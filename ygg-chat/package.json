@@ -1,0 +1,36 @@
+{
+  "name": "ygg-chat",
+  "version": "1.0.0",
+  "description": "Full stack LLM frontend",
+  "private": true,
+  "workspaces": [
+    "client/ygg-chat-r",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "migrate": "npm --prefix server run migrate",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "format:client": "prettier --write 'ygg-chat/client/**/*.{js,jsx,ts,tsx,json,css,md}'",
+    "format:server": "prettier --write 'ygg-chat/server/**/*.{js,jsx,ts,tsx,json,css,md}'",
+    "format:shared": "prettier --write 'ygg-chat/shared/**/*.{js,jsx,ts,tsx,json,css,md}'",
+    "format:chat": "prettier --write 'ygg-chat/**/*.{js,jsx,ts,tsx,json,css,md}'",
+    "dev": "concurrently -n server,client -c yellow,cyan \"npm --prefix server run dev\" \"npm --prefix client/ygg-chat-r run dev\"",
+    "dev:migrate": "npm run migrate && npm run dev",
+    "dev:client": "cd client/ygg-chat-r && npm run dev",
+    "dev:serverold": "cd server && npm run dev",
+    "dev:server": "nodemon server/src/index.ts --ignore src/**/*",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd client/ygg-chat-r && npm run build",
+    "build:server": "cd server && npm run build",
+    "install:all": "npm install && cd ygg-chat/client/ygg-chat-r && npm install && cd ../../server && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.6.2"
+  },
+  "dependencies": {
+    "strip-markdown": "^6.0.0"
+  }
+}

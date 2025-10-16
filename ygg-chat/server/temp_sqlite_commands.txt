@@ -1,0 +1,1 @@
+SELECT DISTINCT user_id FROM messages LIMIT 10;

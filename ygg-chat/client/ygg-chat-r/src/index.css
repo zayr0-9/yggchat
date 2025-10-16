@@ -1,0 +1,298 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap');
+/* Ensure dark variant is available globally and early */
+@custom-variant dark (&:where(.dark, .dark *));
+@import 'tailwindcss';
+@plugin "@tailwindcss/typography";
+/* Override Tailwind v4 default font stack */
+@theme {
+  --font-sans: 'DM Sans', Inter, system-ui, sans-serif;
+}
+/* Highlight.js base theme for rehype-highlight
+   We import the light theme unconditionally, then provide .dark-scoped overrides below.
+   This ensures manual dark mode (toggling the `.dark` class) also switches syntax colors. */
+@import 'highlight.js/styles/atom-one-light.css';
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+}
+/* Markdown code styling */
+.prose pre:not(.not-prose) {
+  @apply bg-gray-100 text-gray-800 dark:bg-neutral-800 dark:text-neutral-100  p-3 overflow-x-auto;
+}
+
+.prose :not(pre) > code {
+  /* Inline code should be visually distinct from blocks and stay inline */
+  @apply inline bg-gray-200 text-gray-800 dark:bg-neutral-900 dark:text-neutral-100 rounded px-1 py-0.5 whitespace-pre-wrap;
+  /* Ensure background/padding only wrap the actual text across soft wraps */
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* Safety net: handle nested inline code (e.g., p > strong > code) and force inline layout */
+.prose :not(pre) code {
+  display: inline !important;
+  width: auto !important;
+  max-width: max-content;
+}
+
+/* Inline code cleaned above; code inside pre is left unstyled here */
+
+/* Dark mode adjustments */
+.dark .prose pre:not(.not-prose) {
+  @apply bg-neutral-900 text-neutral-100 border-neutral-800;
+}
+
+.dark .prose :not(pre) > code {
+  @apply bg-neutral-800 text-neutral-100;
+}
+
+/* Ensure nested inline code stays inline in dark mode too */
+.dark .prose :not(pre) code {
+  display: inline !important;
+  width: auto !important;
+}
+
+/* Fix: Remove highlight.js background/padding on code element inside blocks. We style the <pre> instead. */
+.prose pre code.hljs {
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Nuke any nested token backgrounds inside highlighted code */
+.prose pre code.hljs *,
+.prose pre .hljs *,
+.prose pre .hljs {
+  background: transparent !important;
+}
+
+/* code inside pre inherits pre styles; no extra styling here */
+
+/* Remove backticks that typography plugin injects for code blocks */
+.prose pre code::before,
+.prose pre code::after {
+  content: none !important;
+}
+.dark .prose pre code::before,
+.dark .prose pre code::after {
+  content: none !important;
+}
+
+/* Also remove injected backticks for inline code */
+.prose :not(pre) > code::before,
+.prose :not(pre) > code::after {
+  content: none !important;
+}
+
+/* Global safety (minimal): let pre control visuals */
+pre > code {
+  background: transparent;
+}
+
+/* Dark-mode highlight.js token overrides (approx. Atom One Dark) */
+/* These only apply when the root has `.dark` class, enabling manual dark toggle compatibility */
+.dark .hljs {
+  color: #abb2bf; /* base text */
+}
+.dark .hljs-comment,
+.dark .hljs-quote {
+  color: #5c6370; /* muted */
+  font-style: italic;
+}
+.dark .hljs-keyword,
+.dark .hljs-operator {
+  color: #c678dd;
+}
+.dark .hljs-variable,
+.dark .hljs-template-variable,
+.dark .hljs-attr,
+.dark .hljs-symbol,
+.dark .hljs-builtin-name,
+.dark .hljs-link,
+.dark .hljs-selector-id,
+.dark .hljs-selector-class {
+  color: #e06c75;
+}
+.dark .hljs-number,
+.dark .hljs-literal,
+.dark .hljs-type,
+.dark .hljs-built_in,
+.dark .hljs-bullet {
+  color: #d19a66;
+}
+.dark .hljs-string,
+.dark .hljs-doctag,
+.dark .hljs-addition {
+  color: #98c379;
+}
+.dark .hljs-title,
+.dark .hljs-section,
+.dark .hljs-name,
+.dark .hljs-selector-tag,
+.dark .hljs-tag .hljs-attribute {
+  color: #61afef;
+}
+.dark .hljs-meta,
+.dark .hljs-subst {
+  color: #56b6c2;
+}
+.dark .hljs-deletion {
+  color: #e06c75;
+}
+.dark .hljs-emphasis {
+  font-style: italic;
+}
+.dark .hljs-strong {
+  font-weight: 700;
+}
+
+/* Disable text selection globally while panning/drag-selecting in Heimdall */
+body.ygg-no-select,
+body.ygg-no-select * {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+}
+
+/* Slow pulse for Heimdall currentPath highlight */
+@keyframes ygg-pulse {
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.animate-pulse-slow {
+  animation: ygg-pulse 4s ease-in-out infinite;
+}
+
+/* Color cycling animation for Heimdall currentPath line */
+@keyframes ygg-color-cycle {
+  0%,
+  100% {
+    stroke: #ffffff;
+  }
+  50% {
+    stroke: #fafafa;
+  }
+}
+.animate-color-cycle {
+  animation: ygg-color-cycle 4s ease-in-out infinite;
+}
+
+/* Stroke color pulse for dark mode (neutral-50 to neutral-700) */
+@keyframes ygg-stroke-pulse-dark {
+  0%,
+  100% {
+    stroke: #fafafa; /* neutral-50 */
+  }
+  50% {
+    stroke: #404040; /* neutral-700 */
+  }
+}
+.dark .animate-stroke-pulse {
+  animation: ygg-stroke-pulse-dark 4s ease-in-out infinite;
+}
+@utility no-scrollbar {
+  @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
+}
+/* Thin scrollbar utility */
+.thin-scrollbar {
+  /* Firefox */
+  scroll-padding-top: 4px;
+  scroll-padding-bottom: 4px;
+}
+/* Chromium/WebKit */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cfcfcf; /* light: neutral-400 */
+  border-radius: 20px;
+  border: 0.5px solid transparent;
+  box-shadow: inset 0 0 0 1px rgba(90, 90, 90, 0.02);
+  /* background-clip: padding-box; */
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thin-scrollbar::-webkit-scrollbar-button {
+  width: 0px;
+}
+
+/* Dark mode overrides */
+.dark .thin-scrollbar {
+  /* Firefox */
+  scrollbar-color: #262626 transparent; /* dark: neutral-800 thumb on transparent track */
+}
+.dark .thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #262626; /* dark: neutral-800 */
+}
+
+/* Utility: multi-line clamp without Tailwind plugin */
+.ygg-line-clamp-6 {
+  display: -webkit-box;
+  line-clamp: 6; /* standard property for compatibility */
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Scroll fade effect - creates smooth fade at top/bottom of scrollable containers */
+.scroll-fade {
+  /* Use mask-image to fade content at the edges */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%);
+}
+
+@theme {
+  --color-yPink-50: #a67899;
+  --color-yPink-100: #976288;
+  --color-yPink-200: #a64d79;
+  --color-yPink-300: #853e61;
+  --color-yPink-400: #6a1e55;
+  --color-yPink-500: #5f1b4d;
+  --color-yPink-600: #551844;
+  --color-yPink-700: #4a153b;
+  --color-yPink-800: #401233;
+  --color-yPink-900: #350f2b;
+  --color-secondary-50: #55414a;
+  --color-secondary-100: #887a80;
+  --color-secondary-200: #55414a;
+  --color-secondary-300: #77676e;
+  --color-secondary-400: #66545c;
+  --color-secondary-500: #55414a;
+  --color-secondary-600: #44343b;
+  --color-secondary-700: #362a2f;
+  --color-secondary-800: #302429;
+  --color-secondary-900: #1b1518;
+  --color-yPurple-50: #e4cad7;
+  --color-yPurple-100: #c182a1;
+  --color-yPurple-200: #c182a1;
+  --color-yPurple-300: #a64d79;
+  --color-yPurple-400: #5e4d6a;
+  --color-yPurple-500: #4c3959;
+  --color-yBrown-50: #b6a9a2;
+  --color-yBrown-400: #6c5345;
+  --color-yBrown-500: #5c4030;
+  --color-yBlack-100: #4c394c;
+  --color-yBlack-500: #1a1a1d;
+  --color-yBlack-600: #242424;
+  --color-yBlack-700: #1c1c1c;
+  --color-yBlack-800: #161616;
+  --color-yBlack-900: #121111;
+  --color-fblue-100: #c5d0d8;
+  --color-fblue-200: #a5bfd7;
+  --color-fblue-300: #a1b6d2;
+  --color-vtesto-100: #ff5f05;
+  --color-vtestb-100: #a5bfd7;
+  --color-vtestb-200: #004479;
+  --color-pureWhite-100: #ffffff;
+  --color-pureWhite-200: #fafafa;
+}

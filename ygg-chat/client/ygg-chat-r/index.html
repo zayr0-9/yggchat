@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React + TS</title>
+    <script>
+      // Apply theme early to avoid FOUC and respect system preference
+      ;(function () {
+        try {
+          var saved = localStorage.getItem('theme')
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var hasExplicit = saved === 'dark' || saved === 'light'
+          var isDark = hasExplicit ? saved === 'dark' : prefersDark
+          document.documentElement.classList.toggle('dark', isDark)
+        } catch (e) {
+          // no-op
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

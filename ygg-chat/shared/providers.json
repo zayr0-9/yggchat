@@ -1,0 +1,29 @@
+{
+  "providers": {
+    "google": {
+      "name": "Google",
+      "url": "https://api.google.com",
+      "description": "Google's LLM API"
+    },
+    "openai": {
+      "name": "OpenAI",
+      "url": "https://api.openai.com",
+      "description": "OpenAI's LLM API"
+    },
+    "anthropic": {
+      "name": "Anthropic",
+      "url": "https://api.anthropic.com",
+      "description": "Anthropic's LLM API"
+    },
+    "openrouter": {
+      "name": "OpenRouter",
+      "url": "https://api.openrouter.com",
+      "description": "OpenRouter's LLM API"
+    },
+    "ollama": {
+      "name": "Ollama",
+      "url": "http://localhost:11434",
+      "description": "Ollama's LLM API"
+    }
+  }
+}

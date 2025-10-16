@@ -1,0 +1,70 @@
+# Root-level
+/node_modules
+ygg-chat/node_modules/
+/.env
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vscode/
+.idea/
+.vscode-test/
+
+# Workspace lockfiles (if you use pnpm, Yarn Berry, etc)
+/pnpm-lock.yaml
+/yarn.lock
+/package-lock.json
+
+# TypeScript
+/**/*.tsbuildinfo
+
+# Logs
+logs
+*.log
+.env
+# Coverage
+coverage/
+/coverage
+
+# Build outputs
+/dist/
+/build/
+/out/
+/.turbo/
+/.next/
+/.expo/
+/.iron-node
+ygg-chat/server/src/data/uploads/
+# Server app
+/server/node_modules/
+/server/dist/
+/server/.env
+/server/*.log
+/server/.cache
+/server/tsconfig.tsbuildinfo
+/server/src/data/yggdrasil.db
+*.db
+# Client app
+/web/node_modules/
+/web/dist/
+/web/.vite/
+/web/.cache/
+/web/.env.local
+/web/*.log
+/web/tsconfig.tsbuildinfo
+
+# Misc
+*.local
+*.tmp
+*.swp
+
+# Server app
+ygg-chat/server/node_modules/
+ygg-chat/server/dist/
+ygg-chat/server/.env
+ygg-chat/server/*.log
+ygg-chat/server/.cache
+ygg-chat/server/tsconfig.tsbuildinfo
+ygg-chat/server/src/data/yggdrasil.db
+ygg-chat/server/src/data/uploads/*node_modules/
