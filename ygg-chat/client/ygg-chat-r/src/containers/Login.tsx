@@ -25,18 +25,35 @@ const Login: React.FC = () => {
 
   // Monitor auth state changes for post-OAuth authorization
   useEffect(() => {
-    if (!supabase || !isElectronMode) return
+    console.log('[Login] Setting up onAuthStateChange listener', {
+      hasSupabase: !!supabase,
+      isElectronMode,
+    })
+
+    if (!supabase || !isElectronMode) {
+      console.log('[Login] Skipping onAuthStateChange setup - missing requirements')
+      return
+    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[Login] Auth state changed:', {
+        event,
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        userId: session?.user?.id,
+      })
+
       // Only check on SIGNED_IN event (OAuth callback)
       if (event === 'SIGNED_IN' && session?.user) {
         const userId = session.user.id
         const userEmail = session.user.email || 'unknown'
 
-        console.log('[Login] Electron mode: Checking user authorization...')
+        console.log('[Login] Electron mode: Checking user authorization...', { userId, userEmail })
 
         // Check if user is allowlisted for Electron access
         const isAllowed = await isUserAllowlisted(userId)
+
+        console.log('[Login] Allowlist check result:', { isAllowed, userId })
 
         if (!isAllowed) {
           console.warn('[Login] User not authorized for Electron access:', userEmail)
