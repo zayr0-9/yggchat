@@ -7,7 +7,7 @@ import { isUserAllowlisted } from '../lib/auth/allowlist'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
-  const { user, signIn } = useAuth()
+  const { user, signIn, reloadSession } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -107,6 +107,34 @@ const Login: React.FC = () => {
           }
 
           console.log('[Login] User authorized, completing sign-in')
+
+          // Save OAuth session to Electron storage so ElectronAuthProvider can use it
+          if (window.electronAPI?.storage) {
+            try {
+              const authStateForStorage = {
+                user: {
+                  id: data.session.user.id,
+                  email: data.session.user.email || 'unknown',
+                  username: data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user',
+                },
+                session: {
+                  access_token: access_token,
+                },
+                loading: false,
+                accessToken: access_token,
+                userId: data.session.user.id,
+              }
+
+              await window.electronAPI.storage.set('auth_session', authStateForStorage)
+              console.log('[Login] OAuth session saved to Electron storage')
+
+              // Reload the session in AuthContext to update user state
+              await reloadSession()
+              console.log('[Login] Auth session reloaded in context')
+            } catch (storageError) {
+              console.error('[Login] Failed to save OAuth session to storage:', storageError)
+            }
+          }
         }
 
         // Success - clear loading state and let the redirect happen

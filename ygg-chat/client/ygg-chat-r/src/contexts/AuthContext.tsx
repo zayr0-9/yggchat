@@ -13,6 +13,7 @@ export interface AuthContextType {
   signOut: () => Promise<void>
   getClaims: () => Promise<Record<string, unknown> | null>
   isTokenValid: () => Promise<boolean>
+  reloadSession: () => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -183,6 +184,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [provider, updateAuthState])
 
+  // Reload session from storage (for Electron OAuth flow)
+  const reloadSession = useCallback(async () => {
+    console.log('[AuthContext] Reloading session from storage...')
+
+    if (!provider) {
+      console.warn('[AuthContext] Provider not initialized yet')
+      return
+    }
+
+    // Check if provider supports reloadSession (ElectronAuthProvider)
+    if ('reloadSession' in provider) {
+      try {
+        await (provider as any).reloadSession()
+
+        // Get updated session
+        const session = await provider.getSession()
+
+        // Update context state
+        updateAuthState({
+          user: session.user as any,
+          session: session.session as any,
+          accessToken: session.accessToken,
+          userId: session.userId,
+        })
+
+        console.log('[AuthContext] Session reloaded successfully')
+      } catch (error) {
+        console.error('[AuthContext] Failed to reload session:', error)
+      }
+    } else {
+      console.log('[AuthContext] Provider does not support session reload')
+    }
+  }, [provider, updateAuthState])
+
   // Memoize context value to prevent re-render cascades
   // Only updates when authState or signIn/signOut actually changes
   const value: AuthContextType = useMemo(
@@ -194,6 +229,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       loading: authState.loading,
       signIn,
       signOut,
+      reloadSession,
       getClaims: async () => {
         // For Supabase provider, use its getClaims method
         if (provider && 'getClaims' in provider) {
@@ -211,7 +247,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return true
       },
     }),
-    [authState, signIn, signOut, provider]
+    [authState, signIn, signOut, reloadSession, provider]
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

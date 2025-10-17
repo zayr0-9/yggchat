@@ -188,6 +188,30 @@ export class ElectronAuthProvider implements AuthProvider {
     return false
   }
 
+  /**
+   * Reload auth session from Electron storage
+   * Useful after OAuth flows that save session externally
+   */
+  async reloadSession(): Promise<void> {
+    if (!this.electronAPI) {
+      console.warn('[ElectronAuth] Cannot reload session - Electron API not available')
+      return
+    }
+
+    try {
+      const savedSession = await this.electronAPI.storage.get('auth_session')
+      if (savedSession && savedSession.user) {
+        console.log('[ElectronAuth] Reloaded session from storage:', savedSession.user.id)
+        this.authState = savedSession
+        this.notifyListeners(this.authState.user)
+      } else {
+        console.log('[ElectronAuth] No session found in storage')
+      }
+    } catch (error) {
+      console.warn('[ElectronAuth] Failed to reload session:', error)
+    }
+  }
+
   private notifyListeners(user: User | null) {
     this.listeners.forEach((listener) => {
       try {
