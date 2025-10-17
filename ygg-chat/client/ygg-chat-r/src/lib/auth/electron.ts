@@ -140,29 +140,31 @@ export class ElectronAuthProvider implements AuthProvider {
     if (this.electronAPI) {
       try {
         await this.electronAPI.auth.logout()
-        await this.electronAPI.storage.set('auth_session', null)
+
+        // Clear ALL stored data to prevent unauthorized access
+        if ('clear' in this.electronAPI.storage) {
+          await this.electronAPI.storage.clear()
+          console.log('[ElectronAuth] Cleared all stored session data')
+        } else {
+          // Fallback: just delete auth_session
+          await this.electronAPI.storage.set('auth_session', null)
+        }
       } catch (error) {
         console.error('[ElectronAuth] Logout error:', error)
       }
     }
 
-    // Reset to default local user
+    // Reset to null state (no default user after logout)
     this.authState = {
-      user: {
-        id: ElectronAuthProvider.ELECTRON_USER_ID,
-        username: 'electron-user',
-        email: 'electron@localhost',
-      },
-      session: {
-        access_token: ElectronAuthProvider.ELECTRON_TOKEN,
-      },
+      user: null,
+      session: null,
       loading: false,
-      accessToken: ElectronAuthProvider.ELECTRON_TOKEN,
-      userId: ElectronAuthProvider.ELECTRON_USER_ID,
+      accessToken: null,
+      userId: null,
     }
 
-    // Notify listeners
-    this.notifyListeners(this.authState.user)
+    // Notify listeners (triggers redirect to login)
+    this.notifyListeners(null)
   }
 
   async refreshToken(): Promise<AuthState> {

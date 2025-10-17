@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import path from 'path'
 import { spawn, ChildProcess } from 'child_process'
+import Store from 'electron-store'
 
 // In CommonJS, __dirname is available by default
 // No need for fileURLToPath or import.meta.url
@@ -10,6 +11,12 @@ let serverProcess: ChildProcess | null = null
 
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat'
+
+// Persistent storage for session data
+const store = new Store({
+  name: 'ygg-chat-auth',
+  encryptionKey: 'ygg-chat-electron-storage-key', // Optional encryption
+})
 
 // Start embedded Express server
 function startServer(): Promise<void> {
@@ -201,18 +208,47 @@ ipcMain.handle('auth:logout', async () => {
   return { success: true }
 })
 
-// Storage (Electron-specific storage)
+// Storage - Persistent storage using electron-store
 ipcMain.handle('storage:get', async (_event, key: string) => {
   console.log('[Electron IPC] storage:get called for key:', key)
-  // Could use electron-store here for persistent storage
-  // For now, return null
-  return null
+  try {
+    const value = store.get(key)
+    console.log('[Electron IPC] Retrieved value:', value ? 'found' : 'not found')
+    return value || null
+  } catch (error) {
+    console.error('[Electron IPC] Failed to get from storage:', error)
+    return null
+  }
 })
 
-ipcMain.handle('storage:set', async (_event, key: string, _value: any) => {
+ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
   console.log('[Electron IPC] storage:set called for key:', key)
-  // Could use electron-store here
-  return { success: true }
+  try {
+    if (value === null || value === undefined) {
+      // Delete key if value is null/undefined
+      store.delete(key)
+      console.log('[Electron IPC] Deleted key from storage')
+    } else {
+      store.set(key, value)
+      console.log('[Electron IPC] Stored successfully')
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to set storage:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+// Clear all storage (for logout/account switching)
+ipcMain.handle('storage:clear', async () => {
+  console.log('[Electron IPC] storage:clear called - clearing all stored data')
+  try {
+    store.clear()
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to clear storage:', error)
+    return { success: false, error: String(error) }
+  }
 })
 
 // Get platform info

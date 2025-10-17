@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   storage: {
     get: (key: string) => ipcRenderer.invoke('storage:get', key),
     set: (key: string, value: any) => ipcRenderer.invoke('storage:set', key, value),
+    clear: () => ipcRenderer.invoke('storage:clear'),
   },
   platformInfo: {
     get: () => ipcRenderer.invoke('platform:info'),

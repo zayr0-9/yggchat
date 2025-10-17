@@ -32,6 +32,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dexie": "^4.0.11",
+    "electron-store": "^11.0.2",
     "framer-motion": "^12.23.12",
     "highlight.js": "^11.11.1",
     "lucide-react": "^0.516.0",
@@ -80,13 +81,19 @@
     },
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "win": {
-      "target": ["nsis"]
+      "target": [
+        "nsis"
+      ]
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "category": "Office"
     }
   }

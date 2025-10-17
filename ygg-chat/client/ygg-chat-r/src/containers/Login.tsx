@@ -95,6 +95,16 @@ const Login: React.FC = () => {
           if (!isAllowed) {
             console.warn('[Login] User not authorized for Electron access:', userEmail)
 
+            // Clear any stored session data to prevent unauthorized access
+            if (window.electronAPI?.storage?.clear) {
+              try {
+                await window.electronAPI.storage.clear()
+                console.log('[Login] Cleared stored data for unauthorized user')
+              } catch (clearError) {
+                console.error('[Login] Failed to clear storage:', clearError)
+              }
+            }
+
             // Sign out immediately
             await supabase!.auth.signOut()
 
