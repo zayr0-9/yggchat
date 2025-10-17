@@ -2,23 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
-
-interface SubscriptionStatus {
-  tier: 'high' | 'mid' | 'low' | null
-  status: 'active' | 'canceled' | 'past_due' | null
-  currentPeriodEnd: string | null
-  creditsBalance: number
-  stripeCustomerId: string | null
-  stripeSubscriptionId: string | null
-}
-
-interface TierInfo {
-  name: string
-  price: number
-  priceId: string
-  credits: number
-  features: string[]
-}
+import { getPaymentProvider, type SubscriptionStatus, type TierInfo } from '../lib/payments'
 
 interface PricingInfo {
   tiers: {
@@ -38,10 +22,18 @@ const PaymentPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [paymentsSupported, setPaymentsSupported] = useState(true)
 
   // Check for success/cancel query params from Stripe redirect
   const success = searchParams.get('success')
   const canceled = searchParams.get('canceled')
+
+  // Check if we're in Electron or local mode (payments not supported)
+  const isElectronOrLocal =
+    (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
+    (typeof __IS_LOCAL__ !== 'undefined' && __IS_LOCAL__) ||
+    import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+    import.meta.env.VITE_ENVIRONMENT === 'local'
 
   useEffect(() => {
     fetchData()
@@ -63,19 +55,31 @@ const PaymentPage: React.FC = () => {
 
     setLoading(true)
     try {
-      // Fetch subscription status
-      const statusRes = await fetch(`http://localhost:3001/api/stripe/subscription-status?userId=${userId}`)
-      if (statusRes.ok) {
-        const statusData = await statusRes.json()
-        setSubscriptionStatus(statusData)
+      const provider = await getPaymentProvider()
+
+      // Check if payments are supported
+      if (!provider.isSupported()) {
+        setPaymentsSupported(false)
+        setLoading(false)
+        return
       }
 
+      // Fetch subscription status
+      const statusData = await provider.getSubscriptionStatus(userId)
+      setSubscriptionStatus(statusData)
+
       // Fetch pricing info
-      const pricingRes = await fetch('http://localhost:3001/api/stripe/pricing-info')
-      if (pricingRes.ok) {
-        const pricingData = await pricingRes.json()
-        setPricingInfo(pricingData)
+      const tiersData = await provider.getPricingInfo()
+
+      // Convert array to object format for backward compatibility
+      const pricingData: PricingInfo = {
+        tiers: {
+          low: tiersData.find((t) => t.name === 'Low') || tiersData[0],
+          mid: tiersData.find((t) => t.name === 'Mid') || tiersData[1],
+          high: tiersData.find((t) => t.name === 'High') || tiersData[2],
+        },
       }
+      setPricingInfo(pricingData)
     } catch (err: any) {
       console.error('Error fetching payment data:', err)
       setError(err.message)
@@ -94,23 +98,9 @@ const PaymentPage: React.FC = () => {
     setError(null)
 
     try {
-      const response = await fetch('http://localhost:3001/api/stripe/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId,
-          tier,
-        }),
-      })
+      const provider = await getPaymentProvider()
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to create checkout session')
-      }
-
-      const { url } = await response.json()
+      const { url } = await provider.createCheckoutSession(userId, tier)
 
       if (url) {
         // Redirect to Stripe Checkout
@@ -124,23 +114,19 @@ const PaymentPage: React.FC = () => {
   }
 
   const handleCancelSubscription = async () => {
-    if (!userId || !window.confirm('Are you sure you want to cancel your subscription? You will have access until the end of your billing period.')) {
+    if (
+      !userId ||
+      !window.confirm(
+        'Are you sure you want to cancel your subscription? You will have access until the end of your billing period.',
+      )
+    ) {
       return
     }
 
     try {
-      const response = await fetch('http://localhost:3001/api/stripe/cancel-subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ userId }),
-      })
+      const provider = await getPaymentProvider()
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to cancel subscription')
-      }
+      await provider.cancelSubscription(userId)
 
       alert('Subscription canceled. You will have access until the end of your billing period.')
       fetchData() // Refresh data
@@ -190,6 +176,83 @@ const PaymentPage: React.FC = () => {
     return (
       <div className='min-h-screen bg-zinc-50 dark:bg-yBlack-500 flex items-center justify-center'>
         <p className='text-xl dark:text-neutral-100'>Loading...</p>
+      </div>
+    )
+  }
+
+  // Show alternative UI for Electron/local modes (no payments)
+  if (!paymentsSupported || isElectronOrLocal) {
+    return (
+      <div className='min-h-screen bg-zinc-50 dark:bg-yBlack-500'>
+        <div className='max-w-4xl mx-auto px-4 py-8'>
+          {/* Header */}
+          <div className='flex items-center justify-between mb-8'>
+            <h1 className='text-4xl font-bold dark:text-neutral-100'>API Keys</h1>
+            <Button variant='outline2' onClick={() => navigate('/')}>
+              <i className='bx bx-arrow-back mr-2'></i>
+              Back to Home
+            </Button>
+          </div>
+
+          {/* Info card */}
+          <div className='p-8 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border border-gray-200 dark:border-neutral-700'>
+            <div className='flex items-center mb-6'>
+              <div className='w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mr-4'>
+                <i className='bx bx-key text-white text-3xl'></i>
+              </div>
+              <div>
+                <h2 className='text-2xl font-bold dark:text-neutral-100'>Use Your Own API Keys</h2>
+                <p className='text-gray-600 dark:text-gray-400'>
+                  No subscriptions needed - connect your own API keys
+                </p>
+              </div>
+            </div>
+
+            <p className='text-gray-700 dark:text-neutral-300 mb-6'>
+              In this version, you have full control over your API usage. Simply provide your own API
+              keys from providers like OpenRouter, OpenAI, Anthropic, or Google Gemini.
+            </p>
+
+            <div className='bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6'>
+              <p className='text-sm text-blue-800 dark:text-blue-200'>
+                <i className='bx bx-info-circle mr-2'></i>
+                Go to <strong>Settings → API Keys</strong> to configure your providers
+              </p>
+            </div>
+
+            <div className='space-y-4'>
+              <h3 className='text-lg font-semibold dark:text-neutral-100 mb-3'>Supported Providers:</h3>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                {[
+                  { name: 'OpenRouter', icon: 'bx-diamond', desc: 'Access 100+ models' },
+                  { name: 'OpenAI', icon: 'bx-brain', desc: 'GPT-4, GPT-3.5' },
+                  { name: 'Anthropic', icon: 'bx-chat', desc: 'Claude models' },
+                  { name: 'Google Gemini', icon: 'bx-star', desc: 'Gemini Pro' },
+                  { name: 'Ollama', icon: 'bx-home', desc: 'Local models' },
+                  { name: 'LM Studio', icon: 'bx-desktop', desc: 'Local models' },
+                ].map((provider) => (
+                  <div
+                    key={provider.name}
+                    className='flex items-center p-3 bg-gray-50 dark:bg-yBlack-800 rounded-lg'
+                  >
+                    <i className={`bx ${provider.icon} text-2xl text-indigo-600 dark:text-indigo-400 mr-3`}></i>
+                    <div>
+                      <p className='font-medium dark:text-neutral-100'>{provider.name}</p>
+                      <p className='text-sm text-gray-600 dark:text-gray-400'>{provider.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className='mt-6'>
+              <Button variant='primary' size='large' onClick={() => navigate('/settings')}>
+                <i className='bx bx-cog mr-2'></i>
+                Configure API Keys
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }

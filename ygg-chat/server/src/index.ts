@@ -144,7 +144,8 @@ app.use(
 
 // IMPORTANT: Register Stripe webhook BEFORE express.json() middleware
 // Webhook signature verification requires raw body, but express.json() parses it
-if (env.VITE_ENVIRONMENT !== 'local') {
+// Only load in web mode (not local or electron)
+if (env.VITE_ENVIRONMENT === 'web') {
   const stripeRoutes = require('./routes/stripe').default
   app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeRoutes)
 }
@@ -159,15 +160,21 @@ app.use('/api', (req, res, next) => {
   // console.log('[Debug Middleware] Headers:', req.headers)
   next()
 })
+// Route handling based on environment
 if (env.VITE_ENVIRONMENT === 'web') {
+  // Web mode: Use Supabase routes with rate limiting
   const supaChat = require('./routes/supaChat').default
   const rateLimit = require('express-rate-limit')
   app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }), supaChat)
 } else {
+  // Local and Electron modes: Use direct chat routes (no Supabase)
   app.use('/api', chatRoutes)
 }
+
 app.use('/api/settings', settingsRoutes)
-if (env.VITE_ENVIRONMENT !== 'local') {
+
+// Stripe routes: Only in web mode
+if (env.VITE_ENVIRONMENT === 'web') {
   const stripeRoutes = require('./routes/stripe').default
   app.use('/api/stripe', stripeRoutes)
 }
@@ -208,17 +215,19 @@ console.log('📊 Rebuilding FTS index on startup...')
 console.log('✅ FTS index rebuilt.')
 initializeStatements()
 
-// Create default local user for local mode
+// Create default local user for local and electron modes
 function ensureDefaultLocalUser() {
-  if (env.VITE_ENVIRONMENT !== 'local') {
-    console.log('Skipping default user creation (not in local mode)')
+  const isLocalOrElectron = env.VITE_ENVIRONMENT === 'local' || env.VITE_ENVIRONMENT === 'electron'
+
+  if (!isLocalOrElectron) {
+    console.log('Skipping default user creation (not in local or electron mode)')
     return
   }
 
   try {
     // Use a fixed UUID for the local user (matches Supabase-generated UUID and migration script)
     const defaultUserId = 'a7c485cb-99e7-4cf2-82a9-6e23b55cdfc3'
-    const defaultUsername = 'local-user'
+    const defaultUsername = env.VITE_ENVIRONMENT === 'electron' ? 'electron-user' : 'local-user'
 
     // Import statements from db module
     const { statements } = require('./database/db')
@@ -234,12 +243,12 @@ function ensureDefaultLocalUser() {
         statements.updateUser.run(defaultUsername, defaultUserId)
         console.log(`✅ Updated user to: ${defaultUsername} (${defaultUserId})`)
       } else {
-        console.log(`✅ Default local user already exists: ${existingUser.username} (${defaultUserId})`)
+        console.log(`✅ Default ${env.VITE_ENVIRONMENT} user already exists: ${existingUser.username} (${defaultUserId})`)
       }
     } else {
       // No user with this ID - create new user
       statements.createUser.run(defaultUserId, defaultUsername)
-      console.log(`✅ Created default local user: ${defaultUsername} (${defaultUserId})`)
+      console.log(`✅ Created default ${env.VITE_ENVIRONMENT} user: ${defaultUsername} (${defaultUserId})`)
     }
   } catch (error) {
     console.error('❌ Error creating default local user:', error)

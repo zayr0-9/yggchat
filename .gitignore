@@ -59,6 +59,15 @@ ygg-chat/server/src/data/uploads/
 *.tmp
 *.swp
 
+# Documentation files (generated)
+FIXES_APPLIED.md
+IMPLEMENTATION_SUMMARY.md
+TESTING_GUIDE.md
+
+# Electron environment
+ygg-chat/.env.electron
+ygg-chat/client/ygg-chat-r/ELECTRON_OAUTH_SETUP.md
+
 # Server app
 ygg-chat/server/node_modules/
 ygg-chat/server/dist/

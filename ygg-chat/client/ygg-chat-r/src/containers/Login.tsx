@@ -3,12 +3,18 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabase'
+import { isUserAllowlisted } from '../lib/auth/allowlist'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, signIn } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Check if we're in Electron mode (build-time or runtime detection)
+  const isElectronMode =
+    (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
+    import.meta.env.VITE_ENVIRONMENT === 'electron'
 
   // Redirect if already logged in
   useEffect(() => {
@@ -16,6 +22,85 @@ const Login: React.FC = () => {
       navigate('/')
     }
   }, [user, navigate])
+
+  // Monitor auth state changes for post-OAuth authorization
+  useEffect(() => {
+    if (!supabase || !isElectronMode) return
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Only check on SIGNED_IN event (OAuth callback)
+      if (event === 'SIGNED_IN' && session?.user) {
+        const userId = session.user.id
+        const userEmail = session.user.email || 'unknown'
+
+        console.log('[Login] Electron mode: Checking user authorization...')
+
+        // Check if user is allowlisted for Electron access
+        const isAllowed = await isUserAllowlisted(userId)
+
+        if (!isAllowed) {
+          console.warn('[Login] User not authorized for Electron access:', userEmail)
+
+          // Sign out immediately
+          await supabase.auth.signOut()
+
+          // Show error message
+          setError(
+            `Access Denied: Electron access requires authorization. Your email (${userEmail}) is not approved for this application. Please contact the administrator to request access.`
+          )
+          setLoading(false)
+        } else {
+          // User is authorized, stop loading
+          setLoading(false)
+        }
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [isElectronMode])
+
+  // Handle OAuth callback from external browser (Electron only)
+  useEffect(() => {
+    if (!window.electronAPI?.auth?.onOAuthCallback) return
+
+    console.log('[Login] Setting up OAuth callback listener for Electron')
+
+    const cleanup = window.electronAPI.auth.onOAuthCallback(async (callbackUrl: string) => {
+      console.log('[Login] Received OAuth callback from external browser:', callbackUrl)
+      setLoading(true)
+
+      try {
+        // Extract the hash/query parameters from the callback URL
+        const url = new URL(callbackUrl)
+        const hashParams = new URLSearchParams(url.hash.substring(1)) // Remove the '#' and parse
+        const access_token = hashParams.get('access_token')
+        const refresh_token = hashParams.get('refresh_token')
+
+        if (access_token && refresh_token) {
+          // Set the session in Supabase
+          const { error } = await supabase!.auth.setSession({
+            access_token,
+            refresh_token,
+          })
+
+          if (error) throw error
+
+          console.log('[Login] OAuth session established successfully')
+          // Auth state change listener will handle authorization check
+        } else {
+          throw new Error('No tokens found in callback URL')
+        }
+      } catch (error: any) {
+        console.error('[Login] Failed to handle OAuth callback:', error)
+        setError(error.message || 'Failed to complete OAuth login')
+        setLoading(false)
+      }
+    })
+
+    return cleanup
+  }, [])
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
     setLoading(true)
@@ -26,23 +111,64 @@ const Login: React.FC = () => {
         throw new Error('Supabase client not available. Please check your environment configuration.')
       }
 
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: `${window.location.origin}/`,
-        },
-      })
-      if (error) throw error
+      // Check if running in Electron and use external browser
+      if (window.electronAPI?.auth?.openExternal) {
+        console.log('[Login] Electron detected - opening OAuth in external browser')
+
+        // Get the OAuth URL from Supabase
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo: 'yggchat://auth/callback',
+            skipBrowserRedirect: true, // Don't redirect in the current window
+          },
+        })
+
+        if (error) throw error
+
+        if (data?.url) {
+          // Open the OAuth URL in the user's default browser
+          const result = await window.electronAPI.auth.openExternal(data.url)
+
+          if (!result.success) {
+            throw new Error('Failed to open external browser')
+          }
+
+          console.log('[Login] OAuth URL opened in external browser, waiting for callback...')
+          // Loading state will be cleared when callback is received
+        } else {
+          throw new Error('No OAuth URL returned from Supabase')
+        }
+      } else {
+        // Web mode - use normal OAuth flow
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo: `${window.location.origin}/`,
+          },
+        })
+        if (error) throw error
+      }
     } catch (error: any) {
       setError(error.message || 'An error occurred')
       setLoading(false)
     }
   }
 
-  const handleLocalMode = () => {
-    // TODO: Implement local-only mode logic
+  const handleLocalMode = async () => {
+    setLoading(true)
+    setError(null)
 
-    navigate('/homePage')
+    try {
+      // Sign in with empty credentials to trigger local mode in ElectronAuthProvider
+      await signIn({ email: '', password: '' })
+
+      // Navigation will happen automatically via the useEffect that monitors user state
+    } catch (error: any) {
+      console.error('[Login] Local mode login failed:', error)
+      setError(error.message || 'Failed to sign in with local mode')
+      setLoading(false)
+    }
   }
 
   return (
