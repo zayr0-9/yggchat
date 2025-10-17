@@ -215,44 +215,11 @@ console.log('📊 Rebuilding FTS index on startup...')
 console.log('✅ FTS index rebuilt.')
 initializeStatements()
 
-// Create default local user for local and electron modes
+// No default user creation - users are created after OAuth authentication
+// Only web and electron modes exist
 function ensureDefaultLocalUser() {
-  const isLocalOrElectron = env.VITE_ENVIRONMENT === 'local' || env.VITE_ENVIRONMENT === 'electron'
-
-  if (!isLocalOrElectron) {
-    console.log('Skipping default user creation (not in local or electron mode)')
-    return
-  }
-
-  try {
-    // Use a fixed UUID for the local user (matches Supabase-generated UUID and migration script)
-    const defaultUserId = 'a7c485cb-99e7-4cf2-82a9-6e23b55cdfc3'
-    const defaultUsername = env.VITE_ENVIRONMENT === 'electron' ? 'electron-user' : 'local-user'
-
-    // Import statements from db module
-    const { statements } = require('./database/db')
-
-    // Check if user already exists with this ID
-    const existingUser = statements.getUserById.get(defaultUserId)
-
-    if (existingUser) {
-      // User exists - ensure username is correct (fix migration artifacts)
-      if (existingUser.username !== defaultUsername) {
-        console.log(`⚠️  User exists with different username: ${existingUser.username}`)
-        console.log(`📝 Updating username to: ${defaultUsername}`)
-        statements.updateUser.run(defaultUsername, defaultUserId)
-        console.log(`✅ Updated user to: ${defaultUsername} (${defaultUserId})`)
-      } else {
-        console.log(`✅ Default ${env.VITE_ENVIRONMENT} user already exists: ${existingUser.username} (${defaultUserId})`)
-      }
-    } else {
-      // No user with this ID - create new user
-      statements.createUser.run(defaultUserId, defaultUsername)
-      console.log(`✅ Created default ${env.VITE_ENVIRONMENT} user: ${defaultUsername} (${defaultUserId})`)
-    }
-  } catch (error) {
-    console.error('❌ Error creating default local user:', error)
-  }
+  console.log('⏭️  Skipping default user creation - users created after OAuth authentication')
+  console.log(`📍 Current environment: ${env.VITE_ENVIRONMENT}`)
 }
 
 ensureDefaultLocalUser()

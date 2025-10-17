@@ -314,8 +314,8 @@ export interface ProviderCostWithMessage {
 }
 
 export class UserService {
-  static create(username: string): User {
-    const id = generateId()
+  static create(username: string, customId?: string): User {
+    const id = customId || generateId()
     statements.createUser.run(id, username)
     return statements.getUserById.get(id) as User
   }

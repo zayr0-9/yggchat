@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
-import { supabase } from '../lib/supabase'
 import { isUserAllowlisted } from '../lib/auth/allowlist'
+import { supabase } from '../lib/supabase'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -13,8 +13,7 @@ const Login: React.FC = () => {
 
   // Check if we're in Electron mode (build-time or runtime detection)
   const isElectronMode =
-    (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
-    import.meta.env.VITE_ENVIRONMENT === 'electron'
+    (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
 
   // Redirect if already logged in
   useEffect(() => {
@@ -29,7 +28,9 @@ const Login: React.FC = () => {
 
     console.log('[Login] Setting up onAuthStateChange listener')
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[Login] Auth state changed:', {
         event,
         hasSession: !!session,
@@ -110,7 +111,7 @@ const Login: React.FC = () => {
 
             // Show error message
             setError(
-              `Access Denied: Electron access requires authorization. Your email (${userEmail}) is not approved for this application. Please contact the administrator to request access.`
+              `Access Denied: Electron access requires authorization. Your email (${userEmail}) is not approved for this application. Please visit the official Yggdrasil website to subscribe.`
             )
             setLoading(false)
             return
@@ -118,32 +119,62 @@ const Login: React.FC = () => {
 
           console.log('[Login] User authorized, completing sign-in')
 
-          // Save OAuth session to Electron storage so ElectronAuthProvider can use it
-          if (window.electronAPI?.storage) {
-            try {
-              const authStateForStorage = {
-                user: {
-                  id: data.session.user.id,
-                  email: data.session.user.email || 'unknown',
-                  username: data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user',
-                },
-                session: {
-                  access_token: access_token,
-                },
-                loading: false,
-                accessToken: access_token,
-                userId: data.session.user.id,
-              }
+          // Create local user in database with Supabase user ID
+          try {
+            const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
 
-              await window.electronAPI.storage.set('auth_session', authStateForStorage)
-              console.log('[Login] OAuth session saved to Electron storage')
+            console.log('[Login] Creating local user in database...', { userId, username })
 
-              // Reload the session in AuthContext to update user state
-              await reloadSession()
-              console.log('[Login] Auth session reloaded in context')
-            } catch (storageError) {
-              console.error('[Login] Failed to save OAuth session to storage:', storageError)
+            const userResponse = await fetch('/api/users', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                userId: userId,
+                username: username,
+              }),
+            })
+
+            if (!userResponse.ok) {
+              throw new Error('Failed to create local user')
             }
+
+            const localUser = await userResponse.json()
+            console.log('[Login] Local user created successfully:', localUser)
+
+            // Save OAuth session to Electron storage so ElectronAuthProvider can use it
+            if (window.electronAPI?.storage) {
+              try {
+                const authStateForStorage = {
+                  user: {
+                    id: localUser.id,
+                    email: data.session.user.email || 'unknown',
+                    username: localUser.username,
+                  },
+                  session: {
+                    access_token: access_token,
+                  },
+                  loading: false,
+                  accessToken: access_token,
+                  userId: localUser.id,
+                }
+
+                await window.electronAPI.storage.set('auth_session', authStateForStorage)
+                console.log('[Login] OAuth session saved to Electron storage')
+
+                // Reload the session in AuthContext to update user state
+                await reloadSession()
+                console.log('[Login] Auth session reloaded in context')
+              } catch (storageError) {
+                console.error('[Login] Failed to save OAuth session to storage:', storageError)
+              }
+            }
+          } catch (userCreationError) {
+            console.error('[Login] Failed to create local user:', userCreationError)
+            setError('Failed to create local user account. Please try again.')
+            setLoading(false)
+            return
           }
         }
 
