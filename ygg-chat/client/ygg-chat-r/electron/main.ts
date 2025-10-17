@@ -1,7 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import path from 'path'
 import { spawn, ChildProcess } from 'child_process'
-import Store from 'electron-store'
 
 // In CommonJS, __dirname is available by default
 // No need for fileURLToPath or import.meta.url
@@ -12,11 +11,18 @@ let serverProcess: ChildProcess | null = null
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat'
 
-// Persistent storage for session data
-const store = new Store({
-  name: 'ygg-chat-auth',
-  encryptionKey: 'ygg-chat-electron-storage-key', // Optional encryption
-})
+// Persistent storage for session data (initialized async)
+let store: any = null
+
+// Initialize electron-store (ESM module, needs dynamic import)
+async function initializeStore() {
+  const { default: Store } = await import('electron-store')
+  store = new Store({
+    name: 'ygg-chat-auth',
+    encryptionKey: 'ygg-chat-electron-storage-key', // Optional encryption
+  })
+  console.log('[Electron] Storage initialized')
+}
 
 // Start embedded Express server
 function startServer(): Promise<void> {
@@ -155,7 +161,9 @@ function handleOAuthCallback(url: string) {
 // App lifecycle
 app.whenReady().then(async () => {
   try {
-    console.log('[Electron] App ready, starting server...')
+    console.log('[Electron] App ready, initializing storage...')
+    await initializeStore()
+    console.log('[Electron] Storage initialized, starting server...')
     await startServer()
     console.log('[Electron] Server started, creating window...')
     createWindow()
@@ -211,6 +219,12 @@ ipcMain.handle('auth:logout', async () => {
 // Storage - Persistent storage using electron-store
 ipcMain.handle('storage:get', async (_event, key: string) => {
   console.log('[Electron IPC] storage:get called for key:', key)
+
+  if (!store) {
+    console.error('[Electron IPC] Storage not initialized yet')
+    return null
+  }
+
   try {
     const value = store.get(key)
     console.log('[Electron IPC] Retrieved value:', value ? 'found' : 'not found')
@@ -223,6 +237,12 @@ ipcMain.handle('storage:get', async (_event, key: string) => {
 
 ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
   console.log('[Electron IPC] storage:set called for key:', key)
+
+  if (!store) {
+    console.error('[Electron IPC] Storage not initialized yet')
+    return { success: false, error: 'Storage not initialized' }
+  }
+
   try {
     if (value === null || value === undefined) {
       // Delete key if value is null/undefined
@@ -242,6 +262,12 @@ ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
 // Clear all storage (for logout/account switching)
 ipcMain.handle('storage:clear', async () => {
   console.log('[Electron IPC] storage:clear called - clearing all stored data')
+
+  if (!store) {
+    console.error('[Electron IPC] Storage not initialized yet')
+    return { success: false, error: 'Storage not initialized' }
+  }
+
   try {
     store.clear()
     return { success: true }

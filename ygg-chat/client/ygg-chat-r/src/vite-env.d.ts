@@ -29,6 +29,7 @@ interface ElectronAPI {
   storage: {
     get: (key: string) => Promise<any>
     set: (key: string, value: any) => Promise<void>
+    clear: () => Promise<{ success: boolean; error?: string }>
   }
   platformInfo: {
     get: () => Promise<{ platform: string; version: string; isElectron: boolean }>
