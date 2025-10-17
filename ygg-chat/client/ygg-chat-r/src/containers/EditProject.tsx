@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { Project } from '../../../../shared/types'
+import { useQueryClient } from '@tanstack/react-query'
+import { Project, ProjectWithLatestConversation } from '../../../../shared/types'
 import { Button, TextField } from '../components'
 import { InputTextArea } from '../components/InputTextArea/InputTextArea'
 import { createProject, CreateProjectPayload, updateProject, UpdateProjectPayload } from '../features/projects'
 import { useAppDispatch } from '../hooks/redux'
+import { useAuth } from '../hooks/useAuth'
 
 interface EditProjectProps {
   isOpen: boolean
@@ -14,6 +16,8 @@ interface EditProjectProps {
 
 const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProject, onProjectCreated }) => {
   const dispatch = useAppDispatch()
+  const queryClient = useQueryClient()
+  const { userId } = useAuth()
 
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectContext, setNewProjectContext] = useState('')
@@ -64,7 +68,40 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
     }
 
     try {
-      await dispatch(updateProject(payload)).unwrap()
+      const updatedProject = await dispatch(updateProject(payload)).unwrap()
+
+      // Update React Query cache to reflect changes immediately
+      // Helper function to update project in cached array
+      const updateProjectInCache = (projects: ProjectWithLatestConversation[] | undefined) => {
+        if (!projects) return projects
+        return projects.map(proj =>
+          proj.id === updatedProject.id
+            ? {
+                ...proj,
+                name: updatedProject.name,
+                context: updatedProject.context,
+                system_prompt: updatedProject.system_prompt,
+                updated_at: updatedProject.updated_at,
+              }
+            : proj
+        )
+      }
+
+      // Update the main projects list cache
+      queryClient.setQueryData<ProjectWithLatestConversation[]>(['projects', userId], updateProjectInCache)
+
+      // Update the individual project cache
+      queryClient.setQueryData<Project>(['projects', updatedProject.id], (old: Project | undefined) => {
+        if (!old) return updatedProject
+        return {
+          ...old,
+          name: updatedProject.name,
+          context: updatedProject.context,
+          system_prompt: updatedProject.system_prompt,
+          updated_at: updatedProject.updated_at,
+        }
+      })
+
       resetForm()
       onClose()
     } catch (error) {

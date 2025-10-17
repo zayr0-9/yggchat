@@ -87,13 +87,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         })
 
         // Subscribe to auth state changes
-        unsubscribe = authProvider.onAuthStateChange((user) => {
+        unsubscribe = authProvider.onAuthStateChange(async (user) => {
           if (!mounted) return
+
+          // Get the actual session with access token from the provider
+          const session = await authProvider.getSession()
 
           updateAuthState({
             user: user as any,
-            session: null, // Provider handles session internally
-            accessToken: user ? 'token-from-provider' : null,
+            session: session.session as any,
+            accessToken: session.accessToken,
             userId: user?.id ?? null,
           })
         })

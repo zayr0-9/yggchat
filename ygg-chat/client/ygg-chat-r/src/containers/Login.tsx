@@ -82,7 +82,7 @@ const Login: React.FC = () => {
 
         console.log('[Login] OAuth session established successfully')
 
-        // Check if user is authorized for Electron access
+        // Handle Electron-specific authorization and setup
         if (data.session?.user && isElectronMode) {
           const userId = data.session.user.id
           const userEmail = data.session.user.email || 'unknown'
@@ -119,7 +119,7 @@ const Login: React.FC = () => {
 
           console.log('[Login] User authorized, completing sign-in')
 
-          // Create local user in database with Supabase user ID
+          // Create local user in database with Supabase user ID (Electron only)
           try {
             const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
 
@@ -176,6 +176,9 @@ const Login: React.FC = () => {
             setLoading(false)
             return
           }
+        } else if (data.session?.user && !isElectronMode) {
+          // Web mode: Session is already set in Supabase, AuthContext will pick it up
+          console.log('[Login] Web mode: OAuth session established, letting AuthContext handle state')
         }
 
         // Success - clear loading state and let the redirect happen

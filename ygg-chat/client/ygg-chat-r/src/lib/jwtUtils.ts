@@ -20,18 +20,34 @@ export function getSessionFromStorage(): Session | null {
     const storageKey = 'supabase-auth-token'
     const stored = localStorage.getItem(storageKey)
 
+    console.log('[jwtUtils] Reading from localStorage key:', storageKey)
+
     if (!stored) {
+      console.log('[jwtUtils] No data in localStorage')
       return null
     }
 
     // Parse the stored session data
     const parsed = JSON.parse(stored)
+    console.log('[jwtUtils] Parsed localStorage:', {
+      hasCurrentSession: !!parsed?.currentSession,
+      hasSession: !!parsed?.session,
+      topLevelKeys: Object.keys(parsed || {}),
+    })
 
     // Supabase stores session in different formats depending on version
     // Try to extract session from various possible structures
     const session = parsed?.currentSession || parsed?.session || parsed
 
+    console.log('[jwtUtils] Extracted session:', {
+      hasAccessToken: !!session?.access_token,
+      accessTokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
+      hasUser: !!session?.user,
+      userId: session?.user?.id,
+    })
+
     if (!session?.access_token) {
+      console.warn('[jwtUtils] Session missing access_token')
       return null
     }
 

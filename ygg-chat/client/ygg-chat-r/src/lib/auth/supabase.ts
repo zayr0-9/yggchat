@@ -1,12 +1,6 @@
-import type { AuthProvider, AuthState, Credentials, AuthChangeCallback } from './types'
+import { clearClaimsCache, getCachedClaims, isTokenValid as validateToken } from '../jwtUtils'
 import { supabase } from '../supabase'
-import {
-  getCachedClaims,
-  clearClaimsCache,
-  isTokenValid as validateToken,
-  refreshTokenIfNeeded,
-  getSessionFromStorage,
-} from '../jwtUtils'
+import type { AuthChangeCallback, AuthProvider, AuthState, Credentials } from './types'
 
 /**
  * Supabase Auth Provider
@@ -19,6 +13,7 @@ import {
 export class SupabaseAuthProvider implements AuthProvider {
   private listeners: Set<AuthChangeCallback> = new Set()
   private unsubscribe: (() => void) | null = null
+  private cachedSession: AuthState | null = null
 
   async initialize(): Promise<void> {
     if (!supabase) {
@@ -29,11 +24,31 @@ export class SupabaseAuthProvider implements AuthProvider {
     console.log('[SupabaseAuth] Initializing...')
 
     // Set up auth state change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[SupabaseAuth] Auth state changed:', event)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[SupabaseAuth] Auth state changed:', event, {
+        hasSession: !!session,
+        hasAccessToken: !!session?.access_token,
+        tokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
+      })
 
       if (event === 'SIGNED_OUT') {
         clearClaimsCache()
+        this.cachedSession = null
+      } else if (session) {
+        // Cache the session from the callback (has the valid access_token)
+        this.cachedSession = {
+          user: (session.user as any) ?? null,
+          session: session as any,
+          accessToken: session.access_token ?? null,
+          userId: session.user?.id ?? null,
+          loading: false,
+        }
+        console.log('[SupabaseAuth] Cached session from callback:', {
+          userId: this.cachedSession.userId,
+          hasAccessToken: !!this.cachedSession.accessToken,
+        })
       }
 
       // Notify all listeners
@@ -62,10 +77,22 @@ export class SupabaseAuthProvider implements AuthProvider {
     }
 
     try {
-      // Read from localStorage ONLY (zero network calls)
-      const session = getSessionFromStorage()
+      // If we have a cached session from the callback, return it (most recent)
+      if (this.cachedSession) {
+        console.log('[SupabaseAuth] Returning cached session:', {
+          userId: this.cachedSession.userId,
+          hasAccessToken: !!this.cachedSession.accessToken,
+        })
+        return this.cachedSession
+      }
 
-      if (!session) {
+      // Otherwise, use Supabase SDK's getSession() which reads from localStorage
+      // This is for initial page load before onAuthStateChange fires
+      console.log('[SupabaseAuth] No cached session, using SDK getSession()')
+      const { data, error } = await supabase.auth.getSession()
+
+      if (error) {
+        console.error('[SupabaseAuth] Error getting session from SDK:', error)
         return {
           user: null,
           session: null,
@@ -75,19 +102,35 @@ export class SupabaseAuthProvider implements AuthProvider {
         }
       }
 
-      // Check if token needs refresh (but don't validate yet)
-      await refreshTokenIfNeeded()
+      const session = data.session
 
-      // Re-read session after potential refresh
-      const refreshedSession = getSessionFromStorage()
+      if (!session) {
+        console.log('[SupabaseAuth] No session from SDK')
+        return {
+          user: null,
+          session: null,
+          accessToken: null,
+          userId: null,
+          loading: false,
+        }
+      }
 
-      return {
-        user: (refreshedSession?.user as any) ?? null,
-        session: refreshedSession as any,
-        accessToken: refreshedSession?.access_token ?? null,
-        userId: refreshedSession?.user?.id ?? null,
+      console.log('[SupabaseAuth] Got session from SDK:', {
+        userId: session.user?.id,
+        hasAccessToken: !!session.access_token,
+        tokenPreview: session.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
+      })
+
+      // Cache this session
+      this.cachedSession = {
+        user: (session.user as any) ?? null,
+        session: session as any,
+        accessToken: session.access_token ?? null,
+        userId: session.user?.id ?? null,
         loading: false,
       }
+
+      return this.cachedSession
     } catch (error) {
       console.error('[SupabaseAuth] Error getting session:', error)
       return {
@@ -177,7 +220,7 @@ export class SupabaseAuthProvider implements AuthProvider {
     this.listeners.add(callback)
 
     // Immediately call with current user
-    this.getSession().then((state) => {
+    this.getSession().then(state => {
       callback(state.user)
     })
 
@@ -188,7 +231,7 @@ export class SupabaseAuthProvider implements AuthProvider {
   }
 
   requiresNetworkAuth(): boolean {
-    return true
+    return false
   }
 
   /**
@@ -224,14 +267,14 @@ export class SupabaseAuthProvider implements AuthProvider {
       console.log('[SupabaseAuth] Auth state changed in another tab')
 
       // Re-read session and notify listeners
-      this.getSession().then((state) => {
+      this.getSession().then(state => {
         this.notifyListeners(state.user)
       })
     }
   }
 
   private notifyListeners(user: any) {
-    this.listeners.forEach((listener) => {
+    this.listeners.forEach(listener => {
       try {
         listener(user)
       } catch (error) {

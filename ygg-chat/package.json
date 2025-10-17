@@ -22,7 +22,7 @@
     "dev:serverold": "cd server && npm run dev",
     "dev:server": "nodemon server/src/index.ts --ignore src/**/*",
     "dev:electron": "cross-env BUILD_TARGET=electron concurrently -n server,client -c yellow,cyan \"npm --prefix server run dev\" \"npm --prefix client/ygg-chat-r run dev:electron\"",
-    "build": "npm run build:client && npm run build:server",
+    "build": "npm run build:client && npm run build:server && npm run build:electron",
     "build:client": "cd client/ygg-chat-r && npm run build",
     "build:server": "cd server && npm run build",
     "build:web": "cross-env BUILD_TARGET=web npm run build:client && npm run build:server",

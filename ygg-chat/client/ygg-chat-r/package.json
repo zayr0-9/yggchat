@@ -6,9 +6,11 @@
   "main": "electron/main.cjs",
   "scripts": {
     "predev": "node scripts/check-env.js",
-    "dev": "vite",
+    "dev": "cross-env BUILD_TARGET=web vite",
+    "dev:local": "cross-env BUILD_TARGET=local vite",
     "dev:electron": "cross-env BUILD_TARGET=electron vite",
-    "build": "tsc -b && vite build",
+    "build": "cross-env BUILD_TARGET=web tsc -b && cross-env BUILD_TARGET=web vite build",
+    "build:web": "cross-env BUILD_TARGET=web tsc -b && cross-env BUILD_TARGET=web vite build",
     "build:electron": "cross-env BUILD_TARGET=electron tsc -b && cross-env BUILD_TARGET=electron vite build",
     "build:electron:main": "tsc -p electron/tsconfig.json && node -e \"require('fs').renameSync('electron/main.js', 'electron/main.cjs'); require('fs').renameSync('electron/preload.js', 'electron/preload.cjs')\"",
     "package:electron": "electron-builder",
