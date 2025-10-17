@@ -23,17 +23,11 @@ const Login: React.FC = () => {
     }
   }, [user, navigate])
 
-  // Monitor auth state changes for post-OAuth authorization
+  // Monitor auth state changes - just for logging and cleanup
   useEffect(() => {
-    console.log('[Login] Setting up onAuthStateChange listener', {
-      hasSupabase: !!supabase,
-      isElectronMode,
-    })
+    if (!supabase) return
 
-    if (!supabase || !isElectronMode) {
-      console.log('[Login] Skipping onAuthStateChange setup - missing requirements')
-      return
-    }
+    console.log('[Login] Setting up onAuthStateChange listener')
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('[Login] Auth state changed:', {
@@ -43,40 +37,17 @@ const Login: React.FC = () => {
         userId: session?.user?.id,
       })
 
-      // Only check on SIGNED_IN event (OAuth callback)
+      // Clear loading state on successful sign-in
+      // Authorization checks are handled in the OAuth callback handler for Electron
       if (event === 'SIGNED_IN' && session?.user) {
-        const userId = session.user.id
-        const userEmail = session.user.email || 'unknown'
-
-        console.log('[Login] Electron mode: Checking user authorization...', { userId, userEmail })
-
-        // Check if user is allowlisted for Electron access
-        const isAllowed = await isUserAllowlisted(userId)
-
-        console.log('[Login] Allowlist check result:', { isAllowed, userId })
-
-        if (!isAllowed) {
-          console.warn('[Login] User not authorized for Electron access:', userEmail)
-
-          // Sign out immediately
-          await supabase.auth.signOut()
-
-          // Show error message
-          setError(
-            `Access Denied: Electron access requires authorization. Your email (${userEmail}) is not approved for this application. Please contact the administrator to request access.`
-          )
-          setLoading(false)
-        } else {
-          // User is authorized, stop loading
-          setLoading(false)
-        }
+        setLoading(false)
       }
     })
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [isElectronMode])
+  }, [])
 
   // Handle OAuth callback from external browser (Electron only)
   useEffect(() => {
@@ -87,6 +58,7 @@ const Login: React.FC = () => {
     const cleanup = window.electronAPI.auth.onOAuthCallback(async (callbackUrl: string) => {
       console.log('[Login] Received OAuth callback from external browser:', callbackUrl)
       setLoading(true)
+      setError(null)
 
       try {
         // Extract the hash/query parameters from the callback URL
@@ -95,20 +67,50 @@ const Login: React.FC = () => {
         const access_token = hashParams.get('access_token')
         const refresh_token = hashParams.get('refresh_token')
 
-        if (access_token && refresh_token) {
-          // Set the session in Supabase
-          const { error } = await supabase!.auth.setSession({
-            access_token,
-            refresh_token,
-          })
-
-          if (error) throw error
-
-          console.log('[Login] OAuth session established successfully')
-          // Auth state change listener will handle authorization check
-        } else {
+        if (!access_token || !refresh_token) {
           throw new Error('No tokens found in callback URL')
         }
+
+        // Set the session in Supabase
+        const { data, error } = await supabase!.auth.setSession({
+          access_token,
+          refresh_token,
+        })
+
+        if (error) throw error
+
+        console.log('[Login] OAuth session established successfully')
+
+        // Check if user is authorized for Electron access
+        if (data.session?.user && isElectronMode) {
+          const userId = data.session.user.id
+          const userEmail = data.session.user.email || 'unknown'
+
+          console.log('[Login] Electron mode: Checking user authorization...', { userId, userEmail })
+
+          const isAllowed = await isUserAllowlisted(userId)
+
+          console.log('[Login] Allowlist check result:', { isAllowed, userId })
+
+          if (!isAllowed) {
+            console.warn('[Login] User not authorized for Electron access:', userEmail)
+
+            // Sign out immediately
+            await supabase!.auth.signOut()
+
+            // Show error message
+            setError(
+              `Access Denied: Electron access requires authorization. Your email (${userEmail}) is not approved for this application. Please contact the administrator to request access.`
+            )
+            setLoading(false)
+            return
+          }
+
+          console.log('[Login] User authorized, completing sign-in')
+        }
+
+        // Success - clear loading state and let the redirect happen
+        setLoading(false)
       } catch (error: any) {
         console.error('[Login] Failed to handle OAuth callback:', error)
         setError(error.message || 'Failed to complete OAuth login')
@@ -117,7 +119,7 @@ const Login: React.FC = () => {
     })
 
     return cleanup
-  }, [])
+  }, [isElectronMode])
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
     setLoading(true)
