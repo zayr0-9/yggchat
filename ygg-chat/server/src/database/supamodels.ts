@@ -594,7 +594,9 @@ export class ConversationService {
     ownerId: string,
     title?: string,
     modelName?: string,
-    projectId?: string
+    projectId?: string,
+    systemPrompt?: string | null,
+    conversationContext?: string | null
   ): Promise<Conversation> {
     const { data: created, error } = await client
       .from('conversations')
@@ -603,6 +605,8 @@ export class ConversationService {
         title: title || null,
         model_name: modelName || 'gemma3:4b',
         project_id: projectId || null,
+        system_prompt: systemPrompt || null,
+        conversation_context: conversationContext || null,
       })
       .select()
       .single()
@@ -794,18 +798,18 @@ export class MessageService {
       }
     }
 
-    console.log('inserting the following fields - - - - - - - ', {
-      conversation_id: conversationId,
-      owner_id: ownerId,
-      parent_id: parentId,
-      role,
-      content,
-      thinking_block,
-      tool_calls: parsedToolCalls,
-      model_name: modelName || 'unknown',
-      note: note || null,
-      plain_text_content: '',
-    })
+    // console.log('inserting the following fields - - - - - - - ', {
+    //   conversation_id: conversationId,
+    //   owner_id: ownerId,
+    //   parent_id: parentId,
+    //   role,
+    //   content,
+    //   thinking_block,
+    //   tool_calls: parsedToolCalls,
+    //   model_name: modelName || 'unknown',
+    //   note: note || null,
+    //   plain_text_content: '',
+    // })
     // Compute plain text content before insert to save an API call
     let plainTextContent: string | null = null
     try {
@@ -836,7 +840,7 @@ export class MessageService {
       console.error('Error creating message:', error)
       throw error
     }
-    console.log('created Message = = = = ', created)
+    // console.log('created Message = = = = ', created)
     return created as Message
   }
 

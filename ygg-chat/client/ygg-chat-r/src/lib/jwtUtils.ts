@@ -8,6 +8,9 @@ interface CachedClaims {
 
 let claimsCache: CachedClaims | null = null
 
+// Mutex to prevent concurrent token refresh requests
+let refreshPromise: Promise<boolean> | null = null
+
 /**
  * Read session from localStorage ONLY (no network calls).
  * This bypasses Supabase SDK's getSession() which may trigger network requests.
@@ -186,56 +189,106 @@ export async function getUserIdFromClaims(): Promise<string | null> {
 }
 
 /**
- * Checks if the current token needs refresh and refreshes it if necessary.
- * Uses local expiry time check - NO network calls unless refresh is actually needed.
+ * Gets the number of seconds until the current token expires.
  *
- * @returns true if token was refreshed, false otherwise
+ * @returns Seconds until expiration, or null if no valid session
  */
-export async function refreshTokenIfNeeded(): Promise<boolean> {
+export function getTokenExpirationTime(): number | null {
   try {
-    // Read from localStorage directly (no network call)
     const session = getSessionFromStorage()
-
-    if (!session) {
-      return false
+    if (!session?.access_token) {
+      return null
     }
 
-    // Check if token expires in the next 5 minutes (300 seconds)
-    const expiresAt = session.expires_at
-    if (!expiresAt) {
-      console.warn('[jwtUtils] Session missing expires_at')
-      return false
+    const claims = decodeJWT(session.access_token)
+    if (!claims?.exp) {
+      return null
     }
 
     const now = Math.floor(Date.now() / 1000)
-    const expiresIn = expiresAt - now
+    const expiresIn = (claims.exp as number) - now
 
-    // Refresh if token expires in less than 5 minutes
-    if (expiresIn < 300) {
-      // Check if supabase client is available
-      if (!supabase) {
-        console.warn('[jwtUtils] ⚠️  Supabase client not available - cannot refresh token')
-        return false
-      }
-
-      // This will call /auth/v1/token endpoint (NOT /auth/v1/user!)
-      const { data, error } = await supabase.auth.refreshSession()
-
-      if (error) {
-        console.error('[jwtUtils] ❌ Failed to refresh session:', error)
-        return false
-      }
-
-      if (data.session) {
-        // Clear claims cache since we have a new token
-        clearClaimsCache()
-        return true
-      }
-    }
-
-    return false
+    return expiresIn
   } catch (err) {
-    console.error('[jwtUtils] ❌ Exception during token refresh:', err)
-    return false
+    console.error('[jwtUtils] Failed to get token expiration time:', err)
+    return null
   }
+}
+
+/**
+ * Checks if the current token needs refresh and refreshes it if necessary.
+ * Uses local expiry time check - NO network calls unless refresh is actually needed.
+ *
+ * Includes mutex to prevent concurrent refresh requests (race condition protection).
+ *
+ * @param force - If true, force refresh regardless of expiration time
+ * @returns true if token was refreshed, false otherwise
+ */
+export async function refreshTokenIfNeeded(force = false): Promise<boolean> {
+  // If a refresh is already in progress, wait for it to complete
+  if (refreshPromise) {
+    console.log('[jwtUtils] Refresh already in progress, waiting...')
+    return await refreshPromise
+  }
+
+  // Create a new refresh promise
+  refreshPromise = (async () => {
+    try {
+      // Read from localStorage directly (no network call)
+      const session = getSessionFromStorage()
+
+      if (!session) {
+        console.log('[jwtUtils] No session found, cannot refresh')
+        return false
+      }
+
+      // Check if token expires in the next 5 minutes (300 seconds)
+      const expiresAt = session.expires_at
+      if (!expiresAt) {
+        console.warn('[jwtUtils] Session missing expires_at')
+        return false
+      }
+
+      const now = Math.floor(Date.now() / 1000)
+      const expiresIn = expiresAt - now
+
+      console.log('[jwtUtils] Token expires in', expiresIn, 'seconds')
+
+      // Refresh if token expires in less than 5 minutes OR if forced
+      if (force || expiresIn < 300) {
+        console.log(`[jwtUtils] ${force ? 'Force refreshing' : 'Refreshing'} token...`)
+
+        // Check if supabase client is available
+        if (!supabase) {
+          console.warn('[jwtUtils] ⚠️  Supabase client not available - cannot refresh token')
+          return false
+        }
+
+        // This will call /auth/v1/token endpoint (NOT /auth/v1/user!)
+        const { data, error } = await supabase.auth.refreshSession()
+
+        if (error) {
+          console.error('[jwtUtils] ❌ Failed to refresh session:', error)
+          return false
+        }
+
+        if (data.session) {
+          console.log('[jwtUtils] ✅ Token refreshed successfully')
+          // Clear claims cache since we have a new token
+          clearClaimsCache()
+          return true
+        }
+      }
+
+      return false
+    } catch (err) {
+      console.error('[jwtUtils] ❌ Exception during token refresh:', err)
+      return false
+    } finally {
+      // Clear the promise so future requests can refresh again
+      refreshPromise = null
+    }
+  })()
+
+  return await refreshPromise
 }

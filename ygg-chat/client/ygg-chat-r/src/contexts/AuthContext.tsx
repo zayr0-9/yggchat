@@ -111,6 +111,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               console.error('[AuthContext] Token refresh failed:', error)
             }
           }, 30000) // Check every 30 seconds
+
+          // Add visibility change listener - refresh when tab becomes visible
+          const handleVisibilityChange = async () => {
+            if (document.visibilityState === 'visible') {
+              console.log('[AuthContext] Tab became visible, checking token...')
+              try {
+                await authProvider.refreshToken()
+              } catch (error) {
+                console.error('[AuthContext] Token refresh on visibility change failed:', error)
+              }
+            }
+          }
+
+          // Add window focus listener - refresh when window gains focus
+          const handleWindowFocus = async () => {
+            console.log('[AuthContext] Window gained focus, checking token...')
+            try {
+              await authProvider.refreshToken()
+            } catch (error) {
+              console.error('[AuthContext] Token refresh on window focus failed:', error)
+            }
+          }
+
+          document.addEventListener('visibilitychange', handleVisibilityChange)
+          window.addEventListener('focus', handleWindowFocus)
+
+          // Store cleanup functions
+          const originalUnsubscribe = unsubscribe
+          unsubscribe = () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            window.removeEventListener('focus', handleWindowFocus)
+            if (originalUnsubscribe) originalUnsubscribe()
+          }
         }
       } catch (error) {
         console.error('[AuthContext] Failed to initialize auth:', error)

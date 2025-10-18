@@ -107,7 +107,7 @@ async function verifyAuth(req: express.Request): Promise<{ userId: string; clien
     throw new Error('Authentication failed: Missing user ID in token claims')
   }
 
-  console.log('[supaChat] ✅ JWT decoded locally (ZERO network calls) for user:', userId)
+  // console.log('[supaChat] ✅ JWT decoded locally (ZERO network calls) for user:', userId)
 
   return { userId, client }
 }
@@ -645,10 +645,18 @@ router.delete(
 router.post(
   '/conversations',
   asyncHandler(async (req, res) => {
-    const { title, modelName, projectId } = req.body
+    const { title, modelName, projectId, systemPrompt, conversationContext } = req.body
     const { client, userId } = await verifyAuth(req)
 
-    const conversation = await ConversationService.create(client, userId, title, modelName, projectId)
+    const conversation = await ConversationService.create(
+      client,
+      userId,
+      title,
+      modelName,
+      projectId,
+      systemPrompt,
+      conversationContext
+    )
     res.json(conversation)
   })
 )
@@ -1205,7 +1213,7 @@ router.post(
               selectedModel,
               assistantToolCalls
             )
-            console.log(assistantMessage)
+            // console.log(assistantMessage)
 
             const cleanedMessage = { ...assistantMessage, content: cleanedContent }
             res.write(`data: ${JSON.stringify({ type: 'complete', message: cleanedMessage, iteration: i })}\n\n`)
@@ -1282,7 +1290,7 @@ router.post(
     if (!content && !retrigger) {
       return res.status(400).json({ error: 'Message content required' })
     }
-    console.log('server | test', systemPrompt, clientProjectContext, clientConversationContext)
+    // console.log('server | test', systemPrompt, clientProjectContext, clientConversationContext)
 
     // let filesToUse = selectedFiles || []
     // if (!filesToUse || filesToUse.length === 0) {
@@ -1340,7 +1348,7 @@ router.post(
 
     const processedContent = content
     // filesToUse && filesToUse.length > 0 ? replaceFileMentionsWithContent(content, filesToUse) : content
-    console.log('server | processedContent', processedContent)
+    // console.log('server | processedContent', processedContent)
 
     // ✅ OPTIMIZATION: Use client-sent context (already validated via RLS when client fetched it)
     // Client sends conversationContext and projectContext to eliminate DB query
@@ -1377,7 +1385,7 @@ router.post(
         return res.status(400).json({ error: 'Cannot retrigger: last message is not from user' })
       }
       userMessage = lastMessage
-      console.log('server | retriggering from existing user message', userMessage.id)
+      // console.log('server | retriggering from existing user message', userMessage.id)
     } else {
       userMessage = await MessageService.create(
         client,
@@ -1389,7 +1397,7 @@ router.post(
         '',
         selectedModel
       )
-      console.log('server | user message', messages)
+      // console.log('server | user message', messages)
 
       if (selectedFiles && selectedFiles.length > 0) {
         for (const file of selectedFiles) {
@@ -1549,7 +1557,7 @@ router.post(
             selectedModel,
             assistantToolCalls
           )
-          console.log(assistantMessage)
+          // console.log(assistantMessage)
           const cleanedMessage = { ...assistantMessage, content: cleanedContent }
           res.write(
             `data: ${JSON.stringify({

@@ -97,29 +97,34 @@ export const fetchConversationsByProjectId = createAsyncThunk<Conversation[], Pr
 // Create new conversation for current user
 export const createConversation = createAsyncThunk<
   Conversation,
-  { title?: string },
+  { title?: string; projectId?: string | null; systemPrompt?: string | null; conversationContext?: string | null },
   { state: RootState; extra: ThunkExtraArgument }
->('conversations/create', async ({ title }, { getState, extra, rejectWithValue }) => {
-  try {
-    const { auth } = extra
+>(
+  'conversations/create',
+  async ({ title, projectId: providedProjectId, systemPrompt, conversationContext }, { getState, extra, rejectWithValue }) => {
+    try {
+      const { auth } = extra
 
-    if (!auth.userId) {
-      throw new Error('User not authenticated')
+      if (!auth.userId) {
+        throw new Error('User not authenticated')
+      }
+
+      // Use provided projectId if available, otherwise fall back to selected project from state
+      const selectedProject = getState().projects.selectedProject
+      const projectId = providedProjectId !== undefined ? providedProjectId : (selectedProject?.id || null)
+
+      return await api.post<Conversation>('/conversations', auth.accessToken, {
+        userId: auth.userId,
+        title: title || null,
+        projectId,
+        systemPrompt,
+        conversationContext,
+      })
+    } catch (err) {
+      return rejectWithValue(err instanceof Error ? err.message : 'Failed to create conversation')
     }
-
-    // Get selected project ID from state
-    const selectedProject = getState().projects.selectedProject
-    const projectId = selectedProject?.id || null
-
-    return await api.post<Conversation>('/conversations', auth.accessToken, {
-      userId: auth.userId,
-      title: title || null,
-      projectId,
-    })
-  } catch (err) {
-    return rejectWithValue(err instanceof Error ? err.message : 'Failed to create conversation')
   }
-})
+)
 
 // Update conversation title by id
 export const updateConversation = createAsyncThunk<
