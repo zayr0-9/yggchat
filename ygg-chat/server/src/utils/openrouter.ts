@@ -1,10 +1,13 @@
 import fs from 'fs'
 import OpenAI from 'openai'
 import path from 'path'
+import { randomUUID } from 'crypto'
 import { MessageId } from '../../../shared/types'
 import { ProviderCostService } from '../database/models'
+import { supabaseAdmin } from '../database/supamodels'
 import { getApiKey } from './apiKeyManager'
 import tools from './tools'
+import { moneyMultiply, moneyAdd, moneyMax, moneyFormat } from './money'
 
 // Helper function to convert Zod schema to JSON schema
 function zodToJsonSchema(zodSchema: any): any {
@@ -270,15 +273,16 @@ function calculateTokenCosts(
   const completionTokens = usage.completion_tokens || 0
   const reasoningTokens = usage.reasoning_tokens || 0
 
-  const promptCost = (promptTokens / 1000) * pricing.prompt
-  const completionCost = (completionTokens / 1000) * pricing.completion
+  // Use precise decimal arithmetic for financial calculations
+  const promptCost = moneyMultiply(promptTokens / 1000, pricing.prompt)
+  const completionCost = moneyMultiply(completionTokens / 1000, pricing.completion)
 
   // Use pricing.reasoning if available, otherwise treat reasoning as completion tokens
   // (ModelPricing interface can be extended to add reasoning later)
   const reasoningRate = (pricing as any).reasoning ?? pricing.completion
-  const reasoningCost = (reasoningTokens / 1000) * reasoningRate
+  const reasoningCost = moneyMultiply(reasoningTokens / 1000, reasoningRate)
 
-  const totalCost = promptCost + completionCost + reasoningCost
+  const totalCost = moneyAdd(moneyAdd(promptCost, completionCost), reasoningCost)
 
   return { promptCost, completionCost, reasoningCost, totalCost }
 }
@@ -286,6 +290,275 @@ function calculateTokenCosts(
 // Preload pricing for all available models
 export async function preloadModelPricing() {
   await fetchAllModelsPricing()
+}
+
+// ===========================================================================
+// TWO-PHASE CREDIT RESERVATION SYSTEM
+// ===========================================================================
+
+/**
+ * Estimate credits needed for a generation request
+ * Uses a conservative multiplier to ensure we don't run out mid-generation
+ */
+function estimateCreditsForGeneration(
+  messages: Array<{ role: string; content: any }>,
+  model: string,
+  pricing: ModelPricing | null
+): number {
+  if (!pricing) {
+    // If no pricing data, use a conservative estimate
+    // Assume ~1000 tokens at $0.01/1K = 0.01 credits, with 3x safety margin
+    return 0.03
+  }
+
+  // Estimate prompt tokens (rough: 4 chars per token)
+  let promptChars = 0
+  messages.forEach(msg => {
+    if (typeof msg.content === 'string') {
+      promptChars += msg.content.length
+    } else if (Array.isArray(msg.content)) {
+      msg.content.forEach((part: any) => {
+        if (part.type === 'text' && part.text) {
+          promptChars += part.text.length
+        }
+      })
+    }
+  })
+
+  const estimatedPromptTokens = Math.ceil(promptChars / 4)
+  // Assume completion will be ~30% of prompt length (conservative)
+  const estimatedCompletionTokens = Math.ceil(estimatedPromptTokens * 0.3)
+
+  // Calculate cost in USD using precise decimal arithmetic
+  const estimatedPromptCost = moneyMultiply(estimatedPromptTokens / 1000, pricing.prompt)
+  const estimatedCompletionCost = moneyMultiply(estimatedCompletionTokens / 1000, pricing.completion)
+
+  // Apply 2x safety multiplier (actual usage often less than estimate)
+  // Convert USD to credits (assuming 1:1 mapping, adjust if needed)
+  const estimatedCredits = moneyMultiply(moneyAdd(estimatedPromptCost, estimatedCompletionCost), 2)
+
+  // Minimum reservation: 0.001 credits
+  return moneyMax(0.001, estimatedCredits)
+}
+
+/**
+ * Reserve credits atomically before starting a generation
+ * Returns reservation info or throws if insufficient credits
+ */
+async function reserveCreditsForGeneration(
+  userId: string,
+  model: string,
+  pricing: ModelPricing | null,
+  messages: Array<{ role: string; content: any }>,
+  stepIndex: number,
+  messageId?: MessageId,
+  conversationId?: string
+): Promise<{ reservationRefId: string; reservedCredits: number; providerRunId: string }> {
+  const reservedCredits = estimateCreditsForGeneration(messages, model, pricing)
+  const reservationRefId = randomUUID()
+
+  try {
+    // Call the finance_reserve_credits function via Supabase RPC
+    const { data, error } = await supabaseAdmin.rpc('finance_reserve_credits', {
+      p_user_id: userId,
+      p_ref_type: 'openrouter_gen_reserve',
+      p_ref_id: reservationRefId,
+      p_amount: reservedCredits,
+      p_metadata: {
+        model,
+        message_id: messageId || null,
+        conversation_id: conversationId || null,
+        step_index: stepIndex,
+        reserved_at: new Date().toISOString(),
+      },
+    })
+
+    if (error) {
+      // Check for specific error types
+      if (error.message.includes('insufficient_credits')) {
+        throw new Error(
+          `Insufficient credits. You need ${moneyFormat(reservedCredits)} credits, but your balance is lower. Please add more credits.`
+        )
+      }
+      throw new Error(`Credit reservation failed: ${error.message}`)
+    }
+
+    const ledgerEntryId = data as string
+
+    // Create provider_runs entry
+    const { data: providerRun, error: providerRunError } = await supabaseAdmin
+      .from('provider_runs')
+      .insert({
+        user_id: userId,
+        conversation_id: conversationId || null,
+        message_id: messageId || null,
+        model,
+        reservation_ref_id: reservationRefId,
+        step_index: stepIndex,
+        status: 'running',
+        reserved_credits: reservedCredits,
+      })
+      .select('id')
+      .single()
+
+    if (providerRunError) {
+      console.error('Error creating provider_runs entry:', providerRunError)
+      // Don't fail the request, just log the error
+      // The reservation was successful, so we can proceed
+    }
+
+    console.log(
+      `✅ Reserved ${moneyFormat(reservedCredits)} credits for user ${userId} (reservation: ${reservationRefId})`
+    )
+
+    return {
+      reservationRefId,
+      reservedCredits,
+      providerRunId: providerRun?.id || '',
+    }
+  } catch (error: any) {
+    console.error('Error reserving credits:', error)
+    throw error
+  }
+}
+
+/**
+ * Update provider_runs with generation_id when we receive it from OpenRouter
+ */
+async function updateProviderRunWithGenerationId(
+  providerRunId: string,
+  generationId: string,
+  reservationRefId: string
+): Promise<void> {
+  try {
+    // Update provider_runs table
+    const { error: runError } = await supabaseAdmin
+      .from('provider_runs')
+      .update({ generation_id: generationId })
+      .eq('id', providerRunId)
+
+    if (runError) {
+      console.error('Error updating provider_runs with generation_id:', runError)
+    }
+
+    // Also update the reservation ledger entry metadata for easier debugging
+    // Use raw SQL via rpc to merge JSONB in a single query
+    const { error: ledgerError } = await supabaseAdmin.rpc('exec_sql', {
+      sql: `
+        UPDATE credits_ledger
+        SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('generation_id', $1::text)
+        WHERE external_ref_type = $2
+        AND external_ref_id = $3
+      `,
+      params: [generationId, 'openrouter_gen_reserve', reservationRefId]
+    })
+
+    if (ledgerError) {
+      console.error('Error updating ledger metadata with generation_id:', ledgerError)
+    }
+
+    console.log(`📝 Updated provider run ${providerRunId} with generation_id: ${generationId}`)
+  } catch (error) {
+    console.error('Error in updateProviderRunWithGenerationId:', error)
+  }
+}
+
+/**
+ * Mark provider_run as finished and set next reconciliation time
+ * For aborted runs without generation_id, immediately refund reserved credits
+ */
+async function finishProviderRun(
+  providerRunId: string,
+  status: 'succeeded' | 'aborted' | 'failed',
+  usage: any
+): Promise<void> {
+  try {
+    // First, fetch the provider run to check if it has a generation_id
+    const { data: providerRun, error: fetchError } = await supabaseAdmin
+      .from('provider_runs')
+      .select('generation_id, reserved_credits, user_id, reservation_ref_id, model')
+      .eq('id', providerRunId)
+      .single()
+
+    if (fetchError) {
+      console.error('Error fetching provider run:', fetchError)
+      return
+    }
+
+    // Check if this is an aborted run without a generation_id
+    // This means the stream never started, so no actual cost was incurred
+    const needsImmediateRefund = status === 'aborted' && !providerRun?.generation_id
+
+    if (needsImmediateRefund && providerRun) {
+      console.log(
+        `💸 Generation aborted before streaming - immediately refunding ${moneyFormat(providerRun.reserved_credits)} credits`
+      )
+
+      // Refund the full reserved amount since no generation occurred
+      try {
+        const { error: refundError } = await supabaseAdmin.rpc('finance_adjust_credits', {
+          p_user_id: providerRun.user_id,
+          p_ref_type: 'openrouter_gen_abort_refund',
+          p_ref_id: providerRun.reservation_ref_id,
+          p_delta: providerRun.reserved_credits, // Positive delta = refund
+          p_kind: 'generation_refund',
+          p_metadata: {
+            model: providerRun.model,
+            provider_run_id: providerRunId,
+            reason: 'Generation aborted before streaming started - no cost incurred',
+            refunded_at: new Date().toISOString(),
+          },
+          p_allow_negative: false,
+        })
+
+        if (refundError) {
+          console.error('Error refunding credits for aborted generation:', refundError)
+        } else {
+          console.log(`✅ Refunded ${moneyFormat(providerRun.reserved_credits)} credits for aborted generation`)
+
+          // Mark as reconciled immediately since we've handled the refund
+          const { error: updateError } = await supabaseAdmin
+            .from('provider_runs')
+            .update({
+              status: 'reconciled',
+              actual_credits: 0, // No actual cost
+              finished_at: new Date().toISOString(),
+              reconciled_at: new Date().toISOString(),
+              raw_usage: usage || null,
+            })
+            .eq('id', providerRunId)
+
+          if (updateError) {
+            console.error('Error updating provider run after refund:', updateError)
+          } else {
+            console.log(`🏁 Marked provider run ${providerRunId} as reconciled (immediate refund)`)
+          }
+          return
+        }
+      } catch (refundError) {
+        console.error('Exception during credit refund:', refundError)
+      }
+    }
+
+    // Normal case: mark as finished and let reconciliation worker handle it
+    const { error } = await supabaseAdmin
+      .from('provider_runs')
+      .update({
+        status,
+        finished_at: new Date().toISOString(),
+        next_reconcile_at: new Date().toISOString(), // Reconcile immediately
+        raw_usage: usage || null,
+      })
+      .eq('id', providerRunId)
+
+    if (error) {
+      console.error('Error finishing provider run:', error)
+    } else {
+      console.log(`🏁 Marked provider run ${providerRunId} as ${status}, ready for reconciliation`)
+    }
+  } catch (error) {
+    console.error('Error in finishProviderRun:', error)
+  }
 }
 
 // Helper function to format tool calls into user-friendly messages
@@ -340,7 +613,8 @@ export async function generateResponse(
   think: boolean = false,
   messageId?: MessageId,
   userId?: string,
-  tool_detail: boolean = false
+  tool_detail: boolean = false,
+  conversationId?: string
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
   let stepCount = 0
@@ -358,6 +632,11 @@ export async function generateResponse(
   let openrouterCreditsUsed = 0
   let assistantContent = ''
   let costAlreadyLogged = false // Prevent double-logging when aborted
+
+  // Track current provider run for credit management
+  let currentProviderRunId: string | null = null
+  let currentReservationRefId: string | null = null
+  let generationIdCaptured = false
 
   // Convert tools to OpenAI format
   const openaiTools = tools
@@ -395,8 +674,41 @@ export async function generateResponse(
 
     // Reset assistant content for this step (but keep finalUsage to track across steps)
     assistantContent = ''
+    generationIdCaptured = false // Reset for this step
+
+    // ===================================================================
+    // STEP 1: RESERVE CREDITS (Two-Phase Commit Pattern)
+    // ===================================================================
+    // Only reserve if userId is provided (meaning credits are enabled)
+    if (userId) {
+      try {
+        const pricing = await getModelPricing(model)
+        const reservation = await reserveCreditsForGeneration(
+          userId,
+          model,
+          pricing,
+          conversationMessages,
+          stepCount,
+          messageId,
+          conversationId
+        )
+        currentProviderRunId = reservation.providerRunId
+        currentReservationRefId = reservation.reservationRefId
+        console.log(`💳 Step ${stepCount}: Reserved ${moneyFormat(reservation.reservedCredits)} credits`)
+      } catch (error: any) {
+        // If reservation fails (e.g., insufficient credits), stop the generation
+        const errorMsg = error.message || 'Failed to reserve credits'
+        onChunk(JSON.stringify({ part: 'error', delta: errorMsg }))
+        throw error
+      }
+    }
 
     if (abortSignal?.aborted) {
+      // Mark provider run as aborted
+      if (currentProviderRunId) {
+        await finishProviderRun(currentProviderRunId, 'aborted', finalUsage)
+      }
+
       // Log partial usage if available before returning (only if not already logged)
       if (finalUsage && !costAlreadyLogged) {
         try {
@@ -413,7 +725,7 @@ export async function generateResponse(
           totalReasoningTokens = totals.totalReasoningTokens
           totalCostUSD = totals.totalCostUSD
           totalOpenRouterCredits = totals.totalOpenRouterCredits
-          console.log(`📊 Logged partial cost on abort: $${totals.totalCostUSD.toFixed(6)}`)
+          console.log(`📊 Logged partial cost on abort: $${moneyFormat(totals.totalCostUSD)}`)
         } catch (logError) {
           console.error('Error logging partial usage on abort:', logError)
         }
@@ -471,6 +783,15 @@ export async function generateResponse(
           const error: any = new Error('Generation aborted by user')
           error.name = 'AbortError'
           throw error
+        }
+
+        // ===================================================================
+        // CAPTURE GENERATION ID (for reconciliation)
+        // ===================================================================
+        // OpenRouter returns generation ID in chunk.id (first chunk usually)
+        if (chunk.id && !generationIdCaptured && currentProviderRunId && currentReservationRefId) {
+          generationIdCaptured = true
+          await updateProviderRunWithGenerationId(currentProviderRunId, chunk.id, currentReservationRefId)
         }
 
         // Handle usage information - this contains the cost according to OpenRouter docs
@@ -589,6 +910,13 @@ export async function generateResponse(
             console.log(`🔹 OpenRouter credits found in final usage: ${finalUsage.cost}`)
           }
 
+          // ===================================================================
+          // FINISH PROVIDER RUN (mark as succeeded, ready for reconciliation)
+          // ===================================================================
+          if (currentProviderRunId) {
+            await finishProviderRun(currentProviderRunId, 'succeeded', finalUsage)
+          }
+
           break
         }
       }
@@ -652,6 +980,11 @@ export async function generateResponse(
           .includes('abort')
 
       if (isAbort) {
+        // Mark provider run as aborted
+        if (currentProviderRunId) {
+          await finishProviderRun(currentProviderRunId, 'aborted', finalUsage)
+        }
+
         // Log partial usage or estimate before returning on abort
         if (!finalUsage) {
           finalUsage = createEstimatedUsage(formattedMessages, assistantContent)
@@ -673,7 +1006,7 @@ export async function generateResponse(
             totalCostUSD = totals.totalCostUSD
             totalOpenRouterCredits = totals.totalOpenRouterCredits
             costAlreadyLogged = true
-            console.log(`📊 Logged partial cost on abort (error): $${totals.totalCostUSD.toFixed(6)}`)
+            console.log(`📊 Logged partial cost on abort (error): $${moneyFormat(totals.totalCostUSD)}`)
           } catch (logError) {
             console.error('Error logging usage on abort error:', logError)
           }
@@ -787,6 +1120,11 @@ export async function generateResponse(
           throw retryError
         }
       } else {
+        // Mark provider run as failed for non-abort errors
+        if (currentProviderRunId) {
+          await finishProviderRun(currentProviderRunId, 'failed', finalUsage)
+        }
+
         const errorMessage = error?.error?.message || error?.message || String(error)
         onChunk(JSON.stringify({ part: 'error', delta: errorMessage }))
         throw error
@@ -862,7 +1200,7 @@ export async function generateResponse(
         approxCost: totalCostUSD,
         apiCreditCost: totalOpenRouterCredits,
       })
-      console.log(`💾 Saved final cost data for user ${userId}, message ${messageId}: $${totalCostUSD.toFixed(6)} USD`)
+      console.log(`💾 Saved final cost data for user ${userId}, message ${messageId}: $${moneyFormat(totalCostUSD)} USD`)
     } catch (error) {
       console.error('Error saving final cost data to database:', error)
     }

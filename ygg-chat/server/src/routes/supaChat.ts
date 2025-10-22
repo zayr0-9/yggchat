@@ -1112,20 +1112,46 @@ router.post(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '', iteration: i })}\n\n`
                 )
               } else if (part === 'tool_call') {
-                assistantToolCalls += delta
-                res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '', iteration: i })}\n\n`)
+                // Validate that delta is valid JSON before adding to tool_calls
+                try {
+                  // Try to parse delta as JSON to validate it
+                  const parsedDelta = JSON.parse(delta)
+                  // If it's valid JSON, add it to the array
+                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                  currentToolCalls.push(delta)
+                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '', iteration: i })}\n\n`)
+                } catch (e) {
+                  // If delta is not valid JSON, treat it as regular content instead
+                  console.warn('⚠️  [supaChat repeats] Received invalid JSON in tool_call part, treating as content:', delta)
+                  assistantContent += delta
+                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta, iteration: i })}\n\n`)
+                }
               } else {
                 const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
                 if (delta.includes('{"') && toolCallRegex.test(delta)) {
                   const matches = delta.match(toolCallRegex)
                   if (matches) {
-                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                    currentToolCalls.push(...matches)
-                    assistantToolCalls = JSON.stringify(currentToolCalls)
+                    // Validate each match is valid JSON before adding
+                    const validMatches = matches.filter(match => {
+                      try {
+                        JSON.parse(match)
+                        return true
+                      } catch {
+                        console.warn('⚠️  [supaChat repeats] Regex matched invalid JSON, skipping:', match)
+                        return false
+                      }
+                    })
 
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '', iteration: i })}\n\n`
-                    )
+                    if (validMatches.length > 0) {
+                      const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                      currentToolCalls.push(...validMatches)
+                      assistantToolCalls = JSON.stringify(currentToolCalls)
+
+                      res.write(
+                        `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '', iteration: i })}\n\n`
+                      )
+                    }
 
                     const cleanedDelta = delta.replace(toolCallRegex, '').trim()
                     if (cleanedDelta) {
@@ -1147,13 +1173,26 @@ router.post(
               if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
                 const matches = chunk.match(toolCallRegex)
                 if (matches) {
-                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                  currentToolCalls.push(...matches)
-                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  // Validate each match is valid JSON before adding
+                  const validMatches = matches.filter(match => {
+                    try {
+                      JSON.parse(match)
+                      return true
+                    } catch {
+                      console.warn('⚠️  [supaChat repeats] Regex matched invalid JSON in catch block, skipping:', match)
+                      return false
+                    }
+                  })
 
-                  res.write(
-                    `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '', iteration: i })}\n\n`
-                  )
+                  if (validMatches.length > 0) {
+                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                    currentToolCalls.push(...validMatches)
+                    assistantToolCalls = JSON.stringify(currentToolCalls)
+
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '', iteration: i })}\n\n`
+                    )
+                  }
 
                   const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
                   if (cleanedChunk) {
@@ -1459,20 +1498,46 @@ router.post(
                 assistantThinking += delta
                 res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '' })}\n\n`)
               } else if (part === 'tool_call') {
-                assistantToolCalls += delta
-                res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '' })}\n\n`)
+                // Validate that delta is valid JSON before adding to tool_calls
+                try {
+                  // Try to parse delta as JSON to validate it
+                  const parsedDelta = JSON.parse(delta)
+                  // If it's valid JSON, add it to the array
+                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                  currentToolCalls.push(delta)
+                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '' })}\n\n`)
+                } catch (e) {
+                  // If delta is not valid JSON, treat it as regular content instead
+                  console.warn('⚠️  [supaChat] Received invalid JSON in tool_call part, treating as content:', delta)
+                  assistantContent += delta
+                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta })}\n\n`)
+                }
               } else {
                 const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
                 if (delta.includes('{"') && toolCallRegex.test(delta)) {
                   const matches = delta.match(toolCallRegex)
                   if (matches) {
-                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                    currentToolCalls.push(...matches)
-                    assistantToolCalls = JSON.stringify(currentToolCalls)
+                    // Validate each match is valid JSON before adding
+                    const validMatches = matches.filter(match => {
+                      try {
+                        JSON.parse(match)
+                        return true
+                      } catch {
+                        console.warn('⚠️  [supaChat] Regex matched invalid JSON, skipping:', match)
+                        return false
+                      }
+                    })
 
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '' })}\n\n`
-                    )
+                    if (validMatches.length > 0) {
+                      const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                      currentToolCalls.push(...validMatches)
+                      assistantToolCalls = JSON.stringify(currentToolCalls)
+
+                      res.write(
+                        `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '' })}\n\n`
+                      )
+                    }
 
                     const cleanedDelta = delta.replace(toolCallRegex, '').trim()
                     if (cleanedDelta) {
@@ -1492,11 +1557,24 @@ router.post(
               if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
                 const matches = chunk.match(toolCallRegex)
                 if (matches) {
-                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                  currentToolCalls.push(...matches)
-                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  // Validate each match is valid JSON before adding
+                  const validMatches = matches.filter(match => {
+                    try {
+                      JSON.parse(match)
+                      return true
+                    } catch {
+                      console.warn('⚠️  [supaChat] Regex matched invalid JSON in catch block, skipping:', match)
+                      return false
+                    }
+                  })
 
-                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '' })}\n\n`)
+                  if (validMatches.length > 0) {
+                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                    currentToolCalls.push(...validMatches)
+                    assistantToolCalls = JSON.stringify(currentToolCalls)
+
+                    res.write(`data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '' })}\n\n`)
+                  }
 
                   const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
                   if (cleanedChunk) {

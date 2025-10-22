@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
@@ -74,9 +74,9 @@ const PaymentPage: React.FC = () => {
       // Convert array to object format for backward compatibility
       const pricingData: PricingInfo = {
         tiers: {
-          low: tiersData.find((t) => t.name === 'Low') || tiersData[0],
-          mid: tiersData.find((t) => t.name === 'Mid') || tiersData[1],
-          high: tiersData.find((t) => t.name === 'High') || tiersData[2],
+          low: tiersData.find(t => t.name === 'Low') || tiersData[0],
+          mid: tiersData.find(t => t.name === 'Mid') || tiersData[1],
+          high: tiersData.find(t => t.name === 'High') || tiersData[2],
         },
       }
       setPricingInfo(pricingData)
@@ -117,7 +117,7 @@ const PaymentPage: React.FC = () => {
     if (
       !userId ||
       !window.confirm(
-        'Are you sure you want to cancel your subscription? You will have access until the end of your billing period.',
+        'Are you sure you want to cancel your subscription? You will have access until the end of your billing period.'
       )
     ) {
       return
@@ -202,15 +202,13 @@ const PaymentPage: React.FC = () => {
               </div>
               <div>
                 <h2 className='text-2xl font-bold dark:text-neutral-100'>Use Your Own API Keys</h2>
-                <p className='text-gray-600 dark:text-gray-400'>
-                  No subscriptions needed - connect your own API keys
-                </p>
+                <p className='text-gray-600 dark:text-gray-400'>No subscriptions needed - connect your own API keys</p>
               </div>
             </div>
 
             <p className='text-gray-700 dark:text-neutral-300 mb-6'>
-              In this version, you have full control over your API usage. Simply provide your own API
-              keys from providers like OpenRouter, OpenAI, Anthropic, or Google Gemini.
+              In this version, you have full control over your API usage. Simply provide your own API keys from
+              providers like OpenRouter, OpenAI, Anthropic, or Google Gemini.
             </p>
 
             <div className='bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6'>
@@ -230,11 +228,8 @@ const PaymentPage: React.FC = () => {
                   { name: 'Google Gemini', icon: 'bx-star', desc: 'Gemini Pro' },
                   { name: 'Ollama', icon: 'bx-home', desc: 'Local models' },
                   { name: 'LM Studio', icon: 'bx-desktop', desc: 'Local models' },
-                ].map((provider) => (
-                  <div
-                    key={provider.name}
-                    className='flex items-center p-3 bg-gray-50 dark:bg-yBlack-800 rounded-lg'
-                  >
+                ].map(provider => (
+                  <div key={provider.name} className='flex items-center p-3 bg-gray-50 dark:bg-yBlack-800 rounded-lg'>
                     <i className={`bx ${provider.icon} text-2xl text-indigo-600 dark:text-indigo-400 mr-3`}></i>
                     <div>
                       <p className='font-medium dark:text-neutral-100'>{provider.name}</p>
@@ -303,7 +298,9 @@ const PaymentPage: React.FC = () => {
             <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
               <div>
                 <p className='text-sm text-gray-600 dark:text-gray-400'>Tier</p>
-                <p className='text-lg font-semibold dark:text-neutral-100 capitalize'>{subscriptionStatus.tier} Tier God</p>
+                <p className='text-lg font-semibold dark:text-neutral-100 capitalize'>
+                  {subscriptionStatus.tier} Tier God
+                </p>
               </div>
               <div>
                 <p className='text-sm text-gray-600 dark:text-gray-400'>Status</p>
@@ -311,13 +308,16 @@ const PaymentPage: React.FC = () => {
               </div>
               <div>
                 <p className='text-sm text-gray-600 dark:text-gray-400'>Credits Balance</p>
-                <p className='text-lg font-semibold dark:text-neutral-100'>{subscriptionStatus.creditsBalance.toLocaleString()}</p>
+                <p className='text-lg font-semibold dark:text-neutral-100'>
+                  {(subscriptionStatus.creditsBalance * 10).toLocaleString()}
+                </p>
               </div>
             </div>
             {subscriptionStatus.currentPeriodEnd && (
               <div className='mt-4'>
                 <p className='text-sm text-gray-600 dark:text-gray-400'>
-                  {subscriptionStatus.status === 'canceled' ? 'Access until' : 'Renews on'}: {formatDate(subscriptionStatus.currentPeriodEnd)}
+                  {subscriptionStatus.status === 'canceled' ? 'Access until' : 'Renews on'}:{' '}
+                  {formatDate(subscriptionStatus.currentPeriodEnd)}
                 </p>
               </div>
             )}
@@ -399,12 +399,14 @@ const PaymentPage: React.FC = () => {
           <div className='mb-8 p-6 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border border-gray-200 dark:border-neutral-700'>
             <h2 className='text-2xl font-bold mb-4 dark:text-neutral-100'>You&apos;re All Set! 🎉</h2>
             <p className='text-gray-700 dark:text-neutral-300 mb-4'>
-              You currently have an active subscription. Your credits will automatically replenish each month on your renewal date.
+              You currently have an active subscription. Your credits will automatically replenish each month on your
+              renewal date.
             </p>
             {subscriptionStatus?.status === 'canceled' && (
               <p className='text-yellow-700 dark:text-yellow-400 mb-4'>
                 <i className='bx bx-info-circle mr-2'></i>
-                Your subscription is set to cancel, but you&apos;ll have access until {formatDate(subscriptionStatus.currentPeriodEnd)}.
+                Your subscription is set to cancel, but you&apos;ll have access until{' '}
+                {formatDate(subscriptionStatus.currentPeriodEnd)}.
               </p>
             )}
             {subscriptionStatus?.status === 'past_due' && (
@@ -415,7 +417,8 @@ const PaymentPage: React.FC = () => {
               </p>
             )}
             <p className='text-sm text-gray-600 dark:text-gray-400'>
-              Need to change your plan or payment method? Please contact support or cancel your current subscription first.
+              Need to change your plan or payment method? Please contact support or cancel your current subscription
+              first.
             </p>
           </div>
         )}

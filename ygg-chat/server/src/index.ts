@@ -16,6 +16,7 @@ import settingsRoutes from './routes/settings'
 import { stripMarkdownToText } from './utils/markdownStripper'
 import { preloadModelPricing } from './utils/openrouter'
 import tools from './utils/tools/index'
+import { startReconciliationWorker } from './workers/openrouter-reconciliation'
 
 const app = express()
 const server = createServer(app)
@@ -228,6 +229,15 @@ ensureDefaultLocalUser()
 preloadModelPricing().catch(error => {
   console.log('Warning: Could not preload model pricing:', error.message)
 })
+
+// Start OpenRouter reconciliation worker (only in web mode where Supabase is available)
+if (env.VITE_ENVIRONMENT === 'web') {
+  startReconciliationWorker()
+  console.log('✅ OpenRouter reconciliation worker started')
+} else {
+  console.log('⏭️  Skipping reconciliation worker (not in web mode)')
+}
+
 ;(async () => {
   server.listen(3001, () => {
     console.log('🚀 Server on :3001')
