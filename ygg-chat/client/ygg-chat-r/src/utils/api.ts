@@ -1,25 +1,111 @@
 // utils/api.ts
 import { ConversationId } from '../../../../shared/types'
+import { getSessionFromStorage, refreshTokenIfNeeded, getTokenExpirationTime } from '../lib/jwtUtils'
 
 // Base configuration
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 export const environment = import.meta.env.VITE_ENVIRONMENT || 'local'
 
+/**
+ * Ensures the access token is valid before making a request.
+ * Automatically refreshes the token if it expires in < 5 minutes.
+ *
+ * @returns The current valid access token or null
+ */
+async function ensureValidToken(): Promise<string | null> {
+  // Skip for non-web environments
+  if (environment !== 'web') {
+    return null
+  }
+
+  const session = getSessionFromStorage()
+  if (!session?.access_token) {
+    console.log('[api] No session found')
+    return null
+  }
+
+  const expiresIn = getTokenExpirationTime()
+  if (expiresIn === null) {
+    console.warn('[api] Could not determine token expiration')
+    return session.access_token
+  }
+
+  // Refresh if token expires in < 5 minutes (300 seconds)
+  if (expiresIn < 300) {
+    console.log(`[api] Token expires in ${expiresIn}s, refreshing...`)
+    await refreshTokenIfNeeded()
+    // Get the refreshed token
+    const refreshedSession = getSessionFromStorage()
+    return refreshedSession?.access_token || null
+  }
+
+  return session.access_token
+}
+
 // Core API utility function - now accepts accessToken as parameter
 export const apiCall = async <T>(endpoint: string, accessToken: string | null, options?: RequestInit): Promise<T> => {
+  // Ensure token is valid before making the request
+  const validToken = await ensureValidToken()
+  const tokenToUse = validToken || accessToken
+
   const isFormData = options?.body && typeof FormData !== 'undefined' && options.body instanceof FormData
 
   // Destructure to separate headers from other options
   const { headers: optionsHeaders, ...restOptions } = options || {}
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...restOptions, // Spread everything EXCEPT headers
-    headers: {
-      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-      ...optionsHeaders, // Spread headers from options
-      ...(accessToken && environment === 'web' ? { Authorization: `Bearer ${accessToken}` } : {}), // Add Authorization header with JWT in web mode
-    },
-  })
+  const makeRequest = async (token: string | null) => {
+    return fetch(`${API_BASE}${endpoint}`, {
+      ...restOptions, // Spread everything EXCEPT headers
+      headers: {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...optionsHeaders, // Spread headers from options
+        ...(token && environment === 'web' ? { Authorization: `Bearer ${token}` } : {}), // Add Authorization header with JWT in web mode
+      },
+    })
+  }
+
+  let response = await makeRequest(tokenToUse)
+
+  // Handle 401 Unauthorized: Try to refresh token and retry once
+  if (response.status === 401 && environment === 'web') {
+    console.warn('[api] Received 401 Unauthorized, attempting token refresh and retry...')
+
+    try {
+      // Force refresh the token
+      const refreshed = await refreshTokenIfNeeded(true)
+
+      if (refreshed) {
+        // Get the new token
+        const newSession = getSessionFromStorage()
+        const newToken = newSession?.access_token
+
+        if (newToken) {
+          console.log('[api] Token refreshed, retrying request...')
+          // Retry the request with the new token
+          response = await makeRequest(newToken)
+
+          if (response.status === 401) {
+            // Still unauthorized after refresh - redirect to login
+            console.error('[api] Still unauthorized after token refresh, redirecting to login...')
+            window.location.href = '/login'
+            throw new Error('Session expired. Please log in again.')
+          }
+        } else {
+          console.error('[api] Token refresh succeeded but no token found')
+          window.location.href = '/login'
+          throw new Error('Session expired. Please log in again.')
+        }
+      } else {
+        console.error('[api] Token refresh failed, redirecting to login...')
+        window.location.href = '/login'
+        throw new Error('Session expired. Please log in again.')
+      }
+    } catch (error) {
+      console.error('[api] Error during token refresh:', error)
+      window.location.href = '/login'
+      throw new Error('Session expired. Please log in again.')
+    }
+  }
 
   if (!response.ok) {
     const errorText = await response.text()
@@ -69,21 +155,72 @@ export const createStreamingRequest = async (
   accessToken: string | null,
   options?: RequestInit
 ): Promise<Response> => {
+  // Ensure token is valid before making the request
+  const validToken = await ensureValidToken()
+  const tokenToUse = validToken || accessToken
+
   const isFormData = options?.body && typeof FormData !== 'undefined' && options.body instanceof FormData
 
   // Destructure to separate headers from other options
   const { headers: optionsHeaders, ...restOptions } = options || {}
 
-  const headers = {
-    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    ...optionsHeaders, // Spread the headers from options
-    ...(accessToken && environment === 'web' ? { Authorization: `Bearer ${accessToken}` } : {}), // Add Authorization header with JWT in web mode
+  const makeStreamRequest = async (token: string | null) => {
+    const headers = {
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      ...optionsHeaders, // Spread the headers from options
+      ...(token && environment === 'web' ? { Authorization: `Bearer ${token}` } : {}), // Add Authorization header with JWT in web mode
+    }
+
+    return fetch(`${API_BASE}${endpoint}`, {
+      ...restOptions, // Spread everything EXCEPT headers
+      headers, // Set headers separately
+    })
   }
 
-  return fetch(`${API_BASE}${endpoint}`, {
-    ...restOptions, // Spread everything EXCEPT headers
-    headers, // Set headers separately
-  })
+  let response = await makeStreamRequest(tokenToUse)
+
+  // Handle 401 Unauthorized: Try to refresh token and retry once
+  if (response.status === 401 && environment === 'web') {
+    console.warn('[api] Streaming request received 401, attempting token refresh and retry...')
+
+    try {
+      // Force refresh the token
+      const refreshed = await refreshTokenIfNeeded(true)
+
+      if (refreshed) {
+        // Get the new token
+        const newSession = getSessionFromStorage()
+        const newToken = newSession?.access_token
+
+        if (newToken) {
+          console.log('[api] Token refreshed, retrying streaming request...')
+          // Retry the request with the new token
+          response = await makeStreamRequest(newToken)
+
+          if (response.status === 401) {
+            // Still unauthorized after refresh - redirect to login
+            console.error('[api] Streaming request still unauthorized after token refresh')
+            window.location.href = '/login'
+            throw new Error('Session expired. Please log in again.')
+          }
+        } else {
+          console.error('[api] Token refresh succeeded but no token found')
+          window.location.href = '/login'
+          throw new Error('Session expired. Please log in again.')
+        }
+      } else {
+        console.error('[api] Token refresh failed, redirecting to login...')
+        window.location.href = '/login'
+        throw new Error('Session expired. Please log in again.')
+      }
+    } catch (error) {
+      console.error('[api] Error during streaming request token refresh:', error)
+      window.location.href = '/login'
+      throw new Error('Session expired. Please log in again.')
+    }
+  }
+
+  return response
 }
 
 // Specific helpers for conversation system prompt endpoints

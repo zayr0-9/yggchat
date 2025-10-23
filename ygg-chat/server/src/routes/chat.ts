@@ -404,12 +404,24 @@ router.patch(
 router.post(
   '/users',
   asyncHandler(async (req, res) => {
-    const { username } = req.body
+    const { username, userId } = req.body
 
     if (!username) {
       return res.status(400).json({ error: 'Username required' })
     }
 
+    // First, check if user exists by ID (for OAuth users)
+    if (userId) {
+      let user = UserService.getById(userId)
+      if (user) {
+        return res.json(user)
+      }
+      // Create user with custom ID
+      user = UserService.create(username, userId)
+      return res.json(user)
+    }
+
+    // Otherwise, check by username (for local users)
     let user = UserService.getByUsername(username)
     if (!user) {
       user = UserService.create(username)
@@ -985,7 +997,8 @@ router.post(
           combinedContext ? combinedContext : null,
           think,
           assistantMessage.id,
-          conversation.user_id
+          conversation.user_id,
+          conversationId
         )
 
         // Final cleanup: ensure tool calls are stripped from content before saving
@@ -1409,7 +1422,8 @@ router.post(
           combinedContext ? combinedContext : null,
           think,
           assistantMessage.id,
-          conversation.user_id
+          conversation.user_id,
+          conversationId
         )
 
         // Final cleanup: ensure tool calls are stripped from content before saving

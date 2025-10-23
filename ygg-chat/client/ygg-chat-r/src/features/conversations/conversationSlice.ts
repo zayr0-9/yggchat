@@ -7,7 +7,6 @@ import {
   fetchConversations,
   fetchConversationsByProjectId,
   fetchRecentConversations,
-  fetchRecentModels,
   updateConversation,
 } from './conversationActions'
 import { Conversation, ConversationsState } from './conversationTypes'
@@ -24,11 +23,7 @@ const initialState: ConversationsState = {
     loading: false,
     error: null,
   },
-  recentModels: {
-    items: [],
-    loading: false,
-    error: null,
-  },
+  // Note: recentModels removed - now managed by React Query (useRecentModels hook)
 }
 
 const conversationSlice = createSlice({
@@ -97,19 +92,7 @@ const conversationSlice = createSlice({
         state.recent.loading = false
         state.recent.error = action.payload as string
       })
-      // fetch recent models
-      .addCase(fetchRecentModels.pending, state => {
-        state.recentModels.loading = true
-        state.recentModels.error = null
-      })
-      .addCase(fetchRecentModels.fulfilled, (state, action: PayloadAction<import('../../../../../shared/types').BaseModel[]>) => {
-        state.recentModels.loading = false
-        state.recentModels.items = action.payload
-      })
-      .addCase(fetchRecentModels.rejected, (state, action) => {
-        state.recentModels.loading = false
-        state.recentModels.error = action.payload as string
-      })
+      // Note: fetchRecentModels reducers removed - now managed by React Query (useRecentModels hook)
       // create conversation
       .addCase(createConversation.pending, state => {
         state.loading = true

@@ -5,19 +5,16 @@ import { RootState } from '../../store/store'
 // Base selector
 const selectChatState = (state: RootState) => state.chat
 
-// Model selectors - simplified for string models
-export const selectModels = createSelector([selectChatState], chat => chat.models.available)
-
+// Model selectors - Note: Model list is now managed by React Query (useModels hook)
+// Redux only stores selected and default models
 export const selectProviderState = createSelector([selectChatState], chat => chat.providerState)
 
 export const selectSelectedModel = createSelector([selectChatState], chat => chat.models.selected)
 
 export const selectDefaultModel = createSelector([selectChatState], chat => chat.models.default)
 
-export const selectModelsLoading = createSelector([selectChatState], chat => chat.models.loading)
 export const conversationContext = createSelector([selectChatState], chat => chat.conversation.context)
 
-export const selectModelsError = createSelector([selectChatState], chat => chat.models.error)
 export const selectMultiReplyCount = createSelector([selectChatState], chat => chat.composition.multiReplyCount)
 
 export const getSelectedNodes = createSelector([selectChatState], chat => chat.selectedNodes)
@@ -28,11 +25,9 @@ export const selectEffectiveModel = createSelector(
   (selected, defaultModel) => selected || defaultModel
 )
 
-// Check if a specific model is available
-export const selectIsModelAvailable = createSelector(
-  [selectModels, (_state: RootState, modelName: string) => modelName],
-  (models, modelName) => models.some(m => m.name === modelName)
-)
+// Note: Model availability check should now be done using useModels React Query hook
+// This selector is kept for backward compatibility but will always return false
+export const selectIsModelAvailable = () => false
 
 // Composition selectors
 export const selectMessageInput = createSelector([selectChatState], chat => chat.composition.input)
@@ -90,19 +85,12 @@ export const HeimdallDataReset = createSelector([selectHeimdallState], h => {
   h.error = null
 })
 
-// Combined model state for UI
-export const selectModelState = createSelector(
-  [selectModels, selectSelectedModel, selectDefaultModel, selectModelsLoading, selectModelsError],
-  (available, selected, defaultModel, loading, error) => ({
-    available,
-    selected,
-    default: defaultModel,
-    effective: selected || defaultModel,
-    loading,
-    error,
-    hasModels: available.length > 0,
-  })
-)
+// Combined model state for UI - simplified (model list managed by React Query)
+export const selectModelState = createSelector([selectSelectedModel, selectDefaultModel], (selected, defaultModel) => ({
+  selected,
+  default: defaultModel,
+  effective: selected || defaultModel,
+}))
 
 // Conversation selectors
 export const selectConversationState = createSelector([selectChatState], chat => chat.conversation)

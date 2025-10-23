@@ -2,13 +2,18 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
+import { isUserAllowlisted } from '../lib/auth/allowlist'
 import { supabase } from '../lib/supabase'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, signIn, reloadSession } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Check if we're in Electron mode (build-time or runtime detection)
+  const isElectronMode =
+    (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
 
   // Redirect if already logged in
   useEffect(() => {
@@ -16,6 +21,177 @@ const Login: React.FC = () => {
       navigate('/')
     }
   }, [user, navigate])
+
+  // Monitor auth state changes - just for logging and cleanup
+  useEffect(() => {
+    if (!supabase) return
+
+    console.log('[Login] Setting up onAuthStateChange listener')
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('[Login] Auth state changed:', {
+        event,
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        userId: session?.user?.id,
+      })
+
+      // Clear loading state on successful sign-in
+      // Authorization checks are handled in the OAuth callback handler for Electron
+      if (event === 'SIGNED_IN' && session?.user) {
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  // Handle OAuth callback from external browser (Electron only)
+  useEffect(() => {
+    if (!window.electronAPI?.auth?.onOAuthCallback) return
+
+    console.log('[Login] Setting up OAuth callback listener for Electron')
+
+    const cleanup = window.electronAPI.auth.onOAuthCallback(async (callbackUrl: string) => {
+      console.log('[Login] Received OAuth callback from external browser:', callbackUrl)
+      setLoading(true)
+      setError(null)
+
+      try {
+        // Extract the hash/query parameters from the callback URL
+        const url = new URL(callbackUrl)
+        const hashParams = new URLSearchParams(url.hash.substring(1)) // Remove the '#' and parse
+        const access_token = hashParams.get('access_token')
+        const refresh_token = hashParams.get('refresh_token')
+
+        if (!access_token || !refresh_token) {
+          throw new Error('No tokens found in callback URL')
+        }
+
+        // Set the session in Supabase
+        const { data, error } = await supabase!.auth.setSession({
+          access_token,
+          refresh_token,
+        })
+
+        if (error) throw error
+
+        console.log('[Login] OAuth session established successfully')
+
+        // Handle Electron-specific authorization and setup
+        if (data.session?.user && isElectronMode) {
+          const userId = data.session.user.id
+          const userEmail = data.session.user.email || 'unknown'
+
+          console.log('[Login] Electron mode: Checking user authorization...', { userId, userEmail })
+
+          const isAllowed = await isUserAllowlisted(userId)
+
+          console.log('[Login] Allowlist check result:', { isAllowed, userId })
+
+          if (!isAllowed) {
+            console.warn('[Login] User not authorized for Electron access:', userEmail)
+
+            // Clear any stored session data to prevent unauthorized access
+            if (window.electronAPI?.storage?.clear) {
+              try {
+                await window.electronAPI.storage.clear()
+                console.log('[Login] Cleared stored data for unauthorized user')
+              } catch (clearError) {
+                console.error('[Login] Failed to clear storage:', clearError)
+              }
+            }
+
+            // Sign out immediately
+            await supabase!.auth.signOut()
+
+            // Show error message
+            setError(
+              `Access Denied: Electron access requires authorization. Your email (${userEmail}) is not approved for this application. Please visit the official Yggdrasil website to subscribe.`
+            )
+            setLoading(false)
+            return
+          }
+
+          console.log('[Login] User authorized, completing sign-in')
+
+          // Create local user in database with Supabase user ID (Electron only)
+          try {
+            const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
+
+            console.log('[Login] Creating local user in database...', { userId, username })
+
+            const userResponse = await fetch('/api/users', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                userId: userId,
+                username: username,
+              }),
+            })
+
+            if (!userResponse.ok) {
+              throw new Error('Failed to create local user')
+            }
+
+            const localUser = await userResponse.json()
+            console.log('[Login] Local user created successfully:', localUser)
+
+            // Save OAuth session to Electron storage so ElectronAuthProvider can use it
+            if (window.electronAPI?.storage) {
+              try {
+                const authStateForStorage = {
+                  user: {
+                    id: localUser.id,
+                    email: data.session.user.email || 'unknown',
+                    username: localUser.username,
+                  },
+                  session: {
+                    access_token: access_token,
+                  },
+                  loading: false,
+                  accessToken: access_token,
+                  userId: localUser.id,
+                }
+
+                await window.electronAPI.storage.set('auth_session', authStateForStorage)
+                console.log('[Login] OAuth session saved to Electron storage')
+
+                // Reload the session in AuthContext to update user state
+                await reloadSession()
+                console.log('[Login] Auth session reloaded in context')
+              } catch (storageError) {
+                console.error('[Login] Failed to save OAuth session to storage:', storageError)
+              }
+            }
+          } catch (userCreationError) {
+            console.error('[Login] Failed to create local user:', userCreationError)
+            setError('Failed to create local user account. Please try again.')
+            setLoading(false)
+            return
+          }
+        } else if (data.session?.user && !isElectronMode) {
+          // Web mode: Session is already set in Supabase, AuthContext will pick it up
+          console.log('[Login] Web mode: OAuth session established, letting AuthContext handle state')
+        }
+
+        // Success - clear loading state and let the redirect happen
+        setLoading(false)
+      } catch (error: any) {
+        console.error('[Login] Failed to handle OAuth callback:', error)
+        setError(error.message || 'Failed to complete OAuth login')
+        setLoading(false)
+      }
+    })
+
+    return cleanup
+  }, [isElectronMode])
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
     setLoading(true)
@@ -26,23 +202,64 @@ const Login: React.FC = () => {
         throw new Error('Supabase client not available. Please check your environment configuration.')
       }
 
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: {
-          redirectTo: `${window.location.origin}/`,
-        },
-      })
-      if (error) throw error
+      // Check if running in Electron and use external browser
+      if (window.electronAPI?.auth?.openExternal) {
+        console.log('[Login] Electron detected - opening OAuth in external browser')
+
+        // Get the OAuth URL from Supabase
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo: 'yggchat://auth/callback',
+            skipBrowserRedirect: true, // Don't redirect in the current window
+          },
+        })
+
+        if (error) throw error
+
+        if (data?.url) {
+          // Open the OAuth URL in the user's default browser
+          const result = await window.electronAPI.auth.openExternal(data.url)
+
+          if (!result.success) {
+            throw new Error('Failed to open external browser')
+          }
+
+          console.log('[Login] OAuth URL opened in external browser, waiting for callback...')
+          // Loading state will be cleared when callback is received
+        } else {
+          throw new Error('No OAuth URL returned from Supabase')
+        }
+      } else {
+        // Web mode - use normal OAuth flow
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: {
+            redirectTo: `${window.location.origin}/`,
+          },
+        })
+        if (error) throw error
+      }
     } catch (error: any) {
       setError(error.message || 'An error occurred')
       setLoading(false)
     }
   }
 
-  const handleLocalMode = () => {
-    // TODO: Implement local-only mode logic
+  const handleLocalMode = async () => {
+    setLoading(true)
+    setError(null)
 
-    navigate('/homePage')
+    try {
+      // Sign in with empty credentials to trigger local mode in ElectronAuthProvider
+      await signIn({ email: '', password: '' })
+
+      // Navigation will happen automatically via the useEffect that monitors user state
+    } catch (error: any) {
+      console.error('[Login] Local mode login failed:', error)
+      setError(error.message || 'Failed to sign in with local mode')
+      setLoading(false)
+    }
   }
 
   return (

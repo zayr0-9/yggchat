@@ -1,7 +1,7 @@
 // server/src/routes/stripe.ts
 import express from 'express'
 import { asyncHandler } from '../utils/asyncHandler'
-import { getCreditHistory, getUserCredits, TIER_CREDITS } from '../utils/credits'
+import { getCreditHistory, TIER_CREDITS } from '../utils/credits'
 import {
   cancelSubscription,
   createCheckoutSession,
@@ -12,252 +12,265 @@ import {
   handleSubscriptionCreated,
   handleSubscriptionDeleted,
   handleSubscriptionUpdated,
-  stripe,
   STRIPE_PRICE_IDS,
-  SubscriptionTier,
   verifyWebhookSignature,
 } from '../utils/stripe'
 
 const router = express.Router()
 
 /**
- * POST /stripe/create-checkout-session
+ * POST /api/stripe/create-checkout-session
  * Create a Stripe Checkout Session for subscription
  */
 router.post(
   '/create-checkout-session',
   asyncHandler(async (req, res) => {
-    if (!stripe) {
-      return res.status(503).json({ error: 'Stripe is not configured on the server' })
-    }
-
     const { userId, tier, email } = req.body
 
-    if (!userId || !tier) {
-      return res.status(400).json({ error: 'Missing userId or tier' })
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' })
     }
 
-    if (!['high', 'mid', 'low'].includes(tier)) {
-      return res.status(400).json({ error: 'Invalid tier. Must be one of: high, mid, low' })
+    if (!tier || !['high', 'mid', 'low'].includes(tier)) {
+      return res.status(400).json({ error: 'Valid tier (high, mid, low) is required' })
     }
 
-    // Construct success and cancel URLs
-    const baseUrl = req.headers.origin || 'http://localhost:5173'
-    const successUrl = `${baseUrl}/payment?success=true&session_id={CHECKOUT_SESSION_ID}`
-    const cancelUrl = `${baseUrl}/payment?canceled=true`
+    // Create checkout session with configured URLs
+    const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173'
+    const session = await createCheckoutSession({
+      userId,
+      tier,
+      userEmail: email,
+      successUrl: `${baseUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${baseUrl}/subscription/cancel`,
+    })
 
-    try {
-      const session = await createCheckoutSession({
-        userId: userId,
-        tier: tier as SubscriptionTier,
-        userEmail: email,
-        successUrl,
-        cancelUrl,
-      })
-
-      if (!session) {
-        return res.status(500).json({ error: 'Failed to create checkout session' })
-      }
-
-      res.json({
-        sessionId: session.id,
-        url: session.url,
-      })
-    } catch (error: any) {
-      console.error('[Stripe API] Error creating checkout session:', error)
-      res.status(500).json({ error: error.message || 'Failed to create checkout session' })
+    if (!session) {
+      return res.status(500).json({ error: 'Failed to create checkout session' })
     }
+
+    res.json({
+      sessionId: session.id,
+      url: session.url,
+    })
   })
 )
 
 /**
- * GET /stripe/subscription-status
+ * GET /api/stripe/subscription-status
  * Get user's subscription status and credit balance
  */
 router.get(
   '/subscription-status',
   asyncHandler(async (req, res) => {
-    const userId = req.query.userId as string | undefined
+    const userId = req.query.userId as string
 
     if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' })
+      return res.status(400).json({ error: 'userId query parameter is required' })
     }
 
-    try {
-      const status = await getUserSubscriptionStatus(userId)
-      const credits = getUserCredits(userId)
-
-      res.json({
-        ...status,
-        creditsBalance: credits,
-      })
-    } catch (error: any) {
-      console.error('[Stripe API] Error getting subscription status:', error)
-      res.status(500).json({ error: error.message || 'Failed to get subscription status' })
-    }
+    const status = await getUserSubscriptionStatus(userId)
+    res.json(status)
   })
 )
 
 /**
- * POST /stripe/cancel-subscription
+ * POST /api/stripe/cancel-subscription
  * Cancel user's subscription (at period end)
  */
 router.post(
   '/cancel-subscription',
   asyncHandler(async (req, res) => {
-    if (!stripe) {
-      return res.status(503).json({ error: 'Stripe is not configured on the server' })
-    }
-
     const { userId } = req.body
 
     if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' })
+      return res.status(400).json({ error: 'userId is required' })
     }
 
-    try {
-      await cancelSubscription(userId)
-      res.json({ success: true, message: 'Subscription will be canceled at period end' })
-    } catch (error: any) {
-      console.error('[Stripe API] Error canceling subscription:', error)
-      res.status(500).json({ error: error.message || 'Failed to cancel subscription' })
-    }
+    await cancelSubscription(userId)
+
+    res.json({
+      success: true,
+      message: 'Subscription will be canceled at the end of the current billing period',
+    })
   })
 )
 
 /**
- * GET /stripe/credit-history
+ * GET /api/stripe/credit-history
  * Get user's credit transaction history
  */
 router.get(
   '/credit-history',
   asyncHandler(async (req, res) => {
-    const userId = req.query.userId as string | undefined
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100
+    const userId = req.query.userId as string
+    const limit = parseInt(req.query.limit as string) || 100
 
     if (!userId) {
-      return res.status(400).json({ error: 'Missing userId' })
+      return res.status(400).json({ error: 'userId query parameter is required' })
     }
 
-    try {
-      const history = getCreditHistory(userId, limit)
-      res.json({ history })
-    } catch (error: any) {
-      console.error('[Stripe API] Error getting credit history:', error)
-      res.status(500).json({ error: error.message || 'Failed to get credit history' })
-    }
+    // Get credit history using the credits utility function
+    const history = getCreditHistory(userId, limit)
+
+    res.json({ history })
   })
 )
 
 /**
- * GET /stripe/pricing-info
- * Get pricing information for all tiers
+ * GET /api/stripe/pricing-info
+ * Get pricing information for all subscription tiers
  */
-router.get('/pricing-info', (req, res) => {
-  res.json({
-    tiers: {
-      high: {
-        name: 'High Tier God',
-        price: 20,
-        priceId: STRIPE_PRICE_IDS.high,
-        credits: TIER_CREDITS.high,
-        features: ['17.00 monthly credits', 'Access to all models', 'Priority support', 'Advanced tools'],
+router.get(
+  '/pricing-info',
+  asyncHandler(async (req, res) => {
+    // Return tier information with credits and price IDs
+    const pricingInfo = {
+      tiers: {
+        high: {
+          name: 'High Tier',
+          price: 29.99, // Update with actual prices from Stripe
+          priceId: STRIPE_PRICE_IDS.high,
+          credits: TIER_CREDITS.high,
+          features: ['Unlimited conversations', 'Priority support', 'Advanced features'],
+        },
+        mid: {
+          name: 'Mid Tier',
+          price: 19.99, // Update with actual prices from Stripe
+          priceId: STRIPE_PRICE_IDS.mid,
+          credits: TIER_CREDITS.mid,
+          features: ['Multiple conversations', 'Standard support', 'Basic features'],
+        },
+        low: {
+          name: 'Low Tier',
+          price: 9.99, // Update with actual prices from Stripe
+          priceId: STRIPE_PRICE_IDS.low,
+          credits: TIER_CREDITS.low,
+          features: ['Limited conversations', 'Email support', 'Essential features'],
+        },
       },
-      mid: {
-        name: 'Mid Tier God',
-        price: 12,
-        priceId: STRIPE_PRICE_IDS.mid,
-        credits: TIER_CREDITS.mid,
-        features: ['9.00 monthly credits', 'Access to most models', 'Standard support', 'Basic tools'],
-      },
-      low: {
-        name: 'Low Tier God',
-        price: 5,
-        priceId: STRIPE_PRICE_IDS.low,
-        credits: TIER_CREDITS.low,
-        features: ['3.00 monthly credits', 'Access to basic models', 'Community support', 'Essential tools'],
-      },
-    },
+    }
+
+    res.json(pricingInfo)
   })
-})
+)
 
 /**
- * POST /stripe/webhook
- * Handle Stripe webhook events
- * This endpoint receives real-time updates from Stripe about payment events
- * Note: Raw body parsing is handled at the app level in index.ts
+ * POST /api/stripe/webhook
+ * Stripe webhook handler
+ * IMPORTANT: This route is mounted separately with express.raw() middleware in index.ts
  */
 router.post(
   '/webhook',
   asyncHandler(async (req, res) => {
-    if (!stripe) {
-      return res.status(503).json({ error: 'Stripe is not configured on the server' })
-    }
-
-    const signature = req.headers['stripe-signature'] as string
+    const signature = req.headers['stripe-signature']
 
     if (!signature) {
-      console.error('[Stripe Webhook] Missing stripe-signature header')
       return res.status(400).json({ error: 'Missing stripe-signature header' })
     }
 
-    // Verify webhook signature
-    const event = verifyWebhookSignature(req.body, signature)
+    // Verify webhook signature (req.body is raw buffer from express.raw middleware)
+    const event = verifyWebhookSignature(req.body, signature as string)
 
     if (!event) {
-      console.error('[Stripe Webhook] Invalid signature')
       return res.status(400).json({ error: 'Invalid signature' })
     }
 
-    console.log(`[Stripe Webhook] Received event: ${event.type}`)
+    console.log(`[Stripe Webhook] Received event: ${event.type} [${event.id}]`)
 
+    // Handle different event types
     try {
-      // Handle different event types
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as any
+          console.log(
+            `[Stripe Webhook] Processing checkout.session.completed - Session: ${session.id}, Customer: ${session.customer}`
+          )
           await handleCheckoutComplete(session)
           break
         }
 
         case 'invoice.payment_succeeded': {
           const invoice = event.data.object as any
+          console.log(
+            `[Stripe Webhook] Processing invoice.payment_succeeded - Invoice: ${invoice.id}, Subscription: ${invoice.subscription}`
+          )
           await handleInvoicePaymentSucceeded(invoice)
           break
         }
 
         case 'invoice.payment_failed': {
           const invoice = event.data.object as any
+          console.log(
+            `[Stripe Webhook] Processing invoice.payment_failed - Invoice: ${invoice.id}, Subscription: ${invoice.subscription}`
+          )
           await handleInvoicePaymentFailed(invoice)
           break
         }
 
         case 'customer.subscription.created': {
           const subscription = event.data.object as any
+          console.log(
+            `[Stripe Webhook] Processing customer.subscription.created - Subscription: ${subscription.id}, Status: ${subscription.status}`
+          )
           await handleSubscriptionCreated(subscription)
           break
         }
 
         case 'customer.subscription.updated': {
           const subscription = event.data.object as any
+          console.log(
+            `[Stripe Webhook] Processing customer.subscription.updated - Subscription: ${subscription.id}, Status: ${subscription.status}`
+          )
           await handleSubscriptionUpdated(subscription)
           break
         }
 
         case 'customer.subscription.deleted': {
           const subscription = event.data.object as any
+          console.log(`[Stripe Webhook] Processing customer.subscription.deleted - Subscription: ${subscription.id}`)
           await handleSubscriptionDeleted(subscription)
           break
         }
 
+        // Payment intent events (logged but not handled - informational only)
+        case 'payment_intent.succeeded':
+        case 'payment_intent.created': {
+          const paymentIntent = event.data.object as any
+          console.log(
+            `[Stripe Webhook] ${event.type} - Payment Intent: ${paymentIntent.id} (no action needed, handled by invoice events)`
+          )
+          break
+        }
+
+        // Customer events (logged but not handled - informational only)
+        case 'customer.created':
+        case 'customer.updated':
+        case 'payment_method.attached': {
+          console.log(`[Stripe Webhook] ${event.type} [${event.id}] (no action needed)`)
+          break
+        }
+
+        // Invoice events (logged but not handled - informational only)
+        case 'invoice.created':
+        case 'invoice.finalized':
+        case 'invoice.paid': {
+          const invoice = event.data.object as any
+          console.log(`[Stripe Webhook] ${event.type} - Invoice: ${invoice.id} (no action needed)`)
+          break
+        }
+
         default:
-          console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`)
+          console.log(`[Stripe Webhook] Unhandled event type: ${event.type} [${event.id}]`)
       }
 
+      console.log(`[Stripe Webhook] Successfully processed event: ${event.type} [${event.id}]`)
       res.json({ received: true })
     } catch (error: any) {
-      console.error(`[Stripe Webhook] Error handling event ${event.type}:`, error)
-      res.status(500).json({ error: error.message || 'Webhook handler failed' })
+      console.error(`[Stripe Webhook] Error handling event ${event.type} [${event.id}]:`, error)
+      console.error(`[Stripe Webhook] Error details:`, error.message)
+      console.error(`[Stripe Webhook] Stack trace:`, error.stack)
+      res.status(500).json({ error: 'Webhook handler failed', eventId: event.id, eventType: event.type })
     }
   })
 )

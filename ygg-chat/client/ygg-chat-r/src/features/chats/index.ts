@@ -17,12 +17,12 @@ export type {
 export { default as chatReducer, chatSliceActions } from './chatSlice'
 
 // Async actions
+// Note: Model fetching thunks (fetchModels, fetchModelsForCurrentProvider, etc.)
+// have been migrated to React Query. See hooks/useQueries.ts for useModels, useRecentModels, useRefreshModels
 export {
   abortStreaming,
   deleteMessage,
   editMessageWithBranching,
-  fetchModels,
-  fetchModelsForCurrentProvider,
   refreshCurrentPathAfterDelete,
   selectModel,
   sendMessage,
@@ -31,6 +31,7 @@ export {
 } from './chatActions'
 
 // Selectors - grouped by feature
+// Note: selectModels, selectModelsLoading, selectModelsError removed - use React Query hooks instead
 export {
   conversationContext,
   HeimdallDataReset,
@@ -53,12 +54,8 @@ export {
   selectIsStreaming,
   // Composition selectors
   selectMessageInput,
-  // Model selectors
-  selectModels,
   // UI selectors
   selectModelSelectorOpen,
-  selectModelsError,
-  selectModelsLoading,
   selectModelState,
   selectProviderState,
   selectSelectedModel,

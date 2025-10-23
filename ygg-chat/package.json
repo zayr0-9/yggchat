@@ -21,13 +21,19 @@
     "dev:client": "cd client/ygg-chat-r && npm run dev",
     "dev:serverold": "cd server && npm run dev",
     "dev:server": "nodemon server/src/index.ts --ignore src/**/*",
-    "build": "npm run build:client && npm run build:server",
+    "dev:electron": "cross-env BUILD_TARGET=electron concurrently -n server,client -c yellow,cyan \"npm --prefix server run dev\" \"npm --prefix client/ygg-chat-r run dev:electron\"",
+    "build": "npm run build:client && npm run build:server && npm run build:electron",
     "build:client": "cd client/ygg-chat-r && npm run build",
     "build:server": "cd server && npm run build",
+    "build:web": "cross-env BUILD_TARGET=web npm run build:client && npm run build:server",
+    "build:electron": "cross-env BUILD_TARGET=electron npm run build:electron:all",
+    "build:electron:all": "npm --prefix client/ygg-chat-r run build:electron && npm --prefix client/ygg-chat-r run build:electron:main",
+    "package:electron": "npm --prefix client/ygg-chat-r run package:electron",
     "install:all": "npm install && cd ygg-chat/client/ygg-chat-r && npm install && cd ../../server && npm install"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
+    "cross-env": "^7.0.3",
     "prettier": "^3.6.2"
   },
   "dependencies": {

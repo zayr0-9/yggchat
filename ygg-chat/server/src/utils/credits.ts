@@ -1,8 +1,8 @@
 // server/src/utils/credits.ts
-import { db, statements } from '../database/db'
-import { generateId } from '../database/idGenerator'
+import { CreditsService } from '../database/supamodels'
 
-// Credit allocation per tier (these can be adjusted based on your pricing model)
+// Credit allocation per tier (legacy - kept for backward compatibility)
+// These values are now stored in Supabase plans table
 export const TIER_CREDITS: Record<string, number> = {
   high: 100000, // High Tier God - $20/month
   mid: 60000, // Mid Tier God - $12/month
@@ -13,6 +13,7 @@ export interface CreditCheckResult {
   hasCredits: boolean
   currentBalance: number
   required: number
+  shortfall?: number
 }
 
 export interface CreditTransaction {
@@ -29,15 +30,14 @@ export interface CreditTransaction {
  * @param requiredAmount - Amount of credits required (positive number)
  * @returns Object with hasCredits boolean and current balance
  */
-export function checkCreditsAvailable(userId: string, requiredAmount: number): CreditCheckResult {
+export async function checkCreditsAvailable(userId: string, requiredAmount: number): Promise<CreditCheckResult> {
   try {
-    const result = statements.getUserCredits.get(userId) as { credits_balance: number } | undefined
-    const currentBalance = result?.credits_balance ?? 0
-
+    const result = await CreditsService.checkCreditsAvailable(userId, requiredAmount)
     return {
-      hasCredits: currentBalance >= requiredAmount,
-      currentBalance,
-      required: requiredAmount,
+      hasCredits: result.hasCredits,
+      currentBalance: result.currentBalance,
+      required: result.required,
+      shortfall: result.shortfall,
     }
   } catch (error) {
     console.error('[Credits] Error checking credits:', error)
@@ -45,6 +45,7 @@ export function checkCreditsAvailable(userId: string, requiredAmount: number): C
       hasCredits: false,
       currentBalance: 0,
       required: requiredAmount,
+      shortfall: requiredAmount,
     }
   }
 }
@@ -56,39 +57,14 @@ export function checkCreditsAvailable(userId: string, requiredAmount: number): C
  * @param reason - Reason for the deduction (e.g., 'AI generation - GPT-4')
  * @returns New balance after deduction, or null if insufficient credits
  */
-export function decrementCredits(userId: string, amount: number, reason: string): number | null {
-  // Use a transaction to ensure atomicity
-  const transaction = db.transaction((uid: string, amt: number, rsn: string) => {
-    // Get current balance
-    const result = statements.getUserCredits.get(uid) as { credits_balance: number } | undefined
-    const currentBalance = result?.credits_balance ?? 0
-
-    // Check if sufficient credits
-    if (currentBalance < amt) {
-      throw new Error('Insufficient credits')
-    }
-
-    // Calculate new balance
-    const newBalance = currentBalance - amt
-
-    // Update user credits
-    statements.updateUserCredits.run(newBalance, uid)
-
-    // Log transaction to ledger (negative amount for deduction)
-    statements.createCreditLedgerEntry.run(generateId(), uid, -amt, rsn, newBalance)
-
-    return newBalance
-  })
-
+export async function decrementCredits(userId: string, amount: number, reason: string): Promise<number | null> {
   try {
-    const newBalance = transaction(userId, amount, reason)
-    console.log(`[Credits] Decremented ${amount} credits for user ${userId}. New balance: ${newBalance}`)
-    return newBalance
-  } catch (error: any) {
-    if (error.message === 'Insufficient credits') {
+    const newBalance = await CreditsService.decrementCredits(userId, amount, reason)
+    if (newBalance === null) {
       console.warn(`[Credits] Insufficient credits for user ${userId}. Required: ${amount}`)
-      return null
     }
+    return newBalance
+  } catch (error) {
     console.error('[Credits] Error decrementing credits:', error)
     return null
   }
@@ -101,33 +77,15 @@ export function decrementCredits(userId: string, amount: number, reason: string)
  * @param reason - Reason for replenishment (e.g., 'Monthly subscription renewal')
  * @returns New balance after replenishment
  */
-export function replenishCredits(userId: string, tier: 'high' | 'mid' | 'low', reason: string): number {
+export async function replenishCredits(userId: string, tier: 'high' | 'mid' | 'low', reason: string): Promise<number> {
   const creditsToAdd = TIER_CREDITS[tier]
 
   if (!creditsToAdd) {
     throw new Error(`Invalid tier: ${tier}`)
   }
 
-  // Use transaction for atomic update
-  const transaction = db.transaction((uid: string, amt: number, rsn: string) => {
-    // Get current balance
-    const result = statements.getUserCredits.get(uid) as { credits_balance: number } | undefined
-    const currentBalance = result?.credits_balance ?? 0
-
-    // Set new balance (replenishment replaces the balance, not adds to it)
-    const newBalance = amt
-
-    // Update user credits
-    statements.updateUserCredits.run(newBalance, uid)
-
-    // Log transaction to ledger (positive amount for replenishment)
-    statements.createCreditLedgerEntry.run(generateId(), uid, amt, rsn, newBalance)
-
-    return newBalance
-  })
-
   try {
-    const newBalance = transaction(userId, creditsToAdd, reason)
+    const newBalance = await CreditsService.replenishCredits(userId, creditsToAdd, reason)
     console.log(`[Credits] Replenished ${creditsToAdd} credits for user ${userId}. New balance: ${newBalance}`)
     return newBalance
   } catch (error) {
@@ -144,26 +102,9 @@ export function replenishCredits(userId: string, tier: 'high' | 'mid' | 'low', r
  * @param reason - Reason for the addition
  * @returns New balance after addition
  */
-export function addCredits(userId: string, amount: number, reason: string): number {
-  const transaction = db.transaction((uid: string, amt: number, rsn: string) => {
-    // Get current balance
-    const result = statements.getUserCredits.get(uid) as { credits_balance: number } | undefined
-    const currentBalance = result?.credits_balance ?? 0
-
-    // Calculate new balance
-    const newBalance = currentBalance + amt
-
-    // Update user credits
-    statements.updateUserCredits.run(newBalance, uid)
-
-    // Log transaction to ledger
-    statements.createCreditLedgerEntry.run(generateId(), uid, amt, rsn, newBalance)
-
-    return newBalance
-  })
-
+export async function addCredits(userId: string, amount: number, reason: string): Promise<number> {
   try {
-    const newBalance = transaction(userId, amount, reason)
+    const newBalance = await CreditsService.addCredits(userId, amount, reason)
     console.log(`[Credits] Added ${amount} credits for user ${userId}. New balance: ${newBalance}`)
     return newBalance
   } catch (error) {
@@ -177,10 +118,9 @@ export function addCredits(userId: string, amount: number, reason: string): numb
  * @param userId - User ID
  * @returns Current credit balance
  */
-export function getUserCredits(userId: string): number {
+export async function getUserCredits(userId: string): Promise<number> {
   try {
-    const result = statements.getUserCredits.get(userId) as { credits_balance: number } | undefined
-    return result?.credits_balance ?? 0
+    return await CreditsService.getUserCredits(userId)
   } catch (error) {
     console.error('[Credits] Error getting user credits:', error)
     return 0
@@ -193,14 +133,14 @@ export function getUserCredits(userId: string): number {
  * @param limit - Number of transactions to retrieve (default 100)
  * @returns Array of credit transactions
  */
-export function getCreditHistory(userId: string, limit: number = 100): CreditTransaction[] {
+export async function getCreditHistory(userId: string, limit: number = 100): Promise<CreditTransaction[]> {
   try {
-    const results = statements.getCreditLedgerByUser.all(userId, limit) as any[]
+    const results = await CreditsService.getCreditHistory(userId, limit)
     return results.map(r => ({
       userId: r.user_id,
-      amount: r.amount,
-      reason: r.reason,
-      balanceAfter: r.balance_after,
+      amount: r.delta_credits, // Changed from amount to delta_credits
+      reason: r.description ?? 'No description',
+      balanceAfter: 0, // Not stored in new schema, would need to calculate
       createdAt: r.created_at,
     }))
   } catch (error) {
@@ -214,10 +154,9 @@ export function getCreditHistory(userId: string, limit: number = 100): CreditTra
  * @param userId - User ID
  * @returns Total credits used
  */
-export function getTotalCreditsUsed(userId: string): number {
+export async function getTotalCreditsUsed(userId: string): Promise<number> {
   try {
-    const result = statements.getTotalCreditsUsedByUser.get(userId) as { total_credits_used: number | null } | undefined
-    return result?.total_credits_used ?? 0
+    return await CreditsService.getTotalCreditsUsed(userId)
   } catch (error) {
     console.error('[Credits] Error getting total credits used:', error)
     return 0

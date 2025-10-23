@@ -10,7 +10,6 @@ import {
   chatSliceActions,
   deleteMessage,
   editMessageWithBranching,
-  fetchModelsForCurrentProvider,
   initializeUserAndConversation,
   Message,
   Model,
@@ -26,7 +25,6 @@ import {
   selectHeimdallLoading,
   selectMessageInput,
   // Chat selectors
-  selectModels,
   selectMultiReplyCount,
   selectProviderState,
   selectSelectedModel,
@@ -41,9 +39,7 @@ import {
   convContextSet,
   Conversation,
   conversationsLoaded,
-  fetchRecentModels,
   makeSelectConversationById,
-  selectRecentModels,
   systemPromptSet,
 } from '../features/conversations'
 import { removeSelectedFileForChat, updateIdeContext } from '../features/ideContext'
@@ -52,7 +48,7 @@ import { selectSelectedProject } from '../features/projects/projectSelectors'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
-import { useConversationMessages, useConversationsByProject } from '../hooks/useQueries'
+import { useConversationMessages, useConversationsByProject, useModels, useRecentModels, useRefreshModels } from '../hooks/useQueries'
 import { cloneConversation } from '../utils/api'
 import { parseId } from '../utils/helpers'
 
@@ -72,7 +68,6 @@ function Chat() {
   const projectIdFromUrl = projectIdParam || null
 
   // Redux selectors
-  const models = useAppSelector(selectModels)
   const selectedModel = useAppSelector(selectSelectedModel)
   const providers = useAppSelector(selectProviderState)
   const messageInput = useAppSelector(selectMessageInput)
@@ -252,8 +247,16 @@ function Chat() {
   const loading = useAppSelector(selectHeimdallLoading)
   const error = useAppSelector(selectHeimdallError)
   const compactMode = useAppSelector(selectHeimdallCompactMode)
-  const recentModels = useAppSelector(selectRecentModels)
   const selectedProject = useAppSelector(selectSelectedProject)
+
+  // React Query hooks for model management
+  const { data: modelsData } = useModels(providers.currentProvider)
+  const { data: recentModelsData } = useRecentModels(5)
+  const refreshModelsMutation = useRefreshModels()
+
+  // Extract models array from React Query response
+  const models = modelsData?.models || []
+  const recentModels = recentModelsData || []
   // Conversation title editing
   const currentConversation = useAppSelector(
     currentConversationId ? makeSelectConversationById(currentConversationId) : () => null
@@ -770,18 +773,8 @@ function Chat() {
     }
   }, [conversationMessages, selectedPath, dispatch, hashMessageId])
 
-  // Load models on mount and when provider changes (consolidated to avoid duplicates)
-  useEffect(() => {
-    const loadModels = async () => {
-      // Fetch models for current provider
-      await dispatch(fetchModelsForCurrentProvider(true))
-        .unwrap()
-        .catch(() => {})
-      // Then fetch recent models (only after provider models loaded)
-      dispatch(fetchRecentModels({ limit: 5 }))
-    }
-    loadModels()
-  }, [providers.currentProvider, dispatch])
+  // Models are now loaded automatically via React Query hooks
+  // No manual loading needed - React Query handles caching and refetching
 
   // Keep a local copy of models to allow reordering with recent models
   useEffect(() => {
@@ -1286,10 +1279,12 @@ function Chat() {
     }
   }, [currentConversationId, accessToken, navigate, queryClient])
 
-  // Refresh models
+  // Refresh models using React Query mutation
   const handleRefreshModels = useCallback(() => {
-    dispatch(fetchModelsForCurrentProvider(true))
-  }, [dispatch])
+    if (providers.currentProvider) {
+      refreshModelsMutation.mutate(providers.currentProvider)
+    }
+  }, [providers.currentProvider, refreshModelsMutation])
 
   // Memoized message list to prevent re-rendering all messages when unrelated state changes
   const memoizedMessageList = useMemo(() => {

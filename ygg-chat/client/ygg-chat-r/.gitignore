@@ -7,8 +7,13 @@ yarn-error.log*
 
 # Build outputs
 dist/
+dist-electron/
 build/
 *.tsbuildinfo
+
+# Compiled electron files
+electron/*.cjs
+electron/*.js.map
 
 # Environment variables
 .env

@@ -1,9 +1,9 @@
 // React Query hooks for data fetching with automatic caching and deduplication
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
-import type { Project } from '../../../../shared/types'
+import type { BaseModel, Project } from '../../../../shared/types'
 import { ConversationId, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
-import type { Message } from '../features/chats/chatTypes'
+import type { Message, Model } from '../features/chats/chatTypes'
 import type { Conversation } from '../features/conversations/conversationTypes'
 import { api } from '../utils/api'
 import { useAuth } from './useAuth'
@@ -220,5 +220,166 @@ export function useConversationMessages(conversationId: ConversationId | null) {
     refetchOnMount: false, // Don't refetch on component mount if data exists
     refetchOnReconnect: false, // Don't refetch on network reconnect
     refetchOnWindowFocus: false, // Don't refetch when user switches tabs
+  })
+}
+
+/**
+ * Helper function to convert model name string to Model object
+ */
+const stringToModel = (modelName: string): Model => ({
+  name: modelName,
+  version: '1.0.0',
+  displayName: modelName,
+  description: `${modelName} model`,
+  inputTokenLimit: 4096,
+  outputTokenLimit: 2048,
+  thinking: false,
+  supportedGenerationMethods: ['chat', 'completion'],
+})
+
+/**
+ * Fetch models for a specific provider
+ * Cache key: ['models', provider]
+ *
+ * Supports multiple providers: ollama, gemini, anthropic, openai, openrouter, lmstudio
+ * Automatically deduplicates requests and caches results
+ *
+ * Returns: { models: Model[], default: Model }
+ */
+export function useModels(provider: string | null) {
+  const { accessToken } = useAuth()
+
+  return useQuery({
+    queryKey: ['models', provider],
+    queryFn: async () => {
+      if (!provider) throw new Error('Provider is required')
+
+      const normalizedProvider = provider.toLowerCase()
+      let endpoint = '/models' // Default to Ollama
+
+      // Map provider to appropriate endpoint
+      switch (normalizedProvider) {
+        case 'google':
+        case 'gemini':
+          endpoint = '/models/gemini'
+          break
+        case 'anthropic':
+          endpoint = '/models/anthropic'
+          break
+        case 'openai':
+          endpoint = '/models/openai'
+          break
+        case 'openrouter':
+          endpoint = '/models/openrouter'
+          break
+        case 'lmstudio':
+          endpoint = '/models/lmstudio'
+          break
+        default:
+          endpoint = '/models' // Ollama
+      }
+
+      const response = await api.get<{ models: string[] | Model[]; default: string | Model }>(endpoint, accessToken)
+
+      // Handle both string[] and Model[] responses
+      const isStringArray = Array.isArray(response.models) && typeof response.models[0] === 'string'
+
+      return {
+        models: isStringArray ? (response.models as string[]).map(stringToModel) : (response.models as Model[]),
+        default:
+          typeof response.default === 'string' ? stringToModel(response.default as string) : (response.default as Model),
+      }
+    },
+    enabled: !!provider && !!accessToken,
+    staleTime: 5 * 60 * 1000, // 5 minutes - models don't change frequently
+    refetchOnMount: false, // Don't refetch on component mount if cache exists
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false, // Don't refetch when user switches tabs
+  })
+}
+
+/**
+ * Fetch recently used models based on message history
+ * Cache key: ['models', 'recent']
+ *
+ * Returns: BaseModel[] (model names with metadata)
+ */
+export function useRecentModels(limit: number = 5) {
+  const { accessToken } = useAuth()
+
+  return useQuery({
+    queryKey: ['models', 'recent'],
+    queryFn: async () => {
+      const query = new URLSearchParams({ limit: String(limit) }).toString()
+      const response = await api.get<{ models: string[] }>(`/models/recent?${query}`, accessToken)
+      const models = Array.isArray(response?.models) ? response.models : []
+
+      // Map plain names to BaseModel shape with sensible defaults
+      const normalized: BaseModel[] = models.map(name => ({
+        name,
+        version: '',
+        displayName: name,
+        description: '',
+        inputTokenLimit: 0,
+        outputTokenLimit: 0,
+        thinking: false,
+        supportedGenerationMethods: [],
+      }))
+
+      return normalized
+    },
+    enabled: !!accessToken,
+    staleTime: 2 * 60 * 1000, // 2 minutes - recent models are more dynamic
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+/**
+ * Mutation hook for refreshing models (force refetch)
+ * Invalidates the models cache for the current provider
+ */
+export function useRefreshModels() {
+  const queryClient = useQueryClient()
+  const { accessToken } = useAuth()
+
+  return useMutation({
+    mutationFn: async (provider: string) => {
+      const normalizedProvider = provider.toLowerCase()
+      let endpoint = '/models'
+
+      switch (normalizedProvider) {
+        case 'google':
+        case 'gemini':
+          endpoint = '/models/gemini'
+          break
+        case 'anthropic':
+          endpoint = '/models/anthropic'
+          break
+        case 'openai':
+          endpoint = '/models/openai'
+          break
+        case 'openrouter':
+          endpoint = '/models/openrouter'
+          break
+        case 'lmstudio':
+          endpoint = '/models/lmstudio'
+          break
+      }
+
+      const response = await api.get<{ models: string[] | Model[]; default: string | Model }>(endpoint, accessToken)
+      const isStringArray = Array.isArray(response.models) && typeof response.models[0] === 'string'
+
+      return {
+        models: isStringArray ? (response.models as string[]).map(stringToModel) : (response.models as Model[]),
+        default:
+          typeof response.default === 'string' ? stringToModel(response.default as string) : (response.default as Model),
+      }
+    },
+    onSuccess: (data, provider) => {
+      // Update the cache with fresh data
+      queryClient.setQueryData(['models', provider], data)
+    },
   })
 }

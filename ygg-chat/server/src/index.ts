@@ -16,6 +16,8 @@ import settingsRoutes from './routes/settings'
 import { stripMarkdownToText } from './utils/markdownStripper'
 import { preloadModelPricing } from './utils/openrouter'
 import tools from './utils/tools/index'
+import { startReconciliationWorker } from './workers/openrouter-reconciliation'
+import { globalRateLimiter, logRateLimiterConfig } from './middleware/rateLimiter'
 
 const app = express()
 const server = createServer(app)
@@ -133,10 +135,33 @@ wss.on('connection', (ws, request) => {
   })
 })
 
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:5173', // Local development
+  'http://localhost:3000', // Alternative local port
+  env.FRONTEND_URL, // Production frontend URL (set in environment variables)
+].filter(Boolean) // Remove undefined values
+
 app.use(
   cors({
-    origin: true, // Allow all origins (or specify your frontend URL)
-    // credentials: true, // Allow credentials
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+      if (!origin) return callback(null, true)
+
+      // In development, allow all origins for flexibility
+      if (env.NODE_ENV !== 'production') {
+        return callback(null, true)
+      }
+
+      // In production, check against whitelist
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        console.warn(`⚠️ CORS blocked origin: ${origin}`)
+        callback(new Error('Not allowed by CORS'))
+      }
+    },
+    credentials: true, // Allow credentials (cookies, authorization headers)
     exposedHeaders: ['Authorization'], // Expose JWT headers to client
     allowedHeaders: ['Content-Type', 'Authorization'], // Accept JWT Authorization header from client
   })
@@ -144,13 +169,19 @@ app.use(
 
 // IMPORTANT: Register Stripe webhook BEFORE express.json() middleware
 // Webhook signature verification requires raw body, but express.json() parses it
-if (env.VITE_ENVIRONMENT !== 'local') {
+// Only load in web mode (not local or electron)
+if (env.VITE_ENVIRONMENT === 'web') {
   const stripeRoutes = require('./routes/stripe').default
   app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeRoutes)
 }
 
 app.use(express.json({ limit: '25mb' }))
 app.use(express.urlencoded({ extended: true, limit: '25mb' }))
+
+// Apply global rate limiter to all routes (only in web mode)
+if (env.VITE_ENVIRONMENT === 'web') {
+  app.use(globalRateLimiter)
+}
 
 // Debug middleware to log all requests
 app.use('/api', (req, res, next) => {
@@ -159,15 +190,20 @@ app.use('/api', (req, res, next) => {
   // console.log('[Debug Middleware] Headers:', req.headers)
   next()
 })
+// Route handling based on environment
 if (env.VITE_ENVIRONMENT === 'web') {
+  // Web mode: Use Supabase routes with Redis-backed rate limiting
   const supaChat = require('./routes/supaChat').default
-  const rateLimit = require('express-rate-limit')
-  app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }), supaChat)
+  app.use('/api', supaChat)
 } else {
+  // Local and Electron modes: Use direct chat routes (no Supabase)
   app.use('/api', chatRoutes)
 }
+
 app.use('/api/settings', settingsRoutes)
-if (env.VITE_ENVIRONMENT !== 'local') {
+
+// Stripe routes: Only in web mode
+if (env.VITE_ENVIRONMENT === 'web') {
   const stripeRoutes = require('./routes/stripe').default
   app.use('/api/stripe', stripeRoutes)
 }
@@ -208,42 +244,11 @@ console.log('📊 Rebuilding FTS index on startup...')
 console.log('✅ FTS index rebuilt.')
 initializeStatements()
 
-// Create default local user for local mode
+// No default user creation - users are created after OAuth authentication
+// Only web and electron modes exist
 function ensureDefaultLocalUser() {
-  if (env.VITE_ENVIRONMENT !== 'local') {
-    console.log('Skipping default user creation (not in local mode)')
-    return
-  }
-
-  try {
-    // Use a fixed UUID for the local user (matches Supabase-generated UUID and migration script)
-    const defaultUserId = 'a7c485cb-99e7-4cf2-82a9-6e23b55cdfc3'
-    const defaultUsername = 'local-user'
-
-    // Import statements from db module
-    const { statements } = require('./database/db')
-
-    // Check if user already exists with this ID
-    const existingUser = statements.getUserById.get(defaultUserId)
-
-    if (existingUser) {
-      // User exists - ensure username is correct (fix migration artifacts)
-      if (existingUser.username !== defaultUsername) {
-        console.log(`⚠️  User exists with different username: ${existingUser.username}`)
-        console.log(`📝 Updating username to: ${defaultUsername}`)
-        statements.updateUser.run(defaultUsername, defaultUserId)
-        console.log(`✅ Updated user to: ${defaultUsername} (${defaultUserId})`)
-      } else {
-        console.log(`✅ Default local user already exists: ${existingUser.username} (${defaultUserId})`)
-      }
-    } else {
-      // No user with this ID - create new user
-      statements.createUser.run(defaultUserId, defaultUsername)
-      console.log(`✅ Created default local user: ${defaultUsername} (${defaultUserId})`)
-    }
-  } catch (error) {
-    console.error('❌ Error creating default local user:', error)
-  }
+  console.log('⏭️  Skipping default user creation - users created after OAuth authentication')
+  console.log(`📍 Current environment: ${env.VITE_ENVIRONMENT}`)
 }
 
 ensureDefaultLocalUser()
@@ -252,10 +257,24 @@ ensureDefaultLocalUser()
 preloadModelPricing().catch(error => {
   console.log('Warning: Could not preload model pricing:', error.message)
 })
+
+// Start OpenRouter reconciliation worker (only in web mode where Supabase is available)
+if (env.VITE_ENVIRONMENT === 'web') {
+  startReconciliationWorker()
+  console.log('✅ OpenRouter reconciliation worker started')
+} else {
+  console.log('⏭️  Skipping reconciliation worker (not in web mode)')
+}
+
 ;(async () => {
   server.listen(3001, () => {
     console.log('🚀 Server on :3001')
     console.log('🔌 WebSocket IDE Context on ws://localhost:3001/ide-context')
+
+    // Log rate limiter configuration (only in web mode)
+    if (env.VITE_ENVIRONMENT === 'web') {
+      logRateLimiterConfig()
+    }
   })
 })()
 

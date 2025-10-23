@@ -1,5 +1,5 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
-import type { BaseModel, ConversationId, ProjectId } from '../../../../../shared/types'
+import type { ConversationId, ProjectId } from '../../../../../shared/types'
 import { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
 import {
@@ -14,35 +14,8 @@ import { convContextSet, systemPromptSet } from './conversationSlice'
 import { Conversation } from './conversationTypes'
 
 // Fetch conversations for current user
+// Note: fetchRecentModels has been migrated to React Query (see useRecentModels in hooks/useQueries.ts)
 
-// Fetch recently used models based on recent messages (server returns names)
-export const fetchRecentModels = createAsyncThunk<
-  BaseModel[],
-  { limit?: number } | void,
-  { extra: ThunkExtraArgument }
->('conversations/fetchRecentModels', async (args, { extra, rejectWithValue }) => {
-  try {
-    const { auth } = extra
-    const limit = args && typeof args.limit === 'number' ? args.limit : 5
-    const query = new URLSearchParams({ limit: String(limit) }).toString()
-    const res = await api.get<{ models: string[] }>(`/models/recent?${query}`, auth.accessToken)
-    const models = Array.isArray(res?.models) ? res.models : []
-    // Map plain names to BaseModel shape with sensible defaults
-    const normalized: BaseModel[] = models.map(name => ({
-      name,
-      version: '',
-      displayName: name,
-      description: '',
-      inputTokenLimit: 0,
-      outputTokenLimit: 0,
-      thinking: false,
-      supportedGenerationMethods: [],
-    }))
-    return normalized
-  } catch (err) {
-    return rejectWithValue(err instanceof Error ? err.message : 'Failed to fetch recent models') as any
-  }
-})
 export const fetchConversations = createAsyncThunk<
   Conversation[],
   void,
@@ -97,29 +70,34 @@ export const fetchConversationsByProjectId = createAsyncThunk<Conversation[], Pr
 // Create new conversation for current user
 export const createConversation = createAsyncThunk<
   Conversation,
-  { title?: string },
+  { title?: string; projectId?: string | null; systemPrompt?: string | null; conversationContext?: string | null },
   { state: RootState; extra: ThunkExtraArgument }
->('conversations/create', async ({ title }, { getState, extra, rejectWithValue }) => {
-  try {
-    const { auth } = extra
+>(
+  'conversations/create',
+  async ({ title, projectId: providedProjectId, systemPrompt, conversationContext }, { getState, extra, rejectWithValue }) => {
+    try {
+      const { auth } = extra
 
-    if (!auth.userId) {
-      throw new Error('User not authenticated')
+      if (!auth.userId) {
+        throw new Error('User not authenticated')
+      }
+
+      // Use provided projectId if available, otherwise fall back to selected project from state
+      const selectedProject = getState().projects.selectedProject
+      const projectId = providedProjectId !== undefined ? providedProjectId : (selectedProject?.id || null)
+
+      return await api.post<Conversation>('/conversations', auth.accessToken, {
+        userId: auth.userId,
+        title: title || null,
+        projectId,
+        systemPrompt,
+        conversationContext,
+      })
+    } catch (err) {
+      return rejectWithValue(err instanceof Error ? err.message : 'Failed to create conversation')
     }
-
-    // Get selected project ID from state
-    const selectedProject = getState().projects.selectedProject
-    const projectId = selectedProject?.id || null
-
-    return await api.post<Conversation>('/conversations', auth.accessToken, {
-      userId: auth.userId,
-      title: title || null,
-      projectId,
-    })
-  } catch (err) {
-    return rejectWithValue(err instanceof Error ? err.message : 'Failed to create conversation')
   }
-})
+)
 
 // Update conversation title by id
 export const updateConversation = createAsyncThunk<

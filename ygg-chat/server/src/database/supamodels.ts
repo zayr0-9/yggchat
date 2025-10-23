@@ -62,10 +62,13 @@ export interface Profile {
   created_at: string
   max_credits: number
   current_credits: number
+  cached_current_credits: number
   total_spent: number
   credits_enabled: boolean
   last_reset_at?: string | null
   reset_period: 'none' | 'daily' | 'monthly' | 'yearly'
+  stripe_customer_id?: string | null
+  active_subscription_id?: string | null
 }
 
 export interface User extends Profile {}
@@ -594,7 +597,9 @@ export class ConversationService {
     ownerId: string,
     title?: string,
     modelName?: string,
-    projectId?: string
+    projectId?: string,
+    systemPrompt?: string | null,
+    conversationContext?: string | null
   ): Promise<Conversation> {
     const { data: created, error } = await client
       .from('conversations')
@@ -603,6 +608,8 @@ export class ConversationService {
         title: title || null,
         model_name: modelName || 'gemma3:4b',
         project_id: projectId || null,
+        system_prompt: systemPrompt || null,
+        conversation_context: conversationContext || null,
       })
       .select()
       .single()
@@ -794,18 +801,18 @@ export class MessageService {
       }
     }
 
-    console.log('inserting the following fields - - - - - - - ', {
-      conversation_id: conversationId,
-      owner_id: ownerId,
-      parent_id: parentId,
-      role,
-      content,
-      thinking_block,
-      tool_calls: parsedToolCalls,
-      model_name: modelName || 'unknown',
-      note: note || null,
-      plain_text_content: '',
-    })
+    // console.log('inserting the following fields - - - - - - - ', {
+    //   conversation_id: conversationId,
+    //   owner_id: ownerId,
+    //   parent_id: parentId,
+    //   role,
+    //   content,
+    //   thinking_block,
+    //   tool_calls: parsedToolCalls,
+    //   model_name: modelName || 'unknown',
+    //   note: note || null,
+    //   plain_text_content: '',
+    // })
     // Compute plain text content before insert to save an API call
     let plainTextContent: string | null = null
     try {
@@ -836,7 +843,7 @@ export class MessageService {
       console.error('Error creating message:', error)
       throw error
     }
-    console.log('created Message = = = = ', created)
+    // console.log('created Message = = = = ', created)
     return created as Message
   }
 
@@ -900,6 +907,16 @@ export class MessageService {
     tool_calls: string | null = null,
     note: string | null = null
   ): Promise<Message | undefined> {
+    // Compute plain text content before update to save an API call
+    let plainTextContent: string
+    try {
+      plainTextContent = await stripMarkdownToText(content)
+    } catch {
+      // If markdown stripping fails, use raw content as fallback
+      plainTextContent = content
+    }
+
+    // Single UPDATE query with all fields including plain_text_content
     const { data } = await client
       .from('messages')
       .update({
@@ -907,22 +924,11 @@ export class MessageService {
         thinking_block,
         tool_calls: tool_calls ? JSON.parse(tool_calls) : null,
         note,
+        plain_text_content: plainTextContent,
       })
       .eq('id', id)
       .select()
       .single()
-
-    // Update plain text content synchronously to avoid race conditions
-    try {
-      const text = await stripMarkdownToText(content)
-      await setPlainTextForMessage(client, text, id)
-    } catch {
-      try {
-        await setPlainTextForMessage(client, content, id)
-      } catch {
-        // Ignore plain text update failures
-      }
-    }
 
     return data ? (data as Message) : undefined
   }
@@ -1182,6 +1188,68 @@ export class ProviderCostService {
   }
 }
 
+// Credits and Billing Interfaces
+export interface CreditLedgerEntry {
+  id: string
+  user_id: string
+  delta_credits: number
+  kind: string // ledger_entry_kind enum
+  external_ref_type?: string | null
+  external_ref_id?: string | null
+  message_id?: string | null
+  conversation_id?: string | null
+  metadata?: any
+  description?: string | null
+  created_at: string
+}
+
+export interface Subscription {
+  id: string
+  user_id: string
+  stripe_subscription_id: string
+  stripe_customer_id: string
+  stripe_price_id: string
+  plan_id?: string | null
+  status: string // subscription_status enum
+  current_period_start: string
+  current_period_end: string
+  billing_cycle_anchor: string
+  cancel_at_period_end: boolean
+  canceled_at?: string | null
+  trial_start?: string | null
+  trial_end?: string | null
+  metadata?: any
+  created_at: string
+  updated_at: string
+}
+
+export interface Plan {
+  id: string
+  plan_code: string
+  stripe_price_id: string
+  stripe_product_id?: string | null
+  included_credits_per_cycle: number
+  display_name: string
+  display_price_usd: number
+  billing_interval: string
+  is_active: boolean
+  metadata?: any
+  created_at: string
+  updated_at: string
+}
+
+export interface UserSubscriptionDetails {
+  subscription_id: string
+  stripe_subscription_id: string
+  status: string
+  plan_code: string
+  plan_name: string
+  monthly_credits: number
+  current_period_start: string
+  current_period_end: string
+  cancel_at_period_end: boolean
+}
+
 // Heimdall tree format
 export interface ChatNode {
   id: string
@@ -1235,5 +1303,371 @@ export function buildMessageTree(messages: Message[]): ChatNode | null {
     message: 'Conversation',
     sender: 'assistant',
     children: rootNodes,
+  }
+}
+
+/**
+ * CreditsService - Wrapper around Supabase RPC functions for credit management
+ * Uses existing Supabase stored procedures for atomic credit operations
+ */
+export class CreditsService {
+  /**
+   * Get user's current credit balance
+   */
+  static async getUserCredits(userId: string): Promise<number> {
+    try {
+      const { data, error } = await supabaseAdmin.rpc('get_user_credit_balance', {
+        p_user_id: userId,
+      })
+
+      if (error) throw error
+      return data ?? 0
+    } catch (error) {
+      console.error('[CreditsService] Error getting user credits:', error)
+      return 0
+    }
+  }
+
+  /**
+   * Check if user has sufficient credits
+   */
+  static async checkCreditsAvailable(
+    userId: string,
+    requiredAmount: number
+  ): Promise<{
+    hasCredits: boolean
+    currentBalance: number
+    required: number
+    shortfall: number
+  }> {
+    try {
+      const { data, error } = await supabaseAdmin.rpc('check_credit_availability', {
+        p_user_id: userId,
+        p_required_credits: requiredAmount,
+      })
+
+      if (error) throw error
+
+      // RPC returns array with single row
+      const result = Array.isArray(data) ? data[0] : data
+
+      return {
+        hasCredits: result?.has_credits ?? false,
+        currentBalance: result?.current_balance ?? 0,
+        required: result?.required_credits ?? requiredAmount,
+        shortfall: result?.shortfall ?? requiredAmount,
+      }
+    } catch (error) {
+      console.error('[CreditsService] Error checking credits:', error)
+      return {
+        hasCredits: false,
+        currentBalance: 0,
+        required: requiredAmount,
+        shortfall: requiredAmount,
+      }
+    }
+  }
+
+  /**
+   * Replenish user credits (for subscription allocation)
+   * Sets the credit balance to the specified amount
+   */
+  static async replenishCredits(userId: string, creditsAmount: number, reason: string): Promise<number> {
+    try {
+      // Get current balance
+      const currentBalance = await this.getUserCredits(userId)
+
+      // Calculate delta to set balance to creditsAmount
+      const delta = creditsAmount - currentBalance
+
+      // Use finance_adjust_credits with 'allocation' kind
+      const { data: ledgerId, error } = await supabaseAdmin.rpc('finance_adjust_credits', {
+        p_user_id: userId,
+        p_ref_type: 'subscription_allocation',
+        p_ref_id: new Date().toISOString(), // Use timestamp as ref
+        p_delta: delta,
+        p_kind: 'allocation',
+        p_metadata: { reason, previous_balance: currentBalance, new_balance: creditsAmount },
+        p_allow_negative: false,
+      })
+
+      if (error) throw error
+
+      // Sync cached balance
+      await supabaseAdmin.rpc('sync_cached_balance', { p_user_id: userId })
+
+      console.log(`[CreditsService] Replenished credits for user ${userId}: ${currentBalance} → ${creditsAmount}`)
+      return creditsAmount
+    } catch (error) {
+      console.error('[CreditsService] Error replenishing credits:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Decrement user credits (for AI generation usage)
+   * Returns new balance or null if insufficient credits
+   */
+  static async decrementCredits(userId: string, amount: number, reason: string): Promise<number | null> {
+    try {
+      // Check if user has sufficient credits
+      const check = await this.checkCreditsAvailable(userId, amount)
+      if (!check.hasCredits) {
+        console.warn(
+          `[CreditsService] Insufficient credits for user ${userId}. Required: ${amount}, Available: ${check.currentBalance}`
+        )
+        return null
+      }
+
+      // Deduct credits (negative delta)
+      const { data: ledgerId, error } = await supabaseAdmin.rpc('finance_adjust_credits', {
+        p_user_id: userId,
+        p_ref_type: 'generation_usage',
+        p_ref_id: new Date().toISOString(),
+        p_delta: -amount,
+        p_kind: 'usage',
+        p_metadata: { reason },
+        p_allow_negative: false,
+      })
+
+      if (error) throw error
+
+      // Sync and return new balance
+      const { data: newBalance } = await supabaseAdmin.rpc('sync_cached_balance', { p_user_id: userId })
+
+      console.log(`[CreditsService] Decremented ${amount} credits for user ${userId}. New balance: ${newBalance}`)
+      return newBalance ?? 0
+    } catch (error: any) {
+      if (error.message?.includes('Insufficient credits')) {
+        console.warn(`[CreditsService] Insufficient credits for user ${userId}`)
+        return null
+      }
+      console.error('[CreditsService] Error decrementing credits:', error)
+      return null
+    }
+  }
+
+  /**
+   * Add credits to user balance (for bonuses, refunds, manual adjustments)
+   */
+  static async addCredits(userId: string, amount: number, reason: string): Promise<number> {
+    try {
+      const { data: ledgerId, error } = await supabaseAdmin.rpc('finance_adjust_credits', {
+        p_user_id: userId,
+        p_ref_type: 'manual_adjustment',
+        p_ref_id: new Date().toISOString(),
+        p_delta: amount,
+        p_kind: 'refund', // or 'bonus' depending on reason
+        p_metadata: { reason },
+        p_allow_negative: false,
+      })
+
+      if (error) throw error
+
+      // Sync and return new balance
+      const { data: newBalance } = await supabaseAdmin.rpc('sync_cached_balance', { p_user_id: userId })
+
+      console.log(`[CreditsService] Added ${amount} credits for user ${userId}. New balance: ${newBalance}`)
+      return newBalance ?? amount
+    } catch (error) {
+      console.error('[CreditsService] Error adding credits:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get user's credit transaction history
+   */
+  static async getCreditHistory(userId: string, limit: number = 100): Promise<CreditLedgerEntry[]> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('credits_ledger')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      if (error) throw error
+      return (data || []) as CreditLedgerEntry[]
+    } catch (error) {
+      console.error('[CreditsService] Error getting credit history:', error)
+      return []
+    }
+  }
+
+  /**
+   * Get total credits used by user (lifetime)
+   */
+  static async getTotalCreditsUsed(userId: string): Promise<number> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('credits_ledger')
+        .select('delta_credits')
+        .eq('user_id', userId)
+        .lt('delta_credits', 0) // Only negative deltas (usage)
+
+      if (error) throw error
+
+      const total = (data || []).reduce((sum, entry) => sum + Math.abs(entry.delta_credits), 0)
+      return total
+    } catch (error) {
+      console.error('[CreditsService] Error getting total credits used:', error)
+      return 0
+    }
+  }
+}
+
+/**
+ * SubscriptionService - Wrapper around Supabase RPC functions for subscription management
+ * Uses existing Supabase stored procedures for subscription operations
+ */
+export class SubscriptionService {
+  /**
+   * Create or update subscription (upsert)
+   * This is called from Stripe webhooks (checkout.session.completed, customer.subscription.*)
+   */
+  static async upsertSubscription(params: {
+    userId: string
+    stripeSubscriptionId: string
+    stripeCustomerId: string
+    stripePriceId: string
+    status: string // 'active', 'canceled', 'past_due', etc.
+    currentPeriodStart: Date
+    currentPeriodEnd: Date
+    billingCycleAnchor: Date
+    cancelAtPeriodEnd?: boolean
+    canceledAt?: Date | null
+    trialStart?: Date | null
+    trialEnd?: Date | null
+    metadata?: any
+  }): Promise<string> {
+    try {
+      const { data: subscriptionId, error } = await supabaseAdmin.rpc('handle_subscription_upsert', {
+        p_user_id: params.userId,
+        p_stripe_subscription_id: params.stripeSubscriptionId,
+        p_stripe_customer_id: params.stripeCustomerId,
+        p_stripe_price_id: params.stripePriceId,
+        p_status: params.status,
+        p_current_period_start: params.currentPeriodStart.toISOString(),
+        p_current_period_end: params.currentPeriodEnd.toISOString(),
+        p_billing_cycle_anchor: params.billingCycleAnchor.toISOString(),
+        p_cancel_at_period_end: params.cancelAtPeriodEnd ?? false,
+        p_canceled_at: params.canceledAt?.toISOString() ?? null,
+        p_trial_start: params.trialStart?.toISOString() ?? null,
+        p_trial_end: params.trialEnd?.toISOString() ?? null,
+        p_metadata: params.metadata ?? {},
+      })
+
+      if (error) throw error
+
+      console.log(
+        `[SubscriptionService] Upserted subscription ${params.stripeSubscriptionId} for user ${params.userId}`
+      )
+      return subscriptionId
+    } catch (error) {
+      console.error('[SubscriptionService] Error upserting subscription:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Handle invoice payment succeeded
+   * This allocates credits for the billing period
+   */
+  static async handleInvoicePayment(params: {
+    userId: string
+    stripeSubscriptionId: string
+    stripeInvoiceId: string
+    stripePriceId: string
+    periodStart: Date
+    periodEnd: Date
+  }): Promise<string> {
+    try {
+      const { data: allocationId, error } = await supabaseAdmin.rpc('handle_invoice_payment_succeeded', {
+        p_user_id: params.userId,
+        p_stripe_subscription_id: params.stripeSubscriptionId,
+        p_stripe_invoice_id: params.stripeInvoiceId,
+        p_stripe_price_id: params.stripePriceId,
+        p_period_start: params.periodStart.toISOString(),
+        p_period_end: params.periodEnd.toISOString(),
+      })
+
+      if (error) throw error
+
+      console.log(
+        `[SubscriptionService] Handled invoice payment ${params.stripeInvoiceId} for user ${params.userId}, allocation: ${allocationId}`
+      )
+      return allocationId
+    } catch (error) {
+      console.error('[SubscriptionService] Error handling invoice payment:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Get user's active subscription with plan details
+   */
+  static async getActiveSubscription(userId: string): Promise<UserSubscriptionDetails | null> {
+    try {
+      const { data, error } = await supabaseAdmin.rpc('get_user_subscription', {
+        p_user_id: userId,
+      })
+
+      if (error) throw error
+
+      // RPC returns array with single row or empty array
+      const result = Array.isArray(data) && data.length > 0 ? data[0] : null
+
+      return result ? (result as UserSubscriptionDetails) : null
+    } catch (error) {
+      console.error('[SubscriptionService] Error getting subscription:', error)
+      return null
+    }
+  }
+
+  /**
+   * Get plan by Stripe price ID
+   */
+  static async getPlanByPriceId(stripePriceId: string): Promise<Plan | null> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('plans')
+        .select('*')
+        .eq('stripe_price_id', stripePriceId)
+        .eq('is_active', true)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No rows returned
+          return null
+        }
+        throw error
+      }
+
+      return data as Plan
+    } catch (error) {
+      console.error('[SubscriptionService] Error getting plan by price ID:', error)
+      return null
+    }
+  }
+
+  /**
+   * Get all active plans
+   */
+  static async getActivePlans(): Promise<Plan[]> {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('plans')
+        .select('*')
+        .eq('is_active', true)
+        .order('display_price_usd', { ascending: true })
+
+      if (error) throw error
+      return (data || []) as Plan[]
+    } catch (error) {
+      console.error('[SubscriptionService] Error getting active plans:', error)
+      return []
+    }
   }
 }

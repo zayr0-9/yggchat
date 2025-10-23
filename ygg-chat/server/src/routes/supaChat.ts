@@ -15,6 +15,11 @@ import {
   ProjectService,
   UserService,
 } from '../database/supamodels'
+import {
+  authEndpointsRateLimiter,
+  authenticatedRateLimiter,
+  expensiveOperationsRateLimiter,
+} from '../middleware/rateLimiter'
 import { asyncHandler } from '../utils/asyncHandler'
 import { SelectedFileContent } from '../utils/fileMentionProcessor'
 import { abortGeneration, clearGeneration, createGeneration } from '../utils/generationManager'
@@ -107,7 +112,7 @@ async function verifyAuth(req: express.Request): Promise<{ userId: string; clien
     throw new Error('Authentication failed: Missing user ID in token claims')
   }
 
-  console.log('[supaChat] ✅ JWT decoded locally (ZERO network calls) for user:', userId)
+  // console.log('[supaChat] ✅ JWT decoded locally (ZERO network calls) for user:', userId)
 
   return { userId, client }
 }
@@ -115,6 +120,7 @@ async function verifyAuth(req: express.Request): Promise<{ userId: string; clien
 // Global search endpoint - Uses JWT auth so auth.uid() works correctly
 router.get(
   '/search',
+  expensiveOperationsRateLimiter, // Apply expensive operations rate limiter
   asyncHandler(async (req, res) => {
     const { client } = await verifyAuth(req) // ✅ Use user's JWT, not service_role
     const q = (req.query.q as string) || ''
@@ -507,6 +513,7 @@ router.patch(
 // Create or get user
 router.post(
   '/users',
+  authEndpointsRateLimiter, // Apply auth endpoints rate limiter (strict IP-based)
   asyncHandler(async (req, res) => {
     const { username, id } = req.body
 
@@ -526,6 +533,7 @@ router.post(
 // Get user conversations
 router.get(
   '/users/:userId/conversations',
+  authenticatedRateLimiter, // Apply authenticated user rate limiter
   asyncHandler(async (req, res) => {
     console.log('\n🔴🔴🔴 [SERVER] GET /users/:userId/conversations')
     console.log('🔴 Timestamp:', new Date().toISOString())
@@ -606,6 +614,7 @@ router.get(
 // Update user
 router.put(
   '/users/:id',
+  authEndpointsRateLimiter, // Apply auth endpoints rate limiter (strict IP-based)
   asyncHandler(async (req, res) => {
     const userId = req.params.id
     const { username } = req.body
@@ -626,6 +635,7 @@ router.put(
 // Delete user (cascade delete conversations and messages)
 router.delete(
   '/users/:id',
+  authEndpointsRateLimiter, // Apply auth endpoints rate limiter (strict IP-based)
   asyncHandler(async (req, res) => {
     const userId = req.params.id
 
@@ -644,11 +654,20 @@ router.delete(
 // Create conversation
 router.post(
   '/conversations',
+  authenticatedRateLimiter, // Apply authenticated user rate limiter
   asyncHandler(async (req, res) => {
-    const { title, modelName, projectId } = req.body
+    const { title, modelName, projectId, systemPrompt, conversationContext } = req.body
     const { client, userId } = await verifyAuth(req)
 
-    const conversation = await ConversationService.create(client, userId, title, modelName, projectId)
+    const conversation = await ConversationService.create(
+      client,
+      userId,
+      title,
+      modelName,
+      projectId,
+      systemPrompt,
+      conversationContext
+    )
     res.json(conversation)
   })
 )
@@ -851,6 +870,7 @@ router.delete(
 // Get conversation messages
 router.get(
   '/conversations/:id/messages',
+  authenticatedRateLimiter, // Apply authenticated user rate limiter
   asyncHandler(async (req, res) => {
     const conversationId = req.params.id
     const { client } = await verifyAuth(req)
@@ -1006,6 +1026,7 @@ router.get(
 // Send message with streaming response (with repeat capability)
 router.post(
   '/conversations/:id/messages/repeat',
+  expensiveOperationsRateLimiter, // Apply expensive operations rate limiter (AI streaming)
   asyncHandler(async (req, res) => {
     const conversationId = req.params.id
     const { client, userId } = await verifyAuth(req)
@@ -1104,20 +1125,51 @@ router.post(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '', iteration: i })}\n\n`
                 )
               } else if (part === 'tool_call') {
-                assistantToolCalls += delta
-                res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '', iteration: i })}\n\n`)
+                // Validate that delta is valid JSON before adding to tool_calls
+                try {
+                  // Try to parse delta as JSON to validate it
+                  const parsedDelta = JSON.parse(delta)
+                  // If it's valid JSON, add it to the array
+                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                  currentToolCalls.push(delta)
+                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '', iteration: i })}\n\n`)
+                } catch (e) {
+                  // If delta is not valid JSON, treat it as regular content instead
+                  console.warn(
+                    '⚠️  [supaChat repeats] Received invalid JSON in tool_call part, treating as content:',
+                    delta
+                  )
+                  assistantContent += delta
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta, iteration: i })}\n\n`
+                  )
+                }
               } else {
                 const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
                 if (delta.includes('{"') && toolCallRegex.test(delta)) {
                   const matches = delta.match(toolCallRegex)
                   if (matches) {
-                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                    currentToolCalls.push(...matches)
-                    assistantToolCalls = JSON.stringify(currentToolCalls)
+                    // Validate each match is valid JSON before adding
+                    const validMatches = matches.filter(match => {
+                      try {
+                        JSON.parse(match)
+                        return true
+                      } catch {
+                        console.warn('⚠️  [supaChat repeats] Regex matched invalid JSON, skipping:', match)
+                        return false
+                      }
+                    })
 
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '', iteration: i })}\n\n`
-                    )
+                    if (validMatches.length > 0) {
+                      const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                      currentToolCalls.push(...validMatches)
+                      assistantToolCalls = JSON.stringify(currentToolCalls)
+
+                      res.write(
+                        `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '', iteration: i })}\n\n`
+                      )
+                    }
 
                     const cleanedDelta = delta.replace(toolCallRegex, '').trim()
                     if (cleanedDelta) {
@@ -1139,13 +1191,26 @@ router.post(
               if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
                 const matches = chunk.match(toolCallRegex)
                 if (matches) {
-                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                  currentToolCalls.push(...matches)
-                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  // Validate each match is valid JSON before adding
+                  const validMatches = matches.filter(match => {
+                    try {
+                      JSON.parse(match)
+                      return true
+                    } catch {
+                      console.warn('⚠️  [supaChat repeats] Regex matched invalid JSON in catch block, skipping:', match)
+                      return false
+                    }
+                  })
 
-                  res.write(
-                    `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '', iteration: i })}\n\n`
-                  )
+                  if (validMatches.length > 0) {
+                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                    currentToolCalls.push(...validMatches)
+                    assistantToolCalls = JSON.stringify(currentToolCalls)
+
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '', iteration: i })}\n\n`
+                    )
+                  }
 
                   const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
                   if (cleanedChunk) {
@@ -1175,7 +1240,8 @@ router.post(
           combinedContext ? combinedContext : null,
           think,
           undefined, // No assistant message ID yet (will create after streaming)
-          userId
+          userId,
+          conversationId
         )
 
         const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
@@ -1205,7 +1271,7 @@ router.post(
               selectedModel,
               assistantToolCalls
             )
-            console.log(assistantMessage)
+            // console.log(assistantMessage)
 
             const cleanedMessage = { ...assistantMessage, content: cleanedContent }
             res.write(`data: ${JSON.stringify({ type: 'complete', message: cleanedMessage, iteration: i })}\n\n`)
@@ -1246,6 +1312,7 @@ router.post(
 // Send message with streaming response
 router.post(
   '/conversations/:id/messages',
+  expensiveOperationsRateLimiter, // Apply expensive operations rate limiter (AI streaming)
   asyncHandler(async (req, res) => {
     console.log('\n🟢🟢🟢 [SERVER] POST /conversations/:id/messages - Message send received')
     console.log('🟢 Timestamp:', new Date().toISOString())
@@ -1282,7 +1349,7 @@ router.post(
     if (!content && !retrigger) {
       return res.status(400).json({ error: 'Message content required' })
     }
-    console.log('server | test', systemPrompt, clientProjectContext, clientConversationContext)
+    // console.log('server | test', systemPrompt, clientProjectContext, clientConversationContext)
 
     // let filesToUse = selectedFiles || []
     // if (!filesToUse || filesToUse.length === 0) {
@@ -1340,7 +1407,7 @@ router.post(
 
     const processedContent = content
     // filesToUse && filesToUse.length > 0 ? replaceFileMentionsWithContent(content, filesToUse) : content
-    console.log('server | processedContent', processedContent)
+    // console.log('server | processedContent', processedContent)
 
     // ✅ OPTIMIZATION: Use client-sent context (already validated via RLS when client fetched it)
     // Client sends conversationContext and projectContext to eliminate DB query
@@ -1377,7 +1444,7 @@ router.post(
         return res.status(400).json({ error: 'Cannot retrigger: last message is not from user' })
       }
       userMessage = lastMessage
-      console.log('server | retriggering from existing user message', userMessage.id)
+      // console.log('server | retriggering from existing user message', userMessage.id)
     } else {
       userMessage = await MessageService.create(
         client,
@@ -1389,7 +1456,7 @@ router.post(
         '',
         selectedModel
       )
-      console.log('server | user message', messages)
+      // console.log('server | user message', messages)
 
       if (selectedFiles && selectedFiles.length > 0) {
         for (const file of selectedFiles) {
@@ -1451,20 +1518,46 @@ router.post(
                 assistantThinking += delta
                 res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '' })}\n\n`)
               } else if (part === 'tool_call') {
-                assistantToolCalls += delta
-                res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '' })}\n\n`)
+                // Validate that delta is valid JSON before adding to tool_calls
+                try {
+                  // Try to parse delta as JSON to validate it
+                  const parsedDelta = JSON.parse(delta)
+                  // If it's valid JSON, add it to the array
+                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                  currentToolCalls.push(delta)
+                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '' })}\n\n`)
+                } catch (e) {
+                  // If delta is not valid JSON, treat it as regular content instead
+                  console.warn('⚠️  [supaChat] Received invalid JSON in tool_call part, treating as content:', delta)
+                  assistantContent += delta
+                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta })}\n\n`)
+                }
               } else {
                 const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
                 if (delta.includes('{"') && toolCallRegex.test(delta)) {
                   const matches = delta.match(toolCallRegex)
                   if (matches) {
-                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                    currentToolCalls.push(...matches)
-                    assistantToolCalls = JSON.stringify(currentToolCalls)
+                    // Validate each match is valid JSON before adding
+                    const validMatches = matches.filter(match => {
+                      try {
+                        JSON.parse(match)
+                        return true
+                      } catch {
+                        console.warn('⚠️  [supaChat] Regex matched invalid JSON, skipping:', match)
+                        return false
+                      }
+                    })
 
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '' })}\n\n`
-                    )
+                    if (validMatches.length > 0) {
+                      const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                      currentToolCalls.push(...validMatches)
+                      assistantToolCalls = JSON.stringify(currentToolCalls)
+
+                      res.write(
+                        `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '' })}\n\n`
+                      )
+                    }
 
                     const cleanedDelta = delta.replace(toolCallRegex, '').trim()
                     if (cleanedDelta) {
@@ -1484,11 +1577,26 @@ router.post(
               if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
                 const matches = chunk.match(toolCallRegex)
                 if (matches) {
-                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                  currentToolCalls.push(...matches)
-                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  // Validate each match is valid JSON before adding
+                  const validMatches = matches.filter(match => {
+                    try {
+                      JSON.parse(match)
+                      return true
+                    } catch {
+                      console.warn('⚠️  [supaChat] Regex matched invalid JSON in catch block, skipping:', match)
+                      return false
+                    }
+                  })
 
-                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '' })}\n\n`)
+                  if (validMatches.length > 0) {
+                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                    currentToolCalls.push(...validMatches)
+                    assistantToolCalls = JSON.stringify(currentToolCalls)
+
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '' })}\n\n`
+                    )
+                  }
 
                   const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
                   if (cleanedChunk) {
@@ -1549,7 +1657,7 @@ router.post(
             selectedModel,
             assistantToolCalls
           )
-          console.log(assistantMessage)
+          // console.log(assistantMessage)
           const cleanedMessage = { ...assistantMessage, content: cleanedContent }
           res.write(
             `data: ${JSON.stringify({

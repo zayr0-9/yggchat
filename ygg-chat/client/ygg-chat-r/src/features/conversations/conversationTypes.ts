@@ -1,4 +1,4 @@
-import { BaseModel, ConversationId, ProjectId } from '../../../../../shared/types'
+import { ConversationId, ProjectId } from '../../../../../shared/types'
 
 export interface Conversation {
   id: ConversationId
@@ -20,18 +20,11 @@ export interface ConversationsState {
   convContext: string | null
   // Recently updated conversations for quick access
   recent: RecentConversationsState
-  // Recently used model names (normalized to BaseModel)
-  recentModels: RecentModelState
+  // Note: recentModels removed - now managed by React Query (useRecentModels hook)
 }
 
 export interface RecentConversationsState {
   items: Conversation[]
-  loading: boolean
-  error: string | null
-}
-
-export interface RecentModelState {
-  items: BaseModel[]
   loading: boolean
   error: string | null
 }

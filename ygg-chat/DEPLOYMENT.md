@@ -1,0 +1,322 @@
+# Deployment Guide: Vercel (Client) + Railway (Server)
+
+This guide will walk you through deploying your Yggdrasil Chat monorepo to Vercel (frontend) and Railway (backend).
+
+## 📋 Prerequisites
+
+- Git repository (GitHub, GitLab, or Bitbucket)
+- [Vercel account](https://vercel.com/signup)
+- [Railway account](https://railway.app/)
+- Supabase project set up
+- Stripe account (for payments)
+- Redis instance (for Railway rate limiting) - can use Railway's Redis service
+
+## 🏗️ Architecture Overview
+
+```
+┌─────────────────────────────────────────────┐
+│         Monorepo Structure                  │
+│  /Webdrasil/ygg-chat/                      │
+│  ├── client/ygg-chat-r/  ← Vercel         │
+│  ├── server/             ← Railway         │
+│  └── shared/             ← Used by both    │
+└─────────────────────────────────────────────┘
+```
+
+**Key Point**: Both Vercel and Railway will set their root directory to `/Webdrasil/ygg-chat` so they can access the `shared/` folder. The build commands navigate to the appropriate subdirectories.
+
+---
+
+## 🚀 Part 1: Deploy Server to Railway
+
+### Step 1: Create New Railway Project
+
+1. Go to [Railway Dashboard](https://railway.app/dashboard)
+2. Click **"New Project"**
+3. Select **"Deploy from GitHub repo"**
+4. Choose your repository
+5. Railway will auto-detect the project
+
+### Step 2: Configure Railway Service
+
+In the Railway project settings:
+
+**Root Directory**: `/Webdrasil/ygg-chat` (IMPORTANT: This allows access to the `shared/` folder)
+
+The `railway.json` file will handle the build and start commands automatically:
+- **Build Command**: `cd server && npm install && npm run build`
+- **Start Command**: `cd server && npm start`
+
+### Step 3: Add Railway Environment Variables
+
+Add these environment variables in Railway's dashboard:
+
+```bash
+# Node Environment
+NODE_ENV=production
+
+# Frontend URL (will be your Vercel URL)
+FRONTEND_URL=https://your-app.vercel.app
+
+# Supabase Configuration
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# Environment Mode
+VITE_ENVIRONMENT=web
+
+# Stripe Configuration
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_ID_HIGH=price_...
+STRIPE_PRICE_ID_MID=price_...
+STRIPE_PRICE_ID_LOW=price_...
+
+# Redis Configuration (for rate limiting)
+REDIS_URL=redis://default:password@redis.railway.internal:6379
+
+# OpenRouter (if using)
+OPENROUTER_API_KEY=your_openrouter_key
+
+# Other LLM API Keys
+ANTHROPIC_API_KEY=your_anthropic_key
+OPENAI_API_KEY=your_openai_key
+GOOGLE_API_KEY=your_google_key
+```
+
+### Step 4: Add Redis Service (Required for Web Mode)
+
+1. In your Railway project, click **"New"** → **"Database"** → **"Add Redis"**
+2. Railway will automatically create a Redis instance
+3. The `REDIS_URL` environment variable will be automatically set
+4. Your server uses Redis for rate limiting in web mode
+
+### Step 5: Deploy
+
+1. Railway will automatically deploy after you add environment variables
+2. Once deployed, copy your Railway service URL (e.g., `https://your-app.up.railway.app`)
+3. **Important**: Save this URL - you'll need it for Vercel configuration
+
+---
+
+## 🎨 Part 2: Deploy Client to Vercel
+
+### Step 1: Create New Vercel Project
+
+1. Go to [Vercel Dashboard](https://vercel.com/dashboard)
+2. Click **"Add New"** → **"Project"**
+3. Import your Git repository
+4. Select your repository
+
+### Step 2: Configure Vercel Project
+
+**IMPORTANT**: In the Vercel project settings:
+
+- **Framework Preset**: Other (don't use Vite preset)
+- **Root Directory**: `/Webdrasil/ygg-chat` ✅ (This is the monorepo root!)
+- Leave **Build Command** and **Install Command** empty (handled by `vercel.json`)
+
+The `vercel.json` configuration handles:
+- Build command: `cd client/ygg-chat-r && npm install && npm run build`
+- Output directory: `client/ygg-chat-r/dist`
+
+### Step 3: Add Vercel Environment Variables
+
+Add these environment variables in Vercel's dashboard (Settings → Environment Variables):
+
+```bash
+# Supabase Configuration
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Environment Mode
+VITE_ENVIRONMENT=web
+
+# Stripe Configuration
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...
+
+# API URL (Your Railway server URL from Part 1)
+VITE_API_URL=https://your-app.up.railway.app/api
+```
+
+**Critical**: Set `VITE_API_URL` to your Railway server URL + `/api` suffix!
+
+### Step 4: Deploy
+
+1. Click **"Deploy"**
+2. Vercel will build and deploy your client
+3. Once deployed, copy your Vercel URL (e.g., `https://your-app.vercel.app`)
+
+---
+
+## 🔄 Part 3: Update Railway with Vercel URL
+
+Now that you have your Vercel URL, go back to Railway:
+
+1. Open your Railway project
+2. Go to **Variables** tab
+3. Update the `FRONTEND_URL` environment variable with your Vercel URL:
+   ```
+   FRONTEND_URL=https://your-app.vercel.app
+   ```
+4. Railway will automatically redeploy with the new CORS configuration
+
+---
+
+## 🔧 Part 4: Configure Stripe Webhooks
+
+Your server needs to receive Stripe webhook events:
+
+1. Go to [Stripe Dashboard](https://dashboard.stripe.com/webhooks)
+2. Click **"Add endpoint"**
+3. Set **Endpoint URL** to: `https://your-railway-url.up.railway.app/api/stripe/webhook`
+4. Select events to listen for:
+   - `checkout.session.completed`
+   - `customer.subscription.updated`
+   - `customer.subscription.deleted`
+   - `invoice.payment_succeeded`
+   - `invoice.payment_failed`
+5. Copy the **Signing secret** (starts with `whsec_`)
+6. Add it to Railway as `STRIPE_WEBHOOK_SECRET`
+
+---
+
+## ✅ Part 5: Verify Deployment
+
+### Test Client
+
+1. Visit your Vercel URL
+2. Open browser DevTools → Network tab
+3. Check that API calls are going to your Railway URL
+4. Test authentication with Supabase
+
+### Test Server
+
+1. Visit `https://your-railway-url.up.railway.app/api/tools`
+2. You should see a JSON response with available tools
+3. Check Railway logs for any errors
+
+### Test CORS
+
+1. Open your Vercel app
+2. Try making an API request
+3. If you see CORS errors, verify:
+   - `FRONTEND_URL` is set correctly in Railway
+   - The URL matches exactly (including `https://` and no trailing slash)
+
+---
+
+## 🔐 Security Checklist
+
+- [ ] All environment variables set in both Vercel and Railway
+- [ ] `FRONTEND_URL` in Railway matches your Vercel domain exactly
+- [ ] `VITE_API_URL` in Vercel points to Railway `/api` endpoint
+- [ ] Stripe webhook secret configured in Railway
+- [ ] Redis configured for rate limiting
+- [ ] Supabase RLS (Row Level Security) policies are set up
+- [ ] API keys are using production values (not test keys)
+
+---
+
+## 📊 Monitoring
+
+### Railway Logs
+- View logs in Railway dashboard under the **"Deployments"** tab
+- Set up alerts for errors
+
+### Vercel Logs
+- View function logs in Vercel dashboard under **"Deployments"** → select deployment → **"Functions"**
+
+### Supabase Logs
+- Monitor auth and database logs in Supabase dashboard
+
+---
+
+## 🐛 Troubleshooting
+
+### Issue: "CORS Error" in browser console
+
+**Solution**:
+- Check that `FRONTEND_URL` in Railway matches your Vercel URL exactly
+- Ensure Railway has redeployed after updating `FRONTEND_URL`
+- Check Railway logs for CORS warning messages
+
+### Issue: "Cannot connect to server"
+
+**Solution**:
+- Verify `VITE_API_URL` in Vercel environment variables
+- Check Railway deployment status
+- Test Railway endpoint directly: `curl https://your-railway-url.up.railway.app/api/tools`
+
+### Issue: "Shared types not found" during build
+
+**Solution**:
+- Verify root directory is set to `/Webdrasil/ygg-chat` (not the subdirectory)
+- Check that build commands in `vercel.json` and `railway.json` are correct
+- Clear build cache and redeploy
+
+### Issue: Stripe webhooks not working
+
+**Solution**:
+- Verify webhook URL in Stripe dashboard
+- Check `STRIPE_WEBHOOK_SECRET` environment variable
+- Test webhook with Stripe CLI: `stripe trigger checkout.session.completed`
+
+### Issue: Redis connection errors
+
+**Solution**:
+- Ensure Redis is added as a service in Railway
+- Verify `REDIS_URL` environment variable is set
+- Check Railway logs for Redis connection errors
+
+---
+
+## 🔄 Continuous Deployment
+
+Both Vercel and Railway support automatic deployments:
+
+- **Push to main branch** → triggers deployment on both platforms
+- **Pull requests** → Vercel creates preview deployments automatically
+- **Rollback** → Both platforms allow instant rollback to previous deployments
+
+---
+
+## 📈 Scaling Considerations
+
+### Railway
+- Automatically scales based on traffic
+- Monitor memory and CPU usage
+- Consider upgrading plan for higher limits
+
+### Vercel
+- Serverless functions auto-scale
+- Monitor function execution time
+- Consider upgrading for higher bandwidth
+
+---
+
+## 🎉 You're Done!
+
+Your app is now deployed:
+- **Frontend**: `https://your-app.vercel.app`
+- **Backend**: `https://your-app.up.railway.app`
+
+Users can now access your production Yggdrasil Chat application!
+
+---
+
+## 📞 Support
+
+If you encounter issues:
+1. Check Railway and Vercel logs first
+2. Review environment variables
+3. Test endpoints individually
+4. Check this guide's troubleshooting section
+
+## 🔗 Useful Links
+
+- [Vercel Documentation](https://vercel.com/docs)
+- [Railway Documentation](https://docs.railway.app/)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Stripe Webhooks Guide](https://stripe.com/docs/webhooks)

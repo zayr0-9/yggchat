@@ -100,13 +100,13 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
   return (
     <aside
-      className={`h-screen bg-white dark:bg-yBlack-800 shadow-lg border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16' : 'w-110'} ${className}`}
+      className={`h-screen bg-white dark:bg-yBlack-800 shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16' : 'w-110'} ${className}`}
       aria-label='Recent conversations'
     >
       {/* Toggle Button */}
-      <div className='flex items-center justify-between p-3'>
+      <div className='flex items-center justify-between py-3 px-1'>
         {!isCollapsed && (
-          <h2 className='text-sm font-semibold text-neutral-700 dark:text-neutral-200 truncate'>Recent Chats</h2>
+          <h2 className='text-lg pl-2 font-semibold text-neutral-700 dark:text-neutral-200 truncate'>Recent Chats</h2>
         )}
         <Button
           variant='outline2'
@@ -139,7 +139,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
       )}
 
       {/* Conversations List */}
-      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 thin-scrollbar'>
+      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 thin-scrollbar border-neutral-100 dark:border-neutral-800 rounded-xl border-1 border-t-0 shadow-[0_2px_16px_1px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_16px_1px_rgba(0,0,0,0.43)]'>
         {loading && (
           <div
             className={`text-xs text-gray-500 dark:text-gray-300 px-2 py-1 ${isCollapsed ? 'text-center' : ''}`}
@@ -181,7 +181,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                 title={isCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
               >
                 {isCollapsed ? (
-                  <Button variant='outline2' size='circle' rounded='full' className='h-10 w-10 text-sm font-semibold'>
+                  <Button variant='outline2' size='circle' rounded='full' className='h-12 w-12 text-md font-semibold'>
                     {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
                   </Button>
                 ) : (
@@ -236,10 +236,12 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
             aria-hidden='true'
           ></i>
         </Button>
-        {!isCollapsed && <div className='flex flex-4 items-center justify-start text-lg dark:text-stone-300'>{themeMode}</div>}
+        {!isCollapsed && (
+          <div className='flex flex-4 items-center justify-start text-lg dark:text-stone-300'>{themeMode}</div>
+        )}
       </div>
       <div className='flex items-center justify-start py-2 px-2'>
-        {/* <div className='flex items-center justify-center gap-2'>
+        <div className='flex items-center justify-center gap-2'>
           <div className='flex flex-1 items-center justify-center text-lg dark:text-stone-300'>
             <Button
               variant='outline2'
@@ -254,7 +256,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           <div className='flex flex-4 items-center justify-start text-lg dark:text-stone-300'>
             {!isCollapsed && <h3> User Name </h3>}
           </div>
-        </div> */}
+        </div>
       </div>
     </aside>
   )

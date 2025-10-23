@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Move, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import type { JSX } from 'react'
@@ -14,6 +15,7 @@ import {
 import { chatSliceActions } from '../../features/chats/chatSlice'
 import { buildBranchPathForMessage } from '../../features/chats/pathUtils'
 import { createConversation } from '../../features/conversations/conversationActions'
+import { makeSelectConversationById } from '../../features/conversations/conversationSelectors'
 // import { selectSelectedProject } from '../../features/projects/projectSelectors'
 import { Message } from '@/features/chats'
 import { ConversationId, MessageId } from '../../../../../shared/types'
@@ -71,10 +73,15 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const selectedNodes = useSelector((state: RootState) => state.chat.selectedNodes)
   const currentPathIds = useSelector((state: RootState) => state.chat.conversation.currentPath)
   // const selectedProject = useSelector(selectSelectedProject)
   const allMessages = useSelector((state: RootState) => state.chat.conversation.messages)
+  // Get current conversation to access project_id
+  const currentConversation = useSelector(
+    conversationId ? makeSelectConversationById(conversationId) : () => null
+  )
   // Track total messages to detect a truly empty conversation
   const messagesCount = useSelector((state: RootState) => state.chat.conversation.messages.length)
 
@@ -1170,8 +1177,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const firstContent = messagesToCopy[0].content
       const title = firstContent.slice(0, 100) + (firstContent.length > 100 ? '...' : '')
 
-      // Create new conversation using the current project context
-      const newConversation = await (dispatch as any)(createConversation({ title })).unwrap()
+      // Create new conversation using the current project context and copy system prompt & context
+      const projectId = currentConversation?.project_id || null
+      const systemPrompt = currentConversation?.system_prompt || null
+      const conversationContext = currentConversation?.conversation_context || null
+      const newConversation = await (dispatch as any)(
+        createConversation({ title, projectId, systemPrompt, conversationContext })
+      ).unwrap()
 
       if (!newConversation?.id) {
         console.error('Failed to create new conversation')
@@ -1188,6 +1200,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
       // Fetch messages and tree to populate the new conversation before navigation
       await (dispatch as any)(fetchMessageTree(newConversation.id)).unwrap()
+
+      // Invalidate React Query cache to update conversations list in sidebar/dropdowns
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      if (projectId) {
+        queryClient.invalidateQueries({ queryKey: ['conversations', 'project', projectId] })
+      }
 
       // Navigate to the new chat
       navigate(`/chat/${newConversation.project_id || 'unknown'}/${newConversation.id}`)
