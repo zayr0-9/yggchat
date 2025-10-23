@@ -1,5 +1,5 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
-import type { BaseModel, ConversationId, ProjectId } from '../../../../../shared/types'
+import type { ConversationId, ProjectId } from '../../../../../shared/types'
 import { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
 import {
@@ -14,35 +14,8 @@ import { convContextSet, systemPromptSet } from './conversationSlice'
 import { Conversation } from './conversationTypes'
 
 // Fetch conversations for current user
+// Note: fetchRecentModels has been migrated to React Query (see useRecentModels in hooks/useQueries.ts)
 
-// Fetch recently used models based on recent messages (server returns names)
-export const fetchRecentModels = createAsyncThunk<
-  BaseModel[],
-  { limit?: number } | void,
-  { extra: ThunkExtraArgument }
->('conversations/fetchRecentModels', async (args, { extra, rejectWithValue }) => {
-  try {
-    const { auth } = extra
-    const limit = args && typeof args.limit === 'number' ? args.limit : 5
-    const query = new URLSearchParams({ limit: String(limit) }).toString()
-    const res = await api.get<{ models: string[] }>(`/models/recent?${query}`, auth.accessToken)
-    const models = Array.isArray(res?.models) ? res.models : []
-    // Map plain names to BaseModel shape with sensible defaults
-    const normalized: BaseModel[] = models.map(name => ({
-      name,
-      version: '',
-      displayName: name,
-      description: '',
-      inputTokenLimit: 0,
-      outputTokenLimit: 0,
-      thinking: false,
-      supportedGenerationMethods: [],
-    }))
-    return normalized
-  } catch (err) {
-    return rejectWithValue(err instanceof Error ? err.message : 'Failed to fetch recent models') as any
-  }
-})
 export const fetchConversations = createAsyncThunk<
   Conversation[],
   void,

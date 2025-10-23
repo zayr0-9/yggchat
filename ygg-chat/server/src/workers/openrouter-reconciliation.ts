@@ -8,7 +8,10 @@
  * 4. Applying credit adjustments via finance_adjust_credits
  * 5. Marking provider_runs as reconciled
  *
- * Runs periodically and uses exponential backoff for retries.
+ * Uses a simple polling approach:
+ * - Polls every 1 minute for pending reconciliations
+ * - Processes up to 10 provider_runs per batch
+ * - Reliable and straightforward - no complex Realtime setup
  */
 
 import { supabaseAdmin } from '../database/supamodels'
@@ -16,7 +19,7 @@ import { moneySubtract, moneyIsZero, moneyFormat } from '../utils/money'
 
 // Configuration
 const RECONCILE_BATCH_SIZE = 10 // Process 10 runs at a time
-const RECONCILE_INTERVAL_MS = 60 * 1000 // Run every 60 seconds
+const RECONCILE_INTERVAL_MS = 60 * 1000 // Poll every 1 minute
 const MAX_RETRIES = 10 // Give up after 10 attempts
 const INITIAL_BACKOFF_MS = 2 * 60 * 1000 // Start with 2 minute backoff
 const MAX_BACKOFF_MS = 60 * 60 * 1000 // Cap at 1 hour
@@ -35,6 +38,8 @@ interface ProviderRun {
   status: string
   created_at: string
   next_reconcile_at: string | null
+  reconciled_at: string | null
+  actual_credits: number | null
   raw_usage: any
 }
 
@@ -449,7 +454,7 @@ async function runReconciliationBatch(): Promise<void> {
 }
 
 /**
- * Start the reconciliation worker
+ * Start the reconciliation worker (simple polling mode)
  */
 export function startReconciliationWorker(): void {
   if (intervalHandle) {
@@ -457,12 +462,13 @@ export function startReconciliationWorker(): void {
     return
   }
 
-  console.log(`🚀 Starting OpenRouter reconciliation worker (interval: ${RECONCILE_INTERVAL_MS}ms)`)
+  console.log('🚀 Starting OpenRouter reconciliation worker')
+  console.log(`🔄 Polling every ${RECONCILE_INTERVAL_MS / 1000}s for pending reconciliations (batch size: ${RECONCILE_BATCH_SIZE})`)
 
-  // Run immediately on start
+  // Run initial batch immediately
   runReconciliationBatch()
 
-  // Then run periodically
+  // Set up polling interval
   intervalHandle = setInterval(runReconciliationBatch, RECONCILE_INTERVAL_MS)
 }
 

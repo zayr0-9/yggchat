@@ -282,9 +282,9 @@ export async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice): Pr
   try {
     // Retrieve the full invoice from Stripe API with subscription expanded
     // This ensures we have complete data even if webhook payload is incomplete
-    const fullInvoice = await stripe.invoices.retrieve(invoice.id, {
+    const fullInvoice = (await stripe.invoices.retrieve(invoice.id, {
       expand: ['subscription'],
-    })
+    })) as StripeInvoice
 
     console.log(`[Stripe] Retrieved invoice ${invoice.id}, subscription type: ${typeof fullInvoice.subscription}`)
 

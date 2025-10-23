@@ -14,7 +14,6 @@ import {
   EditMessagePayload,
   Message,
   Model,
-  ModelsResponse,
   SendMessagePayload,
   tools,
 } from './chatTypes'
@@ -292,203 +291,17 @@ const resolveAttachmentUrl = (urlOrPath?: string | null, filePath?: string | nul
   }
   return null
 }
-// Helper function to convert model name string to Model object
-const stringToModel = (modelName: string): Model => ({
-  name: modelName,
-  version: '1.0.0',
-  displayName: modelName,
-  description: `${modelName} model`,
-  inputTokenLimit: 4096,
-  outputTokenLimit: 2048,
-  thinking: false,
-  supportedGenerationMethods: ['chat', 'completion'],
-})
-
-// Model operations - cached and optimized
-export const fetchModels = createAsyncThunk<ModelsResponse, boolean, { state: RootState; extra: ThunkExtraArgument }>(
-  'chat/fetchModels',
-  async (force = false, { getState, dispatch, extra, rejectWithValue }) => {
-    const { auth } = extra
-    const state = getState() as RootState //ensure state is same type as store for the whole website
-    const lastRefresh = state.chat.models.lastRefresh
-
-    // Skip if recently refreshed (30 seconds cache)
-    if (!force && lastRefresh && Date.now() - lastRefresh < 30000) {
-      return {
-        models: state.chat.models.available,
-        default: state.chat.models.default || state.chat.models.available[0],
-      }
-    }
-
-    dispatch(chatSliceActions.modelsLoadingStarted())
-
-    try {
-      const response = await apiCall<{ models: string[]; default: string }>('/models', auth.accessToken)
-      // Convert string arrays to Model objects
-      const convertedResponse: ModelsResponse = {
-        models: response.models.map(stringToModel),
-        default: stringToModel(response.default),
-      }
-      dispatch(chatSliceActions.modelsLoaded(convertedResponse))
-      return convertedResponse
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch models'
-      dispatch(chatSliceActions.modelsError(message))
-      return rejectWithValue(message)
-    }
-  }
-)
-
-// Fetch Gemini models from Google's Generative Language API and load into ModelState.available
-export const fetchGeminiModels = createAsyncThunk<ModelsResponse, void, { extra: ThunkExtraArgument }>(
-  'chat/fetchGeminiModels',
-  async (_: void, { dispatch, extra, rejectWithValue }) => {
-    const { auth } = extra
-    dispatch(chatSliceActions.modelsLoadingStarted())
-
-    try {
-      const payload = await apiCall<ModelsResponse>('/models/gemini', auth.accessToken)
-      dispatch(chatSliceActions.modelsLoaded(payload))
-      return payload
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch Gemini models'
-      dispatch(chatSliceActions.modelsError(message))
-      return rejectWithValue(message)
-    }
-  }
-)
-
-// Fetch Anthropic models from Anthropic API and load into ModelState.available
-export const fetchAnthropicModels = createAsyncThunk<ModelsResponse, void, { extra: ThunkExtraArgument }>(
-  'chat/fetchAnthropicModels',
-  async (_: void, { dispatch, extra, rejectWithValue }) => {
-    const { auth } = extra
-    dispatch(chatSliceActions.modelsLoadingStarted())
-
-    try {
-      const payload = await apiCall<ModelsResponse>('/models/anthropic', auth.accessToken)
-      dispatch(chatSliceActions.modelsLoaded(payload))
-      return payload
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch Anthropic models'
-      dispatch(chatSliceActions.modelsError(message))
-      return rejectWithValue(message)
-    }
-  }
-)
-
-// Fetch OpenAI models from OpenAI API and load into ModelState.available
-export const fetchOpenAIModels = createAsyncThunk<ModelsResponse, void, { extra: ThunkExtraArgument }>(
-  'chat/fetchOpenAIModels',
-  async (_: void, { dispatch, extra, rejectWithValue }) => {
-    const { auth } = extra
-    dispatch(chatSliceActions.modelsLoadingStarted())
-
-    try {
-      const response = await apiCall<{ models: string[]; default: string }>('/models/openai', auth.accessToken)
-      // Convert string arrays to Model objects (same as in fetchModels)
-      const convertedResponse: ModelsResponse = {
-        models: response.models.map(stringToModel),
-        default: stringToModel(response.default),
-      }
-      dispatch(chatSliceActions.modelsLoaded(convertedResponse))
-      return convertedResponse
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch OpenAI models'
-      dispatch(chatSliceActions.modelsError(message))
-      return rejectWithValue(message)
-    }
-  }
-)
-// Fetch openRouter models from openRouter API and load into ModelState.available
-export const fetchOpenRouterModels = createAsyncThunk<ModelsResponse, void, { extra: ThunkExtraArgument }>(
-  'chat/fetchOpenRouterModels',
-  async (_: void, { dispatch, extra, rejectWithValue }) => {
-    const { auth } = extra
-    dispatch(chatSliceActions.modelsLoadingStarted())
-
-    try {
-      const payload = await apiCall<ModelsResponse>('/models/openrouter', auth.accessToken)
-      dispatch(chatSliceActions.modelsLoaded(payload))
-      return payload
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch OpenRouter models'
-      dispatch(chatSliceActions.modelsError(message))
-      return rejectWithValue(message)
-    }
-  }
-)
-
-// Fetch LM Studio models from LM Studio API and load into ModelState.available
-export const fetchLMStudioModels = createAsyncThunk<ModelsResponse, void, { extra: ThunkExtraArgument }>(
-  'chat/fetchLMStudioModels',
-  async (_: void, { dispatch, extra, rejectWithValue }) => {
-    const { auth } = extra
-    dispatch(chatSliceActions.modelsLoadingStarted())
-
-    try {
-      const payload = await apiCall<ModelsResponse>('/models/lmstudio', auth.accessToken)
-      dispatch(chatSliceActions.modelsLoaded(payload))
-      return payload
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch LM Studio models'
-      dispatch(chatSliceActions.modelsError(message))
-      return rejectWithValue(message)
-    }
-  }
-)
-
-// Provider-aware models fetch orchestrator
-export const fetchModelsForCurrentProvider = createAsyncThunk<
-  ModelsResponse,
-  boolean,
-  { state: RootState; extra: ThunkExtraArgument }
->('chat/fetchModelsForCurrentProvider', async (force = false, { getState, dispatch, rejectWithValue }) => {
-  const state = getState() as RootState
-  const provider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
-
-  try {
-    if (provider === 'google') {
-      const res = await (dispatch as any)(fetchGeminiModels()).unwrap()
-      return res
-    }
-    if (provider === 'anthropic') {
-      const res = await (dispatch as any)(fetchAnthropicModels()).unwrap()
-      return res
-    }
-    if (provider === 'openai') {
-      const res = await (dispatch as any)(fetchOpenAIModels()).unwrap()
-      return res
-    }
-    if (provider === 'openrouter') {
-      const res = await (dispatch as any)(fetchOpenRouterModels()).unwrap()
-      return res
-    }
-    if (provider === 'lmstudio') {
-      const res = await (dispatch as any)(fetchLMStudioModels()).unwrap()
-      return res
-    }
-    const res = await (dispatch as any)(fetchModels(force)).unwrap()
-    // console.log('fetchModelsForCurrentProvider', res)
-    return res
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch models for provider'
-    dispatch(chatSliceActions.modelsError(message))
-    return rejectWithValue(message)
-  }
-})
+// Model operations have been migrated to React Query
+// See useModels, useRecentModels, and useRefreshModels in hooks/useQueries.ts
+// Redux now only manages selected model state, not the model list cache
 
 // Model selection with persistence
+// Note: Model availability verification should be done in the UI layer using React Query
 export const selectModel = createAsyncThunk<Model, Model, { state: RootState; extra: ThunkExtraArgument }>(
   'chat/selectModel',
-  async (model: Model, { dispatch, getState }) => {
-    const state = getState() as RootState
-
-    // Verify model exists
-    if (!state.chat.models.available.includes(model)) {
-      throw new Error(`Model ${model.name} not available`)
-    }
-
+  async (model: Model, { dispatch }) => {
+    // Model availability is now checked via React Query in the UI
+    // Redux only handles the selection state
     dispatch(chatSliceActions.modelSelected({ model, persist: true }))
     return model
   }

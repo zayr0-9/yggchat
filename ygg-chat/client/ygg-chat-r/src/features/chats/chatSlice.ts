@@ -11,7 +11,6 @@ import {
   MessageInput,
   Model,
   ModelSelectionPayload,
-  ModelsResponse,
   StreamChunk,
 } from './chatTypes'
 
@@ -32,12 +31,8 @@ const getStoredSelectedModel = (): Model | null => {
 
 const makeInitialState = (): ChatState => ({
   models: {
-    available: [],
     selected: getStoredSelectedModel(),
     default: null,
-    loading: false,
-    error: null,
-    lastRefresh: null,
   },
   providerState: {
     providers: Object.values(providersList.providers),
@@ -114,21 +109,7 @@ export const chatSlice = createSlice({
       state.providerState.currentProvider = action.payload
       localStorage.setItem('currentProvider', action.payload)
     },
-    // Model management - preserve server-provided fields
-    modelsLoaded: (state, action: PayloadAction<ModelsResponse>) => {
-      state.models.available = action.payload.models
-      state.models.default = action.payload.default
-      state.models.loading = false
-      state.models.error = null
-      state.models.lastRefresh = Date.now()
-
-      // If no model selected yet, use the default
-      if (!state.models.selected && action.payload.default) {
-        state.models.selected = action.payload.default
-        localStorage.setItem('selectedModel', JSON.stringify(action.payload.default))
-      }
-    },
-
+    // Model management - only handles selected model (list managed by React Query)
     modelSelected: (state, action: PayloadAction<ModelSelectionPayload>) => {
       state.models.selected = action.payload.model
 
@@ -137,14 +118,14 @@ export const chatSlice = createSlice({
       }
     },
 
-    modelsError: (state, action: PayloadAction<string>) => {
-      state.models.error = action.payload
-      state.models.loading = false
-    },
-
-    modelsLoadingStarted: state => {
-      state.models.loading = true
-      state.models.error = null
+    // Set default model (used when no model is selected)
+    defaultModelSet: (state, action: PayloadAction<Model>) => {
+      state.models.default = action.payload
+      // If no model selected yet, use the default
+      if (!state.models.selected) {
+        state.models.selected = action.payload
+        localStorage.setItem('selectedModel', JSON.stringify(action.payload))
+      }
     },
 
     // Composition - validation integrated
