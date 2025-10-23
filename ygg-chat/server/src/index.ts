@@ -17,6 +17,7 @@ import { stripMarkdownToText } from './utils/markdownStripper'
 import { preloadModelPricing } from './utils/openrouter'
 import tools from './utils/tools/index'
 import { startReconciliationWorker } from './workers/openrouter-reconciliation'
+import { globalRateLimiter, logRateLimiterConfig } from './middleware/rateLimiter'
 
 const app = express()
 const server = createServer(app)
@@ -134,10 +135,33 @@ wss.on('connection', (ws, request) => {
   })
 })
 
+// CORS configuration
+const allowedOrigins = [
+  'http://localhost:5173', // Local development
+  'http://localhost:3000', // Alternative local port
+  env.FRONTEND_URL, // Production frontend URL (set in environment variables)
+].filter(Boolean) // Remove undefined values
+
 app.use(
   cors({
-    origin: true, // Allow all origins (or specify your frontend URL)
-    // credentials: true, // Allow credentials
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+      if (!origin) return callback(null, true)
+
+      // In development, allow all origins for flexibility
+      if (env.NODE_ENV !== 'production') {
+        return callback(null, true)
+      }
+
+      // In production, check against whitelist
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        console.warn(`⚠️ CORS blocked origin: ${origin}`)
+        callback(new Error('Not allowed by CORS'))
+      }
+    },
+    credentials: true, // Allow credentials (cookies, authorization headers)
     exposedHeaders: ['Authorization'], // Expose JWT headers to client
     allowedHeaders: ['Content-Type', 'Authorization'], // Accept JWT Authorization header from client
   })
@@ -154,6 +178,11 @@ if (env.VITE_ENVIRONMENT === 'web') {
 app.use(express.json({ limit: '25mb' }))
 app.use(express.urlencoded({ extended: true, limit: '25mb' }))
 
+// Apply global rate limiter to all routes (only in web mode)
+if (env.VITE_ENVIRONMENT === 'web') {
+  app.use(globalRateLimiter)
+}
+
 // Debug middleware to log all requests
 app.use('/api', (req, res, next) => {
   // console.log('[Debug Middleware] Method:', req.method)
@@ -163,10 +192,9 @@ app.use('/api', (req, res, next) => {
 })
 // Route handling based on environment
 if (env.VITE_ENVIRONMENT === 'web') {
-  // Web mode: Use Supabase routes with rate limiting
+  // Web mode: Use Supabase routes with Redis-backed rate limiting
   const supaChat = require('./routes/supaChat').default
-  const rateLimit = require('express-rate-limit')
-  app.use('/api', rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }), supaChat)
+  app.use('/api', supaChat)
 } else {
   // Local and Electron modes: Use direct chat routes (no Supabase)
   app.use('/api', chatRoutes)
@@ -242,6 +270,11 @@ if (env.VITE_ENVIRONMENT === 'web') {
   server.listen(3001, () => {
     console.log('🚀 Server on :3001')
     console.log('🔌 WebSocket IDE Context on ws://localhost:3001/ide-context')
+
+    // Log rate limiter configuration (only in web mode)
+    if (env.VITE_ENVIRONMENT === 'web') {
+      logRateLimiterConfig()
+    }
   })
 })()
 

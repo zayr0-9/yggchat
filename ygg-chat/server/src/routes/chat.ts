@@ -997,7 +997,8 @@ router.post(
           combinedContext ? combinedContext : null,
           think,
           assistantMessage.id,
-          conversation.user_id
+          conversation.user_id,
+          conversationId
         )
 
         // Final cleanup: ensure tool calls are stripped from content before saving
@@ -1421,7 +1422,8 @@ router.post(
           combinedContext ? combinedContext : null,
           think,
           assistantMessage.id,
-          conversation.user_id
+          conversation.user_id,
+          conversationId
         )
 
         // Final cleanup: ensure tool calls are stripped from content before saving

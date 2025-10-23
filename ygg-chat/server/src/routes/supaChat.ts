@@ -15,6 +15,11 @@ import {
   ProjectService,
   UserService,
 } from '../database/supamodels'
+import {
+  authenticatedRateLimiter,
+  authEndpointsRateLimiter,
+  expensiveOperationsRateLimiter,
+} from '../middleware/rateLimiter'
 import { asyncHandler } from '../utils/asyncHandler'
 import { SelectedFileContent } from '../utils/fileMentionProcessor'
 import { abortGeneration, clearGeneration, createGeneration } from '../utils/generationManager'
@@ -115,6 +120,7 @@ async function verifyAuth(req: express.Request): Promise<{ userId: string; clien
 // Global search endpoint - Uses JWT auth so auth.uid() works correctly
 router.get(
   '/search',
+  expensiveOperationsRateLimiter, // Apply expensive operations rate limiter
   asyncHandler(async (req, res) => {
     const { client } = await verifyAuth(req) // ✅ Use user's JWT, not service_role
     const q = (req.query.q as string) || ''
@@ -507,6 +513,7 @@ router.patch(
 // Create or get user
 router.post(
   '/users',
+  authEndpointsRateLimiter, // Apply auth endpoints rate limiter (strict IP-based)
   asyncHandler(async (req, res) => {
     const { username, id } = req.body
 
@@ -526,6 +533,7 @@ router.post(
 // Get user conversations
 router.get(
   '/users/:userId/conversations',
+  authenticatedRateLimiter, // Apply authenticated user rate limiter
   asyncHandler(async (req, res) => {
     console.log('\n🔴🔴🔴 [SERVER] GET /users/:userId/conversations')
     console.log('🔴 Timestamp:', new Date().toISOString())
@@ -606,6 +614,7 @@ router.get(
 // Update user
 router.put(
   '/users/:id',
+  authEndpointsRateLimiter, // Apply auth endpoints rate limiter (strict IP-based)
   asyncHandler(async (req, res) => {
     const userId = req.params.id
     const { username } = req.body
@@ -626,6 +635,7 @@ router.put(
 // Delete user (cascade delete conversations and messages)
 router.delete(
   '/users/:id',
+  authEndpointsRateLimiter, // Apply auth endpoints rate limiter (strict IP-based)
   asyncHandler(async (req, res) => {
     const userId = req.params.id
 
@@ -644,6 +654,7 @@ router.delete(
 // Create conversation
 router.post(
   '/conversations',
+  authenticatedRateLimiter, // Apply authenticated user rate limiter
   asyncHandler(async (req, res) => {
     const { title, modelName, projectId, systemPrompt, conversationContext } = req.body
     const { client, userId } = await verifyAuth(req)
@@ -859,6 +870,7 @@ router.delete(
 // Get conversation messages
 router.get(
   '/conversations/:id/messages',
+  authenticatedRateLimiter, // Apply authenticated user rate limiter
   asyncHandler(async (req, res) => {
     const conversationId = req.params.id
     const { client } = await verifyAuth(req)
@@ -1014,6 +1026,7 @@ router.get(
 // Send message with streaming response (with repeat capability)
 router.post(
   '/conversations/:id/messages/repeat',
+  expensiveOperationsRateLimiter, // Apply expensive operations rate limiter (AI streaming)
   asyncHandler(async (req, res) => {
     const conversationId = req.params.id
     const { client, userId } = await verifyAuth(req)
@@ -1222,7 +1235,8 @@ router.post(
           combinedContext ? combinedContext : null,
           think,
           undefined, // No assistant message ID yet (will create after streaming)
-          userId
+          userId,
+          conversationId
         )
 
         const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
@@ -1293,6 +1307,7 @@ router.post(
 // Send message with streaming response
 router.post(
   '/conversations/:id/messages',
+  expensiveOperationsRateLimiter, // Apply expensive operations rate limiter (AI streaming)
   asyncHandler(async (req, res) => {
     console.log('\n🟢🟢🟢 [SERVER] POST /conversations/:id/messages - Message send received')
     console.log('🟢 Timestamp:', new Date().toISOString())
