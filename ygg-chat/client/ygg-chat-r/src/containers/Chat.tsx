@@ -48,7 +48,13 @@ import { selectSelectedProject } from '../features/projects/projectSelectors'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
-import { useConversationMessages, useConversationsByProject, useModels, useRecentModels, useRefreshModels } from '../hooks/useQueries'
+import {
+  useConversationMessages,
+  useConversationsByProject,
+  useModels,
+  useRecentModels,
+  useRefreshModels,
+} from '../hooks/useQueries'
 import { cloneConversation } from '../utils/api'
 import { parseId } from '../utils/helpers'
 
@@ -394,6 +400,14 @@ function Chat() {
   const [isResizing, setIsResizing] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [think, setThink] = useState<boolean>(false)
+  const [heimdallVisible, setHeimdallVisible] = useState<boolean>(() => {
+    try {
+      const stored = typeof window !== 'undefined' ? window.localStorage.getItem('chat:heimdallVisible') : null
+      return stored !== null ? stored === 'true' : true
+    } catch {
+      return true
+    }
+  })
   // One-time spin flags for icon buttons
   const [spinSettings, setSpinSettings] = useState(false)
   const [spinRefresh, setSpinRefresh] = useState(false)
@@ -405,7 +419,7 @@ function Chat() {
   useEffect(() => {
     if (!isResizing) return
 
-    const clamp = (v: number) => Math.max(20, Math.min(80, v))
+    const clamp = (v: number) => Math.max(20, Math.min(99, v))
 
     const handleMove = (clientX: number) => {
       const el = containerRef.current
@@ -1320,7 +1334,7 @@ function Chat() {
     <div ref={containerRef} className='flex h-screen overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
       <div
         className='relative flex flex-col flex-none min-w-[280px] h-screen overflow-hidden'
-        style={{ width: `${leftWidthPct}%` }}
+        style={{ width: heimdallVisible ? `${leftWidthPct}%` : '100%' }}
       >
         {/* Conversation Title Editor */}
         {currentConversationId && (
@@ -1337,6 +1351,26 @@ function Chat() {
                 }}
               >
                 <i className='bx bx-chat text-2xl' aria-hidden='true'></i>
+              </Button>
+
+              <Button
+                variant='outline2'
+                size='medium'
+                className='transition-transform duration-100 active:scale-95'
+                aria-label={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
+                onClick={() => {
+                  const newValue = !heimdallVisible
+                  setHeimdallVisible(newValue)
+                  try {
+                    window.localStorage.setItem('chat:heimdallVisible', String(newValue))
+                  } catch {}
+                }}
+                title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
+              >
+                <i
+                  className={`bx ${heimdallVisible ? 'bx-sidebar' : 'bx-layout'} text-2xl transition-transform duration-200`}
+                  aria-hidden='true'
+                ></i>
               </Button>
 
               {editingTitle ? (
@@ -1688,31 +1722,35 @@ function Chat() {
       </div>
 
       {/* SEPARATOR */}
-      <div
-        className='w-2 dark:bg-transparent bg-transparent hover:dark:bg-neutral-800 hover:bg-neutral-200 cursor-col-resize select-none'
-        style={{ border: 'none', outline: 'none', margin: 0, padding: 0 }}
-        role='separator'
-        aria-orientation='vertical'
-        onMouseDown={() => setIsResizing(true)}
-        onTouchStart={e => {
-          e.preventDefault()
-          setIsResizing(true)
-        }}
-        title='Drag to resize'
-      />
-
-      <div className='flex-1 min-w-0'>
-        <Heimdall
-          key={currentConversationId ?? 'none'}
-          chatData={heimdallData}
-          loading={loading}
-          error={error}
-          compactMode={compactMode}
-          conversationId={currentConversationId}
-          onNodeSelect={handleNodeSelect}
-          visibleMessageId={visibleMessageId}
+      {heimdallVisible && (
+        <div
+          className='w-2 dark:bg-transparent bg-transparent hover:dark:bg-neutral-800 hover:bg-neutral-200 cursor-col-resize select-none'
+          style={{ border: 'none', outline: 'none', margin: 0, padding: 0 }}
+          role='separator'
+          aria-orientation='vertical'
+          onMouseDown={() => setIsResizing(true)}
+          onTouchStart={e => {
+            e.preventDefault()
+            setIsResizing(true)
+          }}
+          title='Drag to resize'
         />
-      </div>
+      )}
+
+      {heimdallVisible && (
+        <div className='flex-1 min-w-0'>
+          <Heimdall
+            key={currentConversationId ?? 'none'}
+            chatData={heimdallData}
+            loading={loading}
+            error={error}
+            compactMode={compactMode}
+            conversationId={currentConversationId}
+            onNodeSelect={handleNodeSelect}
+            visibleMessageId={visibleMessageId}
+          />
+        </div>
+      )}
       <SettingsPane open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Centered custom delete confirmation modal */}

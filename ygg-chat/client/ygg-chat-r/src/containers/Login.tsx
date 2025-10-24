@@ -111,7 +111,7 @@ const Login: React.FC = () => {
 
             // Show error message
             setError(
-              `Access Denied: Electron access requires authorization. Your email (${userEmail}) is not approved for this application. Please visit the official Yggdrasil website to subscribe.`
+              `Access Denied: Pro access requires authorization. Your email (${userEmail}) is not approved for this application. Please visit the official Yggdrasil website to subscribe.`
             )
             setLoading(false)
             return
@@ -265,7 +265,7 @@ const Login: React.FC = () => {
   return (
     <div className='min-h-screen flex items-center justify-center bg-gray-50 dark:bg-yBlack-900 py-12 px-4 sm:px-6 lg:px-8'>
       <div className='max-w-md w-full space-y-8'>
-        <div>
+        <div className='py-10'>
           <h2 className='mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white'>
             Sign in to your account
           </h2>
@@ -337,39 +337,7 @@ const Login: React.FC = () => {
               </svg>
               <span className='ml-3'>Continue with Google</span>
             </Button>
-
-            <div className='relative'>
-              <div className='absolute inset-0 flex items-center'>
-                <div className='w-full border-t border-2 border-stone-300 dark:border-stone-500' />
-              </div>
-              <div className='relative flex justify-center text-sm'>
-                <span className='py-1 px-1.5 bg-gray-50 dark:bg-yBlack-900 border-2 dark:text-stone-300 border:stone-700 dark:border-stone-400 rounded-full text-gray-500'>
-                  Or
-                </span>
-              </div>
-            </div>
-
-            <Button
-              onClick={handleLocalMode}
-              disabled={loading}
-              variant='outline2'
-              className='w-full inline-flex justify-center items-center'
-              size='large'
-            >
-              <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  strokeWidth={2}
-                  d='M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z'
-                />
-              </svg>
-              <span className='ml-3'>Continue in Local Mode</span>
-            </Button>
           </div>
-          <p className='text-xs text-center text-gray-500 dark:text-gray-400 mt-4'>
-            Local mode runs entirely on your device without cloud authentication
-          </p>
         </div>
       </div>
     </div>
