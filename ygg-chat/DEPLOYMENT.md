@@ -7,6 +7,7 @@ This guide will walk you through deploying your Yggdrasil Chat monorepo to Verce
 - Git repository (GitHub, GitLab, or Bitbucket)
 - [Vercel account](https://vercel.com/signup)
 - [Railway account](https://railway.app/)
+- **Node.js 20.x or higher** (required for dependencies like `better-sqlite3`)
 - Supabase project set up
 - Stripe account (for payments)
 - Redis instance (for Railway rate limiting) - can use Railway's Redis service
@@ -27,7 +28,17 @@ This guide will walk you through deploying your Yggdrasil Chat monorepo to Verce
 
 ---
 
-## 🚀 Part 1: Deploy Server to Railway
+## 🔄 Breaking the Circular Dependency
+
+**Important**: You have a chicken-and-egg problem:
+- Railway needs `FRONTEND_URL` (Vercel URL)
+- Vercel needs `VITE_API_URL` (Railway URL)
+
+**Solution**: Deploy Railway FIRST with a temporary permissive CORS setting (`FRONTEND_URL=*`), then lock it down after Vercel is deployed.
+
+---
+
+## 🚀 Part 1: Deploy Server to Railway (Without Frontend URL)
 
 ### Step 1: Create New Railway Project
 
@@ -43,7 +54,9 @@ In the Railway project settings:
 
 **Root Directory**: `/Webdrasil/ygg-chat` (IMPORTANT: This allows access to the `shared/` folder)
 
-The `railway.json` file will handle the build and start commands automatically:
+**Node.js Version**: Railway will automatically use Node.js 20 (specified in `nixpacks.toml`)
+
+The `railway.json` and `nixpacks.toml` files will handle the build and start commands automatically:
 - **Build Command**: `cd server && npm install && npm run build`
 - **Start Command**: `cd server && npm start`
 
@@ -55,8 +68,8 @@ Add these environment variables in Railway's dashboard:
 # Node Environment
 NODE_ENV=production
 
-# Frontend URL (will be your Vercel URL)
-FRONTEND_URL=https://your-app.vercel.app
+# Frontend URL - TEMPORARILY set to wildcard (we'll update this in Part 3)
+FRONTEND_URL=*
 
 # Supabase Configuration
 SUPABASE_URL=https://your-project.supabase.co
@@ -92,11 +105,14 @@ GOOGLE_API_KEY=your_google_key
 3. The `REDIS_URL` environment variable will be automatically set
 4. Your server uses Redis for rate limiting in web mode
 
-### Step 5: Deploy
+### Step 5: Deploy and Get Railway URL
 
 1. Railway will automatically deploy after you add environment variables
-2. Once deployed, copy your Railway service URL (e.g., `https://your-app.up.railway.app`)
-3. **Important**: Save this URL - you'll need it for Vercel configuration
+2. Wait for the deployment to complete (monitor the build logs)
+3. Once deployed, **copy your Railway service URL** (e.g., `https://your-app.up.railway.app`)
+4. **Critical**: Save this URL - you need it for the next step!
+
+**Note**: Your server is now deployed with permissive CORS (`FRONTEND_URL=*`). This is temporary and will be secured in Part 3.
 
 ---
 
@@ -150,17 +166,21 @@ VITE_API_URL=https://your-app.up.railway.app/api
 
 ---
 
-## 🔄 Part 3: Update Railway with Vercel URL
+## 🔐 Part 3: Secure Railway with Vercel URL
 
-Now that you have your Vercel URL, go back to Railway:
+Now that you have your Vercel URL, **lock down CORS** by updating Railway:
 
 1. Open your Railway project
 2. Go to **Variables** tab
-3. Update the `FRONTEND_URL` environment variable with your Vercel URL:
+3. **Update** the `FRONTEND_URL` environment variable with your actual Vercel URL:
    ```
    FRONTEND_URL=https://your-app.vercel.app
    ```
-4. Railway will automatically redeploy with the new CORS configuration
+   (Remove the wildcard `*` and use your exact Vercel URL)
+4. Railway will automatically redeploy with strict CORS configuration
+5. Wait for redeployment to complete
+
+**Security Note**: This step changes from permissive CORS (accepts all origins) to strict CORS (only accepts requests from your Vercel domain). This is critical for production security.
 
 ---
 
@@ -235,12 +255,32 @@ Your server needs to receive Stripe webhook events:
 
 ## 🐛 Troubleshooting
 
+### Issue: Railway build fails with "EBADENGINE Unsupported engine"
+
+**Error**: `npm ERR! EBADENGINE Unsupported engine` or `better-sqlite3` build failure
+
+**Solution**:
+- Ensure `nixpacks.toml` exists in `/Webdrasil/ygg-chat/` and specifies Node.js 20
+- The file should contain: `nixPkgs = ["nodejs-20_x"]`
+- Redeploy on Railway after adding this file
+- Verify build logs show "Node.js 20.x" being used
+
+### Issue: "I can't deploy because I don't have the URLs yet!"
+
+**Solution**: This is the circular dependency problem! Follow this exact order:
+1. Deploy Railway **first** with `FRONTEND_URL=*` (wildcard)
+2. Get your Railway URL
+3. Deploy Vercel with `VITE_API_URL=<railway-url>/api`
+4. Get your Vercel URL
+5. Update Railway's `FRONTEND_URL` to your exact Vercel URL
+
 ### Issue: "CORS Error" in browser console
 
 **Solution**:
-- Check that `FRONTEND_URL` in Railway matches your Vercel URL exactly
-- Ensure Railway has redeployed after updating `FRONTEND_URL`
+- Check that `FRONTEND_URL` in Railway matches your Vercel URL exactly (no trailing slash!)
+- Ensure Railway has redeployed after updating `FRONTEND_URL` from `*` to the actual URL
 - Check Railway logs for CORS warning messages
+- If you're still testing, you can temporarily use `FRONTEND_URL=*` but **never** do this in production
 
 ### Issue: "Cannot connect to server"
 
