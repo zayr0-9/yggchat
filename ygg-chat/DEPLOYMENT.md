@@ -55,9 +55,10 @@ In the Railway project settings:
 **Root Directory**: `/Webdrasil/ygg-chat` (IMPORTANT: This allows access to the `shared/` folder)
 
 The `railway.json` file will handle the build and start commands automatically:
-- **Build Command**: `npm install && cd server && npm run build`
-  - Runs from monorepo root to ensure TypeScript can compile shared dependencies
-- **Start Command**: `cd server && npm start`
+- **Build Command**: `cd server && npm install && npm run build`
+- **Start Command**: `cd server && npm start` (runs `node dist/server/src/index.js`)
+
+**Note**: The server's `package.json` start command is configured to match where TypeScript outputs files when using `rootDir: "../"` in tsconfig.json.
 
 **Important**: You'll also need to set a Node.js version environment variable (see next step).
 
@@ -294,16 +295,22 @@ Your server needs to receive Stripe webhook events:
 
 **Error**: `Error: Cannot find module '/app/server/dist/index.js'` during startup
 
-**Root Cause**: TypeScript build output doesn't match the start command's expected path
+**Root Cause**: TypeScript's `rootDir: "../"` configuration preserves directory structure in output
+
+**Explanation**:
+- The `server/tsconfig.json` has `rootDir: "../"` (points to monorepo root)
+- This is intentional - needed for `@shared/*` imports from the shared folder
+- TypeScript compiles `server/src/index.ts` → `server/dist/server/src/index.js`
+- The directory structure from rootDir is preserved in the output
 
 **Solution**:
-- Ensure `railway.json` buildCommand runs from monorepo root:
+- Update `server/package.json` start command to match actual output path:
   ```json
-  "buildCommand": "npm install && cd server && npm run build"
+  "start": "node dist/server/src/index.js"
   ```
-  NOT `"buildCommand": "cd server && npm install && npm run build"`
-- The monorepo root context is needed because `tsconfig.json` uses `rootDir: "../"`
-- Railway will automatically redeploy after updating `railway.json`
+  Instead of: `"start": "node dist/index.js"`
+- Also update the `main` field to: `"dist/server/src/index.js"`
+- Railway will automatically redeploy after pushing this change
 
 ### Issue: "I can't deploy because I don't have the URLs yet!"
 

@@ -2,14 +2,14 @@
   "name": "ygg-chat-server",
   "version": "1.0.0",
   "description": "Backend API server for Ollama Chat and other apis",
-  "main": "dist/index.js",
+  "main": "dist/server/src/index.js",
   "scripts": {
     "migrate": "ts-node src/database/runMigration.ts",
     "update-projects": "ts-node src/database/updateProjectsUserId.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "dev:migrate": "npm run migrate && npm run dev",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node dist/server/src/index.js",
     "type-check": "tsc --noEmit",
     "test:supabase": "ts-node src/database/testSupabase.ts"
   },
