@@ -31,6 +31,7 @@ This guide will walk you through deploying your Yggdrasil Chat monorepo to Verce
 ## 🔄 Breaking the Circular Dependency
 
 **Important**: You have a chicken-and-egg problem:
+
 - Railway needs `FRONTEND_URL` (Vercel URL)
 - Vercel needs `VITE_API_URL` (Railway URL)
 
@@ -55,6 +56,7 @@ In the Railway project settings:
 **Root Directory**: `/Webdrasil/ygg-chat` (IMPORTANT: This allows access to the `shared/` folder)
 
 The `railway.json` file will handle the build and start commands automatically:
+
 - **Build Command**: `cd server && npm install && npm run build`
 - **Start Command**: `cd server && npm start` (runs `node dist/server/src/index.js`)
 
@@ -148,6 +150,7 @@ GOOGLE_API_KEY=your_google_key
 - Leave **Build Command** and **Install Command** empty (handled by `vercel.json`)
 
 The `vercel.json` configuration handles:
+
 - Build command: `cd client/ygg-chat-r && npm install && npm run build`
 - Output directory: `client/ygg-chat-r/dist`
 
@@ -180,7 +183,7 @@ VITE_API_URL=https://your-app.up.railway.app/api
 
 ---
 
-## 🔐 Part 3: Secure Railway with Vercel URL
+## 🔐 Part 3: Secure Railway with Vercel URL test push
 
 Now that you have your Vercel URL, **lock down CORS** by updating Railway:
 
@@ -256,13 +259,16 @@ Your server needs to receive Stripe webhook events:
 ## 📊 Monitoring
 
 ### Railway Logs
+
 - View logs in Railway dashboard under the **"Deployments"** tab
 - Set up alerts for errors
 
 ### Vercel Logs
+
 - View function logs in Vercel dashboard under **"Deployments"** → select deployment → **"Functions"**
 
 ### Supabase Logs
+
 - Monitor auth and database logs in Supabase dashboard
 
 ---
@@ -278,16 +284,19 @@ Your server needs to receive Stripe webhook events:
 **Solution** (choose ONE method):
 
 **Method 1: Environment Variable (RECOMMENDED)**
+
 - Add `NIXPACKS_NODE_VERSION=20` to Railway environment variables
 - This is the simplest and most reliable method
 - Railway will use Node.js 20 for the build
 
 **Method 2: .nvmrc file**
+
 - Create `.nvmrc` file in `/Webdrasil/ygg-chat/` with content: `20`
 - Railway auto-detects this file
 - Works well for local development too
 
 **Method 3: package.json engines**
+
 - Add to your `server/package.json`:
   ```json
   "engines": {
@@ -296,6 +305,7 @@ Your server needs to receive Stripe webhook events:
   ```
 
 **After applying any method**:
+
 - Redeploy on Railway
 - Check build logs to confirm "Node.js 20.x" is being used
 - Build should complete successfully
@@ -307,12 +317,14 @@ Your server needs to receive Stripe webhook events:
 **Root Cause**: TypeScript's `rootDir: "../"` configuration preserves directory structure in output
 
 **Explanation**:
+
 - The `server/tsconfig.json` has `rootDir: "../"` (points to monorepo root)
 - This is intentional - needed for `@shared/*` imports from the shared folder
 - TypeScript compiles `server/src/index.ts` → `server/dist/server/src/index.js`
 - The directory structure from rootDir is preserved in the output
 
 **Solution**:
+
 - Update `server/package.json` start command to match actual output path:
   ```json
   "start": "node dist/server/src/index.js"
@@ -328,6 +340,7 @@ Your server needs to receive Stripe webhook events:
 **Root Cause**: express-rate-limit v8.x requires `ipKeyGenerator` helper for IPv6 safety
 
 **Solution**:
+
 - This has been fixed in the codebase
 - Update `server/src/middleware/rateLimiter.ts` to use `ipKeyGenerator` from express-rate-limit
 - The fix is included in the latest version - just pull and redeploy
@@ -335,6 +348,7 @@ Your server needs to receive Stripe webhook events:
 ### Issue: "I can't deploy because I don't have the URLs yet!"
 
 **Solution**: This is the circular dependency problem! Follow this exact order:
+
 1. Deploy Railway **first** with `FRONTEND_URL=*` (wildcard)
 2. Get your Railway URL
 3. Deploy Vercel with `VITE_API_URL=<railway-url>/api`
@@ -344,6 +358,7 @@ Your server needs to receive Stripe webhook events:
 ### Issue: "CORS Error" in browser console
 
 **Solution**:
+
 - Check that `FRONTEND_URL` in Railway matches your Vercel URL exactly (no trailing slash!)
 - Ensure Railway has redeployed after updating `FRONTEND_URL` from `*` to the actual URL
 - Check Railway logs for CORS warning messages
@@ -352,6 +367,7 @@ Your server needs to receive Stripe webhook events:
 ### Issue: "Cannot connect to server"
 
 **Solution**:
+
 - Verify `VITE_API_URL` in Vercel environment variables
 - Check Railway deployment status
 - Test Railway endpoint directly: `curl https://your-railway-url.up.railway.app/api/tools`
@@ -359,6 +375,7 @@ Your server needs to receive Stripe webhook events:
 ### Issue: "Shared types not found" during build
 
 **Solution**:
+
 - Verify root directory is set to `/Webdrasil/ygg-chat` (not the subdirectory)
 - Check that build commands in `vercel.json` and `railway.json` are correct
 - Clear build cache and redeploy
@@ -366,6 +383,7 @@ Your server needs to receive Stripe webhook events:
 ### Issue: Stripe webhooks not working
 
 **Solution**:
+
 - Verify webhook URL in Stripe dashboard
 - Check `STRIPE_WEBHOOK_SECRET` environment variable
 - Test webhook with Stripe CLI: `stripe trigger checkout.session.completed`
@@ -373,6 +391,7 @@ Your server needs to receive Stripe webhook events:
 ### Issue: Redis connection errors or "MaxRetriesPerRequestError"
 
 **Error**:
+
 - `Connecting to Redis via host/port (localhost:6379, db=0)`
 - `MaxRetriesPerRequestError: Reached the max retries per request limit`
 - Server keeps reconnecting to Redis
@@ -380,6 +399,7 @@ Your server needs to receive Stripe webhook events:
 **Root Cause**: `REDIS_URL` environment variable is not set or incorrect
 
 **Solution**:
+
 1. **Add Redis service** if you haven't already:
    - In Railway, click "New" → "Database" → "Add Redis"
 
@@ -421,11 +441,13 @@ Both Vercel and Railway support automatic deployments:
 ## 📈 Scaling Considerations
 
 ### Railway
+
 - Automatically scales based on traffic
 - Monitor memory and CPU usage
 - Consider upgrading plan for higher limits
 
 ### Vercel
+
 - Serverless functions auto-scale
 - Monitor function execution time
 - Consider upgrading for higher bandwidth
@@ -435,6 +457,7 @@ Both Vercel and Railway support automatic deployments:
 ## 🎉 You're Done!
 
 Your app is now deployed:
+
 - **Frontend**: `https://your-app.vercel.app`
 - **Backend**: `https://your-app.up.railway.app`
 
@@ -445,6 +468,7 @@ Users can now access your production Yggdrasil Chat application!
 ## 📞 Support
 
 If you encounter issues:
+
 1. Check Railway and Vercel logs first
 2. Review environment variables
 3. Test endpoints individually
