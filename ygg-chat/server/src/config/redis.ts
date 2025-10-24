@@ -1,4 +1,4 @@
-import Redis from 'ioredis'
+import Redis, { RedisOptions } from 'ioredis'
 
 /**
  * Redis client configuration for rate limiting
@@ -10,12 +10,7 @@ import Redis from 'ioredis'
  * - REDIS_DB: Redis database number (default: 0)
  */
 
-const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379', 10),
-  password: process.env.REDIS_PASSWORD || undefined,
-  db: parseInt(process.env.REDIS_DB || '0', 10),
-
+const baseOptions: RedisOptions = {
   // Connection retry strategy
   retryStrategy: (times: number) => {
     const delay = Math.min(times * 50, 2000)
@@ -36,8 +31,30 @@ const redisConfig = {
   maxRetriesPerRequest: 3,
 }
 
-// Create Redis client instance
-export const redisClient = new Redis(redisConfig)
+const redisUrl = process.env.REDIS_URL
+
+let redisClient: Redis
+
+if (redisUrl) {
+  console.log('🔌 Connecting to Redis via REDIS_URL')
+  redisClient = new Redis(redisUrl, baseOptions)
+} else {
+  const redisConfig: RedisOptions = {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
+    db: parseInt(process.env.REDIS_DB || '0', 10),
+    ...baseOptions,
+  }
+
+  console.log(
+    `🔌 Connecting to Redis via host/port (${redisConfig.host}:${redisConfig.port}, db=${redisConfig.db})`
+  )
+
+  redisClient = new Redis(redisConfig)
+}
+
+export { redisClient }
 
 // Connection event handlers
 redisClient.on('connect', () => {
