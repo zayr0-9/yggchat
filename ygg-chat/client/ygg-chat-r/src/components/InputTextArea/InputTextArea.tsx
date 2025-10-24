@@ -298,30 +298,33 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
 
   const adjustHeight = () => {
     const textarea = textareaRef.current
-    if (textarea) {
-      // Use requestAnimationFrame to batch DOM reads and writes
-      requestAnimationFrame(() => {
-        // Reset height to auto to get the correct scrollHeight
-        textarea.style.height = 'auto'
+    if (!textarea) return
 
-        // Calculate the number of lines
-        const lineHeight = 24 // Approximate line height in pixels
-        const minHeight = minRows * lineHeight + 16 // 16px for padding
-        const maxHeight = maxRows ? maxRows * lineHeight + 16 : undefined
+    requestAnimationFrame(() => {
+      textarea.style.height = 'auto'
 
-        const scrollHeight = textarea.scrollHeight
-        let newHeight = Math.max(scrollHeight, minHeight)
+      const computedStyle = window.getComputedStyle(textarea)
+      const fallbackLineHeight = 24
+      const parsedLineHeight = parseFloat(computedStyle.lineHeight)
+      const lineHeight = Number.isNaN(parsedLineHeight) ? fallbackLineHeight : parsedLineHeight
+      const paddingTop = parseFloat(computedStyle.paddingTop) || 0
+      const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0
+      const verticalPadding = paddingTop + paddingBottom
+      const minHeight = Math.max(minRows, 1) * lineHeight + verticalPadding
+      const maxHeight = maxRows ? maxRows * lineHeight + verticalPadding : undefined
 
-        if (maxHeight && newHeight > maxHeight) {
-          newHeight = maxHeight
-          textarea.style.overflowY = 'auto'
-        } else {
-          textarea.style.overflowY = 'hidden'
-        }
+      const scrollHeight = textarea.scrollHeight
+      let newHeight = Math.max(scrollHeight, minHeight)
 
-        textarea.style.height = `${newHeight}px`
-      })
-    }
+      if (maxHeight && newHeight > maxHeight) {
+        newHeight = maxHeight
+        textarea.style.overflowY = 'auto'
+      } else {
+        textarea.style.overflowY = 'hidden'
+      }
+
+      textarea.style.height = `${newHeight}px`
+    })
   }
 
   const debouncedAdjustHeight = () => {
@@ -334,7 +337,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   // Adjust height when value changes (debounced)
   useEffect(() => {
     debouncedAdjustHeight()
-  }, [value])
+  }, [value, minRows, maxRows])
 
   // Adjust height on mount and cleanup timeout
   useEffect(() => {
@@ -344,7 +347,8 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
         clearTimeout(adjustHeightTimeoutRef.current)
       }
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minRows, maxRows])
 
   // Programmatic focus when autoFocus toggles to true (e.g., after streaming finishes)
   useEffect(() => {
@@ -473,6 +477,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
           id={id}
           placeholder={placeholder}
           value={value}
+          rows={minRows}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onBlur={onBlur}
@@ -487,9 +492,6 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
           aria-invalid={state === 'error'}
           aria-describedby={state === 'error' && errorMessage ? errorId : undefined}
           autoFocus={autoFocus}
-          style={{
-            minHeight: `${minRows * 24 + 16}px`,
-          }}
           {...rest}
         />
 

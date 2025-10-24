@@ -205,17 +205,26 @@ body.ygg-no-select * {
   /* Firefox */
   scroll-padding-top: 4px;
   scroll-padding-bottom: 4px;
+  scrollbar-color: transparent transparent; /* Hidden by default */
+}
+.thin-scrollbar:hover {
+  /* Firefox - show on hover */
+  scrollbar-color: #cfcfcf transparent; /* light: neutral-400 thumb on transparent track */
 }
 /* Chromium/WebKit */
 .thin-scrollbar::-webkit-scrollbar {
   width: 8px;
 }
 .thin-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #cfcfcf; /* light: neutral-400 */
+  background-color: transparent; /* Hidden by default */
   border-radius: 20px;
   border: 0.5px solid transparent;
   box-shadow: inset 0 0 0 1px rgba(90, 90, 90, 0.02);
+  transition: background-color 0.2s ease-in-out;
   /* background-clip: padding-box; */
+}
+.thin-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: #cfcfcf; /* light: neutral-400 - visible on hover */
 }
 .thin-scrollbar::-webkit-scrollbar-track {
   background: transparent;
@@ -228,10 +237,18 @@ body.ygg-no-select * {
 /* Dark mode overrides */
 .dark .thin-scrollbar {
   /* Firefox */
+  scrollbar-color: transparent transparent; /* Hidden by default */
+}
+.dark .thin-scrollbar:hover {
+  /* Firefox - show on hover */
   scrollbar-color: #262626 transparent; /* dark: neutral-800 thumb on transparent track */
 }
 .dark .thin-scrollbar::-webkit-scrollbar-thumb {
-  background-color: #262626; /* dark: neutral-800 */
+  background-color: transparent; /* Hidden by default */
+  transition: background-color 0.3s ease-in-out;
+}
+.dark .thin-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: #262626; /* dark: neutral-800 - visible on hover */
 }
 
 /* Utility: multi-line clamp without Tailwind plugin */

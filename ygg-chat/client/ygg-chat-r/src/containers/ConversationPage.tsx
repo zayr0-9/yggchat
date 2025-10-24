@@ -197,7 +197,7 @@ const ConversationPage: React.FC = () => {
   }
 
   return (
-    <div className='bg-zinc-50 min-h-screen dark:bg-zinc-900 flex'>
+    <div className='bg-zinc-50 dark:bg-zinc-900 flex overflow-hidden h-screen'>
       {/* Recent conversations sidebar */}
       <SideBar limit={12} projects={allProjects} />
       {/* Main content with flex layout */}
@@ -277,7 +277,7 @@ const ConversationPage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
           <div className='flex gap-4 pt-5 items-start max-w-5xl'>
-            <ul className='space-y-2 px-2 py-8 rounded flex-2 overflow-y-auto max-h-[65vh] pr-2 thin-scrollbar scroll-fade'>
+            <ul className='space-y-2 px-2 py-8 rounded flex-2 overflow-y-auto max-h-[55vh] pr-2 thin-scrollbar scroll-fade'>
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}

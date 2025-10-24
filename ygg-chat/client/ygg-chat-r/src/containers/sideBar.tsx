@@ -100,7 +100,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
   return (
     <aside
-      className={`h-screen bg-white dark:bg-yBlack-800 shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16' : 'w-110'} ${className}`}
+      className={`h-screen bg-white dark:bg-yBlack-800 shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16' : 'w-90'} ${className}`}
       aria-label='Recent conversations'
     >
       {/* Toggle Button */}

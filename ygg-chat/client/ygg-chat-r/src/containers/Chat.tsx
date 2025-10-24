@@ -1522,12 +1522,12 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute bottom-0 left-0 ${!heimdallVisible ? 'px-60' : ''} right-0 ml-2 mb-2 mr-2`}
+          className={`absolute bottom-0 left-0 max-w-4xl px-4 mx-auto ${!heimdallVisible ? 'max-w-5xl mx-auto' : ''} right-0 mx-4 mb-4 `}
         >
           {/* Controls row (above) */}
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
-          <div className='bg-neutral-100 pb-2 pt-4 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-t-4xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05),0_-6px_18px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.45),0_-6px_18px_-4px_rgba(0,0,0,0.02)] rounded-b-4xl dark:bg-yBlack-900'>
+          <div className='bg-neutral-100 pb-2 pt-4 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
             <InputTextArea
               value={localInput}
               onChange={handleInputChange}
@@ -1600,7 +1600,7 @@ function Chat() {
                 })}
               </div>
             )}
-            <div className='bg-neutral-100 pt-2 rounded-b-lg dark:bg-yBlack-900 flex flex-col items-end'>
+            <div className='bg-neutral-100 rounded-b-lg dark:bg-yBlack-900 flex flex-col items-end'>
               {/* <h3 className='text-lg font-semibold text-stone-800 dark:text-stone-200 mb-3'>Send Message:</h3> */}
 
               {/* {messageInput.content.length > 0 && (
@@ -1610,7 +1610,7 @@ function Chat() {
             )} */}
 
               {/* <h3 className='text-lg font-semibold text-stone-800 dark:text-stone-200 mb-1'>Model Selection:</h3> */}
-              <div className='flex justify-between w-full mb-3'>
+              <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   <div
                     className='ide-status text-neutral-900 max-w-2/12 dark:text-neutral-200 break-words line-clamp-2 text-right'
