@@ -55,7 +55,8 @@ In the Railway project settings:
 **Root Directory**: `/Webdrasil/ygg-chat` (IMPORTANT: This allows access to the `shared/` folder)
 
 The `railway.json` file will handle the build and start commands automatically:
-- **Build Command**: `cd server && npm install && npm run build`
+- **Build Command**: `npm install && cd server && npm run build`
+  - Runs from monorepo root to ensure TypeScript can compile shared dependencies
 - **Start Command**: `cd server && npm start`
 
 **Important**: You'll also need to set a Node.js version environment variable (see next step).
@@ -288,6 +289,21 @@ Your server needs to receive Stripe webhook events:
 - Redeploy on Railway
 - Check build logs to confirm "Node.js 20.x" is being used
 - Build should complete successfully
+
+### Issue: Railway crashes with "Cannot find module '/app/server/dist/index.js'"
+
+**Error**: `Error: Cannot find module '/app/server/dist/index.js'` during startup
+
+**Root Cause**: TypeScript build output doesn't match the start command's expected path
+
+**Solution**:
+- Ensure `railway.json` buildCommand runs from monorepo root:
+  ```json
+  "buildCommand": "npm install && cd server && npm run build"
+  ```
+  NOT `"buildCommand": "cd server && npm install && npm run build"`
+- The monorepo root context is needed because `tsconfig.json` uses `rootDir: "../"`
+- Railway will automatically redeploy after updating `railway.json`
 
 ### Issue: "I can't deploy because I don't have the URLs yet!"
 
