@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
-  const { user, signIn, reloadSession } = useAuth()
+  const { user, reloadSession } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -242,22 +242,6 @@ const Login: React.FC = () => {
       }
     } catch (error: any) {
       setError(error.message || 'An error occurred')
-      setLoading(false)
-    }
-  }
-
-  const handleLocalMode = async () => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      // Sign in with empty credentials to trigger local mode in ElectronAuthProvider
-      await signIn({ email: '', password: '' })
-
-      // Navigation will happen automatically via the useEffect that monitors user state
-    } catch (error: any) {
-      console.error('[Login] Local mode login failed:', error)
-      setError(error.message || 'Failed to sign in with local mode')
       setLoading(false)
     }
   }
