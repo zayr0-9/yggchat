@@ -54,17 +54,20 @@ In the Railway project settings:
 
 **Root Directory**: `/Webdrasil/ygg-chat` (IMPORTANT: This allows access to the `shared/` folder)
 
-**Node.js Version**: Railway will automatically use Node.js 20 (specified in `nixpacks.toml`)
-
-The `railway.json` and `nixpacks.toml` files will handle the build and start commands automatically:
+The `railway.json` file will handle the build and start commands automatically:
 - **Build Command**: `cd server && npm install && npm run build`
 - **Start Command**: `cd server && npm start`
+
+**Important**: You'll also need to set a Node.js version environment variable (see next step).
 
 ### Step 3: Add Railway Environment Variables
 
 Add these environment variables in Railway's dashboard:
 
 ```bash
+# Node.js Version (CRITICAL - fixes better-sqlite3 build errors)
+NIXPACKS_NODE_VERSION=20
+
 # Node Environment
 NODE_ENV=production
 
@@ -259,11 +262,32 @@ Your server needs to receive Stripe webhook events:
 
 **Error**: `npm ERR! EBADENGINE Unsupported engine` or `better-sqlite3` build failure
 
-**Solution**:
-- Ensure `nixpacks.toml` exists in `/Webdrasil/ygg-chat/` and specifies Node.js 20
-- The file should contain: `nixPkgs = ["nodejs-20_x"]`
-- Redeploy on Railway after adding this file
-- Verify build logs show "Node.js 20.x" being used
+**Root Cause**: Railway defaults to Node.js 18, but your dependencies require Node.js 20+
+
+**Solution** (choose ONE method):
+
+**Method 1: Environment Variable (RECOMMENDED)**
+- Add `NIXPACKS_NODE_VERSION=20` to Railway environment variables
+- This is the simplest and most reliable method
+- Railway will use Node.js 20 for the build
+
+**Method 2: .nvmrc file**
+- Create `.nvmrc` file in `/Webdrasil/ygg-chat/` with content: `20`
+- Railway auto-detects this file
+- Works well for local development too
+
+**Method 3: package.json engines**
+- Add to your `server/package.json`:
+  ```json
+  "engines": {
+    "node": "20.x"
+  }
+  ```
+
+**After applying any method**:
+- Redeploy on Railway
+- Check build logs to confirm "Node.js 20.x" is being used
+- Build should complete successfully
 
 ### Issue: "I can't deploy because I don't have the URLs yet!"
 
