@@ -1,11 +1,11 @@
 // server/src/database/idGenerator.ts
-import { v4 as uuidv4 } from 'uuid'
+import { randomUUID } from 'node:crypto'
 
 /**
  * Generate a new UUID v4 for database primary keys
  */
 export function generateId(): string {
-  return uuidv4()
+  return randomUUID()
 }
 
 /**
