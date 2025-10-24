@@ -84,7 +84,8 @@ function generateRateLimitKey(prefix: string) {
     }
 
     // Fallback to IP using ipKeyGenerator helper for IPv6 safety
-    return `${prefix}:${ipKeyGenerator(req)}`
+    const ip = req.ip || req.socket.remoteAddress || '127.0.0.1'
+    return `${prefix}:${ipKeyGenerator(ip)}`
   }
 }
 
@@ -139,7 +140,8 @@ export const globalRateLimiter = rateLimit({
     prefix: 'rl:global:',
   }),
   keyGenerator: (req: Request) => {
-    return `ip:${ipKeyGenerator(req)}`
+    const ip = req.ip || req.socket.remoteAddress || '127.0.0.1'
+    return `ip:${ipKeyGenerator(ip)}`
   },
   handler: rateLimitHandler,
   skip: skipForWhitelist,
@@ -217,7 +219,8 @@ export const authEndpointsRateLimiter = rateLimit({
     prefix: 'rl:authep:',
   }),
   keyGenerator: (req: Request) => {
-    return `ip:${ipKeyGenerator(req)}`
+    const ip = req.ip || req.socket.remoteAddress || '127.0.0.1'
+    return `ip:${ipKeyGenerator(ip)}`
   },
   handler: rateLimitHandler,
   skip: skipForWhitelist,
