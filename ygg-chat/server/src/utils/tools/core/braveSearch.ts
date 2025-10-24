@@ -1,4 +1,4 @@
-import fetch from 'node-fetch'
+const fetchFn = globalThis.fetch
 
 interface BraveSearchResult {
   title: string
@@ -77,6 +77,14 @@ export async function braveSearch(
     }
   }
 
+  if (!fetchFn) {
+    return {
+      success: false,
+      error: 'Fetch API is not available in this environment',
+      query
+    }
+  }
+
   try {
     // Add 2 second delay to avoid rate limits
     await new Promise(resolve => setTimeout(resolve, 2000))
@@ -98,7 +106,7 @@ export async function braveSearch(
       ...(options.summary !== undefined && { summary: options.summary.toString() })
     })
 
-    const response = await fetch(`${baseUrl}?${searchParams}`, {
+    const response = await fetchFn(`${baseUrl}?${searchParams}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
