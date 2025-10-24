@@ -91,8 +91,9 @@ STRIPE_PRICE_ID_HIGH=price_...
 STRIPE_PRICE_ID_MID=price_...
 STRIPE_PRICE_ID_LOW=price_...
 
-# Redis Configuration (for rate limiting)
-REDIS_URL=redis://default:password@redis.railway.internal:6379
+# Redis Configuration (REQUIRED - for rate limiting)
+# Use Railway's internal Redis URL (from Redis service variables)
+REDIS_URL=redis://default:your-password@redis.railway.internal:6379
 
 # OpenRouter (if using)
 OPENROUTER_API_KEY=your_openrouter_key
@@ -107,8 +108,16 @@ GOOGLE_API_KEY=your_google_key
 
 1. In your Railway project, click **"New"** → **"Database"** → **"Add Redis"**
 2. Railway will automatically create a Redis instance
-3. The `REDIS_URL` environment variable will be automatically set
-4. Your server uses Redis for rate limiting in web mode
+3. **IMPORTANT**: Copy the **internal Redis URL** from the Redis service:
+   - Click on your Redis service
+   - Go to **"Variables"** tab
+   - Look for the variable that contains `redis.railway.internal`
+   - Example: `redis://default:password@redis.railway.internal:6379`
+4. **Manually add** `REDIS_URL` to your **server service** environment variables:
+   - Go back to your server service (not Redis service)
+   - Add `REDIS_URL` with the internal Redis URL you copied
+5. Railway does NOT automatically set this variable - you must copy it manually
+6. Use the **internal URL** (ends with `.railway.internal`), NOT the external proxy URL
 
 ### Step 5: Deploy and Get Railway URL
 
@@ -312,6 +321,17 @@ Your server needs to receive Stripe webhook events:
 - Also update the `main` field to: `"dist/server/src/index.js"`
 - Railway will automatically redeploy after pushing this change
 
+### Issue: "ValidationError: Custom keyGenerator appears to use request IP without calling the ipKeyGenerator helper"
+
+**Error**: `ERR_ERL_KEY_GEN_IPV6` validation error from express-rate-limit
+
+**Root Cause**: express-rate-limit v8.x requires `ipKeyGenerator` helper for IPv6 safety
+
+**Solution**:
+- This has been fixed in the codebase
+- Update `server/src/middleware/rateLimiter.ts` to use `ipKeyGenerator` from express-rate-limit
+- The fix is included in the latest version - just pull and redeploy
+
 ### Issue: "I can't deploy because I don't have the URLs yet!"
 
 **Solution**: This is the circular dependency problem! Follow this exact order:
@@ -350,12 +370,41 @@ Your server needs to receive Stripe webhook events:
 - Check `STRIPE_WEBHOOK_SECRET` environment variable
 - Test webhook with Stripe CLI: `stripe trigger checkout.session.completed`
 
-### Issue: Redis connection errors
+### Issue: Redis connection errors or "MaxRetriesPerRequestError"
+
+**Error**:
+- `Connecting to Redis via host/port (localhost:6379, db=0)`
+- `MaxRetriesPerRequestError: Reached the max retries per request limit`
+- Server keeps reconnecting to Redis
+
+**Root Cause**: `REDIS_URL` environment variable is not set or incorrect
 
 **Solution**:
-- Ensure Redis is added as a service in Railway
-- Verify `REDIS_URL` environment variable is set
-- Check Railway logs for Redis connection errors
+1. **Add Redis service** if you haven't already:
+   - In Railway, click "New" → "Database" → "Add Redis"
+
+2. **Copy the internal Redis URL**:
+   - Click on your Redis service in Railway
+   - Go to "Variables" tab
+   - Find the variable containing `redis.railway.internal`
+   - Copy the full URL: `redis://default:password@redis.railway.internal:6379`
+
+3. **Set REDIS_URL in your server service**:
+   - Go to your server service (NOT the Redis service)
+   - Click "Variables" tab
+   - Add new variable: `REDIS_URL=redis://default:password@redis.railway.internal:6379`
+   - Use your actual password from step 2
+
+4. **Important notes**:
+   - Railway does NOT automatically share Redis URLs between services
+   - You must manually copy the URL from Redis service to server service
+   - Use the **internal URL** (`.railway.internal`), not the external proxy
+   - Internal URL is faster and doesn't incur bandwidth charges
+
+5. **Verify**:
+   - Check Railway logs after redeploy
+   - Should see: `🔌 Connecting to Redis via REDIS_URL`
+   - Should NOT see: `Connecting to Redis via host/port (localhost:6379...)`
 
 ---
 

@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import RedisStore, { type RedisReply } from 'rate-limit-redis'
 import type { Request, Response } from 'express'
 import { redisClient } from '../config/redis'
@@ -73,6 +73,7 @@ function extractUserIdFromJWT(req: Request): string | null {
  * Custom key generator for rate limiting
  * - Uses user ID from JWT if available (per-user limiting)
  * - Falls back to IP address if no JWT (per-IP limiting)
+ * - Uses ipKeyGenerator helper for proper IPv6 support
  */
 function generateRateLimitKey(prefix: string) {
   return (req: Request): string => {
@@ -82,9 +83,8 @@ function generateRateLimitKey(prefix: string) {
       return `${prefix}:user:${userId}`
     }
 
-    // Fallback to IP
-    const ip = req.ip || req.socket.remoteAddress || 'unknown'
-    return `${prefix}:ip:${ip}`
+    // Fallback to IP using ipKeyGenerator helper for IPv6 safety
+    return `${prefix}:${ipKeyGenerator(req)}`
   }
 }
 
@@ -139,8 +139,7 @@ export const globalRateLimiter = rateLimit({
     prefix: 'rl:global:',
   }),
   keyGenerator: (req: Request) => {
-    const ip = req.ip || req.socket.remoteAddress || 'unknown'
-    return `ip:${ip}`
+    return `ip:${ipKeyGenerator(req)}`
   },
   handler: rateLimitHandler,
   skip: skipForWhitelist,
@@ -218,8 +217,7 @@ export const authEndpointsRateLimiter = rateLimit({
     prefix: 'rl:authep:',
   }),
   keyGenerator: (req: Request) => {
-    const ip = req.ip || req.socket.remoteAddress || 'unknown'
-    return `ip:${ip}`
+    return `ip:${ipKeyGenerator(req)}`
   },
   handler: rateLimitHandler,
   skip: skipForWhitelist,
