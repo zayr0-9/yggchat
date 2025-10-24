@@ -1450,7 +1450,7 @@ function Chat() {
 
         {/* Messages Display */}
         <div
-          className='relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-neutral-900 flex-1 min-h-0'
+          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-neutral-900 flex-1 min-h-0 ${!heimdallVisible ? 'px-20' : ''}`}
           style={{ paddingBottom: `${inputAreaHeight}px` }}
         >
           <div
@@ -1520,11 +1520,14 @@ function Chat() {
           </div>
         </div>
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
-        <div ref={inputAreaRef} className='absolute bottom-0 left-0 right-0 ml-2 mb-2 mr-2'>
+        <div
+          ref={inputAreaRef}
+          className={`absolute bottom-0 left-0 ${!heimdallVisible ? 'px-60' : ''} right-0 ml-2 mb-2 mr-2`}
+        >
           {/* Controls row (above) */}
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
-          <div className='bg-neutral-100 px-4 pb-2 pt-4 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-t-4xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05),0_-6px_18px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.45),0_-6px_18px_-4px_rgba(0,0,0,0.02)] rounded-b-4xl dark:bg-yBlack-900'>
+          <div className='bg-neutral-100 pb-2 pt-4 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-t-4xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05),0_-6px_18px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.45),0_-6px_18px_-4px_rgba(0,0,0,0.02)] rounded-b-4xl dark:bg-yBlack-900'>
             <InputTextArea
               value={localInput}
               onChange={handleInputChange}
@@ -1533,7 +1536,7 @@ function Chat() {
               placeholder='Type your message...'
               state='default'
               width='w-full'
-              minRows={3}
+              minRows={1}
               autoFocus={true}
               showCharCount={true}
             />
