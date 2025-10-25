@@ -444,8 +444,8 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   }
 
   const baseStyles = outline
-    ? `${width} px-3 py-2 sm:px-4 sm:py-3 md:px-4 md:py-3 lg:px-5 lg:py-4 3xl:px-6 3xl:py-5 4xl:px-8 4xl:py-6 overflow-hidden bg-transparent text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] ${variantStyles[variant]}`
-    : `${width} px-3 py-2 sm:px-4 sm:py-3 md:px-4 md:py-3 lg:px-5 lg:py-4 3xl:px-6 3xl:py-5 4xl:px-8 4xl:py-6 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-yBlack-900 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[12px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]`
+    ? `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 overflow-hidden bg-transparent text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] ${variantStyles[variant]}`
+    : `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-yBlack-900 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[12px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]`
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
 
   const stateStyles = outline
@@ -461,7 +461,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
       }
 
   return (
-    <div className={`flex flex-col gap-3`}>
+    <div className={`flex flex-col gap-0`}>
       {label && (
         <label
           htmlFor={id}

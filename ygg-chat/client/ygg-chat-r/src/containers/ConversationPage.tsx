@@ -202,7 +202,7 @@ const ConversationPage: React.FC = () => {
       <SideBar limit={12} projects={allProjects} />
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='flex-1 mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-35 2xl:ml-15 3xl:mr-35 3xl:ml-15 transition-all p-2 duration-300'>
-        <div className='py-4 max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-[1640px] 3xl:max-w-[1920px] 4xl:max-w-[2400px] mx-auto'>
+        <div className='py-4 max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-6xl xl:max-w-6xl 2xl:max-w-[1440px] 3xl:max-w-[1920px] 4xl:max-w-[2400px] mx-auto'>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 pt-2 mb-2'>
               <Button
@@ -213,7 +213,7 @@ const ConversationPage: React.FC = () => {
                 className='group border-2 hover:bg-pureWhite-100 dark:hover:bg-neutral-900 border-pureWhite-200 dark:border-neutral-800 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.5)] dark:shadow-[0_1px_22px_1px_rgba(0,0,0,0.45)]'
               >
                 <i
-                  className='bx bx-home text-3xl pb-0.75 transition-transform group-hover:scale-101 duration-100 group-active:scale-93 pointer-events-none'
+                  className='bx bx-home text-[16px] sm:text-[14px] md:text-[14px] lg:text-[22px] 2xl:text-[26px] 3xl:text-[16px] 4xl:text-[16px] pb-0.75 transition-transform group-hover:scale-101 duration-100 group-active:scale-93 pointer-events-none'
                   aria-hidden='true'
                 ></i>
               </Button>
