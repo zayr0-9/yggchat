@@ -2295,7 +2295,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           <div className='text-xs text-stone-800 bg-amber-50 dark:bg-neutral-800 dark:text-stone-200 mb-1'>
             {selectedNode.sender === 'user' ? 'User' : 'Assistant'}
           </div>
-          <div className='text-sm whitespace-normal break-words overflow-hidden ygg-line-clamp-6'>
+          <div className='text-sm whitespace-normal break-words max-h-80 overflow-y-auto thin-scrollbar md:max-h-none md:overflow-hidden md:ygg-line-clamp-6'>
             {selectedNode.message}
           </div>
         </div>
