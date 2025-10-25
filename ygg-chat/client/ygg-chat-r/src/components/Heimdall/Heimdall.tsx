@@ -79,9 +79,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   // const selectedProject = useSelector(selectSelectedProject)
   const allMessages = useSelector((state: RootState) => state.chat.conversation.messages)
   // Get current conversation to access project_id
-  const currentConversation = useSelector(
-    conversationId ? makeSelectConversationById(conversationId) : () => null
-  )
+  const currentConversation = useSelector(conversationId ? makeSelectConversationById(conversationId) : () => null)
   // Track total messages to detect a truly empty conversation
   const messagesCount = useSelector((state: RootState) => state.chat.conversation.messages.length)
 
@@ -1922,9 +1920,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           {compactMode ? 'Compact' : 'Full'}
         </button>
       </div>
-      <div className='absolute top-4 right-8 z-10 flex flex-col gap-2 items-end'>
+      <div className='absolute top-4 right-8 ml-100 z-10 flex flex-col gap-2 items-end'>
         {/* Search bar for messages in the current chat */}
-        <div className='w-[400px] relative mb-2 shadow-[0_20px_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.2)]'>
+        <div className='w-full max-w-[400px] relative mb-2 shadow-[0_20px_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.2)]'>
           <TextField
             placeholder='Search'
             value={searchQuery}
@@ -1978,7 +1976,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           />
           {searchOpen && searchQuery.trim() && (
             <div
-              className='absolute right-0 mt-1 w-full max-h-72 overflow-auto rounded-md border border-stone-200 bg-white dark:bg-neutral-900 dark:border-stone-700 z-20 thin-scrollbar shadow-[0_12px_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.2)]'
+              className='absolute right-0 mt-1 max-h-72 overflow-auto rounded-md border border-stone-200 bg-white dark:bg-neutral-900 dark:border-stone-700 z-20 thin-scrollbar shadow-[0_12px_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.2)]'
               data-heimdall-wheel-exempt='true'
             >
               {filteredResults.length === 0 ? (

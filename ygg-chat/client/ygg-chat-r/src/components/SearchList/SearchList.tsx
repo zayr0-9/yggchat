@@ -124,7 +124,7 @@ const SearchList: React.FC<SearchListProps> = ({
       {isOpen &&
         (loading ? (
           <div
-            className='fixed z-50 bg-indigo-50 dark:bg-yBlack-900 p-4 text-sm'
+            className='fixed z-50 bg-indigo-50 dark:bg-yBlack-900 p-4 md:p-3 lg:p-2.5 xl:p-2 text-sm md:text-xs lg:text-xs xl:text-[10px]'
             style={{
               top: `${dropdownPosition.top}px`,
               left: `${dropdownPosition.left}px`,
@@ -148,21 +148,21 @@ const SearchList: React.FC<SearchListProps> = ({
               {results.map(res => (
                 <li
                   key={`${res.conversationId}-${res.messageId}`}
-                  className='p-3 hover:bg-indigo-100 dark:bg-yBlack-900 dark:hover:bg-yBlack-700 cursor-pointer text-sm dark:text-neutral-200'
+                  className='p-3 md:p-2.5 lg:p-2 xl:p-1.5 hover:bg-indigo-100 dark:bg-yBlack-900 dark:hover:bg-yBlack-700 cursor-pointer text-sm md:text-xs lg:text-xs xl:text-[10px] dark:text-neutral-200'
                   onClick={() => {
                     onResultClick(res.conversationId, res.messageId)
                     setIsOpen(false)
                   }}
                 >
                   <div className='flex justify-between items-baseline'>
-                    <div className='font-semibold text-base text-indigo-600 dark:text-yBrown-50'>
+                    <div className='font-semibold text-base md:text-sm lg:text-xs xl:text-[11px] text-indigo-600 dark:text-yBrown-50'>
                       {res.conversationTitle || `Conv ${res.conversationId}`}
                     </div>
-                    <div className='text-xs text-neutral-500 dark:text-neutral-400 ml-2'>
+                    <div className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] text-neutral-500 dark:text-neutral-400 ml-2'>
                       {new Date(res.createdAt).toLocaleString()}
                     </div>
                   </div>
-                  <div className='mt-1 pl-2 text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words max-h-48 overflow-hidden'>
+                  <div className='mt-1 md:mt-0.5 lg:mt-0.5 xl:mt-0 pl-2 md:pl-1.5 lg:pl-1 xl:pl-1 text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words max-h-48 md:max-h-40 lg:max-h-32 xl:max-h-28 overflow-hidden'>
                     {res.content}
                   </div>
                 </li>

@@ -217,7 +217,7 @@ const ConversationPage: React.FC = () => {
                   aria-hidden='true'
                 ></i>
               </Button>
-              <h1 className='text-3xl sm:text-4xl lg:text-5xl py-4 px-2 font-bold dark:text-neutral-100'>
+              <h1 className='text-3xl md:text-base lg:text-2xl xl:text-3xl 2xl:text-4xl 3xl:text-6xl xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
                 {selectedProject ? `${selectedProject.name}` : 'Conversations'}
               </h1>
               {/* {selectedProject && (
@@ -235,7 +235,9 @@ const ConversationPage: React.FC = () => {
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl'>
-            <h2 className='text-2xl sm:text-3xl py-4 font-bold dark:text-neutral-100'>Conversations</h2>
+            <h2 className='text-2xl md:text-lg lg:text-xl xl:text-2xl 2xl:text-3xl 3xl:text-4xl xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
+              Conversations
+            </h2>
             <div className='flex items-center gap-2 pt-4 pr-4'>
               <Button variant='outline' size='medium' onClick={handleEditProject} className='group'>
                 <p className='transition-transform duration-100 group-active:scale-95'>Project Settings</p>

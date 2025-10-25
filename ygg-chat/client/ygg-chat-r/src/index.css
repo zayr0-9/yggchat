@@ -241,7 +241,7 @@ body.ygg-no-select * {
 }
 /* Chromium/WebKit */
 .thin-scrollbar::-webkit-scrollbar {
-  width: 8px;
+  width: 2px;
 }
 .thin-scrollbar::-webkit-scrollbar-thumb {
   background-color: transparent; /* Hidden by default */

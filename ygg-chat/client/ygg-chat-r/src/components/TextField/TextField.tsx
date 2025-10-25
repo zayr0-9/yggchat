@@ -55,13 +55,15 @@ export const TextField: React.FC<TextFieldProps> = ({
 
   // Base input styles that apply to all text fields
   const baseInputStyles =
-    'w-full px-4 py-3 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-neutral-900 bg-gray-800 text-stone-800 dark:text-stone-200 placeholder-neutral-700 dark:placeholder-neutral-200 border-1 border-gray-300 outline-none focus:border-gray-400 dark:border-neutral-600 dark:focus:border-neutral-500'
+    'w-full px-4 md:px-3.5 lg:px-3 xl:px-2.5 py-3 md:py-2 lg:py-2 xl:py-2.5 2xl:py-3 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-neutral-900 bg-gray-800 text-stone-800 dark:text-stone-200 placeholder-neutral-700 dark:placeholder-neutral-200 border-1 border-gray-300 outline-none focus:border-gray-400 dark:border-neutral-600 dark:focus:border-neutral-500'
 
   // Size variants control padding and text size
   const sizeStyles = {
-    small: 'px-3 py-1.5 text-sm',
-    medium: 'px-4 py-2 text-base',
-    large: 'px-5 py-3 text-lg',
+    small:
+      'px-3 md:px-2.5 lg:px-2 xl:px-1.5 py-1.5 md:py-1 lg:py-1 xl:py-0.5 text-sm md:text-xs lg:text-xs xl:text-[10px]',
+    medium:
+      'px-4 md:px-3.5 lg:px-3 xl:px-2.5 py-2 md:py-2 lg:py-2 xl:py-2 text-base md:text-sm lg:text-xs xl:text-[14px] 2xl:text-[14px]',
+    large: 'px-5 md:px-4 lg:px-3.5 xl:px-3 py-3 md:py-2.5 lg:py-2 xl:py-1.5 text-lg md:text-base lg:text-sm xl:text-xs',
   }
 
   // State-based styles change based on error state and disabled state
@@ -82,7 +84,8 @@ export const TextField: React.FC<TextFieldProps> = ({
   `.trim()
 
   // Label styles with required indicator
-  const labelStyles = 'block text-base font-medium text-gray-700 dark:text-gray-300 mb-2'
+  const labelStyles =
+    'block text-base md:text-sm lg:text-xs xl:text-[11px] 2xl:text-[13px] font-medium text-gray-700 dark:text-gray-300 mb-2 md:mb-1.5 lg:mb-1 xl:mb-1'
 
   return (
     <div className='w-full'>
@@ -112,16 +115,27 @@ export const TextField: React.FC<TextFieldProps> = ({
             onClick={onSearchClick}
             disabled={disabled}
             aria-label='Search'
-            className='absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700 dark:text-neutral-300 dark:hover:text-neutral-100 focus:outline-none'
+            className='absolute right-3 md:right-2.5 lg:right-2 xl:right-1.5 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-700 dark:text-neutral-300 dark:hover:text-neutral-100 focus:outline-none'
           >
-            <i className='bx bx-search text-xl pt-1.5' aria-hidden='true'></i>
+            <i
+              className='bx bx-search text-xl md:text-lg lg:text-base xl:text-md pt-1.5 md:pt-1 lg:pt-0.5 xl:pt-2'
+              aria-hidden='true'
+            ></i>
           </button>
         )}
       </div>
 
       {/* Helper text or error message */}
-      {error && <p className='mt-1 text-sm text-red-600'>{error}</p>}
-      {!error && helperText && <p className='mt-1 text-sm text-gray-500'>{helperText}</p>}
+      {error && (
+        <p className='mt-1 md:mt-0.5 lg:mt-0.5 xl:mt-0 text-sm md:text-xs lg:text-xs xl:text-[10px] text-red-600'>
+          {error}
+        </p>
+      )}
+      {!error && helperText && (
+        <p className='mt-1 md:mt-0.5 lg:mt-0.5 xl:mt-0 text-sm md:text-xs lg:text-xs xl:text-[10px] text-gray-500'>
+          {helperText}
+        </p>
+      )}
     </div>
   )
 }
