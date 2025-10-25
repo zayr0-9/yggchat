@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
+import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { MessageId } from '../../../../shared/types'
@@ -240,6 +241,16 @@ function Chat() {
     }
   }, [])
 
+  // Detect mobile screen size changes
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   // Consider the user to be "at the bottom" if within this many pixels
   const NEAR_BOTTOM_PX = 48
   const isNearBottom = (el: HTMLElement, threshold = NEAR_BOTTOM_PX) => {
@@ -407,6 +418,11 @@ function Chat() {
     } catch {
       return true
     }
+  })
+  // Detect if user is on mobile device (below md breakpoint: 768px)
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth < 768
   })
   // One-time spin flags for icon buttons
   const [spinSettings, setSpinSettings] = useState(false)
@@ -1342,7 +1358,7 @@ function Chat() {
     <div ref={containerRef} className='flex h-[100dvh] overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
       <div
         className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-[100dvh] overflow-hidden'
-        style={{ width: heimdallVisible ? `${leftWidthPct}%` : '100%' }}
+        style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : '100%' }}
       >
         {/* Conversation Title Editor */}
         {currentConversationId && (
@@ -1731,8 +1747,8 @@ function Chat() {
         </div>
       </div>
 
-      {/* SEPARATOR */}
-      {heimdallVisible && (
+      {/* SEPARATOR - Hidden on mobile */}
+      {heimdallVisible && !isMobile && (
         <div
           className='w-2 dark:bg-transparent bg-transparent hover:dark:bg-neutral-800 hover:bg-neutral-200 cursor-col-resize select-none'
           style={{ border: 'none', outline: 'none', margin: 0, padding: 0 }}
@@ -1747,7 +1763,8 @@ function Chat() {
         />
       )}
 
-      {heimdallVisible && (
+      {/* Desktop: side-by-side layout */}
+      {heimdallVisible && !isMobile && (
         <div className='flex-1 min-w-0'>
           <Heimdall
             key={currentConversationId ?? 'none'}
@@ -1760,6 +1777,76 @@ function Chat() {
             visibleMessageId={visibleMessageId}
           />
         </div>
+      )}
+
+      {/* Mobile: bottom drawer with backdrop */}
+      {isMobile && (
+        <>
+          {/* Backdrop */}
+          <AnimatePresence>
+            {heimdallVisible && (
+              <motion.div
+                className='fixed inset-0 bg-black/50 z-[90]'
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                onClick={() => {
+                  setHeimdallVisible(false)
+                  try {
+                    window.localStorage.setItem('chat:heimdallVisible', 'false')
+                  } catch {}
+                }}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Drawer */}
+          <AnimatePresence>
+            {heimdallVisible && (
+              <motion.div
+                className='fixed bottom-0 left-0 right-0 h-[85vh] z-[100] bg-neutral-50 dark:bg-neutral-900 rounded-t-2xl shadow-2xl overflow-hidden'
+                initial={{ y: '100%' }}
+                animate={{ y: 0 }}
+                exit={{ y: '100%' }}
+                transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              >
+                {/* Drag handle indicator */}
+                <div className='w-full flex justify-center py-3 bg-neutral-100 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700'>
+                  <div className='w-12 h-1.5 bg-neutral-400 dark:bg-neutral-600 rounded-full' />
+                </div>
+
+                {/* Heimdall component */}
+                <div className='h-[calc(100%-3rem)] overflow-hidden'>
+                  <Heimdall
+                    key={currentConversationId ?? 'none'}
+                    chatData={heimdallData}
+                    loading={loading}
+                    error={error}
+                    compactMode={compactMode}
+                    conversationId={currentConversationId}
+                    onNodeSelect={handleNodeSelect}
+                    visibleMessageId={visibleMessageId}
+                  />
+                </div>
+
+                {/* Collapse button - bottom right corner */}
+                <button
+                  onClick={() => {
+                    setHeimdallVisible(false)
+                    try {
+                      window.localStorage.setItem('chat:heimdallVisible', 'false')
+                    } catch {}
+                  }}
+                  className='fixed bottom-6 right-6 z-[110] w-12 h-12 rounded-full bg-neutral-700 dark:bg-neutral-600 hover:bg-neutral-800 dark:hover:bg-neutral-500 text-white shadow-lg flex items-center justify-center transition-colors'
+                  aria-label='Close tree view'
+                >
+                  <i className='bx bx-chevron-down text-2xl' aria-hidden='true'></i>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </>
       )}
       <SettingsPane open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
