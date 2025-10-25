@@ -1346,8 +1346,8 @@ function Chat() {
       >
         {/* Conversation Title Editor */}
         {currentConversationId && (
-          <div className='flex flex-col gap-2 xl:mb-0.5 xl:mt-0.5 2xl:mb-2 2xl:mt-2 mx-2 rounded-xl pr-2 shadow-[0_0px_12px_6px_rgba(0,0,0,0.06),0_0px_12px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65),0_6px_12px_-4px_rgba(0,0,0,0.02)]'>
-            <div className='flex items-center gap-2 xl:p-0 2xl:p-1 '>
+          <div className='flex flex-col gap-2 mt-2 mb-1 xl:mb-1 xl:mt-2 2xl:mb-2 2xl:mt-2 mx-2 rounded-xl pr-2 shadow-[0_0px_12px_6px_rgba(0,0,0,0.06),0_0px_12px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65),0_6px_12px_-4px_rgba(0,0,0,0.02)]'>
+            <div className='flex items-center gap-2 py-1 xl:py-1 2xl:p-1 '>
               <Button
                 variant='outline2'
                 size='medium'

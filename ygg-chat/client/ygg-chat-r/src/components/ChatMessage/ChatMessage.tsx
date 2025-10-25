@@ -640,7 +640,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         )}
 
         {/* Message content */}
-        <div className='prose max-w-none dark:prose-invert w-full text-[10px] md:text-[10px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px]'>
+        <div className='prose max-w-none dark:prose-invert w-full text-[14px] md:text-[14px] lg:text-[14px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px]'>
           {editingState ? (
             <TextArea
               value={editContent}

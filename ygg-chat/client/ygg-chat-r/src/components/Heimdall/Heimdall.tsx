@@ -105,6 +105,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [noteText, setNoteText] = useState<string>('')
   // Track dark mode for shadows
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  // Track pinch-to-zoom state
+  const lastPinchDistanceRef = useRef<number | null>(null)
+  const isPinchingRef = useRef<boolean>(false)
 
   // Keep a stable inner offset so the whole tree does not shift when nodes are added/removed
   const offsetRef = useRef<{ x: number; y: number } | null>(null)
@@ -807,6 +810,114 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
   }, [])
 
+  // Pinch-to-zoom support for mobile devices
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        // Two fingers detected - start pinch gesture
+        isPinchingRef.current = true
+        const touch1 = e.touches[0]
+        const touch2 = e.touches[1]
+        const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
+        lastPinchDistanceRef.current = distance
+
+        // Prevent default to avoid page zoom
+        try {
+          e.preventDefault()
+        } catch {}
+      } else {
+        // Reset pinch state if not two fingers
+        isPinchingRef.current = false
+        lastPinchDistanceRef.current = null
+      }
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isPinchingRef.current || e.touches.length !== 2) return
+      if (lastPinchDistanceRef.current === null) return
+
+      const touch1 = e.touches[0]
+      const touch2 = e.touches[1]
+
+      // Calculate current distance between touches
+      const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
+
+      // Calculate the center point between the two touches
+      const centerX = (touch1.clientX + touch2.clientX) / 2
+      const centerY = (touch1.clientY + touch2.clientY) / 2
+
+      // Calculate zoom scale based on distance change
+      const scale = currentDistance / lastPinchDistanceRef.current
+      const currentZoom = zoomRef.current
+      const newZoom = Math.max(0.1, Math.min(3, currentZoom * scale))
+
+      // Only update if zoom actually changed
+      if (newZoom !== currentZoom) {
+        const svgEl = svgRef.current
+        if (svgEl) {
+          const rect = svgEl.getBoundingClientRect()
+
+          // Convert touch center to SVG coordinates
+          const cursorX = centerX - rect.left
+          const cursorY = centerY - rect.top
+
+          const currentPan = panRef.current
+
+          // Outer group transform components
+          const tx = currentPan.x + rect.width / 2
+          const ty = currentPan.y + 100
+
+          // Use stable inner offset
+          const ox = offsetRef.current ? offsetRef.current.x : offsetX
+          const oy = offsetRef.current ? offsetRef.current.y : offsetY
+
+          // Convert cursor screen position to world coordinates under current transform
+          const worldX = (cursorX - tx) / currentZoom - ox
+          const worldY = (cursorY - ty) / currentZoom - oy
+
+          // Compute new pan so that the same world point stays under the cursor after zoom
+          const newPanX = cursorX - (worldX + ox) * newZoom - rect.width / 2
+          const newPanY = cursorY - (worldY + oy) * newZoom - 100
+
+          setZoom(newZoom)
+          setPan({ x: newPanX, y: newPanY })
+        }
+      }
+
+      // Update last distance for next calculation
+      lastPinchDistanceRef.current = currentDistance
+
+      // Prevent default scrolling/zooming
+      try {
+        e.preventDefault()
+      } catch {}
+    }
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        // Less than two fingers remaining - end pinch gesture
+        isPinchingRef.current = false
+        lastPinchDistanceRef.current = null
+      }
+    }
+
+    // Add touch listeners with passive: false to allow preventDefault
+    container.addEventListener('touchstart', handleTouchStart, { passive: false })
+    container.addEventListener('touchmove', handleTouchMove, { passive: false })
+    container.addEventListener('touchend', handleTouchEnd, { passive: false })
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: false })
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+      container.removeEventListener('touchend', handleTouchEnd)
+      container.removeEventListener('touchcancel', handleTouchEnd)
+    }
+  }, [offsetX, offsetY])
+
   // Function to determine which nodes are within the selection rectangle
   const getNodesInSelectionRectangle = (): MessageId[] => {
     const selectedNodeIds: MessageId[] = []
@@ -900,6 +1011,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const onWindowTouchMove = (e: globalThis.TouchEvent): void => {
+    // Skip if pinching - pinch handler will take over
+    if (isPinchingRef.current || e.touches.length > 1) return
+
     // Prevent page scroll while interacting
     if (isDraggingRef.current || isSelectingRef.current) {
       try {
