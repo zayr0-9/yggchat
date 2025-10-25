@@ -141,7 +141,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
       {/* Search Section */}
       {!isCollapsed && (
-        <div className='px-2 py-4 relative z-50'>
+        <div className='px-2 relative z-50'>
           <SearchList
             value={searchQuery}
             onChange={handleSearchChange}
@@ -156,7 +156,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
       )}
 
       {/* Conversations List */}
-      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 thin-scrollbar border-neutral-100 dark:border-neutral-800 rounded-xl border-1 border-t-0 shadow-[0_2px_16px_1px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_16px_1px_rgba(0,0,0,0.43)]'>
+      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-8 2xl:pt-10 no-scrollbar scroll-fade border-neutral-100 dark:border-neutral-800 rounded-xl border-1 border-t-0 shadow-[0_2px_16px_1px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_16px_1px_rgba(0,0,0,0.43)]'>
         {loading && (
           <div
             className={`text-xs text-gray-500 dark:text-gray-300 px-2 py-1 ${isCollapsed ? 'text-center' : ''}`}

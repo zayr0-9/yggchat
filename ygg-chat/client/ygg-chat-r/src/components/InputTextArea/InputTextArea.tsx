@@ -445,7 +445,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
 
   const baseStyles = outline
     ? `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 2xl:px-5 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 overflow-hidden bg-transparent text-[16px] sm:text-[16px] md:text-[16px] lg:text-[16px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px] ${variantStyles[variant]}`
-    : `${width} px-3 py-2 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 2xl:px-5 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-yBlack-900 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[18px]`
+    : `${width} px-3 py-2 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 2xl:px-5 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-yBlack-900 text-[14px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[18px]`
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
 
   const stateStyles = outline

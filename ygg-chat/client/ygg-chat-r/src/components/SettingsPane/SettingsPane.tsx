@@ -1,12 +1,12 @@
-import React, { useCallback, useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import React, { useCallback, useEffect, useRef } from 'react'
 import { selectCurrentConversationId } from '../../features/chats'
 import { convContextSet, systemPromptSet, updateContext, updateSystemPrompt } from '../../features/conversations'
+import type { Conversation } from '../../features/conversations/conversationTypes'
 import { selectSelectedProject } from '../../features/projects'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { ToolsSettings } from './ToolsSettings'
-import type { Conversation } from '../../features/conversations/conversationTypes'
 
 type SettingsPaneProps = {
   open: boolean
@@ -108,10 +108,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
 
             // Update project-specific conversations cache if projectId exists
             if (projectId) {
-              queryClient.setQueryData<Conversation[]>(
-                ['conversations', 'project', projectId],
-                updateContextInCache
-              )
+              queryClient.setQueryData<Conversation[]>(['conversations', 'project', projectId], updateContextInCache)
             }
           })
           .catch(error => {
@@ -143,7 +140,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       {/* Modal */}
       <div className='py-2'>
         <div
-          className={`relative z-50 w-full max-w-4xl rounded-3xl px-4 py-2 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${
+          className={`relative z-50 mx-4 max-w-3xl rounded-3xl px-12 py-4 lg:py-6 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${
             tools.some(tool => tool.enabled) ? 'h-[80vh]' : 'h-[58vh]'
           }`}
           onClick={e => e.stopPropagation()}
