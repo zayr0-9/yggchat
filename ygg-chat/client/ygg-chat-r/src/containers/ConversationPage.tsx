@@ -287,7 +287,7 @@ const ConversationPage: React.FC = () => {
                   onClick={() => handleSelect(conv)}
                 >
                   <div className='flex items-center justify-between'>
-                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 md:text-[11px] lg:text-[10px] xl:text-[10px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px]'>
+                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 md:text-[11px] lg:text-[10px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px]'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
                     <Button

@@ -191,21 +191,23 @@ const Homepage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
-          <div className='gap-2 sm:gap-3 md:gap-4 items-start w-full max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl flex-1 overflow-hidden flex flex-col'>
+          <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl flex-1 overflow-hidden flex flex-col'>
             <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-4 sm:py-8 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
               {projects.map(project => (
                 <li
                   key={project.id}
-                  className='p-4 mb-4 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
+                  className='sm:p-2 md:p-2 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-2 xl:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className='flex place-items-start justify-between'>
                     <div className='flex-1'>
                       <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99'>
-                        <p className='transition-transform duration-100 group-active:scale-99'>{project.name}</p>
+                        <p className='transition-transform duration-100 group-active:scale-99 text-[10px] sm:text-[8px]md:text-[11px] lg:text-[10px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px]'>
+                          {project.name}
+                        </p>
                       </span>
                       {project.context && (
-                        <p className='text-sm text-gray-600 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99'>
+                        <p className='text-sm text-gray-600 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 md:text-[11px] lg:text-[8px] xl:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px]'>
                           {project.context}
                         </p>
                       )}
