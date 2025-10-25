@@ -105,8 +105,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [noteText, setNoteText] = useState<string>('')
   // Track dark mode for shadows
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
-  // Track pinch-to-zoom state
-  const lastPinchDistanceRef = useRef<number | null>(null)
+  // Track pointers for pinch-to-zoom gesture
+  const pointerCacheRef = useRef<PointerEvent[]>([])
+  const prevPinchDistanceRef = useRef<number | null>(null)
   const isPinchingRef = useRef<boolean>(false)
 
   // Keep a stable inner offset so the whole tree does not shift when nodes are added/removed
@@ -260,6 +261,25 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
   // Pointer Events with pointer capture for robust drag outside element
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>): void => {
+    // Add pointer to cache for multi-touch tracking
+    const pointerIndex = pointerCacheRef.current.findIndex(p => p.pointerId === e.pointerId)
+    if (pointerIndex === -1) {
+      pointerCacheRef.current.push(e.nativeEvent)
+    } else {
+      pointerCacheRef.current[pointerIndex] = e.nativeEvent
+    }
+
+    // If two pointers are active, start pinch gesture
+    if (pointerCacheRef.current.length === 2) {
+      isPinchingRef.current = true
+      const p1 = pointerCacheRef.current[0]
+      const p2 = pointerCacheRef.current[1]
+      const distance = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY)
+      prevPinchDistanceRef.current = distance
+      // Don't start dragging/selecting when pinching
+      return
+    }
+
     // Don't start dragging if clicking on a node
     const target = e.target as unknown as SVGElement
     if (target && (target.tagName === 'rect' || target.tagName === 'circle')) {
@@ -325,6 +345,71 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>): void => {
+    // Update pointer in cache
+    const pointerIndex = pointerCacheRef.current.findIndex(p => p.pointerId === e.pointerId)
+    if (pointerIndex !== -1) {
+      pointerCacheRef.current[pointerIndex] = e.nativeEvent
+    }
+
+    // Handle pinch-to-zoom if two pointers are active
+    if (isPinchingRef.current && pointerCacheRef.current.length === 2) {
+      const p1 = pointerCacheRef.current[0]
+      const p2 = pointerCacheRef.current[1]
+
+      // Calculate current distance between pointers
+      const currentDistance = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY)
+
+      if (prevPinchDistanceRef.current !== null && prevPinchDistanceRef.current > 0) {
+        // Calculate the center point between the two pointers
+        const centerX = (p1.clientX + p2.clientX) / 2
+        const centerY = (p1.clientY + p2.clientY) / 2
+
+        const svgEl = svgRef.current
+        if (svgEl) {
+          const rect = svgEl.getBoundingClientRect()
+
+          // Convert center to SVG coordinates
+          const cursorX = centerX - rect.left
+          const cursorY = centerY - rect.top
+
+          const currentZoom = zoomRef.current
+          const currentPan = panRef.current
+
+          // Use logarithmic scaling with damping for smoother zoom
+          const DAMPING_FACTOR = 0.4 // Adjust between 0.1 (slower) and 1.0 (faster)
+          const distanceRatio = (currentDistance - prevPinchDistanceRef.current) / prevPinchDistanceRef.current
+          const zoomDelta = distanceRatio * DAMPING_FACTOR
+          const newZoom = Math.max(0.1, Math.min(3, currentZoom * (1 + zoomDelta)))
+
+          // Only update if zoom actually changed
+          if (Math.abs(newZoom - currentZoom) > 0.001) {
+            // Outer group transform components
+            const tx = currentPan.x + rect.width / 2
+            const ty = currentPan.y + 100
+
+            // Use stable inner offset
+            const ox = offsetRef.current ? offsetRef.current.x : offsetX
+            const oy = offsetRef.current ? offsetRef.current.y : offsetY
+
+            // Convert cursor screen position to world coordinates under current transform
+            const worldX = (cursorX - tx) / currentZoom - ox
+            const worldY = (cursorY - ty) / currentZoom - oy
+
+            // Compute new pan so that the same world point stays under the cursor after zoom
+            const newPanX = cursorX - (worldX + ox) * newZoom - rect.width / 2
+            const newPanY = cursorY - (worldY + oy) * newZoom - 100
+
+            setZoom(newZoom)
+            setPan({ x: newPanX, y: newPanY })
+          }
+        }
+
+        // Update previous distance for next frame
+        prevPinchDistanceRef.current = currentDistance
+      }
+      return // Don't process dragging/selecting while pinching
+    }
+
     if (isDraggingRef.current) {
       setPan({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y })
     } else if (isSelectingRef.current) {
@@ -338,6 +423,18 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>): void => {
+    // Remove pointer from cache
+    const pointerIndex = pointerCacheRef.current.findIndex(p => p.pointerId === e.pointerId)
+    if (pointerIndex !== -1) {
+      pointerCacheRef.current.splice(pointerIndex, 1)
+    }
+
+    // If less than two pointers remain, end pinch gesture
+    if (pointerCacheRef.current.length < 2) {
+      isPinchingRef.current = false
+      prevPinchDistanceRef.current = null
+    }
+
     try {
       ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
     } catch {}
@@ -354,6 +451,18 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const handlePointerCancel = (e: React.PointerEvent<SVGSVGElement>): void => {
+    // Remove pointer from cache
+    const pointerIndex = pointerCacheRef.current.findIndex(p => p.pointerId === e.pointerId)
+    if (pointerIndex !== -1) {
+      pointerCacheRef.current.splice(pointerIndex, 1)
+    }
+
+    // If less than two pointers remain, end pinch gesture
+    if (pointerCacheRef.current.length < 2) {
+      isPinchingRef.current = false
+      prevPinchDistanceRef.current = null
+    }
+
     try {
       ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
     } catch {}
@@ -810,114 +919,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
   }, [])
 
-  // Pinch-to-zoom support for mobile devices
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        // Two fingers detected - start pinch gesture
-        isPinchingRef.current = true
-        const touch1 = e.touches[0]
-        const touch2 = e.touches[1]
-        const distance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
-        lastPinchDistanceRef.current = distance
-
-        // Prevent default to avoid page zoom
-        try {
-          e.preventDefault()
-        } catch {}
-      } else {
-        // Reset pinch state if not two fingers
-        isPinchingRef.current = false
-        lastPinchDistanceRef.current = null
-      }
-    }
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isPinchingRef.current || e.touches.length !== 2) return
-      if (lastPinchDistanceRef.current === null) return
-
-      const touch1 = e.touches[0]
-      const touch2 = e.touches[1]
-
-      // Calculate current distance between touches
-      const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY)
-
-      // Calculate the center point between the two touches
-      const centerX = (touch1.clientX + touch2.clientX) / 2
-      const centerY = (touch1.clientY + touch2.clientY) / 2
-
-      // Calculate zoom scale based on distance change
-      const scale = currentDistance / lastPinchDistanceRef.current
-      const currentZoom = zoomRef.current
-      const newZoom = Math.max(0.1, Math.min(3, currentZoom * scale))
-
-      // Only update if zoom actually changed
-      if (newZoom !== currentZoom) {
-        const svgEl = svgRef.current
-        if (svgEl) {
-          const rect = svgEl.getBoundingClientRect()
-
-          // Convert touch center to SVG coordinates
-          const cursorX = centerX - rect.left
-          const cursorY = centerY - rect.top
-
-          const currentPan = panRef.current
-
-          // Outer group transform components
-          const tx = currentPan.x + rect.width / 2
-          const ty = currentPan.y + 100
-
-          // Use stable inner offset
-          const ox = offsetRef.current ? offsetRef.current.x : offsetX
-          const oy = offsetRef.current ? offsetRef.current.y : offsetY
-
-          // Convert cursor screen position to world coordinates under current transform
-          const worldX = (cursorX - tx) / currentZoom - ox
-          const worldY = (cursorY - ty) / currentZoom - oy
-
-          // Compute new pan so that the same world point stays under the cursor after zoom
-          const newPanX = cursorX - (worldX + ox) * newZoom - rect.width / 2
-          const newPanY = cursorY - (worldY + oy) * newZoom - 100
-
-          setZoom(newZoom)
-          setPan({ x: newPanX, y: newPanY })
-        }
-      }
-
-      // Update last distance for next calculation
-      lastPinchDistanceRef.current = currentDistance
-
-      // Prevent default scrolling/zooming
-      try {
-        e.preventDefault()
-      } catch {}
-    }
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      if (e.touches.length < 2) {
-        // Less than two fingers remaining - end pinch gesture
-        isPinchingRef.current = false
-        lastPinchDistanceRef.current = null
-      }
-    }
-
-    // Add touch listeners with passive: false to allow preventDefault
-    container.addEventListener('touchstart', handleTouchStart, { passive: false })
-    container.addEventListener('touchmove', handleTouchMove, { passive: false })
-    container.addEventListener('touchend', handleTouchEnd, { passive: false })
-    container.addEventListener('touchcancel', handleTouchEnd, { passive: false })
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart)
-      container.removeEventListener('touchmove', handleTouchMove)
-      container.removeEventListener('touchend', handleTouchEnd)
-      container.removeEventListener('touchcancel', handleTouchEnd)
-    }
-  }, [offsetX, offsetY])
-
   // Function to determine which nodes are within the selection rectangle
   const getNodesInSelectionRectangle = (): MessageId[] => {
     const selectedNodeIds: MessageId[] = []
@@ -1011,8 +1012,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const onWindowTouchMove = (e: globalThis.TouchEvent): void => {
-    // Skip if pinching - pinch handler will take over
-    if (isPinchingRef.current || e.touches.length > 1) return
+    // Skip if pinching - pointer events will handle it
+    if (e.touches.length > 1) return
 
     // Prevent page scroll while interacting
     if (isDraggingRef.current || isSelectingRef.current) {
