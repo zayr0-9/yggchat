@@ -3,8 +3,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Move, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import type { JSX } from 'react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
+import rehypeHighlight from 'rehype-highlight'
+import remarkGfm from 'remark-gfm'
 import {
   deleteSelectedNodes,
   fetchMessageTree,
@@ -2295,8 +2298,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           <div className='text-xs text-stone-800 bg-amber-50 dark:bg-neutral-800 dark:text-stone-200 mb-1'>
             {selectedNode.sender === 'user' ? 'User' : 'Assistant'}
           </div>
-          <div className='text-sm whitespace-normal break-words max-h-80 overflow-y-auto thin-scrollbar md:max-h-none md:overflow-hidden md:ygg-line-clamp-6'>
-            {selectedNode.message}
+          <div className='prose prose-sm dark:prose-invert max-w-none text-sm max-h-80 overflow-y-auto thin-scrollbar md:max-h-none md:overflow-hidden md:ygg-line-clamp-6'>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+            >
+              {selectedNode.message}
+            </ReactMarkdown>
           </div>
         </div>
       )}
