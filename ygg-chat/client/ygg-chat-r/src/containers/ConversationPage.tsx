@@ -202,7 +202,7 @@ const ConversationPage: React.FC = () => {
       <SideBar limit={12} projects={allProjects} />
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all p-2 duration-300'>
-        <div className='py-4 w-full max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-6xl xl:max-w-6xl 2xl:max-w-[1600px] 3xl:max-w-[2000px] 4xl:max-w-[2400px] mx-auto shrink-0'>
+        <div className='py-4 w-full max-w-full mx-auto shrink-0'>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 pt-2 mb-2'>
               <Button
