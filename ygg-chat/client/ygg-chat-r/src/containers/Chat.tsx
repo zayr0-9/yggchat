@@ -1630,7 +1630,7 @@ function Chat() {
                     }}
                   >
                     <i
-                      className={`bx bx-cog text-xl ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
+                      className={`bx bx-cog text-[18px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
                       aria-hidden='true'
                       onAnimationEnd={() => setSpinSettings(false)}
                     ></i>
@@ -1654,7 +1654,7 @@ function Chat() {
                     options={(localModel ?? models).map(m => m.name)}
                     placeholder='Select a model...'
                     disabled={(localModel ?? models).length === 0}
-                    className='flex-1 max-w-32 sm:max-w-40 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99'
+                    className='flex-1 max-w-48 sm:max-w-40 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99'
                     searchBarVisible={true}
                   />
                   <Button
@@ -1667,7 +1667,7 @@ function Chat() {
                     }}
                   >
                     <i
-                      className={`bx bx-refresh text-xl ${spinRefresh ? 'animate-[spin_0.6s_linear_1]' : ''}`}
+                      className={`bx bx-refresh text-[22px] sm:text-[18px] md:text-[16px] lg:text-[18px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinRefresh ? 'animate-[spin_0.6s_linear_1]' : ''}`}
                       aria-hidden='true'
                       onAnimationEnd={() => setSpinRefresh(false)}
                     ></i>
@@ -1675,9 +1675,15 @@ function Chat() {
                   {selectedModel?.thinking && (
                     <Button variant='outline2' className='rounded-full' size='medium' onClick={() => setThink(t => !t)}>
                       {think ? (
-                        <i className='bx bxs-bulb text-xl text-yellow-400' aria-hidden='true'></i>
+                        <i
+                          className='bx bxs-bulb text-yellow-400 text-[18px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px]'
+                          aria-hidden='true'
+                        ></i>
                       ) : (
-                        <i className='bx bx-bulb text-xl' aria-hidden='true'></i>
+                        <i
+                          className='bx bx-bulb text-[18px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] '
+                          aria-hidden='true'
+                        ></i>
                       )}
                     </Button>
                   )}
@@ -1691,7 +1697,7 @@ function Chat() {
                       onClick={handleStopGeneration}
                       disabled={!streamState.streamingMessageId}
                     >
-                      <i className='bx bx-stop-circle text-xl' aria-hidden='true'></i>
+                      <i className='bx bx-stop-circle text-[18px]' aria-hidden='true'></i>
                     </Button>
                   ) : sendingState.sending ? (
                     'Sending...'
@@ -1702,7 +1708,7 @@ function Chat() {
                       disabled={!canSendLocal || !currentConversationId}
                       onClick={() => handleSend(multiReplyCount)}
                     >
-                      <i className='bx bx-send text-2xl' aria-hidden='true'></i>
+                      <i className='bx bx-send text-[18px]' aria-hidden='true'></i>
                     </Button>
                   )}
                 </div>

@@ -59,12 +59,12 @@ export const Select: React.FC<SelectProps> = ({
   const sizeClass = useMemo(() => {
     switch (size) {
       case 'small':
-        return 'px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-lg 4xl:text-xl leading-none'
+        return 'px-2 py-1 sm:px-3 sm:py-1.5 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-lg 4xl:text-xl leading-none'
       case 'large':
-        return 'px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-sm md:text-sm lg:text-base 3xl:text-2xl 4xl:text-3xl leading-none'
+        return 'px-3 py-2 sm:px-4 sm:py-3 text-[14px] sm:text-[12px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] leading-none'
       case 'medium':
       default:
-        return 'px-2.5 py-2 sm:px-3 sm:py-3 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-xl 4xl:text-2xl leading-none'
+        return 'px-2.5 py-2 sm:px-3 sm:py-3 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-xl 4xl:text-2xl leading-none'
     }
   }, [size])
 
@@ -204,11 +204,11 @@ export const Select: React.FC<SelectProps> = ({
             </div>
           )}
           <div
-            className='overflow-auto thin-scrollbar'
+            className='overflow-y-scroll thin-scrollbar'
             style={{ maxHeight: searchBarVisible ? (listMaxHeight || 280) - 50 : listMaxHeight }}
           >
             {filteredOptions.length === 0 ? (
-              <div className='px-3 py-2 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-lg 4xl:text-xl text-neutral-500 dark:text-neutral-400'>
+              <div className='px-3 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] text-neutral-500 dark:text-neutral-400'>
                 {searchBarVisible && searchTerm.trim() ? 'No matching options' : 'No options'}
               </div>
             ) : (
@@ -229,7 +229,7 @@ export const Select: React.FC<SelectProps> = ({
                       handleSelect(opt.value)
                     }}
                     onClick={() => handleSelect(opt.value)}
-                    className={`w-full text-left px-3 py-2 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-lg 4xl:text-xl transition-colors
+                    className={`w-full line-clamp-3 text-left px-3 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] transition-colors
                       ${isActive ? 'bg-neutral-100 dark:bg-yBlack-500' : ''}
                       ${isSelected ? 'font-medium' : ''}
                       text-stone-800 dark:text-stone-100`}

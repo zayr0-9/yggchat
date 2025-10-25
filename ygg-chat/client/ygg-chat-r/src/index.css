@@ -1,11 +1,19 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap');
 /* Ensure dark variant is available globally and early */
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant 2xl (@media (min-width: 1920px) and (max-width: 2559px));
+@custom-variant 3xl (@media (min-width: 2560px) and (max-width: 3839px));
+@custom-variant 4xl (@media (min-width: 3840px));
+@custom-variant hidpi (@media (min-resolution: 144dpi));
+@custom-variant retina (@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi));
 @import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 /* Override Tailwind v4 default font stack */
 @theme {
   --font-sans: 'DM Sans', Inter, system-ui, sans-serif;
+}
+@theme {
+  --breakpoint-2xl: initial;
 }
 /* Highlight.js base theme for rehype-highlight
    We import the light theme unconditionally, then provide .dark-scoped overrides below.
