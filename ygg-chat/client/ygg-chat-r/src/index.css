@@ -17,6 +17,15 @@
     font-family: var(--font-sans);
   }
 
+  /* Set body background to extend into safe areas on mobile */
+  body {
+    background-color: #fafafa; /* zinc-50 for light mode */
+  }
+
+  .dark body {
+    background-color: #121111; /* yBlack-900 for dark mode */
+  }
+
   /* Pixel density normalization for high-DPI displays */
   /* This helps ensure consistent rendering across different pixel densities */
   @media (min-resolution: 144dpi) {

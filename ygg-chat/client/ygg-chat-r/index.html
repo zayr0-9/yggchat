@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#121111" media="(prefers-color-scheme: dark)" />
     <title>Vite + React + TS</title>
     <script>
       // Apply theme early to avoid FOUC and respect system preference
@@ -14,6 +16,13 @@
           var hasExplicit = saved === 'dark' || saved === 'light'
           var isDark = hasExplicit ? saved === 'dark' : prefersDark
           document.documentElement.classList.toggle('dark', isDark)
+
+          // Update theme-color meta tag to match dark mode state
+          var themeColor = isDark ? '#121111' : '#fafafa'
+          var metaThemeColor = document.querySelector('meta[name="theme-color"]')
+          if (metaThemeColor) {
+            metaThemeColor.setAttribute('content', themeColor)
+          }
         } catch (e) {
           // no-op
         }
