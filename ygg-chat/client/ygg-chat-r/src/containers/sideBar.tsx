@@ -126,7 +126,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
       {/* Search Section */}
       {!isCollapsed && (
-        <div className='p-2 relative z-50'>
+        <div className='px-2 py-4 relative z-50'>
           <SearchList
             value={searchQuery}
             onChange={handleSearchChange}
