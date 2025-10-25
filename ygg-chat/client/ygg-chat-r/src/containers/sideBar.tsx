@@ -181,7 +181,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                 title={isCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
               >
                 {isCollapsed ? (
-                  <Button variant='outline2' size='circle' rounded='full' className='h-12 w-12 text-md font-semibold'>
+                  <Button variant='outline2' size='circle' rounded='full' className='h-10 w-10 text-md font-semibold'>
                     {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
                   </Button>
                 ) : (

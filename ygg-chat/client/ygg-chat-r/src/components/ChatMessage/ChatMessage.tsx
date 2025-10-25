@@ -73,8 +73,8 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   copied = false,
 }) => {
   return (
-    <div className='flex items-center gap-1 opacity-0 group-hover:opacity-100 border-1 border-stone-300 dark:bg-yBlack-900 dark:border-1 dark:border-neutral-700 transition-opacity rounded-3xl duration-200 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_6px_2px_rgba(0,0,0,0.35)]'>
-      <div className='flex items-center gap-1 px-2 py-1'>
+    <div className='flex items-center gap-0.5 sm:gap-1 opacity-0 group-hover:opacity-100 border-1 border-stone-300 dark:bg-yBlack-900 dark:border-1 dark:border-neutral-700 transition-opacity rounded-3xl duration-200 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_6px_2px_rgba(0,0,0,0.35)]'>
+      <div className='flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 sm:py-1'>
         {isEditing ? (
           <>
             <button
@@ -475,94 +475,98 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     return (
       <div
         id={`message-${id}`}
-        className={`group p-4 mb-4 ${styles.container} ${width} transition-all duration-200 rounded-xl hover:bg-opacity-80  ${className ?? ''}`}
+        className={`group p-2 sm:p-3 md:p-4 mb-2 sm:mb-3 md:mb-4 ${styles.container} ${width} transition-all duration-200 rounded-xl hover:bg-opacity-80  ${className ?? ''}`}
       >
         {/* Header with role and actions */}
-        <div className='flex items-center justify-between mb-3'>
-          <div className='flex items-center gap-2'>
-            <span className={`text-sm font-semibold ${styles.role}`}>{styles.roleText}</span>
-            {timestamp && formatTimestamp(timestamp) && (
-              <span className='text-xs text-neutral-400 pt-0.5'>{formatTimestamp(timestamp)}</span>
-            )}
-          </div>
+        <div className='flex items-center justify-between mb-0'>
+          <div className='flex items-center justify-between w-full'>
+            <span className={`text-xs sm:text-sm 3xl:text-base font-semibold ${styles.role}`}>{styles.roleText}</span>
 
-          <div className='relative'>
-            <MessageActions
-              onEdit={role === 'user' ? handleEdit : handleEdit}
-              onBranch={role === 'user' ? handleBranch : undefined}
-              onDelete={handleDelete}
-              onCopy={handleCopy}
-              onResend={role === 'assistant' ? handleResend : undefined}
-              onSave={handleSave}
-              onSaveBranch={handleSaveBranch}
-              onCancel={handleCancel}
-              onMore={handleMoreClick}
-              isEditing={editingState}
-              editMode={editMode}
-              copied={copied}
-            />
-            {/* More menu dropdown */}
-            {showMoreMenu && (
-              <div
-                ref={moreMenuRef}
-                className='absolute right-0 top-8 z-20 w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)]'
-              >
-                {!showMoreInfo ? (
-                  <div className='py-1 rounded-4xl'>
-                    <button
-                      onClick={handleMoreInfoClick}
-                      className='w-full text-left rounded-4xl px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 active:scale-95 transition-all duration-150'
-                    >
-                      More Info
-                    </button>
-                  </div>
-                ) : (
-                  <div className='p-3'>
-                    <div className='flex items-center justify-between mb-2'>
-                      <h3 className='text-sm font-semibold text-gray-700 dark:text-gray-300'>Message Info</h3>
-                      <button
-                        onClick={handleBackToMenu}
-                        className='text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 active:scale-95 transition-all duration-150'
-                      >
-                        Back
-                      </button>
-                    </div>
-                    <div className='max-h-96 overflow-y-auto text-xs space-y-1.5 pt-2'>
-                      {messageData ? (
-                        <>
-                          {Object.entries(messageData)
-                            .filter(
-                              ([key]) =>
-                                key !== 'content' &&
-                                key !== 'plain_text_content' &&
-                                key !== 'artifacts' &&
-                                key !== 'content_plain_text'
-                            )
-                            .map(([key, value]) => (
-                              <div key={key} className='flex gap-2'>
-                                <span className='font-medium text-gray-600 dark:text-gray-400 shrink-0'>{key}:</span>
-                                <span className='text-gray-800 dark:text-gray-200 break-all'>
-                                  {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-                                </span>
-                              </div>
-                            ))}
-                        </>
-                      ) : (
-                        <p className='text-gray-500 dark:text-gray-400'>No message data found</p>
-                      )}
-                    </div>
+            {/* Actions row */}
+            <div className='flex items-center justify-end mb-0'>
+              <div className='relative'>
+                <MessageActions
+                  onEdit={role === 'user' ? handleEdit : handleEdit}
+                  onBranch={role === 'user' ? handleBranch : undefined}
+                  onDelete={handleDelete}
+                  onCopy={handleCopy}
+                  onResend={role === 'assistant' ? handleResend : undefined}
+                  onSave={handleSave}
+                  onSaveBranch={handleSaveBranch}
+                  onCancel={handleCancel}
+                  onMore={handleMoreClick}
+                  isEditing={editingState}
+                  editMode={editMode}
+                  copied={copied}
+                />
+                {/* More menu dropdown */}
+                {showMoreMenu && (
+                  <div
+                    ref={moreMenuRef}
+                    className='absolute right-0 top-8 z-20 w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)]'
+                  >
+                    {!showMoreInfo ? (
+                      <div className='py-1 rounded-4xl'>
+                        <button
+                          onClick={handleMoreInfoClick}
+                          className='w-full text-left rounded-4xl px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 active:scale-95 transition-all duration-150'
+                        >
+                          More Info
+                        </button>
+                      </div>
+                    ) : (
+                      <div className='p-2 sm:p-3'>
+                        <div className='flex items-center justify-between mb-2'>
+                          <h3 className='text-xs sm:text-sm 3xl:text-base font-semibold text-gray-700 dark:text-gray-300'>
+                            Message Info
+                          </h3>
+                          <button
+                            onClick={handleBackToMenu}
+                            className='text-xs sm:text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 active:scale-95 transition-all duration-150'
+                          >
+                            Back
+                          </button>
+                        </div>
+                        <div className='max-h-64 sm:max-h-80 md:max-h-96 overflow-y-auto text-xs sm:text-sm space-y-1.5 pt-2'>
+                          {messageData ? (
+                            <>
+                              {Object.entries(messageData)
+                                .filter(
+                                  ([key]) =>
+                                    key !== 'content' &&
+                                    key !== 'plain_text_content' &&
+                                    key !== 'artifacts' &&
+                                    key !== 'content_plain_text'
+                                )
+                                .map(([key, value]) => (
+                                  <div key={key} className='flex gap-2'>
+                                    <span className='font-medium text-gray-600 dark:text-gray-400 shrink-0'>
+                                      {key}:
+                                    </span>
+                                    <span className='text-gray-800 dark:text-gray-200 break-all'>
+                                      {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                                    </span>
+                                  </div>
+                                ))}
+                            </>
+                          ) : (
+                            <p className='text-gray-500 dark:text-gray-400'>No message data found</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
         {/* Tool calls block */}
         {typeof toolCalls === 'string' && toolCalls.trim().length > 0 && (
-          <div className='mb-3 rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/40 dark:bg-neutral-900'>
+          <div className='mb-3 rounded-md border border-blue-200 bg-blue-50 p-2 sm:p-3 dark:border-blue-900/40 dark:bg-neutral-900'>
             <div className='mb-2 flex items-center justify-between'>
-              <div className='text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300'>
+              <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300'>
                 Tool Calls
               </div>
               <Button
@@ -578,8 +582,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               </Button>
             </div>
             {showToolCalls && (
-              <div id={`tool-calls-content-${id}`} className='prose max-w-none dark:prose-invert w-full text-sm'>
-                <pre className='bg-gray-100 dark:bg-neutral-800 p-3 rounded-md overflow-auto text-xs'>
+              <div
+                id={`tool-calls-content-${id}`}
+                className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
+              >
+                <pre className='bg-gray-100 dark:bg-neutral-800 p-3 rounded-md overflow-auto text-xs sm:text-sm 3xl:text-base'>
                   <code className='text-blue-700 dark:text-blue-300'>
                     {(() => {
                       try {
@@ -598,9 +605,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Reasoning / thinking block */}
         {typeof thinking === 'string' && thinking.trim().length > 0 && (
-          <div className='mb-3 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-neutral-900'>
+          <div className='mb-3 rounded-md border border-amber-200 bg-amber-50 px-2 sm:px-3 dark:border-amber-900/40 dark:bg-neutral-900'>
             <div className='mb-2 flex items-center justify-between'>
-              <div className='text-xs font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300'>
+              <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300'>
                 Reasoning
               </div>
               <Button
@@ -616,7 +623,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               </Button>
             </div>
             {showThinking && (
-              <div id={`reasoning-content-${id}`} className='prose max-w-none dark:prose-invert w-full text-sm'>
+              <div
+                id={`reasoning-content-${id}`}
+                className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
+              >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
@@ -630,7 +640,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         )}
 
         {/* Message content */}
-        <div className='prose max-w-none dark:prose-invert w-full text-lg'>
+        <div className='prose max-w-none dark:prose-invert w-full text-base 3xl:text-lg 4xl:text-xl'>
           {editingState ? (
             <TextArea
               value={editContent}
@@ -668,7 +678,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Artifacts (images) */}
         {Array.isArray(artifacts) && artifacts.length > 0 && (
-          <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3'>
+          <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3'>
             {artifacts.map((dataUrl, idx) => (
               <div
                 key={`${id}-artifact-${idx}`}
@@ -678,7 +688,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 <img
                   src={dataUrl}
                   alt={`attachment-${idx}`}
-                  className='w-full h-64 object-contain bg-neutral-100 dark:bg-neutral-800'
+                  className='w-full h-40 sm:h-48 md:h-56 lg:h-64 object-contain bg-neutral-100 dark:bg-neutral-800'
                   loading='lazy'
                 />
                 {editingState && editMode === 'branch' && (
@@ -700,12 +710,19 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Edit instructions */}
         {editingState && (
-          <div className='mt-2 text-xs text-gray-500'>
+          <div className='mt-2 text-xs sm:text-sm text-gray-500'>
             Press Enter to save, Shift+Enter for new line, Escape to cancel
           </div>
         )}
 
-        {modelName && <div className='mt-2 text-[16px] text-gray-500 flex justify-end'>{modelName}</div>}
+        {modelName && (
+          <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
+        )}
+        {timestamp && formatTimestamp(timestamp) && (
+          <div className='text-[9px] sm:text-xs 3xl:text-sm text-stone-400 pt-0.5 flex justify-end'>
+            {formatTimestamp(timestamp)}
+          </div>
+        )}
       </div>
     )
   }

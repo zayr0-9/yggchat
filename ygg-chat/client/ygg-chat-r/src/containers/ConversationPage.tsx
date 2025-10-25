@@ -276,8 +276,8 @@ const ConversationPage: React.FC = () => {
 
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
-          <div className='flex gap-2 sm:gap-3 md:gap-4 pt-5 items-start max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl'>
-            <ul className='space-y-2 px-1 sm:px-2 py-4 sm:py-8 rounded flex-2 overflow-y-auto max-h-[55vh] sm:max-h-[60vh] lg:max-h-[65vh] pr-2 thin-scrollbar scroll-fade'>
+          <div className='flex gap-4 pt-5 items-start max-w-5xl'>
+            <ul className='space-y-2 px-2 py-8 rounded flex-2 overflow-y-auto max-h-[55vh] pr-2 thin-scrollbar scroll-fade'>
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}

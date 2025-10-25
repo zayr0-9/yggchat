@@ -1333,7 +1333,7 @@ function Chat() {
   return (
     <div ref={containerRef} className='flex h-screen overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
       <div
-        className='relative flex flex-col flex-none min-w-[280px] h-screen overflow-hidden'
+        className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-screen overflow-hidden'
         style={{ width: heimdallVisible ? `${leftWidthPct}%` : '100%' }}
       >
         {/* Conversation Title Editor */}
@@ -1450,7 +1450,7 @@ function Chat() {
 
         {/* Messages Display */}
         <div
-          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-neutral-900 flex-1 min-h-0 ${!heimdallVisible ? 'px-20' : ''}`}
+          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-neutral-900 flex-1 min-h-0 ${!heimdallVisible ? 'px-2 sm:px-4 md:px-8 lg:px-12 xl:px-20' : ''}`}
           style={{ paddingBottom: `${inputAreaHeight}px` }}
         >
           <div
@@ -1522,7 +1522,7 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute bottom-0 left-0 max-w-4xl px-4 mx-auto ${!heimdallVisible ? 'max-w-5xl mx-auto' : ''} right-0 mx-4 mb-4 `}
+          className={`absolute bottom-0 left-0 px-2 sm:px-3 md:px-4 lg:px-6 mx-auto right-0 mb-2 sm:mb-4 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-5xl 2xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl'}`}
         >
           {/* Controls row (above) */}
 
@@ -1565,7 +1565,7 @@ function Chat() {
                         }
                       }}
                     >
-                      <span className='truncate max-w-[220px]'>{displayName}</span>
+                      <span className='truncate max-w-[100px] sm:max-w-[150px] md:max-w-[220px]'>{displayName}</span>
                       <button
                         type='button'
                         className='rounded dark:hover:bg-blue-200 hover:bg-blue-700 p-0.5 text-blue-700 dark:text-blue-200'
@@ -1583,7 +1583,7 @@ function Chat() {
                         className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${
                           isExpanded
                             ? 'hidden'
-                            : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
+                            : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
                         }`}
                       >
                         <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-2 truncate'>
@@ -1613,7 +1613,7 @@ function Chat() {
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   <div
-                    className='ide-status text-neutral-900 max-w-2/12 dark:text-neutral-200 break-words line-clamp-2 text-right'
+                    className='ide-status text-neutral-900 max-w-1/3 sm:max-w-1/4 dark:text-neutral-200 break-words line-clamp-2 text-right'
                     title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                   >
                     {ideContext?.extensionConnected ? '' : ''}
@@ -1643,7 +1643,7 @@ function Chat() {
                     options={providers.providers.map(p => p.name)}
                     placeholder='Select a provider...'
                     disabled={providers.providers.length === 0}
-                    className='flex-1 max-w-40 transition-transform duration-60 active:scale-97'
+                    className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 transition-transform duration-60 active:scale-97'
                     searchBarVisible={true}
                   />
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
@@ -1653,7 +1653,7 @@ function Chat() {
                     options={(localModel ?? models).map(m => m.name)}
                     placeholder='Select a model...'
                     disabled={(localModel ?? models).length === 0}
-                    className='flex-1 max-w-2xs transition-transform duration-60 active:scale-99'
+                    className='flex-1 max-w-32 sm:max-w-40 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99'
                     searchBarVisible={true}
                   />
                   <Button
@@ -1798,7 +1798,7 @@ function Chat() {
           return (
             <div
               className={`fixed z-[100000] -translate-y-full rounded-lg shadow-2xl border border-gray-600 p-3 transform transition-all duration-100 ease-out dark:bg-neutral-900 bg-slate-100 pointer-events-auto`}
-              style={{ left, top, maxWidth: 'min(90vw, 56rem)', width: '56rem' }}
+              style={{ left, top, maxWidth: '90vw', width: 'clamp(90vw, 90vw, 56rem)' }}
               onMouseDown={e => e.stopPropagation()}
               onMouseUp={e => e.stopPropagation()}
               onClick={e => e.stopPropagation()}
