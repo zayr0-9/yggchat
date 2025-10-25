@@ -105,9 +105,9 @@ const Homepage: React.FC = () => {
     <div className='bg-zinc-50 min-h-screen dark:bg-yBlack-500 flex'>
       <SideBar limit={12} projects={allProjects} />
       {/* Main content with flex layout */}
-      <div className='flex-1 mr-35 ml-15 transition-all duration-300'>
+      <div className='flex-1 mr-15 ml-15 transition-all duration-300'>
         <div className='py-4 max-w-[1640px] mx-auto'>
-          <div className='flex items-center justify-baseline px-2 py-10'>
+          <div className='flex items-center justify-baseline px-2 py-4'>
             <div className='flex items-center flex-wrap gap-3 rounded-full'>
               <img
                 src='/img/logo-d.svg'
@@ -123,7 +123,7 @@ const Homepage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className='p-6 max-w-7xl mx-auto'>
+        <div className='px-6  max-w-7xl mx-auto'>
           <div className='mb-4 flex items-center justify-between'>
             <h2 className='text-3xl py-4 font-bold dark:text-neutral-100'>Projects</h2>
             <div className='flex items-center gap-2 pt-2'>
@@ -192,7 +192,7 @@ const Homepage: React.FC = () => {
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
           <div className='gap-4 items-start max-w-5xl '>
-            <ul className='scroll-fade space-y-2 px-2 py-8 rounded flex-wrap overflow-y-auto max-h-[55vh] pr-2 thin-scrollbar'>
+            <ul className='scroll-fade space-y-2 px-2 py-8 rounded flex-wrap overflow-y-auto max-h-120 pr-2 thin-scrollbar'>
               {projects.map(project => (
                 <li
                   key={project.id}

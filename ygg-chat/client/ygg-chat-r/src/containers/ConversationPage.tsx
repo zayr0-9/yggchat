@@ -201,9 +201,9 @@ const ConversationPage: React.FC = () => {
       {/* Recent conversations sidebar */}
       <SideBar limit={12} projects={allProjects} />
       {/* Main content with flex layout */}
-      <div className='flex-1 mr-35 ml-15 transition-all py-6 duration-300'>
+      <div className='flex-1 mr-35 ml-15 transition-all p-2 duration-300'>
         <div className='py-4  max-w-[1640px] mx-auto'>
-          <div className='flex items-center justify-between mb-8'>
+          <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 pt-2 mb-2'>
               <Button
                 variant='outline'
@@ -233,7 +233,7 @@ const ConversationPage: React.FC = () => {
             )} */}
           </div>
         </div>
-        <div className='p-6 max-w-7xl mx-auto'>
+        <div className='px-6 max-w-7xl mx-auto'>
           <div className='mb-4 flex items-center justify-between max-w-5xl'>
             <h2 className='text-3xl py-4 font-bold dark:text-neutral-100'>Conversations</h2>
             <div className='flex items-center gap-2 pt-4 pr-4'>

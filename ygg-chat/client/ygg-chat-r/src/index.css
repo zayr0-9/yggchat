@@ -243,10 +243,7 @@ body.ygg-no-select * {
   /* Firefox - show on hover */
   scrollbar-color: #262626 transparent; /* dark: neutral-800 thumb on transparent track */
 }
-.dark .thin-scrollbar::-webkit-scrollbar-thumb {
-  background-color: transparent; /* Hidden by default */
-  transition: background-color 0.3s ease-in-out;
-}
+
 .dark .thin-scrollbar:hover::-webkit-scrollbar-thumb {
   background-color: #262626; /* dark: neutral-800 - visible on hover */
 }
