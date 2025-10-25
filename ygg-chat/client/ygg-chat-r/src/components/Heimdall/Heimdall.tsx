@@ -109,8 +109,17 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   // Track dark mode for shadows
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
   // Track pointers for pinch-to-zoom gesture
-  const pointerCacheRef = useRef<PointerEvent[]>([])
-  const prevPinchDistanceRef = useRef<number | null>(null)
+  const pointerMapRef = useRef<Map<number, { clientX: number; clientY: number; pointerType: string }>>(new Map())
+  const fallbackOffsetsRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const pinchStateRef = useRef<
+    | {
+        initialDistance: number
+        initialZoom: number
+        rafId: number | null
+        pending: { point: { clientX: number; clientY: number }; targetZoom: number } | null
+      }
+    | null
+  >(null)
   const isPinchingRef = useRef<boolean>(false)
 
   // Keep a stable inner offset so the whole tree does not shift when nodes are added/removed
@@ -207,6 +216,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     } catch {}
   }
 
+  const removeGlobalNoSelect = () => {
+    try {
+      document.body.classList.remove('ygg-no-select')
+    } catch {}
+  }
+
+
   // Debounced update function for notes
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -262,24 +278,165 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     [noteMessageId, getCurrentMessage, debouncedUpdateNote]
   )
 
+  const onWindowMouseMove = (e: globalThis.MouseEvent): void => {
+    if (isDraggingRef.current) {
+      setPan({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y })
+    } else if (isSelectingRef.current) {
+      const svgRect = svgRef.current?.getBoundingClientRect()
+      if (svgRect) {
+        const svgX = e.clientX - svgRect.left
+        const svgY = e.clientY - svgRect.top
+        setSelectionEnd({ x: svgX, y: svgY })
+      }
+    }
+  }
+
+  const onWindowTouchMove = (e: globalThis.TouchEvent): void => {
+    if (e.touches.length > 1) return
+
+    if (isDraggingRef.current || isSelectingRef.current) {
+      try {
+        e.preventDefault()
+      } catch {}
+    }
+    if (!e.touches || e.touches.length === 0) return
+    const t = e.touches[0]
+    if (isDraggingRef.current) {
+      setPan({ x: t.clientX - dragStartRef.current.x, y: t.clientY - dragStartRef.current.y })
+    } else if (isSelectingRef.current) {
+      const svgRect = svgRef.current?.getBoundingClientRect()
+      if (svgRect) {
+        const svgX = t.clientX - svgRect.left
+        const svgY = t.clientY - svgRect.top
+        setSelectionEnd({ x: svgX, y: svgY })
+      }
+    }
+  }
+
+  const addGlobalMoveListeners = (): void => {
+    window.addEventListener('mousemove', onWindowMouseMove)
+    window.addEventListener('pointermove', onWindowMouseMove)
+    window.addEventListener('touchmove', onWindowTouchMove, { passive: false })
+  }
+
+  const removeGlobalMoveListeners = (): void => {
+    window.removeEventListener('mousemove', onWindowMouseMove)
+    window.removeEventListener('pointermove', onWindowMouseMove)
+    window.removeEventListener('touchmove', onWindowTouchMove)
+  }
+
+  const clampZoomValue = (value: number) => Math.max(0.1, Math.min(3, value))
+
+  const applyZoomAtPoint = useCallback(
+    (point: { clientX: number; clientY: number }, desiredZoom: number) => {
+      const svgEl = svgRef.current
+      const currentZoom = zoomRef.current
+      const clampedZoom = clampZoomValue(desiredZoom)
+
+      if (!svgEl) {
+        if (Math.abs(clampedZoom - currentZoom) > 0.0001) {
+          setZoom(clampedZoom)
+        }
+        return
+      }
+
+      const rect = svgEl.getBoundingClientRect()
+      const cursorX = point.clientX - rect.left
+      const cursorY = point.clientY - rect.top
+
+      const currentPan = panRef.current
+      const tx = currentPan.x + rect.width / 2
+      const ty = currentPan.y + 100
+
+      const { x: ox, y: oy } = offsetRef.current ?? fallbackOffsetsRef.current
+
+      const worldX = (cursorX - tx) / currentZoom - ox
+      const worldY = (cursorY - ty) / currentZoom - oy
+
+      const newPanX = cursorX - (worldX + ox) * clampedZoom - rect.width / 2
+      const newPanY = cursorY - (worldY + oy) * clampedZoom - 100
+
+      if (Math.abs(clampedZoom - currentZoom) > 0.0001) {
+        setZoom(clampedZoom)
+      }
+      setPan({ x: newPanX, y: newPanY })
+    },
+    []
+  )
+
+  const queuePinchFrame = useCallback(
+    (point: { clientX: number; clientY: number }, targetZoom: number) => {
+      const state = pinchStateRef.current
+      if (!state) return
+
+      state.pending = { point, targetZoom }
+      if (state.rafId !== null) return
+
+      const frameOwner = state
+      frameOwner.rafId = requestAnimationFrame(() => {
+        const activeState = pinchStateRef.current
+        const payload = frameOwner.pending
+        frameOwner.pending = null
+        frameOwner.rafId = null
+
+        if (!activeState || !payload) {
+          return
+        }
+
+        applyZoomAtPoint(payload.point, payload.targetZoom)
+      })
+    },
+    [applyZoomAtPoint]
+  )
+
+  const beginPinch = useCallback(() => {
+    const touchPointers = Array.from(pointerMapRef.current.values()).filter(ptr => ptr.pointerType === 'touch')
+    if (touchPointers.length < 2) return false
+
+    const [first, second] = touchPointers
+    const initialDistance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY)
+    if (!initialDistance) return false
+
+    pinchStateRef.current = {
+      initialDistance,
+      initialZoom: zoomRef.current,
+      rafId: null,
+      pending: null,
+    }
+    isPinchingRef.current = true
+
+    setIsDragging(false)
+    isDraggingRef.current = false
+    setIsSelecting(false)
+    isSelectingRef.current = false
+    removeGlobalNoSelect()
+    removeGlobalMoveListeners()
+    return true
+  }, [removeGlobalMoveListeners, removeGlobalNoSelect])
+
+  const endPinch = useCallback(() => {
+    const state = pinchStateRef.current
+    if (state && state.rafId !== null) {
+      cancelAnimationFrame(state.rafId)
+    }
+    pinchStateRef.current = null
+    isPinchingRef.current = false
+  }, [])
+
   // Pointer Events with pointer capture for robust drag outside element
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>): void => {
-    // Add pointer to cache for multi-touch tracking
-    const pointerIndex = pointerCacheRef.current.findIndex(p => p.pointerId === e.pointerId)
-    if (pointerIndex === -1) {
-      pointerCacheRef.current.push(e.nativeEvent)
-    } else {
-      pointerCacheRef.current[pointerIndex] = e.nativeEvent
+    pointerMapRef.current.set(e.pointerId, {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      pointerType: e.pointerType,
+    })
+
+    const touchPointers = Array.from(pointerMapRef.current.values()).filter(ptr => ptr.pointerType === 'touch')
+    if (!isPinchingRef.current && touchPointers.length >= 2 && beginPinch()) {
+      return
     }
 
-    // If two pointers are active, start pinch gesture
-    if (pointerCacheRef.current.length === 2) {
-      isPinchingRef.current = true
-      const p1 = pointerCacheRef.current[0]
-      const p2 = pointerCacheRef.current[1]
-      const distance = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY)
-      prevPinchDistanceRef.current = distance
-      // Don't start dragging/selecting when pinching
+    if (isPinchingRef.current) {
       return
     }
 
@@ -298,7 +455,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       ;(e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId)
     } catch {}
 
-    if (e.button === 2) {
+    const isRightButton = e.button === 2 && e.pointerType !== 'touch'
+    const isPrimaryLike = e.button === 0 || e.pointerType === 'touch' || e.buttons === 1
+
+    if (isRightButton) {
       const svgRect = svgRef.current?.getBoundingClientRect()
       if (svgRect) {
         const svgX = e.clientX - svgRect.left
@@ -324,11 +484,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         window.addEventListener('touchend', onEnd)
         window.addEventListener('blur', onEnd)
       }
-    } else if (e.button === 0) {
+    } else if (isPrimaryLike) {
       setIsDragging(true)
       isDraggingRef.current = true
-      const ds = { x: e.clientX - pan.x, y: e.clientY - pan.y }
-      dragStartRef.current = ds
+      dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
       addGlobalNoSelect()
       // Fallback: also track globally in case pointer capture fails in some browsers
       addGlobalMoveListeners()
@@ -348,68 +507,34 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>): void => {
-    // Update pointer in cache
-    const pointerIndex = pointerCacheRef.current.findIndex(p => p.pointerId === e.pointerId)
-    if (pointerIndex !== -1) {
-      pointerCacheRef.current[pointerIndex] = e.nativeEvent
+    if (pointerMapRef.current.has(e.pointerId)) {
+      pointerMapRef.current.set(e.pointerId, {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        pointerType: e.pointerType,
+      })
     }
 
-    // Handle pinch-to-zoom if two pointers are active
-    if (isPinchingRef.current && pointerCacheRef.current.length === 2) {
-      const p1 = pointerCacheRef.current[0]
-      const p2 = pointerCacheRef.current[1]
+    if (isPinchingRef.current && pinchStateRef.current) {
+      const touchPointers = Array.from(pointerMapRef.current.values()).filter(ptr => ptr.pointerType === 'touch')
+      if (touchPointers.length >= 2) {
+        const [first, second] = touchPointers
+        const currentDistance = Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY)
+        const state = pinchStateRef.current
 
-      // Calculate current distance between pointers
-      const currentDistance = Math.hypot(p2.clientX - p1.clientX, p2.clientY - p1.clientY)
-
-      if (prevPinchDistanceRef.current !== null && prevPinchDistanceRef.current > 0) {
-        // Calculate the center point between the two pointers
-        const centerX = (p1.clientX + p2.clientX) / 2
-        const centerY = (p1.clientY + p2.clientY) / 2
-
-        const svgEl = svgRef.current
-        if (svgEl) {
-          const rect = svgEl.getBoundingClientRect()
-
-          // Convert center to SVG coordinates
-          const cursorX = centerX - rect.left
-          const cursorY = centerY - rect.top
-
-          const currentZoom = zoomRef.current
-          const currentPan = panRef.current
-
-          // Use logarithmic scaling with damping for smoother zoom
-          const DAMPING_FACTOR = 0.4 // Adjust between 0.1 (slower) and 1.0 (faster)
-          const distanceRatio = (currentDistance - prevPinchDistanceRef.current) / prevPinchDistanceRef.current
-          const zoomDelta = distanceRatio * DAMPING_FACTOR
-          const newZoom = Math.max(0.1, Math.min(3, currentZoom * (1 + zoomDelta)))
-
-          // Only update if zoom actually changed
-          if (Math.abs(newZoom - currentZoom) > 0.001) {
-            // Outer group transform components
-            const tx = currentPan.x + rect.width / 2
-            const ty = currentPan.y + 100
-
-            // Use stable inner offset
-            const ox = offsetRef.current ? offsetRef.current.x : offsetX
-            const oy = offsetRef.current ? offsetRef.current.y : offsetY
-
-            // Convert cursor screen position to world coordinates under current transform
-            const worldX = (cursorX - tx) / currentZoom - ox
-            const worldY = (cursorY - ty) / currentZoom - oy
-
-            // Compute new pan so that the same world point stays under the cursor after zoom
-            const newPanX = cursorX - (worldX + ox) * newZoom - rect.width / 2
-            const newPanY = cursorY - (worldY + oy) * newZoom - 100
-
-            setZoom(newZoom)
-            setPan({ x: newPanX, y: newPanY })
+        if (state && state.initialDistance > 0 && currentDistance > 0) {
+          const ratio = currentDistance / state.initialDistance
+          const targetZoom = clampZoomValue(state.initialZoom * ratio)
+          const midpoint = {
+            clientX: (first.clientX + second.clientX) / 2,
+            clientY: (first.clientY + second.clientY) / 2,
           }
+          queuePinchFrame(midpoint, targetZoom)
         }
-
-        // Update previous distance for next frame
-        prevPinchDistanceRef.current = currentDistance
       }
+      try {
+        e.preventDefault()
+      } catch {}
       return // Don't process dragging/selecting while pinching
     }
 
@@ -426,22 +551,19 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>): void => {
-    // Remove pointer from cache
-    const pointerIndex = pointerCacheRef.current.findIndex(p => p.pointerId === e.pointerId)
-    if (pointerIndex !== -1) {
-      pointerCacheRef.current.splice(pointerIndex, 1)
-    }
+    pointerMapRef.current.delete(e.pointerId)
 
-    // If less than two pointers remain, end pinch gesture
-    if (pointerCacheRef.current.length < 2) {
-      isPinchingRef.current = false
-      prevPinchDistanceRef.current = null
+    if (isPinchingRef.current) {
+      const touchPointers = Array.from(pointerMapRef.current.values()).filter(ptr => ptr.pointerType === 'touch')
+      if (touchPointers.length < 2) {
+        endPinch()
+      }
     }
 
     try {
       ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
     } catch {}
-    // If we were selecting, record mouse-up position to anchor the context menu
+
     if (isSelectingRef.current) {
       const rect = containerRef.current?.getBoundingClientRect()
       if (rect) {
@@ -450,48 +572,43 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         setContextMenuPos(pos)
       }
     }
+
     handleMouseUp()
   }
 
   const handlePointerCancel = (e: React.PointerEvent<SVGSVGElement>): void => {
-    // Remove pointer from cache
-    const pointerIndex = pointerCacheRef.current.findIndex(p => p.pointerId === e.pointerId)
-    if (pointerIndex !== -1) {
-      pointerCacheRef.current.splice(pointerIndex, 1)
-    }
+    pointerMapRef.current.delete(e.pointerId)
 
-    // If less than two pointers remain, end pinch gesture
-    if (pointerCacheRef.current.length < 2) {
-      isPinchingRef.current = false
-      prevPinchDistanceRef.current = null
+    if (isPinchingRef.current) {
+      const touchPointers = Array.from(pointerMapRef.current.values()).filter(ptr => ptr.pointerType === 'touch')
+      if (touchPointers.length < 2) {
+        endPinch()
+      }
     }
 
     try {
       ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
     } catch {}
+
     handleMouseUp()
   }
-  const removeGlobalNoSelect = () => {
-    try {
-      document.body.classList.remove('ygg-no-select')
-    } catch {}
-  }
-  // Safety: ensure global side effects are removed if component unmounts mid-drag
+
   useEffect(() => {
+    const pointerMap = pointerMapRef.current
     return () => {
       removeGlobalNoSelect()
-      // Also remove any global move listeners just in case a drag was active
-      try {
-        // removeGlobalMoveListeners is declared below; function hoisting makes this safe
-        // eslint-disable-next-line @typescript-eslint/no-use-before-define
-        removeGlobalMoveListeners()
-      } catch {}
-      // Clean up debounce timeout
+      removeGlobalMoveListeners()
+      const state = pinchStateRef.current
+      if (state && state.rafId !== null) {
+        cancelAnimationFrame(state.rafId)
+      }
+      pinchStateRef.current = null
+      pointerMap.clear()
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current)
       }
     }
-  }, [])
+  }, [removeGlobalMoveListeners, removeGlobalNoSelect])
 
   // Keep refs in sync with latest state for out-of-react listeners
   useEffect(() => {
@@ -747,6 +864,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const offsetX = hasPositions ? (offsetRef.current ? offsetRef.current.x : -bounds.minX + 50) : 0
   const offsetY = hasPositions ? (offsetRef.current ? offsetRef.current.y : -bounds.minY + 50) : 0
 
+  useEffect(() => {
+    fallbackOffsetsRef.current = { x: offsetX, y: offsetY }
+  }, [offsetX, offsetY])
+
   // Center the viewport on a specific node id (string) without altering zoom
   const centerOnNode = (targetNodeId: string): void => {
     const pos = positions[targetNodeId]
@@ -863,7 +984,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       } catch {}
 
       // Handle zoom centered at the cursor position
-      const svgEl = svgRef.current
       // Normalize delta to pixels across browsers/devices
       const LINE_HEIGHT = 16
       const PAGE_HEIGHT = 800
@@ -872,46 +992,15 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         if (mode === 2) return dy * pageH // pages -> px
         return dy // already in px
       }
-      if (!svgEl) {
-        const deltaYPx = normalizeDeltaPx(e.deltaY, e.deltaMode, PAGE_HEIGHT)
-        const scale = Math.exp(-deltaYPx * 0.001) // smooth, device-independent
-        setZoom(prev => Math.max(0.1, Math.min(3, prev * scale)))
-        return
-      }
-
-      const rect = svgEl.getBoundingClientRect()
-      const cursorX = e.clientX - rect.left
-      const cursorY = e.clientY - rect.top
-
       const currentZoom = zoomRef.current
-      // Normalize deltaY using actual pixel-equivalent distance, then map via exponential scale
-      const deltaYPx = normalizeDeltaPx(e.deltaY, e.deltaMode, rect.height)
-      const scale = Math.exp(-deltaYPx * 0.001) // smaller factor => less sensitive
-      const newZoom = Math.max(0.1, Math.min(3, currentZoom * scale))
+      const svgHeight = svgRef.current?.getBoundingClientRect().height ?? PAGE_HEIGHT
+      const deltaYPx = normalizeDeltaPx(e.deltaY, e.deltaMode, svgHeight)
+      const scale = Math.exp(-deltaYPx * 0.001)
+      const targetZoom = clampZoomValue(currentZoom * scale)
 
-      // No change
-      if (newZoom === currentZoom) return
+      if (Math.abs(targetZoom - currentZoom) < 0.0001) return
 
-      const currentPan = panRef.current
-
-      // Outer group transform components (derive width from current SVG rect to avoid stale dimensions)
-      const tx = currentPan.x + rect.width / 2
-      const ty = currentPan.y + 100
-
-      // Use stable inner offset if available, else fall back to computed values
-      const ox = offsetRef.current ? offsetRef.current.x : offsetX
-      const oy = offsetRef.current ? offsetRef.current.y : offsetY
-
-      // Convert cursor screen position to world coordinates under current transform
-      const worldX = (cursorX - tx) / currentZoom - ox
-      const worldY = (cursorY - ty) / currentZoom - oy
-
-      // Compute new pan so that the same world point stays under the cursor after zoom
-      const newPanX = cursorX - (worldX + ox) * newZoom - rect.width / 2
-      const newPanY = cursorY - (worldY + oy) * newZoom - 100
-
-      setZoom(newZoom)
-      setPan({ x: newPanX, y: newPanY })
+      applyZoomAtPoint({ clientX: e.clientX, clientY: e.clientY }, targetZoom)
     }
 
     // Add wheel listener with passive: false to allow preventDefault
@@ -920,7 +1009,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     return () => {
       container.removeEventListener('wheel', handleWheel)
     }
-  }, [])
+  }, [applyZoomAtPoint])
 
   // Function to determine which nodes are within the selection rectangle
   const getNodesInSelectionRectangle = (): MessageId[] => {
@@ -998,56 +1087,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     isDraggingRef.current = false
     // Extra safety in case global listeners missed it
     removeGlobalNoSelect()
-  }
-
-  // Global move listeners to continue interactions outside the SVG
-  const onWindowMouseMove = (e: globalThis.MouseEvent): void => {
-    if (isDraggingRef.current) {
-      setPan({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y })
-    } else if (isSelectingRef.current) {
-      const svgRect = svgRef.current?.getBoundingClientRect()
-      if (svgRect) {
-        const svgX = e.clientX - svgRect.left
-        const svgY = e.clientY - svgRect.top
-        setSelectionEnd({ x: svgX, y: svgY })
-      }
-    }
-  }
-
-  const onWindowTouchMove = (e: globalThis.TouchEvent): void => {
-    // Skip if pinching - pointer events will handle it
-    if (e.touches.length > 1) return
-
-    // Prevent page scroll while interacting
-    if (isDraggingRef.current || isSelectingRef.current) {
-      try {
-        e.preventDefault()
-      } catch {}
-    }
-    if (!e.touches || e.touches.length === 0) return
-    const t = e.touches[0]
-    if (isDraggingRef.current) {
-      setPan({ x: t.clientX - dragStartRef.current.x, y: t.clientY - dragStartRef.current.y })
-    } else if (isSelectingRef.current) {
-      const svgRect = svgRef.current?.getBoundingClientRect()
-      if (svgRect) {
-        const svgX = t.clientX - svgRect.left
-        const svgY = t.clientY - svgRect.top
-        setSelectionEnd({ x: svgX, y: svgY })
-      }
-    }
-  }
-
-  const addGlobalMoveListeners = (): void => {
-    window.addEventListener('mousemove', onWindowMouseMove)
-    window.addEventListener('pointermove', onWindowMouseMove)
-    window.addEventListener('touchmove', onWindowTouchMove, { passive: false })
-  }
-
-  const removeGlobalMoveListeners = (): void => {
-    window.removeEventListener('mousemove', onWindowMouseMove)
-    window.removeEventListener('pointermove', onWindowMouseMove)
-    window.removeEventListener('touchmove', onWindowTouchMove)
   }
 
   // Handle right-click context menu events
