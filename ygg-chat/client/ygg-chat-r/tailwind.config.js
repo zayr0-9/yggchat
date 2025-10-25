@@ -13,10 +13,12 @@ export default {
         dm: ['"DM Sans"', 'sans-serif'],
       },
       screens: {
+        // Override default 2xl breakpoint for proper 1080p detection
+        '2xl': '1920px',  // Full HD / 1080p displays (overrides Tailwind's default 1536px)
+
         // Extended breakpoints for larger displays
-        'fhd': '1920px',  // Full HD / 1080p displays
-        '3xl': '1920px',  // 2K displays at standard scaling
-        '4xl': '2560px',  // 4K displays at standard scaling
+        '3xl': '2560px',  // 2K displays at standard scaling
+        '4xl': '3840px',  // 4K displays at standard scaling
 
         // Pixel density breakpoints to normalize high-DPI rendering
         'hidpi': { raw: '(min-resolution: 144dpi)' },

@@ -102,11 +102,11 @@ const Homepage: React.FC = () => {
   }
 
   return (
-    <div className='bg-zinc-50 min-h-screen dark:bg-yBlack-500 flex'>
+    <div className='bg-zinc-50 h-screen overflow-hidden dark:bg-yBlack-500 flex'>
       <SideBar limit={12} projects={allProjects} />
       {/* Main content with flex layout - Responsive margins for different displays */}
-      <div className='flex-1 mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-35 2xl:ml-15 3xl:mr-35 3xl:ml-15 transition-all duration-300'>
-        <div className='py-4 max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-[1640px] 3xl:max-w-[1920px] 4xl:max-w-[2400px] mx-auto'>
+      <div className='flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
+        <div className='py-4 w-full max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-[1600px] 3xl:max-w-[2000px] 4xl:max-w-[2400px] mx-auto shrink-0'>
           <div className='flex items-center justify-baseline px-2 py-4'>
             <div className='flex items-center flex-wrap gap-3 rounded-full'>
               <img
@@ -123,7 +123,7 @@ const Homepage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className='px-2 sm:px-4 md:px-6 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl 3xl:max-w-[1920px] 4xl:max-w-[2400px] mx-auto'>
+        <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between'>
             <h2 className='text-2xl sm:text-3xl py-4 font-bold dark:text-neutral-100'>Projects</h2>
             <div className='flex items-center gap-2 pt-2'>
@@ -191,8 +191,8 @@ const Homepage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
-          <div className='gap-2 sm:gap-3 md:gap-4 items-start max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl'>
-            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-4 sm:py-8 rounded flex-wrap overflow-y-auto max-h-120 pr-2 thin-scrollbar'>
+          <div className='gap-2 sm:gap-3 md:gap-4 items-start w-full max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl flex-1 overflow-hidden flex flex-col'>
+            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-4 sm:py-8 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
               {projects.map(project => (
                 <li
                   key={project.id}

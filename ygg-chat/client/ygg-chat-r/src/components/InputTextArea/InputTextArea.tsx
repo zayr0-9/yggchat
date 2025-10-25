@@ -440,12 +440,12 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
     primary:
       'text-stone-900 dark:text-stone-200 placeholder-neutral-700 dark:placeholder-neutral-200 border-secondary-600 outline-none focus:border-secondary-600 focus:ring-1 focus:ring-opacity-50 dark:focus:ring-secondary-600',
     outline:
-      'px-3 py-2 sm:px-4 sm:py-3 md:px-4 md:py-3 lg:px-5 lg:py-4 3xl:px-6 3xl:py-5 4xl:px-8 4xl:py-6 rounded-3xl overflow-hidden bg-transparent text-neutral-900 dark:text-neutral-300 border border-neutral-300 focus:border-neutral-400 dark:border-neutral-700 outline-none  dark:border-neutral-700 dark:focus:border-neutral-600 ',
+      'px-3 py-2 sm:px-4 sm:py-3 md:px-4 md:py-3 lg:px-5 lg:py-4 2xl:px-5 2xl:py-4 3xl:px-6 3xl:py-5 4xl:px-8 4xl:py-6 rounded-3xl overflow-hidden bg-transparent text-neutral-900 dark:text-neutral-300 border border-neutral-300 focus:border-neutral-400 dark:border-neutral-700 outline-none  dark:border-neutral-700 dark:focus:border-neutral-600 ',
   }
 
   const baseStyles = outline
-    ? `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 overflow-hidden bg-transparent text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] ${variantStyles[variant]}`
-    : `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-yBlack-900 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[12px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]`
+    ? `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 2xl:px-5 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 overflow-hidden bg-transparent text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] ${variantStyles[variant]}`
+    : `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-5 lg:py-2 2xl:px-5 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-yBlack-900 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[18px]`
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
 
   const stateStyles = outline
@@ -528,7 +528,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
                 onMouseEnter={() => setSelectedFileIndex(index)}
               >
                 <div className='font-medium truncate'>{file.name}</div>
-                <div className='text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate'>
+                <div className='text-[10px] sm:text-xs md:text-xs lg:text-sm 2xl:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate'>
                   {file.path}
                 </div>
               </div>

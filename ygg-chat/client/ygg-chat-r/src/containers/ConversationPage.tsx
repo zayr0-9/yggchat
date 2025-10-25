@@ -201,8 +201,8 @@ const ConversationPage: React.FC = () => {
       {/* Recent conversations sidebar */}
       <SideBar limit={12} projects={allProjects} />
       {/* Main content with flex layout - Responsive margins for different displays */}
-      <div className='flex-1 mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-35 2xl:ml-15 3xl:mr-35 3xl:ml-15 transition-all p-2 duration-300'>
-        <div className='py-4 max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-6xl xl:max-w-6xl 2xl:max-w-[1440px] 3xl:max-w-[1920px] 4xl:max-w-[2400px] mx-auto'>
+      <div className='flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all p-2 duration-300'>
+        <div className='py-4 w-full max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-6xl xl:max-w-6xl 2xl:max-w-[1600px] 3xl:max-w-[2000px] 4xl:max-w-[2400px] mx-auto shrink-0'>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 pt-2 mb-2'>
               <Button
@@ -213,7 +213,7 @@ const ConversationPage: React.FC = () => {
                 className='group border-2 hover:bg-pureWhite-100 dark:hover:bg-neutral-900 border-pureWhite-200 dark:border-neutral-800 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.5)] dark:shadow-[0_1px_22px_1px_rgba(0,0,0,0.45)]'
               >
                 <i
-                  className='bx bx-home text-[16px] sm:text-[14px] md:text-[14px] lg:text-[22px] 2xl:text-[26px] 3xl:text-[16px] 4xl:text-[16px] pb-0.75 transition-transform group-hover:scale-101 duration-100 group-active:scale-93 pointer-events-none'
+                  className='bx bx-home text-[16px] sm:text-[14px] md:text-[14px] lg:text-[22px] 2xl:text-[24px] 3xl:text-[28px] 4xl:text-[32px] pb-0.75 transition-transform group-hover:scale-101 duration-100 group-active:scale-93 pointer-events-none'
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -233,7 +233,7 @@ const ConversationPage: React.FC = () => {
             )} */}
           </div>
         </div>
-        <div className='px-2 sm:px-4 md:px-6 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl 3xl:max-w-[1920px] 4xl:max-w-[2400px] mx-auto'>
+        <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl'>
             <h2 className='text-2xl sm:text-3xl py-4 font-bold dark:text-neutral-100'>Conversations</h2>
             <div className='flex items-center gap-2 pt-4 pr-4'>
@@ -276,16 +276,16 @@ const ConversationPage: React.FC = () => {
 
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
-          <div className='flex gap-4 pt-5 items-start max-w-5xl'>
-            <ul className='space-y-2 px-2 py-8 rounded flex-2 overflow-y-auto max-h-[55vh] pr-2 thin-scrollbar scroll-fade'>
+          <div className='flex gap-4 pt-5 items-start max-w-5xl w-full flex-1 overflow-hidden flex-col'>
+            <ul className='space-y-2 px-2 py-4 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar scroll-fade w-full'>
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}
-                  className='px-3 pb-4 pt-2 mb-6 bg-indigo-50 rounded-lg cursor-pointer dark:bg-yBlack-900 dark:outline-1 dark:outline-neutral-800 hover:bg-indigo-100 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
+                  className='px-3 pb-2 pt-2 mb-2 md:mb-2 lg:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer dark:bg-yBlack-900 dark:outline-1 dark:outline-neutral-800 hover:bg-indigo-100 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
                   onClick={() => handleSelect(conv)}
                 >
                   <div className='flex items-center justify-between'>
-                    <span className='font-semibold text-lg dark:text-neutral-300 transition-transform duration-100 group-active:scale-99'>
+                    <span className='font-semibold text-lg dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[16px] sm:text-[14px] md:text-[14px] lg:text-[16px] 2xl:text-[17px] 3xl:text-[18px] 4xl:text-[20px]'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
                     <Button
