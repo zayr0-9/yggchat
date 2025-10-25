@@ -61,10 +61,10 @@ export const Select: React.FC<SelectProps> = ({
       case 'small':
         return 'px-2 py-1 sm:px-3 sm:py-1.5 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-lg 4xl:text-xl leading-none'
       case 'large':
-        return 'px-3 py-2 sm:px-4 sm:py-3 text-[14px] sm:text-[12px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] leading-none'
+        return 'px-3 py-2 sm:px-4 sm:py-2 text-[14px] sm:text-[12px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] leading-none'
       case 'medium':
       default:
-        return 'px-2.5 py-2 sm:px-3 sm:py-3 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-xl 4xl:text-2xl leading-none'
+        return 'px-2.5 py-2 sm:px-3 sm:py-2 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-xl 4xl:text-2xl leading-none'
     }
   }, [size])
 
