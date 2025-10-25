@@ -192,11 +192,11 @@ const Homepage: React.FC = () => {
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
           <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl flex-1 overflow-hidden flex flex-col'>
-            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-4 sm:py-8 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
+            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-8 sm:py-8 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
               {projects.map(project => (
                 <li
                   key={project.id}
-                  className='sm:p-2 md:p-2 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-2 xl:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
+                  className='p-2 sm:p-2 md:p-2 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-2 xl:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className='flex place-items-start justify-between'>
