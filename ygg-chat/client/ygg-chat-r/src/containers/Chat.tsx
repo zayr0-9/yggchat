@@ -832,6 +832,13 @@ function Chat() {
     setLocalInput(messageInput.content)
   }, [messageInput.content, currentConversationId])
 
+  // Set OpenRouter as default provider if no provider is selected
+  useEffect(() => {
+    if (!providers.currentProvider) {
+      dispatch(chatSliceActions.providerSelected('OpenRouter'))
+    }
+  }, [providers.currentProvider, dispatch])
+
   // Initialize or set conversation based on route param
   useEffect(() => {
     if (conversationIdFromUrl) {
@@ -863,12 +870,13 @@ function Chat() {
     },
     [models, dispatch]
   )
-  const handleProviderSelect = useCallback(
-    (providerName: string) => {
-      dispatch(chatSliceActions.providerSelected(providerName))
-    },
-    [dispatch]
-  )
+  // Commented out - provider selection removed from UI, defaulting to OpenRouter
+  // const handleProviderSelect = useCallback(
+  //   (providerName: string) => {
+  //     dispatch(chatSliceActions.providerSelected(providerName))
+  //   },
+  //   [dispatch]
+  // )
   // Local version of canSend that checks localInput instead of Redux state
   const canSendLocal = useMemo(() => {
     const hasInput = localInput.trim().length > 0
@@ -1629,7 +1637,8 @@ function Chat() {
                   </Button>
 
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
-                  <Select
+                  {/* Provider selector commented out - defaulting to OpenRouter */}
+                  {/* <Select
                     value={providers.currentProvider || ''}
                     onChange={handleProviderSelect}
                     options={providers.providers.map(p => p.name)}
@@ -1637,7 +1646,7 @@ function Chat() {
                     disabled={providers.providers.length === 0}
                     className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 transition-transform duration-60 active:scale-97'
                     searchBarVisible={true}
-                  />
+                  /> */}
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
                   <Select
                     value={selectedModel?.name || ''}
