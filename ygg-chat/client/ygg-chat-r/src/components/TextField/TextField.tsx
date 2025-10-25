@@ -60,10 +60,11 @@ export const TextField: React.FC<TextFieldProps> = ({
   // Size variants control padding and text size
   const sizeStyles = {
     small:
-      'px-3 md:px-2.5 lg:px-2 xl:px-1.5 py-1.5 md:py-1 lg:py-1 xl:py-0.5 text-sm md:text-xs lg:text-xs xl:text-[10px]',
+      'px-3 md:px-2.5 lg:px-2 xl:px-1.5 py-1.5 md:py-1 lg:py-1 xl:py-0.5 text-sm md:text-xs lg:text-xs xl:text-[10px] 2xl:text-[12px]',
     medium:
       'px-4 md:px-3.5 lg:px-3 xl:px-2.5 py-2 md:py-2 lg:py-2 xl:py-2 text-base md:text-sm lg:text-xs xl:text-[14px] 2xl:text-[14px]',
-    large: 'px-5 md:px-4 lg:px-3.5 xl:px-3 py-3 md:py-2.5 lg:py-2 xl:py-1.5 text-lg md:text-base lg:text-sm xl:text-xs',
+    large:
+      'px-5 md:px-4 lg:px-3.5 xl:px-3 py-3 md:py-2.5 lg:py-2 xl:py-1.5 text-lg md:text-base lg:text-sm xl:text-[16px] 2xl:text-[18px]',
   }
 
   // State-based styles change based on error state and disabled state

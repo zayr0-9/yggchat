@@ -13,14 +13,17 @@ export default {
         dm: ['"DM Sans"', 'sans-serif'],
       },
       screens: {
-        // Override default 2xl breakpoint for proper 1080p detection
-        '2xl': '1920px',  // Full HD / 1080p displays (overrides Tailwind's default 1536px)
+        // Standard Tailwind breakpoints (sm: 640px, md: 768px, lg: 1024px, xl: 1280px remain default)
 
-        // Extended breakpoints for larger displays
-        '3xl': '2560px',  // 2K displays at standard scaling
-        '4xl': '3840px',  // 4K displays at standard scaling
+        // Override default 2xl breakpoint to target Full HD only (1920 ≤ width < 2560)
+        '2xl': { min: '1920px', max: '2559px' },
+
+        // Extended breakpoints for larger displays using non-overlapping ranges
+        '3xl': { min: '2560px', max: '3839px' },  // 2K/QHD displays (2560×1440)
+        '4xl': { min: '3840px' },                // 4K/UHD displays (3840×2160)
 
         // Pixel density breakpoints to normalize high-DPI rendering
+        // These detect physical pixel density, not viewport size
         'hidpi': { raw: '(min-resolution: 144dpi)' },
         'retina': { raw: '(-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi)' },
       },

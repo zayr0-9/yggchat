@@ -192,12 +192,12 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                     {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
                   </Button>
                 ) : (
-                  <div className='flex flex-col gap-2 md:gap-1.5 lg:gap-1.5 xl:gap-1 py-2 md:py-1.5 lg:py-1.5 xl:py-1 mx-2'>
-                    <span className='text-sm md:text-xs lg:text-xs xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[18px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
+                  <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-1.5 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
+                    <span className='text-sm md:text-xs lg:text-xs xl:text-[10px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[18px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
                     {projectName && (
-                      <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
+                      <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
                         Project: {projectName}
                       </span>
                     )}
@@ -239,31 +239,31 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           className='group'
         >
           <i
-            className={`bx ${themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun'} text-3xl md:text-2xl lg:text-xl xl:text-lg p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none`}
+            className={`bx ${themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun'} text-3xl md:text-2xl lg:text-xl xl:text-lg 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none`}
             aria-hidden='true'
           ></i>
         </Button>
         {!isCollapsed && (
-          <div className='flex flex-4 items-center justify-start text-lg md:text-base lg:text-sm xl:text-xs dark:text-stone-300'>
+          <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-xs xl:text-xs 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
             {themeMode}
           </div>
         )}
       </div>
-      <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
-        <div className='flex items-center justify-center gap-2'>
-          <div className='flex flex-1 items-center justify-center text-lg md:text-base lg:text-sm xl:text-xs dark:text-stone-300'>
+      <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-3'>
+        <div className='flex items-center justify-center gap-0'>
+          <div className='flex flex-1 items-center justify-start text-lg md:text-base lg:text-sm xl:text-xs 2xl:text-[16px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
             <Button
               variant='outline2'
-              size='large'
+              size='smaller'
               rounded='full'
-              className='h-12 md:h-11 lg:h-10 xl:h-9 w-12 md:w-11 lg:w-10 xl:w-9 text-sm md:text-xs lg:text-xs xl:text-[10px] font-semibold'
+              className='group'
               onClick={() => navigate('/payment')}
             >
-              <i className='bx bx-user-circle text-3xl md:text-2xl lg:text-xl xl:text-lg hover:scale-104 active:scale-95 p-4 md:p-3.5 lg:p-3 xl:p-2'></i>
+              <i className='bx bx-user-circle text-3xl md:text-2xl lg:text-xl xl:text-lg 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] hover:scale-104 active:scale-95'></i>
             </Button>
           </div>
-          <div className='flex flex-4 items-center justify-start text-lg md:text-base lg:text-sm xl:text-xs dark:text-stone-300'>
-            {!isCollapsed && <h3> User Name </h3>}
+          <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-xs xl:text-xs 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] pl-1 dark:text-stone-300'>
+            {!isCollapsed && <h3> Get user name </h3>}
           </div>
         </div>
       </div>

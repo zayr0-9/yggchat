@@ -283,11 +283,11 @@ const ConversationPage: React.FC = () => {
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}
-                  className='px-3 pb-2 pt-2 mb-2 md:mb-2 lg:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer dark:bg-yBlack-900 dark:outline-1 dark:outline-neutral-800 hover:bg-indigo-100 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
+                  className='px-3 pb-2 pt-2 mb-2 md:mb-2 lg:mb-2 xl:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer dark:bg-yBlack-900 dark:outline-1 dark:outline-neutral-800 hover:bg-indigo-100 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
                   onClick={() => handleSelect(conv)}
                 >
                   <div className='flex items-center justify-between'>
-                    <span className='font-semibold text-lg dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[16px] sm:text-[14px] md:text-[14px] lg:text-[16px] 2xl:text-[17px] 3xl:text-[18px] 4xl:text-[20px]'>
+                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 md:text-[11px] lg:text-[10px] xl:text-[10px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px]'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
                     <Button
