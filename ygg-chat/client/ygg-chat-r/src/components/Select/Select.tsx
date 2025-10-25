@@ -55,16 +55,16 @@ export const Select: React.FC<SelectProps> = ({
 
   const selected = useMemo(() => normOptions.find(o => o.value === value) || null, [normOptions, value])
 
-  // Size styles to mirror Button component sizes
+  // Size styles to mirror Button component sizes with responsive text sizing
   const sizeClass = useMemo(() => {
     switch (size) {
       case 'small':
-        return 'px-3 py-1.5 text-sm leading-none'
+        return 'px-2 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-lg 4xl:text-xl leading-none'
       case 'large':
-        return 'px-4 py-3 text-lg leading-none'
+        return 'px-3 py-2 sm:px-4 sm:py-3 text-sm sm:text-sm md:text-sm lg:text-base 3xl:text-2xl 4xl:text-3xl leading-none'
       case 'medium':
       default:
-        return 'px-3 py-3 text-base leading-none'
+        return 'px-2.5 py-2 sm:px-3 sm:py-3 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-xl 4xl:text-2xl leading-none'
     }
   }, [size])
 
@@ -198,7 +198,7 @@ export const Select: React.FC<SelectProps> = ({
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder='Search...'
-                className='w-full px-2 py-1 text-sm rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
+                className='w-full px-2 py-1 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-lg 4xl:text-xl rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
                 autoFocus
               />
             </div>
@@ -208,7 +208,7 @@ export const Select: React.FC<SelectProps> = ({
             style={{ maxHeight: searchBarVisible ? (listMaxHeight || 280) - 50 : listMaxHeight }}
           >
             {filteredOptions.length === 0 ? (
-              <div className='px-3 py-2 text-sm text-neutral-500 dark:text-neutral-400'>
+              <div className='px-3 py-2 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-lg 4xl:text-xl text-neutral-500 dark:text-neutral-400'>
                 {searchBarVisible && searchTerm.trim() ? 'No matching options' : 'No options'}
               </div>
             ) : (
@@ -229,7 +229,7 @@ export const Select: React.FC<SelectProps> = ({
                       handleSelect(opt.value)
                     }}
                     onClick={() => handleSelect(opt.value)}
-                    className={`w-full text-left px-3 py-2 text-sm transition-colors
+                    className={`w-full text-left px-3 py-2 text-xs sm:text-xs md:text-xs lg:text-sm 3xl:text-lg 4xl:text-xl transition-colors
                       ${isActive ? 'bg-neutral-100 dark:bg-yBlack-500' : ''}
                       ${isSelected ? 'font-medium' : ''}
                       text-stone-800 dark:text-stone-100`}

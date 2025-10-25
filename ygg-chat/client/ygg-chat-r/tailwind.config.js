@@ -14,6 +14,7 @@ export default {
       },
       screens: {
         // Extended breakpoints for larger displays
+        'fhd': '1920px',  // Full HD / 1080p displays
         '3xl': '1920px',  // 2K displays at standard scaling
         '4xl': '2560px',  // 4K displays at standard scaling
 

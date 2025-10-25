@@ -1601,15 +1601,6 @@ function Chat() {
               </div>
             )}
             <div className='bg-neutral-100 rounded-b-lg dark:bg-yBlack-900 flex flex-col items-end'>
-              {/* <h3 className='text-lg font-semibold text-stone-800 dark:text-stone-200 mb-3'>Send Message:</h3> */}
-
-              {/* {messageInput.content.length > 0 && (
-              <small className='text-stone-800 dark:text-stone-200 text-xs mb-3 block text-right w-full'>
-                Press Enter to send, Shift+Enter for new line
-              </small>
-            )} */}
-
-              {/* <h3 className='text-lg font-semibold text-stone-800 dark:text-stone-200 mb-1'>Model Selection:</h3> */}
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   <div
