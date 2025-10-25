@@ -1331,9 +1331,9 @@ function Chat() {
   // incorrect parent linking that could break currentPath after branching.
 
   return (
-    <div ref={containerRef} className='flex h-screen overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
+    <div ref={containerRef} className='flex h-[100dvh] overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
       <div
-        className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-screen overflow-hidden'
+        className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-[100dvh] overflow-hidden'
         style={{ width: heimdallVisible ? `${leftWidthPct}%` : '100%' }}
       >
         {/* Conversation Title Editor */}
@@ -1522,7 +1522,8 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute bottom-0 left-0 px-2 sm:px-3 md:px-4 lg:px-6 mx-auto right-0 mb-2 sm:mb-4 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-5xl 2xl:max-w-5xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+          className={`absolute bottom-0 left-0 px-2 sm:px-3 md:px-4 lg:px-6 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-5xl 2xl:max-w-5xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+          style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {/* Controls row (above) */}
 
