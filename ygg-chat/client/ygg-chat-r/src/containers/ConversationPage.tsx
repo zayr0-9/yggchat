@@ -200,9 +200,9 @@ const ConversationPage: React.FC = () => {
     <div className='bg-zinc-50 dark:bg-zinc-900 flex overflow-hidden h-screen'>
       {/* Recent conversations sidebar */}
       <SideBar limit={12} projects={allProjects} />
-      {/* Main content with flex layout */}
-      <div className='flex-1 mr-35 ml-15 transition-all p-2 duration-300'>
-        <div className='py-4  max-w-[1640px] mx-auto'>
+      {/* Main content with flex layout - Responsive margins for different displays */}
+      <div className='flex-1 mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-35 2xl:ml-15 3xl:mr-35 3xl:ml-15 transition-all p-2 duration-300'>
+        <div className='py-4 max-w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-[1640px] 3xl:max-w-[1920px] 4xl:max-w-[2400px] mx-auto'>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 pt-2 mb-2'>
               <Button
@@ -217,7 +217,7 @@ const ConversationPage: React.FC = () => {
                   aria-hidden='true'
                 ></i>
               </Button>
-              <h1 className='text-5xl py-4 px-2 font-bold dark:text-neutral-100'>
+              <h1 className='text-3xl sm:text-4xl lg:text-5xl py-4 px-2 font-bold dark:text-neutral-100'>
                 {selectedProject ? `${selectedProject.name}` : 'Conversations'}
               </h1>
               {/* {selectedProject && (
@@ -233,9 +233,9 @@ const ConversationPage: React.FC = () => {
             )} */}
           </div>
         </div>
-        <div className='px-6 max-w-7xl mx-auto'>
-          <div className='mb-4 flex items-center justify-between max-w-5xl'>
-            <h2 className='text-3xl py-4 font-bold dark:text-neutral-100'>Conversations</h2>
+        <div className='px-2 sm:px-4 md:px-6 max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl 3xl:max-w-[1920px] 4xl:max-w-[2400px] mx-auto'>
+          <div className='mb-4 flex items-center justify-between max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl'>
+            <h2 className='text-2xl sm:text-3xl py-4 font-bold dark:text-neutral-100'>Conversations</h2>
             <div className='flex items-center gap-2 pt-4 pr-4'>
               <Button variant='outline' size='medium' onClick={handleEditProject} className='group'>
                 <p className='transition-transform duration-100 group-active:scale-95'>Project Settings</p>
@@ -276,8 +276,8 @@ const ConversationPage: React.FC = () => {
 
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
-          <div className='flex gap-4 pt-5 items-start max-w-5xl'>
-            <ul className='space-y-2 px-2 py-8 rounded flex-2 overflow-y-auto max-h-[55vh] pr-2 thin-scrollbar scroll-fade'>
+          <div className='flex gap-2 sm:gap-3 md:gap-4 pt-5 items-start max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl'>
+            <ul className='space-y-2 px-1 sm:px-2 py-4 sm:py-8 rounded flex-2 overflow-y-auto max-h-[55vh] sm:max-h-[60vh] lg:max-h-[65vh] pr-2 thin-scrollbar scroll-fade'>
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}

@@ -16,6 +16,29 @@
   html {
     font-family: var(--font-sans);
   }
+
+  /* Pixel density normalization for high-DPI displays */
+  /* This helps ensure consistent rendering across different pixel densities */
+  @media (min-resolution: 144dpi) {
+    html {
+      /* Slightly reduce base font size on high-DPI displays to compensate for OS scaling */
+      font-size: 15px;
+    }
+  }
+
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    html {
+      /* Further reduce on retina/2x displays */
+      font-size: 14px;
+    }
+  }
+
+  /* Reset to standard on very large high-DPI displays (like 4K monitors) */
+  @media (min-width: 2560px) and (min-resolution: 144dpi) {
+    html {
+      font-size: 16px;
+    }
+  }
 }
 /* Markdown code styling */
 .prose pre:not(.not-prose) {

@@ -12,6 +12,27 @@ export default {
         // optional: dedicated utility
         dm: ['"DM Sans"', 'sans-serif'],
       },
+      screens: {
+        // Extended breakpoints for larger displays
+        '3xl': '1920px',  // 2K displays at standard scaling
+        '4xl': '2560px',  // 4K displays at standard scaling
+
+        // Pixel density breakpoints to normalize high-DPI rendering
+        'hidpi': { raw: '(min-resolution: 144dpi)' },
+        'retina': { raw: '(-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi)' },
+      },
+      spacing: {
+        // Custom spacing values to support existing usage
+        // These map to the invalid classes currently in use
+        '15': '60px',   // ml-15
+        '35': '140px',  // mr-35
+        '90': '360px',  // w-90 (sidebar width)
+      },
+      flex: {
+        // Custom flex values to support existing usage
+        '2': '2 2 0%',
+        '4': '4 4 0%',
+      },
     },
   },
   plugins: [],
