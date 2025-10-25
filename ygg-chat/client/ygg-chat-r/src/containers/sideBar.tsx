@@ -29,11 +29,26 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
   const searchResults = useAppSelector(selectSearchResults)
   const searchQuery = useAppSelector(selectSearchQuery)
 
-  // Drawer collapse state with localStorage persistence
+  // Helper function to detect mobile device
+  const isMobileDevice = (): boolean => {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia('(max-width: 767px)').matches
+  }
+
+  // Drawer collapse state with localStorage persistence and mobile-first default
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     try {
-      const stored = typeof window !== 'undefined' ? localStorage.getItem('sidebar:collapsed') : null
-      return stored === 'true'
+      if (typeof window === 'undefined') return false
+
+      const stored = localStorage.getItem('sidebar:collapsed')
+
+      // If user has a stored preference, use it
+      if (stored !== null) {
+        return stored === 'true'
+      }
+
+      // Otherwise, default to collapsed on mobile, expanded on desktop
+      return isMobileDevice()
     } catch {
       return false
     }
@@ -164,7 +179,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           const projectName = conv.project_id ? projects.find(p => p.id === conv.project_id)?.name : undefined
 
           return (
-            <div key={conv.id} className='mb-1.5 group relative'>
+            <div key={conv.id} className='lg:mb-1.5 group relative'>
               <div
                 role='button'
                 tabIndex={0}
@@ -193,11 +208,11 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                   </Button>
                 ) : (
                   <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-1.5 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
-                    <span className='text-[10px] md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
+                    <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
                     {projectName && (
-                      <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[10px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
+                      <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
                         Project: {projectName}
                       </span>
                     )}

@@ -61,10 +61,10 @@ export const Select: React.FC<SelectProps> = ({
       case 'small':
         return 'px-2 py-1 sm:px-3 sm:py-1.5 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-lg 4xl:text-xl leading-none'
       case 'large':
-        return 'px-3 py-2 sm:px-4 sm:py-2 text-[14px] sm:text-[12px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] leading-none'
+        return 'px-3 py-2 sm:px-4 sm:py-2 text-[14px] sm:text-[12px] md:text-[16px] lg:text-[16px] 2xl:text-[14px] 3xl:text-[28px] 4xl:text-[24px] leading-none'
       case 'medium':
       default:
-        return 'px-2.5 py-2 sm:px-3 sm:py-2 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-xl 4xl:text-2xl leading-none'
+        return 'px-2.5 py-2 sm:px-3 sm:py-2.5 md:px-2.5 md:py-2.5 lg:px-2.5 lg:py-2.5 xl:px-2.5 xl:py-2.5 2xl:px-2.5 2xl:py-4 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[14px] 2xl:text-[16px] 3xl:text-xl 4xl:text-2xl leading-none'
     }
   }, [size])
 
@@ -198,7 +198,7 @@ export const Select: React.FC<SelectProps> = ({
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder='Search...'
-                className='w-full px-2 py-1 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[16px] 3xl:text-[28px] 4xl:text-[24px]ounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
+                className='w-full px-2 py-1 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
                 autoFocus
               />
             </div>
@@ -208,7 +208,7 @@ export const Select: React.FC<SelectProps> = ({
             style={{ maxHeight: searchBarVisible ? (listMaxHeight || 280) - 50 : listMaxHeight }}
           >
             {filteredOptions.length === 0 ? (
-              <div className='px-3 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[16px] 3xl:text-[28px] 4xl:text-[24px] text-neutral-500 dark:text-neutral-400'>
+              <div className='px-3 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] text-neutral-500 dark:text-neutral-400'>
                 {searchBarVisible && searchTerm.trim() ? 'No matching options' : 'No options'}
               </div>
             ) : (
@@ -229,7 +229,7 @@ export const Select: React.FC<SelectProps> = ({
                       handleSelect(opt.value)
                     }}
                     onClick={() => handleSelect(opt.value)}
-                    className={`w-full line-clamp-3 text-left px-3 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[16px] 3xl:text-[18px] 4xl:text-[20px] transition-colors
+                    className={`w-full line-clamp-3 text-left pl-4 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] transition-colors
                       ${isActive ? 'bg-neutral-100 dark:bg-yBlack-500' : ''}
                       ${isSelected ? 'font-medium' : ''}
                       text-stone-800 dark:text-stone-100`}

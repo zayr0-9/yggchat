@@ -241,15 +241,15 @@ body.ygg-no-select * {
   /* Firefox */
   scroll-padding-top: 4px;
   scroll-padding-bottom: 4px;
-  scrollbar-color: transparent transparent; /* Hidden by default */
+  scrollbar-color: #c5c5c5; /* Hidden by default */
 }
 .thin-scrollbar:hover {
   /* Firefox - show on hover */
-  scrollbar-color: #cfcfcf transparent; /* light: neutral-400 thumb on transparent track */
+  scrollbar-color: #c5c5c5; /* light: neutral-400 thumb on transparent track */
 }
 /* Chromium/WebKit */
 .thin-scrollbar::-webkit-scrollbar {
-  width: 2px;
+  width: 4px;
 }
 .thin-scrollbar::-webkit-scrollbar-thumb {
   background-color: transparent; /* Hidden by default */
@@ -260,7 +260,7 @@ body.ygg-no-select * {
   /* background-clip: padding-box; */
 }
 .thin-scrollbar:hover::-webkit-scrollbar-thumb {
-  background-color: #cfcfcf; /* light: neutral-400 - visible on hover */
+  background-color: #c5c5c5; /* light: neutral-400 - visible on hover */
 }
 .thin-scrollbar::-webkit-scrollbar-track {
   background: transparent;

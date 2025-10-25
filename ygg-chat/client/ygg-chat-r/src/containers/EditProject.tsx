@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import React, { useEffect, useState } from 'react'
 import { Project, ProjectWithLatestConversation } from '../../../../shared/types'
 import { Button, TextField } from '../components'
 import { InputTextArea } from '../components/InputTextArea/InputTextArea'
@@ -140,7 +140,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
 
           <div className='space-y-6'>
             <div>
-              <label className='block text-lg text-neutral-900 font-medium mb-2 dark:text-neutral-200'>
+              <label className='block text-[12px] sm:text-[12px] md:text-[14px] lg:text-[14px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px] text-neutral-900 font-medium mb-2 dark:text-neutral-200'>
                 Project Name
               </label>
               <TextField

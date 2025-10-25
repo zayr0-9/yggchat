@@ -62,7 +62,7 @@ export const TextField: React.FC<TextFieldProps> = ({
     small:
       'px-3 md:px-2.5 lg:px-2 xl:px-1.5 py-1.5 md:py-1 lg:py-1 xl:py-0.5 text-sm md:text-xs lg:text-xs xl:text-[10px] 2xl:text-[12px]',
     medium:
-      'px-4 md:px-3.5 lg:px-3 xl:px-2.5 py-2 md:py-2 lg:py-2 xl:py-2 text-base md:text-sm lg:text-xs xl:text-[14px] 2xl:text-[14px]',
+      'px-4 sm:py-3 md:px-3.5 lg:px-4 xl:px-2.5 py-2 md:py-3 lg:py-3 xl:py-3 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[18px] ',
     large:
       'px-5 md:px-4 lg:px-3.5 xl:px-3 py-3 md:py-2.5 lg:py-2 xl:py-1.5 text-lg md:text-base lg:text-sm xl:text-[16px] 2xl:text-[18px]',
   }

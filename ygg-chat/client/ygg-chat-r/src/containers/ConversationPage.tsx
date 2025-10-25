@@ -287,7 +287,7 @@ const ConversationPage: React.FC = () => {
                   onClick={() => handleSelect(conv)}
                 >
                   <div className='flex items-center justify-between'>
-                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 md:text-[11px] lg:text-[10px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px]'>
+                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[10px] md:text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
                     <Button
@@ -304,7 +304,7 @@ const ConversationPage: React.FC = () => {
                     </Button>
                   </div>
                   {conv.created_at && (
-                    <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99'>
+                    <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[16px]'>
                       {new Date(conv.created_at).toLocaleString()}
                     </div>
                   )}

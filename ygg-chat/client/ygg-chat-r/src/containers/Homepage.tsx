@@ -196,18 +196,18 @@ const Homepage: React.FC = () => {
               {projects.map(project => (
                 <li
                   key={project.id}
-                  className='p-2 sm:p-2 md:p-2 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-2 xl:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
+                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-2 xl:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className='flex place-items-start justify-between'>
                     <div className='flex-1'>
                       <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99'>
-                        <p className='transition-transform duration-100 group-active:scale-99 text-[10px] sm:text-[8px]md:text-[11px] lg:text-[10px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px]'>
+                        <p className='transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[12px] md:text-[14px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
                           {project.name}
                         </p>
                       </span>
                       {project.context && (
-                        <p className='text-sm text-gray-600 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 md:text-[11px] lg:text-[8px] xl:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px]'>
+                        <p className='text-sm text-gray-600 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
                           {project.context}
                         </p>
                       )}
@@ -248,7 +248,7 @@ const Homepage: React.FC = () => {
                     </div>
                   </div>
                   {project.created_at && (
-                    <div className='text-xs text-neutral-600 dark:text-neutral-300 mt-2 transition-transform duration-100 group-active:scale-99'>
+                    <div className='text-xs text-neutral-600 dark:text-neutral-300 mt-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
                       Created: {new Date(project.created_at).toLocaleString()}
                     </div>
                   )}
