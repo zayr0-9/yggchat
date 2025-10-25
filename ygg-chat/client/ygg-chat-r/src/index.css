@@ -17,13 +17,9 @@
     font-family: var(--font-sans);
   }
 
-  /* Set body background to extend into safe areas on mobile */
+  /* Transparent body background to let page backgrounds show through */
   body {
-    background-color: #fafafa; /* zinc-50 for light mode */
-  }
-
-  .dark body {
-    background-color: #121111; /* yBlack-900 for dark mode */
+    background-color: transparent;
   }
 
   /* Pixel density normalization for high-DPI displays */
