@@ -207,7 +207,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                     {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
                   </Button>
                 ) : (
-                  <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-1.5 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
+                  <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
                     <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
