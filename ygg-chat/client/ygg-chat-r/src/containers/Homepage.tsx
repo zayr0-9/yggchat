@@ -50,51 +50,6 @@ const Homepage: React.FC = () => {
     // No need to dispatch Redux actions for fetching - React Query handles caching and deduplication
   }, [dispatch])
 
-  // Debug display for screen size, resolution, and breakpoints
-  const [screenInfo, setScreenInfo] = useState({
-    width: 0,
-    height: 0,
-    dpr: 1,
-    breakpoint: 'base',
-    resCategory: 'standard',
-  })
-
-  useEffect(() => {
-    const updateScreenInfo = () => {
-      const width = window.innerWidth
-      const height = window.innerHeight
-      const dpr = window.devicePixelRatio || 1
-      const resolution = dpr * 96 // Convert DPR to DPI (96 is base DPI)
-
-      // Determine active breakpoint based on custom breakpoints from index.css
-      let breakpoint = 'base'
-      if (width >= 3840) breakpoint = '4xl'
-      else if (width >= 2560 && width <= 3839) breakpoint = '3xl'
-      else if (width >= 1920 && width <= 2559) breakpoint = '2xl'
-      else if (width >= 1536) breakpoint = 'xl'
-      else if (width >= 1024) breakpoint = 'lg'
-      else if (width >= 768) breakpoint = 'md'
-      else if (width >= 640) breakpoint = 'sm'
-
-      // Determine resolution category
-      let resCategory = 'standard'
-      if (resolution >= 192) resCategory = 'retina'
-      else if (resolution >= 144) resCategory = 'hidpi'
-
-      setScreenInfo({ width, height, dpr, breakpoint, resCategory })
-    }
-
-    // Update on mount
-    updateScreenInfo()
-
-    // Update on resize
-    window.addEventListener('resize', updateScreenInfo)
-
-    return () => {
-      window.removeEventListener('resize', updateScreenInfo)
-    }
-  }, [])
-
   // Dropdown open/close is managed internally by SearchList
 
   const handleSelectProject = (project: ProjectWithLatestConversation) => {
@@ -151,30 +106,34 @@ const Homepage: React.FC = () => {
       <SideBar limit={12} projects={allProjects} />
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
-        <div className='py-4 w-full  mx-auto shrink-0'>
+        <div className='py-1 lg:py-1 xl:py-1 2xl:py-2 3xl:py-4 4xl:py-6 w-full  mx-auto shrink-0'>
           <div className='flex items-center justify-baseline px-2 py-4'>
             <div className='flex items-center flex-wrap gap-3 rounded-full'>
               <img
                 src='/img/logo-d.svg'
                 alt='Yggdrasil Logo'
-                className='w-22 h-22 dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)]'
+                className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22 dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)]'
               />
               <img
                 src='/img/logo-l.svg'
                 alt='Yggdrasil Logo'
-                className='w-22 h-22 hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
+                className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
               />
-              <h1 className='text-3xl sm:text-4xl lg:text-5xl font-bold px-3 dark:text-neutral-100 '>Yggdrasil</h1>
+              <h1 className='text-xl sm:text-xl lg:text-4xl xl:text-4xl 2xl:text-4xl 3xl:text-5xl 4xl:text-6xl font-bold px-3 dark:text-neutral-100 '>
+                Yggdrasil
+              </h1>
             </div>
           </div>
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between'>
-            <h2 className='text-2xl sm:text-3xl py-4 font-bold dark:text-neutral-100'>Projects</h2>
+            <h2 className='text-xl sm:text-xl lg:text-2xl xl:text-3xl 2xl:text-3xl 3xl:text-4xl 4xl:text-5xl py-2 font-bold dark:text-neutral-100'>
+              Projects
+            </h2>
             <div className='flex items-center gap-2 pt-2'>
               <Button
                 variant='outline2'
-                size='smaller'
+                size='large'
                 onClick={handleLogout}
                 rounded='full'
                 title='Logout'
@@ -188,7 +147,7 @@ const Homepage: React.FC = () => {
               </Button>
               <Button
                 variant='outline2'
-                size='smaller'
+                size='large'
                 onClick={() => navigate('/settings')}
                 className='group'
                 rounded='full'
@@ -202,8 +161,8 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-6 flex flex-wrap items-center gap-3'>
-            <Button variant='outline' size='large' onClick={handleCreateProject} className='shrink-0 group'>
+          <div className='mb-2 flex p-2 flex-wrap items-center gap-3 outline-1 outline-neutral-800 rounded-2xl dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+            <Button variant='outline2' size='large' onClick={handleCreateProject} className='shrink-0 group'>
               <p className='transition-transform duration-100 group-active:scale-95'>New Project</p>
             </Button>
 
@@ -236,12 +195,12 @@ const Homepage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
-          <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl flex-1 overflow-hidden flex flex-col'>
+          <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-8 sm:py-8 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
               {projects.map(project => (
                 <li
                   key={project.id}
-                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-2 xl:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
+                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-3 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45)]'
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className='flex place-items-start justify-between'>
@@ -313,15 +272,6 @@ const Homepage: React.FC = () => {
         editingProject={editingProject}
         onProjectCreated={handleProjectCreated}
       />
-
-      {/* Screen Debug Info - Fixed bottom right */}
-      <div className='fixed bottom-4 right-4 bg-black/80 text-white text-xs p-3 rounded-lg font-mono pointer-events-none z-50'>
-        <div className='font-bold mb-1'>Screen Info</div>
-        <div>Viewport: {screenInfo.width}x{screenInfo.height}</div>
-        <div>DPR: {screenInfo.dpr}</div>
-        <div>Breakpoint: <span className='font-bold text-yellow-300'>{screenInfo.breakpoint}</span></div>
-        <div>Resolution: {screenInfo.resCategory}</div>
-      </div>
     </div>
   )
 }

@@ -414,9 +414,14 @@ function Chat() {
   const [heimdallVisible, setHeimdallVisible] = useState<boolean>(() => {
     try {
       const stored = typeof window !== 'undefined' ? window.localStorage.getItem('chat:heimdallVisible') : null
-      return stored !== null ? stored === 'true' : true
+      // Check if on mobile (< 768px) to set appropriate default
+      const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 768
+      const defaultValue = isMobileDevice ? false : true
+      return stored !== null ? stored === 'true' : defaultValue
     } catch {
-      return true
+      // Fallback: check if mobile
+      const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 768
+      return isMobileDevice ? false : true
     }
   })
   // Detect if user is on mobile device (below md breakpoint: 768px)
