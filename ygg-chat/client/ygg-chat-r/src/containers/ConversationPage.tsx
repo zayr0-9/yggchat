@@ -219,7 +219,7 @@ const ConversationPage: React.FC = () => {
                   aria-hidden='true'
                 ></i>
               </Button>
-              <h1 className='text-3xl md:text-base lg:text-2xl xl:text-3xl 2xl:text-4xl 3xl:text-6xl xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
+              <h1 className='text-[24px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
                 {selectedProject ? `${selectedProject.name}` : 'Conversations'}
               </h1>
               {/* {selectedProject && (
@@ -237,7 +237,7 @@ const ConversationPage: React.FC = () => {
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between max-w-full'>
-            <h2 className='text-2xl md:text-lg lg:text-xl xl:text-2xl 2xl:text-3xl 3xl:text-4xl xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
+            <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
               Conversations
             </h2>
             <div className='flex items-center gap-2 my-1 p-0 lg:p-1 outline-2 rounded-4xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] dark:outline-neutral-800 outline-neutral-50'>

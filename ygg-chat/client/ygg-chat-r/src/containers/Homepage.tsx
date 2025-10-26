@@ -167,7 +167,7 @@ const Homepage: React.FC = () => {
                 alt='Yggdrasil Logo'
                 className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
               />
-              <h1 className='text-xl sm:text-xl lg:text-4xl xl:text-4xl 2xl:text-4xl 3xl:text-5xl 4xl:text-6xl font-bold px-3 dark:text-neutral-100 '>
+              <h1 className='text-[28px] sm:text-[24px] lg:text-[28px] xl:text-4xl 2xl:text-4xl 3xl:text-5xl 4xl:text-6xl font-bold px-1 dark:text-neutral-100 '>
                 Yggdrasil
               </h1>
             </div>
@@ -175,7 +175,7 @@ const Homepage: React.FC = () => {
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between'>
-            <h2 className='text-xl sm:text-xl lg:text-2xl xl:text-3xl 2xl:text-3xl 3xl:text-4xl 4xl:text-5xl py-2 font-bold dark:text-neutral-100'>
+            <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] py-2 font-bold dark:text-neutral-100'>
               Projects
             </h2>
             <div className='flex items-center gap-2 my-1 p-1 outline-2 outline-neutral-50 dark:outline-neutral-800 rounded-4xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
