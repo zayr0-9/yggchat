@@ -124,8 +124,14 @@ const Homepage: React.FC = () => {
     handleSelectProject(projectWithLatest)
   }
 
-  const handleDeleteProject = (id: ProjectId) => {
-    dispatch(deleteProject(id))
+  const handleDeleteProject = async (id: ProjectId) => {
+    // Delete via Redux thunk (handles API call)
+    await dispatch(deleteProject(id))
+
+    // Update React Query cache to remove the deleted project
+    queryClient.setQueryData(['projects', userId], (old: ProjectWithLatestConversation[] | undefined) => {
+      return old ? old.filter(project => project.id !== id) : []
+    })
   }
 
   const handleCloseModal = () => {
