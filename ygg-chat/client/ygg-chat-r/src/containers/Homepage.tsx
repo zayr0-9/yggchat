@@ -50,9 +50,17 @@ const Homepage: React.FC = () => {
     // No need to dispatch Redux actions for fetching - React Query handles caching and deduplication
   }, [dispatch])
 
-  // Debug logging for screen size, resolution, and breakpoints
+  // Debug display for screen size, resolution, and breakpoints
+  const [screenInfo, setScreenInfo] = useState({
+    width: 0,
+    height: 0,
+    dpr: 1,
+    breakpoint: 'base',
+    resCategory: 'standard',
+  })
+
   useEffect(() => {
-    const logScreenInfo = () => {
+    const updateScreenInfo = () => {
       const width = window.innerWidth
       const height = window.innerHeight
       const dpr = window.devicePixelRatio || 1
@@ -73,25 +81,17 @@ const Homepage: React.FC = () => {
       if (resolution >= 192) resCategory = 'retina'
       else if (resolution >= 144) resCategory = 'hidpi'
 
-      console.log('=== SCREEN DEBUG INFO ===')
-      console.log('Viewport:', `${width}x${height}`)
-      console.log('Device Pixel Ratio:', dpr)
-      console.log('Effective DPI:', Math.round(resolution))
-      console.log('Active Breakpoint:', breakpoint)
-      console.log('Resolution Category:', resCategory)
-      console.log('Screen:', `${window.screen.width}x${window.screen.height}`)
-      console.log('Available Screen:', `${window.screen.availWidth}x${window.screen.availHeight}`)
-      console.log('========================')
+      setScreenInfo({ width, height, dpr, breakpoint, resCategory })
     }
 
-    // Log on mount
-    logScreenInfo()
+    // Update on mount
+    updateScreenInfo()
 
-    // Log on resize
-    window.addEventListener('resize', logScreenInfo)
+    // Update on resize
+    window.addEventListener('resize', updateScreenInfo)
 
     return () => {
-      window.removeEventListener('resize', logScreenInfo)
+      window.removeEventListener('resize', updateScreenInfo)
     }
   }, [])
 
@@ -313,6 +313,15 @@ const Homepage: React.FC = () => {
         editingProject={editingProject}
         onProjectCreated={handleProjectCreated}
       />
+
+      {/* Screen Debug Info - Fixed bottom right */}
+      <div className='fixed bottom-4 right-4 bg-black/80 text-white text-xs p-3 rounded-lg font-mono pointer-events-none z-50'>
+        <div className='font-bold mb-1'>Screen Info</div>
+        <div>Viewport: {screenInfo.width}x{screenInfo.height}</div>
+        <div>DPR: {screenInfo.dpr}</div>
+        <div>Breakpoint: <span className='font-bold text-yellow-300'>{screenInfo.breakpoint}</span></div>
+        <div>Resolution: {screenInfo.resCategory}</div>
+      </div>
     </div>
   )
 }
