@@ -161,7 +161,7 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-2 flex p-2 flex-wrap items-center gap-3 outline-1 outline-neutral-800 rounded-2xl dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-1 outline-neutral-800 rounded-2xl dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
             <Button variant='outline2' size='large' onClick={handleCreateProject} className='shrink-0 group'>
               <p className='transition-transform duration-100 group-active:scale-95'>New Project</p>
             </Button>
@@ -196,7 +196,7 @@ const Homepage: React.FC = () => {
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
           <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
-            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-8 sm:py-8 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
+            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-8 sm:py-6 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
               {projects.map(project => (
                 <li
                   key={project.id}
