@@ -440,11 +440,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       return
     }
 
-    // Don't start dragging if clicking on a node
-    const target = e.target as unknown as SVGElement
-    if (target && (target.tagName === 'rect' || target.tagName === 'circle')) {
-      return
-    }
     try {
       e.preventDefault()
     } catch {}
