@@ -50,6 +50,51 @@ const Homepage: React.FC = () => {
     // No need to dispatch Redux actions for fetching - React Query handles caching and deduplication
   }, [dispatch])
 
+  // Debug logging for screen size, resolution, and breakpoints
+  useEffect(() => {
+    const logScreenInfo = () => {
+      const width = window.innerWidth
+      const height = window.innerHeight
+      const dpr = window.devicePixelRatio || 1
+      const resolution = dpr * 96 // Convert DPR to DPI (96 is base DPI)
+
+      // Determine active breakpoint based on custom breakpoints from index.css
+      let breakpoint = 'base'
+      if (width >= 3840) breakpoint = '4xl'
+      else if (width >= 2560 && width <= 3839) breakpoint = '3xl'
+      else if (width >= 1920 && width <= 2559) breakpoint = '2xl'
+      else if (width >= 1536) breakpoint = 'xl'
+      else if (width >= 1024) breakpoint = 'lg'
+      else if (width >= 768) breakpoint = 'md'
+      else if (width >= 640) breakpoint = 'sm'
+
+      // Determine resolution category
+      let resCategory = 'standard'
+      if (resolution >= 192) resCategory = 'retina'
+      else if (resolution >= 144) resCategory = 'hidpi'
+
+      console.log('=== SCREEN DEBUG INFO ===')
+      console.log('Viewport:', `${width}x${height}`)
+      console.log('Device Pixel Ratio:', dpr)
+      console.log('Effective DPI:', Math.round(resolution))
+      console.log('Active Breakpoint:', breakpoint)
+      console.log('Resolution Category:', resCategory)
+      console.log('Screen:', `${window.screen.width}x${window.screen.height}`)
+      console.log('Available Screen:', `${window.screen.availWidth}x${window.screen.availHeight}`)
+      console.log('========================')
+    }
+
+    // Log on mount
+    logScreenInfo()
+
+    // Log on resize
+    window.addEventListener('resize', logScreenInfo)
+
+    return () => {
+      window.removeEventListener('resize', logScreenInfo)
+    }
+  }, [])
+
   // Dropdown open/close is managed internally by SearchList
 
   const handleSelectProject = (project: ProjectWithLatestConversation) => {
