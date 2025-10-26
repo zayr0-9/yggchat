@@ -130,10 +130,10 @@ const Homepage: React.FC = () => {
             <h2 className='text-xl sm:text-xl lg:text-2xl xl:text-3xl 2xl:text-3xl 3xl:text-4xl 4xl:text-5xl py-2 font-bold dark:text-neutral-100'>
               Projects
             </h2>
-            <div className='flex items-center gap-2 pt-2'>
+            <div className='flex items-center gap-2 my-1 p-1 outline-2 outline-neutral-50 dark:outline-neutral-800 rounded-4xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
               <Button
                 variant='outline2'
-                size='large'
+                size='smaller'
                 onClick={handleLogout}
                 rounded='full'
                 title='Logout'
@@ -141,19 +141,19 @@ const Homepage: React.FC = () => {
                 className='group'
               >
                 <i
-                  className='bx bx-log-out text-3xl p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                  className='bx bx-log-out text-lg sm:text-lg 2xl:text-2xl p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none'
                   aria-hidden='true'
                 ></i>
               </Button>
               <Button
                 variant='outline2'
-                size='large'
+                size='smaller'
                 onClick={() => navigate('/settings')}
                 className='group'
                 rounded='full'
               >
                 <i
-                  className='bx bx-cog text-3xl p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                  className='bx bx-cog text-xl sm:text-lg 2xl:text-2xl p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none'
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -161,7 +161,7 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-1 outline-neutral-800 rounded-2xl dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800 outline-neutral-50 rounded-2xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
             <Button variant='outline2' size='large' onClick={handleCreateProject} className='shrink-0 group'>
               <p className='transition-transform duration-100 group-active:scale-95'>New Project</p>
             </Button>
@@ -196,11 +196,11 @@ const Homepage: React.FC = () => {
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
           <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
-            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-8 sm:py-6 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
+            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
               {projects.map(project => (
                 <li
                   key={project.id}
-                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-1 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer  border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-indigo-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45)]'
+                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-1 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-neutral-50 rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className='flex place-items-start justify-between'>

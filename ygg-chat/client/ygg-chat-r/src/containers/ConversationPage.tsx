@@ -234,19 +234,19 @@ const ConversationPage: React.FC = () => {
           </div>
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
-          <div className='mb-4 flex items-center justify-between max-w-full lg:max-w-5xl 2xl:max-w-6xl 3xl:max-w-7xl'>
+          <div className='mb-4 flex items-center justify-between max-w-full'>
             <h2 className='text-2xl md:text-lg lg:text-xl xl:text-2xl 2xl:text-3xl 3xl:text-4xl xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
               Conversations
             </h2>
-            <div className='flex items-center gap-2 pt-4 pr-4'>
-              <Button variant='outline' size='medium' onClick={handleEditProject} className='group'>
+            <div className='flex items-center gap-2 my-1 p-0 lg:p-1 outline-2 rounded-4xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] dark:outline-neutral-800 outline-neutral-50'>
+              <Button variant='outline2' size='medium' onClick={handleEditProject} className='group'>
                 <p className='transition-transform duration-100 group-active:scale-95'>Project Settings</p>
               </Button>
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
-          <div className='mb-6 flex items-center gap-3'>
-            <Button variant='outline' size='large' onClick={handleNewConversation} className='group'>
+          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800 outline-neutral-50 rounded-2xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+            <Button variant='outline2' size='large' onClick={handleNewConversation} className='group'>
               <p className='transition-transform duration-100 group-active:scale-95'>New Conversation</p>
             </Button>
 
@@ -278,12 +278,12 @@ const ConversationPage: React.FC = () => {
 
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
-          <div className='flex gap-4 pt-5 items-start max-w-5xl w-full flex-1 overflow-hidden flex-col'>
+          <div className='flex gap-4 pt-5 items-start w-full flex-1 overflow-hidden flex-col'>
             <ul className='space-y-2 px-2 py-8 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar scroll-fade w-full'>
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}
-                  className='px-3 pb-2 pt-2 mb-2 md:mb-2 lg:mb-2 xl:mb-2 2xl:mb-4 3xl:mb-6 bg-indigo-50 rounded-lg cursor-pointer dark:bg-yBlack-900 dark:outline-1 dark:outline-neutral-800 hover:bg-indigo-100 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group dark:shadow-[0px_6px_12px_-12px_rgba(0,0,0,0.45),0px_6px_12px_-8px_rgba(0,0,0,0.2)]'
+                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-1 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-neutral-50 rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
                   onClick={() => handleSelect(conv)}
                 >
                   <div className='flex items-center justify-between'>

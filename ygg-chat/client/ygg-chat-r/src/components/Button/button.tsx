@@ -47,7 +47,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   // Size styles control padding and text size
   const sizeStyles = {
-    smaller: 'px-1.5 py-1 text-[12px]',
+    smaller: 'p-1 text-[10px]',
     small: 'px-3 py-1.5 text-[14px]',
     medium: 'px-3 py-2 text-base',
     large:
