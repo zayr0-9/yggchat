@@ -10,6 +10,7 @@ import { chatSliceActions } from '../features/chats'
 import { deleteProject, projectsLoaded, setSelectedProject } from '../features/projects'
 import { useAppDispatch } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
+import { useIsMobile } from '../hooks/useMediaQuery'
 import { useProjects } from '../hooks/useQueries'
 import { sortProjects } from '../utils/sortProjects'
 import EditProject from './EditProject'
@@ -20,6 +21,7 @@ const Homepage: React.FC = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { userId } = useAuth()
+  const isMobile = useIsMobile()
 
   // Use React Query for data fetching (with automatic caching and deduplication)
   // Projects now include latest_conversation_updated_at, eliminating need to fetch all conversations
@@ -40,7 +42,53 @@ const Homepage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
+  // Mobile options menu state
+  const [showMobileOptionsMenu, setShowMobileOptionsMenu] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
+
+  // Theme state
+  const [themeMode, setThemeMode] = useState<'Light' | 'Dark' | 'System'>(() => {
+    if (typeof window === 'undefined') return 'Light'
+    const saved = localStorage.getItem('theme')
+    return saved === 'dark' ? 'Dark' : saved === 'light' ? 'Light' : saved === 'system' ? 'System' : 'System'
+  })
+
   const projects = sortProjects(allProjects, sortBy, sortOrder === 'asc')
+
+  // Apply theme immediately when user toggles preference
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const isDark = themeMode === 'Dark' || (themeMode === 'System' && media.matches)
+    document.documentElement.classList.toggle('dark', isDark)
+  }, [themeMode])
+
+  // Persist theme preference
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem('theme', themeMode === 'Dark' ? 'dark' : themeMode === 'Light' ? 'light' : 'system')
+  }, [themeMode])
+
+  const cycleTheme = () => {
+    setThemeMode(prev => (prev === 'Light' ? 'Dark' : prev === 'Dark' ? 'System' : 'Light'))
+  }
+
+  // Close mobile options menu on outside click or Escape key
+  useEffect(() => {
+    if (!showMobileOptionsMenu) return
+    const onDown = () => {
+      setShowMobileOptionsMenu(false)
+    }
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') setShowMobileOptionsMenu(false)
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [showMobileOptionsMenu])
 
   useEffect(() => {
     dispatch(chatSliceActions.stateReset())
@@ -103,7 +151,7 @@ const Homepage: React.FC = () => {
 
   return (
     <div className='bg-zinc-50 h-screen overflow-hidden dark:bg-yBlack-500 flex'>
-      <SideBar limit={12} projects={allProjects} />
+      {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
         <div className='py-1 lg:py-1 xl:py-1 2xl:py-2 3xl:py-4 4xl:py-6 w-full  mx-auto shrink-0'>
@@ -157,6 +205,29 @@ const Homepage: React.FC = () => {
                   aria-hidden='true'
                 ></i>
               </Button>
+              {isMobile && (
+                <Button
+                  variant='outline2'
+                  size='smaller'
+                  onClick={() => {
+                    const button = document.activeElement as HTMLElement
+                    if (button) {
+                      const rect = button.getBoundingClientRect()
+                      setMenuPosition({ x: rect.left, y: rect.bottom + 4 })
+                    }
+                    setShowMobileOptionsMenu(true)
+                  }}
+                  rounded='full'
+                  title='More options'
+                  aria-label='More options'
+                  className='group'
+                >
+                  <i
+                    className='bx bx-dots-vertical-rounded text-lg sm:text-lg 2xl:text-2xl p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                    aria-hidden='true'
+                  ></i>
+                </Button>
+              )}
             </div>
           </div>
 
@@ -196,11 +267,11 @@ const Homepage: React.FC = () => {
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
           <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
-            <ul className='scroll-fade space-y-2 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
+            <ul className='scroll-fade space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
               {projects.map(project => (
                 <li
                   key={project.id}
-                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-1 md:mb-2 lg:mb-1 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-neutral-50 rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
+                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-3 md:mb-3 lg:mb-2 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-neutral-50 rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className='flex place-items-start justify-between'>
@@ -272,6 +343,48 @@ const Homepage: React.FC = () => {
         editingProject={editingProject}
         onProjectCreated={handleProjectCreated}
       />
+
+      {/* Mobile Options Context Menu */}
+      {showMobileOptionsMenu && menuPosition && (
+        <div
+          className='fixed z-50 min-w-[100px] rounded-xl shadow-lg border border-stone-200 bg-white dark:bg-yBlack-900 dark:border-neutral-700 animate-scale-in'
+          style={{
+            left: Math.max(8, Math.min(menuPosition.x, window.innerWidth - 110)),
+            top: Math.max(8, Math.min(menuPosition.y, window.innerHeight - 160)),
+            transformOrigin: 'top right',
+          }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <ul className='py-1 text-sm text-stone-800 dark:text-stone-200'>
+            <li>
+              <button
+                className='w-full text-left px-4 py-3 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-yBlack-500 rounded-xl hover:scale-103 active:scale-97 transition-all duration-100 flex items-center gap-3'
+                onClick={() => {
+                  cycleTheme()
+                }}
+              >
+                <i
+                  className={`bx ${themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun'} text-xl`}
+                  aria-hidden='true'
+                ></i>
+                <span>{themeMode}</span>
+              </button>
+            </li>
+            <li>
+              <button
+                className='w-full text-left px-4 py-3 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-yBlack-500 rounded-xl hover:scale-103 active:scale-97 transition-all duration-100 flex items-center gap-3'
+                onClick={() => {
+                  navigate('/payment')
+                  setShowMobileOptionsMenu(false)
+                }}
+              >
+                <i className='bx bx-user-circle text-xl' aria-hidden='true'></i>
+                <span>Profile</span>
+              </button>
+            </li>
+          </ul>
+        </div>
+      )}
     </div>
   )
 }

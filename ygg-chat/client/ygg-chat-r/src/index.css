@@ -233,6 +233,22 @@ body.ygg-no-select * {
 .dark .animate-stroke-pulse {
   animation: ygg-stroke-pulse-dark 4s ease-in-out infinite;
 }
+
+/* Scale-in animation for mobile options menu */
+@keyframes ygg-scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-scale-in {
+  animation: ygg-scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 @utility no-scrollbar {
   @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
 }

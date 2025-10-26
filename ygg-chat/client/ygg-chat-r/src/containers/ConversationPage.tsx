@@ -18,6 +18,7 @@ import {
 import { clearSelectedProject, projectsLoaded, selectSelectedProject, setSelectedProject } from '../features/projects'
 
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
+import { useIsMobile } from '../hooks/useMediaQuery'
 import { useConversations, useConversationsByProject, useProject, useProjects } from '../hooks/useQueries'
 import { parseId } from '../utils/helpers'
 import EditProject from './EditProject'
@@ -27,6 +28,7 @@ const ConversationPage: React.FC = () => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const isMobile = useIsMobile()
   const [searchParams] = useSearchParams()
   const projectIdParam = searchParams.get('projectId')
   const projectId = projectIdParam ? parseId(projectIdParam) : null
@@ -199,7 +201,7 @@ const ConversationPage: React.FC = () => {
   return (
     <div className='bg-zinc-50 dark:bg-zinc-900 flex overflow-hidden h-screen'>
       {/* Recent conversations sidebar */}
-      <SideBar limit={12} projects={allProjects} />
+      {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all p-2 duration-300'>
         <div className='py-4 w-full max-w-full mx-auto shrink-0'>
