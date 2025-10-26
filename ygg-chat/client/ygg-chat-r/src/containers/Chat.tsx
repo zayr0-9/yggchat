@@ -1630,7 +1630,7 @@ function Chat() {
                 })}
               </div>
             )}
-            <div className='bg-neutral-100 rounded-b-lg dark:bg-yBlack-900 flex flex-col items-end'>
+            <div className='bg-neutral-100 rounded-b-4xl dark:bg-yBlack-900 flex flex-col items-end pt-3 md:pt-0'>
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   <div
@@ -1651,7 +1651,7 @@ function Chat() {
                     }}
                   >
                     <i
-                      className={`bx bx-cog text-[18px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
+                      className={`bx bx-cog text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
                       aria-hidden='true'
                       onAnimationEnd={() => setSpinSettings(false)}
                     ></i>
@@ -1688,7 +1688,7 @@ function Chat() {
                     }}
                   >
                     <i
-                      className={`bx bx-refresh text-[22px] sm:text-[18px] md:text-[16px] lg:text-[18px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinRefresh ? 'animate-[spin_0.6s_linear_1]' : ''}`}
+                      className={`bx bx-refresh text-[26px] sm:text-[18px] md:text-[16px] lg:text-[18px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinRefresh ? 'animate-[spin_0.6s_linear_1]' : ''}`}
                       aria-hidden='true'
                       onAnimationEnd={() => setSpinRefresh(false)}
                     ></i>
@@ -1697,12 +1697,12 @@ function Chat() {
                     <Button variant='outline2' className='rounded-full' size='medium' onClick={() => setThink(t => !t)}>
                       {think ? (
                         <i
-                          className='bx bxs-bulb text-yellow-400 text-[18px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px]'
+                          className='bx bxs-bulb text-yellow-400 text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px]'
                           aria-hidden='true'
                         ></i>
                       ) : (
                         <i
-                          className='bx bx-bulb text-[18px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] '
+                          className='bx bx-bulb text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] '
                           aria-hidden='true'
                         ></i>
                       )}
@@ -1729,7 +1729,7 @@ function Chat() {
                       disabled={!canSendLocal || !currentConversationId}
                       onClick={() => handleSend(multiReplyCount)}
                     >
-                      <i className='bx bx-send text-[18px]' aria-hidden='true'></i>
+                      <i className='bx bx-send text-[22px]' aria-hidden='true'></i>
                     </Button>
                   )}
                 </div>
