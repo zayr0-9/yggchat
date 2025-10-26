@@ -124,8 +124,8 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
 
   return (
     <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4 text-lg'>
-      <div className='bg-neutral-100 text-neutral-900 dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full no-scrollbar max-w-5xl h-full max-h-[83vh] overflow-y-auto thin-scrollbar'>
-        <div className='py-12 px-4 sm: px-10 md:px-12 lg:px-16 xl:px-20 2xl:px-24 3xl:px-28 4xl:px-32'>
+      <div className='bg-neutral-100 text-neutral-900 dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full thin-scrollbar max-w-5xl h-full max-h-[83vh] overflow-y-auto thin-scrollbar'>
+        <div className='py-6 px-4 sm:px-10 md:px-12 lg:px-12 xl:px-16 2xl:px-20 3xl:px-24 4xl:px-24'>
           <div className='flex items-center justify-between space-y-6'>
             <h3 className='text-2xl font-semibold dark:text-neutral-100'>
               {isEditing ? `Edit Project: ${editingProject?.name}` : 'Create New Project'}
