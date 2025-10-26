@@ -1415,7 +1415,7 @@ function Chat() {
                   <Button
                     variant='secondary'
                     size='medium'
-                    className='transition-transform duration-100 active:scale-95'
+                    className=''
                     aria-label='Confirm edit'
                     onClick={() => setEditingTitle(false)}
                   >
@@ -1437,7 +1437,7 @@ function Chat() {
                     }))}
                     placeholder='Select conversation...'
                     disabled={sortedConversations.length === 0}
-                    className='flex-1 transition-transform min-w-0 duration-60 active:scale-97 outline-1 outline-neutral-200 dark:outline-neutral-700 rounded-lg'
+                    className='flex-1 transition-transform min-w-0 outline-1 outline-neutral-200 dark:outline-neutral-700 rounded-lg'
                     searchBarVisible={true}
                   />
                   <div ref={optionsRef} className='relative'>

@@ -198,7 +198,7 @@ export const Select: React.FC<SelectProps> = ({
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder='Search...'
-                className='w-full px-2 py-1 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
+                className='w-full px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
                 autoFocus
               />
             </div>
@@ -229,7 +229,7 @@ export const Select: React.FC<SelectProps> = ({
                       handleSelect(opt.value)
                     }}
                     onClick={() => handleSelect(opt.value)}
-                    className={`w-full line-clamp-3 text-left px-2 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] transition-colors
+                    className={`w-full line-clamp-3 text-left px-2 py-2 text-[13px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] transition-colors
                       ${isActive ? 'bg-neutral-100 dark:bg-yBlack-500' : ''}
                       ${isSelected ? 'font-medium' : ''}
                       text-stone-800 dark:text-stone-100`}
