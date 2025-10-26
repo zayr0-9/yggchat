@@ -136,6 +136,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const isDraggingRef = useRef<boolean>(false)
   const isSelectingRef = useRef<boolean>(false)
   const dragStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  const pointerDownPosRef = useRef<{ x: number; y: number } | null>(null)
+  const hasMovedRef = useRef<boolean>(false)
+  const clickedNodeRef = useRef<SVGElement | null>(null)
   // Ref to record last mouse-up position for context menu anchoring
   const lastMouseUpPosRef = useRef<{ x: number; y: number } | null>(null)
   // Refs for latest zoom and pan to avoid stale closures inside wheel listener
@@ -480,8 +483,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         window.addEventListener('blur', onEnd)
       }
     } else if (isPrimaryLike) {
-      setIsDragging(true)
-      isDraggingRef.current = true
+      // Store initial pointer position and check if clicking on a node
+      pointerDownPosRef.current = { x: e.clientX, y: e.clientY }
+      hasMovedRef.current = false
+      const target = e.target as unknown as SVGElement
+      clickedNodeRef.current = target && (target.tagName === 'rect' || target.tagName === 'circle') ? target : null
+
+      // Don't start dragging immediately - wait for movement in handlePointerMove
       dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
       addGlobalNoSelect()
       // Fallback: also track globally in case pointer capture fails in some browsers
@@ -533,6 +541,20 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       return // Don't process dragging/selecting while pinching
     }
 
+    // Check if we should start dragging based on movement threshold
+    if (!isDraggingRef.current && !isSelectingRef.current && pointerDownPosRef.current) {
+      const dx = e.clientX - pointerDownPosRef.current.x
+      const dy = e.clientY - pointerDownPosRef.current.y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      const DRAG_THRESHOLD = 5 // pixels
+
+      if (distance > DRAG_THRESHOLD) {
+        hasMovedRef.current = true
+        setIsDragging(true)
+        isDraggingRef.current = true
+      }
+    }
+
     if (isDraggingRef.current) {
       setPan({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y })
     } else if (isSelectingRef.current) {
@@ -558,6 +580,26 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     try {
       ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
     } catch {}
+
+    // Handle click on node (when user didn't drag)
+    if (!hasMovedRef.current && clickedNodeRef.current && onNodeSelect) {
+      const nodeId = clickedNodeRef.current.getAttribute('data-node-id')
+      if (nodeId) {
+        const nodeIdParsed = parseId(nodeId)
+        // If clicked node is already in current path, just update focused message
+        if (currentPathIds && currentPathIds.includes(nodeIdParsed)) {
+          dispatch(chatSliceActions.focusedChatMessageSet(nodeIdParsed))
+        } else {
+          const path = getPathWithDescendants(nodeId)
+          onNodeSelect(nodeId, path)
+        }
+      }
+    }
+
+    // Reset refs
+    pointerDownPosRef.current = null
+    hasMovedRef.current = false
+    clickedNodeRef.current = null
 
     if (isSelectingRef.current) {
       const rect = containerRef.current?.getBoundingClientRect()
@@ -1765,6 +1807,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               />
             )}
             <rect
+              data-node-id={node.id}
               width={nodeWidth}
               height={nodeHeight}
               rx='8'
@@ -1886,6 +1929,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               />
             )}
             <circle
+              data-node-id={node.id}
               cx={x}
               cy={y + circleRadius}
               r={circleRadius}
