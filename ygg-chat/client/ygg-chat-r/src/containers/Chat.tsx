@@ -1546,7 +1546,7 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute bottom-0 left-0 px-2 sm:px-3 md:px-4 lg:px-6 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-5xl 2xl:max-w-5xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+          className={`absolute mb-2 bottom-0 left-0 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
           style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {/* Controls row (above) */}
