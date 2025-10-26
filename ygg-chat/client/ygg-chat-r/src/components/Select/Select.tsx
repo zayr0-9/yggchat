@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useIsMobile } from '../../hooks/useMediaQuery'
 
 export type SelectOption = { value: string; label?: string }
 
@@ -31,6 +32,7 @@ export const Select: React.FC<SelectProps> = ({
   const searchRef = useRef<HTMLInputElement | null>(null)
   const [openUp, setOpenUp] = useState(false)
   const [listMaxHeight, setListMaxHeight] = useState<number | undefined>(undefined)
+  const isMobile = useIsMobile()
 
   const normOptions: SelectOption[] = useMemo(() => {
     const out: SelectOption[] = []
@@ -199,7 +201,7 @@ export const Select: React.FC<SelectProps> = ({
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder='Search...'
                 className='w-full px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
-                autoFocus
+                autoFocus={!isMobile}
               />
             </div>
           )}

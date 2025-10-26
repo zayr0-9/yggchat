@@ -29,12 +29,6 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
   const searchResults = useAppSelector(selectSearchResults)
   const searchQuery = useAppSelector(selectSearchQuery)
 
-  // Helper function to detect mobile device
-  const isMobileDevice = (): boolean => {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia('(max-width: 767px)').matches
-  }
-
   // Drawer collapse state with localStorage persistence and mobile-first default
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     try {
@@ -48,7 +42,8 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
       }
 
       // Otherwise, default to collapsed on mobile, expanded on desktop
-      return isMobileDevice()
+      // Use window.innerWidth for initial state since hook isn't available in initializer
+      return window.innerWidth < 768
     } catch {
       return false
     }

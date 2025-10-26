@@ -48,6 +48,7 @@ import { selectSelectedFilesForChat, selectWorkspace } from '../features/ideCont
 import { selectSelectedProject } from '../features/projects/projectSelectors'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
+import { useIsMobile } from '../hooks/useMediaQuery'
 import { useIdeContext } from '../hooks/useIdeContext'
 import {
   useConversationMessages,
@@ -241,15 +242,6 @@ function Chat() {
     }
   }, [])
 
-  // Detect mobile screen size changes
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768)
-    }
-
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   // Consider the user to be "at the bottom" if within this many pixels
   const NEAR_BOTTOM_PX = 48
@@ -425,10 +417,7 @@ function Chat() {
     }
   })
   // Detect if user is on mobile device (below md breakpoint: 768px)
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false
-    return window.innerWidth < 768
-  })
+  const isMobile = useIsMobile()
   // One-time spin flags for icon buttons
   const [spinSettings, setSpinSettings] = useState(false)
   const [spinRefresh, setSpinRefresh] = useState(false)

@@ -208,7 +208,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     content,
     thinking,
     toolCalls,
-    timestamp,
+    // timestamp,
     onEdit,
     onBranch,
     onDelete,
@@ -424,13 +424,13 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
     const styles = getRoleStyles()
 
-    const formatTimestamp = (dateInput: string | Date) => {
-      const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
-      if (isNaN(date.getTime())) {
-        return typeof dateInput === 'string' ? dateInput : ''
-      }
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
+    // const formatTimestamp = (dateInput: string | Date) => {
+    //   const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput
+    //   if (isNaN(date.getTime())) {
+    //     return typeof dateInput === 'string' ? dateInput : ''
+    //   }
+    //   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    // }
 
     // Custom renderer for block code (<pre>) to add a copy button while preserving valid HTML structure
     const PreRenderer: React.FC<any> = ({ children, ...props }) => {
