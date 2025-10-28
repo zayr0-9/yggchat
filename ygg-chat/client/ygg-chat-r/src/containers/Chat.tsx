@@ -42,6 +42,7 @@ import {
   conversationsLoaded,
   makeSelectConversationById,
   systemPromptSet,
+  updateResearchNote,
 } from '../features/conversations'
 import { removeSelectedFileForChat, updateIdeContext } from '../features/ideContext'
 import { selectSelectedFilesForChat, selectWorkspace } from '../features/ideContext/ideContextSelectors'
@@ -1271,6 +1272,80 @@ function Chat() {
     closeDeleteModal()
   }
 
+  // Handle adding text to research note
+  const handleAddToNote = useCallback(
+    (text: string) => {
+      if (!currentConversationId) {
+        console.warn('No active conversation to add note to')
+        return
+      }
+
+      // Get current research note from conversation
+      const existingNote = currentConversation?.research_note || ''
+
+      // Create timestamp for the note entry
+      const timestamp = new Date().toLocaleString()
+
+      // Append new text with timestamp and separator
+      const separator = existingNote ? '\n\n---\n\n' : ''
+      const newEntry = `[${timestamp}]\n${text}`
+      const updatedNote = existingNote + separator + newEntry
+
+      // Dispatch update action
+      dispatch(updateResearchNote({ id: currentConversationId, researchNote: updatedNote }))
+        .unwrap()
+        .then(updatedConversation => {
+          // Update React Query caches to reflect the new research note
+          const projectId = selectedProject?.id || currentConversation?.project_id
+
+          // Update all conversations cache
+          const conversationsCache = queryClient.getQueryData<Conversation[]>(['conversations'])
+          if (conversationsCache) {
+            queryClient.setQueryData(
+              ['conversations'],
+              conversationsCache.map(conv =>
+                conv.id === currentConversationId ? { ...conv, research_note: updatedNote } : conv
+              )
+            )
+          }
+
+          // Update project conversations cache if project exists
+          if (projectId) {
+            const projectConversationsCache = queryClient.getQueryData<Conversation[]>([
+              'conversations',
+              'project',
+              projectId,
+            ])
+            if (projectConversationsCache) {
+              queryClient.setQueryData(
+                ['conversations', 'project', projectId],
+                projectConversationsCache.map(conv =>
+                  conv.id === currentConversationId ? { ...conv, research_note: updatedNote } : conv
+                )
+              )
+            }
+          }
+
+          // Update recent conversations cache
+          const recentCache = queryClient.getQueryData<Conversation[]>(['conversations', 'recent'])
+          if (recentCache) {
+            queryClient.setQueryData(
+              ['conversations', 'recent'],
+              recentCache.map(conv =>
+                conv.id === currentConversationId ? { ...conv, research_note: updatedNote } : conv
+              )
+            )
+          }
+
+          console.log('Added to research note successfully')
+        })
+        .catch(error => {
+          console.error('Failed to update research note:', error)
+        })
+    },
+    [currentConversationId, currentConversation, selectedProject, queryClient, dispatch]
+  )
+
   // Handle key press
   const handleKeyPress = useCallback(
     (e: React.KeyboardEvent) => {
@@ -1339,9 +1414,10 @@ function Chat() {
           onBranch={handleMessageBranch}
           onDelete={handleRequestDelete}
           onResend={handleResend}
+          onAddToNote={handleAddToNote}
         />
       ))
-  }, [displayMessages, handleMessageEdit, handleMessageBranch, handleRequestDelete, handleResend])
+  }, [displayMessages, handleMessageEdit, handleMessageBranch, handleRequestDelete, handleResend, handleAddToNote])
 
   // Removed obsolete streaming completion effect that synthesized assistant messages.
   // The streaming thunks now dispatch messageAdded and messageBranchCreated directly,

@@ -9,6 +9,7 @@ import remarkGfm from 'remark-gfm'
 import { chatSliceActions } from '../../features/chats/chatSlice'
 import { Button } from '../Button/button'
 import { TextArea } from '../TextArea/TextArea'
+import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
 type MessageRole = 'user' | 'assistant' | 'system'
 // Updated to use valid Tailwind classes
 type ChatMessageWidth =
@@ -33,6 +34,7 @@ interface ChatMessageProps {
   onDelete?: (id: string) => void
   onCopy?: (content: string) => void
   onResend?: (id: string) => void
+  onAddToNote?: (text: string) => void
   isEditing?: boolean
   width: ChatMessageWidth
   // When true (default), message cards have colored backgrounds and left borders.
@@ -214,6 +216,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     onDelete,
     onCopy,
     onResend,
+    onAddToNote,
     isEditing = false,
     width = 'w-3/5',
     colored = true,
@@ -234,6 +237,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [showMoreMenu, setShowMoreMenu] = useState(false)
     const [showMoreInfo, setShowMoreInfo] = useState(false)
     const moreMenuRef = useRef<HTMLDivElement | null>(null)
+    // Context menu states
+    const [contextMenuOpen, setContextMenuOpen] = useState(false)
+    const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
+    const [selectedText, setSelectedText] = useState<string>('')
 
     // Get message data from Redux store
     const messageData = useSelector((state: RootState) =>
@@ -320,6 +327,53 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const handleDeleteArtifact = (index: number) => {
       dispatch(chatSliceActions.messageArtifactDeleted({ messageId: id, index }))
     }
+
+    const handleContextMenu = (e: React.MouseEvent) => {
+      e.preventDefault()
+
+      // Get selected text
+      const selection = window.getSelection()
+      const text = selection?.toString().trim() || ''
+
+      // Only show menu if text is selected
+      if (text) {
+        setSelectedText(text)
+        setContextMenuPosition({ x: e.clientX, y: e.clientY })
+        setContextMenuOpen(true)
+      }
+    }
+
+    const handleAddToNoteClick = () => {
+      if (onAddToNote && selectedText) {
+        onAddToNote(selectedText)
+      }
+      setContextMenuOpen(false)
+    }
+
+    const handleCopySelectedText = async () => {
+      if (selectedText) {
+        await copyPlainText(selectedText)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }
+      setContextMenuOpen(false)
+    }
+
+    // Context menu items
+    const contextMenuItems: ContextMenuItem[] = [
+      {
+        label: 'Add to note',
+        icon: <i className='bx bx-note' />,
+        onClick: handleAddToNoteClick,
+        disabled: !onAddToNote || !selectedText,
+      },
+      {
+        label: 'Copy',
+        icon: <i className='bx bx-copy' />,
+        onClick: handleCopySelectedText,
+        disabled: !selectedText,
+      },
+    ]
 
     const handleMoreClick = () => {
       setShowMoreMenu(!showMoreMenu)
@@ -476,6 +530,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       <div
         id={`message-${id}`}
         className={`group px-2 sm:px-3 md:px-4 mb-2 sm:mb-3 md:mb-4 ${styles.container} ${width} transition-all duration-200 rounded-xl hover:bg-opacity-80  ${className ?? ''}`}
+        onContextMenu={handleContextMenu}
       >
         {/* Header with role and actions */}
         <div className='flex items-center justify-between mb-0'>
@@ -723,6 +778,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             {formatTimestamp(timestamp)}
           </div>
         )} */}
+
+        {/* Context Menu */}
+        <ContextMenu
+          isOpen={contextMenuOpen}
+          position={contextMenuPosition}
+          items={contextMenuItems}
+          onClose={() => setContextMenuOpen(false)}
+        />
       </div>
     )
   }
