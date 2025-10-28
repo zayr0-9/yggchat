@@ -7,6 +7,7 @@ import {
   getConversationContext,
   getConversationSystemPrompt,
   patchConversationContext,
+  patchConversationResearchNote,
   patchConversationSystemPrompt,
   type SystemPromptPatchResponse,
 } from '../../utils/api'
@@ -194,6 +195,21 @@ export const updateContext = createAsyncThunk<
     return next
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update context'
+    return rejectWithValue(message) as any
+  }
+})
+
+export const updateResearchNote = createAsyncThunk<
+  Conversation, // return type - full conversation object for cache update
+  { id: ConversationId; researchNote: string | null }, // argument type
+  { extra: ThunkExtraArgument }
+>('conversations/updateResearchNote', async ({ id, researchNote }, { extra, rejectWithValue }) => {
+  try {
+    const { auth } = extra
+    const updated = await patchConversationResearchNote(id, researchNote, auth.accessToken)
+    return updated as Conversation
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update research note'
     return rejectWithValue(message) as any
   }
 })

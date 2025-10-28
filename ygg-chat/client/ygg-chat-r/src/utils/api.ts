@@ -252,6 +252,13 @@ export const patchConversationContext = (
   accessToken: string | null
 ) => api.patch<ConversationPatchResponse>(`/conversations/${conversationId}/context`, accessToken, { context })
 
+export const patchConversationResearchNote = (
+  conversationId: ConversationId,
+  researchNote: string | null,
+  accessToken: string | null
+) =>
+  api.patch<ConversationPatchResponse>(`/conversations/${conversationId}/research-note`, accessToken, { researchNote })
+
 export const cloneConversation = (conversationId: ConversationId, accessToken: string | null) =>
   api.post<{ id: ConversationId; title: string; project_id: ConversationId | null }>(
     `/conversations/${conversationId}/clone`,

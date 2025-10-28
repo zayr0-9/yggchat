@@ -9,6 +9,7 @@ export interface Conversation {
   updated_at: string
   system_prompt: string | null
   conversation_context: string | null
+  research_note: string | null
 }
 
 export interface ConversationsState {

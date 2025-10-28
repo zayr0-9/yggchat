@@ -777,6 +777,34 @@ router.patch(
   })
 )
 
+// Update conversation research note
+router.patch(
+  '/conversations/:id/research-note',
+  asyncHandler(async (req, res) => {
+    const conversationId = req.params.id
+    const { researchNote } = req.body as { researchNote?: string | null }
+    const { client } = await verifyAuth(req)
+
+    const existing = await ConversationService.getById(client, conversationId)
+    if (!existing) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+
+    if (typeof researchNote === 'undefined') {
+      return res.status(400).json({ error: 'researchNote is required (string or null)' })
+    }
+    if (researchNote !== null && typeof researchNote !== 'string') {
+      return res.status(400).json({ error: 'researchNote must be a string or null' })
+    }
+
+    const normalizedResearchNote =
+      typeof researchNote === 'string' && researchNote.trim().length === 0 ? null : (researchNote as string | null)
+
+    const updated = await ConversationService.updateResearchNote(client, conversationId, normalizedResearchNote)
+    res.json(updated)
+  })
+)
+
 // Clone conversation
 router.post(
   '/conversations/:id/clone',

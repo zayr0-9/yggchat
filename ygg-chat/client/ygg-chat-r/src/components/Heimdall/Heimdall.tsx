@@ -25,6 +25,7 @@ import { ConversationId, MessageId } from '../../../../../shared/types'
 import type { RootState } from '../../store/store'
 import { parseId } from '../../utils/helpers'
 import stripMarkdownToText from '../../utils/markdownStripper'
+import { LowBar } from '../LowBar/LowBar'
 import { TextArea } from '../TextArea/TextArea'
 import { TextField } from '../TextField/TextField'
 
@@ -2430,6 +2431,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           </div>
         </div>
       )}
+
+      {/* LowBar for conversation research notes */}
+      <LowBar conversationId={conversationId} />
     </div>
   )
 }

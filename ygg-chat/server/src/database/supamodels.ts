@@ -81,6 +81,7 @@ export interface Conversation {
   model_name: string
   system_prompt?: string | null
   conversation_context?: string | null
+  research_note?: string | null
   created_at: string
   updated_at: string
 }
@@ -599,7 +600,8 @@ export class ConversationService {
     modelName?: string,
     projectId?: string,
     systemPrompt?: string | null,
-    conversationContext?: string | null
+    conversationContext?: string | null,
+    researchNote?: string | null
   ): Promise<Conversation> {
     const { data: created, error } = await client
       .from('conversations')
@@ -610,6 +612,7 @@ export class ConversationService {
         project_id: projectId || null,
         system_prompt: systemPrompt || null,
         conversation_context: conversationContext || null,
+        research_note: researchNote || null,
       })
       .select()
       .single()
@@ -698,6 +701,21 @@ export class ConversationService {
     return data || undefined
   }
 
+  static async updateResearchNote(
+    client: SupabaseClient,
+    id: string,
+    researchNote: string | null
+  ): Promise<Conversation | undefined> {
+    const { data } = await client
+      .from('conversations')
+      .update({ research_note: researchNote })
+      .eq('id', id)
+      .select()
+      .single()
+
+    return data || undefined
+  }
+
   static async touch(client: SupabaseClient, id: string): Promise<void> {
     await client.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', id)
   }
@@ -726,6 +744,7 @@ export class ConversationService {
         project_id: source.project_id,
         system_prompt: source.system_prompt,
         conversation_context: source.conversation_context,
+        research_note: source.research_note,
       })
       .select()
       .single()
