@@ -1123,14 +1123,71 @@ function Chat() {
         // Replace any @file mentions with actual file contents before branching
         const processed = replaceFileMentionsWithPath(newContent)
         console.log(processed)
-        const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
 
-        if (isWebMode) {
-          // Find the original message to get its parent_id
-          const parsedId = parseId(id)
-          const originalMessage = conversationMessages.find(m => m.id === parsedId)
+        // Find the message to check if it has children
+        const parsedId = parseId(id)
+        const originalMessage = conversationMessages.find(m => m.id === parsedId)
 
-          if (originalMessage) {
+        if (!originalMessage) {
+          console.error('Message not found:', id)
+          return
+        }
+
+        // Check if message has children
+        const hasChildren = originalMessage.children_ids && originalMessage.children_ids.length > 0
+
+        if (!hasChildren) {
+          // No children: send a new message with this message as parent (linear continuation)
+          const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+
+          if (isWebMode) {
+            // Create optimistic message for instant UI feedback
+            const optimisticUserMessage: Message = {
+              id: `temp-${Date.now()}`,
+              conversation_id: currentConversationId,
+              role: 'user' as const,
+              content: newContent,
+              content_plain_text: newContent,
+              parent_id: parsedId,
+              children_ids: [],
+              created_at: new Date().toISOString(),
+              model_name: selectedModel?.name || '',
+              partial: false,
+              pastedContext: [],
+              artifacts: [],
+            }
+            dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
+          }
+
+          // Send as a regular message with the selected message as parent
+          dispatch(
+            sendMessage({
+              conversationId: currentConversationId,
+              input: { content: newContent },
+              parent: parsedId,
+              repeatNum: 1,
+              think: think,
+            })
+          )
+            .unwrap()
+            .then(result => {
+              if (!result?.userMessage) {
+                console.warn('Server did not confirm user message')
+              }
+              // Messages already added to Redux via SSE stream
+            })
+            .catch(error => {
+              // Clear optimistic message on error
+              if (isWebMode) {
+                dispatch(chatSliceActions.optimisticMessageCleared())
+              }
+              console.error('Failed to send message:', error)
+            })
+        } else {
+          // Has children: create a branch (existing behavior)
+          const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+
+          if (isWebMode) {
             // Create optimistic branch message for instant UI feedback (web mode only)
             const optimisticBranchMessage: Message = {
               id: `branch-temp-${Date.now()}`,
@@ -1148,36 +1205,36 @@ function Chat() {
             }
             dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
           }
-        }
 
-        dispatch(
-          editMessageWithBranching({
-            conversationId: currentConversationId,
-            originalMessageId: parseId(id),
-            newContent: newContent,
-            modelOverride: selectedModel?.name,
-            think: think,
-          })
-        )
-          .unwrap()
-          .then(() => {
-            // Invalidate React Query cache after successful branch to fetch new messages
-            // Note: messages query now includes tree data, so only one invalidation needed
-            queryClient.invalidateQueries({
-              queryKey: ['conversations', currentConversationId, 'messages'],
-              refetchType: 'active',
+          dispatch(
+            editMessageWithBranching({
+              conversationId: currentConversationId,
+              originalMessageId: parsedId,
+              newContent: newContent,
+              modelOverride: selectedModel?.name,
+              think: think,
             })
-          })
-          .catch(error => {
-            // Clear optimistic branch message on error (web mode only)
-            if (isWebMode) {
-              dispatch(chatSliceActions.optimisticBranchMessageCleared())
-            }
-            console.error('Failed to branch message:', error)
-          })
+          )
+            .unwrap()
+            .then(() => {
+              // Invalidate React Query cache after successful branch to fetch new messages
+              // Note: messages query now includes tree data, so only one invalidation needed
+              queryClient.invalidateQueries({
+                queryKey: ['conversations', currentConversationId, 'messages'],
+                refetchType: 'active',
+              })
+            })
+            .catch(error => {
+              // Clear optimistic branch message on error (web mode only)
+              if (isWebMode) {
+                dispatch(chatSliceActions.optimisticBranchMessageCleared())
+              }
+              console.error('Failed to branch message:', error)
+            })
+        }
       }
     },
-    [currentConversationId, selectedModel?.name, think, dispatch, replaceFileMentionsWithPath, conversationMessages]
+    [currentConversationId, selectedModel?.name, think, dispatch, replaceFileMentionsWithPath, conversationMessages, queryClient, scrollToBottomNow]
   )
 
   const handleResend = useCallback(

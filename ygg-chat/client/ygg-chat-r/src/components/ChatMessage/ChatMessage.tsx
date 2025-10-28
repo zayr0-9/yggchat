@@ -8,8 +8,8 @@ import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
 import { chatSliceActions } from '../../features/chats/chatSlice'
 import { Button } from '../Button/button'
-import { TextArea } from '../TextArea/TextArea'
 import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
+import { TextArea } from '../TextArea/TextArea'
 type MessageRole = 'user' | 'assistant' | 'system'
 // Updated to use valid Tailwind classes
 type ChatMessageWidth =
@@ -359,6 +359,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       setContextMenuOpen(false)
     }
 
+    const handleCreateBranchFromSelection = () => {
+      if (onBranch && selectedText) {
+        // Prefix the selected text with "Explain: " and create a new branch
+        const branchContent = `Explain: ${selectedText}`
+        onBranch(id, branchContent)
+      }
+      setContextMenuOpen(false)
+    }
+
     // Context menu items
     const contextMenuItems: ContextMenuItem[] = [
       {
@@ -366,6 +375,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         icon: <i className='bx bx-note' />,
         onClick: handleAddToNoteClick,
         disabled: !onAddToNote || !selectedText,
+      },
+      {
+        label: 'Explain',
+        icon: <i className='bx bx-git-branch' />,
+        onClick: handleCreateBranchFromSelection,
+        disabled: !onBranch || !selectedText,
       },
       {
         label: 'Copy',
