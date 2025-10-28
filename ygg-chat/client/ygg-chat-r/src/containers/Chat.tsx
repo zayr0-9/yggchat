@@ -49,8 +49,8 @@ import { selectSelectedFilesForChat, selectWorkspace } from '../features/ideCont
 import { selectSelectedProject } from '../features/projects/projectSelectors'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
-import { useIsMobile } from '../hooks/useMediaQuery'
 import { useIdeContext } from '../hooks/useIdeContext'
+import { useIsMobile } from '../hooks/useMediaQuery'
 import {
   useConversationMessages,
   useConversationsByProject,
@@ -242,7 +242,6 @@ function Chat() {
       observer.disconnect()
     }
   }, [])
-
 
   // Consider the user to be "at the bottom" if within this many pixels
   const NEAR_BOTTOM_PX = 48
@@ -1234,7 +1233,16 @@ function Chat() {
         }
       }
     },
-    [currentConversationId, selectedModel?.name, think, dispatch, replaceFileMentionsWithPath, conversationMessages, queryClient, scrollToBottomNow]
+    [
+      currentConversationId,
+      selectedModel?.name,
+      think,
+      dispatch,
+      replaceFileMentionsWithPath,
+      conversationMessages,
+      queryClient,
+      scrollToBottomNow,
+    ]
   )
 
   const handleResend = useCallback(
@@ -1351,7 +1359,7 @@ function Chat() {
       // Dispatch update action
       dispatch(updateResearchNote({ id: currentConversationId, researchNote: updatedNote }))
         .unwrap()
-        .then(updatedConversation => {
+        .then(() => {
           // Update React Query caches to reflect the new research note
           const projectId = selectedProject?.id || currentConversation?.project_id
 
