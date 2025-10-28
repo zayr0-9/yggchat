@@ -240,15 +240,27 @@ const ConversationPage: React.FC = () => {
             <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
               Conversations
             </h2>
-            <div className='flex items-center gap-2 my-1 p-0 lg:p-1 outline-2 rounded-4xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] dark:outline-neutral-800 outline-neutral-50'>
-              <Button variant='outline2' size='medium' onClick={handleEditProject} className='group'>
+            <div className='flex items-center gap-2 my-1 p-0 lg:p-1 '>
+              <Button
+                variant='outline2'
+                size='medium'
+                rounded='full'
+                onClick={handleEditProject}
+                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_1px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+              >
                 <p className='transition-transform duration-100 group-active:scale-95'>Project Settings</p>
               </Button>
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
-          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800 outline-neutral-50 rounded-2xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
-            <Button variant='outline2' size='large' onClick={handleNewConversation} className='group'>
+          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-3xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+            <Button
+              variant='outline2'
+              size='large'
+              rounded='full'
+              onClick={handleNewConversation}
+              className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+            >
               <p className='transition-transform duration-100 group-active:scale-95'>New Conversation</p>
             </Button>
 
@@ -281,7 +293,7 @@ const ConversationPage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
           <div className='flex gap-4 pt-2 lg:pt-5 items-start w-full flex-1 overflow-hidden flex-col'>
-            <ul className='space-y-2 px-2 py-6 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar scroll-fade w-full'>
+            <ul className='space-y-2 px-4 py-6 rounded flex-1 overflow-y-auto no-scrollbar scroll-fade w-full'>
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}

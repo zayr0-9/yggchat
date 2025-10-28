@@ -677,7 +677,11 @@ export class ConversationService {
     return data || undefined
   }
 
-  static async updateContext(client: SupabaseClient, id: string, context: string): Promise<Conversation | undefined> {
+  static async updateContext(
+    client: SupabaseClient,
+    id: string,
+    context: string | null
+  ): Promise<Conversation | undefined> {
     const { data } = await client
       .from('conversations')
       .update({ conversation_context: context })

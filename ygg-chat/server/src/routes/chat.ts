@@ -639,13 +639,15 @@ router.patch(
     if (typeof context === 'undefined') {
       return res.status(400).json({ error: 'context is required (string or null)' })
     }
-    if (context) {
-      const updated = ConversationService.updateContext(conversationId, context)
-      res.json(updated)
-    } else {
-      // return error if no context sent
-      return res.status(400).json({ error: 'context is required (string or null)' })
+    if (context !== null && typeof context !== 'string') {
+      return res.status(400).json({ error: 'context must be a string or null' })
     }
+
+    const normalizedContext =
+      typeof context === 'string' && context.trim().length === 0 ? null : (context as string | null)
+
+    const updated = ConversationService.updateContext(conversationId, normalizedContext)
+    res.json(updated)
   })
 )
 // Clone conversation

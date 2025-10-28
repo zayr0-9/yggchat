@@ -20,11 +20,13 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const context = useAppSelector(state => state.conversations.convContext ?? '')
   const conversationId = useAppSelector(selectCurrentConversationId)
   const selectedProject = useAppSelector(selectSelectedProject)
+  const conversations = useAppSelector(state => state.conversations.items)
   const tools = useAppSelector(state => state.chat.tools ?? [])
 
   // Track initial values when modal opens to detect changes
   const initialSystemPromptRef = useRef<string | null>(null)
   const initialContextRef = useRef<string | null>(null)
+  const prevOpenRef = useRef<boolean>(false)
 
   const handleChange = useCallback(
     (value: string) => {
@@ -44,79 +46,99 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
 
   // Capture initial values when modal opens and save changes when it closes
   useEffect(() => {
-    if (open) {
-      // Store initial values when modal opens
+    if (open && !prevOpenRef.current) {
       initialSystemPromptRef.current = systemPrompt
       initialContextRef.current = context
-    } else {
-      // When modal closes, save changes if values have changed
-      if (!conversationId) return
-
-      const currentSystemPrompt = systemPrompt.trim() === '' ? null : systemPrompt
-      const currentContext = context.trim() === '' ? null : context
-      const initialSystemPrompt = initialSystemPromptRef.current?.trim() === '' ? null : initialSystemPromptRef.current
-      const initialContext = initialContextRef.current?.trim() === '' ? null : initialContextRef.current
-
-      const systemPromptChanged = currentSystemPrompt !== initialSystemPrompt
-      const contextChanged = currentContext !== initialContext
-
-      const projectId = selectedProject?.id
-
-      // Helper function to update conversation in cached array
-      const updateSystemPromptInCache = (conversations: Conversation[] | undefined) => {
-        if (!conversations) return conversations
-        return conversations.map(conv =>
-          conv.id === conversationId ? { ...conv, system_prompt: currentSystemPrompt } : conv
-        )
-      }
-
-      const updateContextInCache = (conversations: Conversation[] | undefined) => {
-        if (!conversations) return conversations
-        return conversations.map(conv =>
-          conv.id === conversationId ? { ...conv, conversation_context: currentContext } : conv
-        )
-      }
-
-      // Save system prompt if changed
-      if (systemPromptChanged) {
-        dispatch(updateSystemPrompt({ id: conversationId, systemPrompt: currentSystemPrompt }))
-          .unwrap()
-          .then(() => {
-            // Update all conversations cache
-            queryClient.setQueryData<Conversation[]>(['conversations'], updateSystemPromptInCache)
-
-            // Update project-specific conversations cache if projectId exists
-            if (projectId) {
-              queryClient.setQueryData<Conversation[]>(
-                ['conversations', 'project', projectId],
-                updateSystemPromptInCache
-              )
-            }
-          })
-          .catch(error => {
-            console.error('Failed to update system prompt:', error)
-          })
-      }
-
-      // Save context if changed
-      if (contextChanged) {
-        dispatch(updateContext({ id: conversationId, context: currentContext }))
-          .unwrap()
-          .then(() => {
-            // Update all conversations cache
-            queryClient.setQueryData<Conversation[]>(['conversations'], updateContextInCache)
-
-            // Update project-specific conversations cache if projectId exists
-            if (projectId) {
-              queryClient.setQueryData<Conversation[]>(['conversations', 'project', projectId], updateContextInCache)
-            }
-          })
-          .catch(error => {
-            console.error('Failed to update context:', error)
-          })
-      }
     }
-  }, [open, conversationId, systemPrompt, context, dispatch, queryClient, selectedProject])
+
+    if (!open && prevOpenRef.current) {
+      if (conversationId) {
+        const currentSystemPrompt = systemPrompt.trim() === '' ? null : systemPrompt
+        const currentContext = context.trim() === '' ? null : context
+        const initialSystemPrompt =
+          initialSystemPromptRef.current?.trim() === '' ? null : initialSystemPromptRef.current
+        const initialContext = initialContextRef.current?.trim() === '' ? null : initialContextRef.current
+
+        const systemPromptChanged = currentSystemPrompt !== initialSystemPrompt
+        const contextChanged = currentContext !== initialContext
+
+        const currentConversation = conversations.find(conv => conv.id === conversationId) || null
+        const projectId = currentConversation?.project_id || selectedProject?.id || null
+
+        const updateSystemPromptInCache = (items: Conversation[] | undefined) => {
+          if (!items) return items
+          return items.map(conv =>
+            conv.id === conversationId ? { ...conv, system_prompt: currentSystemPrompt } : conv
+          )
+        }
+
+        const updateContextInCache = (items: Conversation[] | undefined) => {
+          if (!items) return items
+          return items.map(conv =>
+            conv.id === conversationId ? { ...conv, conversation_context: currentContext } : conv
+          )
+        }
+
+        if (systemPromptChanged) {
+          dispatch(updateSystemPrompt({ id: conversationId, systemPrompt: currentSystemPrompt }))
+            .unwrap()
+            .then(() => {
+              queryClient.setQueryData<Conversation[]>(['conversations'], updateSystemPromptInCache)
+              if (projectId) {
+                queryClient.setQueryData<Conversation[]>(
+                  ['conversations', 'project', projectId],
+                  updateSystemPromptInCache
+                )
+              }
+              queryClient.setQueryData<Conversation[]>(['conversations', 'recent'], updateSystemPromptInCache)
+              queryClient.setQueryData(
+                ['conversations', conversationId, 'data'],
+                (prev: any) => (prev ? { ...prev, systemPrompt: currentSystemPrompt } : prev)
+              )
+            })
+            .catch(error => {
+              console.error('Failed to update system prompt:', error)
+            })
+        }
+
+        if (contextChanged) {
+          dispatch(updateContext({ id: conversationId, context: currentContext }))
+            .unwrap()
+            .then(() => {
+              queryClient.setQueryData<Conversation[]>(['conversations'], updateContextInCache)
+              if (projectId) {
+                queryClient.setQueryData<Conversation[]>(
+                  ['conversations', 'project', projectId],
+                  updateContextInCache
+                )
+              }
+              queryClient.setQueryData<Conversation[]>(['conversations', 'recent'], updateContextInCache)
+              queryClient.setQueryData(
+                ['conversations', conversationId, 'data'],
+                (prev: any) => (prev ? { ...prev, context: currentContext } : prev)
+              )
+            })
+            .catch(error => {
+              console.error('Failed to update context:', error)
+            })
+        }
+      }
+
+      initialSystemPromptRef.current = null
+      initialContextRef.current = null
+    }
+
+    prevOpenRef.current = open
+  }, [
+    open,
+    conversationId,
+    systemPrompt,
+    context,
+    conversations,
+    dispatch,
+    queryClient,
+    selectedProject,
+  ])
 
   useEffect(() => {
     if (!open) return
