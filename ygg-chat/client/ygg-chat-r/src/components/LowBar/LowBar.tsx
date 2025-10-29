@@ -142,7 +142,11 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
 
         {/* Expanded content */}
         {isExpanded && (
-          <div className='flex-1 p-3 overflow-hidden' data-heimdall-wheel-exempt='true' data-heimdall-contextmenu-exempt='true'>
+          <div
+            className='flex-1 p-3 overflow-hidden thin-scrollbar'
+            data-heimdall-wheel-exempt='true'
+            data-heimdall-contextmenu-exempt='true'
+          >
             <TextArea
               value={localNote}
               onChange={handleNoteChange}
