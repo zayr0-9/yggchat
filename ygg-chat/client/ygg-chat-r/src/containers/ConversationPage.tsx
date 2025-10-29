@@ -264,7 +264,7 @@ const ConversationPage: React.FC = () => {
             <div className='flex items-center gap-2 my-1 p-0 lg:p-1 '>
               <Button
                 variant='outline2'
-                size='medium'
+                size='large'
                 rounded='full'
                 onClick={handleEditProject}
                 className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_1px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
@@ -274,7 +274,7 @@ const ConversationPage: React.FC = () => {
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
-          <div className='mb-0 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-3xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+          <div className='mb-0 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
                 variant='outline2'

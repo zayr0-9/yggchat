@@ -68,17 +68,17 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
   return (
     <div
       className={`fixed bottom-4 right-4 z-50 transition-all duration-300 ease-in-out ${
-        isExpanded ? 'w-[400px] h-[320px]' : 'w-[200px] h-[40px]'
+        isExpanded ? 'w-[30%] h-[50%]' : 'w-[10%] h-[3%]'
       }`}
     >
       {/* Container with shadow and border */}
-      <div className='h-full flex flex-col bg-slate-100 dark:bg-secondary-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg overflow-hidden'>
+      <div className='h-full flex flex-col backdrop-blur-sm dark:bg-transparent border border-transparent dark:border-neutral-800 rounded-2xl shadow-lg overflow-hidden'>
         {/* Header bar (always visible) */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className='flex items-center justify-between px-4 py-2 bg-slate-200 dark:bg-secondary-600 hover:bg-slate-300 dark:hover:bg-secondary-500 transition-colors border-b border-gray-300 dark:border-gray-600 cursor-pointer'
+          className={`flex items-center justify-between ${isExpanded ? 'mt-2 mx-2' : ''} px-4 py-2 bg-neutral-50 dark:bg-neutral-900 dark:outline-2 rounded-full dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800`}
         >
-          <span className='text-sm font-medium text-stone-800 dark:text-stone-200'>Notes</span>
+          <span className='text-sm font-medium text-stone-800 dark:text-stone-200 '>Notes</span>
           {isExpanded ? (
             <ChevronUp className='w-4 h-4 text-stone-600 dark:text-stone-300' />
           ) : (
@@ -94,8 +94,8 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
               onChange={handleNoteChange}
               placeholder='Enter research notes for this conversation...'
               className='w-full h-full resize-none'
-              minRows={8}
-              maxRows={8}
+              minRows={20}
+              fillAvailableHeight={true}
               autoFocus={false}
             />
           </div>

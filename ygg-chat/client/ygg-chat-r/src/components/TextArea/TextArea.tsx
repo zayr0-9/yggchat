@@ -24,6 +24,7 @@ interface TextAreaProps {
   maxRows?: number
   autoFocus?: boolean
   showCharCount?: boolean
+  fillAvailableHeight?: boolean
 }
 
 export const TextArea: React.FC<TextAreaProps> = ({
@@ -41,6 +42,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
   maxRows = 25,
   autoFocus = false,
   showCharCount = false,
+  fillAvailableHeight = false,
   ...rest
 }) => {
   const dispatch = useDispatch()
@@ -243,6 +245,17 @@ export const TextArea: React.FC<TextAreaProps> = ({
   const adjustHeight = () => {
     const textarea = textareaRef.current
     if (textarea) {
+      // If fillAvailableHeight is true, only set min-height and let flex handle the rest
+      if (fillAvailableHeight) {
+        const lineHeight = 24 // Approximate line height in pixels
+        const minHeight = minRows * lineHeight + 16 // 16px for padding
+        textarea.style.minHeight = `${minHeight}px`
+        textarea.style.height = '100%'
+        textarea.style.overflowY = 'auto'
+        return
+      }
+
+      // Original fixed-height behavior for non-flex mode
       // Reset height to auto to get the correct scrollHeight
       textarea.style.height = 'auto'
 
@@ -337,22 +350,22 @@ export const TextArea: React.FC<TextAreaProps> = ({
 
   const baseStyles = `${width} px-4 py-3 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-neutral-900`
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
-
+  // focus:border-gray-500 focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 dark:focus:ring-2 dark:focus:ring-secondary-600
   const stateStyles = {
-    default: `${baseStyles} bg-gray-800 text-stone-800 dark:text-stone-200 placeholder-gray-400 border-gray-600 outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 dark:focus:ring-2 dark:focus:ring-secondary-600`,
+    default: `${baseStyles} bg-gray-800 text-stone-800 dark:text-stone-200 placeholder-gray-400 border-gray-600 outline-none`,
     error: `${baseStyles} bg-gray-800 text-stone-800 dark:text-stone-200 placeholder-gray-400 border-red-500 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-500 focus:ring-opacity-50`,
     disabled: `${baseStyles} bg-gray-900 text-stone-800 dark:text-stone-200 border-gray-700 placeholder-gray-600 cursor-not-allowed`,
   }
 
   return (
-    <div className='flex flex-col gap-1'>
+    <div className={`flex flex-col gap-1 ${fillAvailableHeight ? 'flex-1 h-full' : ''}`}>
       {label && (
         <label htmlFor={id} className={`text-sm font-medium text-gray-200 ${labelClasses}`}>
           {label}
         </label>
       )}
 
-      <div className='relative'>
+      <div className={`relative ${fillAvailableHeight ? 'flex flex-col flex-1' : ''}`}>
         <textarea
           ref={textareaRef}
           id={id}
@@ -365,13 +378,17 @@ export const TextArea: React.FC<TextAreaProps> = ({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           disabled={state === 'disabled'}
-          className={`${stateStyles[state]} ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${className}`}
+          className={`${stateStyles[state]} ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${fillAvailableHeight ? 'flex-1' : ''} ${className}`}
           aria-invalid={state === 'error'}
           aria-describedby={state === 'error' && errorMessage ? errorId : undefined}
           autoFocus={autoFocus}
-          style={{
-            minHeight: `${minRows * 24 + 16}px`,
-          }}
+          style={
+            fillAvailableHeight
+              ? undefined
+              : {
+                  minHeight: `${minRows * 24 + 16}px`,
+                }
+          }
           {...rest}
         />
 

@@ -193,10 +193,10 @@ const Homepage: React.FC = () => {
             <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] py-2 font-bold dark:text-neutral-100'>
               Projects
             </h2>
-            <div className='flex items-center gap-2 my-1 p-1 outline-2 outline-neutral-50 dark:outline-neutral-800 rounded-4xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+            <div className='flex items-center gap-0 my-1 outline-2 outline-transparent dark:outline-2 dark:outline-neutral-800 rounded-4xl shadow-[0px_0px_3px_-0.5px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
               <Button
                 variant='outline2'
-                size='smaller'
+                size='medium'
                 onClick={handleLogout}
                 rounded='full'
                 title='Logout'
@@ -210,7 +210,7 @@ const Homepage: React.FC = () => {
               </Button>
               <Button
                 variant='outline2'
-                size='smaller'
+                size='medium'
                 onClick={() => navigate('/settings')}
                 className=''
                 rounded='full'
@@ -247,7 +247,7 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-0 flex p-2 justify-between flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800 outline-neutral-50 rounded-2xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+          <div className='mb-0 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
                 variant='outline2'
