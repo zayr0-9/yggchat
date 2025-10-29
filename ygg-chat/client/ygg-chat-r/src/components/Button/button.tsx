@@ -52,7 +52,7 @@ export const Button: React.FC<ButtonProps> = ({
     small: 'px-3 py-1.5 text-[14px]',
     medium: 'px-3 py-2 text-base',
     large:
-      'px-2 py-2 sm:px-1.5 sm:py-2 md:px-1.5 md:py-2 lg:px-2 lg:py-2 xl:px-3 xl:py-3 2xl:px-3 2xl:py-3 3xl:px-4 3xl:py-3 4xl:px-4 4xl:py-4 text-[14px] sm:text-[12px] md:text-[14px] lg:text-[16px] xl:text-[16px] 2xl:text-[16px] 3xl:text-[20px] 4xl:text-[22px]',
+      'px-2 py-2.5 sm:px-1.5 sm:py-2 md:px-1.5 md:py-2 lg:px-2 lg:py-2 xl:px-3 xl:py-3 2xl:px-3 2xl:py-3 3xl:px-4 3xl:py-3 4xl:px-4 4xl:py-4 text-[14px] sm:text-[12px] md:text-[14px] lg:text-[16px] xl:text-[16px] 2xl:text-[16px] 3xl:text-[20px] 4xl:text-[22px]',
     extraLarge: 'px-6 py-6 text-lg',
     circle: 'px-3 py-3 text-lg',
   }

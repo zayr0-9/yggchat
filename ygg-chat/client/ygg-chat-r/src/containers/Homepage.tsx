@@ -247,35 +247,18 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800 outline-neutral-50 rounded-2xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
-            <Button
-              variant='outline2'
-              size='large'
-              rounded='full'
-              onClick={handleCreateProject}
-              className='shrink-0 group rounded-4xl'
-            >
-              <p className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'>
-                New Project
-              </p>
-            </Button>
-
-            <Button
-              variant='outline2'
-              size='circle'
-              rounded='full'
-              onClick={handleRefreshProjects}
-              disabled={isRefetching}
-              className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
-              title='Refresh projects from server'
-            >
-              <i
-                className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
-                  isRefetching ? 'animate-spin' : ''
-                }`}
-                aria-hidden='true'
-              ></i>
-            </Button>
+          <div className='mb-0 flex p-2 justify-between flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800 outline-neutral-50 rounded-2xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+            <div className='flex items-center gap-1'>
+              <Button
+                variant='outline2'
+                size='large'
+                rounded='full'
+                onClick={handleCreateProject}
+                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+              >
+                <p className=''>New Project</p>
+              </Button>
+            </div>
 
             <div className='flex items-center gap-2'>
               <span className='text-sm text-gray-600 dark:text-gray-300'>Filter</span>
@@ -297,6 +280,22 @@ const Homepage: React.FC = () => {
               >
                 <i
                   className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none`}
+                  aria-hidden='true'
+                ></i>
+              </Button>
+              <Button
+                variant='outline2'
+                size='circle'
+                rounded='full'
+                onClick={handleRefreshProjects}
+                disabled={isRefetching}
+                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+                title='Refresh projects from server'
+              >
+                <i
+                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
+                    isRefetching ? 'animate-spin' : ''
+                  }`}
                   aria-hidden='true'
                 ></i>
               </Button>

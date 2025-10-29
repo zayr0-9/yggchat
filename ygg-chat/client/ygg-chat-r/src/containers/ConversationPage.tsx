@@ -274,35 +274,20 @@ const ConversationPage: React.FC = () => {
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
-          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-3xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
-            <Button
-              variant='outline2'
-              size='large'
-              rounded='full'
-              onClick={handleNewConversation}
-              className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
-            >
-              <p className='transition-transform duration-100 group-active:scale-95'>New Conversation</p>
-            </Button>
+          <div className='mb-0 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-3xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+            <div className='flex items-center gap-1'>
+              <Button
+                variant='outline2'
+                size='large'
+                rounded='full'
+                onClick={handleNewConversation}
+                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+              >
+                <p className='transition-transform duration-100 group-active:scale-95'>New Conversation</p>
+              </Button>
+            </div>
 
-            <Button
-              variant='outline2'
-              size='circle'
-              rounded='full'
-              onClick={handleRefreshConversations}
-              disabled={isRefetching}
-              className='group dark:outline-2 rounded-full dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
-              title='Refresh conversations from server'
-            >
-              <i
-                className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
-                  isRefetching ? 'animate-spin' : ''
-                }`}
-                aria-hidden='true'
-              ></i>
-            </Button>
-
-            <div className='flex items-center gap-2'>
+            <div className='flex items-center gap-1'>
               <span className='text-sm text-gray-600 dark:text-gray-300'>Filter</span>
               <Select
                 value={sortBy}
@@ -312,7 +297,7 @@ const ConversationPage: React.FC = () => {
                   { value: 'created', label: 'Created' },
                   { value: 'name', label: 'Name' },
                 ]}
-                className='w-32 transition-transform duration-70 active:scale-95'
+                className='w-28 transition-transform duration-70 active:scale-95'
               />
               <Button
                 variant='outline2'
@@ -322,6 +307,23 @@ const ConversationPage: React.FC = () => {
               >
                 <i
                   className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none`}
+                  aria-hidden='true'
+                ></i>
+              </Button>
+
+              <Button
+                variant='outline2'
+                size='circle'
+                rounded='full'
+                onClick={handleRefreshConversations}
+                disabled={isRefetching}
+                className='group dark:outline-2 rounded-full dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+                title='Refresh conversations from server'
+              >
+                <i
+                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
+                    isRefetching ? 'animate-spin' : ''
+                  }`}
                   aria-hidden='true'
                 ></i>
               </Button>
