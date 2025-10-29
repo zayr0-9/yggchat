@@ -1,9 +1,11 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { ConversationId } from '../../../../../shared/types'
 import { updateResearchNote } from '../../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../../features/conversations/conversationSelectors'
+import { Conversation } from '../../features/conversations/conversationTypes'
 import { TextArea } from '../TextArea/TextArea'
 
 interface LowBarProps {
@@ -12,6 +14,7 @@ interface LowBarProps {
 
 export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
   const dispatch = useDispatch()
+  const queryClient = useQueryClient()
   const [isExpanded, setIsExpanded] = useState(false)
   const [localNote, setLocalNote] = useState('')
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -37,9 +40,52 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
 
       debounceTimeoutRef.current = setTimeout(() => {
         dispatch(updateResearchNote({ id: conversationId, researchNote: note }) as any)
+          .unwrap()
+          .then(() => {
+            // Update React Query caches to reflect the new research note
+            const projectId = conversation?.project_id
+
+            // Update all conversations cache
+            const conversationsCache = queryClient.getQueryData<Conversation[]>(['conversations'])
+            if (conversationsCache) {
+              queryClient.setQueryData(
+                ['conversations'],
+                conversationsCache.map(conv => (conv.id === conversationId ? { ...conv, research_note: note } : conv))
+              )
+            }
+
+            // Update project conversations cache if project exists
+            if (projectId) {
+              const projectConversationsCache = queryClient.getQueryData<Conversation[]>([
+                'conversations',
+                'project',
+                projectId,
+              ])
+              if (projectConversationsCache) {
+                queryClient.setQueryData(
+                  ['conversations', 'project', projectId],
+                  projectConversationsCache.map(conv =>
+                    conv.id === conversationId ? { ...conv, research_note: note } : conv
+                  )
+                )
+              }
+            }
+
+            // Update recent conversations cache
+            const recentCache = queryClient.getQueryData<Conversation[]>(['conversations', 'recent'])
+            if (recentCache) {
+              queryClient.setQueryData(
+                ['conversations', 'recent'],
+                recentCache.map(conv => (conv.id === conversationId ? { ...conv, research_note: note } : conv))
+              )
+            }
+          })
+          .catch((error: unknown) => {
+            console.error('Failed to update research note:', error)
+          })
       }, 1000) // 1 second debounce
     },
-    [conversationId, dispatch]
+    [conversationId, conversation?.project_id, dispatch, queryClient]
   )
 
   // Handle text change

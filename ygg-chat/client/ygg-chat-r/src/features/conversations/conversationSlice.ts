@@ -8,6 +8,7 @@ import {
   fetchConversationsByProjectId,
   fetchRecentConversations,
   updateConversation,
+  updateResearchNote,
 } from './conversationActions'
 import { Conversation, ConversationsState } from './conversationTypes'
 
@@ -141,6 +142,13 @@ const conversationSlice = createSlice({
       .addCase(deleteConversation.rejected, (state, action) => {
         state.loading = false
         state.error = action.payload as string
+      })
+      // update research note
+      .addCase(updateResearchNote.fulfilled, (state, action: PayloadAction<Conversation>) => {
+        const idx = state.items.findIndex(c => c.id === action.payload.id)
+        if (idx !== -1) {
+          state.items[idx] = action.payload
+        }
       })
   },
 })
