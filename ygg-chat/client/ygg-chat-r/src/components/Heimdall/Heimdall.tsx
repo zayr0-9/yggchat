@@ -107,20 +107,19 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [noteDialogPos, setNoteDialogPos] = useState<{ x: number; y: number } | null>(null)
   const [noteMessageId, setNoteMessageId] = useState<MessageId | null>(null)
   const [noteText, setNoteText] = useState<string>('')
+  // Store message content in ref to avoid stale closures in debounced update
+  const noteMessageContentRef = useRef<string>('')
   // Track dark mode for shadows
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
   // Track pointers for pinch-to-zoom gesture
   const pointerMapRef = useRef<Map<number, { clientX: number; clientY: number; pointerType: string }>>(new Map())
   const fallbackOffsetsRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
-  const pinchStateRef = useRef<
-    | {
-        initialDistance: number
-        initialZoom: number
-        rafId: number | null
-        pending: { point: { clientX: number; clientY: number }; targetZoom: number } | null
-      }
-    | null
-  >(null)
+  const pinchStateRef = useRef<{
+    initialDistance: number
+    initialZoom: number
+    rafId: number | null
+    pending: { point: { clientX: number; clientY: number }; targetZoom: number } | null
+  } | null>(null)
   const isPinchingRef = useRef<boolean>(false)
 
   // Keep a stable inner offset so the whole tree does not shift when nodes are added/removed
@@ -226,7 +225,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     } catch {}
   }
 
-
   // Debounced update function for notes
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -254,6 +252,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
       setNoteMessageId(messageId)
       setNoteText(message.note || '')
+      noteMessageContentRef.current = message.content // Store content in ref
       setNoteDialogPos(position)
       setShowNoteDialog(true)
       setShowContextMenu(false)
@@ -266,6 +265,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     setNoteDialogPos(null)
     setNoteMessageId(null)
     setNoteText('')
+    noteMessageContentRef.current = '' // Clear ref on close
   }, [])
 
   const handleNoteTextChange = useCallback(
@@ -273,13 +273,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       setNoteText(newNoteText)
 
       if (noteMessageId !== null) {
-        const message = getCurrentMessage(noteMessageId)
-        if (message) {
-          debouncedUpdateNote(noteMessageId, message.content, newNoteText)
+        const messageContent = noteMessageContentRef.current
+        if (messageContent) {
+          debouncedUpdateNote(noteMessageId, messageContent, newNoteText)
         }
       }
     },
-    [noteMessageId, getCurrentMessage, debouncedUpdateNote]
+    [noteMessageId, debouncedUpdateNote]
   )
 
   const onWindowMouseMove = (e: globalThis.MouseEvent): void => {
@@ -331,42 +331,39 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
   const clampZoomValue = (value: number) => Math.max(0.1, Math.min(3, value))
 
-  const applyZoomAtPoint = useCallback(
-    (point: { clientX: number; clientY: number }, desiredZoom: number) => {
-      const svgEl = svgRef.current
-      const currentZoom = zoomRef.current
-      const clampedZoom = clampZoomValue(desiredZoom)
+  const applyZoomAtPoint = useCallback((point: { clientX: number; clientY: number }, desiredZoom: number) => {
+    const svgEl = svgRef.current
+    const currentZoom = zoomRef.current
+    const clampedZoom = clampZoomValue(desiredZoom)
 
-      if (!svgEl) {
-        if (Math.abs(clampedZoom - currentZoom) > 0.0001) {
-          setZoom(clampedZoom)
-        }
-        return
-      }
-
-      const rect = svgEl.getBoundingClientRect()
-      const cursorX = point.clientX - rect.left
-      const cursorY = point.clientY - rect.top
-
-      const currentPan = panRef.current
-      const tx = currentPan.x + rect.width / 2
-      const ty = currentPan.y + 100
-
-      const { x: ox, y: oy } = offsetRef.current ?? fallbackOffsetsRef.current
-
-      const worldX = (cursorX - tx) / currentZoom - ox
-      const worldY = (cursorY - ty) / currentZoom - oy
-
-      const newPanX = cursorX - (worldX + ox) * clampedZoom - rect.width / 2
-      const newPanY = cursorY - (worldY + oy) * clampedZoom - 100
-
+    if (!svgEl) {
       if (Math.abs(clampedZoom - currentZoom) > 0.0001) {
         setZoom(clampedZoom)
       }
-      setPan({ x: newPanX, y: newPanY })
-    },
-    []
-  )
+      return
+    }
+
+    const rect = svgEl.getBoundingClientRect()
+    const cursorX = point.clientX - rect.left
+    const cursorY = point.clientY - rect.top
+
+    const currentPan = panRef.current
+    const tx = currentPan.x + rect.width / 2
+    const ty = currentPan.y + 100
+
+    const { x: ox, y: oy } = offsetRef.current ?? fallbackOffsetsRef.current
+
+    const worldX = (cursorX - tx) / currentZoom - ox
+    const worldY = (cursorY - ty) / currentZoom - oy
+
+    const newPanX = cursorX - (worldX + ox) * clampedZoom - rect.width / 2
+    const newPanY = cursorY - (worldY + oy) * clampedZoom - 100
+
+    if (Math.abs(clampedZoom - currentZoom) > 0.0001) {
+      setZoom(clampedZoom)
+    }
+    setPan({ x: newPanX, y: newPanY })
+  }, [])
 
   const queuePinchFrame = useCallback(
     (point: { clientX: number; clientY: number }, targetZoom: number) => {
@@ -458,31 +455,39 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     const isPrimaryLike = e.button === 0 || e.pointerType === 'touch' || e.buttons === 1
 
     if (isRightButton) {
-      const svgRect = svgRef.current?.getBoundingClientRect()
-      if (svgRect) {
-        const svgX = e.clientX - svgRect.left
-        const svgY = e.clientY - svgRect.top
-        dispatch(chatSliceActions.nodesSelected([]))
-        setIsSelecting(true)
-        isSelectingRef.current = true
-        setSelectionStart({ x: svgX, y: svgY })
-        setSelectionEnd({ x: svgX, y: svgY })
-        addGlobalNoSelect()
-        // Fallback: also track globally in case pointer capture fails in some browsers
-        addGlobalMoveListeners()
-        const onEnd = () => {
-          removeGlobalNoSelect()
-          removeGlobalMoveListeners()
-          window.removeEventListener('mouseup', onEnd)
-          window.removeEventListener('touchend', onEnd)
-          window.removeEventListener('blur', onEnd)
-          isSelectingRef.current = false
-          isDraggingRef.current = false
+      // Check if right-clicking on a node element
+      const target = e.target as unknown as SVGElement
+      const isClickingNode = target && (target.tagName === 'rect' || target.tagName === 'circle') && target.getAttribute('data-node-id')
+
+      // Only start drag-to-select if clicking on empty space (not on a node)
+      if (!isClickingNode) {
+        const svgRect = svgRef.current?.getBoundingClientRect()
+        if (svgRect) {
+          const svgX = e.clientX - svgRect.left
+          const svgY = e.clientY - svgRect.top
+          dispatch(chatSliceActions.nodesSelected([]))
+          setIsSelecting(true)
+          isSelectingRef.current = true
+          setSelectionStart({ x: svgX, y: svgY })
+          setSelectionEnd({ x: svgX, y: svgY })
+          addGlobalNoSelect()
+          // Fallback: also track globally in case pointer capture fails in some browsers
+          addGlobalMoveListeners()
+          const onEnd = () => {
+            removeGlobalNoSelect()
+            removeGlobalMoveListeners()
+            window.removeEventListener('mouseup', onEnd)
+            window.removeEventListener('touchend', onEnd)
+            window.removeEventListener('blur', onEnd)
+            isSelectingRef.current = false
+            isDraggingRef.current = false
+          }
+          window.addEventListener('mouseup', onEnd)
+          window.addEventListener('touchend', onEnd)
+          window.addEventListener('blur', onEnd)
         }
-        window.addEventListener('mouseup', onEnd)
-        window.addEventListener('touchend', onEnd)
-        window.addEventListener('blur', onEnd)
       }
+      // If clicking on a node, do nothing here - let the node's onContextMenu handler take over
     } else if (isPrimaryLike) {
       // Store initial pointer position and check if clicking on a node
       pointerDownPosRef.current = { x: e.clientX, y: e.clientY }
@@ -642,11 +647,17 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
       pinchStateRef.current = null
       pointerMap.clear()
+    }
+  }, [removeGlobalMoveListeners, removeGlobalNoSelect])
+
+  // Dedicated cleanup for note debounce timer (only on unmount)
+  useEffect(() => {
+    return () => {
       if (debounceTimeoutRef.current) {
         clearTimeout(debounceTimeoutRef.current)
       }
     }
-  }, [removeGlobalMoveListeners, removeGlobalNoSelect])
+  }, [])
 
   // Keep refs in sync with latest state for out-of-react listeners
   useEffect(() => {
@@ -2400,10 +2411,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             {selectedNode.sender === 'user' ? 'User' : 'Assistant'}
           </div>
           <div className='prose prose-sm dark:prose-invert max-w-none text-sm max-h-80 overflow-y-auto thin-scrollbar md:max-h-none md:overflow-hidden md:ygg-line-clamp-6'>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-            >
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
               {selectedNode.message}
             </ReactMarkdown>
           </div>
