@@ -201,10 +201,10 @@ const Homepage: React.FC = () => {
                 rounded='full'
                 title='Logout'
                 aria-label='Logout'
-                className='group'
+                className=''
               >
                 <i
-                  className='bx bx-log-out text-lg sm:text-lg 2xl:text-2xl p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                  className='bx bx-log-out text-lg sm:text-lg 2xl:text-2xl p-1 transition-all hover:scale-96 duration-200'
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -212,11 +212,11 @@ const Homepage: React.FC = () => {
                 variant='outline2'
                 size='smaller'
                 onClick={() => navigate('/settings')}
-                className='group'
+                className=''
                 rounded='full'
               >
                 <i
-                  className='bx bx-cog text-xl sm:text-lg 2xl:text-2xl p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                  className='bx bx-cog text-xl sm:text-lg 2xl:text-2xl p-1 transition-all hover:scale-96 duration-200'
                   aria-hidden='true'
                 ></i>
               </Button>

@@ -36,6 +36,7 @@ interface ChatMessageProps {
   onCopy?: (content: string) => void
   onResend?: (id: string) => void
   onAddToNote?: (text: string) => void
+  onExplainFromSelection?: (id: string, newContent: string) => void
   isEditing?: boolean
   width: ChatMessageWidth
   // When true (default), message cards have colored backgrounds and left borders.
@@ -218,6 +219,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     onCopy,
     onResend,
     onAddToNote,
+    onExplainFromSelection,
     isEditing = false,
     width = 'w-3/5',
     colored = true,
@@ -364,10 +366,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }
 
     const handleCreateBranchFromSelection = () => {
-      if (onBranch && selectedText) {
+      if (onExplainFromSelection && selectedText) {
         // Prefix the selected text with "Explain: " and create a new branch
         const branchContent = `Explain: ${selectedText}`
-        onBranch(id, branchContent)
+        onExplainFromSelection(id, branchContent)
       }
       setContextMenuOpen(false)
     }
@@ -384,7 +386,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         label: 'Explain',
         icon: <i className='bx bx-git-branch' />,
         onClick: handleCreateBranchFromSelection,
-        disabled: !onBranch || !selectedText,
+        disabled: !onExplainFromSelection || !selectedText,
       },
       {
         label: 'Copy',

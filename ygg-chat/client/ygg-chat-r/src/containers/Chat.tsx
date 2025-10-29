@@ -1122,6 +1122,69 @@ function Chat() {
         // Replace any @file mentions with actual file contents before branching
         const processed = replaceFileMentionsWithPath(newContent)
         console.log(processed)
+        const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+
+        if (isWebMode) {
+          // Find the original message to get its parent_id
+          const parsedId = parseId(id)
+          const originalMessage = conversationMessages.find(m => m.id === parsedId)
+
+          if (originalMessage) {
+            // Create optimistic branch message for instant UI feedback (web mode only)
+            const optimisticBranchMessage: Message = {
+              id: `branch-temp-${Date.now()}`,
+              conversation_id: currentConversationId,
+              role: 'user' as const,
+              content: newContent,
+              content_plain_text: newContent,
+              parent_id: originalMessage.parent_id,
+              children_ids: [],
+              created_at: new Date().toISOString(),
+              model_name: selectedModel?.name || '',
+              partial: false,
+              pastedContext: [],
+              artifacts: [],
+            }
+            dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
+          }
+        }
+
+        dispatch(
+          editMessageWithBranching({
+            conversationId: currentConversationId,
+            originalMessageId: parseId(id),
+            newContent: newContent,
+            modelOverride: selectedModel?.name,
+            think: think,
+          })
+        )
+          .unwrap()
+          .then(() => {
+            // Invalidate React Query cache after successful branch to fetch new messages
+            // Note: messages query now includes tree data, so only one invalidation needed
+            queryClient.invalidateQueries({
+              queryKey: ['conversations', currentConversationId, 'messages'],
+              refetchType: 'active',
+            })
+          })
+          .catch(error => {
+            // Clear optimistic branch message on error (web mode only)
+            if (isWebMode) {
+              dispatch(chatSliceActions.optimisticBranchMessageCleared())
+            }
+            console.error('Failed to branch message:', error)
+          })
+      }
+    },
+    [currentConversationId, selectedModel?.name, think, dispatch, replaceFileMentionsWithPath, conversationMessages, queryClient]
+  )
+
+  const handleExplainFromSelection = useCallback(
+    (id: string, newContent: string) => {
+      if (currentConversationId) {
+        // Replace any @file mentions with actual file contents before branching
+        const processed = replaceFileMentionsWithPath(newContent)
+        console.log(processed)
 
         // Find the message to check if it has children
         const parsedId = parseId(id)
@@ -1183,7 +1246,7 @@ function Chat() {
               console.error('Failed to send message:', error)
             })
         } else {
-          // Has children: create a branch (existing behavior)
+          // Has children: create a branch (same as branch button behavior)
           const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
 
           if (isWebMode) {
@@ -1217,7 +1280,6 @@ function Chat() {
             .unwrap()
             .then(() => {
               // Invalidate React Query cache after successful branch to fetch new messages
-              // Note: messages query now includes tree data, so only one invalidation needed
               queryClient.invalidateQueries({
                 queryKey: ['conversations', currentConversationId, 'messages'],
                 refetchType: 'active',
@@ -1233,16 +1295,7 @@ function Chat() {
         }
       }
     },
-    [
-      currentConversationId,
-      selectedModel?.name,
-      think,
-      dispatch,
-      replaceFileMentionsWithPath,
-      conversationMessages,
-      queryClient,
-      scrollToBottomNow,
-    ]
+    [currentConversationId, selectedModel?.name, think, dispatch, replaceFileMentionsWithPath, conversationMessages, queryClient]
   )
 
   const handleResend = useCallback(
@@ -1480,9 +1533,10 @@ function Chat() {
           onDelete={handleRequestDelete}
           onResend={handleResend}
           onAddToNote={handleAddToNote}
+          onExplainFromSelection={handleExplainFromSelection}
         />
       ))
-  }, [displayMessages, handleMessageEdit, handleMessageBranch, handleRequestDelete, handleResend, handleAddToNote])
+  }, [displayMessages, handleMessageEdit, handleMessageBranch, handleRequestDelete, handleResend, handleAddToNote, handleExplainFromSelection])
 
   // Removed obsolete streaming completion effect that synthesized assistant messages.
   // The streaming thunks now dispatch messageAdded and messageBranchCreated directly,
