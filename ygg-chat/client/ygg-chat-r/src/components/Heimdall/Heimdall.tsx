@@ -2014,7 +2014,18 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     <div
       ref={containerRef}
       className='group w-full h-screen border-l dark:border-neutral-800 border-neutral-200 bg-neutral-50 relative overflow-hidden dark:bg-neutral-900 shadow-[inset_8px_0_17px_-8px_rgba(0,0,0,0.1)] dark:shadow-[inset_8px_0_12px_-2px_rgba(0,0,0,0.85)]'
-      onContextMenu={e => e.preventDefault()}
+      onContextMenu={e => {
+        // Check if the context menu event originates from an exempt element
+        let el = e.target as Node | null
+        while (el && el !== containerRef.current) {
+          if (el instanceof HTMLElement && el.dataset?.heimdallContextmenuExempt === 'true') {
+            // Allow the context menu in exempt elements
+            return
+          }
+          el = (el as HTMLElement).parentElement
+        }
+        e.preventDefault()
+      }}
       style={{
         filter: isTransitioning ? 'none' : 'none',
         transition: 'filter 100ms ease-in-out',
@@ -2243,7 +2254,18 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onContextMenu={e => e.preventDefault()}
+        onContextMenu={e => {
+          // Check if the context menu event originates from an exempt element
+          let el = e.target as Node | null
+          while (el && el !== containerRef.current) {
+            if (el instanceof HTMLElement && el.dataset?.heimdallContextmenuExempt === 'true') {
+              // Allow the context menu in exempt elements
+              return
+            }
+            el = (el as HTMLElement).parentElement
+          }
+          e.preventDefault()
+        }}
         onClick={e => {
           const target = e.target as SVGElement
           if (target === e.currentTarget || target.tagName === 'svg') {

@@ -6,6 +6,7 @@ import { ConversationId } from '../../../../../shared/types'
 import { updateResearchNote } from '../../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../../features/conversations/conversationSelectors'
 import { Conversation } from '../../features/conversations/conversationTypes'
+import { useIsMobile } from '../../hooks/useMediaQuery'
 import { TextArea } from '../TextArea/TextArea'
 
 interface LowBarProps {
@@ -15,6 +16,7 @@ interface LowBarProps {
 export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
   const dispatch = useDispatch()
   const queryClient = useQueryClient()
+  const isMobile = useIsMobile()
   const [isExpanded, setIsExpanded] = useState(false)
   const [localNote, setLocalNote] = useState('')
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -114,7 +116,13 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
   return (
     <div
       className={`fixed bottom-4 right-4 z-50 transition-all duration-300 ease-in-out ${
-        isExpanded ? 'w-[30%] h-[50%]' : 'w-[10%] h-[3%]'
+        isExpanded
+          ? isMobile
+            ? 'w-[95%] h-[75%]'
+            : 'w-[30%] h-[50%]'
+          : isMobile
+            ? 'w-[40%] h-[35px]'
+            : 'w-[15%] h-[35px]'
       }`}
     >
       {/* Container with shadow and border */}
@@ -134,7 +142,7 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
 
         {/* Expanded content */}
         {isExpanded && (
-          <div className='flex-1 p-3 overflow-hidden' data-heimdall-wheel-exempt='true'>
+          <div className='flex-1 p-3 overflow-hidden' data-heimdall-wheel-exempt='true' data-heimdall-contextmenu-exempt='true'>
             <TextArea
               value={localNote}
               onChange={handleNoteChange}
