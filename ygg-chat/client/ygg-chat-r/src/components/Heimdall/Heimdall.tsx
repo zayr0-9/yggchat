@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Move, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
+import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import type { JSX } from 'react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -25,6 +25,7 @@ import { ConversationId, MessageId } from '../../../../../shared/types'
 import type { RootState } from '../../store/store'
 import { parseId } from '../../utils/helpers'
 import stripMarkdownToText from '../../utils/markdownStripper'
+import { useResearchNotes } from '../../hooks/useQueries'
 import { LowBar } from '../LowBar/LowBar'
 import { TextArea } from '../TextArea/TextArea'
 import { TextField } from '../TextField/TextField'
@@ -86,6 +87,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const currentConversation = useSelector(conversationId ? makeSelectConversationById(conversationId) : () => null)
   // Track total messages to detect a truly empty conversation
   const messagesCount = useSelector((state: RootState) => state.chat.conversation.messages.length)
+  // Fetch all research notes for the tabbed interface
+  const { data: researchNotes = [], isLoading: isLoadingNotes } = useResearchNotes()
 
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -457,7 +460,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     if (isRightButton) {
       // Check if right-clicking on a node element
       const target = e.target as unknown as SVGElement
-      const isClickingNode = target && (target.tagName === 'rect' || target.tagName === 'circle') && target.getAttribute('data-node-id')
+      const isClickingNode =
+        target && (target.tagName === 'rect' || target.tagName === 'circle') && target.getAttribute('data-node-id')
 
       // Only start drag-to-select if clicking on empty space (not on a node)
       if (!isClickingNode) {
@@ -2386,18 +2390,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           </ul>
         </div>
       )}
-      <div className='absolute bottom-4 left-4 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200'>
-        <div className='bg-neutral-50  text-stone-800 dark:text-stone-200 px-3 py-2 rounded-lg text-xs space-y-1 w-fit transition-colors border-2 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
-          <div>Messages: {stats.totalNodes}</div>
-          <div>Max depth: {stats.maxDepth}</div>
-          <div>Branches: {stats.branches}</div>
-          {/* <div className='pt-1 border-t border-gray-700'>Mode: {compactMode ? 'Compact' : 'Full'}</div> */}
-        </div>
-        <div className='text-stone-800 dark:text-stone-200 text-sm flex items-center gap-2'>
-          <Move size={16} />
-          <span>Drag to pan • Scroll to zoom • Right-click drag to select</span>
-        </div>
-      </div>
+
       {selectedNode && (
         <div
           className={`absolute max-w-md bg-amber-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 ${compactMode ? 'border-2 border-gray-600' : ''}`}
@@ -2462,8 +2455,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         </div>
       )}
 
-      {/* LowBar for conversation research notes */}
-      <LowBar conversationId={conversationId} />
+      {/* LowBar for conversation research notes with tabbed interface */}
+      <LowBar conversationId={conversationId} enableTabs={true} notes={researchNotes} isLoadingNotes={isLoadingNotes} />
     </div>
   )
 }
