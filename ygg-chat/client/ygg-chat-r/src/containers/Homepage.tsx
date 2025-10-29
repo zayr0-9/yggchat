@@ -5,13 +5,14 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Project, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
 import { Button } from '../components'
+import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
 import { chatSliceActions } from '../features/chats'
 import { deleteProject, projectsLoaded, setSelectedProject } from '../features/projects'
 import { useAppDispatch } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIsMobile } from '../hooks/useMediaQuery'
-import { useProjects } from '../hooks/useQueries'
+import { useProjects, useResearchNotes } from '../hooks/useQueries'
 import { sortProjects } from '../utils/sortProjects'
 import EditProject from './EditProject'
 import SideBar from './sideBar'
@@ -26,6 +27,9 @@ const Homepage: React.FC = () => {
   // Use React Query for data fetching (with automatic caching and deduplication)
   // Projects now include latest_conversation_updated_at, eliminating need to fetch all conversations
   const { data: allProjects = [], isLoading: loading, isRefetching, refetch: refetchProjects } = useProjects()
+
+  // Fetch research notes for display in LowBar
+  const { data: researchNotes = [], isLoading: notesLoading } = useResearchNotes()
 
   // Sync React Query data to Redux
   useEffect(() => {
@@ -424,6 +428,14 @@ const Homepage: React.FC = () => {
           </ul>
         </div>
       )}
+
+      {/* Research Notes List - Fixed bottom-right */}
+      <LowBar
+        conversationId={null}
+        mode='list'
+        notes={researchNotes}
+        isLoadingNotes={notesLoading}
+      />
     </div>
   )
 }

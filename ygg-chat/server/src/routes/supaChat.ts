@@ -568,6 +568,17 @@ router.get(
   })
 )
 
+// Get all research notes for user
+router.get(
+  '/users/:userId/research-notes',
+  authenticatedRateLimiter,
+  asyncHandler(async (req, res) => {
+    const { client } = await verifyAuth(req)
+    const notes = await ConversationService.getResearchNotesByUser(client)
+    res.json(notes)
+  })
+)
+
 // Get conversation by projectID
 router.get(
   '/conversations/project/:projectId',

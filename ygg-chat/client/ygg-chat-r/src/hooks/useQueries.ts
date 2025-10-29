@@ -363,6 +363,43 @@ export function useRecentModels(limit: number = 5) {
 }
 
 /**
+ * Research note item returned from API
+ */
+export interface ResearchNoteItem {
+  id: string
+  title: string
+  research_note: string
+  updated_at: string
+  project_id: string | null
+}
+
+/**
+ * Fetch all research notes for the current user
+ * Cache key: ['research-notes', userId]
+ *
+ * Returns: Array of research notes with conversation metadata
+ * Only returns conversations with non-empty research notes
+ *
+ * @returns Query result with data, isLoading, isRefetching, and refetch function
+ */
+export function useResearchNotes() {
+  const { accessToken, userId } = useAuth()
+
+  return useQuery({
+    queryKey: ['research-notes', userId],
+    queryFn: async () => {
+      if (!userId) throw new Error('User not authenticated')
+      return api.get<ResearchNoteItem[]>(`/users/${userId}/research-notes`, accessToken)
+    },
+    enabled: !!userId && !!accessToken,
+    staleTime: 5 * 60 * 1000, // 5 minutes - research notes don't change often
+    refetchOnMount: false, // Don't refetch if data exists
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false, // Don't refetch when user switches tabs
+  })
+}
+
+/**
  * Mutation hook for refreshing models (force refetch)
  * Invalidates the models cache for the current provider
  */

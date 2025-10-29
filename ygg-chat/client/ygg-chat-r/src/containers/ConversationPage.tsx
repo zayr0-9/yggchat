@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ConversationId } from '../../../../shared/types'
 import { Button } from '../components'
+import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
 import { chatSliceActions } from '../features/chats'
 import {
@@ -19,7 +20,7 @@ import { clearSelectedProject, projectsLoaded, selectSelectedProject, setSelecte
 
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useIsMobile } from '../hooks/useMediaQuery'
-import { useConversations, useConversationsByProject, useProject, useProjects } from '../hooks/useQueries'
+import { useConversations, useConversationsByProject, useProject, useProjects, useResearchNotes } from '../hooks/useQueries'
 import { parseId } from '../utils/helpers'
 import EditProject from './EditProject'
 import SideBar from './sideBar'
@@ -53,6 +54,9 @@ const ConversationPage: React.FC = () => {
   // Project data is fetched but not directly used - populates React Query cache
   useProject(projectId)
   const { data: allProjects = [] } = useProjects()
+
+  // Fetch research notes for display in LowBar
+  const { data: researchNotes = [], isLoading: notesLoading } = useResearchNotes()
 
   // Use project conversations if we have a projectId, otherwise use all conversations
   const conversations = projectId ? projectConversations : allConversations
@@ -168,6 +172,9 @@ const ConversationPage: React.FC = () => {
     queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
       return old ? old.filter(c => c.id !== id) : []
     })
+
+    // Update research notes cache - remove the deleted conversation's note
+    queryClient.invalidateQueries({ queryKey: ['research-notes'] })
   }
 
   const handleNewConversation = async () => {
@@ -376,6 +383,14 @@ const ConversationPage: React.FC = () => {
         isOpen={showEditProjectModal}
         onClose={handleCloseEditProjectModal}
         editingProject={selectedProject}
+      />
+
+      {/* Research Notes List - Fixed bottom-right */}
+      <LowBar
+        conversationId={null}
+        mode='list'
+        notes={researchNotes}
+        isLoadingNotes={notesLoading}
       />
     </div>
   )

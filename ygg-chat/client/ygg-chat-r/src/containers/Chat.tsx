@@ -1176,7 +1176,15 @@ function Chat() {
           })
       }
     },
-    [currentConversationId, selectedModel?.name, think, dispatch, replaceFileMentionsWithPath, conversationMessages, queryClient]
+    [
+      currentConversationId,
+      selectedModel?.name,
+      think,
+      dispatch,
+      replaceFileMentionsWithPath,
+      conversationMessages,
+      queryClient,
+    ]
   )
 
   const handleExplainFromSelection = useCallback(
@@ -1295,7 +1303,15 @@ function Chat() {
         }
       }
     },
-    [currentConversationId, selectedModel?.name, think, dispatch, replaceFileMentionsWithPath, conversationMessages, queryClient]
+    [
+      currentConversationId,
+      selectedModel?.name,
+      think,
+      dispatch,
+      replaceFileMentionsWithPath,
+      conversationMessages,
+      queryClient,
+    ]
   )
 
   const handleResend = useCallback(
@@ -1536,7 +1552,15 @@ function Chat() {
           onExplainFromSelection={handleExplainFromSelection}
         />
       ))
-  }, [displayMessages, handleMessageEdit, handleMessageBranch, handleRequestDelete, handleResend, handleAddToNote, handleExplainFromSelection])
+  }, [
+    displayMessages,
+    handleMessageEdit,
+    handleMessageBranch,
+    handleRequestDelete,
+    handleResend,
+    handleAddToNote,
+    handleExplainFromSelection,
+  ])
 
   // Removed obsolete streaming completion effect that synthesized assistant messages.
   // The streaming thunks now dispatch messageAdded and messageBranchCreated directly,
@@ -1597,7 +1621,7 @@ function Chat() {
                     size='large'
                   />
                   <Button
-                    variant='secondary'
+                    variant='outline2'
                     size='medium'
                     className=''
                     aria-label='Confirm edit'
@@ -2043,21 +2067,21 @@ function Chat() {
       {pendingDeleteId && confirmDel && (
         <div className='fixed inset-0 z-[100] flex items-center justify-center bg-black/50' onClick={closeDeleteModal}>
           <div
-            className='bg-white dark:bg-neutral-800 rounded-lg shadow-xl p-6 w-[90%] max-w-sm'
+            className='bg-white dark:bg-yBlack-900 rounded-lg shadow-xl p-6 w-[90%] max-w-sm'
             onClick={e => e.stopPropagation()}
           >
-            <h3 className='text-lg font-semibold mb-2 text-neutral-900 dark:text-neutral-100'>Delete message?</h3>
-            <p className='text-sm text-neutral-700 dark:text-neutral-300 mb-4'>This action cannot be undone.</p>
+            <h3 className='text-[20px] font-semibold mb-6 text-neutral-900 dark:text-neutral-100'>Delete message?</h3>
+            <p className='text-[14px] text-neutral-700 dark:text-neutral-300 mb-4'>This action cannot be undone.</p>
             <label className='flex items-center gap-2 mb-4 text-sm text-neutral-700 dark:text-neutral-300'>
               <input type='checkbox' checked={dontAskAgain} onChange={e => setDontAskAgain(e.target.checked)} />
               Don't ask again this session
             </label>
-            <div className='flex justify-end gap-2'>
-              <Button variant='secondary' onClick={closeDeleteModal} className='active:scale-90'>
+            <div className='flex justify-end gap-2 mt-8'>
+              <Button variant='outline2' onClick={closeDeleteModal} className='active:scale-90'>
                 Cancel
               </Button>
               <Button
-                variant='primary'
+                variant='outline2'
                 className='bg-red-600 hover:bg-red-700 border-red-700 text-white active:scale-90'
                 onClick={confirmDeleteModal}
               >

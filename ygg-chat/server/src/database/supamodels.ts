@@ -641,6 +641,29 @@ export class ConversationService {
     return data || []
   }
 
+  static async getResearchNotesByUser(
+    client: SupabaseClient
+  ): Promise<Array<{ id: string; title: string; research_note: string; updated_at: string; project_id: string | null }>> {
+    const { data } = await client
+      .from('conversations')
+      .select('id, title, research_note, updated_at, project_id')
+      .not('research_note', 'is', null)
+      .neq('research_note', '')
+      .order('updated_at', { ascending: false })
+
+    // Filter out whitespace-only notes
+    const filtered =
+      data?.filter(conv => conv.research_note && conv.research_note.trim().length > 0) || []
+
+    return filtered as Array<{
+      id: string
+      title: string
+      research_note: string
+      updated_at: string
+      project_id: string | null
+    }>
+  }
+
   static async getByProjectId(client: SupabaseClient, id: string): Promise<Conversation[]> {
     console.log('🔴 [ConversationService.getByProjectId] CALLED, projectId:', id)
     console.log('🔴 Stack:', new Error().stack)

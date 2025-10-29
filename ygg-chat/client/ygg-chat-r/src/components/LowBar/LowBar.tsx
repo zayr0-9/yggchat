@@ -6,16 +6,23 @@ import { ConversationId } from '../../../../../shared/types'
 import { updateResearchNote } from '../../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../../features/conversations/conversationSelectors'
 import { Conversation } from '../../features/conversations/conversationTypes'
+import { useAuth } from '../../hooks/useAuth'
+import { ResearchNoteItem } from '../../hooks/useQueries'
 import { useIsMobile } from '../../hooks/useMediaQuery'
+import { ResearchNotesList } from './ResearchNotesList'
 import { TextArea } from '../TextArea/TextArea'
 
 interface LowBarProps {
   conversationId: ConversationId | null
+  mode?: 'single' | 'list'
+  notes?: ResearchNoteItem[]
+  isLoadingNotes?: boolean
 }
 
-export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
+export const LowBar: React.FC<LowBarProps> = ({ conversationId, mode = 'single', notes = [], isLoadingNotes = false }) => {
   const dispatch = useDispatch()
   const queryClient = useQueryClient()
+  const { userId } = useAuth()
   const isMobile = useIsMobile()
   const [isExpanded, setIsExpanded] = useState(false)
   const [localNote, setLocalNote] = useState('')
@@ -23,6 +30,11 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
 
   // Get conversation data using selector
   const conversation = useSelector(conversationId ? makeSelectConversationById(conversationId) : () => null)
+
+  // If mode is 'list', render the ResearchNotesList component instead
+  if (mode === 'list') {
+    return <ResearchNotesList notes={notes} isLoading={isLoadingNotes} />
+  }
 
   // Initialize local note from conversation data
   useEffect(() => {
@@ -81,13 +93,55 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId }) => {
                 recentCache.map(conv => (conv.id === conversationId ? { ...conv, research_note: note } : conv))
               )
             }
+
+            // Update research notes cache
+            const researchNotesCache = queryClient.getQueryData<ResearchNoteItem[]>(['research-notes', userId])
+            if (researchNotesCache) {
+              // If note is empty or whitespace, remove from list
+              if (!note || note.trim().length === 0) {
+                queryClient.setQueryData(
+                  ['research-notes', userId],
+                  researchNotesCache.filter(item => item.id !== conversationId)
+                )
+              } else {
+                // Update existing note or add new one
+                const existingIndex = researchNotesCache.findIndex(item => item.id === conversationId)
+                if (existingIndex >= 0) {
+                  // Update existing note
+                  queryClient.setQueryData(
+                    ['research-notes', userId],
+                    researchNotesCache.map(item =>
+                      item.id === conversationId
+                        ? {
+                            ...item,
+                            research_note: note,
+                            updated_at: new Date().toISOString(),
+                          }
+                        : item
+                    )
+                  )
+                } else {
+                  // Add new note to the list
+                  queryClient.setQueryData(['research-notes', userId], [
+                    {
+                      id: conversationId,
+                      title: conversation?.title || `Conversation ${conversationId}`,
+                      research_note: note,
+                      updated_at: new Date().toISOString(),
+                      project_id: conversation?.project_id || null,
+                    },
+                    ...researchNotesCache,
+                  ])
+                }
+              }
+            }
           })
           .catch((error: unknown) => {
             console.error('Failed to update research note:', error)
           })
       }, 1000) // 1 second debounce
     },
-    [conversationId, conversation?.project_id, dispatch, queryClient]
+    [conversationId, conversation?.project_id, conversation?.title, dispatch, queryClient, userId]
   )
 
   // Handle text change
