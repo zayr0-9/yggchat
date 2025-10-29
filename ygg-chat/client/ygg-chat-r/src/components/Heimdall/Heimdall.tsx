@@ -22,10 +22,10 @@ import { makeSelectConversationById } from '../../features/conversations/convers
 // import { selectSelectedProject } from '../../features/projects/projectSelectors'
 import { Message } from '@/features/chats'
 import { ConversationId, MessageId } from '../../../../../shared/types'
+import { useResearchNotes } from '../../hooks/useQueries'
 import type { RootState } from '../../store/store'
 import { parseId } from '../../utils/helpers'
 import stripMarkdownToText from '../../utils/markdownStripper'
-import { useResearchNotes } from '../../hooks/useQueries'
 import { LowBar } from '../LowBar/LowBar'
 import { TextArea } from '../TextArea/TextArea'
 import { TextField } from '../TextField/TextField'
@@ -51,11 +51,11 @@ interface Bounds {
   maxY: number
 }
 
-interface TreeStats {
-  totalNodes: number
-  maxDepth: number
-  branches: number
-}
+// interface TreeStats {
+//   totalNodes: number
+//   maxDepth: number
+//   branches: number
+// }
 
 interface HeimdallProps {
   chatData?: ChatNode | null
@@ -813,26 +813,26 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   // }, [chatData, compactMode])
 
   // Calculate tree statistics
-  const getTreeStats = (node: ChatNode): TreeStats => {
-    let totalNodes = 0
-    let maxDepth = 0
-    let branches = 0
+  // const getTreeStats = (node: ChatNode): TreeStats => {
+  //   let totalNodes = 0
+  //   let maxDepth = 0
+  //   let branches = 0
 
-    const traverse = (n: ChatNode, depth: number = 0): void => {
-      totalNodes++
-      maxDepth = Math.max(maxDepth, depth)
-      if (n.children && n.children.length > 1) branches++
-      n.children?.forEach(child => traverse(child, depth + 1))
-    }
+  //   const traverse = (n: ChatNode, depth: number = 0): void => {
+  //     totalNodes++
+  //     maxDepth = Math.max(maxDepth, depth)
+  //     if (n.children && n.children.length > 1) branches++
+  //     n.children?.forEach(child => traverse(child, depth + 1))
+  //   }
 
-    traverse(node)
-    return { totalNodes, maxDepth, branches }
-  }
+  //   traverse(node)
+  //   return { totalNodes, maxDepth, branches }
+  // }
 
-  const stats = useMemo(
-    () => (currentChatData ? getTreeStats(currentChatData) : { totalNodes: 0, maxDepth: 0, branches: 0 }),
-    [currentChatData]
-  )
+  // const stats = useMemo(
+  //   () => (currentChatData ? getTreeStats(currentChatData) : { totalNodes: 0, maxDepth: 0, branches: 0 }),
+  //   [currentChatData]
+  // )
 
   // Calculate tree layout
   const calculateTreeLayout = (node: ChatNode): Record<string, Position> => {
