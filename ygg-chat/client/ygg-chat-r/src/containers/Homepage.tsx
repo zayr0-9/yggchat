@@ -25,7 +25,7 @@ const Homepage: React.FC = () => {
 
   // Use React Query for data fetching (with automatic caching and deduplication)
   // Projects now include latest_conversation_updated_at, eliminating need to fetch all conversations
-  const { data: allProjects = [], isLoading: loading } = useProjects()
+  const { data: allProjects = [], isLoading: loading, isRefetching, refetch: refetchProjects } = useProjects()
 
   // Sync React Query data to Redux
   useEffect(() => {
@@ -155,6 +155,15 @@ const Homepage: React.FC = () => {
     // The ProtectedRoute component will automatically redirect to /login
   }
 
+  const handleRefreshProjects = async () => {
+    // Manually refetch projects from the server
+    await refetchProjects()
+
+    // Also invalidate and refetch related caches for a complete refresh
+    queryClient.invalidateQueries({ queryKey: ['conversations'] })
+    queryClient.invalidateQueries({ queryKey: ['conversations', 'recent'] })
+  }
+
   return (
     <div className='bg-zinc-50 h-screen overflow-hidden dark:bg-yBlack-500 flex'>
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
@@ -239,12 +248,37 @@ const Homepage: React.FC = () => {
 
           {/* New Project Button + Sort Controls + Search */}
           <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800 outline-neutral-50 rounded-2xl shadow-[0px_0px_8px_-1px_rgba(0,0,0,0.35)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
-            <Button variant='outline2' size='large' onClick={handleCreateProject} className='shrink-0 group'>
-              <p className='transition-transform duration-100 group-active:scale-95'>New Project</p>
+            <Button
+              variant='outline2'
+              size='large'
+              rounded='full'
+              onClick={handleCreateProject}
+              className='shrink-0 group rounded-4xl'
+            >
+              <p className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'>
+                New Project
+              </p>
+            </Button>
+
+            <Button
+              variant='outline2'
+              size='circle'
+              rounded='full'
+              onClick={handleRefreshProjects}
+              disabled={isRefetching}
+              className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+              title='Refresh projects from server'
+            >
+              <i
+                className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
+                  isRefetching ? 'animate-spin' : ''
+                }`}
+                aria-hidden='true'
+              ></i>
             </Button>
 
             <div className='flex items-center gap-2'>
-              <span className='text-sm text-gray-600 dark:text-gray-300'>Sort by:</span>
+              <span className='text-sm text-gray-600 dark:text-gray-300'>Filter</span>
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}

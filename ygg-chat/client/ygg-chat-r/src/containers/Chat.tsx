@@ -1614,7 +1614,7 @@ function Chat() {
         >
           <div
             ref={messagesContainerRef}
-            className='px-2 dark:border-neutral-700 border-stone-200 rounded-lg py-4 overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y p-3 bg-transparent dark:bg-neutral-900 flex-1 min-h-0'
+            className='flex flex-col gap-5 2xl:gap-3 px-2 dark:border-neutral-700 border-stone-200 rounded-lg py-4 overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y p-3 bg-transparent dark:bg-neutral-900 flex-1 min-h-0'
             style={{ ['overflowAnchor' as any]: 'none' }}
           >
             {displayMessages.length === 0 ? (

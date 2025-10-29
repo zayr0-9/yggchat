@@ -36,9 +36,19 @@ const ConversationPage: React.FC = () => {
   // Use React Query for data fetching
   // Fetch project-specific conversations OR all conversations (not both)
   // The enabled flags ensure only one query runs at a time
-  const { data: projectConversations = [], isLoading: projectConvsLoading } = useConversationsByProject(projectId)
+  const {
+    data: projectConversations = [],
+    isLoading: projectConvsLoading,
+    isRefetching: projectConvsRefetching,
+    refetch: refetchProjectConversations,
+  } = useConversationsByProject(projectId)
   // Only fetch all conversations when NOT viewing a specific project
-  const { data: allConversations = [], isLoading: allConvsLoading } = useConversations(!projectId)
+  const {
+    data: allConversations = [],
+    isLoading: allConvsLoading,
+    isRefetching: allConvsRefetching,
+    refetch: refetchAllConversations,
+  } = useConversations(!projectId)
 
   // Project data is fetched but not directly used - populates React Query cache
   useProject(projectId)
@@ -47,6 +57,8 @@ const ConversationPage: React.FC = () => {
   // Use project conversations if we have a projectId, otherwise use all conversations
   const conversations = projectId ? projectConversations : allConversations
   const loading = projectId ? projectConvsLoading : allConvsLoading
+  const isRefetching = projectId ? projectConvsRefetching : allConvsRefetching
+  const refetchConversations = projectId ? refetchProjectConversations : refetchAllConversations
 
   // Sync React Query data to Redux
   // Simple approach: just load the conversations from React Query
@@ -198,6 +210,15 @@ const ConversationPage: React.FC = () => {
     setShowEditProjectModal(false)
   }
 
+  const handleRefreshConversations = async () => {
+    // Manually refetch conversations from the server
+    await refetchConversations()
+
+    // Also invalidate and refetch related caches for a complete refresh
+    queryClient.invalidateQueries({ queryKey: ['conversations', 'recent'] })
+    queryClient.invalidateQueries({ queryKey: ['projects'] })
+  }
+
   return (
     <div className='bg-zinc-50 dark:bg-zinc-900 flex overflow-hidden h-screen'>
       {/* Recent conversations sidebar */}
@@ -236,7 +257,7 @@ const ConversationPage: React.FC = () => {
           </div>
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
-          <div className='mb-4 flex items-center justify-between max-w-full'>
+          <div className='mb-4 flex items-center justify-between max-w-full '>
             <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
               Conversations
             </h2>
@@ -253,7 +274,7 @@ const ConversationPage: React.FC = () => {
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
-          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-3xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+          <div className='mb-0 flex p-2 flex-wrap items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-3xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <Button
               variant='outline2'
               size='large'
@@ -264,8 +285,25 @@ const ConversationPage: React.FC = () => {
               <p className='transition-transform duration-100 group-active:scale-95'>New Conversation</p>
             </Button>
 
+            <Button
+              variant='outline2'
+              size='circle'
+              rounded='full'
+              onClick={handleRefreshConversations}
+              disabled={isRefetching}
+              className='group dark:outline-2 rounded-full dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+              title='Refresh conversations from server'
+            >
+              <i
+                className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
+                  isRefetching ? 'animate-spin' : ''
+                }`}
+                aria-hidden='true'
+              ></i>
+            </Button>
+
             <div className='flex items-center gap-2'>
-              <span className='text-sm text-gray-600 dark:text-gray-300'>Sort by:</span>
+              <span className='text-sm text-gray-600 dark:text-gray-300'>Filter</span>
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}

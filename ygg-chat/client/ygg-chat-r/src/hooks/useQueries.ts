@@ -17,6 +17,8 @@ import { useAuth } from './useAuth'
  * Refetch behavior:
  * - Homepage: Always refetch to show latest projects
  * - Chat.tsx: Never refetch (uses persisted cache for instant UI)
+ *
+ * @returns Query result with data, isLoading, isRefetching, and refetch function for manual refresh
  */
 export function useProjects() {
   const { accessToken, userId } = useAuth()
@@ -25,7 +27,7 @@ export function useProjects() {
   // Always refetch on Homepage, never on Chat.tsx
   const isHomePage = location.pathname === '/'
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['projects', userId],
     queryFn: async () => {
       return api.get<ProjectWithLatestConversation[]>(
@@ -39,6 +41,13 @@ export function useProjects() {
     refetchOnReconnect: false,
     refetchOnWindowFocus: false, // Don't refetch when user switches tabs
   })
+
+  // Expose refetch and isRefetching for manual refresh button
+  return {
+    ...query,
+    refetch: query.refetch,
+    isRefetching: query.isRefetching,
+  }
 }
 
 /**
@@ -68,6 +77,7 @@ export function useProject(projectId: ProjectId | null) {
  * - Chat.tsx: Never refetch (uses persisted cache for instant UI)
  *
  * @param enabled - Optional flag to control whether the query runs (default: true)
+ * @returns Query result with data, isLoading, isRefetching, and refetch function for manual refresh
  */
 export function useConversations(enabled: boolean = true) {
   const { accessToken, userId: authUserId } = useAuth()
@@ -79,7 +89,7 @@ export function useConversations(enabled: boolean = true) {
   // Always refetch on ConversationPage, never on Chat.tsx
   // const isConversationPage = location.pathname.includes('/conversationPage')
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['conversations'],
     queryFn: async () => {
       if (!userId) throw new Error('User not authenticated')
@@ -92,6 +102,13 @@ export function useConversations(enabled: boolean = true) {
     refetchOnReconnect: false,
     refetchOnWindowFocus: false, // Don't refetch when user switches tabs
   })
+
+  // Expose refetch and isRefetching for manual refresh button
+  return {
+    ...query,
+    refetch: query.refetch,
+    isRefetching: query.isRefetching,
+  }
 }
 
 /**
@@ -101,6 +118,8 @@ export function useConversations(enabled: boolean = true) {
  * Refetch behavior:
  * - ConversationPage: Always refetch to show latest project conversations
  * - Other pages: Never refetch (uses cache)
+ *
+ * @returns Query result with data, isLoading, isRefetching, and refetch function for manual refresh
  */
 export function useConversationsByProject(projectId: ProjectId | null) {
   const { accessToken } = useAuth()
@@ -109,7 +128,7 @@ export function useConversationsByProject(projectId: ProjectId | null) {
   // Always refetch on ConversationPage
   // const isConversationPage = location.pathname.includes('/conversationPage')
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['conversations', 'project', projectId],
     queryFn: async () => {
       if (!projectId) throw new Error('Project ID is required')
@@ -122,6 +141,13 @@ export function useConversationsByProject(projectId: ProjectId | null) {
     refetchOnReconnect: false,
     refetchOnWindowFocus: false, // Don't refetch when user switches tabs
   })
+
+  // Expose refetch and isRefetching for manual refresh button
+  return {
+    ...query,
+    refetch: query.refetch,
+    isRefetching: query.isRefetching,
+  }
 }
 
 /**
