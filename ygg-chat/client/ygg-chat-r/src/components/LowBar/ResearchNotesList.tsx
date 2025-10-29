@@ -1,8 +1,8 @@
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ResearchNoteItem } from '../../hooks/useQueries'
 import { useIsMobile } from '../../hooks/useMediaQuery'
+import { ResearchNoteItem } from '../../hooks/useQueries'
 
 interface ResearchNotesListProps {
   notes: ResearchNoteItem[]
@@ -13,9 +13,23 @@ export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({ notes, isL
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [isExpanded, setIsExpanded] = useState(false)
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set())
 
   const handleNoteClick = (note: ResearchNoteItem) => {
     navigate(`/chat/${note.project_id}/${note.id}`)
+  }
+
+  const toggleNoteExpansion = (noteId: string, event: React.MouseEvent) => {
+    event.stopPropagation() // Prevent navigation when clicking chevron
+    setExpandedNoteIds(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(noteId)) {
+        newSet.delete(noteId)
+      } else {
+        newSet.add(noteId)
+      }
+      return newSet
+    })
   }
 
   const truncateNote = (text: string, maxLength: number = 100): string => {
@@ -82,28 +96,62 @@ export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({ notes, isL
               </div>
             ) : (
               <div className='space-y-3'>
-                {notes.map(note => (
-                  <div
-                    key={note.id}
-                    onClick={() => handleNoteClick(note)}
-                    className='p-3 bg-neutral-50 dark:bg-neutral-900 rounded-lg cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-all duration-150 border border-neutral-200 dark:border-neutral-700 shadow-sm hover:shadow-md'
-                  >
-                    {/* Conversation title */}
-                    <h3 className='text-sm font-semibold text-stone-800 dark:text-stone-200 mb-1 truncate'>
-                      {note.title || `Conversation ${note.id}`}
-                    </h3>
+                {notes.map(note => {
+                  const isNoteExpanded = expandedNoteIds.has(note.id)
 
-                    {/* Note preview */}
-                    <p className='text-xs text-stone-600 dark:text-stone-400 mb-2 line-clamp-2'>
-                      {truncateNote(note.research_note)}
-                    </p>
+                  return (
+                    <div
+                      key={note.id}
+                      className='p-3 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm transition-all duration-200 ease-in-out'
+                    >
+                      {/* Clickable header area - navigates to chat */}
+                      <div
+                        onClick={() => handleNoteClick(note)}
+                        className='cursor-pointer hover:opacity-80 transition-opacity duration-150'
+                      >
+                        {/* Title row with chevron button */}
+                        <div className='flex items-start justify-between gap-2 mb-1'>
+                          <h3 className='flex-1 text-sm font-semibold text-stone-800 dark:text-stone-200 truncate'>
+                            {note.title || `Conversation ${note.id}`}
+                          </h3>
+                          <button
+                            onClick={e => toggleNoteExpansion(note.id, e)}
+                            className='flex-shrink-0 p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors duration-150'
+                            aria-label={isNoteExpanded ? 'Collapse note' : 'Expand note'}
+                            aria-expanded={isNoteExpanded}
+                          >
+                            {isNoteExpanded ? (
+                              <ChevronUp className='w-3.5 h-3.5 text-stone-600 dark:text-stone-400' />
+                            ) : (
+                              <ChevronDown className='w-3.5 h-3.5 text-stone-600 dark:text-stone-400' />
+                            )}
+                          </button>
+                        </div>
 
-                    {/* Timestamp */}
-                    <div className='text-xs text-stone-500 dark:text-stone-500'>
-                      {formatDate(note.updated_at)}
+                        {/* Truncated preview - only show when collapsed */}
+                        {!isNoteExpanded && (
+                          <p className='text-xs text-stone-600 dark:text-stone-400 line-clamp-2'>
+                            {truncateNote(note.research_note)}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Expanded content - full note text */}
+                      {isNoteExpanded && (
+                        <div className='mt-2 p-2 bg-neutral-100 dark:bg-neutral-800 rounded-md max-h-48 overflow-y-auto thin-scrollbar'>
+                          <p className='text-xs text-stone-700 dark:text-stone-300 whitespace-pre-wrap'>
+                            {note.research_note}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Timestamp */}
+                      <div className='text-xs text-stone-500 dark:text-stone-500 mt-2'>
+                        {formatDate(note.updated_at)}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

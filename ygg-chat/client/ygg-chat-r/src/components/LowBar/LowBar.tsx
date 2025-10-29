@@ -7,10 +7,10 @@ import { updateResearchNote } from '../../features/conversations/conversationAct
 import { makeSelectConversationById } from '../../features/conversations/conversationSelectors'
 import { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
-import { ResearchNoteItem } from '../../hooks/useQueries'
 import { useIsMobile } from '../../hooks/useMediaQuery'
-import { ResearchNotesList } from './ResearchNotesList'
+import { ResearchNoteItem } from '../../hooks/useQueries'
 import { TextArea } from '../TextArea/TextArea'
+import { ResearchNotesList } from './ResearchNotesList'
 
 interface LowBarProps {
   conversationId: ConversationId | null
@@ -19,7 +19,12 @@ interface LowBarProps {
   isLoadingNotes?: boolean
 }
 
-export const LowBar: React.FC<LowBarProps> = ({ conversationId, mode = 'single', notes = [], isLoadingNotes = false }) => {
+export const LowBar: React.FC<LowBarProps> = ({
+  conversationId,
+  mode = 'single',
+  notes = [],
+  isLoadingNotes = false,
+}) => {
   const dispatch = useDispatch()
   const queryClient = useQueryClient()
   const { userId } = useAuth()
@@ -122,16 +127,19 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId, mode = 'single',
                   )
                 } else {
                   // Add new note to the list
-                  queryClient.setQueryData(['research-notes', userId], [
-                    {
-                      id: conversationId,
-                      title: conversation?.title || `Conversation ${conversationId}`,
-                      research_note: note,
-                      updated_at: new Date().toISOString(),
-                      project_id: conversation?.project_id || null,
-                    },
-                    ...researchNotesCache,
-                  ])
+                  queryClient.setQueryData(
+                    ['research-notes', userId],
+                    [
+                      {
+                        id: conversationId,
+                        title: conversation?.title || `Conversation ${conversationId}`,
+                        research_note: note,
+                        updated_at: new Date().toISOString(),
+                        project_id: conversation?.project_id || null,
+                      },
+                      ...researchNotesCache,
+                    ]
+                  )
                 }
               }
             }
@@ -180,7 +188,7 @@ export const LowBar: React.FC<LowBarProps> = ({ conversationId, mode = 'single',
       }`}
     >
       {/* Container with shadow and border */}
-      <div className='h-full flex flex-col backdrop-blur-sm dark:bg-transparent border border-transparent dark:border-neutral-800 rounded-2xl shadow-lg overflow-hidden'>
+      <div className='h-full flex flex-col backdrop-blur-sm dark:bg-transparent border border-transparent dark:border-neutral-800 rounded-2xl shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_20px_rgba(0,0,0,0.95)] overflow-hidden'>
         {/* Header bar (always visible) */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
