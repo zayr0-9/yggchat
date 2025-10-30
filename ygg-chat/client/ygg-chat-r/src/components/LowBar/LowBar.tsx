@@ -191,7 +191,7 @@ export const LowBar: React.FC<LowBarProps> = ({
         {/* Header bar (always visible) */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`flex items-center justify-between px-4 py-2 ${isExpanded ? 'mt-2 mx-2' : ''} bg-neutral-50 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200 `}
+          className={`flex items-center justify-between px-4 py-2 ${isExpanded ? 'mt-3 mx-2' : ''} bg-neutral-50 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200 `}
         >
           <div className='text-sm font-medium text-stone-800 dark:text-stone-200 '>Notes</div>
           {isExpanded ? (
