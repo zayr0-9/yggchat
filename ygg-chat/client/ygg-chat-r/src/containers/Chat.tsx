@@ -52,6 +52,7 @@ import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import {
+  ResearchNoteItem,
   useConversationMessages,
   useConversationsByProject,
   useModels,
@@ -63,7 +64,7 @@ import { parseId } from '../utils/helpers'
 
 function Chat() {
   const dispatch = useAppDispatch()
-  const { accessToken } = useAuth()
+  const { accessToken, userId } = useAuth()
   const { ideContext } = useIdeContext()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -1471,13 +1472,58 @@ function Chat() {
             )
           }
 
+          // Update research notes cache
+          const researchNotesCache = queryClient.getQueryData<ResearchNoteItem[]>(['research-notes', userId])
+          if (researchNotesCache) {
+            // If note is empty or whitespace, remove from list
+            if (!updatedNote || updatedNote.trim().length === 0) {
+              queryClient.setQueryData(
+                ['research-notes', userId],
+                researchNotesCache.filter(item => item.id !== currentConversationId)
+              )
+            } else {
+              // Update existing note or add new one
+              const existingIndex = researchNotesCache.findIndex(item => item.id === currentConversationId)
+              if (existingIndex >= 0) {
+                // Update existing note
+                queryClient.setQueryData(
+                  ['research-notes', userId],
+                  researchNotesCache.map(item =>
+                    item.id === currentConversationId
+                      ? {
+                          ...item,
+                          research_note: updatedNote,
+                          updated_at: new Date().toISOString(),
+                        }
+                      : item
+                  )
+                )
+              } else {
+                // Add new note to the list
+                queryClient.setQueryData(
+                  ['research-notes', userId],
+                  [
+                    {
+                      id: currentConversationId,
+                      title: currentConversation?.title || `Conversation ${currentConversationId}`,
+                      research_note: updatedNote,
+                      updated_at: new Date().toISOString(),
+                      project_id: projectId || null,
+                    },
+                    ...researchNotesCache,
+                  ]
+                )
+              }
+            }
+          }
+
           console.log('Added to research note successfully')
         })
         .catch(error => {
           console.error('Failed to update research note:', error)
         })
     },
-    [currentConversationId, currentConversation, selectedProject, queryClient, dispatch]
+    [currentConversationId, currentConversation, selectedProject, queryClient, dispatch, userId]
   )
 
   // Handle key press
