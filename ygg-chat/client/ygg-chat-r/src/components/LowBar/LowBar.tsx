@@ -32,7 +32,7 @@ export const LowBar: React.FC<LowBarProps> = ({
   const queryClient = useQueryClient()
   const { userId } = useAuth()
   const isMobile = useIsMobile()
-  const [isExpanded, setIsExpanded] = useState(mode === 'list') // Auto-expand when in list mode
+  const [isExpanded, setIsExpanded] = useState(false) // Auto-expand when in list mode
   const [localNote, setLocalNote] = useState('')
   const [activeTab, setActiveTab] = useState<'note' | 'list'>('note')
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
