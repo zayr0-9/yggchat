@@ -127,7 +127,7 @@ export const QuickInput: React.FC = () => {
         state='default'
         width='w-full'
         minRows={1}
-        autoFocus={true}
+        autoFocus={false}
         showCharCount={true}
       />
       <div className='bg-neutral-100 rounded-b-4xl dark:bg-yBlack-900 flex flex-col items-end pt-3 md:pt-0'>
