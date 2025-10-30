@@ -74,7 +74,7 @@ function Chat() {
   // Get conversation ID and project ID from URL params FIRST (before any hooks that depend on it)
   const { id: conversationIdParam, projectId: projectIdParam } = useParams<{ id?: string; projectId?: string }>()
   const conversationIdFromUrl = conversationIdParam ? parseId(conversationIdParam) : null
-  const projectIdFromUrl = projectIdParam || null
+  const projectIdFromUrl = projectIdParam === 'null' ? null : projectIdParam || null
 
   // Redux selectors
   const selectedModel = useAppSelector(selectSelectedModel)

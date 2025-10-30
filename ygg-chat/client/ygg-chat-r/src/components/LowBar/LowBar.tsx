@@ -9,6 +9,7 @@ import { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { ResearchNoteItem } from '../../hooks/useQueries'
+import { QuickInput } from '../QuickInput/QuickInput'
 import { TextArea } from '../TextArea/TextArea'
 import { ResearchNotesList } from './ResearchNotesList'
 
@@ -31,18 +32,13 @@ export const LowBar: React.FC<LowBarProps> = ({
   const queryClient = useQueryClient()
   const { userId } = useAuth()
   const isMobile = useIsMobile()
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(mode === 'list') // Auto-expand when in list mode
   const [localNote, setLocalNote] = useState('')
   const [activeTab, setActiveTab] = useState<'note' | 'list'>('note')
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Get conversation data using selector
   const conversation = useSelector(conversationId ? makeSelectConversationById(conversationId) : () => null)
-
-  // If mode is 'list', render the ResearchNotesList component instead
-  if (mode === 'list') {
-    return <ResearchNotesList notes={notes} isLoading={isLoadingNotes} />
-  }
 
   // Initialize local note from conversation data
   useEffect(() => {
@@ -173,8 +169,8 @@ export const LowBar: React.FC<LowBarProps> = ({
     }
   }, [])
 
-  // Don't render if no conversation
-  if (!conversationId) {
+  // Don't render if no conversation (except when in list mode for quick chats)
+  if (!conversationId && mode !== 'list') {
     return null
   }
 
@@ -241,8 +237,18 @@ export const LowBar: React.FC<LowBarProps> = ({
               data-heimdall-contextmenu-exempt='true'
             >
               {enableTabs && activeTab === 'list' ? (
-                <div className='h-full overflow-y-auto thin-scrollbar'>
-                  <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
+                <div className='h-full flex flex-col overflow-hidden'>
+                  <div className='flex-1 overflow-y-auto thin-scrollbar'>
+                    <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
+                  </div>
+                  <QuickInput />
+                </div>
+              ) : mode === 'list' ? (
+                <div className='h-full flex flex-col overflow-hidden'>
+                  <div className='flex-1 overflow-y-auto thin-scrollbar'>
+                    <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
+                  </div>
+                  <QuickInput />
                 </div>
               ) : (
                 <TextArea

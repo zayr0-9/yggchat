@@ -20,7 +20,13 @@ import { clearSelectedProject, projectsLoaded, selectSelectedProject, setSelecte
 
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useIsMobile } from '../hooks/useMediaQuery'
-import { useConversations, useConversationsByProject, useProject, useProjects, useResearchNotes } from '../hooks/useQueries'
+import {
+  useConversations,
+  useConversationsByProject,
+  useProject,
+  useProjects,
+  useResearchNotes,
+} from '../hooks/useQueries'
 import { parseId } from '../utils/helpers'
 import EditProject from './EditProject'
 import SideBar from './sideBar'
@@ -172,9 +178,6 @@ const ConversationPage: React.FC = () => {
     queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
       return old ? old.filter(c => c.id !== id) : []
     })
-
-    // Update research notes cache - remove the deleted conversation's note
-    queryClient.invalidateQueries({ queryKey: ['research-notes'] })
   }
 
   const handleNewConversation = async () => {
@@ -386,12 +389,7 @@ const ConversationPage: React.FC = () => {
       />
 
       {/* Research Notes List - Fixed bottom-right */}
-      <LowBar
-        conversationId={null}
-        mode='list'
-        notes={researchNotes}
-        isLoadingNotes={notesLoading}
-      />
+      <LowBar conversationId={null} mode='list' notes={researchNotes} isLoadingNotes={notesLoading} />
     </div>
   )
 }
