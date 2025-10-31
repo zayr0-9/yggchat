@@ -19,6 +19,7 @@ interface LowBarProps {
   notes?: ResearchNoteItem[]
   isLoadingNotes?: boolean
   enableTabs?: boolean
+  showInput?: boolean
 }
 
 export const LowBar: React.FC<LowBarProps> = ({
@@ -27,6 +28,7 @@ export const LowBar: React.FC<LowBarProps> = ({
   notes = [],
   isLoadingNotes = false,
   enableTabs = false,
+  showInput = false,
 }) => {
   const dispatch = useDispatch()
   const queryClient = useQueryClient()
@@ -180,7 +182,7 @@ export const LowBar: React.FC<LowBarProps> = ({
         isExpanded
           ? isMobile
             ? 'w-[95%] h-[75%]'
-            : 'w-[30%] h-[50%]'
+            : 'w-[30%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[50%] 2xl:w-[30%]'
           : isMobile
             ? 'w-[40%] h-[35px]'
             : 'w-[15%] h-[38px]'
@@ -195,9 +197,9 @@ export const LowBar: React.FC<LowBarProps> = ({
         >
           <div className='text-sm font-medium text-stone-800 dark:text-stone-200 '>Notes</div>
           {isExpanded ? (
-            <ChevronUp className='w-4 h-4 text-stone-600 dark:text-stone-300' />
-          ) : (
             <ChevronDown className='w-4 h-4 text-stone-600 dark:text-stone-300' />
+          ) : (
+            <ChevronUp className='w-4 h-4 text-stone-600 dark:text-stone-300' />
           )}
         </button>
 
@@ -241,7 +243,7 @@ export const LowBar: React.FC<LowBarProps> = ({
                   <div className='flex-1 overflow-y-auto thin-scrollbar'>
                     <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
                   </div>
-                  <QuickInput />
+                  {showInput && <QuickInput />}
                 </div>
               ) : mode === 'list' ? (
                 <div className='h-full flex flex-col overflow-hidden'>

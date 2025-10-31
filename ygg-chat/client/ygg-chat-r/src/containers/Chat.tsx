@@ -226,7 +226,7 @@ function Chat() {
       for (const entry of entries) {
         const height = entry.contentRect.height
         if (height > 0) {
-          setInputAreaHeight(height)
+          setInputAreaHeight(height - height)
         }
       }
     })
@@ -1348,8 +1348,16 @@ function Chat() {
   const handleNodeSelect = (nodeId: string, path: string[]) => {
     if (!nodeId || !path || path.length === 0) return // ignore clicks on empty space
     // console.log('Node selected:', nodeId, 'Path:', path)
-    // Mark this selection as user-initiated so the scroll-to-selection effect may run
-    selectionScrollCauseRef.current = 'user'
+
+    const parsedNodeId = parseId(nodeId)
+
+    // Only trigger scroll if clicking a different node than currently visible
+    // This allows re-scrolling after manual navigation, but prevents redundant scrolls
+    if (parsedNodeId !== visibleMessageId) {
+      // Mark this selection as user-initiated so the scroll-to-selection effect may run
+      selectionScrollCauseRef.current = 'user'
+    }
+
     // Treat user selection during streaming as an override to bottom pinning
     if (streamState.active) {
       userScrolledDuringStreamRef.current = true
@@ -1357,7 +1365,7 @@ function Chat() {
     dispatch(chatSliceActions.conversationPathSet(path.map(id => parseId(id))))
     dispatch(chatSliceActions.selectedNodePathSet(path))
 
-    dispatch(chatSliceActions.focusedChatMessageSet(parseId(nodeId)))
+    dispatch(chatSliceActions.focusedChatMessageSet(parsedNodeId))
   }
 
   // const handleOnResend = (id: string) => {
@@ -1738,7 +1746,7 @@ function Chat() {
         >
           <div
             ref={messagesContainerRef}
-            className='flex flex-col gap-5 2xl:gap-3 px-2 dark:border-neutral-700 border-stone-200 rounded-lg py-4 overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y p-3 bg-transparent dark:bg-neutral-900 flex-1 min-h-0'
+            className={`flex flex-col pb-35 gap-5 2xl:gap-3 px-2 dark:border-neutral-700 border-stone-200 rounded-lg py-4 overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y p-3 bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
             style={{ ['overflowAnchor' as any]: 'none' }}
           >
             {displayMessages.length === 0 ? (
