@@ -407,6 +407,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const viewportWidth = window.innerWidth
       const viewportHeight = window.innerHeight
 
+      // On mobile, center the input in the viewport
+      if (isMobile) {
+        return {
+          x: (viewportWidth - inputRect.width) / 2,
+          y: (viewportHeight - inputRect.height) / 2,
+        }
+      }
+
+      // On desktop, position near the cursor but adjust to avoid viewport overflow
       let { x, y } = explainInputPosition.current
 
       // Adjust horizontal position
