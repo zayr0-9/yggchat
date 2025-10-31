@@ -348,7 +348,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
     }
   }, [showFileList])
 
-  const baseStyles = `${width} px-4 py-3 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-neutral-900 text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px] `
+  const baseStyles = `${width} resize-none px-4 py-3 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-neutral-900 text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px] `
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
   // focus:border-gray-500 focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 dark:focus:ring-2 dark:focus:ring-secondary-600
   const stateStyles = {
@@ -378,7 +378,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
           disabled={state === 'disabled'}
-          className={`${stateStyles[state]} ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${fillAvailableHeight ? 'flex-1' : ''} ${className}`}
+          className={`${stateStyles[state]} thin-scrollbar ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${fillAvailableHeight ? 'flex-1' : ''} ${className}`}
           aria-invalid={state === 'error'}
           aria-describedby={state === 'error' && errorMessage ? errorId : undefined}
           autoFocus={autoFocus}
@@ -403,7 +403,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
         {showFileList && filteredFiles.length > 0 && (
           <div
             ref={listRef}
-            className='absolute z-50 mb-1 w-80 max-h-60 overflow-y-auto dark:bg-secondary-600 bg-slate-50 border border-gray-600 rounded-lg shadow-lg thin-scrollbar'
+            className='absolute z-50 mb-1 w-80 max-h-60 overflow-y-auto dark:bg-secondary-600 bg-slate-50 border border-gray-600 rounded-lg shadow-lg'
             style={{
               bottom: dropdownDirection === 'up' ? '100%' : undefined,
               top: dropdownDirection === 'down' ? '100%' : undefined,

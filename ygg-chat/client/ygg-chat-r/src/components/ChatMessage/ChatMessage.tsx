@@ -1,6 +1,7 @@
 import type { RootState } from '@/store/store'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
+import { AnimatePresence, motion } from 'framer-motion'
 import React, { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useDispatch, useSelector } from 'react-redux'
@@ -247,6 +248,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
     const [selectedText, setSelectedText] = useState<string>('')
+    // Explain input states
+    const [showExplainInput, setShowExplainInput] = useState(false)
+    const [explainInputValue, setExplainInputValue] = useState('')
+    const explainInputPosition = useRef<{ x: number; y: number } | null>(null)
+    const explainInputRef = useRef<HTMLDivElement | null>(null)
 
     // Get message data from Redux store
     const messageData = useSelector((state: RootState) =>
@@ -367,11 +373,53 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
     const handleCreateBranchFromSelection = () => {
       if (onExplainFromSelection && selectedText) {
-        // Prefix the selected text with "Explain: " and create a new branch
-        const branchContent = `Explain: ${selectedText}`
-        onExplainFromSelection(id, branchContent)
+        // Store position and show floating input instead of immediately creating branch
+        explainInputPosition.current = contextMenuPosition
+        setShowExplainInput(true)
+        setExplainInputValue('')
       }
       setContextMenuOpen(false)
+    }
+
+    const handleSendExplainInput = () => {
+      if (onExplainFromSelection && selectedText && explainInputValue.trim()) {
+        // Combine user's custom question with the selected text
+        const branchContent = `${explainInputValue.trim()}\n\nSelected text:\n${selectedText}`
+        onExplainFromSelection(id, branchContent)
+        // Reset state
+        setShowExplainInput(false)
+        setExplainInputValue('')
+        setSelectedText('')
+      }
+    }
+
+    const handleCancelExplainInput = () => {
+      setShowExplainInput(false)
+      setExplainInputValue('')
+      setSelectedText('')
+    }
+
+    // Get adjusted position for explain input to avoid viewport overflow
+    const getAdjustedExplainInputPosition = () => {
+      if (!explainInputPosition.current || !explainInputRef.current) return explainInputPosition.current
+
+      const inputRect = explainInputRef.current.getBoundingClientRect()
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+
+      let { x, y } = explainInputPosition.current
+
+      // Adjust horizontal position
+      if (x + inputRect.width > viewportWidth) {
+        x = viewportWidth - inputRect.width - 10
+      }
+
+      // Adjust vertical position
+      if (y + inputRect.height > viewportHeight) {
+        y = viewportHeight - inputRect.height - 10
+      }
+
+      return { x: Math.max(10, x), y: Math.max(10, y) }
     }
 
     // Context menu items
@@ -409,7 +457,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       setShowMoreInfo(false)
     }
 
-    // Click outside handler
+    // Click outside handler for more menu
     useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
         if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
@@ -426,6 +474,23 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }, [showMoreMenu])
+
+    // Click outside handler for explain input
+    useEffect(() => {
+      if (!showExplainInput) return
+
+      const handleClickOutside = (event: MouseEvent) => {
+        if (explainInputRef.current && !explainInputRef.current.contains(event.target as Node)) {
+          handleCancelExplainInput()
+        }
+      }
+
+      document.addEventListener('mousedown', handleClickOutside)
+
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }, [showExplainInput])
 
     // Compute dropdown placement - runs on mount and when menu state changes
     useEffect(() => {
@@ -916,6 +981,65 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           items={contextMenuItems}
           onClose={() => setContextMenuOpen(false)}
         />
+
+        {/* Floating Explain Input */}
+        <AnimatePresence>
+          {showExplainInput && explainInputPosition.current && (
+            <motion.div
+              ref={explainInputRef}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className='fixed z-[10000] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3'
+              style={{
+                left: `${getAdjustedExplainInputPosition()?.x || explainInputPosition.current.x}px`,
+                top: `${getAdjustedExplainInputPosition()?.y || explainInputPosition.current.y}px`,
+              }}
+            >
+              {/* <div className='mb-2 text-sm font-medium text-gray-700 dark:text-gray-300'>
+                Ask about selected text
+              </div> */}
+              {/* Display selected text */}
+              <div className='mb-2 p-2 rounded-md bg-neutral-50 dark:bg-yBlack-800 border border-neutral-200 dark:border-neutral-700 max-h-[100px] overflow-y-auto'>
+                <div className='text-xs text-gray-600 dark:text-gray-400 italic line-clamp-4'>"{selectedText}"</div>
+              </div>
+              <TextArea
+                value={explainInputValue}
+                onChange={setExplainInputValue}
+                placeholder='Ask a question about the selected text...'
+                autoFocus
+                width='w-full'
+                minRows={1}
+                maxRows={2}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendExplainInput()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    handleCancelExplainInput()
+                  }
+                }}
+              />
+              <div className='mt-2 flex justify-end gap-2'>
+                <button
+                  onClick={handleCancelExplainInput}
+                  className='px-3 py-1.5 text-sm rounded-md text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors'
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendExplainInput}
+                  disabled={!explainInputValue.trim()}
+                  className='px-3 py-1.5 text-sm rounded-md bg-blue-500 hover:bg-blue-600 disabled:bg-neutral-300 disabled:cursor-not-allowed dark:disabled:bg-neutral-700 text-white transition-colors'
+                >
+                  Send
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }
