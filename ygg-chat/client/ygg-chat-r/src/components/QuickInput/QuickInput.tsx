@@ -136,6 +136,7 @@ export const QuickInput: React.FC = () => {
             <Select
               value={selectedModel?.name || ''}
               onChange={handleModelSelect}
+              size='small'
               options={models.map(m => m.name)}
               placeholder='Select model...'
               disabled={models.length === 0}
