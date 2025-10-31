@@ -343,9 +343,16 @@ export const sendMessage = createAsyncThunk<
         ? drafts.map(d => ({ dataUrl: d.dataUrl, name: d.name, type: d.type, size: d.size }))
         : null
 
-      // Use project system prompt as fallback if conversation system prompt is empty
+      // Combine project and conversation system prompts (project first)
       const selectedProject = selectSelectedProject(state)
-      const systemPrompt = state.conversations.systemPrompt || selectedProject?.system_prompt || ''
+      let systemPrompt = ''
+      if (selectedProject?.system_prompt) {
+        systemPrompt = selectedProject.system_prompt
+      }
+      if (state.conversations.systemPrompt) {
+        if (systemPrompt) systemPrompt += '\n\n'
+        systemPrompt += state.conversations.systemPrompt
+      }
 
       // Send conversation and project context to eliminate server DB call
       // Client already fetched these via RLS-protected endpoints, so sending them is safe
@@ -670,9 +677,16 @@ export const editMessageWithBranching = createAsyncThunk<
       const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
       const serverProvider = appProvider === 'google' ? 'gemini' : appProvider
 
-      // Use project system prompt as fallback if conversation system prompt is empty
+      // Combine project and conversation system prompts (project first)
       const selectedProject = selectSelectedProject(state)
-      const systemPrompt = state.conversations.systemPrompt || selectedProject?.system_prompt || ''
+      let systemPrompt = ''
+      if (selectedProject?.system_prompt) {
+        systemPrompt = selectedProject.system_prompt
+      }
+      if (state.conversations.systemPrompt) {
+        if (systemPrompt) systemPrompt += '\n\n'
+        systemPrompt += state.conversations.systemPrompt
+      }
       const drafts = state.chat.composition.imageDrafts || []
       // Build attachments: existing artifacts minus deleted (backup) + current drafts
       const artifactsExisting: string[] = Array.isArray(originalMessage.artifacts)
