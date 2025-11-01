@@ -353,11 +353,12 @@ export const sendMessage = createAsyncThunk<
         if (systemPrompt) systemPrompt += '\n\n'
         systemPrompt += state.conversations.systemPrompt
       }
-
-      // Send conversation and project context to eliminate server DB call
-      // Client already fetched these via RLS-protected endpoints, so sending them is safe
-      const conversationContext = state.conversations.convContext || null
       const projectContext = selectedProject?.context || null
+      const conversationContextSource = state.conversations.convContext || null
+      const combinedContext =
+        projectContext && conversationContextSource
+          ? `${projectContext}\n\n${conversationContextSource}`
+          : projectContext || conversationContextSource || null
 
       // Get selected files for chat from IDE context
       const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
@@ -381,7 +382,7 @@ export const sendMessage = createAsyncThunk<
             // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
             parentId: parent,
             systemPrompt: systemPrompt,
-            conversationContext,
+            conversationContext: combinedContext,
             projectContext,
             provider: serverProvider,
             repeatNum: repeatNum,
@@ -412,7 +413,7 @@ export const sendMessage = createAsyncThunk<
             // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
             parentId: parent,
             systemPrompt: systemPrompt,
-            conversationContext,
+            conversationContext: combinedContext,
             projectContext,
             provider: serverProvider,
             attachmentsBase64,
@@ -687,6 +688,12 @@ export const editMessageWithBranching = createAsyncThunk<
         if (systemPrompt) systemPrompt += '\n\n'
         systemPrompt += state.conversations.systemPrompt
       }
+      const projectContext = selectedProject?.context || null
+      const conversationContextSource = state.conversations.convContext || null
+      const combinedContext =
+        projectContext && conversationContextSource
+          ? `${projectContext}\n\n${conversationContextSource}`
+          : projectContext || conversationContextSource || null
       const drafts = state.chat.composition.imageDrafts || []
       // Build attachments: existing artifacts minus deleted (backup) + current drafts
       const artifactsExisting: string[] = Array.isArray(originalMessage.artifacts)
@@ -733,6 +740,8 @@ export const editMessageWithBranching = createAsyncThunk<
           modelName,
           parentId: parentId, // Branch from the same parent as original
           systemPrompt: systemPrompt,
+          conversationContext: combinedContext,
+          projectContext,
           provider: serverProvider,
           attachmentsBase64,
           selectedFiles: selectedFilesForChat,
@@ -888,6 +897,18 @@ export const sendMessageToBranch = createAsyncThunk<
         ? drafts.map(d => ({ dataUrl: d.dataUrl, name: d.name, type: d.type, size: d.size }))
         : null
 
+      // Retrieve project and conversation context to send with branch message
+      const selectedProject = selectSelectedProject(state)
+      const projectContext = selectedProject?.context || null
+      const conversationContextSource = state.conversations.convContext || null
+      const combinedContext =
+        projectContext && conversationContextSource
+          ? `${projectContext}\n\n${conversationContextSource}`
+          : projectContext || conversationContextSource || null
+
+      // Get selected files for chat from IDE context
+      const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
+
       if (!modelName) {
         throw new Error('No model selected')
       }
@@ -900,8 +921,11 @@ export const sendMessageToBranch = createAsyncThunk<
           modelName,
           parentId,
           systemPrompt,
+          conversationContext: combinedContext,
+          projectContext,
           provider: serverProvider,
           attachmentsBase64,
+          selectedFiles: selectedFilesForChat,
           think,
         }),
         signal: controller.signal,

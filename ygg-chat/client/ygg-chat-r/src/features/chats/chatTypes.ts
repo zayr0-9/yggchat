@@ -14,6 +14,15 @@ export interface miniMessage {
   media: Blob | null
 }
 
+// Tool call types
+export interface ToolCall {
+  id: string
+  name: string
+  arguments: any
+  status: 'pending' | 'executing' | 'complete'
+  result?: string
+}
+
 // Stream-specific types
 export interface StreamChunk {
   type: 'chunk' | 'complete' | 'error' | 'user_message' | 'reset' | 'generation_started' | 'tool_call'
@@ -27,6 +36,8 @@ export interface StreamChunk {
   // optional iteration index for multi-reply endpoints
   iteration?: number
   messageId?: MessageId
+  // structured tool call data
+  toolCall?: ToolCall
 }
 
 export interface StreamState {
@@ -34,8 +45,8 @@ export interface StreamState {
   buffer: string
   // separate buffer for reasoning/thinking tokens while streaming
   thinkingBuffer: string
-  // separate buffer for tool call tokens while streaming
-  toolCallsBuffer: string
+  // separate array for tool calls while streaming
+  toolCalls: ToolCall[]
   messageId: MessageId | null
   error: string | null
   finished: boolean

@@ -836,15 +836,23 @@ export class MessageService {
   ): Promise<Message> {
     // Parse tool_calls safely - if invalid JSON, log and set to null
     let parsedToolCalls: any = null
+    console.log('📥 [MessageService.create] Received tool_calls parameter:', typeof tool_calls, 'Length:', tool_calls?.length)
+    console.log('📥 [MessageService.create] tool_calls value:', tool_calls)
+    console.log('📥 [MessageService.create] tool_calls is empty string?:', tool_calls === '')
+    console.log('📥 [MessageService.create] tool_calls is truthy?:', !!tool_calls)
+
     if (tool_calls) {
       try {
-        console.log('🔧 [MessageService.create] Raw tool_calls string:', tool_calls)
+        console.log('🔧 [MessageService.create] Raw tool_calls string:', tool_calls.substring(0, 200))
         parsedToolCalls = JSON.parse(tool_calls)
+        console.log('✅ [MessageService.create] Successfully parsed tool_calls:', JSON.stringify(parsedToolCalls).substring(0, 200))
       } catch (parseError) {
         console.error('❌ [MessageService.create] Failed to parse tool_calls JSON:', parseError)
-        console.error('❌ Invalid tool_calls value:', tool_calls)
+        console.error('❌ Invalid tool_calls value:', tool_calls.substring(0, 200))
         // Continue with null - don't fail message creation
       }
+    } else {
+      console.log('⚠️  [MessageService.create] tool_calls is falsy, will be stored as null in database')
     }
 
     // console.log('inserting the following fields - - - - - - - ', {
@@ -868,6 +876,14 @@ export class MessageService {
       plainTextContent = content
     }
 
+    console.log('💾 [MessageService.create] About to insert message with:', {
+      role,
+      content_length: content.length,
+      thinking_block_length: thinking_block.length,
+      tool_calls: parsedToolCalls,
+      model_name: modelName || 'unknown',
+    })
+
     const { data: created, error } = await client
       .from('messages')
       .insert({
@@ -886,10 +902,10 @@ export class MessageService {
       .single()
 
     if (error) {
-      console.error('Error creating message:', error)
+      console.error('❌ Error creating message:', error)
       throw error
     }
-    // console.log('created Message = = = = ', created)
+    console.log('✅ [MessageService.create] Message created successfully with tool_calls:', created.tool_calls)
     return created as Message
   }
 

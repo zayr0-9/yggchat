@@ -2,6 +2,7 @@ import { anthropic } from '@ai-sdk/anthropic'
 import { stepCountIs, streamText } from 'ai'
 import fs from 'fs'
 import path from 'path'
+import { extractJsonObjects } from './jsonExtractor'
 import tools from './tools'
 export async function generateResponse(
   messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
@@ -158,19 +159,16 @@ export async function generateResponse(
             onChunk(JSON.stringify({ part: 'tool_call', delta }))
           } else {
             // Check if this delta contains tool calls mixed in with text
-            const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-            if (delta.includes('{"') && toolCallRegex.test(delta)) {
-              // Extract tool calls from this delta
-              const matches = delta.match(toolCallRegex)
-              if (matches) {
+            if (delta.includes('{')) {
+              const { jsonObjects, cleanedText } = extractJsonObjects(delta)
+              if (jsonObjects.length > 0) {
                 // Send tool calls separately
-                onChunk(JSON.stringify({ part: 'tool_call', delta: matches.join('') }))
+                onChunk(JSON.stringify({ part: 'tool_call', delta: JSON.stringify(jsonObjects) }))
+              }
 
-                // Send cleaned text separately
-                const cleanedDelta = delta.replace(toolCallRegex, '').trim()
-                if (cleanedDelta) {
-                  onChunk(JSON.stringify({ part: 'text', delta: cleanedDelta }))
-                }
+              // Send cleaned text separately
+              if (cleanedText) {
+                onChunk(JSON.stringify({ part: 'text', delta: cleanedText }))
               }
             } else {
               onChunk(JSON.stringify({ part: 'text', delta }))
@@ -187,18 +185,16 @@ export async function generateResponse(
           return
         }
         // Filter tool calls from textStream fallback as well
-        const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-        if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
-          const matches = chunk.match(toolCallRegex)
-          if (matches) {
+        if (chunk.includes('{')) {
+          const { jsonObjects, cleanedText } = extractJsonObjects(chunk)
+          if (jsonObjects.length > 0) {
             // Send tool calls separately
-            onChunk(JSON.stringify({ part: 'tool_call', delta: matches.join('') }))
+            onChunk(JSON.stringify({ part: 'tool_call', delta: JSON.stringify(jsonObjects) }))
+          }
 
-            // Send cleaned text separately
-            const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
-            if (cleanedChunk) {
-              onChunk(JSON.stringify({ part: 'text', delta: cleanedChunk }))
-            }
+          // Send cleaned text separately
+          if (cleanedText) {
+            onChunk(JSON.stringify({ part: 'text', delta: cleanedText }))
           }
         } else {
           onChunk(JSON.stringify({ part: 'text', delta: chunk }))

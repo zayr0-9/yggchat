@@ -1,4 +1,5 @@
 import type { RootState } from '@/store/store'
+import type { ToolCall } from '@/features/chats/chatTypes'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -29,7 +30,7 @@ interface ChatMessageProps {
   role: MessageRole
   content: string
   thinking?: string
-  toolCalls?: string
+  toolCalls?: ToolCall[]
   timestamp?: string | Date
   onEdit?: (id: string, newContent: string) => void
   onBranch?: (id: string, newContent: string) => void
@@ -744,11 +745,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         </div>
 
         {/* Tool calls block */}
-        {typeof toolCalls === 'string' && toolCalls.trim().length > 0 && (
+        {Array.isArray(toolCalls) && toolCalls.length > 0 && (
           <div className='mb-3 rounded-md border border-blue-200 bg-blue-50 p-2 sm:p-3 dark:border-blue-900/40 dark:bg-neutral-900'>
             <div className='mb-2 flex items-center justify-between'>
               <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300'>
-                Tool Calls
+                Tool Calls ({toolCalls.length})
               </div>
               <Button
                 type='button'
@@ -765,20 +766,38 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             {showToolCalls && (
               <div
                 id={`tool-calls-content-${id}`}
-                className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
+                className='space-y-2 text-xs sm:text-sm 3xl:text-base'
               >
-                <pre className='bg-gray-100 dark:bg-neutral-800 p-3 rounded-md overflow-auto text-xs sm:text-sm 3xl:text-base'>
-                  <code className='text-blue-700 dark:text-blue-300'>
-                    {(() => {
-                      try {
-                        const parsed = JSON.parse(toolCalls)
-                        return JSON.stringify(parsed, null, 2)
-                      } catch {
-                        return toolCalls
-                      }
-                    })()}
-                  </code>
-                </pre>
+                {toolCalls.map((toolCall, idx) => (
+                  <div key={toolCall.id || idx} className='bg-white dark:bg-neutral-800 p-2 rounded-md border border-blue-100 dark:border-blue-900/30'>
+                    <div className='flex items-center justify-between mb-2'>
+                      <div className='font-semibold text-blue-700 dark:text-blue-300'>
+                        {toolCall.name}
+                      </div>
+                      <span className='text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'>
+                        {toolCall.status}
+                      </span>
+                    </div>
+                    {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                      <div className='text-xs space-y-1'>
+                        {Object.entries(toolCall.arguments).map(([key, value]) => (
+                          <div key={key} className='flex gap-2'>
+                            <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                            <span className='text-gray-800 dark:text-gray-200 break-all'>
+                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {toolCall.result && (
+                      <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
+                        <div className='font-semibold mb-1'>Result:</div>
+                        <div className='break-all'>{toolCall.result}</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>

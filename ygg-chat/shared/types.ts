@@ -10,7 +10,9 @@ export interface BaseMessage {
   conversation_id: ConversationId
   role: 'user' | 'assistant'
   thinking_block?: string
-  tool_calls?: string
+  // tool_calls can be string (SQLite) or parsed object/array (Supabase)
+  // Frontend handles both formats transparently
+  tool_calls?: string | any
   content: string
   content_plain_text: string
   parent_id?: MessageId | null

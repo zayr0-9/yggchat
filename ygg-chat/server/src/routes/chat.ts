@@ -16,6 +16,7 @@ import {
   UserService,
 } from '../database/models'
 import { asyncHandler } from '../utils/asyncHandler'
+import { extractJsonObjects } from '../utils/jsonExtractor'
 import { modelService } from '../utils/modelService'
 // import { generateResponse } from '../utils/ollama'
 import { saveBase64ImageAttachmentsForMessage } from '../utils/attachments'
@@ -922,33 +923,41 @@ router.post(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '', iteration: i })}\n\n`
                 )
               } else if (part === 'tool_call') {
-                assistantToolCalls += delta
-                res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '', iteration: i })}\n\n`)
+                // Get structured tool call from obj.toolCall (not from delta)
+                if (obj?.toolCall) {
+                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                  currentToolCalls.push(obj.toolCall)
+                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  console.log(`✅ [chat/repeat] Accumulated tool call: ${obj.toolCall.name}`)
+                  // Forward to client with structured data
+                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, iteration: i })}\n\n`)
+                } else {
+                  // Fallback: treat as content if no structured toolCall
+                  assistantContent += delta
+                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta, iteration: i })}\n\n`)
+                }
               } else {
                 // Check if this delta contains tool calls and handle them
-                const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-                if (delta.includes('{"') && toolCallRegex.test(delta)) {
-                  // Extract tool calls from this delta
-                  const matches = delta.match(toolCallRegex)
-                  if (matches) {
+                if (delta.includes('{')) {
+                  const { jsonObjects, cleanedText } = extractJsonObjects(delta)
+                  if (jsonObjects.length > 0) {
                     // Add to tool calls buffer
                     const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                    currentToolCalls.push(...matches)
+                    currentToolCalls.push(...jsonObjects)
                     assistantToolCalls = JSON.stringify(currentToolCalls)
 
                     // Send tool call chunk
                     res.write(
-                      `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '', iteration: i })}\n\n`
+                      `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '', iteration: i })}\n\n`
                     )
+                  }
 
-                    // Clean the delta of tool calls before adding to content
-                    const cleanedDelta = delta.replace(toolCallRegex, '').trim()
-                    if (cleanedDelta) {
-                      assistantContent += cleanedDelta
-                      res.write(
-                        `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedDelta, content: cleanedDelta, iteration: i })}\n\n`
-                      )
-                    }
+                  // Clean the delta of tool calls before adding to content
+                  if (cleanedText) {
+                    assistantContent += cleanedText
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText, iteration: i })}\n\n`
+                    )
                   }
                 } else {
                   assistantContent += delta
@@ -959,25 +968,23 @@ router.post(
               }
             } catch {
               // Fallback: treat as plain text but still check for tool calls
-              const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-              if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
-                const matches = chunk.match(toolCallRegex)
-                if (matches) {
+              if (chunk.includes('{')) {
+                const { jsonObjects, cleanedText } = extractJsonObjects(chunk)
+                if (jsonObjects.length > 0) {
                   const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                  currentToolCalls.push(...matches)
+                  currentToolCalls.push(...jsonObjects)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
 
                   res.write(
-                    `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '', iteration: i })}\n\n`
+                    `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '', iteration: i })}\n\n`
                   )
+                }
 
-                  const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
-                  if (cleanedChunk) {
-                    assistantContent += cleanedChunk
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedChunk, content: cleanedChunk, iteration: i })}\n\n`
-                    )
-                  }
+                if (cleanedText) {
+                  assistantContent += cleanedText
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText, iteration: i })}\n\n`
+                  )
                 }
               } else {
                 assistantContent += chunk
@@ -1004,14 +1011,14 @@ router.post(
         )
 
         // Final cleanup: ensure tool calls are stripped from content before saving
-        const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-        if (!assistantToolCalls.trim() && assistantContent.includes('{"')) {
-          const matches = assistantContent.match(toolCallRegex)
-          if (matches) {
-            assistantToolCalls = JSON.stringify(matches)
+        if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
+          const { jsonObjects, cleanedText } = extractJsonObjects(assistantContent)
+          if (jsonObjects.length > 0) {
+            assistantToolCalls = JSON.stringify(jsonObjects)
+            assistantContent = cleanedText
           }
         }
-        const cleanedContent = assistantContent.replace(toolCallRegex, '').trim()
+        const cleanedContent = assistantContent.trim()
 
         if (cleanedContent.trim() || assistantThinking.trim() || assistantToolCalls.trim()) {
           // Update the existing assistant message with final content
@@ -1353,33 +1360,41 @@ router.post(
                 assistantThinking += delta
                 res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '' })}\n\n`)
               } else if (part === 'tool_call') {
-                assistantToolCalls += delta
-                res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '' })}\n\n`)
+                // Get structured tool call from obj.toolCall (not from delta)
+                if (obj?.toolCall) {
+                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                  currentToolCalls.push(obj.toolCall)
+                  assistantToolCalls = JSON.stringify(currentToolCalls)
+                  console.log(`✅ [chat] Accumulated tool call: ${obj.toolCall.name}`)
+                  // Forward to client with structured data
+                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, content: '' })}\n\n`)
+                } else {
+                  // Fallback: treat as content if no structured toolCall
+                  assistantContent += delta
+                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta })}\n\n`)
+                }
               } else {
                 // Check if this delta contains tool calls and handle them
-                const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-                if (delta.includes('{"') && toolCallRegex.test(delta)) {
-                  // Extract tool calls from this delta
-                  const matches = delta.match(toolCallRegex)
-                  if (matches) {
+                if (delta.includes('{')) {
+                  const { jsonObjects, cleanedText } = extractJsonObjects(delta)
+                  if (jsonObjects.length > 0) {
                     // Add to tool calls buffer
                     const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                    currentToolCalls.push(...matches)
+                    currentToolCalls.push(...jsonObjects)
                     assistantToolCalls = JSON.stringify(currentToolCalls)
 
                     // Send tool call chunk
                     res.write(
-                      `data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '' })}\n\n`
+                      `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '' })}\n\n`
                     )
+                  }
 
-                    // Clean the delta of tool calls before adding to content
-                    const cleanedDelta = delta.replace(toolCallRegex, '').trim()
-                    if (cleanedDelta) {
-                      assistantContent += cleanedDelta
-                      res.write(
-                        `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedDelta, content: cleanedDelta })}\n\n`
-                      )
-                    }
+                  // Clean the delta of tool calls before adding to content
+                  if (cleanedText) {
+                    assistantContent += cleanedText
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText })}\n\n`
+                    )
                   }
                 } else {
                   assistantContent += delta
@@ -1388,23 +1403,21 @@ router.post(
               }
             } catch {
               // Fallback: treat as plain text but still check for tool calls
-              const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-              if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
-                const matches = chunk.match(toolCallRegex)
-                if (matches) {
+              if (chunk.includes('{')) {
+                const { jsonObjects, cleanedText } = extractJsonObjects(chunk)
+                if (jsonObjects.length > 0) {
                   const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                  currentToolCalls.push(...matches)
+                  currentToolCalls.push(...jsonObjects)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta: matches.join(''), content: '' })}\n\n`)
+                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '' })}\n\n`)
+                }
 
-                  const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
-                  if (cleanedChunk) {
-                    assistantContent += cleanedChunk
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedChunk, content: cleanedChunk })}\n\n`
-                    )
-                  }
+                if (cleanedText) {
+                  assistantContent += cleanedText
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText })}\n\n`
+                  )
                 }
               } else {
                 assistantContent += chunk
@@ -1429,16 +1442,16 @@ router.post(
         )
 
         // Final cleanup: ensure tool calls are stripped from content before saving
-        const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-        if (!assistantToolCalls.trim() && assistantContent.includes('{"')) {
+        if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
           // Extract any remaining tool calls
-          const matches = assistantContent.match(toolCallRegex)
-          if (matches) {
-            assistantToolCalls = JSON.stringify(matches)
+          const { jsonObjects, cleanedText } = extractJsonObjects(assistantContent)
+          if (jsonObjects.length > 0) {
+            assistantToolCalls = JSON.stringify(jsonObjects)
+            assistantContent = cleanedText
           }
         }
         // Always clean content regardless of whether we found new tool calls
-        const cleanedContent = assistantContent.replace(toolCallRegex, '').trim()
+        const cleanedContent = assistantContent.trim()
 
         // Normal completion -> update assistant message with final content
         const updatedAssistantMessage = MessageService.update(
@@ -1488,14 +1501,14 @@ router.post(
             .includes('abort')
         if (isAbort) {
           // Final cleanup for aborted messages
-          const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-          if (!assistantToolCalls.trim() && assistantContent.includes('{"')) {
-            const matches = assistantContent.match(toolCallRegex)
-            if (matches) {
-              assistantToolCalls = JSON.stringify(matches)
+          if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
+            const { jsonObjects, cleanedText } = extractJsonObjects(assistantContent)
+            if (jsonObjects.length > 0) {
+              assistantToolCalls = JSON.stringify(jsonObjects)
+              assistantContent = cleanedText
             }
           }
-          const cleanedContent = assistantContent.replace(toolCallRegex, '').trim()
+          const cleanedContent = assistantContent.trim()
 
           // Persist whatever we have as a partial message
           if (cleanedContent.trim() || assistantThinking.trim() || assistantToolCalls.trim()) {

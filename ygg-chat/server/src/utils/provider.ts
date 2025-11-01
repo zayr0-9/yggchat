@@ -148,7 +148,7 @@ export async function generateResponse(
         think,
         messageId,
         userId,
-        false,
+        true,
         conversationId
       )
     }

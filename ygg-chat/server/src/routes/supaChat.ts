@@ -23,6 +23,7 @@ import {
 import { asyncHandler } from '../utils/asyncHandler'
 import { SelectedFileContent } from '../utils/fileMentionProcessor'
 import { abortGeneration, clearGeneration, createGeneration } from '../utils/generationManager'
+import { extractJsonObjects } from '../utils/jsonExtractor'
 import { modelService } from '../utils/modelService'
 import { generateResponse } from '../utils/provider'
 import { saveBase64ImageAttachmentsForMessage } from '../utils/supaAttachments'
@@ -1167,20 +1168,21 @@ router.post(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '', iteration: i })}\n\n`
                 )
               } else if (part === 'tool_call') {
-                // Validate that delta is valid JSON before adding to tool_calls
-                try {
-                  // Try to parse delta as JSON to validate it
-                  const parsedDelta = JSON.parse(delta)
-                  // If it's valid JSON, add it to the array
+                // Get structured tool call from obj.toolCall (not from delta)
+                if (obj?.toolCall) {
                   const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                  currentToolCalls.push(delta)
+                  currentToolCalls.push(obj.toolCall)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
-                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '', iteration: i })}\n\n`)
-                } catch (e) {
-                  // If delta is not valid JSON, treat it as regular content instead
+                  console.log(`✅ [supaChat/repeat] Accumulated tool call: ${obj.toolCall.name}`)
+                  // Forward to client with structured data
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, iteration: i })}\n\n`
+                  )
+                } else {
+                  // Fallback: treat as content if no structured toolCall
                   console.warn(
-                    '⚠️  [supaChat repeats] Received invalid JSON in tool_call part, treating as content:',
-                    delta
+                    '⚠️  [supaChat repeats] Received tool_call part but no toolCall object:',
+                    delta.substring(0, 100)
                   )
                   assistantContent += delta
                   res.write(
@@ -1188,38 +1190,24 @@ router.post(
                   )
                 }
               } else {
-                const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-                if (delta.includes('{"') && toolCallRegex.test(delta)) {
-                  const matches = delta.match(toolCallRegex)
-                  if (matches) {
-                    // Validate each match is valid JSON before adding
-                    const validMatches = matches.filter(match => {
-                      try {
-                        JSON.parse(match)
-                        return true
-                      } catch {
-                        console.warn('⚠️  [supaChat repeats] Regex matched invalid JSON, skipping:', match)
-                        return false
-                      }
-                    })
+                if (delta.includes('{')) {
+                  const { jsonObjects, cleanedText } = extractJsonObjects(delta)
+                  if (jsonObjects.length > 0) {
+                    // Add extracted JSON objects to tool calls
+                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                    currentToolCalls.push(...jsonObjects)
+                    assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                    if (validMatches.length > 0) {
-                      const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                      currentToolCalls.push(...validMatches)
-                      assistantToolCalls = JSON.stringify(currentToolCalls)
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '', iteration: i })}\n\n`
+                    )
+                  }
 
-                      res.write(
-                        `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '', iteration: i })}\n\n`
-                      )
-                    }
-
-                    const cleanedDelta = delta.replace(toolCallRegex, '').trim()
-                    if (cleanedDelta) {
-                      assistantContent += cleanedDelta
-                      res.write(
-                        `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedDelta, content: cleanedDelta, iteration: i })}\n\n`
-                      )
-                    }
+                  if (cleanedText) {
+                    assistantContent += cleanedText
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText, iteration: i })}\n\n`
+                    )
                   }
                 } else {
                   assistantContent += delta
@@ -1229,38 +1217,23 @@ router.post(
                 }
               }
             } catch {
-              const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-              if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
-                const matches = chunk.match(toolCallRegex)
-                if (matches) {
-                  // Validate each match is valid JSON before adding
-                  const validMatches = matches.filter(match => {
-                    try {
-                      JSON.parse(match)
-                      return true
-                    } catch {
-                      console.warn('⚠️  [supaChat repeats] Regex matched invalid JSON in catch block, skipping:', match)
-                      return false
-                    }
-                  })
+              if (chunk.includes('{')) {
+                const { jsonObjects, cleanedText } = extractJsonObjects(chunk)
+                if (jsonObjects.length > 0) {
+                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                  currentToolCalls.push(...jsonObjects)
+                  assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                  if (validMatches.length > 0) {
-                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                    currentToolCalls.push(...validMatches)
-                    assistantToolCalls = JSON.stringify(currentToolCalls)
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '', iteration: i })}\n\n`
+                  )
+                }
 
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '', iteration: i })}\n\n`
-                    )
-                  }
-
-                  const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
-                  if (cleanedChunk) {
-                    assistantContent += cleanedChunk
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedChunk, content: cleanedChunk, iteration: i })}\n\n`
-                    )
-                  }
+                if (cleanedText) {
+                  assistantContent += cleanedText
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText, iteration: i })}\n\n`
+                  )
                 }
               } else {
                 assistantContent += chunk
@@ -1286,14 +1259,15 @@ router.post(
           conversationId
         )
 
-        const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-        if (!assistantToolCalls.trim() && assistantContent.includes('{"')) {
-          const matches = assistantContent.match(toolCallRegex)
-          if (matches) {
-            assistantToolCalls = JSON.stringify(matches)
+        if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
+          const { jsonObjects, cleanedText } = extractJsonObjects(assistantContent)
+          if (jsonObjects.length > 0) {
+            assistantToolCalls = JSON.stringify(jsonObjects)
+            // Update assistantContent to remove extracted JSON objects
+            assistantContent = cleanedText
           }
         }
-        const cleanedContent = assistantContent.replace(toolCallRegex, '').trim()
+        const cleanedContent = assistantContent.trim()
 
         if (cleanedContent.trim() || assistantThinking.trim() || assistantToolCalls.trim()) {
           // Validate assistantToolCalls before passing to MessageService.create
@@ -1560,54 +1534,45 @@ router.post(
                 assistantThinking += delta
                 res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '' })}\n\n`)
               } else if (part === 'tool_call') {
-                // Validate that delta is valid JSON before adding to tool_calls
-                try {
-                  // Try to parse delta as JSON to validate it
-                  const parsedDelta = JSON.parse(delta)
-                  // If it's valid JSON, add it to the array
+                // Get structured tool call from obj.toolCall (not from delta)
+                if (obj?.toolCall) {
+                  console.log(`✅ [supaChat] Received structured tool call: ${obj.toolCall.name}`)
+                  // If it's valid tool call, add it to the array
                   const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                  currentToolCalls.push(delta)
+                  currentToolCalls.push(obj.toolCall)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
-                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta, content: '' })}\n\n`)
-                } catch (e) {
-                  // If delta is not valid JSON, treat it as regular content instead
-                  console.warn('⚠️  [supaChat] Received invalid JSON in tool_call part, treating as content:', delta)
+                  console.log('✅ [supaChat] Updated assistantToolCalls, current length:', currentToolCalls.length)
+                  // Forward to client with structured data
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, content: '' })}\n\n`
+                  )
+                } else {
+                  // If no structured toolCall, treat delta as regular content
+                  console.warn(
+                    '⚠️  [supaChat] Received tool_call part but no toolCall object:',
+                    delta.substring(0, 150)
+                  )
                   assistantContent += delta
                   res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta })}\n\n`)
                 }
               } else {
-                const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-                if (delta.includes('{"') && toolCallRegex.test(delta)) {
-                  const matches = delta.match(toolCallRegex)
-                  if (matches) {
-                    // Validate each match is valid JSON before adding
-                    const validMatches = matches.filter(match => {
-                      try {
-                        JSON.parse(match)
-                        return true
-                      } catch {
-                        console.warn('⚠️  [supaChat] Regex matched invalid JSON, skipping:', match)
-                        return false
-                      }
-                    })
+                if (delta.includes('{')) {
+                  const { jsonObjects, cleanedText } = extractJsonObjects(delta)
+                  if (jsonObjects.length > 0) {
+                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                    currentToolCalls.push(...jsonObjects)
+                    assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                    if (validMatches.length > 0) {
-                      const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                      currentToolCalls.push(...validMatches)
-                      assistantToolCalls = JSON.stringify(currentToolCalls)
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '' })}\n\n`
+                    )
+                  }
 
-                      res.write(
-                        `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '' })}\n\n`
-                      )
-                    }
-
-                    const cleanedDelta = delta.replace(toolCallRegex, '').trim()
-                    if (cleanedDelta) {
-                      assistantContent += cleanedDelta
-                      res.write(
-                        `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedDelta, content: cleanedDelta })}\n\n`
-                      )
-                    }
+                  if (cleanedText) {
+                    assistantContent += cleanedText
+                    res.write(
+                      `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText })}\n\n`
+                    )
                   }
                 } else {
                   assistantContent += delta
@@ -1615,38 +1580,23 @@ router.post(
                 }
               }
             } catch {
-              const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-              if (chunk.includes('{"') && toolCallRegex.test(chunk)) {
-                const matches = chunk.match(toolCallRegex)
-                if (matches) {
-                  // Validate each match is valid JSON before adding
-                  const validMatches = matches.filter(match => {
-                    try {
-                      JSON.parse(match)
-                      return true
-                    } catch {
-                      console.warn('⚠️  [supaChat] Regex matched invalid JSON in catch block, skipping:', match)
-                      return false
-                    }
-                  })
+              if (chunk.includes('{')) {
+                const { jsonObjects, cleanedText } = extractJsonObjects(chunk)
+                if (jsonObjects.length > 0) {
+                  const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
+                  currentToolCalls.push(...jsonObjects)
+                  assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                  if (validMatches.length > 0) {
-                    const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
-                    currentToolCalls.push(...validMatches)
-                    assistantToolCalls = JSON.stringify(currentToolCalls)
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '' })}\n\n`
+                  )
+                }
 
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'tool_call', delta: validMatches.join(''), content: '' })}\n\n`
-                    )
-                  }
-
-                  const cleanedChunk = chunk.replace(toolCallRegex, '').trim()
-                  if (cleanedChunk) {
-                    assistantContent += cleanedChunk
-                    res.write(
-                      `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedChunk, content: cleanedChunk })}\n\n`
-                    )
-                  }
+                if (cleanedText) {
+                  assistantContent += cleanedText
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText })}\n\n`
+                  )
                 }
               } else {
                 assistantContent += chunk
@@ -1670,24 +1620,42 @@ router.post(
         )
 
         // Clean up content and extract tool calls after streaming completes
-        const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-        if (!assistantToolCalls.trim() && assistantContent.includes('{"')) {
-          const matches = assistantContent.match(toolCallRegex)
-          if (matches) {
-            assistantToolCalls = JSON.stringify(matches)
-            console.log('Final extraction - found tool calls:', assistantToolCalls)
-          }
-        }
-        const cleanedContent = assistantContent.replace(toolCallRegex, '').trim()
+        // if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
+        //   const { jsonObjects, cleanedText } = extractJsonObjects(assistantContent)
+        //   if (jsonObjects.length > 0) {
+        //     assistantToolCalls = JSON.stringify(jsonObjects)
+        //     assistantContent = cleanedText
+        //     console.log('Final extraction - found tool calls:', assistantToolCalls)
+        //   }
+        // }
+        const cleanedContent = assistantContent.trim()
         console.log('Original content length:', assistantContent.length, 'Cleaned length:', cleanedContent.length)
 
         // Validate assistantToolCalls before passing to MessageService.create
         console.log('🔧 [supaChat] assistantToolCalls value:', assistantToolCalls)
         console.log('🔧 [supaChat] assistantToolCalls type:', typeof assistantToolCalls)
         console.log('🔧 [supaChat] assistantToolCalls length:', assistantToolCalls?.length)
+        console.log('🔧 [supaChat] assistantToolCalls is empty string?:', assistantToolCalls === '')
+        console.log('🔧 [supaChat] assistantToolCalls is truthy?:', !!assistantToolCalls)
+
+        if (assistantToolCalls) {
+          try {
+            const parsed = JSON.parse(assistantToolCalls)
+            console.log('🔧 [supaChat] Parsed assistantToolCalls successfully:', JSON.stringify(parsed))
+          } catch (e) {
+            console.error(
+              '🔧 [supaChat] Failed to parse assistantToolCalls:',
+              e instanceof Error ? e.message : String(e)
+            )
+          }
+        }
 
         // Create assistant message with final content (not update placeholder)
         try {
+          console.log(
+            '📤 [supaChat] Calling MessageService.create with tool_calls:',
+            assistantToolCalls ? assistantToolCalls.substring(0, 100) : 'empty'
+          )
           const assistantMessage = await MessageService.create(
             client,
             userId,
@@ -1737,14 +1705,14 @@ router.post(
 
         if (isAbort) {
           // If aborted with content, create message with what we have
-          const toolCallRegex = /\{[^{}]*"[^"]*":\s*"[^"]*"[^{}]*\}/g
-          if (!assistantToolCalls.trim() && assistantContent.includes('{"')) {
-            const matches = assistantContent.match(toolCallRegex)
-            if (matches) {
-              assistantToolCalls = JSON.stringify(matches)
+          if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
+            const { jsonObjects, cleanedText } = extractJsonObjects(assistantContent)
+            if (jsonObjects.length > 0) {
+              assistantToolCalls = JSON.stringify(jsonObjects)
+              assistantContent = cleanedText
             }
           }
-          const cleanedContent = assistantContent.replace(toolCallRegex, '').trim()
+          const cleanedContent = assistantContent.trim()
 
           if (cleanedContent.trim() || assistantThinking.trim() || assistantToolCalls.trim()) {
             // Create message with partial content from aborted generation

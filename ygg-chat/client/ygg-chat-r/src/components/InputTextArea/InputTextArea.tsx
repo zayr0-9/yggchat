@@ -496,7 +496,9 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
         />
 
         {/* Character count indicator */}
-
+        <div className='absolute top-1 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] text-stone-800 dark:text-stone-200'>
+          {value.length}
+        </div>
         {/* Character count indicator */}
         {value.length <= 0 && (
           <div className='absolute top-1 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] text-stone-800 dark:text-stone-200'>

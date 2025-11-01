@@ -1,13 +1,13 @@
+import { randomUUID } from 'crypto'
 import fs from 'fs'
 import OpenAI from 'openai'
 import path from 'path'
-import { randomUUID } from 'crypto'
 import { MessageId } from '../../../shared/types'
 import { ProviderCostService } from '../database/models'
 import { supabaseAdmin } from '../database/supamodels'
 import { getApiKey } from './apiKeyManager'
+import { moneyAdd, moneyFormat, moneyMax, moneyMultiply } from './money'
 import tools from './tools'
-import { moneyMultiply, moneyAdd, moneyMax, moneyFormat } from './money'
 
 // Helper function to convert Zod schema to JSON schema
 function zodToJsonSchema(zodSchema: any): any {
@@ -450,7 +450,7 @@ async function updateProviderRunWithGenerationId(
         WHERE external_ref_type = $2
         AND external_ref_id = $3
       `,
-      params: [generationId, 'openrouter_gen_reserve', reservationRefId]
+      params: [generationId, 'openrouter_gen_reserve', reservationRefId],
     })
 
     if (ledgerError) {
@@ -613,7 +613,7 @@ export async function generateResponse(
   think: boolean = false,
   messageId?: MessageId,
   userId?: string,
-  tool_detail: boolean = false,
+  tool_detail: boolean = true,
   conversationId?: string
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
@@ -821,6 +821,7 @@ export async function generateResponse(
 
         // Handle tool calls
         if (delta.tool_calls) {
+          console.log('🔧 [openrouter] Tool call delta received:', JSON.stringify(delta.tool_calls))
           for (const toolCall of delta.tool_calls) {
             if (toolCall.id && toolCall.function?.name) {
               // New tool call
@@ -830,16 +831,19 @@ export async function generateResponse(
                 arguments: toolCall.function.arguments || '',
               }
               toolCallBuffer = toolCall.function.arguments || ''
+              console.log(`🔧 [openrouter] New tool call detected: name=${currentToolCall.name}, id=${currentToolCall.id}`)
             } else if (currentToolCall && toolCall.function?.arguments) {
               // Continue existing tool call
               toolCallBuffer += toolCall.function.arguments
               currentToolCall.arguments = toolCallBuffer
+              console.log(`🔧 [openrouter] Continuing tool call ${currentToolCall.name}, accumulated buffer length: ${toolCallBuffer.length}`)
             }
 
             // Try to send complete tool calls
             if (currentToolCall && toolCallBuffer) {
               try {
                 // Try to parse as JSON first
+                console.log(`🔧 [openrouter] Attempting to parse toolCallBuffer: ${toolCallBuffer.substring(0, 100)}...`)
                 JSON.parse(toolCallBuffer)
                 const toolCallData = {
                   id: currentToolCall.id,
@@ -847,12 +851,22 @@ export async function generateResponse(
                   arguments: toolCallBuffer,
                 }
 
-                // Format the tool call message based on tool_detail flag
-                const toolMessage = tool_detail
-                  ? JSON.stringify(toolCallData) + '\n'
-                  : formatToolCallForUser(currentToolCall.name, toolCallBuffer) + '\n'
+                console.log(`✅ [openrouter] Tool call JSON parsed successfully. tool_detail=${tool_detail}`)
+                console.log(`✅ [openrouter] toolCallData to send:`, JSON.stringify(toolCallData))
 
-                onChunk(JSON.stringify({ part: 'tool_call', delta: toolMessage }))
+                // Send structured tool call data to client
+                const toolCallEvent = {
+                  part: 'tool_call',
+                  toolCall: {
+                    id: currentToolCall.id,
+                    name: currentToolCall.name,
+                    arguments: JSON.parse(toolCallBuffer),
+                    status: 'pending' as const,
+                  },
+                }
+
+                console.log(`✅ [openrouter] Sending tool call event:`, JSON.stringify(toolCallEvent).substring(0, 200))
+                onChunk(JSON.stringify(toolCallEvent))
 
                 // Add to our tool calls list for execution
                 const existingIndex = toolCalls.findIndex(tc => tc.id === currentToolCall.id)
@@ -861,8 +875,11 @@ export async function generateResponse(
                 } else {
                   toolCalls.push(toolCallData)
                 }
-              } catch {
+                console.log(`✅ [openrouter] Tool call added to execution list. Total tool calls: ${toolCalls.length}`)
+              } catch (e) {
                 // If JSON parsing fails, check if we have empty object - this might be Grok's issue
+                console.error(`❌ [openrouter] Failed to parse tool call buffer:`, e)
+                console.error(`❌ [openrouter] Buffer content: ${toolCallBuffer}`)
                 if (toolCallBuffer === '{}' || !toolCallBuffer.trim()) {
                   console.log(
                     `Warning: Tool call ${currentToolCall.name} has empty arguments, will try to extract from content`
@@ -941,14 +958,7 @@ export async function generateResponse(
 
         // Execute tools and add their results
         for (const toolCall of uniqueToolCalls) {
-          // Try to extract parameters from content if arguments are empty
-          let finalArguments = toolCall.arguments
-          if (!finalArguments || finalArguments === '{}') {
-            finalArguments = extractParametersFromContent(assistantContent, toolCall.name)
-            console.log(`Extracted parameters for ${toolCall.name}:`, finalArguments)
-          }
-
-          const result = await executeToolCall(toolCall.name, finalArguments)
+          const result = await executeToolCall(toolCall.name, toolCall.arguments)
           console.log(`Tool ${toolCall.name} result:`, result.substring(0, 200) + (result.length > 200 ? '...' : ''))
 
           conversationMessages.push({
@@ -1200,7 +1210,9 @@ export async function generateResponse(
         approxCost: totalCostUSD,
         apiCreditCost: totalOpenRouterCredits,
       })
-      console.log(`💾 Saved final cost data for user ${userId}, message ${messageId}: $${moneyFormat(totalCostUSD)} USD`)
+      console.log(
+        `💾 Saved final cost data for user ${userId}, message ${messageId}: $${moneyFormat(totalCostUSD)} USD`
+      )
     } catch (error) {
       console.error('Error saving final cost data to database:', error)
     }
@@ -1292,47 +1304,6 @@ function createEstimatedUsage(messages: any[], assistantContent: string): any {
   }
 }
 
-// Helper function to extract parameters from XML-like content (for Grok compatibility)
-function extractParametersFromContent(content: string, toolName: string): string {
-  try {
-    const params: any = {}
-
-    // Look for <parameter name="key">value</parameter> patterns
-    const parameterRegex = /<parameter name="([^"]+)">([^<]*)<\/parameter>/g
-    let match
-
-    while ((match = parameterRegex.exec(content)) !== null) {
-      const [, paramName, paramValue] = match
-      params[paramName] = paramValue.trim()
-    }
-
-    // If we found parameters, return them as JSON
-    if (Object.keys(params).length > 0) {
-      console.log(`Extracted parameters for ${toolName}:`, params)
-      return JSON.stringify(params)
-    }
-
-    // Fallback: try to extract query from content for search tools
-    if (toolName === 'brave_search') {
-      // Look for query-like content in the message
-      const lines = content.split('\n').filter(line => line.trim())
-      for (const line of lines) {
-        if (line.includes('query') || line.length > 10) {
-          // Extract meaningful text that could be a search query
-          const cleanLine = line.replace(/<[^>]*>/g, '').trim()
-          if (cleanLine && cleanLine.length > 3) {
-            return JSON.stringify({ query: cleanLine, count: 10 })
-          }
-        }
-      }
-    }
-
-    return '{}'
-  } catch (error) {
-    console.log('Error extracting parameters from content:', error)
-    return '{}'
-  }
-}
 
 // Helper function to execute tools
 async function executeToolCall(toolName: string, args: string): Promise<string> {

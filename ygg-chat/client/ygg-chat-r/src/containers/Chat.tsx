@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { MessageId } from '../../../../shared/types'
+import type { ToolCall } from '../features/chats/chatTypes'
 import { Button, ChatMessage, Heimdall, InputTextArea, Select, SettingsPane, TextField } from '../components'
 import {
   abortStreaming,
@@ -536,7 +537,7 @@ function Chat() {
     displayMessages,
     streamState.buffer,
     streamState.thinkingBuffer,
-    streamState.toolCallsBuffer,
+    streamState.toolCalls,
     streamState.active,
     streamState.finished,
     selectedPath,
@@ -1586,26 +1587,48 @@ function Chat() {
     // Filter out any undefined/null messages or messages with invalid IDs
     return displayMessages
       .filter(msg => msg && msg.id != null)
-      .map(msg => (
-        <ChatMessage
-          key={msg.id}
-          id={msg.id.toString()}
-          role={msg.role}
-          content={msg.content}
-          thinking={msg.thinking_block}
-          toolCalls={msg.tool_calls}
-          timestamp={msg.created_at}
-          width='w-full'
-          modelName={msg.model_name}
-          artifacts={msg.artifacts}
-          onEdit={handleMessageEdit}
-          onBranch={handleMessageBranch}
-          onDelete={handleRequestDelete}
-          onResend={handleResend}
-          onAddToNote={handleAddToNote}
-          onExplainFromSelection={handleExplainFromSelection}
-        />
-      ))
+      .map(msg => {
+        // Parse tool_calls into structured ToolCall array if present
+        // Handles both formats:
+        // - String (from SQLite in local mode): needs JSON.parse()
+        // - Object/Array (from Supabase in web mode): already parsed
+        let toolCalls: ToolCall[] | undefined = undefined
+        if (msg.tool_calls) {
+          try {
+            // If tool_calls is already an object/array (from Supabase), use it directly
+            if (typeof msg.tool_calls === 'object') {
+              toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [msg.tool_calls]
+            } else if (typeof msg.tool_calls === 'string') {
+              // If it's a string (from SQLite), parse it
+              const parsed = JSON.parse(msg.tool_calls)
+              toolCalls = Array.isArray(parsed) ? parsed : [parsed]
+            }
+          } catch (error) {
+            console.warn(`Failed to parse tool_calls for message ${msg.id}:`, msg.tool_calls, error)
+          }
+        }
+
+        return (
+          <ChatMessage
+            key={msg.id}
+            id={msg.id.toString()}
+            role={msg.role}
+            content={msg.content}
+            thinking={msg.thinking_block}
+            toolCalls={toolCalls}
+            timestamp={msg.created_at}
+            width='w-full'
+            modelName={msg.model_name}
+            artifacts={msg.artifacts}
+            onEdit={handleMessageEdit}
+            onBranch={handleMessageBranch}
+            onDelete={handleRequestDelete}
+            onResend={handleResend}
+            onAddToNote={handleAddToNote}
+            onExplainFromSelection={handleExplainFromSelection}
+          />
+        )
+      })
   }, [
     displayMessages,
     handleMessageEdit,
@@ -1789,13 +1812,13 @@ function Chat() {
             {streamState.active &&
               (Boolean(streamState.buffer) ||
                 Boolean(streamState.thinkingBuffer) ||
-                Boolean(streamState.toolCallsBuffer)) && (
+                streamState.toolCalls.length > 0) && (
                 <ChatMessage
                   id='streaming'
                   role='assistant'
                   content={streamState.buffer}
                   thinking={streamState.thinkingBuffer}
-                  toolCalls={streamState.toolCallsBuffer}
+                  toolCalls={streamState.toolCalls}
                   width='w-full'
                   modelName={selectedModel?.name || undefined}
                   className=''

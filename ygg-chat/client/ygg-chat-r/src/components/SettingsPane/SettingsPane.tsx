@@ -91,9 +91,8 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
                 )
               }
               queryClient.setQueryData<Conversation[]>(['conversations', 'recent'], updateSystemPromptInCache)
-              queryClient.setQueryData(
-                ['conversations', conversationId, 'data'],
-                (prev: any) => (prev ? { ...prev, systemPrompt: currentSystemPrompt } : prev)
+              queryClient.setQueryData(['conversations', conversationId, 'data'], (prev: any) =>
+                prev ? { ...prev, systemPrompt: currentSystemPrompt } : prev
               )
             })
             .catch(error => {
@@ -107,15 +106,11 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
             .then(() => {
               queryClient.setQueryData<Conversation[]>(['conversations'], updateContextInCache)
               if (projectId) {
-                queryClient.setQueryData<Conversation[]>(
-                  ['conversations', 'project', projectId],
-                  updateContextInCache
-                )
+                queryClient.setQueryData<Conversation[]>(['conversations', 'project', projectId], updateContextInCache)
               }
               queryClient.setQueryData<Conversation[]>(['conversations', 'recent'], updateContextInCache)
-              queryClient.setQueryData(
-                ['conversations', conversationId, 'data'],
-                (prev: any) => (prev ? { ...prev, context: currentContext } : prev)
+              queryClient.setQueryData(['conversations', conversationId, 'data'], (prev: any) =>
+                prev ? { ...prev, context: currentContext } : prev
               )
             })
             .catch(error => {
@@ -129,16 +124,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     }
 
     prevOpenRef.current = open
-  }, [
-    open,
-    conversationId,
-    systemPrompt,
-    context,
-    conversations,
-    dispatch,
-    queryClient,
-    selectedProject,
-  ])
+  }, [open, conversationId, systemPrompt, context, conversations, dispatch, queryClient, selectedProject])
 
   useEffect(() => {
     if (!open) return
@@ -203,9 +189,9 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
                 minRows={10}
                 maxRows={16}
                 width='w-full'
-                showCharCount
                 variant='outline'
                 outline={true}
+                showCharCount={true}
                 className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
               />
             </div>

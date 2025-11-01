@@ -59,7 +59,7 @@ const makeInitialState = (): ChatState => ({
     active: false,
     buffer: '',
     thinkingBuffer: '',
-    toolCallsBuffer: '',
+    toolCalls: [],
     messageId: null,
     error: null,
     finished: false,
@@ -178,7 +178,7 @@ export const chatSlice = createSlice({
       state.streaming.active = true
       state.streaming.buffer = ''
       state.streaming.thinkingBuffer = ''
-      state.streaming.toolCallsBuffer = ''
+      state.streaming.toolCalls = []
       state.composition.input.content = ''
       state.streaming.error = null
       state.streaming.finished = false
@@ -207,7 +207,7 @@ export const chatSlice = createSlice({
       if (chunk.type === 'reset') {
         state.streaming.buffer = ''
         state.streaming.thinkingBuffer = ''
-        state.streaming.toolCallsBuffer = ''
+        state.streaming.toolCalls = []
         state.streaming.error = null
         return
       }
@@ -219,15 +219,29 @@ export const chatSlice = createSlice({
           const delta = chunk.delta ?? chunk.content ?? ''
           state.streaming.thinkingBuffer += delta
         } else if (chunk.part === 'tool_call') {
-          const delta = chunk.delta ?? chunk.content ?? ''
-          state.streaming.toolCallsBuffer += delta
+          // Handle structured tool call data
+          if (chunk.toolCall) {
+            const existingIndex = state.streaming.toolCalls.findIndex(tc => tc.id === chunk.toolCall!.id)
+            if (existingIndex >= 0) {
+              state.streaming.toolCalls[existingIndex] = chunk.toolCall
+            } else {
+              state.streaming.toolCalls.push(chunk.toolCall)
+            }
+          }
         } else {
           const delta = chunk.delta ?? chunk.content ?? ''
           state.streaming.buffer += delta
         }
       } else if (chunk.type === 'tool_call') {
-        const delta = chunk.delta ?? chunk.content ?? ''
-        state.streaming.toolCallsBuffer += delta
+        // Handle structured tool call data in dedicated type
+        if (chunk.toolCall) {
+          const existingIndex = state.streaming.toolCalls.findIndex(tc => tc.id === chunk.toolCall!.id)
+          if (existingIndex >= 0) {
+            state.streaming.toolCalls[existingIndex] = chunk.toolCall
+          } else {
+            state.streaming.toolCalls.push(chunk.toolCall)
+          }
+        }
       } else if (chunk.type === 'complete') {
         state.streaming.messageId = chunk.message?.id || null
         state.streaming.active = false
