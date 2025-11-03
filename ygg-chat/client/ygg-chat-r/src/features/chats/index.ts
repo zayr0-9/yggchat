@@ -1,5 +1,6 @@
 // Types
 export type {
+  CCSessionInfo,
   ChatState,
   CompositionState,
   Message,
@@ -8,6 +9,7 @@ export type {
   ModelSelectionPayload,
   ModelsResponse,
   ModelState,
+  SendCCMessagePayload,
   SendMessagePayload,
   StreamChunk,
   StreamState,
@@ -23,8 +25,10 @@ export {
   abortStreaming,
   deleteMessage,
   editMessageWithBranching,
+  getCCSessionInfo,
   refreshCurrentPathAfterDelete,
   selectModel,
+  sendCCMessage,
   sendMessage,
   sendMessageToBranch,
   updateMessage,

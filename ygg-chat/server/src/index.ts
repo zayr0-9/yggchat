@@ -195,6 +195,10 @@ if (env.VITE_ENVIRONMENT === 'web') {
   // Web mode: Use Supabase routes with Redis-backed rate limiting
   const supaChat = require('./routes/supaChat').default
   app.use('/api', supaChat)
+
+  // Agent routes: Claude Code and other external agents
+  const supaAgents = require('./routes/supaAgents').default
+  app.use('/api/agents', supaAgents)
 } else {
   // Local and Electron modes: Use direct chat routes (no Supabase)
   app.use('/api', chatRoutes)

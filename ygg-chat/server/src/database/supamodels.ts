@@ -82,6 +82,7 @@ export interface Conversation {
   system_prompt?: string | null
   conversation_context?: string | null
   research_note?: string | null
+  cwd?: string | null // Working directory for Claude Code sessions
   created_at: string
   updated_at: string
 }
@@ -99,6 +100,8 @@ export interface Message extends Omit<BaseMessage, 'id' | 'conversation_id' | 'p
   owner_id: string
   parent_id?: string | null
   search_vector?: any
+  ex_agent_session_id?: string | null
+  ex_agent_type?: string | null
 }
 
 export interface SearchResult extends Message {

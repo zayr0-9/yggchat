@@ -13,7 +13,7 @@ import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
 import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
 import { TextArea } from '../TextArea/TextArea'
-type MessageRole = 'user' | 'assistant' | 'system'
+type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent'
 // Updated to use valid Tailwind classes
 type ChatMessageWidth =
   | 'max-w-sm'
@@ -589,6 +589,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               : transparentContainer,
             role: 'text-purple-400',
             roleText: 'System',
+          }
+        case 'ex_agent':
+          return {
+            container: useColored
+              ? 'bg-gray-800 border-l-1 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950'
+              : transparentContainer,
+            role: 'text-emerald-700 dark:text-emerald-300',
+            roleText: 'Claude Code',
           }
         default:
           return {

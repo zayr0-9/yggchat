@@ -20,6 +20,7 @@ import {
   authenticatedRateLimiter,
   expensiveOperationsRateLimiter,
 } from '../middleware/rateLimiter'
+import { verifyAuth, getAuthToken } from '../middleware/supaAuth'
 import { asyncHandler } from '../utils/asyncHandler'
 import { SelectedFileContent } from '../utils/fileMentionProcessor'
 import { abortGeneration, clearGeneration, createGeneration } from '../utils/generationManager'
@@ -30,93 +31,6 @@ import { saveBase64ImageAttachmentsForMessage } from '../utils/supaAttachments'
 import { getToolByName, updateToolEnabled } from '../utils/tools/index'
 
 const router = express.Router()
-
-/**
- * Extract JWT token from Authorization header
- */
-function getAuthToken(req: express.Request): string {
-  const authHeader = req.headers.authorization
-
-  if (!authHeader?.startsWith('Bearer ')) {
-    throw new Error('Missing or invalid Authorization header. Expected format: Bearer <jwt>')
-  }
-
-  return authHeader.substring(7) // Remove 'Bearer ' prefix
-}
-
-/**
- * Decode JWT locally without network calls (server-side version)
- * Only decodes the payload - does NOT verify signature (assumes Supabase already validated)
- *
- * @param token - The JWT access token
- * @returns The decoded JWT payload or null if invalid
- */
-function decodeJWT(token: string): Record<string, unknown> | null {
-  try {
-    // JWT format: header.payload.signature
-    const parts = token.split('.')
-    if (parts.length !== 3) {
-      console.error('[supaChat] ❌ Invalid JWT format')
-      return null
-    }
-
-    // Decode the payload (second part)
-    const payload = parts[1]
-
-    // Base64URL decode (handle URL-safe base64)
-    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const jsonPayload = Buffer.from(base64, 'base64').toString('utf-8')
-
-    return JSON.parse(jsonPayload)
-  } catch (err) {
-    console.error('[supaChat] ❌ Failed to decode JWT:', err)
-    return null
-  }
-}
-
-/**
- * Verify JWT token and return authenticated Supabase client + user ID
- * The client is authenticated with the user's JWT, so:
- * - RLS policies automatically filter by owner_id
- * - auth.uid() returns the user's actual UUID (not NULL)
- *
- * ZERO network calls - decodes JWT locally for instant validation
- */
-async function verifyAuth(req: express.Request): Promise<{ userId: string; client: SupabaseClient }> {
-  const jwt = getAuthToken(req)
-
-  // Create authenticated client with user's JWT
-  const client = createAuthenticatedClient(jwt)
-
-  // Decode JWT LOCALLY (NO network call - pure base64 decode)
-  const claims = decodeJWT(jwt)
-
-  if (!claims) {
-    throw new Error('Authentication failed: Invalid JWT format')
-  }
-
-  // Check expiry locally
-  const exp = claims.exp as number
-  if (!exp) {
-    throw new Error('Authentication failed: Missing exp claim in JWT')
-  }
-
-  const now = Math.floor(Date.now() / 1000)
-  if (exp < now) {
-    throw new Error('Authentication failed: JWT has expired')
-  }
-
-  // Extract user ID from JWT claims (sub = subject = user ID)
-  const userId = claims.sub as string
-
-  if (!userId) {
-    throw new Error('Authentication failed: Missing user ID in token claims')
-  }
-
-  // console.log('[supaChat] ✅ JWT decoded locally (ZERO network calls) for user:', userId)
-
-  return { userId, client }
-}
 
 // Global search endpoint - Uses JWT auth so auth.uid() works correctly
 router.get(

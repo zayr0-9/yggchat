@@ -3,7 +3,6 @@ import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ConversationId } from '../../../../shared/types'
 import { Button } from '../components'
 import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
@@ -101,6 +100,8 @@ const ConversationPage: React.FC = () => {
   const error = useAppSelector(selectConvError)
 
   const [showEditProjectModal, setShowEditProjectModal] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   // Sorting function for conversations
@@ -158,7 +159,15 @@ const ConversationPage: React.FC = () => {
     dispatch(activeConversationIdSet(conv.id))
   }
 
-  const handleDelete = async (id: ConversationId) => {
+  const handleDelete = (conversation: Conversation) => {
+    setConversationToDelete(conversation)
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!conversationToDelete) return
+
+    const id = conversationToDelete.id
     await dispatch(deleteConversation({ id }))
 
     // Optimistically update React Query caches to remove the deleted conversation
@@ -178,6 +187,14 @@ const ConversationPage: React.FC = () => {
     queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
       return old ? old.filter(c => c.id !== id) : []
     })
+
+    setShowDeleteConfirm(false)
+    setConversationToDelete(null)
+  }
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false)
+    setConversationToDelete(null)
   }
 
   const handleNewConversation = async () => {
@@ -269,7 +286,7 @@ const ConversationPage: React.FC = () => {
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between max-w-full '>
             <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
-              Conversations
+              Chats
             </h2>
             <div className='flex items-center gap-2 my-1 p-0 lg:p-1 '>
               <Button
@@ -293,7 +310,7 @@ const ConversationPage: React.FC = () => {
                 onClick={handleNewConversation}
                 className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
               >
-                <p className='transition-transform duration-100 group-active:scale-95'>New Conversation</p>
+                <p className='transition-transform duration-100 group-active:scale-95'>New Chat</p>
               </Button>
             </div>
 
@@ -360,7 +377,7 @@ const ConversationPage: React.FC = () => {
                       onClick={
                         (e => {
                           ;(e as unknown as React.MouseEvent).stopPropagation()
-                          handleDelete(conv.id)
+                          handleDelete(conv)
                         }) as unknown as () => void
                       }
                     >
@@ -387,6 +404,35 @@ const ConversationPage: React.FC = () => {
         onClose={handleCloseEditProjectModal}
         editingProject={selectedProject}
       />
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && conversationToDelete && (
+        <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
+          <div className='bg-neutral-100 text-neutral-900 dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'>
+            <h3 className='text-xl font-semibold mb-2 dark:text-neutral-100'>Delete Conversation?</h3>
+            <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-4'>
+              Are you sure you want to delete "
+              <span className='font-medium'>
+                {conversationToDelete.title || `Conversation ${conversationToDelete.id}`}
+              </span>
+              "? This action cannot be undone.
+            </p>
+            <div className='flex gap-3 justify-end'>
+              <Button variant='outline' size='medium' className='group' onClick={handleCancelDelete}>
+                <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
+              </Button>
+              <Button
+                variant='outline'
+                size='medium'
+                className='group bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white border-red-600 dark:border-red-700'
+                onClick={confirmDelete}
+              >
+                <p className='transition-transform duration-100 group-active:scale-95'>Delete</p>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Research Notes List - Fixed bottom-right */}
       <LowBar conversationId={null} mode='list' notes={researchNotes} isLoadingNotes={notesLoading} />

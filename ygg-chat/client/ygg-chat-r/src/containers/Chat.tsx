@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { MessageId } from '../../../../shared/types'
-import type { ToolCall } from '../features/chats/chatTypes'
 import { Button, ChatMessage, Heimdall, InputTextArea, Select, SettingsPane, TextField } from '../components'
 import {
   abortStreaming,
@@ -32,10 +31,12 @@ import {
   selectSelectedModel,
   selectSendingState,
   selectStreamState,
+  sendCCMessage,
   sendMessage,
   updateConversationTitle,
   updateMessage,
 } from '../features/chats'
+import type { ToolCall } from '../features/chats/chatTypes'
 import { buildBranchPathForMessage } from '../features/chats/pathUtils'
 import {
   convContextSet,
@@ -72,6 +73,12 @@ function Chat() {
 
   // Local state for input to completely avoid Redux dispatches during typing
   const [localInput, setLocalInput] = useState('')
+
+  // Claude Code mode toggle
+  const [ccMode, setCCMode] = useState(false)
+
+  // Claude Code working directory input
+  const [ccCwd, setCcCwd] = useState('')
 
   // Get conversation ID and project ID from URL params FIRST (before any hooks that depend on it)
   const { id: conversationIdParam, projectId: projectIdParam } = useParams<{ id?: string; projectId?: string }>()
@@ -1994,7 +2001,29 @@ function Chat() {
                     </Button>
                   )}
                 </div>
-                <div className='flex items-center justify-end pl-2.5'>
+                <div className='flex items-center justify-end gap-2 pl-2.5'>
+                  {/* Claude Code mode toggle button (minimal UI) */}
+                  {currentConversationId && !sendingState.streaming && !sendingState.sending && (
+                    <Button
+                      variant={ccMode ? 'primary' : 'outline2'}
+                      size='medium'
+                      onClick={() => setCCMode(!ccMode)}
+                      title='Toggle Claude Code Agent Mode'
+                    >
+                      <i className='bx bx-code-block text-[18px]' aria-hidden='true'></i>
+                    </Button>
+                  )}
+                  {/* Claude Code working directory input (appears when CC mode is active) */}
+                  {ccMode && currentConversationId && !sendingState.streaming && !sendingState.sending && (
+                    <input
+                      type='text'
+                      value={ccCwd}
+                      onChange={e => setCcCwd(e.target.value)}
+                      placeholder='Working directory (optional)'
+                      className='px-3 py-2 text-sm border text-neutral-50 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500'
+                      title='Specify the working directory for Claude Code agent'
+                    />
+                  )}
                   {!currentConversationId ? (
                     'Creating...'
                   ) : sendingState.streaming ? (
@@ -2012,7 +2041,33 @@ function Chat() {
                       variant={canSendLocal && currentConversationId ? 'outline2' : 'outline2'}
                       size='medium'
                       disabled={!canSendLocal || !currentConversationId}
-                      onClick={() => handleSend(multiReplyCount)}
+                      onClick={() => {
+                        if (ccMode && localInput.trim()) {
+                          // Send to Claude Code agent
+                          const parent: MessageId | null =
+                            selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
+                          dispatch(
+                            sendCCMessage({
+                              conversationId: currentConversationId,
+                              message: localInput.trim(),
+                              cwd: ccCwd || undefined,
+                              permissionMode: 'default',
+                              resume: true,
+                              parentId: parent,
+                            })
+                          )
+                            .unwrap()
+                            .then(() => {
+                              setLocalInput('')
+                            })
+                            .catch(error => {
+                              console.error('Failed to send CC message:', error)
+                            })
+                        } else {
+                          // Send normal message
+                          handleSend(multiReplyCount)
+                        }
+                      }}
                     >
                       <i className='bx bx-send text-[22px]' aria-hidden='true'></i>
                     </Button>

@@ -389,10 +389,15 @@ export const chatSlice = createSlice({
     selectedNodePathSet: (state, action: PayloadAction<string[]>) => {
       // Convert string IDs to proper format based on environment
       const parsedPath = action.payload
-        .filter(id => id !== 'empty' && id !== '') // Filter out empty/default nodes
+        .filter(id => id !== 'empty' && id !== '' && id !== 'root') // Filter out empty/default/synthetic root nodes
         .map(id => parseId(id))
         .filter(id => (typeof id === 'number' && !isNaN(id)) || typeof id === 'string') // Filter out invalid IDs
       state.conversation.currentPath = parsedPath
+    },
+
+    // Update Claude Code session info
+    ccSessionUpdated: (state, action: PayloadAction<{ sessionId: string; lastMessageAt: string; messageCount: number; cwd: string }>) => {
+      state.conversation.ccSession = action.payload
     },
 
     /* Heimdall tree reducers */

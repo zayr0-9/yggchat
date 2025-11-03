@@ -8,7 +8,7 @@ export type ProjectId = string
 export interface BaseMessage {
   id: MessageId
   conversation_id: ConversationId
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system' | 'ex_agent'
   thinking_block?: string
   // tool_calls can be string (SQLite) or parsed object/array (Supabase)
   // Frontend handles both formats transparently
@@ -25,6 +25,9 @@ export interface BaseMessage {
   has_attachments?: boolean
   attachments_count?: number
   note?: string
+  // External agent fields (for Claude Code, etc.)
+  ex_agent_session_id?: string | null
+  ex_agent_type?: string | null
 }
 
 export interface BaseModel {

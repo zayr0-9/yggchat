@@ -15,6 +15,7 @@ import {
   Message,
   Model,
   SendMessagePayload,
+  SendCCMessagePayload,
   tools,
 } from './chatTypes'
 // TODO: Import when conversations feature is available
@@ -329,7 +330,7 @@ export const sendMessage = createAsyncThunk<
 
       const state = getState() as RootState
       const { messages: currentMessages } = state.chat.conversation
-      const currentPathIds = state.chat.conversation.currentPath
+      const currentPathIds = state.chat.conversation.currentPath.filter(id => id !== 'root')
       const currentPathMessages = currentPathIds.map(id => currentMessages.find(m => m.id === id))
       const isFirstMessage = (currentMessages?.length || 0) === 0
       const selectedName = state.chat.models.selected?.name || state.chat.models.default?.name
@@ -663,7 +664,7 @@ export const editMessageWithBranching = createAsyncThunk<
       const state = getState() as RootState
       const originalMessage = state.chat.conversation.messages.find(m => m.id === originalMessageId)
       const { messages: currentMessages } = state.chat.conversation
-      const currentPathIds = state.chat.conversation.currentPath
+      const currentPathIds = state.chat.conversation.currentPath.filter(id => id !== 'root')
       // Truncate path to only include messages strictly before the originalMessageId
       const idxOriginal = currentPathIds.indexOf(originalMessageId)
       const truncatedPathIds = idxOriginal >= 0 ? currentPathIds.slice(0, idxOriginal) : currentPathIds
@@ -1518,6 +1519,176 @@ export const insertBulkMessages = createAsyncThunk<
     return rejectWithValue(message)
   }
 })
+
+// ============================================================================
+// CLAUDE CODE AGENT ENDPOINTS
+// ============================================================================
+
+/**
+ * Fetch Claude Code session info for a conversation
+ * Returns session metadata without starting/resuming a session
+ */
+export const getCCSessionInfo = createAsyncThunk<
+  { hasSession: boolean; sessionId?: string; lastMessageAt?: string; messageCount?: number; cwd?: string },
+  ConversationId,
+  { state: RootState; extra: ThunkExtraArgument }
+>(
+  'chat/getCCSessionInfo',
+  async (conversationId, { extra, rejectWithValue }) => {
+    const { auth } = extra
+    try {
+      const response = await apiCall<{
+        hasSession: boolean
+        sessionId?: string
+        lastMessageAt?: string
+        messageCount?: number
+        cwd?: string
+      }>(`/agents/cc-session/${conversationId}`, auth.accessToken)
+
+      return response
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get CC session info'
+      return rejectWithValue(message)
+    }
+  }
+)
+
+/**
+ * Send message to Claude Code agent with SSE streaming
+ *
+ * Similar to sendMessage but uses CC agent endpoints.
+ * Automatically saves messages with ex_agent role.
+ * Tracks CC session ID in message metadata.
+ */
+export const sendCCMessage = createAsyncThunk<
+  { sessionId: string; messageCount: number; userMessageId?: MessageId },
+  SendCCMessagePayload,
+  { state: RootState; extra: ThunkExtraArgument }
+>(
+  'chat/sendCCMessage',
+  async (
+    { conversationId, message, cwd, permissionMode = 'default', resume },
+    { dispatch, extra, rejectWithValue, signal }
+  ) => {
+    const { auth } = extra
+    dispatch(chatSliceActions.sendingStarted())
+
+    let controller: AbortController | undefined
+
+    try {
+      controller = new AbortController()
+      signal.addEventListener('abort', () => controller?.abort())
+
+      // Prepare request body
+      const requestBody: any = {
+        message,
+        permissionMode,
+      }
+
+      if (cwd) requestBody.cwd = cwd
+      if (resume !== undefined) requestBody.resume = resume
+
+      // Create streaming request to CC endpoint
+      const response = await createStreamingRequest(`/agents/cc-messages/${conversationId}`, auth.accessToken, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to send CC message'}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No stream reader available')
+
+      const decoder = new TextDecoder()
+      let sessionId: string | null = null
+      let messageCount = 0
+      let userMessageId: MessageId | undefined
+      let buffer = ''
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          // Buffer management - same pattern as sendMessage
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+
+            try {
+              const chunk = JSON.parse(line.slice(6))
+
+              // Handle CC-specific event types
+              if (chunk.type === 'message' && chunk.message) {
+                // CC assistant message with ex_agent role
+                const ccMessage: Message = {
+                  ...chunk.message,
+                  role: 'ex_agent',
+                }
+                dispatch(chatSliceActions.messageAdded(ccMessage))
+                dispatch(chatSliceActions.messageBranchCreated({ newMessage: ccMessage }))
+                updateMessageCache(extra.queryClient, conversationId, ccMessage)
+              } else if (chunk.type === 'progress') {
+                // Tool execution progress - show in streaming buffer
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  content: chunk.toolName ? `Executing: ${chunk.toolName}` : 'Processing...',
+                  part: 'text',
+                }))
+              } else if (chunk.type === 'system') {
+                // System events (init, auth, etc.) - log silently for now
+                console.log('[CC System]', chunk.message)
+              } else if (chunk.type === 'complete') {
+                sessionId = chunk.sessionId
+                messageCount = chunk.messageCount
+              } else if (chunk.type === 'error') {
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'error',
+                  error: chunk.error || 'CC error',
+                }))
+                throw new Error(chunk.error || 'CC stream error')
+              }
+            } catch (parseError) {
+              // Skip malformed chunks
+              if (line.length > 100) {
+                console.warn('Failed to parse CC chunk:', line.substring(0, 100) + '...', parseError)
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock()
+      }
+
+      if (!sessionId) {
+        throw new Error('No session ID received from CC')
+      }
+
+      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.inputCleared())
+
+      return { sessionId, messageCount, userMessageId }
+    } catch (error) {
+      dispatch(chatSliceActions.sendingCompleted())
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        return rejectWithValue('CC message cancelled')
+      }
+
+      const message = error instanceof Error ? error.message : 'Failed to send CC message'
+      dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: message }))
+      return rejectWithValue(message)
+    }
+  }
+)
 
 // export const fetchMessageTree = createAsyncThunk(
 //   'chat/fetchMessageTree',

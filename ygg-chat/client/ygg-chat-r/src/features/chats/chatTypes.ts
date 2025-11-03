@@ -108,6 +108,8 @@ export interface ConversationState {
   bookmarked: MessageId[] //each index contains id of a message selected
   excludedMessages: MessageId[] //id of each message which are NOT to be sent for chat,
   context: string
+  // Claude Code session tracking
+  ccSession?: CCSessionInfo | null
 }
 
 // Core chat state - ONLY chat concerns
@@ -175,6 +177,22 @@ export interface BranchMessagePayload {
   modelOverride?: string
   systemPrompt?: string
   think: boolean
+}
+
+export interface CCSessionInfo {
+  sessionId: string
+  lastMessageAt: string
+  messageCount: number
+  cwd: string
+}
+
+export interface SendCCMessagePayload {
+  conversationId: ConversationId
+  message: string
+  cwd?: string
+  permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
+  resume?: boolean
+  parentId?: MessageId | null
 }
 
 export interface ModelSelectionPayload {
