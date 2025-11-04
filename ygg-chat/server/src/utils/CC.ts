@@ -334,10 +334,20 @@ async function resumeChat(
   cwd: string,
   onResponse?: OnResponse,
   permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'default',
-  onStreamingChunk?: OnStreamingChunk
+  onStreamingChunk?: OnStreamingChunk,
+  providedSessionId?: string,
+  forkSession?: boolean
 ) {
   const sessionKey = createSessionKey(conversationId, cwd)
-  const sessionId = sessions.get(sessionKey)
+  // Use provided session ID if given, otherwise look it up from sessions map
+  let sessionId = providedSessionId || sessions.get(sessionKey)
+
+  // Store provided session ID in the sessions Map so SDK can find it
+  if (providedSessionId && !sessions.has(sessionKey)) {
+    sessions.set(sessionKey, providedSessionId)
+    console.log(`[CC] Registered provided session ID for key "${sessionKey}": ${providedSessionId}`)
+  }
+
   const isCommand = isSlashCommand(userMessage)
 
   if (!sessionId) {
@@ -348,6 +358,7 @@ async function resumeChat(
   console.log(`[CC] Resuming chat with session: ${sessionId}`)
   console.log(`[CC] Working directory: ${cwd}`)
   console.log(`[CC] Permission mode: ${permissionMode}`)
+  console.log(`[CC] Fork session: ${forkSession || false}`)
   console.log(`[CC] ${isCommand ? 'Slash command' : 'User message'}: ${userMessage}`)
 
   try {
@@ -378,6 +389,7 @@ async function resumeChat(
         maxTurns: 10,
         permissionMode: permissionMode as any,
         resume: sessionId,
+        forkSession: forkSession,
       } as any,
     })) {
       console.log('[CC] Message Type:', (message as any).type)

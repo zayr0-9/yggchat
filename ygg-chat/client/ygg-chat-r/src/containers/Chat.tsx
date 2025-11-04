@@ -32,6 +32,7 @@ import {
   selectSendingState,
   selectStreamState,
   sendCCMessage,
+  sendCCBranch,
   sendMessage,
   updateConversationTitle,
   updateMessage,
@@ -1130,65 +1131,123 @@ function Chat() {
       if (currentConversationId) {
         // Replace any @file mentions with actual file contents before branching
         const processed = replaceFileMentionsWithPath(newContent)
-        console.log(processed)
         const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+        const parsedId = parseId(id)
+        const originalMessage = conversationMessages.find(m => m.id === parsedId)
 
-        if (isWebMode) {
-          // Find the original message to get its parent_id
-          const parsedId = parseId(id)
-          const originalMessage = conversationMessages.find(m => m.id === parsedId)
+        // If Claude Code mode is enabled, fork the CC session instead of branching normally
+        if (ccMode && originalMessage) {
+          // Walk up the parent chain (including the starting node) to find the nearest CC session
+          let lastExAgentSessionId: string | undefined
+          let current: Message | undefined = originalMessage
 
-          if (originalMessage) {
-            // Create optimistic branch message for instant UI feedback (web mode only)
-            const optimisticBranchMessage: Message = {
-              id: `branch-temp-${Date.now()}`,
-              conversation_id: currentConversationId,
-              role: 'user' as const,
-              content: newContent,
-              content_plain_text: newContent,
-              parent_id: originalMessage.parent_id,
-              children_ids: [],
-              created_at: new Date().toISOString(),
-              model_name: selectedModel?.name || '',
-              partial: false,
-              pastedContext: [],
-              artifacts: [],
+          while (current && !lastExAgentSessionId) {
+            if (current.role === 'ex_agent' && current.ex_agent_session_id) {
+              lastExAgentSessionId = current.ex_agent_session_id
+              break
             }
-            dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
+
+            const nextParentId = current.parent_id
+            if (!nextParentId) break
+            current = conversationMessages.find(m => m.id === nextParentId)
           }
-        }
 
-        dispatch(
-          editMessageWithBranching({
-            conversationId: currentConversationId,
-            originalMessageId: parseId(id),
-            newContent: newContent,
-            modelOverride: selectedModel?.name,
-            think: think,
-          })
-        )
-          .unwrap()
-          .then(() => {
-            // Invalidate React Query cache after successful branch to fetch new messages
-            // Note: messages query now includes tree data, so only one invalidation needed
-            queryClient.invalidateQueries({
-              queryKey: ['conversations', currentConversationId, 'messages'],
-              refetchType: 'active',
-            })
-          })
-          .catch(error => {
-            // Clear optimistic branch message on error (web mode only)
-            if (isWebMode) {
-              dispatch(chatSliceActions.optimisticBranchMessageCleared())
+          const branchParentId =
+            originalMessage.role === 'ex_agent' ? originalMessage.id : originalMessage.parent_id ?? null
+
+          if (branchParentId) {
+            dispatch(
+              sendCCBranch({
+                conversationId: currentConversationId,
+                message: processed,
+                cwd: ccCwd || undefined,
+                permissionMode: 'default',
+                resume: true,
+                parentId: branchParentId,
+                sessionId: lastExAgentSessionId,
+                forkSession: true,
+              })
+            )
+              .unwrap()
+              .catch(error => {
+                console.error('Failed to fork CC branch session:', error)
+              })
+          } else {
+            console.warn('Unable to determine parent for CC branch; falling back to standard CC message')
+            dispatch(
+              sendCCMessage({
+                conversationId: currentConversationId,
+                message: processed,
+                cwd: ccCwd || undefined,
+                permissionMode: 'default',
+                resume: true,
+                parentId: originalMessage.parent_id,
+                sessionId: lastExAgentSessionId,
+                forkSession: true,
+              })
+            )
+              .unwrap()
+              .catch(error => {
+                console.error('Failed to fork CC session:', error)
+              })
+          }
+        } else {
+          // Regular message branching logic (non-CC mode)
+          if (isWebMode) {
+            if (originalMessage) {
+              // Create optimistic branch message for instant UI feedback (web mode only)
+              const optimisticBranchMessage: Message = {
+                id: `branch-temp-${Date.now()}`,
+                conversation_id: currentConversationId,
+                role: 'user' as const,
+                content: newContent,
+                content_plain_text: newContent,
+                parent_id: originalMessage.parent_id,
+                children_ids: [],
+                created_at: new Date().toISOString(),
+                model_name: selectedModel?.name || '',
+                partial: false,
+                pastedContext: [],
+                artifacts: [],
+              }
+              dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
             }
-            console.error('Failed to branch message:', error)
-          })
+          }
+
+          dispatch(
+            editMessageWithBranching({
+              conversationId: currentConversationId,
+              originalMessageId: parsedId,
+              newContent: newContent,
+              modelOverride: selectedModel?.name,
+              think: think,
+            })
+          )
+            .unwrap()
+            .then(() => {
+              // Invalidate React Query cache after successful branch to fetch new messages
+              // Note: messages query now includes tree data, so only one invalidation needed
+              queryClient.invalidateQueries({
+                queryKey: ['conversations', currentConversationId, 'messages'],
+                refetchType: 'active',
+              })
+            })
+            .catch(error => {
+              // Clear optimistic branch message on error (web mode only)
+              if (isWebMode) {
+                dispatch(chatSliceActions.optimisticBranchMessageCleared())
+              }
+              console.error('Failed to branch message:', error)
+            })
+        }
       }
     },
     [
       currentConversationId,
       selectedModel?.name,
       think,
+      ccMode,
+      ccCwd,
       dispatch,
       replaceFileMentionsWithPath,
       conversationMessages,

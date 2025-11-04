@@ -15,6 +15,7 @@ import {
   Message,
   Model,
   SendMessagePayload,
+  SendCCBranchPayload,
   SendCCMessagePayload,
   tools,
 } from './chatTypes'
@@ -1567,7 +1568,7 @@ export const sendCCMessage = createAsyncThunk<
 >(
   'chat/sendCCMessage',
   async (
-    { conversationId, message, cwd, permissionMode = 'default', resume, sessionId: resumeSessionId },
+    { conversationId, message, cwd, permissionMode = 'default', resume, sessionId: resumeSessionId, forkSession },
     { dispatch, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
@@ -1588,6 +1589,7 @@ export const sendCCMessage = createAsyncThunk<
       if (cwd) requestBody.cwd = cwd
       if (resume !== undefined) requestBody.resume = resume
       if (resumeSessionId) requestBody.sessionId = resumeSessionId
+      if (forkSession !== undefined) requestBody.forkSession = forkSession
 
       // Create streaming request to CC endpoint
       const response = await createStreamingRequest(`/agents/cc-messages/${conversationId}`, auth.accessToken, {
@@ -1695,6 +1697,151 @@ export const sendCCMessage = createAsyncThunk<
       }
 
       const message = error instanceof Error ? error.message : 'Failed to send CC message'
+      dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: message }))
+      return rejectWithValue(message)
+    }
+  }
+)
+
+export const sendCCBranch = createAsyncThunk<
+  { sessionId: string; messageCount: number; userMessageId?: MessageId },
+  SendCCBranchPayload,
+  { state: RootState; extra: ThunkExtraArgument }
+>(
+  'chat/sendCCBranch',
+  async (
+    { conversationId, message, cwd, permissionMode = 'default', resume, parentId, sessionId: resumeSessionId, forkSession },
+    { dispatch, extra, rejectWithValue, signal }
+  ) => {
+    const { auth } = extra
+    dispatch(chatSliceActions.sendingStarted())
+
+    let controller: AbortController | undefined
+
+    try {
+      controller = new AbortController()
+      signal.addEventListener('abort', () => controller?.abort())
+
+      if (!parentId) {
+        throw new Error('parentId is required for CC branching')
+      }
+
+      // Prepare request body - parentId is required for branching
+      const requestBody: any = {
+        message,
+        permissionMode,
+        parentId, // Explicitly pass parentId for branching
+      }
+
+      if (cwd) requestBody.cwd = cwd
+      if (resume !== undefined) requestBody.resume = resume
+      if (resumeSessionId) requestBody.sessionId = resumeSessionId
+      if (forkSession !== undefined) requestBody.forkSession = forkSession
+
+      // Create streaming request to CC branch endpoint
+      const response = await createStreamingRequest(`/agents/cc-messages-branch/${conversationId}`, auth.accessToken, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to send CC branch message'}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No stream reader available')
+
+      const decoder = new TextDecoder()
+      let sessionId: string | null = null
+      let messageCount = 0
+      let userMessageId: MessageId | undefined
+      let buffer = ''
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          // Buffer management - same pattern as sendMessage
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+
+            try {
+              const chunk = JSON.parse(line.slice(6))
+
+              // Handle CC-specific event types
+              if (chunk.type === 'chunk') {
+                // Real-time streaming chunk (delta) - display incrementally
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  content: chunk.delta || chunk.content || '',
+                  part: chunk.part || 'text',
+                  chunkType: chunk.chunkType,
+                }))
+              } else if (chunk.type === 'message' && chunk.message) {
+                // CC assistant message with ex_agent role (complete message for persistence)
+                const ccMessage: Message = {
+                  ...chunk.message,
+                  role: 'ex_agent',
+                }
+                dispatch(chatSliceActions.messageAdded(ccMessage))
+                dispatch(chatSliceActions.messageBranchCreated({ newMessage: ccMessage }))
+                updateMessageCache(extra.queryClient, conversationId, ccMessage)
+              } else if (chunk.type === 'progress') {
+                // Tool execution progress - show in streaming buffer
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  content: chunk.toolName ? `Executing: ${chunk.toolName}` : 'Processing...',
+                  part: 'text',
+                }))
+              } else if (chunk.type === 'system') {
+                // System events (init, auth, etc.)
+                console.log('[CC System]', chunk.message)
+              } else if (chunk.type === 'complete') {
+                sessionId = chunk.sessionId
+                messageCount = chunk.messageCount
+              } else if (chunk.type === 'error') {
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'error',
+                  error: chunk.error || 'CC error',
+                }))
+                throw new Error(chunk.error || 'CC branch stream error')
+              }
+            } catch (parseError) {
+              // Skip malformed chunks
+              if (line.length > 100) {
+                console.warn('Failed to parse CC branch chunk:', line.substring(0, 100) + '...', parseError)
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock()
+      }
+
+      if (!sessionId) {
+        throw new Error('No session ID received from CC branch')
+      }
+
+      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.inputCleared())
+
+      return { sessionId, messageCount, userMessageId }
+    } catch (error) {
+      dispatch(chatSliceActions.sendingCompleted())
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        return rejectWithValue('CC branch message cancelled')
+      }
+
+      const message = error instanceof Error ? error.message : 'Failed to send CC branch message'
       dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: message }))
       return rejectWithValue(message)
     }

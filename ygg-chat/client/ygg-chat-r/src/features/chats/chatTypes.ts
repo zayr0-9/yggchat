@@ -229,6 +229,11 @@ export interface SendCCMessagePayload {
   resume?: boolean
   parentId?: MessageId | null
   sessionId?: string
+  forkSession?: boolean
+}
+
+export interface SendCCBranchPayload extends Omit<SendCCMessagePayload, 'parentId'> {
+  parentId: MessageId
 }
 
 export interface ModelSelectionPayload {

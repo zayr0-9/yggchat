@@ -13,7 +13,12 @@ import express from 'express'
 import { asyncHandler } from '../utils/asyncHandler'
 import { authenticatedRateLimiter, expensiveOperationsRateLimiter } from '../middleware/rateLimiter'
 import { verifyAuth, getAuthToken } from '../middleware/supaAuth'
-import { startCCChatWithDB, resumeCCChatWithDB, getCCSessionInfo } from '../utils/CCSupabase'
+import {
+  startCCChatWithDB,
+  resumeCCChatWithDB,
+  resumeCCChatWithBranch,
+  getCCSessionInfo,
+} from '../utils/CCSupabase'
 
 const router = express.Router()
 
@@ -100,12 +105,14 @@ router.post(
       permissionMode = 'default',
       resume,
       sessionId,
+      forkSession,
     } = req.body as {
       message: string
       cwd?: string
       permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
       resume?: boolean
       sessionId?: string
+      forkSession?: boolean
     }
 
     if (!message) {
@@ -152,6 +159,7 @@ router.post(
           permissionMode,
           onStream,
           sessionId,
+          forkSession,
         })
       } else {
         // Explicitly start new session
@@ -180,6 +188,102 @@ router.post(
       console.error('[CC Endpoint] Error:', error)
 
       // Send error event
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })}\n\n`
+      )
+    }
+
+    res.end()
+  })
+)
+
+router.post(
+  '/cc-messages-branch/:conversationId',
+  expensiveOperationsRateLimiter,
+  asyncHandler(async (req, res) => {
+    console.log('\n🤖🤖🤖 [SERVER] POST /api/agents/cc-messages-branch - Claude Code branch message received')
+    console.log('🤖 Timestamp:', new Date().toISOString())
+    console.log('🤖 Conversation ID:', req.params.conversationId)
+
+    const conversationId = req.params.conversationId
+    const jwt = getAuthToken(req)
+    const { userId } = await verifyAuth(req)
+
+    const {
+      message,
+      parentId,
+      cwd = process.cwd(),
+      permissionMode = 'default',
+      sessionId,
+      forkSession,
+    } = req.body as {
+      message: string
+      parentId: string
+      cwd?: string
+      permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
+      sessionId?: string
+      forkSession?: boolean
+    }
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message content required' })
+    }
+
+    if (!parentId) {
+      return res.status(400).json({ error: 'parentId is required for branching' })
+    }
+
+    console.log('🤖 CC Branch Request:', {
+      message: message.substring(0, 100),
+      parentId,
+      cwd,
+      permissionMode,
+    })
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    })
+
+    try {
+      const onStream = (data: any) => {
+        try {
+          res.write(`data: ${JSON.stringify(data)}\n\n`)
+        } catch (error) {
+          console.error('[CC Branch Endpoint] Error writing stream data:', error)
+        }
+      }
+
+      const result = await resumeCCChatWithBranch({
+        conversationId,
+        userMessage: message,
+        parentId,
+        cwd,
+        userId,
+        jwt,
+        permissionMode,
+        onStream,
+        sessionId,
+        forkSession,
+      })
+
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'complete',
+          sessionId: result.sessionId,
+          messageCount: result.messages.length,
+        })}\n\n`
+      )
+
+      console.log('🤖 CC branch conversation completed successfully')
+    } catch (error) {
+      console.error('[CC Branch Endpoint] Error:', error)
+
       res.write(
         `data: ${JSON.stringify({
           type: 'error',

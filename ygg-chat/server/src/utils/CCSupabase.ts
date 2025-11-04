@@ -92,6 +92,11 @@ interface CCChatOptions {
   permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
   onStream?: (data: any) => void
   sessionId?: string
+  forkSession?: boolean
+}
+
+interface CCBranchOptions extends CCChatOptions {
+  parentId: string
 }
 
 /**
@@ -826,7 +831,7 @@ export async function startCCChatWithDB(options: CCChatOptions): Promise<CCChatR
  * @returns Promise with conversation, messages, and session ID
  */
 export async function resumeCCChatWithDB(options: CCChatOptions): Promise<CCChatResponse> {
-  const { conversationId, userMessage, cwd, userId, jwt, permissionMode = 'default', onStream, sessionId: providedSessionId } = options
+  const { conversationId, userMessage, cwd, userId, jwt, permissionMode = 'default', onStream, sessionId: providedSessionId, forkSession } = options
 
   console.log('[CCSupabase] Resuming CC chat with database integration:', {
     conversationId,
@@ -925,7 +930,7 @@ export async function resumeCCChatWithDB(options: CCChatOptions): Promise<CCChat
   }
 
   // Resume CC chat with both callbacks
-  await resumeChat(conversationId, userMessage, cwd, wrappedCallback, permissionMode, safeResumeOnStreamingChunk)
+  await resumeChat(conversationId, userMessage, cwd, wrappedCallback, permissionMode, safeResumeOnStreamingChunk, providedSessionId, forkSession)
 
   // Update conversation's cwd if provided
   if (cwd && conversation.cwd !== cwd) {
@@ -942,6 +947,125 @@ export async function resumeCCChatWithDB(options: CCChatOptions): Promise<CCChat
 
   return {
     conversation: conversation,
+    messages,
+    sessionId: ccSessionId,
+  }
+}
+
+export async function resumeCCChatWithBranch(options: CCBranchOptions): Promise<CCChatResponse> {
+  const {
+    conversationId,
+    userMessage,
+    cwd,
+    userId,
+    jwt,
+    permissionMode = 'default',
+    onStream,
+    parentId,
+    sessionId: providedSessionId,
+    forkSession,
+  } = options
+
+  console.log('[CCSupabase] Resuming CC branch with database integration:', {
+    conversationId,
+    parentId,
+    cwd,
+    permissionMode,
+    providedSessionId,
+  })
+
+  const client = createAuthenticatedClient(jwt)
+
+  const conversation = await ConversationService.getById(client, conversationId)
+  if (!conversation) {
+    throw new Error(`Conversation ${conversationId} not found or access denied`)
+  }
+
+  const parentMessage = await MessageService.getById(client, parentId)
+  if (!parentMessage || parentMessage.conversation_id !== conversationId) {
+    throw new Error(`Parent message ${parentId} not found in conversation ${conversationId}`)
+  }
+
+  let sessionId = providedSessionId
+  let current: Message | undefined = parentMessage
+
+  while (!sessionId && current) {
+    if (current.role === 'ex_agent' && current.ex_agent_session_id) {
+      sessionId = current.ex_agent_session_id
+      break
+    }
+
+    if (!current.parent_id) break
+    current = await MessageService.getById(client, current.parent_id)
+  }
+
+  if (!sessionId) {
+    console.warn('[CCSupabase] No CC session found for branch; falling back to standard resume flow')
+    return resumeCCChatWithDB(options)
+  }
+
+  const userMsg = await saveUserMessage(client, conversationId, userId, userMessage, parentId)
+
+  console.log('[CCSupabase] Branch user message saved:', userMsg.id)
+
+  const branchCallbackSet = createCCResponseCallback(client, conversationId, userId, userMsg.id, onStream)
+
+  const branchOnResponse = branchCallbackSet?.onResponse
+  const branchOnStreamingChunk = branchCallbackSet?.onStreamingChunk
+
+  if (typeof branchOnResponse !== 'function') {
+    console.error('[CCSupabase] Invalid onResponse callback returned from factory (branch)', {
+      type: typeof branchOnResponse,
+    })
+  }
+
+  if (branchOnStreamingChunk && typeof branchOnStreamingChunk !== 'function') {
+    console.error('[CCSupabase] Invalid onStreamingChunk callback returned from factory (branch)', {
+      type: typeof branchOnStreamingChunk,
+    })
+  }
+
+  const safeBranchOnResponse: OnResponse = async response => {
+    if (typeof branchOnResponse === 'function') {
+      await branchOnResponse(response)
+    }
+  }
+
+  const safeBranchOnStreamingChunk: OnStreamingChunk | undefined =
+    typeof branchOnStreamingChunk === 'function' ? branchOnStreamingChunk : undefined
+
+  let ccSessionId: string = sessionId
+
+  const wrappedCallback: OnResponse = async response => {
+    if (response.sessionId) {
+      ccSessionId = response.sessionId
+    }
+    await safeBranchOnResponse(response)
+  }
+
+  await resumeChat(
+    conversationId,
+    userMessage,
+    cwd,
+    wrappedCallback,
+    permissionMode,
+    safeBranchOnStreamingChunk,
+    sessionId,
+    forkSession
+  )
+
+  if (cwd && conversation.cwd !== cwd) {
+    await client.from('conversations').update({ cwd }).eq('id', conversationId)
+  }
+
+  await ConversationService.touch(client, conversationId)
+
+  const messages = await MessageService.getByConversation(client, conversationId)
+
+  console.log('[CCSupabase] CC branch resumed and completed. Session ID:', ccSessionId)
+
+  return {
+    conversation,
     messages,
     sessionId: ccSessionId,
   }
