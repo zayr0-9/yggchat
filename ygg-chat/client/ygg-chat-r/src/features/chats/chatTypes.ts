@@ -7,12 +7,45 @@ export interface Message extends BaseMessage {
   artifacts: string[]
   //should write a function which extracts text content
   //when user drags and drops it on the input component
+  // Content blocks for ex_agent messages (Claude Code responses stored chronologically)
+  content_blocks?: (ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock)[]
 }
 
 export interface miniMessage {
   content: string
   media: Blob | null
 }
+
+// Content Block types for ex_agent messages with sequential rendering
+export interface ThinkingBlock {
+  type: 'thinking'
+  index: number
+  content: string
+}
+
+export interface ToolUseBlock {
+  type: 'tool_use'
+  index: number
+  id: string
+  name: string
+  input: any
+}
+
+export interface TextBlock {
+  type: 'text'
+  index: number
+  content: string
+}
+
+export interface ToolResultBlock {
+  type: 'tool_result'
+  index: number
+  tool_use_id: string
+  content: any
+  is_error: boolean
+}
+
+export type ContentBlock = ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock
 
 // Tool call types
 export interface ToolCall {
@@ -38,6 +71,8 @@ export interface StreamChunk {
   messageId?: MessageId
   // structured tool call data
   toolCall?: ToolCall
+  // CC-specific chunk type (from Claude Code SDK streaming events)
+  chunkType?: 'content_delta' | 'thinking_delta' | 'tool_start' | 'tool_end' | 'tool_progress'
 }
 
 export interface StreamState {
@@ -193,6 +228,7 @@ export interface SendCCMessagePayload {
   permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
   resume?: boolean
   parentId?: MessageId | null
+  sessionId?: string
 }
 
 export interface ModelSelectionPayload {

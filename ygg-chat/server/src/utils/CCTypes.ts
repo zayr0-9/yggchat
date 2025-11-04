@@ -126,4 +126,27 @@ export interface CCResponse {
 /**
  * Callback function type for streaming responses
  */
-export type OnResponse = (response: CCResponse) => void | Promise<void>;
+export type OnResponse = (response: CCResponse) => void | Promise<void>
+
+/**
+ * Streaming chunk for real-time delta emission
+ * Used to stream content incrementally as it's generated
+ */
+export interface CCStreamChunk {
+  /** Type of streaming event */
+  type: 'content_delta' | 'thinking_delta' | 'tool_start' | 'tool_end' | 'tool_progress'
+  /** Delta text (for content_delta and thinking_delta) */
+  delta?: string
+  /** Tool name (for tool_start, tool_end, tool_progress) */
+  toolName?: string
+  /** Tool ID (for tool operations) */
+  toolId?: string
+  /** Content type being streamed */
+  contentType: 'text' | 'thinking'
+}
+
+/**
+ * Callback function type for streaming chunks (deltas)
+ * Called in real-time as content is generated, before final assembly
+ */
+export type OnStreamingChunk = (chunk: CCStreamChunk) => void | Promise<void>;

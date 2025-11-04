@@ -13,24 +13,64 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { createAuthenticatedClient } from '../database/supamodels'
-import { MessageService, ConversationService, Message, Conversation } from '../database/supamodels'
 import {
-  startChat,
-  resumeChat,
+  Conversation,
+  ConversationService,
+  createAuthenticatedClient,
+  Message,
+  MessageService,
+} from '../database/supamodels'
+import {
   CCResponse,
+  CCStreamChunk,
   OnResponse,
-  ParsedMessage,
+  OnStreamingChunk,
   ParsedContent,
   ParsedTextContent,
   ParsedThinkingContent,
-  ParsedToolUseContent,
   ParsedToolResultContent,
+  ParsedToolUseContent,
+  resumeChat,
+  startChat,
 } from './CC'
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
+
+/**
+ * A single content block in chronological sequence
+ */
+interface ContentBlock {
+  type: 'thinking' | 'tool_use' | 'text' | 'tool_result'
+  index: number
+}
+
+interface ThinkingBlock extends ContentBlock {
+  type: 'thinking'
+  content: string
+}
+
+interface ToolUseBlock extends ContentBlock {
+  type: 'tool_use'
+  id: string
+  name: string
+  input: any
+}
+
+interface TextBlock extends ContentBlock {
+  type: 'text'
+  content: string
+}
+
+interface ToolResultBlock extends ContentBlock {
+  type: 'tool_result'
+  tool_use_id: string
+  content: any
+  is_error: boolean
+}
+
+type ContentBlockSequence = (ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock)[]
 
 /**
  * Result of saving a CC message to the database
@@ -51,6 +91,7 @@ interface CCChatOptions {
   jwt: string
   permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
   onStream?: (data: any) => void
+  sessionId?: string
 }
 
 /**
@@ -95,9 +136,7 @@ function assembleCCContent(parsedContent: ParsedContent[]): {
 
         // Include citations if present
         if (textBlock.citations && textBlock.citations.length > 0) {
-          const citationsText = textBlock.citations
-            .map(c => `[Citation: ${c.type} - ${c.title || c.url}]`)
-            .join('\n')
+          const citationsText = textBlock.citations.map(c => `[Citation: ${c.type} - ${c.title || c.url}]`).join('\n')
           contentParts.push(citationsText)
         }
         break
@@ -270,25 +309,121 @@ async function saveUserMessage(
   return message
 }
 
+/**
+ * Saves accumulated CC message data to the database
+ *
+ * This is called after all steps have been accumulated into one logical message.
+ * Stores content blocks in chronological sequence and text content for search.
+ *
+ * For Claude Code messages:
+ * - content_blocks: JSONB array with all blocks in order (source of truth)
+ * - content: Text-only content for search indexing
+ * - thinking_block: NULL (data in content_blocks)
+ * - tool_calls: NULL (data in content_blocks)
+ *
+ * @param client - Authenticated Supabase client
+ * @param conversationId - Target conversation ID
+ * @param ownerId - User ID (owner of the message)
+ * @param contentBlocks - Ordered sequence of all content blocks
+ * @param textOnlyContent - Text-only content for search indexing
+ * @param sessionId - CC session ID
+ * @param messageId - CC message ID
+ * @param parentId - Parent message ID for threading
+ * @param isError - Whether this is an error completion
+ * @returns Saved message with session ID
+ */
+async function saveCCMessageToDatabaseAccumulated(
+  client: SupabaseClient,
+  conversationId: string,
+  ownerId: string,
+  contentBlocks: ContentBlockSequence,
+  textOnlyContent: string,
+  sessionId: string,
+  messageId: string,
+  parentId: string | null,
+  isError: boolean
+): Promise<SavedCCMessage> {
+  const modelName = 'claude-sonnet-4-5' // CC uses Sonnet 4.5
+
+  const blockStats = {
+    thinking: contentBlocks.filter(b => b.type === 'thinking').length,
+    toolUse: contentBlocks.filter(b => b.type === 'tool_use').length,
+    text: contentBlocks.filter(b => b.type === 'text').length,
+    toolResult: contentBlocks.filter(b => b.type === 'tool_result').length,
+  }
+
+  console.log('[CCSupabase] Saving accumulated CC message to database:', {
+    conversationId,
+    messageId,
+    sessionId,
+    contentTextLength: textOnlyContent.length,
+    contentBlocksCount: contentBlocks.length,
+    blockStats,
+    isError,
+  })
+
+  // Create message in database with ex_agent role
+  const { data: message, error } = await client
+    .from('messages')
+    .insert({
+      conversation_id: conversationId,
+      owner_id: ownerId,
+      parent_id: parentId,
+      role: 'ex_agent', // External agent role
+      content: textOnlyContent || '', // Text-only for search
+      thinking_block: null, // Skip - stored in content_blocks
+      tool_calls: null, // Skip - stored in content_blocks
+      content_blocks: contentBlocks, // NEW: Full ordered structure
+      model_name: modelName,
+      ex_agent_session_id: sessionId,
+      ex_agent_type: 'claude_code',
+      note: isError ? 'Generation completed with error' : null,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('[CCSupabase] Error saving accumulated CC message:', error)
+    throw error
+  }
+
+  console.log('[CCSupabase] Successfully saved accumulated CC message:', {
+    id: message.id,
+    contentTextLength: (message.content || '').length,
+    contentBlocksCount: contentBlocks.length,
+    blockStats,
+  })
+
+  return {
+    message: message as Message,
+    sessionId,
+  }
+}
+
 // ============================================================================
 // Callback Factory Functions
 // ============================================================================
 
 /**
- * Creates an OnResponse callback that saves CC messages to the database
+ * Creates OnResponse and OnStreamingChunk callbacks for CC SDK integration
  *
- * This factory function returns a callback that:
- * - Saves assistant messages to database with ex_agent role
- * - Tracks parent_id for message threading
- * - Forwards all events to optional stream callback
- * - Handles errors gracefully
+ * This factory function returns dual callbacks that:
+ * - Stream chunks in real-time for delta-based display
+ * - ACCUMULATE all agent response steps into a single message
+ * - Save complete assistant messages only when generation completes
+ * - Track parent_id for message threading
+ * - Forward all events to optional stream callback
+ * - Handle errors gracefully
+ *
+ * Key change: Instead of saving on EVERY message event, accumulate content
+ * across all response events and save only when the agent is finished (on 'result').
  *
  * @param client - Authenticated Supabase client
  * @param conversationId - Target conversation ID
  * @param ownerId - User ID
  * @param userMessageId - ID of the user message that triggered CC
  * @param onStream - Optional callback to stream events to client
- * @returns OnResponse callback for CC SDK
+ * @returns Object with onResponse and onStreamingChunk callbacks for CC SDK
  */
 function createCCResponseCallback(
   client: SupabaseClient,
@@ -296,11 +431,45 @@ function createCCResponseCallback(
   ownerId: string,
   userMessageId: string,
   onStream?: (data: any) => void
-): OnResponse {
+): { onResponse: OnResponse; onStreamingChunk: OnStreamingChunk } {
   // Track the last saved message ID for parent linking
   let lastMessageId: string = userMessageId
 
-  return async (response: CCResponse) => {
+  // ===== ACCUMULATION STATE =====
+  // Track content blocks in chronological sequence
+  let contentBlocksSequence: ContentBlockSequence = []
+  let textOnlyParts: string[] = [] // For search indexing
+  let sequenceIndex = 0 // Track order of blocks
+  let currentSessionId: string | null = null
+  let currentMessageId: string | undefined = undefined
+  let isAccumulating = false
+
+  console.log('[CCSupabase] Callback factory initialized for user message:', userMessageId)
+
+  // Streaming chunk handler - forwards deltas to client in real-time
+  const onStreamingChunk: OnStreamingChunk = async (chunk: CCStreamChunk) => {
+    try {
+      if (onStream) {
+        // Transform CC chunk format to OpenRouter-compatible format
+        const streamEvent = {
+          type: 'chunk',
+          part: chunk.contentType === 'thinking' ? 'reasoning' : 'text',
+          delta: chunk.delta || '',
+          content: chunk.delta || '',
+          toolName: chunk.toolName,
+          toolId: chunk.toolId,
+          chunkType: chunk.type,
+        }
+        onStream(streamEvent)
+      }
+    } catch (error) {
+      console.error('[CCSupabase] Error in streaming chunk callback:', error)
+      // Don't throw - continue streaming
+    }
+  }
+
+  // Response handler - ACCUMULATES and saves only on completion
+  const onResponse: OnResponse = async (response: CCResponse) => {
     try {
       // Forward all events to stream callback if provided
       if (onStream) {
@@ -310,19 +479,93 @@ function createCCResponseCallback(
       // Handle different message types
       switch (response.messageType) {
         case 'message': {
-          // Save assistant message to database
+          // ACCUMULATION: Extract blocks in chronological order
           if (response.sessionId && response.message) {
-            const { message } = await saveCCMessageToDatabase(
-              client,
-              conversationId,
-              ownerId,
-              response,
-              lastMessageId, // Parent is the user message or last agent message
-              response.sessionId
-            )
+            console.log('[CCSupabase] [ACCUMULATE] Message event received. Session:', response.sessionId)
 
-            // Update last message ID for next response in chain
-            lastMessageId = message.id
+            // Track session and message IDs
+            currentSessionId = response.sessionId
+            currentMessageId = response.messageId
+            isAccumulating = true
+
+            // Extract blocks in order from parsed content
+            for (const block of response.message.content) {
+              switch (block.type) {
+                case 'thinking': {
+                  const thinkingBlock = block as ParsedThinkingContent
+                  contentBlocksSequence.push({
+                    type: 'thinking',
+                    content: thinkingBlock.thinking,
+                    index: sequenceIndex++,
+                  })
+                  console.log('[CCSupabase] [ACCUMULATE] Thinking block added at index', sequenceIndex - 1)
+                  break
+                }
+
+                case 'tool_use': {
+                  const toolBlock = block as ParsedToolUseContent
+                  contentBlocksSequence.push({
+                    type: 'tool_use',
+                    id: toolBlock.id,
+                    name: toolBlock.name,
+                    input: toolBlock.input,
+                    index: sequenceIndex++,
+                  })
+                  console.log(
+                    '[CCSupabase] [ACCUMULATE] Tool call',
+                    toolBlock.name,
+                    'added at index',
+                    sequenceIndex - 1
+                  )
+                  break
+                }
+
+                case 'text': {
+                  const textBlock = block as ParsedTextContent
+                  contentBlocksSequence.push({
+                    type: 'text',
+                    content: textBlock.text,
+                    index: sequenceIndex++,
+                  })
+                  textOnlyParts.push(textBlock.text)
+
+                  // Include citations if present
+                  if (textBlock.citations && textBlock.citations.length > 0) {
+                    const citationsText = textBlock.citations
+                      .map(c => `[Citation: ${c.type} - ${c.title || c.url}]`)
+                      .join('\n')
+                    textOnlyParts.push(citationsText)
+                  }
+                  console.log('[CCSupabase] [ACCUMULATE] Text block added at index', sequenceIndex - 1)
+                  break
+                }
+
+                case 'tool_result': {
+                  const resultBlock = block as ParsedToolResultContent
+                  const resultText = Array.isArray(resultBlock.content)
+                    ? resultBlock.content.map(c => (c as any).text || JSON.stringify(c)).join('\n')
+                    : String(resultBlock.content)
+
+                  contentBlocksSequence.push({
+                    type: 'tool_result',
+                    tool_use_id: resultBlock.tool_use_id,
+                    content: resultBlock.content,
+                    is_error: resultBlock.isError || false,
+                    index: sequenceIndex++,
+                  })
+
+                  const status = resultBlock.isError ? 'ERROR' : 'SUCCESS'
+                  textOnlyParts.push(`[Tool Result ${status}: ${resultBlock.tool_use_id}]\n${resultText}`)
+                  console.log('[CCSupabase] [ACCUMULATE] Tool result added at index', sequenceIndex - 1)
+                  break
+                }
+
+                default:
+                  console.warn('[CCSupabase] [ACCUMULATE] Unknown block type:', (block as any).type)
+              }
+            }
+
+            console.log('[CCSupabase] [ACCUMULATE] Total blocks so far:', contentBlocksSequence.length)
           }
           break
         }
@@ -340,6 +583,57 @@ function createCCResponseCallback(
         }
 
         case 'result': {
+          // COMPLETION: Agent is done, save accumulated content blocks in order
+          console.log('[CCSupabase] [SAVE] Result received. Is accumulating:', isAccumulating)
+          console.log('[CCSupabase] [SAVE] Accumulated content blocks:', {
+            totalBlocks: contentBlocksSequence.length,
+            thinking: contentBlocksSequence.filter(b => b.type === 'thinking').length,
+            toolUse: contentBlocksSequence.filter(b => b.type === 'tool_use').length,
+            text: contentBlocksSequence.filter(b => b.type === 'text').length,
+            toolResult: contentBlocksSequence.filter(b => b.type === 'tool_result').length,
+            sessionId: currentSessionId,
+          })
+
+          if (isAccumulating && currentSessionId) {
+            try {
+              // Assemble text content for search indexing
+              const textOnlyContent = textOnlyParts.join('\n\n').trim()
+
+              console.log('[CCSupabase] [SAVE] Final content blocks:', {
+                blockCount: contentBlocksSequence.length,
+                textLength: textOnlyContent.length,
+              })
+
+              // Save ONCE with all accumulated blocks in chronological order
+              const { message } = await saveCCMessageToDatabaseAccumulated(
+                client,
+                conversationId,
+                ownerId,
+                contentBlocksSequence,
+                textOnlyContent,
+                currentSessionId,
+                currentMessageId || 'unknown',
+                lastMessageId,
+                response.result?.is_error || false
+              )
+
+              // Update last message ID for next response in chain
+              lastMessageId = message.id
+              console.log('[CCSupabase] [SAVE] Message saved successfully:', message.id)
+            } catch (saveError) {
+              console.error('[CCSupabase] [SAVE] Failed to save accumulated message:', saveError)
+              // Continue - don't break the flow
+            }
+          }
+
+          // Reset accumulation state for next agent response
+          contentBlocksSequence = []
+          textOnlyParts = []
+          sequenceIndex = 0
+          isAccumulating = false
+          currentSessionId = null
+          currentMessageId = undefined
+
           // Final result - log completion
           console.log('[CCSupabase] CC conversation completed:', {
             duration_ms: response.result?.duration_ms,
@@ -350,8 +644,46 @@ function createCCResponseCallback(
         }
 
         case 'error': {
-          // Error - log and continue (don't break the flow)
-          console.error('[CCSupabase] CC error:', response.error)
+          // ERROR: Save whatever we have accumulated
+          console.error('[CCSupabase] [ERROR] CC error occurred:', response.error)
+          console.log('[CCSupabase] [ERROR] Accumulated so far:', {
+            totalBlocks: contentBlocksSequence.length,
+            thinking: contentBlocksSequence.filter(b => b.type === 'thinking').length,
+            toolUse: contentBlocksSequence.filter(b => b.type === 'tool_use').length,
+            text: contentBlocksSequence.filter(b => b.type === 'text').length,
+          })
+
+          if (isAccumulating && currentSessionId) {
+            try {
+              const textOnlyContent = textOnlyParts.join('\n\n').trim()
+
+              // Save partial message with error flag
+              const { message } = await saveCCMessageToDatabaseAccumulated(
+                client,
+                conversationId,
+                ownerId,
+                contentBlocksSequence,
+                textOnlyContent,
+                currentSessionId,
+                currentMessageId || 'unknown',
+                lastMessageId,
+                true // is_error = true
+              )
+
+              lastMessageId = message.id
+              console.log('[CCSupabase] [ERROR] Partial message saved on error:', message.id)
+            } catch (saveError) {
+              console.error('[CCSupabase] [ERROR] Failed to save partial message on error:', saveError)
+            }
+          }
+
+          // Reset accumulation state
+          contentBlocksSequence = []
+          textOnlyParts = []
+          sequenceIndex = 0
+          isAccumulating = false
+          currentSessionId = null
+          currentMessageId = undefined
           break
         }
 
@@ -363,6 +695,8 @@ function createCCResponseCallback(
       // Don't throw - continue processing other messages
     }
   }
+
+  return { onResponse, onStreamingChunk }
 }
 
 // ============================================================================
@@ -408,8 +742,39 @@ export async function startCCChatWithDB(options: CCChatOptions): Promise<CCChatR
 
   console.log('[CCSupabase] User message saved:', userMsg.id)
 
-  // Create callback that saves CC responses
-  const callback = createCCResponseCallback(client, conversationId, userId, userMsg.id, onStream)
+  // Create dual callbacks that save CC responses and stream chunks
+  const callbackSet = createCCResponseCallback(client, conversationId, userId, userMsg.id, onStream)
+
+  const baseOnResponse = callbackSet?.onResponse
+  const baseOnStreamingChunk = callbackSet?.onStreamingChunk
+
+  if (typeof baseOnResponse !== 'function') {
+    console.error('[CCSupabase] Invalid onResponse callback returned from factory', {
+      type: typeof baseOnResponse,
+    })
+  }
+
+  if (baseOnStreamingChunk && typeof baseOnStreamingChunk !== 'function') {
+    console.error('[CCSupabase] Invalid onStreamingChunk callback returned from factory', {
+      type: typeof baseOnStreamingChunk,
+    })
+  }
+
+  const safeOnResponse: OnResponse = async response => {
+    if (typeof baseOnResponse === 'function') {
+      await baseOnResponse(response)
+    }
+  }
+
+  const safeOnStreamingChunk: OnStreamingChunk | undefined =
+    typeof baseOnStreamingChunk === 'function' ? baseOnStreamingChunk : undefined
+
+  if (process.env.DEBUG_CC_CALLBACKS) {
+    console.log('[CCSupabase] Callback factory result', {
+      hasOnResponse: typeof baseOnResponse === 'function',
+      hasOnStreamingChunk: typeof safeOnStreamingChunk === 'function',
+    })
+  }
 
   // Track session ID
   let ccSessionId: string | null = null
@@ -419,11 +784,11 @@ export async function startCCChatWithDB(options: CCChatOptions): Promise<CCChatR
     if (response.sessionId) {
       ccSessionId = response.sessionId
     }
-    await callback(response)
+    await safeOnResponse(response)
   }
 
-  // Start CC chat
-  await startChat(conversationId, userMessage, cwd, wrappedCallback, permissionMode)
+  // Start CC chat with both callbacks
+  await startChat(conversationId, userMessage, cwd, wrappedCallback, permissionMode, safeOnStreamingChunk)
 
   // Update conversation's cwd if provided
   if (cwd && conversation.cwd !== cwd) {
@@ -461,12 +826,13 @@ export async function startCCChatWithDB(options: CCChatOptions): Promise<CCChatR
  * @returns Promise with conversation, messages, and session ID
  */
 export async function resumeCCChatWithDB(options: CCChatOptions): Promise<CCChatResponse> {
-  const { conversationId, userMessage, cwd, userId, jwt, permissionMode = 'default', onStream } = options
+  const { conversationId, userMessage, cwd, userId, jwt, permissionMode = 'default', onStream, sessionId: providedSessionId } = options
 
   console.log('[CCSupabase] Resuming CC chat with database integration:', {
     conversationId,
     cwd,
     permissionMode,
+    providedSessionId,
   })
 
   // Create authenticated Supabase client
@@ -478,24 +844,30 @@ export async function resumeCCChatWithDB(options: CCChatOptions): Promise<CCChat
     throw new Error(`Conversation ${conversationId} not found or access denied`)
   }
 
-  // Get last CC message to retrieve session ID
-  const { data: lastCCMessage } = await client
-    .from('messages')
-    .select('ex_agent_session_id')
-    .eq('conversation_id', conversationId)
-    .eq('role', 'ex_agent')
-    .not('ex_agent_session_id', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+  // Use provided session ID if available, otherwise look up from database
+  let sessionId = providedSessionId
+
+  if (!sessionId) {
+    // Get last CC message to retrieve session ID
+    const { data: lastCCMessage } = await client
+      .from('messages')
+      .select('ex_agent_session_id')
+      .eq('conversation_id', conversationId)
+      .eq('role', 'ex_agent')
+      .not('ex_agent_session_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    sessionId = lastCCMessage?.ex_agent_session_id
+  }
 
   // If no session found, start new chat instead
-  if (!lastCCMessage?.ex_agent_session_id) {
+  if (!sessionId) {
     console.log('[CCSupabase] No previous CC session found, starting new chat')
     return startCCChatWithDB(options)
   }
 
-  const sessionId = lastCCMessage.ex_agent_session_id
   console.log('[CCSupabase] Resuming CC session:', sessionId)
 
   // Get last message to determine parent ID
@@ -507,8 +879,39 @@ export async function resumeCCChatWithDB(options: CCChatOptions): Promise<CCChat
 
   console.log('[CCSupabase] User message saved:', userMsg.id)
 
-  // Create callback that saves CC responses
-  const callback = createCCResponseCallback(client, conversationId, userId, userMsg.id, onStream)
+  // Create dual callbacks that save CC responses and stream chunks
+  const resumeCallbackSet = createCCResponseCallback(client, conversationId, userId, userMsg.id, onStream)
+
+  const resumeOnResponse = resumeCallbackSet?.onResponse
+  const resumeOnStreamingChunk = resumeCallbackSet?.onStreamingChunk
+
+  if (typeof resumeOnResponse !== 'function') {
+    console.error('[CCSupabase] Invalid onResponse callback returned from factory (resume)', {
+      type: typeof resumeOnResponse,
+    })
+  }
+
+  if (resumeOnStreamingChunk && typeof resumeOnStreamingChunk !== 'function') {
+    console.error('[CCSupabase] Invalid onStreamingChunk callback returned from factory (resume)', {
+      type: typeof resumeOnStreamingChunk,
+    })
+  }
+
+  const safeResumeOnResponse: OnResponse = async response => {
+    if (typeof resumeOnResponse === 'function') {
+      await resumeOnResponse(response)
+    }
+  }
+
+  const safeResumeOnStreamingChunk: OnStreamingChunk | undefined =
+    typeof resumeOnStreamingChunk === 'function' ? resumeOnStreamingChunk : undefined
+
+  if (process.env.DEBUG_CC_CALLBACKS) {
+    console.log('[CCSupabase] Resume callback factory result', {
+      hasOnResponse: typeof resumeOnResponse === 'function',
+      hasOnStreamingChunk: typeof safeResumeOnStreamingChunk === 'function',
+    })
+  }
 
   // Track session ID (might change if session reset)
   let ccSessionId: string = sessionId
@@ -518,11 +921,11 @@ export async function resumeCCChatWithDB(options: CCChatOptions): Promise<CCChat
     if (response.sessionId) {
       ccSessionId = response.sessionId
     }
-    await callback(response)
+    await safeResumeOnResponse(response)
   }
 
-  // Resume CC chat
-  await resumeChat(conversationId, userMessage, cwd, wrappedCallback, permissionMode)
+  // Resume CC chat with both callbacks
+  await resumeChat(conversationId, userMessage, cwd, wrappedCallback, permissionMode, safeResumeOnStreamingChunk)
 
   // Update conversation's cwd if provided
   if (cwd && conversation.cwd !== cwd) {
@@ -597,6 +1000,22 @@ export async function getCCSessionInfo(
 // Exports
 // ============================================================================
 
-export type { CCChatOptions, CCChatResponse, SavedCCMessage }
+export type {
+  CCChatOptions,
+  CCChatResponse,
+  ContentBlock,
+  ContentBlockSequence,
+  SavedCCMessage,
+  TextBlock,
+  ThinkingBlock,
+  ToolResultBlock,
+  ToolUseBlock,
+}
 
-export { assembleCCContent, saveCCMessageToDatabase, saveUserMessage, createCCResponseCallback }
+export {
+  assembleCCContent,
+  createCCResponseCallback,
+  saveCCMessageToDatabase,
+  saveCCMessageToDatabaseAccumulated,
+  saveUserMessage,
+}

@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { logMessageStats, parseAssistantMessage } from './CCParser'
-import type { CCResponse, OnResponse } from './CCTypes'
+import type { CCResponse, OnResponse, OnStreamingChunk } from './CCTypes'
 
 // Session storage: key = "conversationId:cwd" -> SDK sessionId
 const sessions = new Map<string, string>()
@@ -45,8 +45,13 @@ function storeSlashCommands(conversationId: string, cwd: string, commands: any[]
 /**
  * Process an SDK message and emit structured response via callback
  * Detects message type and extracts content appropriately
+ * Also emits streaming chunks for real-time delta streaming
  */
-async function processSDKMessage(message: any, onResponse?: OnResponse): Promise<string | null> {
+async function processSDKMessage(
+  message: any,
+  onResponse?: OnResponse,
+  onStreamingChunk?: OnStreamingChunk
+): Promise<string | null> {
   const messageType = message.type
 
   // Process assistant messages with content parsing
@@ -148,10 +153,60 @@ async function processSDKMessage(message: any, onResponse?: OnResponse): Promise
     return message.session_id
   }
 
-  // Process streaming events (partial messages)
+  // Process streaming events (partial messages - deltas)
   if (messageType === 'stream_event') {
-    // Stream events are raw API events - log for debugging
-    console.log('[CC] Stream event:', message.event?.type)
+    // Stream events contain real-time deltas - emit them immediately
+    if (onStreamingChunk && message.event) {
+      const event = message.event
+      const eventType = event.type
+
+      // Handle content block delta events
+      if (eventType === 'content_block_delta' && event.delta) {
+        const delta = event.delta
+        if (delta.type === 'text_delta' && delta.text) {
+          // Text content delta
+          await onStreamingChunk({
+            type: 'content_delta',
+            delta: delta.text,
+            contentType: 'text',
+          })
+        } else if (delta.type === 'thinking_delta' && delta.thinking) {
+          // Extended thinking delta
+          await onStreamingChunk({
+            type: 'thinking_delta',
+            delta: delta.thinking,
+            contentType: 'thinking',
+          })
+        }
+      }
+
+      // Handle content block start events (for tool use)
+      if (eventType === 'content_block_start' && event.content_block) {
+        const block = event.content_block
+        if (block.type === 'tool_use') {
+          await onStreamingChunk({
+            type: 'tool_start',
+            toolName: block.name,
+            toolId: block.id,
+            contentType: 'text',
+          })
+        }
+      }
+
+      // Handle content block stop events (for tool use completion)
+      if (eventType === 'content_block_stop') {
+        // Tool call has completed
+        await onStreamingChunk({
+          type: 'tool_end',
+          contentType: 'text',
+        })
+      }
+
+      // Debug logging
+      if (process.env.DEBUG_CC_STREAM) {
+        console.log('[CC] Stream event processed:', eventType)
+      }
+    }
     return message.session_id
   }
 
@@ -169,13 +224,15 @@ async function processSDKMessage(message: any, onResponse?: OnResponse): Promise
  * @param cwd - Working directory context (supports multiple IDE instances)
  * @param onResponse - Optional callback to receive parsed responses
  * @param permissionMode - Optional permission mode ('default', 'plan', 'bypassPermissions', 'acceptEdits'). Defaults to 'default'
+ * @param onStreamingChunk - Optional callback to receive streaming chunks for real-time delta emission
  */
 async function startChat(
   conversationId: string,
   userMessage: string,
   cwd: string,
   onResponse?: OnResponse,
-  permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'default'
+  permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'default',
+  onStreamingChunk?: OnStreamingChunk
 ) {
   const sessionKey = createSessionKey(conversationId, cwd)
   const isCommand = isSlashCommand(userMessage)
@@ -213,13 +270,14 @@ async function startChat(
         maxTurns: 10,
         permissionMode: permissionMode as any,
         maxThinkingTokens: 1024,
+        model: 'claude-haiku-4-5-20251001',
       },
     })) {
       console.log('[CC] Message Type:', (message as any).type)
       console.log('[CC] Full Response:', JSON.stringify(message, null, 2))
 
       // Process message and emit structured response
-      const sessionId = await processSDKMessage(message, onResponse)
+      const sessionId = await processSDKMessage(message, onResponse, onStreamingChunk)
 
       // Capture session ID from response if available
       if (sessionId && !sessions.has(sessionKey)) {
@@ -268,13 +326,15 @@ async function startChat(
  * @param cwd - Working directory context (must match the original conversation's cwd)
  * @param onResponse - Optional callback to receive parsed responses
  * @param permissionMode - Optional permission mode ('default', 'plan', 'bypassPermissions', 'acceptEdits'). Defaults to 'default'
+ * @param onStreamingChunk - Optional callback to receive streaming chunks for real-time delta emission
  */
 async function resumeChat(
   conversationId: string,
   userMessage: string,
   cwd: string,
   onResponse?: OnResponse,
-  permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'default'
+  permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'default',
+  onStreamingChunk?: OnStreamingChunk
 ) {
   const sessionKey = createSessionKey(conversationId, cwd)
   const sessionId = sessions.get(sessionKey)
@@ -282,7 +342,7 @@ async function resumeChat(
 
   if (!sessionId) {
     console.log(`[CC] No session found for key "${sessionKey}", starting new chat`)
-    return startChat(conversationId, userMessage, cwd, onResponse, permissionMode)
+    return startChat(conversationId, userMessage, cwd, onResponse, permissionMode, onStreamingChunk)
   }
 
   console.log(`[CC] Resuming chat with session: ${sessionId}`)
@@ -324,7 +384,7 @@ async function resumeChat(
       console.log('[CC] Full Response:', JSON.stringify(message, null, 2))
 
       // Process message and emit structured response
-      await processSDKMessage(message, onResponse)
+      await processSDKMessage(message, onResponse, onStreamingChunk)
 
       // Capture slash commands from init message (in case session was reset)
       if (
@@ -354,7 +414,9 @@ async function resumeChat(
 // Type exports
 export type {
   CCResponse,
+  CCStreamChunk,
   OnResponse,
+  OnStreamingChunk,
   ParsedContent,
   ParsedMessage,
   ParsedTextContent,

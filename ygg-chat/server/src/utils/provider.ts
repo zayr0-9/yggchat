@@ -57,7 +57,10 @@ export async function generateResponse(
   // Prepare messages for AI SDK providers (text-only content objects)
   const aiSdkBase = messages
     .filter(msg => msg.content && msg.content.trim() !== '')
-    .map(msg => ({ role: msg.role as 'user' | 'assistant', content: msg.content }))
+    .map(msg => ({
+      role: msg.role === 'ex_agent' ? 'assistant' : (msg.role as 'user' | 'assistant'),
+      content: msg.content
+    }))
 
   // Optionally prepend a dummy user context message
   const aiSdkMessages =

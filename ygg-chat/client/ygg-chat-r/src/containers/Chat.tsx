@@ -36,7 +36,7 @@ import {
   updateConversationTitle,
   updateMessage,
 } from '../features/chats'
-import type { ToolCall } from '../features/chats/chatTypes'
+import type { ContentBlock, ToolCall } from '../features/chats/chatTypes'
 import { buildBranchPathForMessage } from '../features/chats/pathUtils'
 import {
   convContextSet,
@@ -1615,6 +1615,30 @@ function Chat() {
           }
         }
 
+        // Parse content_blocks for ex_agent messages with sequential rendering
+        // Handles both formats:
+        // - String (from SQLite): needs JSON.parse()
+        // - Object/Array (from Supabase): already parsed
+        let contentBlocks: ContentBlock[] | undefined = undefined
+        if (msg.role === 'ex_agent' && msg.content_blocks) {
+          try {
+            if (typeof msg.content_blocks === 'object') {
+              contentBlocks = Array.isArray(msg.content_blocks)
+                ? msg.content_blocks
+                : [msg.content_blocks]
+            } else if (typeof msg.content_blocks === 'string') {
+              const parsed = JSON.parse(msg.content_blocks)
+              contentBlocks = Array.isArray(parsed) ? parsed : [parsed]
+            }
+            // Sort by index to ensure chronological order
+            if (contentBlocks) {
+              contentBlocks.sort((a, b) => a.index - b.index)
+            }
+          } catch (error) {
+            console.warn(`Failed to parse content_blocks for message ${msg.id}`, error)
+          }
+        }
+
         return (
           <ChatMessage
             key={msg.id}
@@ -1623,6 +1647,7 @@ function Chat() {
             content={msg.content}
             thinking={msg.thinking_block}
             toolCalls={toolCalls}
+            contentBlocks={contentBlocks}
             timestamp={msg.created_at}
             width='w-full'
             modelName={msg.model_name}
@@ -2046,6 +2071,21 @@ function Chat() {
                           // Send to Claude Code agent
                           const parent: MessageId | null =
                             selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
+
+                          // Find last ex_agent message in current branch to resume its session
+                          let lastExAgentSessionId: string | undefined
+                          if (selectedPath.length > 0) {
+                            // Iterate selectedPath in reverse to find last ex_agent message
+                            for (let i = selectedPath.length - 1; i >= 0; i--) {
+                              const messageId = selectedPath[i]
+                              const message = conversationMessages.find(m => m.id === messageId)
+                              if (message?.role === 'ex_agent' && message?.ex_agent_session_id) {
+                                lastExAgentSessionId = message.ex_agent_session_id
+                                break
+                              }
+                            }
+                          }
+
                           dispatch(
                             sendCCMessage({
                               conversationId: currentConversationId,
@@ -2054,6 +2094,7 @@ function Chat() {
                               permissionMode: 'default',
                               resume: true,
                               parentId: parent,
+                              sessionId: lastExAgentSessionId,
                             })
                           )
                             .unwrap()

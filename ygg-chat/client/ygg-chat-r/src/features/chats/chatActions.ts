@@ -1567,7 +1567,7 @@ export const sendCCMessage = createAsyncThunk<
 >(
   'chat/sendCCMessage',
   async (
-    { conversationId, message, cwd, permissionMode = 'default', resume },
+    { conversationId, message, cwd, permissionMode = 'default', resume, sessionId: resumeSessionId },
     { dispatch, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
@@ -1587,6 +1587,7 @@ export const sendCCMessage = createAsyncThunk<
 
       if (cwd) requestBody.cwd = cwd
       if (resume !== undefined) requestBody.resume = resume
+      if (resumeSessionId) requestBody.sessionId = resumeSessionId
 
       // Create streaming request to CC endpoint
       const response = await createStreamingRequest(`/agents/cc-messages/${conversationId}`, auth.accessToken, {
@@ -1627,8 +1628,18 @@ export const sendCCMessage = createAsyncThunk<
               const chunk = JSON.parse(line.slice(6))
 
               // Handle CC-specific event types
-              if (chunk.type === 'message' && chunk.message) {
-                // CC assistant message with ex_agent role
+              if (chunk.type === 'chunk') {
+                // Real-time streaming chunk (delta) - display incrementally
+                // This comes from the onStreamingChunk callback for live streaming
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  content: chunk.delta || chunk.content || '',
+                  part: chunk.part || 'text',
+                  chunkType: chunk.chunkType,
+                }))
+              } else if (chunk.type === 'message' && chunk.message) {
+                // CC assistant message with ex_agent role (complete message for persistence)
+                // This comes after streaming completes for final database save
                 const ccMessage: Message = {
                   ...chunk.message,
                   role: 'ex_agent',

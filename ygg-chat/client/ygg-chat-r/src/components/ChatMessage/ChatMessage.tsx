@@ -1,5 +1,5 @@
 import type { RootState } from '@/store/store'
-import type { ToolCall } from '@/features/chats/chatTypes'
+import type { ContentBlock, ToolCall } from '@/features/chats/chatTypes'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -31,6 +31,7 @@ interface ChatMessageProps {
   content: string
   thinking?: string
   toolCalls?: ToolCall[]
+  contentBlocks?: ContentBlock[]
   timestamp?: string | Date
   onEdit?: (id: string, newContent: string) => void
   onBranch?: (id: string, newContent: string) => void
@@ -214,6 +215,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     content,
     thinking,
     toolCalls,
+    contentBlocks,
     // timestamp,
     onEdit,
     onBranch,
@@ -847,42 +849,131 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           </div>
         )}
 
-        {/* Message content */}
-        <div className='prose max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px]'>
-          {editingState ? (
-            <TextArea
-              value={editContent}
-              onChange={setEditContent}
-              placeholder='Edit your message...'
-              minRows={2}
-              maxRows={40}
-              maxLength={20000}
-              autoFocus
-              width='w-full'
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  if (editMode === 'branch') {
-                    handleSaveBranch()
-                  } else {
-                    handleSave()
+        {/* Sequential content blocks for ex_agent messages (Claude Code responses) */}
+        {Array.isArray(contentBlocks) && contentBlocks.length > 0 && (
+          <div className='space-y-3 mb-3'>
+            {contentBlocks.map((block, idx) => {
+              switch (block.type) {
+                case 'thinking':
+                  return (
+                    <div key={`thinking-${block.index}-${idx}`} className='rounded-md border border-amber-200 bg-amber-50 p-2 sm:p-3 dark:border-amber-900/40 dark:bg-neutral-900'>
+                      <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300 mb-2'>
+                        Thinking
+                      </div>
+                      <div className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                          components={{ pre: PreRenderer }}
+                        >
+                          {block.content}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  )
+                case 'tool_use':
+                  return (
+                    <div key={`tool-use-${block.id}-${idx}`} className='rounded-md border border-blue-200 bg-blue-50 p-2 sm:p-3 dark:border-blue-900/40 dark:bg-neutral-900'>
+                      <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300 mb-2'>
+                        Tool: {block.name}
+                      </div>
+                      <div className='bg-white dark:bg-neutral-800 p-2 rounded-md border border-blue-100 dark:border-blue-900/30 text-xs sm:text-sm'>
+                        {block.input && Object.keys(block.input).length > 0 && (
+                          <div className='space-y-1'>
+                            <div className='font-semibold text-blue-700 dark:text-blue-300 mb-2'>Input:</div>
+                            {Object.entries(block.input).map(([key, value]) => (
+                              <div key={key} className='flex gap-2'>
+                                <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                                <span className='text-gray-800 dark:text-gray-200 break-all'>
+                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                case 'text':
+                  return (
+                    <div key={`text-${block.index}-${idx}`} className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                        components={{ pre: PreRenderer }}
+                      >
+                        {block.content}
+                      </ReactMarkdown>
+                    </div>
+                  )
+                case 'tool_result':
+                  const isError = block.is_error
+                  return (
+                    <div
+                      key={`tool-result-${block.tool_use_id}-${idx}`}
+                      className={`rounded-md border p-2 sm:p-3 ${
+                        isError
+                          ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-neutral-900'
+                          : 'border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-neutral-900'
+                      }`}
+                    >
+                      <div
+                        className={`text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide mb-2 ${
+                          isError ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'
+                        }`}
+                      >
+                        {isError ? 'Tool Error' : 'Tool Result'}
+                      </div>
+                      <div className='text-xs sm:text-sm break-all whitespace-pre-wrap'>
+                        {typeof block.content === 'object' ? JSON.stringify(block.content, null, 2) : String(block.content)}
+                      </div>
+                    </div>
+                  )
+                default:
+                  return null
+              }
+            })}
+          </div>
+        )}
+
+        {/* Message content - only show if no contentBlocks present (to avoid duplication with content_blocks last element) */}
+        {(!contentBlocks || contentBlocks.length === 0) && (
+          <div className='prose max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px]'>
+            {editingState ? (
+              <TextArea
+                value={editContent}
+                onChange={setEditContent}
+                placeholder='Edit your message...'
+                minRows={2}
+                maxRows={40}
+                maxLength={20000}
+                autoFocus
+                width='w-full'
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    if (editMode === 'branch') {
+                      handleSaveBranch()
+                    } else {
+                      handleSave()
+                    }
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    handleCancel()
                   }
-                } else if (e.key === 'Escape') {
-                  e.preventDefault()
-                  handleCancel()
-                }
-              }}
-            />
-          ) : (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-              components={{ pre: PreRenderer }}
-            >
-              {content}
-            </ReactMarkdown>
-          )}
-        </div>
+                }}
+              />
+            ) : (
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                components={{ pre: PreRenderer }}
+              >
+                {content}
+              </ReactMarkdown>
+            )}
+          </div>
+        )}
 
         {/* Actions row - Mobile only (at bottom) */}
         {isMobile && (

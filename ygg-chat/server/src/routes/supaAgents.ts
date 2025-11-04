@@ -99,11 +99,13 @@ router.post(
       cwd = process.cwd(),
       permissionMode = 'default',
       resume,
+      sessionId,
     } = req.body as {
       message: string
       cwd?: string
       permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
       resume?: boolean
+      sessionId?: string
     }
 
     if (!message) {
@@ -149,6 +151,7 @@ router.post(
           jwt,
           permissionMode,
           onStream,
+          sessionId,
         })
       } else {
         // Explicitly start new session
