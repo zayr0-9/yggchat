@@ -271,6 +271,7 @@ async function startChat(
         permissionMode: permissionMode as any,
         maxThinkingTokens: 1024,
         model: 'claude-haiku-4-5-20251001',
+        includePartialMessages: true,
       },
     })) {
       console.log('[CC] Message Type:', (message as any).type)
@@ -390,6 +391,7 @@ async function resumeChat(
         permissionMode: permissionMode as any,
         resume: sessionId,
         forkSession: forkSession,
+        includePartialMessages: true,
       } as any,
     })) {
       console.log('[CC] Message Type:', (message as any).type)

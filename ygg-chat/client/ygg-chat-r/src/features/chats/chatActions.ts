@@ -1612,6 +1612,7 @@ export const sendCCMessage = createAsyncThunk<
       let messageCount = 0
       let userMessageId: MessageId | undefined
       let buffer = ''
+      let shouldInvalidateMessages = false
 
       try {
         while (true) {
@@ -1662,6 +1663,7 @@ export const sendCCMessage = createAsyncThunk<
               } else if (chunk.type === 'complete') {
                 sessionId = chunk.sessionId
                 messageCount = chunk.messageCount
+                shouldInvalidateMessages = true
               } else if (chunk.type === 'error') {
                 dispatch(chatSliceActions.streamChunkReceived({
                   type: 'error',
@@ -1679,6 +1681,10 @@ export const sendCCMessage = createAsyncThunk<
         }
       } finally {
         reader.releaseLock()
+      }
+
+      if (shouldInvalidateMessages) {
+        await extra.queryClient.invalidateQueries({ queryKey: ['conversations', conversationId, 'messages'] })
       }
 
       if (!sessionId) {
@@ -1759,6 +1765,7 @@ export const sendCCBranch = createAsyncThunk<
       let messageCount = 0
       let userMessageId: MessageId | undefined
       let buffer = ''
+      let shouldInvalidateMessages = false
 
       try {
         while (true) {
@@ -1807,6 +1814,7 @@ export const sendCCBranch = createAsyncThunk<
               } else if (chunk.type === 'complete') {
                 sessionId = chunk.sessionId
                 messageCount = chunk.messageCount
+                shouldInvalidateMessages = true
               } else if (chunk.type === 'error') {
                 dispatch(chatSliceActions.streamChunkReceived({
                   type: 'error',
@@ -1824,6 +1832,10 @@ export const sendCCBranch = createAsyncThunk<
         }
       } finally {
         reader.releaseLock()
+      }
+
+      if (shouldInvalidateMessages) {
+        await extra.queryClient.invalidateQueries({ queryKey: ['conversations', conversationId, 'messages'] })
       }
 
       if (!sessionId) {
