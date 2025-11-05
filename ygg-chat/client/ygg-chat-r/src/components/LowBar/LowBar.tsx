@@ -182,7 +182,7 @@ export const LowBar: React.FC<LowBarProps> = ({
         isExpanded
           ? isMobile
             ? 'w-[95%] h-[75%]'
-            : 'w-[30%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[50%] 2xl:w-[30%]'
+            : 'w-[30%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[55%] 2xl:w-[35%]'
           : isMobile
             ? 'w-[40%] h-[35px]'
             : 'w-[15%] h-[38px]'
@@ -213,8 +213,8 @@ export const LowBar: React.FC<LowBarProps> = ({
                   onClick={() => setActiveTab('note')}
                   className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
                     activeTab === 'note'
-                      ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)] dark:outline-neutral-800'
-                      : 'bg-transparent text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+                      ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)] dark:outline-neutral-800'
+                      : 'bg-transparent text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
                   }`}
                 >
                   Note
@@ -223,8 +223,8 @@ export const LowBar: React.FC<LowBarProps> = ({
                   onClick={() => setActiveTab('list')}
                   className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
                     activeTab === 'list'
-                      ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)] dark:outline-neutral-800'
-                      : 'bg-transparent hover:scale-103 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+                      ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)] dark:outline-neutral-800'
+                      : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
                   }`}
                 >
                   List

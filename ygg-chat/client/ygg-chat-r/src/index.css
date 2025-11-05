@@ -1,4 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap');
+
+/* Jaini Google Font CSS class */
+.jaini-regular {
+  font-family: "Jaini", system-ui;
+  font-weight: 400;
+  font-style: normal;
+}
+
 /* Ensure dark variant is available globally and early */
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant 2xl (@media (min-width: 1920px) and (max-width: 2559px));
@@ -305,6 +313,15 @@ body.ygg-no-select * {
   display: -webkit-box;
   line-clamp: 6; /* standard property for compatibility */
   -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ygg-line-clamp-15 {
+  display: -webkit-box;
+  line-clamp: 15; /* standard property for compatibility */
+  -webkit-line-clamp: 15;
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;

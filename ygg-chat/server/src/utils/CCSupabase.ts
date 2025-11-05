@@ -449,11 +449,27 @@ function createCCResponseCallback(
   let currentMessageId: string | undefined = undefined
   let isAccumulating = false
 
+  // ===== STREAM-BASED ORDERING =====
+  // Track tool execution order from streaming events
+  let streamToolOrder: string[] = [] // Array of tool IDs in execution order
+  let toolUseBlocks: Map<string, ToolUseBlock> = new Map() // tool_id -> ToolUseBlock
+  let toolResultBlocks: Map<string, ToolResultBlock> = new Map() // tool_use_id -> ToolResultBlock
+  let otherBlocks: (ThinkingBlock | TextBlock)[] = [] // Non-tool blocks in order
+
   console.log('[CCSupabase] Callback factory initialized for user message:', userMessageId)
 
   // Streaming chunk handler - forwards deltas to client in real-time
   const onStreamingChunk: OnStreamingChunk = async (chunk: CCStreamChunk) => {
     try {
+      // Track tool execution order from stream events
+      if (chunk.type === 'tool_start' && chunk.toolId) {
+        // Tool execution started - record order
+        streamToolOrder.push(chunk.toolId)
+        console.log('[CCSupabase] [STREAM] Tool started:', chunk.toolName, 'ID:', chunk.toolId, 'Position:', streamToolOrder.length - 1)
+      } else if (chunk.type === 'tool_end') {
+        console.log('[CCSupabase] [STREAM] Tool ended. Total tools so far:', streamToolOrder.length)
+      }
+
       if (onStream) {
         // Transform CC chunk format to OpenRouter-compatible format
         const streamEvent = {
@@ -493,45 +509,43 @@ function createCCResponseCallback(
             currentMessageId = response.messageId
             isAccumulating = true
 
-            // Extract blocks in order from parsed content
+            // Extract blocks and store separately for reordering
             for (const block of response.message.content) {
               switch (block.type) {
                 case 'thinking': {
                   const thinkingBlock = block as ParsedThinkingContent
-                  contentBlocksSequence.push({
+                  const thinkingBlockData: ThinkingBlock = {
                     type: 'thinking',
                     content: thinkingBlock.thinking,
-                    index: sequenceIndex++,
-                  })
-                  console.log('[CCSupabase] [ACCUMULATE] Thinking block added at index', sequenceIndex - 1)
+                    index: otherBlocks.length, // Will be reindexed later
+                  }
+                  otherBlocks.push(thinkingBlockData)
+                  console.log('[CCSupabase] [ACCUMULATE] Thinking block stored')
                   break
                 }
 
                 case 'tool_use': {
                   const toolBlock = block as ParsedToolUseContent
-                  contentBlocksSequence.push({
+                  const toolUseBlockData: ToolUseBlock = {
                     type: 'tool_use',
                     id: toolBlock.id,
                     name: toolBlock.name,
                     input: toolBlock.input,
-                    index: sequenceIndex++,
-                  })
-                  console.log(
-                    '[CCSupabase] [ACCUMULATE] Tool call',
-                    toolBlock.name,
-                    'added at index',
-                    sequenceIndex - 1
-                  )
+                    index: 0, // Will be set based on stream order
+                  }
+                  toolUseBlocks.set(toolBlock.id, toolUseBlockData)
+                  console.log('[CCSupabase] [ACCUMULATE] Tool use stored:', toolBlock.name, 'ID:', toolBlock.id)
                   break
                 }
 
                 case 'text': {
                   const textBlock = block as ParsedTextContent
-                  contentBlocksSequence.push({
+                  const textBlockData: TextBlock = {
                     type: 'text',
                     content: textBlock.text,
-                    index: sequenceIndex++,
-                  })
+                    index: otherBlocks.length, // Will be reindexed later
+                  }
+                  otherBlocks.push(textBlockData)
                   textOnlyParts.push(textBlock.text)
 
                   // Include citations if present
@@ -541,7 +555,7 @@ function createCCResponseCallback(
                       .join('\n')
                     textOnlyParts.push(citationsText)
                   }
-                  console.log('[CCSupabase] [ACCUMULATE] Text block added at index', sequenceIndex - 1)
+                  console.log('[CCSupabase] [ACCUMULATE] Text block stored')
                   break
                 }
 
@@ -551,17 +565,18 @@ function createCCResponseCallback(
                     ? resultBlock.content.map(c => (c as any).text || JSON.stringify(c)).join('\n')
                     : String(resultBlock.content)
 
-                  contentBlocksSequence.push({
+                  const toolResultBlockData: ToolResultBlock = {
                     type: 'tool_result',
                     tool_use_id: resultBlock.tool_use_id,
                     content: resultBlock.content,
                     is_error: resultBlock.isError || false,
-                    index: sequenceIndex++,
-                  })
+                    index: 0, // Will be set based on stream order
+                  }
+                  toolResultBlocks.set(resultBlock.tool_use_id, toolResultBlockData)
 
                   const status = resultBlock.isError ? 'ERROR' : 'SUCCESS'
                   textOnlyParts.push(`[Tool Result ${status}: ${resultBlock.tool_use_id}]\n${resultText}`)
-                  console.log('[CCSupabase] [ACCUMULATE] Tool result added at index', sequenceIndex - 1)
+                  console.log('[CCSupabase] [ACCUMULATE] Tool result stored for ID:', resultBlock.tool_use_id)
                   break
                 }
 
@@ -570,7 +585,12 @@ function createCCResponseCallback(
               }
             }
 
-            console.log('[CCSupabase] [ACCUMULATE] Total blocks so far:', contentBlocksSequence.length)
+            console.log('[CCSupabase] [ACCUMULATE] Blocks stored:', {
+              thinking: otherBlocks.filter(b => b.type === 'thinking').length,
+              text: otherBlocks.filter(b => b.type === 'text').length,
+              toolUse: toolUseBlocks.size,
+              toolResult: toolResultBlocks.size,
+            })
           }
           break
         }
@@ -981,13 +1001,16 @@ export async function resumeCCChatWithBranch(options: CCBranchOptions): Promise<
     throw new Error(`Conversation ${conversationId} not found or access denied`)
   }
 
-  const parentMessage = await MessageService.getById(client, parentId)
-  if (!parentMessage || parentMessage.conversation_id !== conversationId) {
-    throw new Error(`Parent message ${parentId} not found in conversation ${conversationId}`)
-  }
-
   let sessionId = providedSessionId
-  let current: Message | undefined = parentMessage
+  let current: Message | undefined = undefined
+
+  if (parentId !== null) {
+    const parentMessage = await MessageService.getById(client, parentId)
+    if (!parentMessage || parentMessage.conversation_id !== conversationId) {
+      throw new Error(`Parent message ${parentId} not found in conversation ${conversationId}`)
+    }
+    current = parentMessage
+  }
 
   while (!sessionId && current) {
     if (current.role === 'ex_agent' && current.ex_agent_session_id) {

@@ -60,7 +60,7 @@ const buildTreeFromMessages = (messages: Message[]): any | null => {
     return {
       id: message.id.toString(),
       message: message.content,
-      sender: message.role === 'user' ? 'user' : 'assistant',
+      sender: message.role === 'user' ? 'user' : message.role === 'ex_agent' ? 'ex_agent' : 'assistant',
       children,
     }
   }
@@ -93,7 +93,7 @@ const addMessageToTree = (tree: any | null, newMessage: Message, parentId: Messa
     return {
       id: newMessage.id.toString(),
       message: newMessage.content,
-      sender: newMessage.role === 'user' ? 'user' : 'assistant',
+      sender: newMessage.role === 'user' ? 'user' : newMessage.role === 'ex_agent' ? 'ex_agent' : 'assistant',
       children: [],
     }
   }
@@ -106,7 +106,7 @@ const addMessageToTree = (tree: any | null, newMessage: Message, parentId: Messa
       const newChild = {
         id: newMessage.id.toString(),
         message: newMessage.content,
-        sender: newMessage.role === 'user' ? 'user' : 'assistant',
+        sender: newMessage.role === 'user' ? 'user' : newMessage.role === 'ex_agent' ? 'ex_agent' : 'assistant',
         children: [],
       }
       return {
@@ -118,7 +118,7 @@ const addMessageToTree = (tree: any | null, newMessage: Message, parentId: Messa
       const newChild = {
         id: newMessage.id.toString(),
         message: newMessage.content,
-        sender: newMessage.role === 'user' ? 'user' : 'assistant',
+        sender: newMessage.role === 'user' ? 'user' : newMessage.role === 'ex_agent' ? 'ex_agent' : 'assistant',
         children: [],
       }
       return {
@@ -137,7 +137,7 @@ const addMessageToTree = (tree: any | null, newMessage: Message, parentId: Messa
       const newChild = {
         id: newMessage.id.toString(),
         message: newMessage.content,
-        sender: newMessage.role === 'user' ? 'user' : 'assistant',
+        sender: newMessage.role === 'user' ? 'user' : newMessage.role === 'ex_agent' ? 'ex_agent' : 'assistant',
         children: [],
       }
 

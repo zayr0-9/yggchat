@@ -10,15 +10,10 @@
  */
 
 import express from 'express'
-import { asyncHandler } from '../utils/asyncHandler'
 import { authenticatedRateLimiter, expensiveOperationsRateLimiter } from '../middleware/rateLimiter'
-import { verifyAuth, getAuthToken } from '../middleware/supaAuth'
-import {
-  startCCChatWithDB,
-  resumeCCChatWithDB,
-  resumeCCChatWithBranch,
-  getCCSessionInfo,
-} from '../utils/CCSupabase'
+import { getAuthToken, verifyAuth } from '../middleware/supaAuth'
+import { asyncHandler } from '../utils/asyncHandler'
+import { getCCSessionInfo, resumeCCChatWithBranch, resumeCCChatWithDB, startCCChatWithDB } from '../utils/CCSupabase'
 
 const router = express.Router()
 
@@ -232,8 +227,8 @@ router.post(
       return res.status(400).json({ error: 'Message content required' })
     }
 
-    if (!parentId) {
-      return res.status(400).json({ error: 'parentId is required for branching' })
+    if (parentId === undefined) {
+      return res.status(400).json({ error: 'parentId is required for branching (use null for root branches)' })
     }
 
     console.log('🤖 CC Branch Request:', {

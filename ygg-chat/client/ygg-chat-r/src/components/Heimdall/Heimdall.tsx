@@ -23,6 +23,7 @@ import { makeSelectConversationById } from '../../features/conversations/convers
 import { Message } from '@/features/chats'
 import { ConversationId, MessageId } from '../../../../../shared/types'
 import { useResearchNotes } from '../../hooks/useQueries'
+import { useIsMobile } from '../../hooks/useMediaQuery'
 import type { RootState } from '../../store/store'
 import { parseId } from '../../utils/helpers'
 import stripMarkdownToText from '../../utils/markdownStripper'
@@ -34,7 +35,7 @@ import { TextField } from '../TextField/TextField'
 interface ChatNode {
   id: string
   message: string
-  sender: 'user' | 'assistant'
+  sender: 'user' | 'assistant' | 'ex_agent'
   children: ChatNode[]
 }
 
@@ -89,6 +90,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const messagesCount = useSelector((state: RootState) => state.chat.conversation.messages.length)
   // Fetch all research notes for the tabbed interface
   const { data: researchNotes = [], isLoading: isLoadingNotes } = useResearchNotes()
+  // Track if on mobile device for responsive tooltip behavior
+  const isMobile = useIsMobile()
 
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1799,12 +1802,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               // />
               <line
                 x1='72'
-                y1={nodeHeight + 10}
+                y1={nodeHeight + 14}
                 x2={nodeWidth - 72}
-                y2={nodeHeight + 10}
-                strokeWidth='4'
+                y2={nodeHeight + 14}
+                strokeWidth='5'
                 className={`animate-pulse-slow transition-colors duration-200 ${
-                  isVisible ? 'stroke-rose-300' : 'stroke-indigo-200 dark:stroke-yPurple-50'
+                  isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-indigo-200 dark:stroke-yPurple-50'
                 }`}
               />
             )}
@@ -1830,7 +1833,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               strokeWidth='2'
               className={`cursor-pointer hover:opacity-90 transition-opacity duration-200 ${
                 compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
-              } ${node.sender === 'user' ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400 '} `}
+              } ${node.sender === 'user' ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400' : node.sender === 'ex_agent' ? 'fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 dark:stroke-orange-600' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400 '} `}
               style={{
                 filter:
                   compactMode && focusedNodeId === node.id
@@ -1949,8 +1952,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               cx={x}
               cy={y + circleRadius}
               r={circleRadius}
-              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-yBlack-900 dark:fill-yBlack-900'} ${
-                node.sender === 'user' ? 'fill-yellow-100 stroke-yBrown-500' : 'fill-indigo-50 stroke-yPurple-500'
+              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400'} ${
+                node.sender === 'user'
+                  ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400'
+                  : node.sender === 'ex_agent'
+                    ? 'fill-orange-50 stroke-orange-600'
+                    : 'fill-indigo-50 stroke-yPurple-500'
               } `}
               style={{
                 transform: selectedNode?.id === node.id ? 'scale(1.1)' : 'scale(1)',
@@ -2260,6 +2267,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             <div className='w-3 h-3 bg-slate-50 dark:bg-yBlack-900 dark:border-yBrown-500 rounded border-2 border-slate-400'></div>
             <span>Assistant messages</span>
           </div>
+          <div className='flex items-center gap-2'>
+            <div className='w-3 h-3 bg-slate-50 dark:bg-yBlack-900 dark:border-orange-600 rounded border-2 border-orange-300'></div>
+            <span>Ex-agent messages</span>
+          </div>
         </div>
       </div>
       <svg
@@ -2393,17 +2404,18 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
       {selectedNode && (
         <div
-          className={`absolute max-w-md bg-amber-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 ${compactMode ? 'border-2 border-gray-600' : ''}`}
+          className={`absolute max-w-md bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 ${compactMode ? 'border-2 border-gray-600' : ''}`}
           style={{
             left: Math.min(mousePosition.x + 10, dimensions.width - 400),
             top: Math.max(mousePosition.y + 10, 10),
             maxWidth: '300px',
+            maxHeight: '400px',
           }}
         >
-          <div className='text-xs text-stone-800 bg-amber-50 dark:bg-neutral-800 dark:text-stone-200 mb-1'>
+          <div className='text-sm text-stone-800 bg-neutral-50 dark:bg-neutral-800 dark:text-stone-200 mb-1'>
             {selectedNode.sender === 'user' ? 'User' : 'Assistant'}
           </div>
-          <div className='prose prose-sm dark:prose-invert max-w-none text-sm max-h-80 overflow-y-auto thin-scrollbar md:max-h-none md:overflow-hidden md:ygg-line-clamp-6'>
+          <div className={`prose prose-sm dark:prose-invert max-w-none text-sm ${isMobile ? 'max-h-80 overflow-y-auto thin-scrollbar' : 'overflow-hidden ygg-line-clamp-15'}`}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
               {selectedNode.message}
             </ReactMarkdown>

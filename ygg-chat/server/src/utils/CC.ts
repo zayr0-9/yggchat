@@ -1,4 +1,4 @@
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { query, type CanUseTool } from '@anthropic-ai/claude-agent-sdk'
 import { logMessageStats, parseAssistantMessage } from './CCParser'
 import type { CCResponse, OnResponse, OnStreamingChunk } from './CCTypes'
 
@@ -93,6 +93,44 @@ async function processSDKMessage(
         })
       }
     }
+    return message.session_id
+  }
+
+  // Process user messages that carry tool_result payloads (permission prompts, etc.)
+  if (messageType === 'user') {
+    const contentBlocks = message.message?.content
+    const hasToolResultBlock =
+      Array.isArray(contentBlocks) && contentBlocks.some((block: any) => block?.type === 'tool_result')
+
+    if (hasToolResultBlock) {
+      try {
+        const blocks = contentBlocks as any[]
+        const generatedId =
+          message.message?.id ||
+          blocks.find((block: any) => typeof block?.tool_use_id === 'string')?.tool_use_id ||
+          message.uuid ||
+          `tool-result-${Date.now()}`
+
+        const parsed = parseAssistantMessage(generatedId, blocks, message.message?.stop_reason, message.message?.usage)
+
+        if (onResponse) {
+          const response: CCResponse = {
+            messageType: 'message',
+            sessionId: message.session_id,
+            timestamp: new Date(),
+            messageId: parsed.id,
+            message: parsed,
+          }
+          await onResponse(response)
+        }
+
+        return message.session_id
+      } catch (error) {
+        console.error('[CC] Error parsing user tool_result message:', error)
+      }
+    }
+
+    console.log('[CC] Unhandled user message content:', contentBlocks)
     return message.session_id
   }
 
@@ -225,14 +263,16 @@ async function processSDKMessage(
  * @param onResponse - Optional callback to receive parsed responses
  * @param permissionMode - Optional permission mode ('default', 'plan', 'bypassPermissions', 'acceptEdits'). Defaults to 'default'
  * @param onStreamingChunk - Optional callback to receive streaming chunks for real-time delta emission
+ * @param canUseTool - Optional callback to approve/deny tool usage
  */
 async function startChat(
   conversationId: string,
   userMessage: string,
   cwd: string,
   onResponse?: OnResponse,
-  permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'default',
-  onStreamingChunk?: OnStreamingChunk
+  permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'bypassPermissions',
+  onStreamingChunk?: OnStreamingChunk,
+  canUseTool?: CanUseTool
 ) {
   const sessionKey = createSessionKey(conversationId, cwd)
   const isCommand = isSlashCommand(userMessage)
@@ -268,10 +308,11 @@ async function startChat(
       options: {
         cwd: cwd,
         maxTurns: 10,
-        permissionMode: permissionMode as any,
+        permissionMode: 'bypassPermissions',
         maxThinkingTokens: 1024,
         model: 'claude-haiku-4-5-20251001',
         includePartialMessages: true,
+        canUseTool: canUseTool,
       },
     })) {
       console.log('[CC] Message Type:', (message as any).type)
@@ -328,16 +369,18 @@ async function startChat(
  * @param onResponse - Optional callback to receive parsed responses
  * @param permissionMode - Optional permission mode ('default', 'plan', 'bypassPermissions', 'acceptEdits'). Defaults to 'default'
  * @param onStreamingChunk - Optional callback to receive streaming chunks for real-time delta emission
+ * @param canUseTool - Optional callback to approve/deny tool usage
  */
 async function resumeChat(
   conversationId: string,
   userMessage: string,
   cwd: string,
   onResponse?: OnResponse,
-  permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'default',
+  permissionMode: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits' = 'bypassPermissions',
   onStreamingChunk?: OnStreamingChunk,
   providedSessionId?: string,
-  forkSession?: boolean
+  forkSession?: boolean,
+  canUseTool?: CanUseTool
 ) {
   const sessionKey = createSessionKey(conversationId, cwd)
   // Use provided session ID if given, otherwise look it up from sessions map
@@ -353,7 +396,7 @@ async function resumeChat(
 
   if (!sessionId) {
     console.log(`[CC] No session found for key "${sessionKey}", starting new chat`)
-    return startChat(conversationId, userMessage, cwd, onResponse, permissionMode, onStreamingChunk)
+    return startChat(conversationId, userMessage, cwd, onResponse, permissionMode, onStreamingChunk, canUseTool)
   }
 
   console.log(`[CC] Resuming chat with session: ${sessionId}`)
@@ -388,10 +431,11 @@ async function resumeChat(
       options: {
         cwd: cwd,
         maxTurns: 10,
-        permissionMode: permissionMode as any,
+        permissionMode: 'bypassPermissions',
         resume: sessionId,
         forkSession: forkSession,
         includePartialMessages: true,
+        canUseTool: canUseTool,
       } as any,
     })) {
       console.log('[CC] Message Type:', (message as any).type)

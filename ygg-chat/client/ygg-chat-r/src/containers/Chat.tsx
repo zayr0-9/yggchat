@@ -75,11 +75,14 @@ function Chat() {
   // Local state for input to completely avoid Redux dispatches during typing
   const [localInput, setLocalInput] = useState('')
 
-  // Claude Code mode toggle
-  const [ccMode, setCCMode] = useState(false)
+  // Claude Code mode toggle (disabled in web mode)
+  const [ccMode, setCCMode] = useState(import.meta.env.VITE_ENVIRONMENT === 'web' ? false : false)
 
-  // Claude Code working directory input
+  // Claude Code working directory input (disabled in web mode)
   const [ccCwd, setCcCwd] = useState('')
+
+  // Check if CC mode should be available
+  const ccModeAvailable = import.meta.env.VITE_ENVIRONMENT !== 'web'
 
   // Get conversation ID and project ID from URL params FIRST (before any hooks that depend on it)
   const { id: conversationIdParam, projectId: projectIdParam } = useParams<{ id?: string; projectId?: string }>()
@@ -213,6 +216,24 @@ function Chat() {
 
   // Track if we already applied the URL hash-based path to avoid overriding user branch switches
   const hashAppliedRef = useRef<MessageId | null>(null)
+
+  // Helper function to find the last ex_agent session ID in a message path
+  // This is used for CC mode to resume sessions
+  const findLastExAgentSession = useCallback(
+    (messageIds: MessageId[]): string | undefined => {
+      if (!messageIds || messageIds.length === 0) return undefined
+
+      // Iterate messageIds in reverse to find the last ex_agent message
+      for (let i = messageIds.length - 1; i >= 0; i--) {
+        const message = conversationMessages.find(m => m.id === messageIds[i])
+        if (message?.role === 'ex_agent' && message?.ex_agent_session_id) {
+          return message.ex_agent_session_id
+        }
+      }
+      return undefined
+    },
+    [conversationMessages]
+  )
 
   // Lock page scroll while chat is mounted
   useEffect(() => {
@@ -938,158 +959,226 @@ function Chat() {
 
         const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
 
-        if (isRetrigger) {
-          // Retrigger: Use the last user message's content and parent
-          const lastUserMessage = displayMessages[displayMessages.length - 1]
-
-          // Safety check: ensure lastUserMessage exists before accessing properties
-          if (!lastUserMessage) {
-            console.error('Cannot retrigger: No last user message found in displayMessages')
-            return
-          }
-
-          const parent: MessageId | null = lastUserMessage.parent_id || null
-          const contentToRetrigger = lastUserMessage.content
-
-          // Immediately scroll to bottom
-          scrollToBottomNow('auto')
-
-          // Dispatch sendMessage with retrigger flag
-          dispatch(
-            sendMessage({
-              conversationId: currentConversationId,
-              input: { content: contentToRetrigger },
-              parent,
-              repeatNum: value,
-              think: think,
-              retrigger: true,
-            })
-          )
-            .unwrap()
-            .then(result => {
-              if (!result?.userMessage) {
-                console.warn('Server did not confirm user message')
-              }
-              // ✅ No refetch needed - messages already added to Redux via SSE stream
-              // Stream sends: user_message event + complete event with full message data
-              // Redux already updated via messageAdded() + messageBranchCreated() dispatches
-            })
-            .catch(error => {
-              console.error('Failed to retrigger generation:', error)
-            })
-        } else {
-          // Normal send flow
-          // Process file mentions with actual content before sending
-          const processedContent = replaceFileMentionsWithPath(localInput)
-
-          // Update Redux state with processed content before sending
-          dispatch(chatSliceActions.inputChanged({ content: processedContent }))
-
+        // CC Mode: Send via sendCCMessage instead of sendMessage (disabled in web mode)
+        if (ccMode && ccModeAvailable) {
           const parent: MessageId | null = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
+          const lastExAgentSessionId = findLastExAgentSession(selectedPath)
 
-          // Optimistically update conversation title if this is the first message
-          if (parent === null) {
-            const generatedTitle = processedContent.slice(0, 100) + (processedContent.length > 100 ? '...' : '')
-            const projectId = selectedProject?.id || currentConversation?.project_id
+          if (isRetrigger) {
+            // Retrigger in CC mode: Use the last user message's content
+            const lastUserMessage = displayMessages[displayMessages.length - 1]
 
-            // Update all relevant React Query caches
-            // Only update if cache exists to avoid creating invalid cache entries
-            const conversationsCache = queryClient.getQueryData<Conversation[]>(['conversations'])
-            if (conversationsCache) {
-              queryClient.setQueryData(
-                ['conversations'],
-                conversationsCache.map(conv =>
-                  conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
-                )
-              )
+            if (!lastUserMessage) {
+              console.error('Cannot retrigger: No last user message found in displayMessages')
+              return
             }
 
-            if (projectId) {
-              const projectConversationsCache = queryClient.getQueryData<Conversation[]>([
-                'conversations',
-                'project',
-                projectId,
-              ])
-              if (projectConversationsCache) {
+            const contentToRetrigger = lastUserMessage.content
+
+            // Immediately scroll to bottom
+            scrollToBottomNow('auto')
+
+            // Dispatch sendCCMessage with retrigger content
+            dispatch(
+              sendCCMessage({
+                conversationId: currentConversationId,
+                message: contentToRetrigger,
+                cwd: ccCwd || undefined,
+                permissionMode: 'default',
+                resume: true,
+                parentId: parent,
+                sessionId: lastExAgentSessionId,
+              })
+            )
+              .unwrap()
+              .catch(error => {
+                console.error('Failed to send CC retrigger message:', error)
+              })
+          } else {
+            // Normal CC mode send
+            const processedContent = replaceFileMentionsWithPath(localInput)
+
+            // Update Redux state with processed content before sending
+            dispatch(chatSliceActions.inputChanged({ content: processedContent }))
+
+            // Clear local input immediately after sending
+            setLocalInput('')
+
+            // Immediately scroll to bottom
+            scrollToBottomNow('auto')
+
+            // Dispatch sendCCMessage
+            dispatch(
+              sendCCMessage({
+                conversationId: currentConversationId,
+                message: processedContent,
+                cwd: ccCwd || undefined,
+                permissionMode: 'default',
+                resume: true,
+                parentId: parent,
+                sessionId: lastExAgentSessionId,
+              })
+            )
+              .unwrap()
+              .catch(error => {
+                console.error('Failed to send CC message:', error)
+              })
+          }
+        } else {
+          // Regular message send (non-CC mode)
+          if (isRetrigger) {
+            // Retrigger: Use the last user message's content and parent
+            const lastUserMessage = displayMessages[displayMessages.length - 1]
+
+            // Safety check: ensure lastUserMessage exists before accessing properties
+            if (!lastUserMessage) {
+              console.error('Cannot retrigger: No last user message found in displayMessages')
+              return
+            }
+
+            const parent: MessageId | null = lastUserMessage.parent_id || null
+            const contentToRetrigger = lastUserMessage.content
+
+            // Immediately scroll to bottom
+            scrollToBottomNow('auto')
+
+            // Dispatch sendMessage with retrigger flag
+            dispatch(
+              sendMessage({
+                conversationId: currentConversationId,
+                input: { content: contentToRetrigger },
+                parent,
+                repeatNum: value,
+                think: think,
+                retrigger: true,
+              })
+            )
+              .unwrap()
+              .then(result => {
+                if (!result?.userMessage) {
+                  console.warn('Server did not confirm user message')
+                }
+                // ✅ No refetch needed - messages already added to Redux via SSE stream
+                // Stream sends: user_message event + complete event with full message data
+                // Redux already updated via messageAdded() + messageBranchCreated() dispatches
+              })
+              .catch(error => {
+                console.error('Failed to retrigger generation:', error)
+              })
+          } else {
+            // Normal send flow
+            // Process file mentions with actual content before sending
+            const processedContent = replaceFileMentionsWithPath(localInput)
+
+            // Update Redux state with processed content before sending
+            dispatch(chatSliceActions.inputChanged({ content: processedContent }))
+
+            const parent: MessageId | null = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
+
+            // Optimistically update conversation title if this is the first message
+            if (parent === null) {
+              const generatedTitle = processedContent.slice(0, 100) + (processedContent.length > 100 ? '...' : '')
+              const projectId = selectedProject?.id || currentConversation?.project_id
+
+              // Update all relevant React Query caches
+              // Only update if cache exists to avoid creating invalid cache entries
+              const conversationsCache = queryClient.getQueryData<Conversation[]>(['conversations'])
+              if (conversationsCache) {
                 queryClient.setQueryData(
-                  ['conversations', 'project', projectId],
-                  projectConversationsCache.map(conv =>
+                  ['conversations'],
+                  conversationsCache.map(conv =>
                     conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
                   )
                 )
               }
-            }
 
-            // Update recent conversations cache
-            const recentCache = queryClient.getQueryData<Conversation[]>(['conversations', 'recent'])
-            if (recentCache) {
-              queryClient.setQueryData(
-                ['conversations', 'recent'],
-                recentCache.map(conv => (conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv))
+              if (projectId) {
+                const projectConversationsCache = queryClient.getQueryData<Conversation[]>([
+                  'conversations',
+                  'project',
+                  projectId,
+                ])
+                if (projectConversationsCache) {
+                  queryClient.setQueryData(
+                    ['conversations', 'project', projectId],
+                    projectConversationsCache.map(conv =>
+                      conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
+                    )
+                  )
+                }
+              }
+
+              // Update recent conversations cache
+              const recentCache = queryClient.getQueryData<Conversation[]>(['conversations', 'recent'])
+              if (recentCache) {
+                queryClient.setQueryData(
+                  ['conversations', 'recent'],
+                  recentCache.map(conv => (conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv))
+                )
+              }
+
+              // Also update Redux to ensure components using Redux see the change immediately
+              const updatedConversations = projectConversations.map(conv =>
+                conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
               )
+              dispatch(conversationsLoaded(updatedConversations))
             }
 
-            // Also update Redux to ensure components using Redux see the change immediately
-            const updatedConversations = projectConversations.map(conv =>
-              conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
+            // Only create optimistic message in web mode for instant UI feedback
+            if (isWebMode) {
+              const optimisticUserMessage: Message = {
+                id: `temp-${Date.now()}`,
+                conversation_id: currentConversationId,
+                role: 'user' as const,
+                content: processedContent,
+                content_plain_text: processedContent,
+                parent_id: parent || null,
+                children_ids: [],
+                created_at: new Date().toISOString(),
+                model_name: selectedModel?.name || '',
+                partial: false,
+                pastedContext: [],
+                artifacts: [],
+              }
+              dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
+            }
+
+            // Use processed content for immediate send
+            const inputToSend = { content: processedContent }
+            // Clear local input immediately after sending
+            setLocalInput('')
+            // Immediately scroll to bottom so the user sees the outgoing message/stream start
+            scrollToBottomNow('auto')
+
+            // Dispatch a single sendMessage with repeatNum set to value.
+            dispatch(
+              sendMessage({
+                conversationId: currentConversationId,
+                input: inputToSend,
+                parent,
+                repeatNum: value,
+                think: think,
+              })
             )
-            dispatch(conversationsLoaded(updatedConversations))
+              .unwrap()
+              .then(result => {
+                // Optional: warn if server didn't confirm message
+                if (!result?.userMessage) {
+                  console.warn('Server did not confirm user message')
+                }
+                // ✅ No refetch needed - messages already added to Redux via SSE stream
+                // Stream sends: user_message event + complete event with full message data
+                // Redux already updated via messageAdded() + messageBranchCreated() dispatches
+              })
+              .catch(error => {
+                // Clear optimistic message on error (web mode only)
+                // Note: Success case is handled in chatActions when user_message chunk arrives
+                if (isWebMode) {
+                  dispatch(chatSliceActions.optimisticMessageCleared())
+                }
+                console.error('Failed to send message:', error)
+              })
           }
-
-          // Only create optimistic message in web mode for instant UI feedback
-          if (isWebMode) {
-            const optimisticUserMessage: Message = {
-              id: `temp-${Date.now()}`,
-              conversation_id: currentConversationId,
-              role: 'user' as const,
-              content: processedContent,
-              content_plain_text: processedContent,
-              parent_id: parent || null,
-              children_ids: [],
-              created_at: new Date().toISOString(),
-              model_name: selectedModel?.name || '',
-              partial: false,
-              pastedContext: [],
-              artifacts: [],
-            }
-            dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
-          }
-
-          // Use processed content for immediate send
-          const inputToSend = { content: processedContent }
-          // Clear local input immediately after sending
-          setLocalInput('')
-          // Immediately scroll to bottom so the user sees the outgoing message/stream start
-          scrollToBottomNow('auto')
-
-          // Dispatch a single sendMessage with repeatNum set to value.
-          dispatch(
-            sendMessage({
-              conversationId: currentConversationId,
-              input: inputToSend,
-              parent,
-              repeatNum: value,
-              think: think,
-            })
-          )
-            .unwrap()
-            .then(result => {
-              // Optional: warn if server didn't confirm message
-              if (!result?.userMessage) {
-                console.warn('Server did not confirm user message')
-              }
-              // ✅ No refetch needed - messages already added to Redux via SSE stream
-              // Stream sends: user_message event + complete event with full message data
-              // Redux already updated via messageAdded() + messageBranchCreated() dispatches
-            })
-            .catch(error => {
-              // Clear optimistic message on error (web mode only)
-              // Note: Success case is handled in chatActions when user_message chunk arrives
-              if (isWebMode) {
-                dispatch(chatSliceActions.optimisticMessageCleared())
-              }
-              console.error('Failed to send message:', error)
-            })
         }
       } else if (!currentConversationId) {
         console.error('📤 No conversation ID available')
@@ -1106,6 +1195,14 @@ function Chat() {
       replaceFileMentionsWithPath,
       scrollToBottomNow,
       selectedModel,
+      ccMode,
+      ccCwd,
+      ccModeAvailable,
+      projectConversations,
+      queryClient,
+      selectedProject,
+      currentConversation,
+      findLastExAgentSession,
     ]
   )
 
@@ -1135,62 +1232,31 @@ function Chat() {
         const parsedId = parseId(id)
         const originalMessage = conversationMessages.find(m => m.id === parsedId)
 
-        // If Claude Code mode is enabled, fork the CC session instead of branching normally
-        if (ccMode && originalMessage) {
-          // Walk up the parent chain (including the starting node) to find the nearest CC session
-          let lastExAgentSessionId: string | undefined
-          let current: Message | undefined = originalMessage
-
-          while (current && !lastExAgentSessionId) {
-            if (current.role === 'ex_agent' && current.ex_agent_session_id) {
-              lastExAgentSessionId = current.ex_agent_session_id
-              break
-            }
-
-            const nextParentId = current.parent_id
-            if (!nextParentId) break
-            current = conversationMessages.find(m => m.id === nextParentId)
-          }
+        // If Claude Code mode is enabled, fork the CC session instead of branching normally (disabled in web mode)
+        if (ccMode && ccModeAvailable && originalMessage) {
+          // Use shared helper to find last ex_agent session ID
+          const lastExAgentSessionId = findLastExAgentSession(selectedPath)
 
           const branchParentId =
             originalMessage.role === 'ex_agent' ? originalMessage.id : originalMessage.parent_id ?? null
 
-          if (branchParentId) {
-            dispatch(
-              sendCCBranch({
-                conversationId: currentConversationId,
-                message: processed,
-                cwd: ccCwd || undefined,
-                permissionMode: 'default',
-                resume: true,
-                parentId: branchParentId,
-                sessionId: lastExAgentSessionId,
-                forkSession: true,
-              })
-            )
-              .unwrap()
-              .catch(error => {
-                console.error('Failed to fork CC branch session:', error)
-              })
-          } else {
-            console.warn('Unable to determine parent for CC branch; falling back to standard CC message')
-            dispatch(
-              sendCCMessage({
-                conversationId: currentConversationId,
-                message: processed,
-                cwd: ccCwd || undefined,
-                permissionMode: 'default',
-                resume: true,
-                parentId: originalMessage.parent_id,
-                sessionId: lastExAgentSessionId,
-                forkSession: true,
-              })
-            )
-              .unwrap()
-              .catch(error => {
-                console.error('Failed to fork CC session:', error)
-              })
-          }
+          // Always use sendCCBranch for branching operations, even when parentId is null (root branch)
+          dispatch(
+            sendCCBranch({
+              conversationId: currentConversationId,
+              message: processed,
+              cwd: ccCwd || undefined,
+              permissionMode: 'default',
+              resume: true,
+              parentId: branchParentId,
+              sessionId: lastExAgentSessionId,
+              forkSession: true,
+            })
+          )
+            .unwrap()
+            .catch(error => {
+              console.error('Failed to fork CC branch session:', error)
+            })
         } else {
           // Regular message branching logic (non-CC mode)
           if (isWebMode) {
@@ -1248,6 +1314,7 @@ function Chat() {
       think,
       ccMode,
       ccCwd,
+      ccModeAvailable,
       dispatch,
       replaceFileMentionsWithPath,
       conversationMessages,
@@ -2086,8 +2153,8 @@ function Chat() {
                   )}
                 </div>
                 <div className='flex items-center justify-end gap-2 pl-2.5'>
-                  {/* Claude Code mode toggle button (minimal UI) */}
-                  {currentConversationId && !sendingState.streaming && !sendingState.sending && (
+                  {/* Claude Code mode toggle button (minimal UI, hidden in web mode) */}
+                  {ccModeAvailable && currentConversationId && !sendingState.streaming && !sendingState.sending && (
                     <Button
                       variant={ccMode ? 'primary' : 'outline2'}
                       size='medium'
@@ -2097,8 +2164,8 @@ function Chat() {
                       <i className='bx bx-code-block text-[18px]' aria-hidden='true'></i>
                     </Button>
                   )}
-                  {/* Claude Code working directory input (appears when CC mode is active) */}
-                  {ccMode && currentConversationId && !sendingState.streaming && !sendingState.sending && (
+                  {/* Claude Code working directory input (appears when CC mode is active, hidden in web mode) */}
+                  {ccModeAvailable && ccMode && currentConversationId && !sendingState.streaming && !sendingState.sending && (
                     <input
                       type='text'
                       value={ccCwd}
@@ -2126,24 +2193,13 @@ function Chat() {
                       size='medium'
                       disabled={!canSendLocal || !currentConversationId}
                       onClick={() => {
-                        if (ccMode && localInput.trim()) {
-                          // Send to Claude Code agent
+                        if (ccMode && ccModeAvailable && localInput.trim()) {
+                          // Send to Claude Code agent (disabled in web mode)
                           const parent: MessageId | null =
                             selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
 
-                          // Find last ex_agent message in current branch to resume its session
-                          let lastExAgentSessionId: string | undefined
-                          if (selectedPath.length > 0) {
-                            // Iterate selectedPath in reverse to find last ex_agent message
-                            for (let i = selectedPath.length - 1; i >= 0; i--) {
-                              const messageId = selectedPath[i]
-                              const message = conversationMessages.find(m => m.id === messageId)
-                              if (message?.role === 'ex_agent' && message?.ex_agent_session_id) {
-                                lastExAgentSessionId = message.ex_agent_session_id
-                                break
-                              }
-                            }
-                          }
+                          // Use shared helper to find last ex_agent session ID
+                          const lastExAgentSessionId = findLastExAgentSession(selectedPath)
 
                           dispatch(
                             sendCCMessage({

@@ -1,5 +1,5 @@
-import type { RootState } from '@/store/store'
 import type { ContentBlock, ToolCall } from '@/features/chats/chatTypes'
+import type { RootState } from '@/store/store'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -595,9 +595,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         case 'ex_agent':
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-1 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-950'
+              ? 'bg-gray-800 border-2 border-orange-600 bg-emerald-50 bg-neutral-50 dark:bg-neutral-800'
               : transparentContainer,
-            role: 'text-emerald-700 dark:text-emerald-300',
+            role: 'text-orange-700 dark:text-orange-400',
             roleText: 'Claude Code',
           }
         default:
@@ -664,7 +664,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     return (
       <div
         id={`message-${id}`}
-        className={`group px-2 sm:px-3 md:px-4 mb-2 sm:mb-3 md:mb-4 ${styles.container} ${width} transition-all duration-200 rounded-xl hover:bg-opacity-80  ${className ?? ''}`}
+        className={`group px-2 sm:px-3 md:px-4 mb-2 sm:mb-3 md:mb-4 ${styles.container} ${width} transition-all duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
       >
         {/* Header with role and actions */}
@@ -774,16 +774,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               </Button>
             </div>
             {showToolCalls && (
-              <div
-                id={`tool-calls-content-${id}`}
-                className='space-y-2 text-xs sm:text-sm 3xl:text-base'
-              >
+              <div id={`tool-calls-content-${id}`} className='space-y-2 text-xs sm:text-sm 3xl:text-base'>
                 {toolCalls.map((toolCall, idx) => (
-                  <div key={toolCall.id || idx} className='bg-white dark:bg-neutral-800 p-2 rounded-md border border-blue-100 dark:border-blue-900/30'>
+                  <div
+                    key={toolCall.id || idx}
+                    className='bg-white dark:bg-neutral-800 p-2 rounded-md border border-blue-100 dark:border-blue-900/30'
+                  >
                     <div className='flex items-center justify-between mb-2'>
-                      <div className='font-semibold text-blue-700 dark:text-blue-300'>
-                        {toolCall.name}
-                      </div>
+                      <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
                       <span className='text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'>
                         {toolCall.status}
                       </span>
@@ -856,8 +854,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               switch (block.type) {
                 case 'thinking':
                   return (
-                    <div key={`thinking-${block.index}-${idx}`} className='rounded-md border border-amber-200 bg-amber-50 p-2 sm:p-3 dark:border-amber-900/40 dark:bg-neutral-900'>
-                      <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300 mb-2'>
+                    <div
+                      key={`thinking-${block.index}-${idx}`}
+                      className='rounded-2xl border border-neutral-50 bg-neutral-50 p-2 sm:p-3 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.2)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'
+                    >
+                      <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-orange-300/85 mb-2'>
                         Thinking
                       </div>
                       <div className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'>
@@ -872,16 +873,45 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     </div>
                   )
                 case 'tool_use':
+                  const blockInput = (block.input ?? {}) as Record<string, any>
+                  const todos = Array.isArray(blockInput.todos)
+                    ? (blockInput.todos as Array<Record<string, any>>)
+                    : null
+                  const otherInputs = Object.entries(blockInput).filter(([key]) => key !== 'todos')
                   return (
-                    <div key={`tool-use-${block.id}-${idx}`} className='rounded-md border border-blue-200 bg-blue-50 p-2 sm:p-3 dark:border-blue-900/40 dark:bg-neutral-900'>
-                      <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300 mb-2'>
+                    <div
+                      key={`tool-use-${block.id}-${idx}`}
+                      className='rounded-2xl border border-blue-50 my-3 bg-neutral-50 p-1 sm:p-2 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'
+                    >
+                      <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300 mb-1'>
                         Tool: {block.name}
                       </div>
-                      <div className='bg-white dark:bg-neutral-800 p-2 rounded-md border border-blue-100 dark:border-blue-900/30 text-xs sm:text-sm'>
-                        {block.input && Object.keys(block.input).length > 0 && (
-                          <div className='space-y-1'>
-                            <div className='font-semibold text-blue-700 dark:text-blue-300 mb-2'>Input:</div>
-                            {Object.entries(block.input).map(([key, value]) => (
+                      <div className='bg-neutral-50 dark:bg-neutral-900 px-2 pb-1 rounded-md text-xs sm:text-sm'>
+                        {todos && todos.length > 0 && (
+                          <div className='space-y-2'>
+                            <div className='font-semibold text-blue-700 dark:text-blue-300'>Todo Items</div>
+                            <ul className='space-y-1 list-disc list-inside text-gray-800 dark:text-gray-200'>
+                              {todos.map((todo, todoIdx) => (
+                                <li key={todoIdx} className='ml-2'>
+                                  <div className='font-medium'>{todo.content ?? 'Untitled task'}</div>
+                                  <div className='text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2'>
+                                    {todo.status && (
+                                      <span className='inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'>
+                                        {String(todo.status)}
+                                      </span>
+                                    )}
+                                    {todo.activeForm && <span className='italic'>{String(todo.activeForm)}</span>}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {otherInputs.length > 0 && (
+                          <div className='space-y-1 mt-2'>
+                            <div className='font-semibold text-xs text-blue-700 dark:text-blue-300'>Input</div>
+                            {otherInputs.map(([key, value]) => (
                               <div key={key} className='flex gap-2'>
                                 <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
                                 <span className='text-gray-800 dark:text-gray-200 break-all'>
@@ -896,7 +926,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   )
                 case 'text':
                   return (
-                    <div key={`text-${block.index}-${idx}`} className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'>
+                    <div
+                      key={`text-${block.index}-${idx}`}
+                      className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
+                    >
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
@@ -911,21 +944,23 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   return (
                     <div
                       key={`tool-result-${block.tool_use_id}-${idx}`}
-                      className={`rounded-md border p-2 sm:p-3 ${
+                      className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] ${
                         isError
-                          ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-neutral-900'
-                          : 'border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-neutral-900'
+                          ? 'border-red-50 bg-red-50 dark:border-red-900/40 dark:bg-neutral-900'
+                          : 'border-green-50 bg-neutral-50 dark:border-green-900/40 dark:bg-neutral-900'
                       }`}
                     >
                       <div
-                        className={`text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide mb-2 ${
+                        className={`text-xs sm:text-xs 3xl:text-base font-semibold uppercase tracking-wide mb-2 ${
                           isError ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'
                         }`}
                       >
                         {isError ? 'Tool Error' : 'Tool Result'}
                       </div>
-                      <div className='text-xs sm:text-sm break-all whitespace-pre-wrap'>
-                        {typeof block.content === 'object' ? JSON.stringify(block.content, null, 2) : String(block.content)}
+                      <div className='text-xs text-neutral-800 dark:text-neutral-50 sm:text-sm break-all whitespace-pre-wrap'>
+                        {typeof block.content === 'object'
+                          ? JSON.stringify(block.content, null, 2)
+                          : String(block.content)}
                       </div>
                     </div>
                   )
