@@ -1,5 +1,6 @@
 // src/components/Button.tsx
 import React from 'react'
+import './liquid.css'
 
 type ButtonProps = Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
@@ -7,7 +8,17 @@ type ButtonProps = Omit<
 > & {
   className?: string
   children: React.ReactNode
-  variant?: 'primary' | 'secondary' | 'tertiary' | 'outline' | 'danger' | 'outline2'
+  variant?:
+    | 'primary'
+    | 'secondary'
+    | 'tertiary'
+    | 'outline'
+    | 'danger'
+    | 'outline2'
+    | 'liquid'
+    | 'mica'
+    | 'acrylic'
+    | 'acrylicul'
   size?: 'smaller' | 'small' | 'medium' | 'large' | 'extraLarge' | 'circle'
   disabled?: boolean
   onClick?: () => void
@@ -44,6 +55,12 @@ export const Button: React.FC<ButtonProps> = ({
       ' dark:bg-transparent text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800',
     danger:
       'bg-rose-400 dark:bg-yPink-700 dark:border-2 dark:border-yPink-200 text-white dark:hover:bg-yPink-600 hover:bg-rose-500 focus:ring-red-500',
+    liquid: 'button-liquid bg-transparent text-neutral-700 dark:text-neutral-300',
+    mica: 'mica-medium text-neutral-700 dark:text-neutral-300',
+    acrylic:
+      'acrylic-subtle text-neutral-700 dark:text-neutral-300 bg-transparent dark:bg-transparent dark:outline-2 dark:outline-neutral-300/20',
+    acrylicul:
+      'acrylic-ultra-light text-neutral-700 dark:text-neutral-300 bg-transparent dark:bg-transparent dark:outline-2 dark:outline-neutral-300/20',
   }
 
   // Size styles control padding and text size

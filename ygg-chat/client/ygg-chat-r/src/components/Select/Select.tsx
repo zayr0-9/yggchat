@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 
 export type SelectOption = { value: string; label?: string }
@@ -30,8 +31,8 @@ export const Select: React.FC<SelectProps> = ({
   const btnRef = useRef<HTMLButtonElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
-  const [openUp, setOpenUp] = useState(false)
   const [listMaxHeight, setListMaxHeight] = useState<number | undefined>(undefined)
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null)
   const isMobile = useIsMobile()
 
   const normOptions: SelectOption[] = useMemo(() => {
@@ -101,11 +102,17 @@ export const Select: React.FC<SelectProps> = ({
       const spaceAbove = rect.top
       // Decide direction: prefer up if below space is tight and above has more room
       const shouldOpenUp = spaceBelow < 200 && spaceAbove > spaceBelow
-      setOpenUp(shouldOpenUp)
       const available = (shouldOpenUp ? spaceAbove : spaceBelow) - 8 // 8px margin
       // Cap to a reasonable range for usability
       const maxH = Math.max(160, Math.min(360, available))
       setListMaxHeight(Number.isFinite(maxH) ? maxH : 280)
+
+      // Calculate fixed position based on button rect
+      setDropdownPosition({
+        top: shouldOpenUp ? rect.top - (maxH + 4) : rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      })
     }
     // Always compute once on mount and whenever `open` changes
     compute()
@@ -171,7 +178,7 @@ export const Select: React.FC<SelectProps> = ({
       <button
         ref={btnRef}
         type='button'
-        className={`w-full inline-flex items-center justify-between gap-2 ${sizeClass} dark:bg-yBlack-900 rounded-lg bg-neutral-50 text-stone-800 dark:text-stone-200 border dark:border-0 border-neutral-200/70  hover:bg-neutral-100 dark:hover:bg-yBlack-500 disabled:opacity-60 disabled:cursor-not-allowed`}
+        className={`w-full inline-flex items-center justify-between gap-2 ${sizeClass} dark:bg-yBlack-900 rounded-lg dark:outline-2 outline-2 outline-neutral-50/20 dark:outline-neutral-300/20 bg-transparent acrylic-subtle text-stone-900 dark:text-stone-200 border dark:border-0 border-neutral-200/70  hover:bg-neutral-100 dark:hover:bg-yBlack-500 disabled:opacity-60 disabled:cursor-not-allowed`}
         aria-haspopup='listbox'
         aria-expanded={open}
         onClick={() => !disabled && setOpen(o => !o)}
@@ -184,66 +191,74 @@ export const Select: React.FC<SelectProps> = ({
         <i className={`bx bx-chevron-down transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden='true' />
       </button>
 
-      {open && (
-        <div
-          ref={listRef}
-          role='listbox'
-          tabIndex={-1}
-          className={`absolute z-50 w-full left-0 ${openUp ? 'bottom-full mb-1' : 'top-full mt-1'} rounded-lg overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white dark:bg-yBlack-900  shadow-xl`}
-          style={{ maxHeight: listMaxHeight }}
-        >
-          {searchBarVisible && (
-            <div className='px-2 py-2 border-b border-neutral-200 dark:border-neutral-700'>
-              <input
-                ref={searchRef}
-                type='text'
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                placeholder='Search...'
-                className='w-full px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
-                autoFocus={!isMobile}
-              />
-            </div>
-          )}
+      {open &&
+        dropdownPosition &&
+        createPortal(
           <div
-            className='overflow-y-scroll no-scrollbar'
-            style={{ maxHeight: searchBarVisible ? (listMaxHeight || 280) - 50 : listMaxHeight }}
+            ref={listRef}
+            role='listbox'
+            tabIndex={-1}
+            className={`fixed z-[100] rounded-lg overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-neutral-200/80 dark:bg-yBlack-900 shadow-xl`}
+            style={{
+              maxHeight: listMaxHeight,
+              top: `${dropdownPosition.top}px`,
+              left: `${dropdownPosition.left}px`,
+              width: `${dropdownPosition.width}px`,
+            }}
           >
-            {filteredOptions.length === 0 ? (
-              <div className='px-3 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] text-neutral-500 dark:text-neutral-400'>
-                {searchBarVisible && searchTerm.trim() ? 'No matching options' : 'No options'}
+            {searchBarVisible && (
+              <div className='px-2 py-2 border-b border-neutral-200 dark:border-neutral-700'>
+                <input
+                  ref={searchRef}
+                  type='text'
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  placeholder='Search...'
+                  className='w-full px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-900 text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
+                  autoFocus={!isMobile}
+                />
               </div>
-            ) : (
-              filteredOptions.map((opt, idx) => {
-                const isSelected = value === opt.value
-                const isActive = idx === activeIndex
-                return (
-                  <button
-                    type='button'
-                    key={opt.value}
-                    role='option'
-                    aria-selected={isSelected}
-                    onMouseEnter={() => setActiveIndex(idx)}
-                    onMouseDown={e => {
-                      // Select on mousedown to beat any outside click handlers and avoid losing the event
-                      e.preventDefault()
-                      e.stopPropagation()
-                      handleSelect(opt.value)
-                    }}
-                    onClick={() => handleSelect(opt.value)}
-                    className={`w-full line-clamp-3 text-left px-2 py-2 text-[13px] sm:text-[13px] md:text-[13px] lg:text-[13px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] transition-colors
-                      ${isActive ? 'bg-neutral-100 dark:bg-yBlack-500' : ''}
+            )}
+            <div
+              className='overflow-y-scroll no-scrollbar'
+              style={{ maxHeight: searchBarVisible ? (listMaxHeight || 280) - 50 : listMaxHeight }}
+            >
+              {filteredOptions.length === 0 ? (
+                <div className='px-3 py-2 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] text-neutral-500 dark:text-neutral-400'>
+                  {searchBarVisible && searchTerm.trim() ? 'No matching options' : 'No options'}
+                </div>
+              ) : (
+                filteredOptions.map((opt, idx) => {
+                  const isSelected = value === opt.value
+                  const isActive = idx === activeIndex
+                  return (
+                    <button
+                      type='button'
+                      key={opt.value}
+                      role='option'
+                      aria-selected={isSelected}
+                      onMouseEnter={() => setActiveIndex(idx)}
+                      onMouseDown={e => {
+                        // Select on mousedown to beat any outside click handlers and avoid losing the event
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleSelect(opt.value)
+                      }}
+                      onClick={() => handleSelect(opt.value)}
+                      className={`w-full line-clamp-3 text-left px-2 py-2 text-[13px] sm:text-[13px] md:text-[13px] lg:text-[13px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] transition-colors
+                      ${isActive ? 'bg-neutral-100/60 dark:bg-yBlack-500' : ''}
                       ${isSelected ? 'font-medium' : ''}
                       text-stone-800 dark:text-stone-100`}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })
-            )}
-          </div>
-        </div>
-      )}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

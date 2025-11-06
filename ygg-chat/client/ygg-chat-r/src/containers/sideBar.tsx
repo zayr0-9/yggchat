@@ -110,7 +110,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
   return (
     <aside
-      className={`h-screen bg-white dark:bg-yBlack-800 shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
+      className={`relative z-10 h-screen bg-transparent dark:bg-transparent shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 acrylic-subtle ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16 acrylic-subtle' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
       aria-label='Recent conversations'
     >
       {/* Toggle Button */}
@@ -174,7 +174,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           const projectName = conv.project_id ? projects.find(p => p.id === conv.project_id)?.name : undefined
 
           return (
-            <div key={conv.id} className='lg:mb-1.5 group relative'>
+            <div key={conv.id} className='lg:mb-1.5 2xl:mb-2 group relative'>
               <div
                 role='button'
                 tabIndex={0}
@@ -188,7 +188,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                 className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
                   isCollapsed
                     ? 'py-2 flex items-center hover:scale-90 justify-center'
-                    : 'hover:bg-stone-100 hover:ring-neutral-100 hover:ring-2 dark:hover:ring-neutral-800  dark:hover:ring-0 dark:hover:bg-neutral-800'
+                    : 'hover:bg-stone-100 hover:ring-neutral-100 hover:ring-2 xl:py-2 dark:hover:ring-neutral-800 outline-1 outline-transparent dark:hover:outline-neutral-700 dark:hover:ring-0 dark:hover:bg-yBlack-900/10'
                 } ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
                 title={isCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
               >

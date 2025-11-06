@@ -248,15 +248,36 @@ const ConversationPage: React.FC = () => {
 
   return (
     <div className='bg-zinc-50 dark:bg-zinc-900 flex overflow-hidden h-screen'>
+      <video
+        autoPlay
+        loop
+        muted
+        className='absolute inset-0 w-full h-full blur-[3px] dark:blur-[1px] 2xl:dark:blur-[4px] object-cover z-0 dark:hidden'
+      >
+        <source src='/video/l1.webm' type='video/webm' />
+      </video>
+
+      {/* Background Video - Dark Mode */}
+      <video
+        autoPlay
+        loop
+        muted
+        className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[6px] object-cover z-0 hidden dark:block'
+      >
+        <source src='/video/d1.webm' type='video/webm' />
+      </video>
+
+      {/* Dark Overlay */}
+      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/20 z-0' />
       {/* Recent conversations sidebar */}
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
-      <div className='flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all p-2 duration-300'>
+      <div className='relative z-10 flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all p-2 duration-300'>
         <div className='py-4 w-full max-w-full mx-auto shrink-0'>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 pt-2 mb-2'>
               <Button
-                variant='outline'
+                variant='acrylic'
                 rounded='full'
                 size='circle'
                 onClick={() => navigate('/homepage')}
@@ -267,7 +288,7 @@ const ConversationPage: React.FC = () => {
                   aria-hidden='true'
                 ></i>
               </Button>
-              <h1 className='text-[24px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
+              <h1 className='text-[24px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[34px] 3xl:text-[22px] 4xl:text-[22px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
                 {selectedProject ? `${selectedProject.name}` : 'Conversations'}
               </h1>
               {/* {selectedProject && (
@@ -290,7 +311,7 @@ const ConversationPage: React.FC = () => {
             </h2>
             <div className='flex items-center gap-2 my-1 p-0 lg:p-1 '>
               <Button
-                variant='outline2'
+                variant='acrylic'
                 size='large'
                 rounded='full'
                 onClick={handleEditProject}
@@ -301,10 +322,10 @@ const ConversationPage: React.FC = () => {
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
-          <div className='mb-0 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+          <div className='mb-0 flex p-2 flex-wrap justify-between acrylic-ultra-light items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
-                variant='outline2'
+                variant='acrylic'
                 size='large'
                 rounded='full'
                 onClick={handleNewConversation}
@@ -327,8 +348,9 @@ const ConversationPage: React.FC = () => {
                 className='w-28 transition-transform duration-70 active:scale-95'
               />
               <Button
-                variant='outline2'
-                size='medium'
+                variant='acrylic'
+                size='circle'
+                rounded='full'
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
                 className='shrink-0 group'
               >
@@ -339,7 +361,7 @@ const ConversationPage: React.FC = () => {
               </Button>
 
               <Button
-                variant='outline2'
+                variant='acrylic'
                 size='circle'
                 rounded='full'
                 onClick={handleRefreshConversations}
@@ -360,19 +382,19 @@ const ConversationPage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
           <div className='flex gap-4 pt-2 lg:pt-5 items-start w-full flex-1 overflow-hidden flex-col'>
-            <ul className='space-y-2 px-4 py-6 rounded flex-1 overflow-y-auto no-scrollbar scroll-fade w-full'>
+            <ul className='space-y-2 px-4 py-6 rounded 2xl:py-10 flex-1 overflow-y-auto no-scrollbar scroll-fade w-full'>
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}
-                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
+                  className='p-2 sm:p-2 md:px-2 acrylic-light md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
                   onClick={() => handleSelect(conv)}
                 >
                   <div className='flex items-center justify-between'>
-                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[10px] md:text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
+                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[10px] md:text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[22px]'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
                     <Button
-                      variant='outline2'
+                      variant='acrylic'
                       size='smaller'
                       onClick={
                         (e => {
@@ -392,7 +414,7 @@ const ConversationPage: React.FC = () => {
                 </li>
               ))}
               {sortedConversations.length === 0 && !loading && (
-                <p className='dark:text-neutral-300'>No conversations yet.</p>
+                <p className='dark:text-neutral-300 rounded-3xl p-4 acrylic-light'>No conversations yet.</p>
               )}
             </ul>
           </div>
@@ -418,12 +440,13 @@ const ConversationPage: React.FC = () => {
               "? This action cannot be undone.
             </p>
             <div className='flex gap-3 justify-end'>
-              <Button variant='outline' size='medium' className='group' onClick={handleCancelDelete}>
+              <Button variant='acrylic' size='medium' className='group' onClick={handleCancelDelete}>
                 <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
               </Button>
               <Button
-                variant='outline'
-                size='medium'
+                variant='acrylic'
+                size='circle'
+                rounded='full'
                 className='group bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white border-red-600 dark:border-red-700'
                 onClick={confirmDelete}
               >

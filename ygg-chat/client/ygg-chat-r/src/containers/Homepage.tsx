@@ -169,24 +169,46 @@ const Homepage: React.FC = () => {
   }
 
   return (
-    <div className='bg-zinc-50 h-screen overflow-hidden dark:bg-yBlack-500 flex'>
+    <div className='relative bg-zinc-50 h-screen overflow-hidden dark:bg-yBlack-600 flex'>
+      {/* Background Video - Light Mode */}
+      <video
+        autoPlay
+        loop
+        muted
+        className='absolute inset-0 w-full h-full blur-[3px] dark:blur-[1px] 2xl:dark:blur-[4px] object-cover z-0 dark:hidden'
+      >
+        <source src='/video/l1.webm' type='video/webm' />
+      </video>
+
+      {/* Background Video - Dark Mode */}
+      <video
+        autoPlay
+        loop
+        muted
+        className='absolute inset-0 w-full h-full blur-[3px] dark:blur-[4px] 2xl:dark:blur-[6px] object-cover z-0 hidden dark:block'
+      >
+        <source src='/video/d1.webm' type='video/webm' />
+      </video>
+
+      {/* Dark Overlay */}
+      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/20 z-0' />
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
-      <div className='flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
+      <div className='relative z-10 flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
         <div className='py-1 lg:py-1 xl:py-1 2xl:py-2 3xl:py-4 4xl:py-6 w-full  mx-auto shrink-0'>
-          <div className='flex items-center justify-baseline px-2 py-4'>
-            <div className='flex items-center flex-wrap gap-3 rounded-full'>
+          <div className='flex items-center justify-baseline'>
+            <div className='flex items-center flex-wrap gap-3 rounded-full pl-2 pr-3 py-2'>
               <img
                 src='/img/logo-d.svg'
                 alt='Yggdrasil Logo'
-                className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22 dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)]'
+                className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22 dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)] acrylic-ultra-light'
               />
               <img
                 src='/img/logo-l.svg'
                 alt='Yggdrasil Logo'
                 className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
               />
-              <h1 className='jaini-regular text-[28px] sm:text-[24px] lg:text-[44px] xl:text-[44px] 2xl:text-[54px] 3xl:text-[44px] 4xl:text-[44px] font-bold px-1 dark:text-neutral-100 '>
+              <h1 className=' junicode-bold tracking-wide pb-8 text-[28px] sm:text-[24px] lg:text-[44px] xl:text-[44px] 2xl:text-[70px] 3xl:text-[44px] 4xl:text-[44px] font-bold px-1 dark:text-neutral-100 '>
                 Yggdrasil
               </h1>
             </div>
@@ -194,12 +216,12 @@ const Homepage: React.FC = () => {
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between'>
-            <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] py-2 font-bold dark:text-neutral-100'>
+            <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[22px] 4xl:text-[22px] py-2 font-bold dark:text-neutral-100'>
               Projects
             </h2>
-            <div className='flex items-center gap-0 my-1 outline-2 outline-transparent dark:outline-2 dark:outline-neutral-800 rounded-4xl shadow-[0px_0px_3px_-0.5px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
+            <div className='flex items-center gap-3 my-1 mr-1 rounded-4xl '>
               <Button
-                variant='outline2'
+                variant='acrylic'
                 size='medium'
                 onClick={handleLogout}
                 rounded='full'
@@ -208,26 +230,20 @@ const Homepage: React.FC = () => {
                 className=''
               >
                 <i
-                  className='bx bx-log-out text-lg sm:text-lg 2xl:text-2xl p-1 transition-all hover:scale-96 duration-200'
+                  className='bx bx-log-out text-lg sm:text-lg 2xl:text-2xl mx-0.5 my-1.5 transition-all hover:scale-96 duration-200'
                   aria-hidden='true'
                 ></i>
               </Button>
-              <Button
-                variant='outline2'
-                size='medium'
-                onClick={() => navigate('/settings')}
-                className=''
-                rounded='full'
-              >
+              {/* <Button variant='acrylic' size='medium' onClick={() => navigate('/settings')} className='' rounded='full'>
                 <i
-                  className='bx bx-cog text-xl sm:text-lg 2xl:text-2xl p-1 transition-all hover:scale-96 duration-200'
+                  className='bx bx-cog text-xl sm:text-lg 2xl:text-2xl p-0.5 py-1.5 transition-all hover:scale-96 duration-200'
                   aria-hidden='true'
                 ></i>
-              </Button>
+              </Button> */}
               {isMobile && (
                 <Button
-                  variant='outline2'
-                  size='smaller'
+                  variant='acrylic'
+                  size='medium'
                   onClick={() => {
                     const button = document.activeElement as HTMLElement
                     if (button) {
@@ -242,7 +258,7 @@ const Homepage: React.FC = () => {
                   className='group'
                 >
                   <i
-                    className='bx bx-dots-vertical-rounded text-lg sm:text-lg 2xl:text-2xl p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                    className='bx bx-dots-vertical-rounded text-lg sm:text-lg 2xl:text-2xl mx-0.5 my-1.5 transition-transform duration-100 group-active:scale-90 pointer-events-none'
                     aria-hidden='true'
                   ></i>
                 </Button>
@@ -251,21 +267,23 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-0 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-800/70 outline-neutral-50 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+          <div className='mb-0 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 acrylic-ultra-light rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
-                variant='outline2'
+                variant='acrylic'
                 size='large'
                 rounded='full'
                 onClick={handleCreateProject}
-                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+                className='group dark:outline-2 rounded-4xl dark:hover:bg-transparent transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-300/20'
               >
-                <p className=''>New Project</p>
+                <p className='text-neutral-800 dark:text-neutral-200 hover:text-neutral-800 dark:hover:text-neutral-50'>
+                  New Project
+                </p>
               </Button>
             </div>
 
             <div className='flex items-center gap-2'>
-              <span className='text-sm text-gray-600 dark:text-gray-300'>Filter</span>
+              <span className='text-md text-neutral-50 dark:text-gray-300'>Filter</span>
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}
@@ -277,8 +295,9 @@ const Homepage: React.FC = () => {
                 className='w-32 transition-transform duration-70 active:scale-95'
               />
               <Button
-                variant='outline2'
-                size='medium'
+                variant='acrylic'
+                size='circle'
+                rounded='full'
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
                 className='shrink-0 group'
               >
@@ -288,12 +307,12 @@ const Homepage: React.FC = () => {
                 ></i>
               </Button>
               <Button
-                variant='outline2'
+                variant='acrylic'
                 size='circle'
                 rounded='full'
                 onClick={handleRefreshProjects}
                 disabled={isRefetching}
-                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+                className='group rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'
                 title='Refresh projects from server'
               >
                 <i
@@ -310,11 +329,11 @@ const Homepage: React.FC = () => {
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
           <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
-            <ul className='scroll-fade space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
+            <ul className='scroll-fade space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 3xl:py-14 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
               {projects.map(project => (
                 <li
                   key={project.id}
-                  className='p-2 sm:p-2 md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-3 md:mb-3 lg:mb-2 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-neutral-50 rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
+                  className='p-2 sm:p-2 acrylic-light md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-3 md:mb-3 lg:mb-2 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-transparent rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-transparent hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-transparent dark:hover:outline-neutral-600 group '
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className='flex place-items-start justify-between'>
@@ -325,15 +344,16 @@ const Homepage: React.FC = () => {
                         </p>
                       </span>
                       {project.context && (
-                        <p className='text-sm text-gray-600 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
+                        <p className='text-sm text-stone-900 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
                           {project.context}
                         </p>
                       )}
                     </div>
                     <div className='flex gap-2'>
                       <Button
-                        variant='outline2'
-                        size='small'
+                        variant='acrylicul'
+                        size='circle'
+                        rounded='full'
                         className='group'
                         onClick={
                           (e => {
@@ -348,8 +368,9 @@ const Homepage: React.FC = () => {
                         ></i>
                       </Button>
                       <Button
-                        variant='outline2'
-                        size='small'
+                        variant='acrylicul'
+                        size='circle'
+                        rounded='full'
                         className='group'
                         onClick={
                           (e => {
@@ -366,7 +387,7 @@ const Homepage: React.FC = () => {
                     </div>
                   </div>
                   {project.created_at && (
-                    <div className='text-xs text-neutral-600 dark:text-neutral-300 mt-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
+                    <div className='text-xs text-stone-800 dark:text-neutral-300 mt-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
                       Created: {new Date(project.created_at).toLocaleString()}
                     </div>
                   )}

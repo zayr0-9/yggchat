@@ -1,12 +1,39 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap');
+@import './styles/liquidGlass.css';
+@import './styles/mica.css';
+@import './styles/acrylic.css';
 
-/* Jaini Google Font CSS class */
-.jaini-regular {
-  font-family: "Jaini", system-ui;
+@font-face {
+  font-family: 'Junicode';
+  src: url('/fonts/Junicode-Bold.ttf') format('opentype');
   font-weight: 400;
   font-style: normal;
 }
 
+/* Create a CSS class to use the font */
+.junicode-bold {
+  font-family: 'Junicode', system-ui;
+  font-weight: 400;
+  font-style: normal;
+}
+
+/* Jaini Google Font CSS class */
+.jaini-regular {
+  font-family: 'Jaini', system-ui;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.baumans-regular {
+  font-family: 'Baumans', system-ui;
+  font-weight: 400;
+  font-style: normal;
+}
+.germania-one-regular {
+  font-family: 'Germania One', system-ui;
+  font-weight: 400;
+  font-style: normal;
+}
 /* Ensure dark variant is available globally and early */
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant 2xl (@media (min-width: 1920px) and (max-width: 2559px));
@@ -378,4 +405,22 @@ body.ygg-no-select * {
   --color-vtestb-200: #004479;
   --color-pureWhite-100: #ffffff;
   --color-pureWhite-200: #fafafa;
+}
+
+/* SVG Filter Definitions for Liquid Glass Effect */
+@layer utilities {
+  html::after {
+    content: '';
+    display: none;
+  }
+}
+
+/* Use a pseudo-element to inject SVG filters */
+html {
+  --svg-filters: '';
+}
+
+@supports selector(html::after) {
+  /* SVG filters are defined inline in the HTML where the effect is used */
+  /* Or injected dynamically via JavaScript if needed */
 }

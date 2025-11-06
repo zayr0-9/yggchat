@@ -1,17 +1,20 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import ProtectedRoute from './components/ProtectedRoute'
-import { Chat, ConversationPage, Homepage, Login, PaymentPage, Settings } from './containers'
+import { LiquidGlassSVG } from './components/LiquidGlassSVG'
+import { Chat, ConversationPage, Homepage, LandingPage, PaymentPage, Settings } from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 function App() {
   return (
     <BrowserRouter>
+      {/* SVG filters for liquid glass effect */}
+      <LiquidGlassSVG />
       {/* Establish IDE Context WebSocket globally so it's not tied to any specific page */}
       <IdeContextBootstrap />
       <Routes>
         {/* Public route */}
-        <Route path='/login' element={<Login />} />
+        <Route path='/landingpage' element={<LandingPage />} />
 
         {/* Protected routes */}
         <Route

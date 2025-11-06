@@ -1,0 +1,139 @@
+/* Acrylic Material Effect - Microsoft Fluent Design System
+ * Based on: https://github.com/yell0wsuit/acrylic-mica-css
+ *
+ * Similar to Mica but with a subtle noise texture overlay for a more textured appearance
+ * Usage: Apply these classes to any element for a grainy frosted glass effect
+ * Available strengths: ultra-light, subtle, light, medium (default), strong, extreme
+ */
+
+/* Base Acrylic styles - shared properties */
+.acrylic-ultra-light,
+.acrylic-subtle,
+.acrylic-light,
+.acrylic,
+.acrylic-medium,
+.acrylic-strong,
+.acrylic-extreme {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid #e5e5e5c4;
+  background-image: url('/img/noise.png');
+  background-repeat: repeat;
+  box-shadow: 0px 0px 5.6px rgba(0, 0, 0, 0.29);
+  /* 0px 0px 5.4px rgba(0, 0, 0, 0.32); */
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+/* Dark mode base styles */
+.dark .acrylic-ultra-light,
+.dark .acrylic-subtle,
+.dark .acrylic-light,
+.dark .acrylic,
+.dark .acrylic-medium,
+.dark .acrylic-strong,
+.dark .acrylic-extreme {
+  border-color: rgba(26, 26, 26, 0.102);
+}
+
+/* Acrylic Ultra Light - Extremely transparent, minimal blur */
+.acrylic-ultra-light {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-color: rgba(247, 247, 247, 0.15); /* 25% opacity */
+}
+
+.dark .acrylic-ultra-light {
+  background-color: rgba(24, 24, 24, 0.15); /* Very transparent in dark */
+}
+
+/* Acrylic Subtle - Most transparent, lightest blur */
+.acrylic-subtle {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background-color: rgba(247, 247, 247, 0.438); /* 65% opacity */
+}
+
+.dark .acrylic-subtle {
+  background-color: rgba(24, 24, 24, 0.027); /* More transparent in dark */
+}
+
+/* Acrylic Light */
+.acrylic-light {
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  background-color: rgba(247, 247, 247, 0.557); /* 65% opacity */
+  border: 1px ridge #e5e5e5cb;
+}
+
+.dark .acrylic-light {
+  background-color: rgba(24, 24, 24, 0.315);
+}
+
+/* Acrylic Medium (Default) - Microsoft's standard implementation */
+.acrylic,
+.acrylic-medium {
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  background-color: rgba(247, 247, 247, 0.8); /* 80% opacity - #F7F7F7CC */
+}
+
+.dark .acrylic,
+.dark .acrylic-medium {
+  background-color: rgba(24, 24, 24, 0.66); /* 66% opacity - #181818a8 */
+}
+
+/* Acrylic Strong - More opaque, heavier blur */
+.acrylic-strong {
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+  background-color: rgba(247, 247, 247, 0.88); /* 88% opacity */
+}
+
+.dark .acrylic-strong {
+  background-color: rgba(24, 24, 24, 0.78);
+}
+
+/* Acrylic Extreme - Most opaque, heaviest blur */
+.acrylic-extreme {
+  backdrop-filter: blur(80px);
+  -webkit-backdrop-filter: blur(80px);
+  background-color: rgba(247, 247, 247, 0.95); /* 95% opacity */
+}
+
+.dark .acrylic-extreme {
+  background-color: rgba(24, 24, 24, 0.88);
+}
+
+/* Interactive states - can be extended with modifiers */
+
+.acrylic-subtle:hover,
+.acrylic-light:hover,
+.acrylic:hover,
+.acrylic-medium:hover,
+.acrylic-strong:hover,
+.acrylic-extreme:hover {
+  background-color: rgba(247, 247, 247, 0.68);
+}
+
+.dark .acrylic-subtle:hover,
+.dark .acrylic-light:hover,
+.dark .acrylic:hover,
+.dark .acrylic-medium:hover,
+.dark .acrylic-strong:hover,
+.dark .acrylic-extreme:hover {
+  background-color: rgba(24, 24, 24, 0.5);
+}
+
+/* Ensure content stays on top of the effect */
+.acrylic-ultra-light > *,
+.acrylic-subtle > *,
+.acrylic-light > *,
+.acrylic > *,
+.acrylic-medium > *,
+.acrylic-strong > *,
+.acrylic-extreme > * {
+  position: relative;
+  z-index: 1;
+}

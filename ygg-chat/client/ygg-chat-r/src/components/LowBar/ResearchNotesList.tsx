@@ -16,7 +16,11 @@ interface ResearchNotesListProps {
   isEmbedded?: boolean
 }
 
-export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({ notes, isLoading = false, isEmbedded = false }) => {
+export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({
+  notes,
+  isLoading = false,
+  isEmbedded = false,
+}) => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const queryClient = useQueryClient()
@@ -219,13 +223,10 @@ export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({ notes, isL
               return (
                 <div
                   key={note.id}
-                  className='p-3 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm transition-all duration-200 ease-in-out'
+                  className='p-3 bg-transparent acrylic-light dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm transition-all duration-200 ease-in-out'
                 >
                   {/* Clickable header area - navigates to chat */}
-                  <div
-                    onClick={() => handleNoteClick(note)}
-                    className='cursor-pointer hover:opacity-80 transition-opacity duration-150'
-                  >
+                  <div onClick={() => handleNoteClick(note)} className='cursor-pointer transition-opacity duration-150'>
                     {/* Title row with chevron button */}
                     <div className='flex items-start justify-between gap-2 mb-1'>
                       <h3 className='flex-1 text-sm font-semibold text-stone-800 dark:text-stone-200 truncate'>
@@ -269,9 +270,7 @@ export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({ notes, isL
                   )}
 
                   {/* Timestamp */}
-                  <div className='text-xs text-stone-500 dark:text-stone-500 mt-2'>
-                    {formatDate(note.updated_at)}
-                  </div>
+                  <div className='text-xs text-stone-500 dark:text-stone-500 mt-2'>{formatDate(note.updated_at)}</div>
                 </div>
               )
             })}
@@ -312,7 +311,7 @@ export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({ notes, isL
         {/* Expanded content - List of notes */}
         {isExpanded && (
           <div
-            className='flex-1 p-3 overflow-y-auto thin-scrollbar'
+            className='flex-1 p-3 overflow-y-auto thin-scrollbar '
             data-heimdall-wheel-exempt='true'
             data-heimdall-contextmenu-exempt='true'
           >

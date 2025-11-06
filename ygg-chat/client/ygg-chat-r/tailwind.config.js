@@ -24,6 +24,10 @@ export default {
         2: '2 2 0%',
         4: '4 4 0%',
       },
+      letterSpacing: {
+        // Custom letter spacing for Yggdrasil heading
+        'ygg-wide': '0.25em',
+      },
     },
   },
   plugins: [],

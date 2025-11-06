@@ -352,9 +352,9 @@ export const TextArea: React.FC<TextAreaProps> = ({
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
   // focus:border-gray-500 focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 dark:focus:ring-2 dark:focus:ring-secondary-600
   const stateStyles = {
-    default: `${baseStyles} bg-gray-800 text-stone-800 dark:text-stone-200 placeholder-gray-400 border-gray-600 outline-none`,
-    error: `${baseStyles} bg-gray-800 text-stone-800 dark:text-stone-200 placeholder-gray-400 border-red-500 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-500 focus:ring-opacity-50`,
-    disabled: `${baseStyles} bg-gray-900 text-stone-800 dark:text-stone-200 border-gray-700 placeholder-gray-600 cursor-not-allowed`,
+    default: `${baseStyles} bg-neutral-800 mica-medium text-stone-800 dark:text-stone-200 placeholder-gray-400 border-gray-600 outline-none`,
+    error: `${baseStyles} bg-gray-800 text-stone-800 mica-medium dark:text-stone-200 placeholder-gray-400 border-red-500 outline-none focus:border-red-400 focus:ring-2 focus:ring-red-500 focus:ring-opacity-50`,
+    disabled: `${baseStyles} bg-gray-900 text-stone-800 mica-medium dark:text-stone-200 border-gray-700 placeholder-gray-600 cursor-not-allowed`,
   }
 
   return (

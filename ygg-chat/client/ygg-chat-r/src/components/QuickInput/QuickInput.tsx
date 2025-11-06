@@ -118,7 +118,7 @@ export const QuickInput: React.FC = () => {
   const canSend = quickChatInput.trim().length > 0 && selectedModel !== null
 
   return (
-    <div className='bg-neutral-100 pb-1 mx-4 my-2 pt-3 2xl:pt-4 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-2xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
+    <div className='bg-transparent acrylic-medium pb-1 mx-4 my-2 pt-3 2xl:pt-4 outline-1 dark:outline-1 dark:outline-neutral-100 outline-neutral-100 rounded-2xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)]'>
       <InputTextArea
         value={quickChatInput}
         onChange={setQuickChatInput}
@@ -128,9 +128,9 @@ export const QuickInput: React.FC = () => {
         width='w-full'
         minRows={1}
         autoFocus={false}
-        showCharCount={true}
+        showCharCount={false}
       />
-      <div className='bg-neutral-100 rounded-b-4xl dark:bg-yBlack-900 flex flex-col items-end pt-3 md:pt-0'>
+      <div className='bg-transparent rounded-b-4xl flex flex-col items-end pt-3 md:pt-0'>
         <div className='flex justify-between w-full mb-1'>
           <div className='flex items-center justify-start gap-1 flex-wrap flex-1'>
             <Select
