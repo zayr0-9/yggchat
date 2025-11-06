@@ -272,7 +272,7 @@ const ConversationPage: React.FC = () => {
       {/* Recent conversations sidebar */}
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
-      <div className='relative z-10 flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all p-2 duration-300'>
+      <div className='relative z-10 flex-1 h-full flex flex-col overflow-hidden w-full mx-1 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all p-2 duration-300'>
         <div className='py-4 w-full max-w-full mx-auto shrink-0'>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 pt-2 mb-2'>
@@ -284,11 +284,11 @@ const ConversationPage: React.FC = () => {
                 className='group border-2 hover:bg-pureWhite-100 dark:hover:bg-neutral-900 border-pureWhite-200 dark:border-neutral-800 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.5)] dark:shadow-[0_1px_22px_1px_rgba(0,0,0,0.45)]'
               >
                 <i
-                  className='bx bx-home text-[16px] sm:text-[14px] md:text-[14px] lg:text-[22px] 2xl:text-[24px] 3xl:text-[28px] 4xl:text-[32px] pb-0.75 transition-transform group-hover:scale-101 duration-100 group-active:scale-93 pointer-events-none'
+                  className='bx bx-home text-[24px] sm:text-[14px] md:text-[25px] lg:text-[30px] 2xl:text-[38px] 3xl:text-[28px] 4xl:text-[32px] pb-0.75 transition-transform group-hover:scale-101 duration-100 group-active:scale-93 pointer-events-none'
                   aria-hidden='true'
                 ></i>
               </Button>
-              <h1 className='text-[24px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[34px] 3xl:text-[22px] 4xl:text-[22px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
+              <h1 className='text-[24px] pl-1 sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[34px] 3xl:text-[22px] 4xl:text-[22px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
                 {selectedProject ? `${selectedProject.name}` : 'Conversations'}
               </h1>
               {/* {selectedProject && (
@@ -304,7 +304,7 @@ const ConversationPage: React.FC = () => {
             )} */}
           </div>
         </div>
-        <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
+        <div className='px-1 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between max-w-full '>
             <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
               Chats
@@ -315,14 +315,14 @@ const ConversationPage: React.FC = () => {
                 size='large'
                 rounded='full'
                 onClick={handleEditProject}
-                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_1px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+                className='group dark:outline-2 dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_1px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
               >
                 <p className='transition-transform duration-100 group-active:scale-95'>Project Settings</p>
               </Button>
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
-          <div className='mb-0 flex p-2 flex-wrap justify-between acrylic-ultra-light items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+          <div className='mb-0 flex p-2 px-2 flex-wrap justify-between acrylic-ultra-light items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
                 variant='acrylic'
@@ -382,15 +382,15 @@ const ConversationPage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
           <div className='flex gap-4 pt-2 lg:pt-5 items-start w-full flex-1 overflow-hidden flex-col'>
-            <ul className='space-y-2 px-4 py-6 rounded 2xl:py-10 flex-1 overflow-y-auto no-scrollbar scroll-fade w-full'>
+            <ul className='space-y-2 px-2 py-6 rounded 2xl:py-10 flex-1 overflow-y-auto no-scrollbar scroll-fade w-full'>
               {sortedConversations.map(conv => (
                 <li
                   key={conv.id}
-                  className='p-2 sm:p-2 md:px-2 acrylic-light md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
+                  className='rounded-4xl px-3 py-3 sm:p-2 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
                   onClick={() => handleSelect(conv)}
                 >
                   <div className='flex items-center justify-between'>
-                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[10px] md:text-[12px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[22px]'>
+                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
                       {conv.title || `Conversation ${conv.id}`}
                     </span>
                     <Button
@@ -407,7 +407,7 @@ const ConversationPage: React.FC = () => {
                     </Button>
                   </div>
                   {conv.created_at && (
-                    <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[16px]'>
+                    <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[11px] md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[16px]'>
                       {new Date(conv.created_at).toLocaleString()}
                     </div>
                   )}

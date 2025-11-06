@@ -333,18 +333,18 @@ const Homepage: React.FC = () => {
               {projects.map(project => (
                 <li
                   key={project.id}
-                  className='p-2 sm:p-2 acrylic-light md:px-2 md:py-1 lg:p-2 xl:p-2 2xl:p-4 3xl:p-4 4xl:p-4 sm:mb-3 md:mb-3 lg:mb-2 xl:mb-3 2xl:mb-4 3xl:mb-6 bg-transparent rounded-lg cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-transparent hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-transparent dark:hover:outline-neutral-600 group '
+                  className='rounded-4xl px-3 py-3 sm:px-4 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 bg-transparent cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-transparent hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-transparent dark:hover:outline-neutral-600 group '
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className='flex place-items-start justify-between'>
                     <div className='flex-1'>
                       <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99'>
-                        <p className='transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[12px] md:text-[14px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
+                        <p className='transition-transform duration-100 group-active:scale-99 text-[16px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
                           {project.name}
                         </p>
                       </span>
                       {project.context && (
-                        <p className='text-sm text-stone-900 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
+                        <p className='text-sm text-stone-900 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
                           {project.context}
                         </p>
                       )}
@@ -387,7 +387,7 @@ const Homepage: React.FC = () => {
                     </div>
                   </div>
                   {project.created_at && (
-                    <div className='text-xs text-stone-800 dark:text-neutral-300 mt-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[8px] md:text-[10px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
+                    <div className='text-xs text-stone-800 dark:text-neutral-300 mt-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
                       Created: {new Date(project.created_at).toLocaleString()}
                     </div>
                   )}
