@@ -336,7 +336,7 @@ const ConversationPage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-1'>
-              <span className='text-sm text-gray-600 dark:text-gray-300'>Filter</span>
+              <span className='text-sm text-neutral-50 dark:text-neutral-300'>Filter</span>
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}

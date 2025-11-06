@@ -240,7 +240,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
       </div>
       <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
         <Button
-          variant='outline2'
+          variant='acrylic'
           size='smaller'
           onClick={cycleTheme}
           rounded='full'
@@ -249,33 +249,25 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           className='group'
         >
           <i
-            className={`bx ${themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun'} text-3xl md:text-2xl lg:text-xl xl:text-lg 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none`}
+            className={`bx ${themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun'} text-3xl md:text-2xl lg:text-[20px] xl:text-[24px] 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none`}
             aria-hidden='true'
           ></i>
         </Button>
         {!isCollapsed && (
-          <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-xs xl:text-xs 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
+          <div className='flex flex-4 items-center justify-start text-xs pl-2 md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
             {themeMode}
           </div>
         )}
       </div>
-      <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-3'>
-        <div className='flex items-center justify-center gap-0'>
-          <div className='flex flex-1 items-center justify-start text-lg md:text-base lg:text-sm xl:text-xs 2xl:text-[16px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
-            <Button
-              variant='outline2'
-              size='smaller'
-              rounded='full'
-              className='group'
-              onClick={() => navigate('/payment')}
-            >
-              <i className='bx bx-user-circle text-3xl md:text-2xl lg:text-xl xl:text-lg 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] hover:scale-104 active:scale-95'></i>
-            </Button>
+      <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
+        <Button variant='acrylic' size='smaller' rounded='full' className='group' onClick={() => navigate('/payment')}>
+          <i className='bx p-1 bx-user-circle text-3xl md:text-2xl lg:text-[20px] xl:text-[24px] 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] hover:scale-104 active:scale-95'></i>
+        </Button>
+        {!isCollapsed && (
+          <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] pl-2 dark:text-stone-300'>
+            <h3> Get user name </h3>
           </div>
-          <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-xs xl:text-xs 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] pl-1 dark:text-stone-300'>
-            {!isCollapsed && <h3> Get user name </h3>}
-          </div>
-        </div>
+        )}
       </div>
     </aside>
   )
