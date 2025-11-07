@@ -1,9 +1,9 @@
 /* Acrylic Material Effect - Microsoft Fluent Design System
  * Based on: https://github.com/yell0wsuit/acrylic-mica-css
  *
- * Similar to Mica but with a subtle noise texture overlay for a more textured appearance
- * Usage: Apply these classes to any element for a grainy frosted glass effect
- * Available strengths: ultra-light, subtle, light, medium (default), strong, extreme
+ * Similar to Mica but with a subtle noise texture overlay for a more textured appearance.
+ * Usage: Apply these classes to any element for a grainy frosted glass effect.
+ * Available strengths: ultra-light, subtle, light, medium (default), strong, extreme.
  */
 
 /* Base Acrylic styles - shared properties */
@@ -19,8 +19,7 @@
   border: 1px solid #e5e5e5c4;
   background-image: url('/img/noise.png');
   background-repeat: repeat;
-  box-shadow: 0px 0px 5.6px rgba(0, 0, 0, 0.29);
-  /* 0px 0px 5.4px rgba(0, 0, 0, 0.32); */
+  box-shadow: 0 0 5.6px rgba(0, 0, 0, 0.29);
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease;
@@ -37,33 +36,27 @@
   border-color: rgba(26, 26, 26, 0.102);
 }
 
-/* Acrylic Ultra Light - Extremely transparent, minimal blur */
+/* Acrylic Ultra Light - Extremely transparent */
 .acrylic-ultra-light {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background-color: rgba(247, 247, 247, 0.15); /* 25% opacity */
+  background-color: rgba(247, 247, 247, 0.15); /* 15% opacity */
 }
 
 .dark .acrylic-ultra-light {
-  background-color: rgba(24, 24, 24, 0.15); /* Very transparent in dark */
+  background-color: rgba(24, 24, 24, 0.15);
 }
 
-/* Acrylic Subtle - Most transparent, lightest blur */
+/* Acrylic Subtle - Most transparent */
 .acrylic-subtle {
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  background-color: rgba(247, 247, 247, 0.438); /* 65% opacity */
+  background-color: rgba(247, 247, 247, 0.438); /* 44% opacity */
 }
 
 .dark .acrylic-subtle {
-  background-color: rgba(24, 24, 24, 0.027); /* More transparent in dark */
+  background-color: rgba(24, 24, 24, 0.027);
 }
 
 /* Acrylic Light */
 .acrylic-light {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(42px);
-  background-color: rgba(247, 247, 247, 0.557); /* 65% opacity */
+  background-color: rgba(247, 247, 247, 0.557); /* 56% opacity */
   border: 1px ridge #e5e5e5cb;
 }
 
@@ -71,23 +64,19 @@
   background-color: rgba(24, 24, 24, 0.015);
 }
 
-/* Acrylic Medium (Default) - Microsoft's standard implementation */
+/* Acrylic Medium (Default) */
 .acrylic,
 .acrylic-medium {
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
-  background-color: rgba(247, 247, 247, 0.8); /* 80% opacity - #F7F7F7CC */
+  background-color: rgba(247, 247, 247, 0.8); /* 80% opacity */
 }
 
 .dark .acrylic,
 .dark .acrylic-medium {
-  background-color: rgba(24, 24, 24, 0.66); /* 66% opacity - #181818a8 */
+  background-color: rgba(24, 24, 24, 0.66); /* 66% opacity */
 }
 
-/* Acrylic Strong - More opaque, heavier blur */
+/* Acrylic Strong */
 .acrylic-strong {
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
   background-color: rgba(247, 247, 247, 0.88); /* 88% opacity */
 }
 
@@ -95,10 +84,8 @@
   background-color: rgba(24, 24, 24, 0.78);
 }
 
-/* Acrylic Extreme - Most opaque, heaviest blur */
+/* Acrylic Extreme */
 .acrylic-extreme {
-  backdrop-filter: blur(80px);
-  -webkit-backdrop-filter: blur(80px);
   background-color: rgba(247, 247, 247, 0.95); /* 95% opacity */
 }
 
@@ -106,14 +93,17 @@
   background-color: rgba(24, 24, 24, 0.88);
 }
 
-/* Interactive states - can be extended with modifiers */
-
+/* Interactive states */
 .acrylic-subtle:hover,
 .acrylic-light:hover,
 .acrylic:hover,
 .acrylic-strong:hover,
 .acrylic-extreme:hover {
   background-color: rgba(247, 247, 247, 0.68);
+}
+
+.acrylic-medium:hover {
+  background-color: rgba(247, 247, 247, 0.88);
 }
 
 .dark .acrylic-subtle:hover,
@@ -127,13 +117,11 @@
 .dark .acrylic-medium:hover {
   background-color: rgba(24, 24, 24, 0.515);
 }
-.acrylic-medium:hover {
-  background-color: rgba(247, 247, 247, 0.88);
-}
 
 .dark .acrylic-light:hover {
   background-color: rgba(24, 24, 24, 0.215);
 }
+
 /* Ensure content stays on top of the effect */
 .acrylic-ultra-light > *,
 .acrylic-subtle > *,
@@ -144,4 +132,38 @@
 .acrylic-extreme > * {
   position: relative;
   z-index: 1;
+}
+
+/* Apply blur only when supported (prevents Lightning CSS from stripping) */
+@supports ((backdrop-filter: blur(0)) or (-webkit-backdrop-filter: blur(0))) {
+  .acrylic-ultra-light {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .acrylic-subtle {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .acrylic-light {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .acrylic,
+  .acrylic-medium {
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+  }
+
+  .acrylic-strong {
+    backdrop-filter: blur(60px);
+    -webkit-backdrop-filter: blur(60px);
+  }
+
+  .acrylic-extreme {
+    backdrop-filter: blur(80px);
+    -webkit-backdrop-filter: blur(80px);
+  }
 }
