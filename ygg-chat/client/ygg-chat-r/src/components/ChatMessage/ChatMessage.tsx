@@ -908,6 +908,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 maxLength={20000}
                 autoFocus
                 width='w-full'
+                onContextMenu={(e: React.MouseEvent<HTMLTextAreaElement>) => {
+                  // Always show default browser menu in TextArea, never the custom menu
+                  e.stopPropagation()
+                }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault()

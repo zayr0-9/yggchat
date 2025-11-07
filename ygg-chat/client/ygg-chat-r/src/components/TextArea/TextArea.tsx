@@ -15,6 +15,7 @@ interface TextAreaProps {
   value?: string
   onChange?: (value: string) => void
   onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  onContextMenu?: (e: React.MouseEvent<HTMLTextAreaElement>) => void
   state?: textAreaState
   errorMessage?: string
   maxLength?: number
@@ -33,6 +34,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
   value = '',
   onChange,
   onKeyDown,
+  onContextMenu,
   state = 'default',
   errorMessage,
   maxLength = 2000000,
@@ -373,6 +375,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
           value={value}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
+          onContextMenu={onContextMenu}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
