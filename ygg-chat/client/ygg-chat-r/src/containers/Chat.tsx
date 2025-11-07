@@ -2119,7 +2119,7 @@ function Chat() {
                     placeholder='Select a model...'
                     blur='high'
                     disabled={(localModel ?? models).length === 0}
-                    className='flex-1 max-w-48 sm:max-w-40 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99'
+                    className='flex-1 max-w-48 sm:max-w-40 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99 rounded-4xl'
                     searchBarVisible={true}
                   />
                   <Button

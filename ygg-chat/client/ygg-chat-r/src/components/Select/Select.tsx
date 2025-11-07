@@ -180,7 +180,7 @@ export const Select: React.FC<SelectProps> = ({
     <div className={`relative ${className}`}>
       <Button
         ref={btnRef}
-        variant={blur === 'high' ? 'acrylicul' : 'acrylic'}
+        variant={blur === 'high' ? 'outline2' : 'acrylicul'}
         size='large'
         className={`w-full justify-between ${sizeClass}`}
         aria-haspopup='listbox'
@@ -202,7 +202,7 @@ export const Select: React.FC<SelectProps> = ({
             ref={listRef}
             role='listbox'
             tabIndex={-1}
-            className={`fixed z-[100] rounded-lg overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent shadow-xl`}
+            className={`fixed z-[100] rounded-2xl overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent shadow-xl`}
             style={{
               maxHeight: listMaxHeight,
               top: `${dropdownPosition.top}px`,
@@ -218,7 +218,7 @@ export const Select: React.FC<SelectProps> = ({
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   placeholder='Search...'
-                  className='w-full rounded-lg px-1 py-1.5 text-[16px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[18px] 4xl:text-[22px]rounded border-neutral-300 dark:border-neutral-900 bg-transparent dark:bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-800 dark:border-0'
+                  className='w-full rounded-lg px-1 py-1.5 text-[16px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[18px] 4xl:text-[22px]rounded border-neutral-300 dark:border-neutral-900 bg-transparent dark:bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-2 dark:focus:ring-neutral-800 dark:border-0'
                   autoFocus={!isMobile}
                 />
               </div>
@@ -250,7 +250,7 @@ export const Select: React.FC<SelectProps> = ({
                         handleSelect(opt.value)
                       }}
                       onClick={() => handleSelect(opt.value)}
-                      className={`w-full line-clamp-3 text-left ${isSelected ? 'font-medium' : ''}`}
+                      className={`w-full line-clamp-3 hover:bg-neutral-200 text-left ${isSelected ? 'font-medium' : ''}`}
                     >
                       {opt.label}
                     </Button>
