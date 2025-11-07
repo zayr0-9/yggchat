@@ -1,8 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
-import ProtectedRoute from './components/ProtectedRoute'
 import { LiquidGlassSVG } from './components/LiquidGlassSVG'
-import { Chat, ConversationPage, Homepage, LandingPage, PaymentPage, Settings } from './containers'
+import ProtectedRoute from './components/ProtectedRoute'
+import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, Settings } from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 function App() {
@@ -15,7 +15,8 @@ function App() {
       <Routes>
         {/* Public route */}
         <Route path='/landingpage' element={<LandingPage />} />
-
+        {/* Public route */}
+        <Route path='/login' element={<Login />} />
         {/* Protected routes */}
         <Route
           path='/conversationPage'
