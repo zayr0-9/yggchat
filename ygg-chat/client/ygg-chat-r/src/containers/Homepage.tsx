@@ -194,7 +194,7 @@ const Homepage: React.FC = () => {
       <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/40 z-0' />
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
-      <div className='relative z-10 flex-1 h-full flex flex-col w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
+      <div className='relative z-10 flex-1 h-full flex flex-col w-full mr-2 ml-2 overflow-hidden sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
         <div className='py-1 lg:py-1 xl:py-1 2xl:py-2 3xl:py-4 4xl:py-6 w-full  mx-auto shrink-0'>
           <div className='flex items-center justify-baseline'>
             <div className='flex items-center flex-wrap gap-3 rounded-full pl-2 pr-3 py-2'>
@@ -398,8 +398,6 @@ const Homepage: React.FC = () => {
                   <p className='dark:text-neutral-300'>No projects yet. Create your first project to get started!</p>
                 )}
               </ul>
-              <div className='scroll-fade-overlay scroll-fade-overlay--top' aria-hidden='true' />
-              <div className='scroll-fade-overlay scroll-fade-overlay--bottom' aria-hidden='true' />
             </div>
           </div>
         </div>
