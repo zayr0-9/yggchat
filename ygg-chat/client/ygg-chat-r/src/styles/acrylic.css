@@ -13,7 +13,6 @@
 .acrylic-subtle,
 .acrylic-light,
 .acrylic,
-.acrylic-medium,
 .acrylic-strong,
 .acrylic-extreme {
   position: relative;
@@ -21,6 +20,16 @@
   background-image: url('/img/noise.png');
   background-repeat: repeat;
   box-shadow: 0 0 5.6px rgba(0, 0, 0, 0.29);
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.acrylic-medium {
+  position: relative;
+  isolation: isolate;
+  background-image: url('/img/noise.png');
+  background-repeat: repeat;
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease;

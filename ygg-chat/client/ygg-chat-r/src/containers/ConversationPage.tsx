@@ -256,7 +256,7 @@ const ConversationPage: React.FC = () => {
   return (
     <div className='bg-zinc-50 dark:bg-zinc-900 flex overflow-hidden h-screen'>
       {/* Dark Overlay */}
-      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/50 z-0' />
+      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/30 z-0' />
       {/* Recent conversations sidebar */}
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
@@ -324,7 +324,7 @@ const ConversationPage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-1'>
-              <span className='text-sm text-neutral-50 dark:text-neutral-300'>Filter</span>
+              {/* <span className='text-sm text-neutral-50 dark:text-neutral-300'>Filter</span> */}
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}

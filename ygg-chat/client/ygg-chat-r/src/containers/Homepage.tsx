@@ -177,7 +177,7 @@ const Homepage: React.FC = () => {
   return (
     <div className='relative h-screen flex'>
       {/* Dark Overlay */}
-      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-transparent z-0' />
+      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/30 z-0' />
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='relative z-10 flex-1 h-full flex flex-col w-full mr-2 ml-2 overflow-hidden sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
@@ -269,7 +269,7 @@ const Homepage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-2'>
-              <span className='text-md text-neutral-50 dark:text-gray-300'>Filter</span>
+              {/* <span className='text-md text-neutral-900 acrylic-subtle rounded-lg p-2 dark:text-gray-300'>Filter</span> */}
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}

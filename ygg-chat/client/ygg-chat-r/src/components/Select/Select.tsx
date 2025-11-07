@@ -14,6 +14,7 @@ interface SelectProps {
   className?: string
   searchBarVisible?: boolean
   size?: 'small' | 'medium' | 'large'
+  blur?: 'low' | 'high'
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -25,6 +26,7 @@ export const Select: React.FC<SelectProps> = ({
   className = '',
   searchBarVisible = false,
   size = 'medium',
+  blur = 'low',
 }) => {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number>(-1)
@@ -178,7 +180,7 @@ export const Select: React.FC<SelectProps> = ({
     <div className={`relative ${className}`}>
       <Button
         ref={btnRef}
-        variant='acrylic'
+        variant={blur === 'high' ? 'acrylicul' : 'acrylic'}
         size='large'
         className={`w-full justify-between ${sizeClass}`}
         aria-haspopup='listbox'
@@ -209,7 +211,7 @@ export const Select: React.FC<SelectProps> = ({
             }}
           >
             {searchBarVisible && (
-              <div className='px-2 py-2 border-b dark:bg-neutral-900 border-neutral-200 dark:border-neutral-900'>
+              <div className='px-2 py-2 border-b acrylic-medium dark:bg-transparent border-neutral-200 dark:border-neutral-900'>
                 <input
                   ref={searchRef}
                   type='text'
@@ -222,7 +224,7 @@ export const Select: React.FC<SelectProps> = ({
               </div>
             )}
             <div
-              className='overflow-y-scroll no-scrollbar acrylic-ultra-light-nb-2'
+              className={`overflow-y-scroll no-scrollbar ${blur === 'high' ? 'acrylic-medium' : 'acrylic-ultra-light-nb-2'}`}
               style={{ maxHeight: searchBarVisible ? (listMaxHeight || 280) - 50 : listMaxHeight }}
             >
               {filteredOptions.length === 0 ? (
