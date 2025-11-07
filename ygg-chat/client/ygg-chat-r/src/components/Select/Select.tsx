@@ -209,14 +209,14 @@ export const Select: React.FC<SelectProps> = ({
             }}
           >
             {searchBarVisible && (
-              <div className='px-2 py-2 border-b border-neutral-200 dark:border-neutral-700'>
+              <div className='px-2 py-2 border-b dark:bg-neutral-900 border-neutral-200 dark:border-neutral-900'>
                 <input
                   ref={searchRef}
                   type='text'
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   placeholder='Search...'
-                  className='w-full rounded-lg px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border-neutral-300 dark:border-neutral-600 bg-transparent dark:bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
+                  className='w-full rounded-lg px-1 py-1.5 text-[16px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[18px] 4xl:text-[22px]rounded border-neutral-300 dark:border-neutral-900 bg-transparent dark:bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-800 dark:border-0'
                   autoFocus={!isMobile}
                 />
               </div>
