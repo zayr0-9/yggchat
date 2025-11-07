@@ -344,18 +344,18 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }
 
     const handleContextMenu = (e: React.MouseEvent) => {
-      e.preventDefault()
-
       // Get selected text
       const selection = window.getSelection()
       const text = selection?.toString().trim() || ''
 
-      // Only show menu if text is selected
+      // Only prevent default and show custom menu if text is selected
       if (text) {
+        e.preventDefault()
         setSelectedText(text)
         setContextMenuPosition({ x: e.clientX, y: e.clientY })
         setContextMenuOpen(true)
       }
+      // If no text selected, allow browser's default context menu to appear
     }
 
     const handleAddToNoteClick = () => {
