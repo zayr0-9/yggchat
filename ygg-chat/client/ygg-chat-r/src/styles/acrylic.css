@@ -137,33 +137,33 @@
 /* Apply blur only when supported (prevents Lightning CSS from stripping) */
 @supports ((backdrop-filter: blur(0)) or (-webkit-backdrop-filter: blur(0))) {
   .acrylic-ultra-light {
-    backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
   }
 
   .acrylic-subtle {
-    backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
   }
 
   .acrylic-light {
-    backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
   }
 
   .acrylic,
   .acrylic-medium {
-    backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
+    backdrop-filter: blur(40px);
   }
 
   .acrylic-strong {
-    backdrop-filter: blur(60px);
     -webkit-backdrop-filter: blur(60px);
+    backdrop-filter: blur(60px);
   }
 
   .acrylic-extreme {
-    backdrop-filter: blur(80px);
     -webkit-backdrop-filter: blur(80px);
+    backdrop-filter: blur(80px);
   }
 }
