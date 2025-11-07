@@ -236,7 +236,7 @@ const Homepage: React.FC = () => {
                 className=''
               >
                 <i
-                  className='bx bx-log-out text-lg sm:text-lg 2xl:text-2xl mx-0.5 my-1.5 transition-all hover:scale-96 duration-200'
+                  className='bx transform -translate-x-0.5  bx-log-out text-lg sm:text-lg 2xl:text-2xl mx-0.5 my-1.5 transition-all hover:scale-96 duration-200'
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -273,14 +273,14 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-0 z-5000 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 acrylic-ultra-light rounded-4xl shadow-[0px_12px_7px_2.5px_rgba(255,255,255,0.95)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+          <div className='mb-0 z-5000 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-300/12 outline-neutral-50/10 acrylic-ultra-light rounded-4xl shadow-[0px_12px_7px_2.5px_rgba(255,255,255,0.95)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
                 variant='acrylic'
                 size='large'
                 rounded='full'
                 onClick={handleCreateProject}
-                className='group dark:outline-2 rounded-4xl dark:hover:bg-transparent transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-300/20'
+                className='group dark:outline-2 rounded-4xl dark:hover:bg-transparent transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] '
               >
                 <p className='text-neutral-800 dark:text-neutral-200 hover:text-neutral-800 dark:hover:text-neutral-50'>
                   New Project
@@ -305,10 +305,10 @@ const Homepage: React.FC = () => {
                 size='circle'
                 rounded='full'
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className='shrink-0 group'
+                className='shrink-0 group rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'
               >
                 <i
-                  className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none`}
+                  className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none`}
                   aria-hidden='true'
                 ></i>
               </Button>

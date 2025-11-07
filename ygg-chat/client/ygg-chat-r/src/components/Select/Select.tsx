@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsMobile } from '../../hooks/useMediaQuery'
+import { Button } from '../Button/button'
 
 export type SelectOption = { value: string; label?: string }
 
@@ -175,21 +176,22 @@ export const Select: React.FC<SelectProps> = ({
 
   return (
     <div className={`relative ${className}`}>
-      <button
+      <Button
         ref={btnRef}
-        type='button'
-        className={`w-full inline-flex items-center justify-between gap-2 ${sizeClass} dark:bg-yBlack-900 rounded-lg outline-neutral-50/20 dark:outline-neutral-300/20 bg-transparent text-stone-900 dark:text-stone-200 border-neutral-200/70  hover:bg-neutral-100 dark:hover:bg-yBlack-500 disabled:opacity-60 disabled:cursor-not-allowed`}
+        variant='acrylic'
+        size='large'
+        className='w-full justify-between'
         aria-haspopup='listbox'
         aria-expanded={open}
         onClick={() => !disabled && setOpen(o => !o)}
         onKeyDown={onKeyDown}
         disabled={disabled}
       >
-        <span className='truncate text-left flex-1 py-3 sm:py-0 md:py-1 lg:py-1 xl:py-1 2xl:py-1 3xl:py-1 4xl:py-2'>
-          {selected ? selected.label : <span className='text-neutral-500 dark:text-neutral-400'>{placeholder}</span>}
+        <span className='truncate text-left flex-1'>
+          {selected ? selected.label : <span className='text-neutral-500  dark:text-neutral-400'>{placeholder}</span>}
         </span>
         <i className={`bx bx-chevron-down transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden='true' />
-      </button>
+      </Button>
 
       {open &&
         dropdownPosition &&
@@ -198,7 +200,7 @@ export const Select: React.FC<SelectProps> = ({
             ref={listRef}
             role='listbox'
             tabIndex={-1}
-            className={`fixed z-[100] rounded-lg overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-neutral-100 dark:bg-yBlack-900 shadow-xl`}
+            className={`fixed z-[100] rounded-lg overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent shadow-xl`}
             style={{
               maxHeight: listMaxHeight,
               top: `${dropdownPosition.top}px`,
@@ -214,13 +216,13 @@ export const Select: React.FC<SelectProps> = ({
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   placeholder='Search...'
-                  className='w-full rounded-lg px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border-neutral-300 dark:border-neutral-600 bg-white dark:bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
+                  className='w-full rounded-lg px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border-neutral-300 dark:border-neutral-600 bg-transparent dark:bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
                   autoFocus={!isMobile}
                 />
               </div>
             )}
             <div
-              className='overflow-y-scroll no-scrollbar'
+              className='overflow-y-scroll no-scrollbar acrylic-ultra-light-nb-2'
               style={{ maxHeight: searchBarVisible ? (listMaxHeight || 280) - 50 : listMaxHeight }}
             >
               {filteredOptions.length === 0 ? (
@@ -230,11 +232,12 @@ export const Select: React.FC<SelectProps> = ({
               ) : (
                 filteredOptions.map((opt, idx) => {
                   const isSelected = value === opt.value
-                  const isActive = idx === activeIndex
                   return (
-                    <button
-                      type='button'
+                    <Button
                       key={opt.value}
+                      variant='outline2'
+                      size='medium'
+                      type='button'
                       role='option'
                       aria-selected={isSelected}
                       onMouseEnter={() => setActiveIndex(idx)}
@@ -245,13 +248,10 @@ export const Select: React.FC<SelectProps> = ({
                         handleSelect(opt.value)
                       }}
                       onClick={() => handleSelect(opt.value)}
-                      className={`w-full line-clamp-3 rounded-xl hover:scale-103 text-left px-2 py-2 text-[13px] sm:text-[13px] md:text-[13px] lg:text-[13px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] transition-colors
-                      ${isActive ? 'bg-neutral-100 dark:bg-yBlack-500' : ''}
-                      ${isSelected ? 'font-medium' : ''}
-                      text-stone-800 dark:text-stone-100`}
+                      className={`w-full line-clamp-3 text-left ${isSelected ? 'font-medium' : ''}`}
                     >
                       {opt.label}
-                    </button>
+                    </Button>
                   )
                 })
               )}

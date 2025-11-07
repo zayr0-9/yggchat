@@ -362,7 +362,7 @@ const ConversationPage: React.FC = () => {
                 className='shrink-0 ml-1 group'
               >
                 <i
-                  className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none`}
+                  className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none`}
                   aria-hidden='true'
                 ></i>
               </Button>

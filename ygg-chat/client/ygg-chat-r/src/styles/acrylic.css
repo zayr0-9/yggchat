@@ -8,6 +8,7 @@
 
 /* Base Acrylic styles - shared properties */
 .acrylic-ultra-light-nb,
+.acrylic-ultra-light-nb-2,
 .acrylic-ultra-light,
 .acrylic-subtle,
 .acrylic-light,
@@ -37,6 +38,7 @@
 
 /* Dark mode base styles */
 .dark .acrylic-ultra-light-nb,
+.dark .acrylic-ultra-light-nb-2,
 .dark .acrylic-ultra-light,
 .dark .acrylic-subtle,
 .dark .acrylic-light,
@@ -52,6 +54,14 @@
 }
 
 .dark .acrylic-ultra-light-nb {
+  background-color: rgba(24, 24, 24, 0.15);
+}
+
+.acrylic-ultra-light-nb-2 {
+  background-color: rgba(247, 247, 247, 0.15);
+}
+
+.dark .acrylic-ultra-light-nb-2 {
   background-color: rgba(24, 24, 24, 0.15);
 }
 
@@ -155,7 +165,8 @@
 
 /* Apply blur only when supported (prevents Lightning CSS from stripping) */
 @supports ((backdrop-filter: blur(0)) or (-webkit-backdrop-filter: blur(0))) {
-  .acrylic-ultra-light {
+  .acrylic-ultra-light,
+  .acrylic-ultra-light-nb-2 {
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
   }
