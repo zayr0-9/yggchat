@@ -260,7 +260,7 @@ const ConversationPage: React.FC = () => {
       {/* Recent conversations sidebar */}
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
-      <div className='relative z-10 flex-1 h-full flex flex-col overflow-hidden w-full mx-1 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all p-2 duration-300'>
+      <div className='relative z-10 flex-1 h-full flex flex-col overflow-hidden w-full mx-1 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all px-2 duration-300'>
         <div className='py-4 w-full max-w-full mx-auto shrink-0'>
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2 pt-2 mb-2'>

@@ -152,7 +152,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
       )}
 
       {/* Conversations List */}
-      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-8 2xl:pt-10 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0 shadow-[0_2px_16px_1px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_16px_1px_rgba(0,0,0,0.43)]'>
+      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-8 2xl:pt-10 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0'>
         {loading && (
           <div
             className={`text-xs text-gray-500 dark:text-gray-300 px-2 py-1 ${isCollapsed ? 'text-center' : ''}`}
@@ -189,7 +189,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                 className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
                   isCollapsed
                     ? 'py-2 flex items-center hover:scale-90 justify-center'
-                    : 'hover:bg-stone-100 hover:ring-neutral-100 hover:ring-2 xl:py-2 dark:hover:ring-neutral-800 outline-1 outline-transparent dark:hover:outline-neutral-700 dark:hover:ring-0 dark:hover:bg-yBlack-900/10'
+                    : 'hover:bg-stone-100 hover:ring-neutral-100 hover:ring-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
                 } ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
                 title={isCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
               >

@@ -126,11 +126,11 @@ export const ToolsSettings: React.FC = () => {
         <div className='space-y-4'>
           <h3 className='text-md mt-3 font-medium text-stone-700 dark:text-stone-300 mb-3'>Individual Tools</h3>
 
-          <div className='space-y-4 px-2'>
+          <div className='space-y-4 px-2 bg-transparent'>
             {tools.map(tool => (
               <div
                 key={tool.name}
-                className='flex items-center justify-between p-3 outline-neutral-200 outline-1  dark:bg-neutral-900 rounded-lg border-1 border-gray-300 dark:border-neutral-600 drop-shadow-xl shadow-[0_6px_12px_1px_rgba(0,0,0,0.05),0_0px_2px_1px_rgba(0,0,0,0.02)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)] '
+                className='flex items-center justify-between p-3 rounded-lg border-1 border-gray-300 dark:border-neutral-600 drop-shadow-xl shadow-[0_6px_12px_1px_rgba(0,0,0,0.05),0_0px_2px_1px_rgba(0,0,0,0.02)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)] '
               >
                 <div className='flex-1'>
                   <div className='font-medium text-stone-800 dark:text-stone-200'>
