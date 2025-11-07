@@ -271,7 +271,7 @@ const ConversationPage: React.FC = () => {
         muted
         className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] object-cover z-0 hidden dark:block'
       >
-        <source src='/video/d1.webm' type='video/webm' />
+        <source src='/video/d2.webm' type='video/webm' />
       </video>
 
       {/* Dark Overlay */}
@@ -322,7 +322,7 @@ const ConversationPage: React.FC = () => {
                 size='large'
                 rounded='full'
                 onClick={handleEditProject}
-                className='group dark:outline-2 dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_1px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+                className='group dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_1px_rgba(0,0,0,0.45)]'
               >
                 <p className='transition-transform duration-100 group-active:scale-95'>Project Settings</p>
               </Button>

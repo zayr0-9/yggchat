@@ -193,7 +193,7 @@ const Homepage: React.FC = () => {
         muted
         className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 hidden dark:block'
       >
-        <source src='/video/d1.webm' type='video/webm' />
+        <source src='/video/d2.webm' type='video/webm' />
       </video>
 
       {/* Dark Overlay */}
