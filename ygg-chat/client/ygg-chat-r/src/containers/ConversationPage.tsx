@@ -164,6 +164,13 @@ const ConversationPage: React.FC = () => {
     setShowDeleteConfirm(true)
   }
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
   const confirmDelete = async () => {
     if (!conversationToDelete) return
 
