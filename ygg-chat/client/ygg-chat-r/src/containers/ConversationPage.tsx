@@ -329,7 +329,7 @@ const ConversationPage: React.FC = () => {
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
-          <div className='mb-0 flex p-2 px-2 flex-wrap justify-between acrylic-ultra-light items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+          <div className='mb-0 z-500 flex p-2 px-2 flex-wrap justify-between acrylic-ultra-light items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
                 variant='acrylic'
@@ -390,7 +390,7 @@ const ConversationPage: React.FC = () => {
           {error && <p className='text-red-500'>{error}</p>}
           <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
-              <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 3xl:py-14 rounded flex-1 pr-2 w-full'>
+              <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
                 {sortedConversations.map(conv => (
                   <li
                     key={conv.id}
