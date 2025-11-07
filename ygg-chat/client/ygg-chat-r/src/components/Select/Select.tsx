@@ -178,7 +178,7 @@ export const Select: React.FC<SelectProps> = ({
       <button
         ref={btnRef}
         type='button'
-        className={`w-full inline-flex items-center justify-between gap-2 ${sizeClass} dark:bg-yBlack-900 rounded-lg dark:outline-2 outline-2 outline-neutral-50/20 dark:outline-neutral-300/20 bg-transparent acrylic-subtle text-stone-900 dark:text-stone-200 border dark:border-0 border-neutral-200/70  hover:bg-neutral-100 dark:hover:bg-yBlack-500 disabled:opacity-60 disabled:cursor-not-allowed`}
+        className={`w-full inline-flex items-center justify-between gap-2 ${sizeClass} dark:bg-yBlack-900 rounded-lg dark:outline-2 outline-1 outline-neutral-50/20 dark:outline-neutral-300/20 bg-transparent text-stone-900 dark:text-stone-200 dark:border-0 border-neutral-200/70  hover:bg-neutral-100 dark:hover:bg-yBlack-500 disabled:opacity-60 disabled:cursor-not-allowed`}
         aria-haspopup='listbox'
         aria-expanded={open}
         onClick={() => !disabled && setOpen(o => !o)}
@@ -214,7 +214,7 @@ export const Select: React.FC<SelectProps> = ({
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   placeholder='Search...'
-                  className='w-full rounded-lg px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-transparent mica-medium text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
+                  className='w-full rounded-lg px-2 py-1 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px]rounded border-neutral-300 dark:border-neutral-600 bg-white dark:bg-transparent text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-neutral-800 dark:focus:ring-2 dark:focus:ring-neutral-700 dark:border-0'
                   autoFocus={!isMobile}
                 />
               </div>
