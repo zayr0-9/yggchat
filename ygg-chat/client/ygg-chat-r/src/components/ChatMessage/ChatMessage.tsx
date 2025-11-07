@@ -643,9 +643,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             <Button
               type='button'
               onClick={handleCopyCode}
-              className='absolute top-2 right-2 z-10 opacity-0 group-hover/code:opacity-100 transition-opacity duration-150 border-1 text-slate-900 dark:text-white border-neutral-600 dark:border-neutral-600 dark:hover:bg-neutral-700'
+              className='absolute top-2 right-2 z-10 opacity-0 group-hover/code:opacity-100 transition-opacity duration-150 text-slate-900 dark:text-white dark:hover:bg-neutral-700'
               size='smaller'
-              variant='outline'
+              variant='outline2'
             >
               {copied ? 'Copied' : 'Copy'}
             </Button>
@@ -664,7 +664,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     return (
       <div
         id={`message-${id}`}
-        className={`group px-2 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-all duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
+        className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-all duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
       >
         {/* Header with role */}
@@ -747,7 +747,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 onClick={() => setShowThinking(s => !s)}
                 className='ml-2 text-xs px-2 py-1 border-1 border-neutral-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-neutral-800'
                 size='smaller'
-                variant='outline'
+                variant='outline2'
                 aria-expanded={showThinking}
                 aria-controls={`reasoning-content-${id}`}
               >
