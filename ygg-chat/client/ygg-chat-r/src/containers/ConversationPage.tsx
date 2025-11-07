@@ -388,7 +388,7 @@ const ConversationPage: React.FC = () => {
 
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
-          <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
+          <div className='gap-2 mb-10 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
               <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
                 {sortedConversations.map(conv => (
@@ -398,7 +398,7 @@ const ConversationPage: React.FC = () => {
                     onClick={() => handleSelect(conv)}
                   >
                     <div className='flex items-center justify-between'>
-                      <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
+                      <span className='font-semibold mr-2  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
                         {conv.title || `Conversation ${conv.id}`}
                       </span>
                       <Button
