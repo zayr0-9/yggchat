@@ -759,7 +759,16 @@ export async function generateResponse(
 
       const stream: any = await openrouterClient.chat.completions.create(
         {
-          model,
+          model, // e.g. "openrouter/auto" or a specific openrouter/<provider>/<model> id
+          provider: {
+            // Ask OpenRouter to route to the lowest-latency provider for this model
+            sort: 'latency',
+
+            // Optional: only use some providers (or remove this if you want all)
+            // allow: ['openai', 'anthropic', 'deepinfra'],
+            // Or explicitly avoid known slow ones:
+            // deny: ['some-slow-provider'],
+          },
           messages: formattedMessages,
           stream: true,
           max_tokens: 100000,
@@ -767,9 +776,7 @@ export async function generateResponse(
           usage: { include: true },
           ...(think && { reasoning: { max_tokens: 30000 } }),
         } as any,
-        {
-          signal: abortSignal,
-        }
+        { signal: abortSignal }
       )
 
       let toolCalls: Array<{ id: string; name: string; arguments: string }> = []
@@ -831,19 +838,25 @@ export async function generateResponse(
                 arguments: toolCall.function.arguments || '',
               }
               toolCallBuffer = toolCall.function.arguments || ''
-              console.log(`🔧 [openrouter] New tool call detected: name=${currentToolCall.name}, id=${currentToolCall.id}`)
+              console.log(
+                `🔧 [openrouter] New tool call detected: name=${currentToolCall.name}, id=${currentToolCall.id}`
+              )
             } else if (currentToolCall && toolCall.function?.arguments) {
               // Continue existing tool call
               toolCallBuffer += toolCall.function.arguments
               currentToolCall.arguments = toolCallBuffer
-              console.log(`🔧 [openrouter] Continuing tool call ${currentToolCall.name}, accumulated buffer length: ${toolCallBuffer.length}`)
+              console.log(
+                `🔧 [openrouter] Continuing tool call ${currentToolCall.name}, accumulated buffer length: ${toolCallBuffer.length}`
+              )
             }
 
             // Try to send complete tool calls
             if (currentToolCall && toolCallBuffer) {
               try {
                 // Try to parse as JSON first
-                console.log(`🔧 [openrouter] Attempting to parse toolCallBuffer: ${toolCallBuffer.substring(0, 100)}...`)
+                console.log(
+                  `🔧 [openrouter] Attempting to parse toolCallBuffer: ${toolCallBuffer.substring(0, 100)}...`
+                )
                 JSON.parse(toolCallBuffer)
                 const toolCallData = {
                   id: currentToolCall.id,
@@ -1303,7 +1316,6 @@ function createEstimatedUsage(messages: any[], assistantContent: string): any {
     estimated: true, // Flag to indicate this is estimated
   }
 }
-
 
 // Helper function to execute tools
 async function executeToolCall(toolName: string, args: string): Promise<string> {

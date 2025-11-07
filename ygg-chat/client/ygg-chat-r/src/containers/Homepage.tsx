@@ -181,9 +181,9 @@ const Homepage: React.FC = () => {
         autoPlay
         loop
         muted
-        className='absolute inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 dark:hidden'
+        className='absolute bottom-10 inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 dark:hidden'
       >
-        <source src='/video/l2sm.webm' type='video/webm' />
+        <source src='/video/l3.webm' type='video/webm' />
       </video>
 
       {/* Background Video - Dark Mode */}
@@ -207,7 +207,7 @@ const Homepage: React.FC = () => {
               <img
                 src='/img/logo-d.svg'
                 alt='Yggdrasil Logo'
-                className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22 dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)] acrylic-ultra-light'
+                className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22 dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)] acrylic-ultra-light-nb'
               />
               <img
                 src='/img/logo-l.svg'

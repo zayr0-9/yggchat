@@ -1810,8 +1810,8 @@ function Chat() {
       >
         {/* Conversation Title Editor */}
         {currentConversationId && (
-          <div className='flex flex-col z-50 gap-2 mt-2 mb-1 xl:mb-1 xl:mt-2 2xl:mb-0 bg-transparent 2xl:mt-1 mx-2 rounded-xl pr-2'>
-            <div className=' rounded-xl flex items-center gap-2 py-1 xl:py-1 2xl:p-1 mt-1 bg-transparent shadow-[0_2px_12px_6px_rgba(0,0,0,0.06),0_0px_12px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65),0_6px_12px_-4px_rgba(0,0,0,0.02)] mica-subtle'>
+          <div className='flex flex-col z-50 gap-2 mt-2 mb-1 xl:mb-1 xl:mt-2 2xl:mb-0 bg-transparent 2xl:mt-1 mx-2 rounded-2xl pr-2'>
+            <div className=' rounded-2xl flex items-center gap-2 py-1 xl:py-1 2xl:p-1 mt-1 bg-transparent shadow-[0_2px_12px_6px_rgba(0,0,0,0.06),0_0px_12px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65),0_6px_12px_-4px_rgba(0,0,0,0.02)] mica-subtle'>
               <Button
                 variant='outline2'
                 size='medium'
@@ -2011,7 +2011,7 @@ function Chat() {
               width='w-full'
               minRows={1}
               autoFocus={true}
-              showCharCount={true}
+              showCharCount={false}
             />
             {/* Selected file chips moved from InputTextArea */}
             {selectedFilesForChat && selectedFilesForChat.length > 0 && (

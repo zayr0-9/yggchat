@@ -7,6 +7,7 @@
  */
 
 /* Base Acrylic styles - shared properties */
+.acrylic-ultra-light-nb,
 .acrylic-ultra-light,
 .acrylic-subtle,
 .acrylic-light,
@@ -16,7 +17,6 @@
 .acrylic-extreme {
   position: relative;
   isolation: isolate;
-  border: 1px solid #e5e5e5c4;
   background-image: url('/img/noise.png');
   background-repeat: repeat;
   box-shadow: 0 0 5.6px rgba(0, 0, 0, 0.29);
@@ -25,7 +25,18 @@
     border-color 0.2s ease;
 }
 
+.acrylic-ultra-light,
+.acrylic-subtle,
+.acrylic-light,
+.acrylic,
+.acrylic-medium,
+.acrylic-strong,
+.acrylic-extreme {
+  border: 1px solid #e5e5e5c4;
+}
+
 /* Dark mode base styles */
+.dark .acrylic-ultra-light-nb,
 .dark .acrylic-ultra-light,
 .dark .acrylic-subtle,
 .dark .acrylic-light,
@@ -34,6 +45,14 @@
 .dark .acrylic-strong,
 .dark .acrylic-extreme {
   border-color: rgba(26, 26, 26, 0.102);
+}
+
+.acrylic-ultra-light-nb {
+  background-color: rgba(247, 247, 247, 0.15);
+}
+
+.dark .acrylic-ultra-light-nb {
+  background-color: rgba(24, 24, 24, 0.15);
 }
 
 /* Acrylic Ultra Light - Extremely transparent */

@@ -737,7 +737,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Reasoning / thinking block */}
         {typeof thinking === 'string' && thinking.trim().length > 0 && (
-          <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.35)]'>
+          <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'>
             <div className='mb-2 flex items-center justify-between'>
               <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
                 Reasoning

@@ -261,7 +261,7 @@ const ConversationPage: React.FC = () => {
         muted
         className='absolute inset-0 w-full h-full blur-[3px] dark:blur-[1px] 2xl:dark:blur-[4px] object-cover z-0 dark:hidden'
       >
-        <source src='/video/l2sm.webm' type='video/webm' />
+        <source src='/video/l3.webm' type='video/webm' />
       </video>
 
       {/* Background Video - Dark Mode */}
