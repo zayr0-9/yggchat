@@ -178,7 +178,7 @@ export const Select: React.FC<SelectProps> = ({
       <button
         ref={btnRef}
         type='button'
-        className={`w-full inline-flex items-center justify-between gap-2 ${sizeClass} dark:bg-yBlack-900 rounded-lg dark:outline-2 outline-1 outline-neutral-50/20 dark:outline-neutral-300/20 bg-transparent text-stone-900 dark:text-stone-200 dark:border-0 border-neutral-200/70  hover:bg-neutral-100 dark:hover:bg-yBlack-500 disabled:opacity-60 disabled:cursor-not-allowed`}
+        className={`w-full inline-flex items-center justify-between gap-2 ${sizeClass} dark:bg-yBlack-900 rounded-lg outline-neutral-50/20 dark:outline-neutral-300/20 bg-transparent text-stone-900 dark:text-stone-200 border-neutral-200/70  hover:bg-neutral-100 dark:hover:bg-yBlack-500 disabled:opacity-60 disabled:cursor-not-allowed`}
         aria-haspopup='listbox'
         aria-expanded={open}
         onClick={() => !disabled && setOpen(o => !o)}
