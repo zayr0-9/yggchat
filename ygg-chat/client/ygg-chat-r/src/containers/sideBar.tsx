@@ -110,19 +110,20 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
   return (
     <aside
-      className={`relative z-10 h-screen bg-transparent dark:bg-transparent shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 acrylic-subtle ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16 acrylic-subtle' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
+      className={`relative z-10 h-screen bg-transparent dark:bg-transparent shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16 acrylic-subtle' : 'w-64 md:w-72 lg:w-80 xl:w-90 acrylic-light'} ${className}`}
       aria-label='Recent conversations'
     >
       {/* Toggle Button */}
-      <div className='flex items-center justify-between py-3 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
+      <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
         {!isCollapsed && (
           <h2 className='text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] pl-2 font-semibold text-neutral-700 dark:text-neutral-200 truncate'>
             Recent Chats
           </h2>
         )}
         <Button
-          variant='outline2'
-          size='medium'
+          variant='acrylic'
+          size='circle'
+          rounded='full'
           onClick={toggleCollapse}
           className={`${isCollapsed ? 'mx-auto' : ''} transition-transform duration-200`}
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -151,7 +152,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
       )}
 
       {/* Conversations List */}
-      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-8 2xl:pt-10 no-scrollbar scroll-fade border-neutral-100 dark:border-neutral-800 rounded-xl border-1 border-t-0 shadow-[0_2px_16px_1px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_16px_1px_rgba(0,0,0,0.43)]'>
+      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-8 2xl:pt-10 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0 shadow-[0_2px_16px_1px_rgba(0,0,0,0.03)] dark:shadow-[0_2px_16px_1px_rgba(0,0,0,0.43)]'>
         {loading && (
           <div
             className={`text-xs text-gray-500 dark:text-gray-300 px-2 py-1 ${isCollapsed ? 'text-center' : ''}`}
@@ -197,7 +198,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                     variant='outline2'
                     size='circle'
                     rounded='full'
-                    className='h-10 w-10 text-md font-semibold text-lg md:text-base lg:text-sm xl:text-sm'
+                    className='h-10 w-10 text-md font-semibold text-lg md:text-base lg:text-sm xl:text-sm 2xl:text-lg'
                   >
                     {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
                   </Button>

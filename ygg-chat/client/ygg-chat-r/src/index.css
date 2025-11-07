@@ -353,11 +353,43 @@ body.ygg-no-select * {
   text-overflow: ellipsis;
 }
 
-/* Scroll fade effect - creates smooth fade at top/bottom of scrollable containers */
-.scroll-fade {
-  /* Use mask-image to fade content at the edges */
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, black 5%, black 95%, transparent 100%);
+.scroll-fade-container {
+  position: relative;
+  height: 100%;
+  --scroll-fade-light: rgba(235, 235, 235, 0.181);
+  --scroll-fade-dark: rgba(24, 24, 24, 0.148);
+}
+
+.project-list {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.scroll-fade-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px; /* adjust fade height */
+  pointer-events: none; /* don’t block clicks on items */
+  z-index: 10;
+}
+
+.scroll-fade-overlay--top {
+  top: 0.5px;
+  background: linear-gradient(to bottom, var(--scroll-fade-light), transparent);
+}
+
+.scroll-fade-overlay--bottom {
+  bottom: 0;
+  background: linear-gradient(to top, var(--scroll-fade-light), transparent);
+}
+
+.dark .scroll-fade-overlay--top {
+  background: linear-gradient(to bottom, var(--scroll-fade-dark), transparent);
+}
+
+.dark .scroll-fade-overlay--bottom {
+  background: linear-gradient(to top, var(--scroll-fade-dark), transparent);
 }
 
 @theme {

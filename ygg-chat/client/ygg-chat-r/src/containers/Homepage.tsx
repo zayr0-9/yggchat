@@ -169,15 +169,15 @@ const Homepage: React.FC = () => {
   }
 
   return (
-    <div className='relative bg-zinc-50 h-screen overflow-hidden dark:bg-yBlack-600 flex'>
+    <div className='relative bg-zinc-50 h-screen dark:bg-yBlack-600 flex'>
       {/* Background Video - Light Mode */}
       <video
         autoPlay
         loop
         muted
-        className='absolute inset-0 w-full h-full blur-[3px] dark:blur-[1px] 2xl:dark:blur-[4px] object-cover z-0 dark:hidden'
+        className='absolute inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 dark:hidden'
       >
-        <source src='/video/l1.webm' type='video/webm' />
+        <source src='/video/l2sm.webm' type='video/webm' />
       </video>
 
       {/* Background Video - Dark Mode */}
@@ -185,16 +185,16 @@ const Homepage: React.FC = () => {
         autoPlay
         loop
         muted
-        className='absolute inset-0 w-full h-full blur-[3px] dark:blur-[4px] 2xl:dark:blur-[6px] object-cover z-0 hidden dark:block'
+        className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 hidden dark:block'
       >
         <source src='/video/d1.webm' type='video/webm' />
       </video>
 
       {/* Dark Overlay */}
-      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/20 z-0' />
+      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/40 z-0' />
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
-      <div className='relative z-10 flex-1 h-full flex flex-col overflow-hidden w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
+      <div className='relative z-10 flex-1 h-full flex flex-col w-full mr-2 ml-2 sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
         <div className='py-1 lg:py-1 xl:py-1 2xl:py-2 3xl:py-4 4xl:py-6 w-full  mx-auto shrink-0'>
           <div className='flex items-center justify-baseline'>
             <div className='flex items-center flex-wrap gap-3 rounded-full pl-2 pr-3 py-2'>
@@ -208,7 +208,7 @@ const Homepage: React.FC = () => {
                 alt='Yggdrasil Logo'
                 className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
               />
-              <h1 className=' junicode-bold tracking-wide pb-8 text-[28px] sm:text-[24px] lg:text-[44px] xl:text-[44px] 2xl:text-[70px] 3xl:text-[44px] 4xl:text-[44px] font-bold px-1 dark:text-neutral-100 '>
+              <h1 className=' junicode-bold tracking-wide pb-5 2xl:pb-6 text-[28px] sm:text-[24px] lg:text-[44px] xl:text-[44px] 2xl:text-[70px] 3xl:text-[44px] 4xl:text-[44px] font-bold px-1 dark:text-neutral-100 '>
                 Yggdrasil
               </h1>
             </div>
@@ -267,7 +267,7 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-0 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 acrylic-ultra-light rounded-4xl shadow-[0px_0px_7px_-2.5px_rgba(0,0,0,0.45)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+          <div className='mb-0 z-5000 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-300/20 outline-neutral-50/10 acrylic-ultra-light rounded-4xl shadow-[0px_12px_7px_2.5px_rgba(255,255,255,0.95)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
                 variant='acrylic'
@@ -328,75 +328,79 @@ const Homepage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {/* {error && <p className='text-red-500'>{error}</p>} */}
 
-          <div className='gap-2 sm:gap-1 md:gap-2 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
-            <ul className='scroll-fade space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 3xl:py-14 rounded flex-1 overflow-y-auto pr-2 thin-scrollbar w-full'>
-              {projects.map(project => (
-                <li
-                  key={project.id}
-                  className='rounded-4xl px-3 py-3 sm:px-4 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 bg-transparent cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-transparent hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-transparent dark:hover:outline-neutral-600 group '
-                  onClick={() => handleSelectProject(project)}
-                >
-                  <div className='flex place-items-start justify-between'>
-                    <div className='flex-1'>
-                      <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99'>
-                        <p className='transition-transform duration-100 group-active:scale-99 text-[16px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
-                          {project.name}
-                        </p>
-                      </span>
-                      {project.context && (
-                        <p className='text-sm text-stone-900 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
-                          {project.context}
-                        </p>
-                      )}
+          <div className='gap-2 sm:gap-1 md:gap-2  px-6  items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
+            <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
+              <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 3xl:py-14 rounded flex-1 pr-2 w-full'>
+                {projects.map(project => (
+                  <li
+                    key={project.id}
+                    className='rounded-4xl acrylic-light px-3 py-3 sm:px-4 md:px-4 md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 bg-neutral-50 dark:bg-yBlack-900 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-transparent hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-700/50 dark:hover:bg-transparent dark:hover:outline-neutral-600 group '
+                    onClick={() => handleSelectProject(project)}
+                  >
+                    <div className='flex place-items-start justify-between'>
+                      <div className='flex-1'>
+                        <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99'>
+                          <p className='transition-transform duration-100 group-active:scale-99 text-[16px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
+                            {project.name}
+                          </p>
+                        </span>
+                        {project.context && (
+                          <p className='text-sm text-stone-900 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
+                            {project.context}
+                          </p>
+                        )}
+                      </div>
+                      <div className='flex gap-2'>
+                        <Button
+                          variant='acrylic'
+                          size='circle'
+                          rounded='full'
+                          className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
+                          onClick={
+                            (e => {
+                              ;(e as unknown as React.MouseEvent).stopPropagation()
+                              handleEditProject(project)
+                            }) as unknown as () => void
+                          }
+                        >
+                          <i
+                            className='bx bx-edit text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none '
+                            aria-hidden='true'
+                          ></i>
+                        </Button>
+                        <Button
+                          variant='acrylic'
+                          size='circle'
+                          rounded='full'
+                          className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
+                          onClick={
+                            (e => {
+                              ;(e as unknown as React.MouseEvent).stopPropagation()
+                              handleDeleteProject(project.id)
+                            }) as unknown as () => void
+                          }
+                        >
+                          <i
+                            className='bx bx-trash-alt text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                            aria-hidden='true'
+                          ></i>
+                        </Button>
+                      </div>
                     </div>
-                    <div className='flex gap-2'>
-                      <Button
-                        variant='acrylicul'
-                        size='circle'
-                        rounded='full'
-                        className='group'
-                        onClick={
-                          (e => {
-                            ;(e as unknown as React.MouseEvent).stopPropagation()
-                            handleEditProject(project)
-                          }) as unknown as () => void
-                        }
-                      >
-                        <i
-                          className='bx bx-edit text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none'
-                          aria-hidden='true'
-                        ></i>
-                      </Button>
-                      <Button
-                        variant='acrylicul'
-                        size='circle'
-                        rounded='full'
-                        className='group'
-                        onClick={
-                          (e => {
-                            ;(e as unknown as React.MouseEvent).stopPropagation()
-                            handleDeleteProject(project.id)
-                          }) as unknown as () => void
-                        }
-                      >
-                        <i
-                          className='bx bx-trash-alt text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none'
-                          aria-hidden='true'
-                        ></i>
-                      </Button>
-                    </div>
-                  </div>
-                  {project.created_at && (
-                    <div className='text-xs text-stone-800 dark:text-neutral-300 mt-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
-                      Created: {new Date(project.created_at).toLocaleString()}
-                    </div>
-                  )}
-                </li>
-              ))}
-              {projects.length === 0 && !loading && (
-                <p className='dark:text-neutral-300'>No projects yet. Create your first project to get started!</p>
-              )}
-            </ul>
+                    {project.created_at && (
+                      <div className='text-xs text-stone-800 dark:text-neutral-300 mt-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px]'>
+                        Created: {new Date(project.created_at).toLocaleString()}
+                      </div>
+                    )}
+                  </li>
+                ))}
+                {projects.length === 0 && !loading && (
+                  <p className='dark:text-neutral-300'>No projects yet. Create your first project to get started!</p>
+                )}
+              </ul>
+              <div className='scroll-fade-overlay scroll-fade-overlay--top' aria-hidden='true' />
+              <div className='scroll-fade-overlay scroll-fade-overlay--bottom' aria-hidden='true' />
+            </div>
           </div>
         </div>
       </div>

@@ -254,7 +254,7 @@ const ConversationPage: React.FC = () => {
         muted
         className='absolute inset-0 w-full h-full blur-[3px] dark:blur-[1px] 2xl:dark:blur-[4px] object-cover z-0 dark:hidden'
       >
-        <source src='/video/l1.webm' type='video/webm' />
+        <source src='/video/l2sm.webm' type='video/webm' />
       </video>
 
       {/* Background Video - Dark Mode */}
@@ -262,13 +262,13 @@ const ConversationPage: React.FC = () => {
         autoPlay
         loop
         muted
-        className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[6px] object-cover z-0 hidden dark:block'
+        className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] object-cover z-0 hidden dark:block'
       >
         <source src='/video/d1.webm' type='video/webm' />
       </video>
 
       {/* Dark Overlay */}
-      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/20 z-0' />
+      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/50 z-0' />
       {/* Recent conversations sidebar */}
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
@@ -329,7 +329,7 @@ const ConversationPage: React.FC = () => {
                 size='large'
                 rounded='full'
                 onClick={handleNewConversation}
-                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+                className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-300/20'
               >
                 <p className='transition-transform duration-100 group-active:scale-95'>New Chat</p>
               </Button>
@@ -345,14 +345,14 @@ const ConversationPage: React.FC = () => {
                   { value: 'created', label: 'Created' },
                   { value: 'name', label: 'Name' },
                 ]}
-                className='w-28 transition-transform duration-70 active:scale-95'
+                className='w-28 ml-1 transition-transform duration-70 active:scale-95'
               />
               <Button
                 variant='acrylic'
                 size='circle'
                 rounded='full'
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className='shrink-0 group'
+                className='shrink-0 ml-1 group'
               >
                 <i
                   className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none`}
@@ -366,7 +366,7 @@ const ConversationPage: React.FC = () => {
                 rounded='full'
                 onClick={handleRefreshConversations}
                 disabled={isRefetching}
-                className='group dark:outline-2 rounded-full dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-800'
+                className='group ml-1 dark:outline-2 rounded-full transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-300/20'
                 title='Refresh conversations from server'
               >
                 <i
@@ -381,42 +381,46 @@ const ConversationPage: React.FC = () => {
 
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
-          <div className='flex gap-4 pt-2 lg:pt-5 items-start w-full flex-1 overflow-hidden flex-col'>
-            <ul className='space-y-2 px-2 py-6 rounded 2xl:py-10 flex-1 overflow-y-auto no-scrollbar scroll-fade w-full'>
-              {sortedConversations.map(conv => (
-                <li
-                  key={conv.id}
-                  className='rounded-4xl px-3 py-3 sm:p-2 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
-                  onClick={() => handleSelect(conv)}
-                >
-                  <div className='flex items-center justify-between'>
-                    <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
-                      {conv.title || `Conversation ${conv.id}`}
-                    </span>
-                    <Button
-                      variant='acrylic'
-                      size='smaller'
-                      onClick={
-                        (e => {
-                          ;(e as unknown as React.MouseEvent).stopPropagation()
-                          handleDelete(conv)
-                        }) as unknown as () => void
-                      }
-                    >
-                      <i className='bx bx-trash-alt text-lg' aria-hidden='true'></i>
-                    </Button>
-                  </div>
-                  {conv.created_at && (
-                    <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[11px] md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[16px]'>
-                      {new Date(conv.created_at).toLocaleString()}
+          <div className='gap-2 sm:gap-1 md:gap-2  px-6  items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
+            <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
+              <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-10 3xl:py-14 rounded flex-1 pr-2 w-full'>
+                {sortedConversations.map(conv => (
+                  <li
+                    key={conv.id}
+                    className='rounded-4xl px-3 py-3 sm:p-2 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-600 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
+                    onClick={() => handleSelect(conv)}
+                  >
+                    <div className='flex items-center justify-between'>
+                      <span className='font-semibold  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
+                        {conv.title || `Conversation ${conv.id}`}
+                      </span>
+                      <Button
+                        variant='outline2'
+                        size='circle'
+                        rounded='full'
+                        className='acrylic-ultra-light dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
+                        onClick={
+                          (e => {
+                            ;(e as unknown as React.MouseEvent).stopPropagation()
+                            handleDelete(conv)
+                          }) as unknown as () => void
+                        }
+                      >
+                        <i className='bx bx-trash-alt text-lg' aria-hidden='true'></i>
+                      </Button>
                     </div>
-                  )}
-                </li>
-              ))}
-              {sortedConversations.length === 0 && !loading && (
-                <p className='dark:text-neutral-300 rounded-3xl p-4 acrylic-light'>No conversations yet.</p>
-              )}
-            </ul>
+                    {conv.created_at && (
+                      <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[11px] md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[16px]'>
+                        {new Date(conv.created_at).toLocaleString()}
+                      </div>
+                    )}
+                  </li>
+                ))}
+                {sortedConversations.length === 0 && !loading && (
+                  <p className='dark:text-neutral-300 rounded-3xl p-4 acrylic-light'>No conversations yet.</p>
+                )}
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -430,7 +434,7 @@ const ConversationPage: React.FC = () => {
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && conversationToDelete && (
         <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
-          <div className='bg-neutral-100 text-neutral-900 dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'>
+          <div className='bg-neutral-100 text-neutral-900 mica-medium dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'>
             <h3 className='text-xl font-semibold mb-2 dark:text-neutral-100'>Delete Conversation?</h3>
             <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-4'>
               Are you sure you want to delete "
@@ -440,7 +444,7 @@ const ConversationPage: React.FC = () => {
               "? This action cannot be undone.
             </p>
             <div className='flex gap-3 justify-end'>
-              <Button variant='acrylic' size='medium' className='group' onClick={handleCancelDelete}>
+              <Button variant='acrylic' size='circle' rounded='full' className='group' onClick={handleCancelDelete}>
                 <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
               </Button>
               <Button

@@ -670,7 +670,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         {/* Header with role */}
         <div className='flex items-center justify-between mb-0'>
           <div className='flex items-center justify-between w-full'>
-            <span className={`text-xs sm:text-sm 3xl:text-base font-semibold ${styles.role}`}>{styles.roleText}</span>
+            <span className={`text-xs mt-3 sm:text-sm 3xl:text-base font-semibold ${styles.role}`}>
+              {styles.roleText}
+            </span>
           </div>
         </div>
 

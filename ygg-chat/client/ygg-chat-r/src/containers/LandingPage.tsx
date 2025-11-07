@@ -40,7 +40,7 @@ const LandingPage: React.FC = () => {
         muted
         className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[2px] object-cover dark:hidden'
       >
-        <source src='/video/l1.webm' type='video/webm' />
+        <source src='/video/l2sm.webm' type='video/webm' />
       </video>
 
       {/* Video Background - Dark Mode */}
@@ -152,13 +152,13 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
       <div className='relative z-10 h-full flex flex-col items-center justify-center px-4 sm:px-6'>
         {/* Main Title */}
 
-        <div className=' mr-6 flex items-center flex-wrap gap-10 rounded-full'>
+        <div className='mr-2 lg:mr-6 flex items-center flex-wrap gap-6 lg:gap-10 rounded-full'>
           <img
             src='/img/logo-l-thick.svg'
             alt='Yggdrasil Logo'
-            className='w-18 h-18 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-32 2xl:h-32 dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
+            className='w-18 h-18 sm:w-14 sm:h-14 md:w-18 md:h-18 lg:w-26 lg:h-26 xl:w-28 xl:h-28 2xl:w-36 2xl:h-36 dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
           />
-          <h1 className='jaini-regular pb-2 text-5xl sm:text-6xl md:text-7xl lg:text-[104px] font-bold text-white dark:text-white text-center mb-4 md:mb-6 drop-shadow-lg'>
+          <h1 className='jaini-regular pb-2 text-[64px] sm:text-6xl md:text-7xl lg:text-[104px] font-bold text-white dark:text-white text-center mb-4 md:mb-6 drop-shadow-lg'>
             yggdrasil
           </h1>
         </div>

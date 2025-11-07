@@ -61,14 +61,14 @@
 
 /* Acrylic Light */
 .acrylic-light {
-  backdrop-filter: blur(40px);
-  -webkit-backdrop-filter: blur(40px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(42px);
   background-color: rgba(247, 247, 247, 0.557); /* 65% opacity */
   border: 1px ridge #e5e5e5cb;
 }
 
 .dark .acrylic-light {
-  background-color: rgba(24, 24, 24, 0.315);
+  background-color: rgba(24, 24, 24, 0.015);
 }
 
 /* Acrylic Medium (Default) - Microsoft's standard implementation */
@@ -111,21 +111,29 @@
 .acrylic-subtle:hover,
 .acrylic-light:hover,
 .acrylic:hover,
-.acrylic-medium:hover,
 .acrylic-strong:hover,
 .acrylic-extreme:hover {
   background-color: rgba(247, 247, 247, 0.68);
 }
 
 .dark .acrylic-subtle:hover,
-.dark .acrylic-light:hover,
 .dark .acrylic:hover,
 .dark .acrylic-medium:hover,
 .dark .acrylic-strong:hover,
 .dark .acrylic-extreme:hover {
-  background-color: rgba(24, 24, 24, 0.5);
+  background-color: rgba(24, 24, 24, 0.215);
 }
 
+.dark .acrylic-medium:hover {
+  background-color: rgba(24, 24, 24, 0.515);
+}
+.acrylic-medium:hover {
+  background-color: rgba(247, 247, 247, 0.88);
+}
+
+.dark .acrylic-light:hover {
+  background-color: rgba(24, 24, 24, 0.215);
+}
 /* Ensure content stays on top of the effect */
 .acrylic-ultra-light > *,
 .acrylic-subtle > *,
