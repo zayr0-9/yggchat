@@ -571,7 +571,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         case 'user':
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-1 border-l-yellow-500 dark:border-l-yPurple-400 bg-neutral-50 dark:bg-yBlack-800'
+              ? 'bg-gray-800 border-l-0 border-l-yellow-500 dark:border-l-yPurple-400 bg-neutral-50 dark:bg-yBlack-800'
               : transparentContainer,
             role: 'text-indigo-800 dark:text-yPurple-50',
             roleText: 'User',
@@ -579,7 +579,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         case 'assistant':
           return {
             container: useColored
-              ? 'bg-gray-850 border-l-1 border-l-blue-500  dark:border-l-yBrown-400 bg-neutral-50  dark:bg-neutral-900'
+              ? 'bg-gray-850 border-l-0 border-l-blue-500 dark:border-l-yBrown-400 bg-neutral-50  dark:bg-neutral-900'
               : transparentContainer,
             role: 'text-lime-800 dark:text-yBrown-50',
             roleText: 'Assistant',
@@ -587,7 +587,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         case 'system':
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-1 border-l-purple-500 bg-purple-50 dark:bg-neutral-800'
+              ? 'bg-gray-800 border-l-0 border-l-purple-500 bg-purple-50 dark:bg-neutral-800'
               : transparentContainer,
             role: 'text-purple-400',
             roleText: 'System',
@@ -652,7 +652,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           }
           <pre
             ref={preRef}
-            className={`not-prose overflow-auto rounded-lg ring-0 outline-none shadow-none bg-gray-100 text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-500`}
+            className={`not-prose overflow-auto rounded-2xl ring-0 outline-none bg-gray-100 text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]`}
             {...props}
           >
             {children}
@@ -664,13 +664,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     return (
       <div
         id={`message-${id}`}
-        className={`group px-2 sm:px-3 md:px-4 mb-2 sm:mb-3 md:mb-4 ${styles.container} ${width} transition-all duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
+        className={`group px-2 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-all duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
       >
         {/* Header with role */}
-        <div className='flex items-center justify-between mb-0'>
-          <div className='flex items-center justify-between w-full'>
-            <span className={`text-xs mt-3 sm:text-sm 3xl:text-base font-semibold ${styles.role}`}>
+        <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
+          <div className='flex items-center justify-between max-w-32 dark:bg-neutral-800 shadow-[0px_0px_2.5px_-0.5px_rgba(0,0,0,0.50)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] rounded-4xl px-3 py-2'>
+            <span
+              className={`text-[14px] mt-0 sm:text-[14px] lg:text-[16px] 3xl:text-base font-semibold ${styles.role}`}
+            >
               {styles.roleText}
             </span>
           </div>
@@ -678,7 +680,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Tool calls block */}
         {Array.isArray(toolCalls) && toolCalls.length > 0 && (
-          <div className='mb-3 rounded-md border border-blue-200 bg-blue-50 p-2 sm:p-3 dark:border-blue-900/40 dark:bg-neutral-900'>
+          <div className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'>
             <div className='mb-2 flex items-center justify-between'>
               <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300'>
                 Tool Calls ({toolCalls.length})
@@ -696,17 +698,17 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               </Button>
             </div>
             {showToolCalls && (
-              <div id={`tool-calls-content-${id}`} className='space-y-2 text-xs sm:text-sm 3xl:text-base'>
+              <div
+                id={`tool-calls-content-${id}`}
+                className='space-y-3 text-xs sm:text-sm xl:text-[14px] 3xl:text-base '
+              >
                 {toolCalls.map((toolCall, idx) => (
-                  <div
-                    key={toolCall.id || idx}
-                    className='bg-white dark:bg-neutral-800 p-2 rounded-md border border-blue-100 dark:border-blue-900/30'
-                  >
+                  <div key={toolCall.id || idx} className='bg-neutral-50 rounded-2xl dark:bg-neutral-900 py-2 '>
                     <div className='flex items-center justify-between mb-2'>
                       <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
-                      <span className='text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'>
+                      {/* <span className='text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'>
                         {toolCall.status}
-                      </span>
+                      </span> */}
                     </div>
                     {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
                       <div className='text-xs space-y-1'>
@@ -735,15 +737,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Reasoning / thinking block */}
         {typeof thinking === 'string' && thinking.trim().length > 0 && (
-          <div className='mb-3 rounded-md border border-amber-200 bg-amber-50 px-2 sm:px-3 dark:border-amber-900/40 dark:bg-neutral-900'>
+          <div className='mb-3 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-neutral-900/40 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'>
             <div className='mb-2 flex items-center justify-between'>
-              <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-amber-800 dark:text-amber-300'>
+              <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
                 Reasoning
               </div>
               <Button
                 type='button'
                 onClick={() => setShowThinking(s => !s)}
-                className='ml-2 text-xs px-2 py-1 border-1 border-amber-300 text-amber-800 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-neutral-800'
+                className='ml-2 text-xs px-2 py-1 border-1 border-neutral-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-neutral-800'
                 size='smaller'
                 variant='outline'
                 aria-expanded={showThinking}
@@ -895,7 +897,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Message content - only show if no contentBlocks present (to avoid duplication with content_blocks last element) */}
         {(!contentBlocks || contentBlocks.length === 0) && (
-          <div className='prose max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px]'>
+          <div className='prose px-4 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px]'>
             {editingState ? (
               <TextArea
                 value={editContent}
@@ -931,7 +933,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             )}
           </div>
         )}
-
+        {modelName && (
+          <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
+        )}
         {/* Actions row (at bottom) */}
         <div className='flex items-center justify-end mt-3 mb-2'>
           <div ref={moreButtonRef} className='relative'>
@@ -966,7 +970,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   </div>
                 ) : (
                   <div className='p-2 sm:p-3'>
-                    <div className='flex items-center justify-between mb-2'>
+                    <div className='flex items-center justify-between mb-1'>
                       <h3 className='text-xs sm:text-sm 3xl:text-base font-semibold text-gray-700 dark:text-gray-300'>
                         Message Info
                       </h3>
@@ -1047,9 +1051,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           </div>
         )}
 
-        {modelName && (
-          <div className='mt-0 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
-        )}
         {/* {timestamp && formatTimestamp(timestamp) && (
           <div className='text-[9px] sm:text-xs 3xl:text-sm text-stone-400 pt-0.5 flex justify-end'>
             {formatTimestamp(timestamp)}

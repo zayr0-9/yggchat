@@ -15,9 +15,8 @@
   position: relative;
   isolation: isolate;
   /* border: 1px solid #e1e6ea; */
-  box-shadow:
-    0px 2.6px 7.6px rgba(0, 0, 0, 0.04),
-    0px 0px 16.4px rgba(0, 0, 0, 0.12);
+  box-shadow: 0px 0px 5.6px rgba(0, 0, 0, 0.14);
+  /* 0px 0px 16.4px rgba(0, 0, 0, 0.12); */
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease;
@@ -52,7 +51,7 @@
 }
 
 .dark .mica-light {
-  background-color: rgba(35, 39, 52, 0.78);
+  background-color: rgba(32, 32, 32, 0.78);
 }
 
 /* Mica Medium (Default) - Microsoft's standard implementation */
