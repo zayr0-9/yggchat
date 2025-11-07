@@ -180,7 +180,7 @@ export const Select: React.FC<SelectProps> = ({
         ref={btnRef}
         variant='acrylic'
         size='large'
-        className='w-full justify-between'
+        className={`w-full justify-between ${sizeClass}`}
         aria-haspopup='listbox'
         aria-expanded={open}
         onClick={() => !disabled && setOpen(o => !o)}
