@@ -76,6 +76,12 @@ const Homepage: React.FC = () => {
   const cycleTheme = () => {
     setThemeMode(prev => (prev === 'Light' ? 'Dark' : prev === 'Dark' ? 'System' : 'Light'))
   }
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
 
   // Close mobile options menu on outside click or Escape key
   useEffect(() => {
