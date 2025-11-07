@@ -14,9 +14,9 @@
 .mica-extreme {
   position: relative;
   isolation: isolate;
-  border: 1px solid #e1e6ea;
+  /* border: 1px solid #e1e6ea; */
   box-shadow:
-    0px 25.6px 57.6px rgba(0, 0, 0, 0.14),
+    0px 2.6px 7.6px rgba(0, 0, 0, 0.04),
     0px 0px 16.4px rgba(0, 0, 0, 0.12);
   transition:
     background-color 0.2s ease,
@@ -41,7 +41,7 @@
 }
 
 .dark .mica-subtle {
-  background-color: rgba(35, 39, 52, 0.7);
+  background-color: rgba(31, 31, 31, 0.815);
 }
 
 /* Mica Light */
@@ -100,7 +100,6 @@
   background-color: rgba(247, 249, 252, 0.9);
 } */
 
-.dark .mica-subtle:hover,
 .dark .mica-light:hover,
 .dark .mica:hover,
 .dark .mica-medium:hover,
@@ -109,6 +108,9 @@
   background-color: rgba(15, 15, 15, 0.45);
 }
 
+.dark .mica-subtle:hover {
+  background-color: rgb(31, 31, 31);
+}
 /* Ensure content stays on top of the effect */
 .mica-subtle > *,
 .mica-light > *,

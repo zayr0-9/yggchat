@@ -198,7 +198,7 @@ export const Select: React.FC<SelectProps> = ({
             ref={listRef}
             role='listbox'
             tabIndex={-1}
-            className={`fixed z-[100] rounded-lg overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-neutral-200/80 dark:bg-yBlack-900 shadow-xl`}
+            className={`fixed z-[100] rounded-lg overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-neutral-100 dark:bg-yBlack-900 shadow-xl`}
             style={{
               maxHeight: listMaxHeight,
               top: `${dropdownPosition.top}px`,
@@ -245,8 +245,8 @@ export const Select: React.FC<SelectProps> = ({
                         handleSelect(opt.value)
                       }}
                       onClick={() => handleSelect(opt.value)}
-                      className={`w-full line-clamp-3 text-left px-2 py-2 text-[13px] sm:text-[13px] md:text-[13px] lg:text-[13px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] transition-colors
-                      ${isActive ? 'bg-neutral-100/60 dark:bg-yBlack-500' : ''}
+                      className={`w-full line-clamp-3 rounded-xl hover:scale-103 text-left px-2 py-2 text-[13px] sm:text-[13px] md:text-[13px] lg:text-[13px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[20px] transition-colors
+                      ${isActive ? 'bg-neutral-100 dark:bg-yBlack-500' : ''}
                       ${isSelected ? 'font-medium' : ''}
                       text-stone-800 dark:text-stone-100`}
                     >

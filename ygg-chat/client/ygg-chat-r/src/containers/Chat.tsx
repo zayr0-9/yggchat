@@ -31,8 +31,8 @@ import {
   selectSelectedModel,
   selectSendingState,
   selectStreamState,
-  sendCCMessage,
   sendCCBranch,
+  sendCCMessage,
   sendMessage,
   updateConversationTitle,
   updateMessage,
@@ -1113,7 +1113,9 @@ function Chat() {
               if (recentCache) {
                 queryClient.setQueryData(
                   ['conversations', 'recent'],
-                  recentCache.map(conv => (conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv))
+                  recentCache.map(conv =>
+                    conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
+                  )
                 )
               }
 
@@ -1238,7 +1240,7 @@ function Chat() {
           const lastExAgentSessionId = findLastExAgentSession(selectedPath)
 
           const branchParentId =
-            originalMessage.role === 'ex_agent' ? originalMessage.id : originalMessage.parent_id ?? null
+            originalMessage.role === 'ex_agent' ? originalMessage.id : (originalMessage.parent_id ?? null)
 
           // Always use sendCCBranch for branching operations, even when parentId is null (root branch)
           dispatch(
@@ -1749,9 +1751,7 @@ function Chat() {
         if (msg.role === 'ex_agent' && msg.content_blocks) {
           try {
             if (typeof msg.content_blocks === 'object') {
-              contentBlocks = Array.isArray(msg.content_blocks)
-                ? msg.content_blocks
-                : [msg.content_blocks]
+              contentBlocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [msg.content_blocks]
             } else if (typeof msg.content_blocks === 'string') {
               const parsed = JSON.parse(msg.content_blocks)
               contentBlocks = Array.isArray(parsed) ? parsed : [parsed]
@@ -1810,8 +1810,8 @@ function Chat() {
       >
         {/* Conversation Title Editor */}
         {currentConversationId && (
-          <div className='flex flex-col gap-2 mt-2 mb-1 xl:mb-1 xl:mt-2 2xl:mb-2 2xl:mt-2 mx-2 rounded-xl pr-2 shadow-[0_0px_12px_6px_rgba(0,0,0,0.06),0_0px_12px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65),0_6px_12px_-4px_rgba(0,0,0,0.02)]'>
-            <div className='flex items-center gap-2 py-1 xl:py-1 2xl:p-1 '>
+          <div className='flex flex-col z-50 gap-2 mt-2 mb-1 xl:mb-1 xl:mt-2 2xl:mb-0 bg-transparent 2xl:mt-1 mx-2 rounded-xl pr-2'>
+            <div className=' rounded-xl flex items-center gap-2 py-1 xl:py-1 2xl:p-1 mt-1 bg-transparent shadow-[0_2px_12px_6px_rgba(0,0,0,0.06),0_0px_12px_-4px_rgba(0,0,0,0.02)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65),0_6px_12px_-4px_rgba(0,0,0,0.02)] mica-subtle'>
               <Button
                 variant='outline2'
                 size='medium'
@@ -2165,16 +2165,20 @@ function Chat() {
                     </Button>
                   )}
                   {/* Claude Code working directory input (appears when CC mode is active, hidden in web mode) */}
-                  {ccModeAvailable && ccMode && currentConversationId && !sendingState.streaming && !sendingState.sending && (
-                    <input
-                      type='text'
-                      value={ccCwd}
-                      onChange={e => setCcCwd(e.target.value)}
-                      placeholder='Working directory (optional)'
-                      className='px-3 py-2 text-sm border text-neutral-50 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500'
-                      title='Specify the working directory for Claude Code agent'
-                    />
-                  )}
+                  {ccModeAvailable &&
+                    ccMode &&
+                    currentConversationId &&
+                    !sendingState.streaming &&
+                    !sendingState.sending && (
+                      <input
+                        type='text'
+                        value={ccCwd}
+                        onChange={e => setCcCwd(e.target.value)}
+                        placeholder='Working directory (optional)'
+                        className='px-3 py-2 text-sm border text-neutral-50 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500'
+                        title='Specify the working directory for Claude Code agent'
+                      />
+                    )}
                   {!currentConversationId ? (
                     'Creating...'
                   ) : sendingState.streaming ? (
