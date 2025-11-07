@@ -33,26 +33,6 @@ const LandingPage: React.FC = () => {
 
   return (
     <div className='relative w-full h-screen bg-gradient-to-b from-cyan-400 to-cyan-500 dark:from-yBlack-600 dark:to-yBlack-700 overflow-hidden'>
-      {/* Video Background - Light Mode */}
-      <video
-        autoPlay
-        loop
-        muted
-        className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[2px] object-cover dark:hidden'
-      >
-        <source src='/video/l3.webm' type='video/webm' />
-      </video>
-
-      {/* Video Background - Dark Mode */}
-      <video
-        autoPlay
-        loop
-        muted
-        className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[2px] object-cover hidden dark:block'
-      >
-        <source src='/video/d2.webm' type='video/webm' />
-      </video>
-
       {/* Dark Backdrop Filter */}
       <div className='absolute inset-0 w-full h-full bg-black/40 dark:bg-black/40' />
 

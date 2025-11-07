@@ -176,26 +176,6 @@ const Homepage: React.FC = () => {
 
   return (
     <div className='relative bg-zinc-50 h-screen dark:bg-yBlack-600 flex'>
-      {/* Background Video - Light Mode */}
-      <video
-        autoPlay
-        loop
-        muted
-        className='absolute bottom-10 inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 dark:hidden'
-      >
-        <source src='/video/l3.webm' type='video/webm' />
-      </video>
-
-      {/* Background Video - Dark Mode */}
-      <video
-        autoPlay
-        loop
-        muted
-        className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 hidden dark:block'
-      >
-        <source src='/video/d2.webm' type='video/webm' />
-      </video>
-
       {/* Dark Overlay */}
       <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/40 z-0' />
       {!isMobile && <SideBar limit={12} projects={allProjects} />}

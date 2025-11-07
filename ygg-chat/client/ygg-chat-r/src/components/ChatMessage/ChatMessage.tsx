@@ -652,7 +652,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           }
           <pre
             ref={preRef}
-            className={`not-prose overflow-auto rounded-2xl ring-0 outline-none bg-gray-100 text-sm lg:text-lg text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]`}
+            className={`not-prose thin-scrollbar overflow-auto rounded-2xl ring-0 outline-none bg-gray-100 text-sm lg:text-lg text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]`}
             {...props}
           >
             {children}

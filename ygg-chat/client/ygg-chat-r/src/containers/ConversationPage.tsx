@@ -255,25 +255,6 @@ const ConversationPage: React.FC = () => {
 
   return (
     <div className='bg-zinc-50 dark:bg-zinc-900 flex overflow-hidden h-screen'>
-      <video
-        autoPlay
-        loop
-        muted
-        className='absolute inset-0 w-full h-full blur-[3px] dark:blur-[1px] 2xl:dark:blur-[4px] object-cover z-0 dark:hidden'
-      >
-        <source src='/video/l3.webm' type='video/webm' />
-      </video>
-
-      {/* Background Video - Dark Mode */}
-      <video
-        autoPlay
-        loop
-        muted
-        className='absolute inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] object-cover z-0 hidden dark:block'
-      >
-        <source src='/video/d2.webm' type='video/webm' />
-      </video>
-
       {/* Dark Overlay */}
       <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/50 z-0' />
       {/* Recent conversations sidebar */}

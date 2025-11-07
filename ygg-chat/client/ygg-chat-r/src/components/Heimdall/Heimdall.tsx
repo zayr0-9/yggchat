@@ -22,8 +22,8 @@ import { makeSelectConversationById } from '../../features/conversations/convers
 // import { selectSelectedProject } from '../../features/projects/projectSelectors'
 import { Message } from '@/features/chats'
 import { ConversationId, MessageId } from '../../../../../shared/types'
-import { useResearchNotes } from '../../hooks/useQueries'
 import { useIsMobile } from '../../hooks/useMediaQuery'
+import { useResearchNotes } from '../../hooks/useQueries'
 import type { RootState } from '../../store/store'
 import { parseId } from '../../utils/helpers'
 import stripMarkdownToText from '../../utils/markdownStripper'
@@ -2415,7 +2415,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           <div className='text-sm text-stone-800 bg-neutral-50 dark:bg-neutral-800 dark:text-stone-200 mb-1'>
             {selectedNode.sender === 'user' ? 'User' : 'Assistant'}
           </div>
-          <div className={`prose prose-sm dark:prose-invert max-w-none text-sm ${isMobile ? 'max-h-80 overflow-y-auto thin-scrollbar' : 'overflow-hidden ygg-line-clamp-15'}`}>
+          <div
+            className={`prose prose-sm dark:prose-invert max-w-none text-sm ${isMobile ? 'max-h-80 overflow-y-auto thin-scrollbar' : 'overflow-hidden ygg-line-clamp-15'}`}
+          >
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
               {selectedNode.message}
             </ReactMarkdown>

@@ -2,12 +2,15 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { LiquidGlassSVG } from './components/LiquidGlassSVG'
 import ProtectedRoute from './components/ProtectedRoute'
+import VideoBackground from './components/VideoBackground'
 import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, Settings } from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 function App() {
   return (
     <BrowserRouter>
+      {/* Persistent video background across all routes */}
+      <VideoBackground />
       {/* SVG filters for liquid glass effect */}
       <LiquidGlassSVG />
       {/* Establish IDE Context WebSocket globally so it's not tied to any specific page */}
