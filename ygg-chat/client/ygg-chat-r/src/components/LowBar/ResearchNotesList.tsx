@@ -212,7 +212,7 @@ export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({
         {isLoading ? (
           <div className='text-center py-4 text-stone-600 dark:text-stone-400'>Loading notes...</div>
         ) : notes.length === 0 ? (
-          <div className='text-center py-4 rounded-2xl acrylic-light text-stone-900 dark:text-stone-400'>
+          <div className='text-center py-2 rounded-2xl acrylic-light text-stone-900 dark:text-stone-400'>
             No research notes yet. Create notes by adding them to your conversations.
           </div>
         ) : (
@@ -318,7 +318,7 @@ export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({
             {isLoading ? (
               <div className='text-center py-4 text-stone-600 dark:text-stone-400'>Loading notes...</div>
             ) : notes.length === 0 ? (
-              <div className='text-center py-4 text-stone-900 rounded-4xl acrylic-light dark:text-stone-400'>
+              <div className='text-center py-2 text-stone-900 rounded-4xl acrylic-light dark:text-stone-400'>
                 No research notes yet. Create notes by adding them to your conversations.
               </div>
             ) : (
