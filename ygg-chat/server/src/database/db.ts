@@ -354,6 +354,20 @@ export function initializeDatabase() {
     // Column already exists, ignore the error
   }
 
+  // Add migration for research_note column on conversations if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE conversations ADD COLUMN research_note TEXT`)
+  } catch (error) {
+    // Column already exists, ignore the error
+  }
+
+  // Add migration for cwd column on conversations if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE conversations ADD COLUMN cwd TEXT`)
+  } catch (error) {
+    // Column already exists, ignore the error
+  }
+
   // Add migration for plain_text_content on messages if it doesn't exist
   try {
     db.exec(`ALTER TABLE messages ADD COLUMN plain_text_content TEXT`)
@@ -544,6 +558,9 @@ export function initializeStatements() {
     ),
     updateConversationContext: db.prepare(
       'UPDATE conversations SET conversation_context = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ),
+    updateConversationResearchNote: db.prepare(
+      'UPDATE conversations SET research_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ),
     getConversationByProjectId: db.prepare('SELECT * FROM conversations WHERE project_id = ?'),
     getConversationContext: db.prepare('SELECT conversation_context FROM conversations WHERE id = ?'),

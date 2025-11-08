@@ -453,6 +453,26 @@ router.get(
   })
 )
 
+// Get all research notes for user
+router.get(
+  '/users/:userId/research-notes',
+  asyncHandler(async (req, res) => {
+    const userId = req.params.userId
+    const conversations = ConversationService.getByUser(userId)
+    // Filter to only conversations with research notes
+    const notesData = conversations
+      .filter(conv => conv.research_note && conv.research_note.trim().length > 0)
+      .map(conv => ({
+        id: conv.id,
+        title: conv.title,
+        research_note: conv.research_note,
+        updated_at: conv.updated_at,
+        project_id: conv.project_id || null,
+      }))
+    res.json(notesData)
+  })
+)
+
 //get conversation by projectID
 router.get(
   '/conversations/project/:projectId',
@@ -651,6 +671,34 @@ router.patch(
     res.json(updated)
   })
 )
+
+// Update conversation research note
+router.patch(
+  '/conversations/:id/research-note',
+  asyncHandler(async (req, res) => {
+    const conversationId = req.params.id
+    const { researchNote } = req.body as { researchNote?: string | null }
+
+    const existing = ConversationService.getById(conversationId)
+    if (!existing) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+
+    if (typeof researchNote === 'undefined') {
+      return res.status(400).json({ error: 'researchNote is required (string or null)' })
+    }
+    if (researchNote !== null && typeof researchNote !== 'string') {
+      return res.status(400).json({ error: 'researchNote must be a string or null' })
+    }
+
+    const normalizedResearchNote =
+      typeof researchNote === 'string' && researchNote.trim().length === 0 ? null : (researchNote as string | null)
+
+    const updated = ConversationService.updateResearchNote(conversationId, normalizedResearchNote)
+    res.json(updated)
+  })
+)
+
 // Clone conversation
 router.post(
   '/conversations/:id/clone',
