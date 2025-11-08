@@ -38,7 +38,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
   state = 'default',
   errorMessage,
   maxLength = 2000000,
-  width = 'max-w-3xl',
+  width = 'max-w-full',
   className = '',
   minRows = 1,
   maxRows = 25,

@@ -194,7 +194,7 @@ const Homepage: React.FC = () => {
                 alt='Yggdrasil Logo'
                 className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
               />
-              <h1 className=' junicode-bold tracking-wide pb-5 2xl:pb-6 text-[28px] sm:text-[24px] lg:text-[44px] xl:text-[44px] 2xl:text-[70px] 3xl:text-[44px] 4xl:text-[44px] font-bold px-1 dark:text-neutral-100 '>
+              <h1 className=' junicode-bold tracking-wide pb-5 2xl:pb-6 text-[28px] sm:text-[24px] lg:text-[44px] xl:text-[44px] 2xl:text-[70px] 3xl:text-[70px] 4xl:text-[44px] font-bold px-1 dark:text-neutral-100 '>
                 Yggdrasil
               </h1>
             </div>

@@ -189,8 +189,8 @@ export const Select: React.FC<SelectProps> = ({
         onKeyDown={onKeyDown}
         disabled={disabled}
       >
-        <span className='truncate text-left flex-1'>
-          {selected ? selected.label : <span className='text-neutral-500  dark:text-neutral-400'>{placeholder}</span>}
+        <span className='truncate text-left flex-1  3xl:text-[17px]'>
+          {selected ? selected.label : <span className='text-neutral-500 dark:text-neutral-400'>{placeholder}</span>}
         </span>
         <i className={`bx bx-chevron-down transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden='true' />
       </Button>

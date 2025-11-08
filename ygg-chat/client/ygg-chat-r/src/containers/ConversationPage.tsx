@@ -276,7 +276,7 @@ const ConversationPage: React.FC = () => {
                   aria-hidden='true'
                 ></i>
               </Button>
-              <h1 className='text-[24px] pl-1 sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[34px] 3xl:text-[22px] 4xl:text-[22px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
+              <h1 className='text-[26px] pl-1 sm:text-[28px] lg:text-[28px] xl:text-[34px] 2xl:text-[34px] 3xl:text-[44px] 4xl:text-[44px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
                 {selectedProject ? `${selectedProject.name}` : 'Conversations'}
               </h1>
               {/* {selectedProject && (

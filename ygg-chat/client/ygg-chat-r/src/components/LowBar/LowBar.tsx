@@ -178,24 +178,26 @@ export const LowBar: React.FC<LowBarProps> = ({
 
   return (
     <div
-      className={`fixed bottom-4 right-4 z-50 transition-all duration-300 ease-in-out ${
+      className={`fixed bottom-12 right-4 z-50 transition-all duration-300 ease-in-out ${
         isExpanded
           ? isMobile
             ? 'w-[95%] h-[75%]'
             : 'w-[30%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[55%] 2xl:w-[35%]'
           : isMobile
             ? 'w-[40%] h-[35px]'
-            : 'w-[15%] h-[38px]'
+            : 'w-[15%] h-[48px]'
       }`}
     >
       {/* Container with shadow and border */}
-      <div className='h-full flex flex-col backdrop-blur-sm dark:bg-transparent border border-transparent dark:border-neutral-900 rounded-3xl overflow-hidden shadow-[0px_0px_3px_1px_rgba(0,0,0,0.09)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700'>
+      <div className='h-full flex flex-col dark:bg-transparent border border-transparent dark:border-neutral-900 rounded-3xl overflow-hidden shadow-[0px_0px_3px_1px_rgba(0,0,0,0.09)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700'>
         {/* Header bar (always visible) */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`flex items-center justify-between px-4 py-2 ${isExpanded ? 'mt-3 mx-2' : ''} bg-transparent acrylic-light dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200 `}
+          className={`flex items-center rounded-full justify-between px-4  ${isExpanded ? 'mt-3 mx-2 py-2' : 'py-3 no-scrollbar'} bg-transparent acrylic-light dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200 `}
         >
-          <div className='text-sm font-medium text-stone-800 dark:text-stone-200 '>Notes</div>
+          <div className='text-sm 2xl:text-[14px] 3xl:text-[16px] font-medium text-stone-800 dark:text-stone-200 '>
+            Notes
+          </div>
           {isExpanded ? (
             <ChevronDown className='w-4 h-4 text-stone-600 dark:text-stone-300' />
           ) : (
@@ -214,7 +216,7 @@ export const LowBar: React.FC<LowBarProps> = ({
                   className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
                     activeTab === 'note'
                       ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)] dark:outline-neutral-800'
-                      : 'bg-transparent text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+                      : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
                   }`}
                 >
                   Note
@@ -234,7 +236,7 @@ export const LowBar: React.FC<LowBarProps> = ({
 
             {/* Content area based on active tab */}
             <div
-              className='flex-1 p-3 pb-4 overflow-hidden thin-scrollbar'
+              className='flex-1 flex flex-col p-3 pb-4 overflow-hidden thin-scrollbar'
               data-heimdall-wheel-exempt='true'
               data-heimdall-contextmenu-exempt='true'
             >
@@ -257,7 +259,7 @@ export const LowBar: React.FC<LowBarProps> = ({
                   value={localNote}
                   onChange={handleNoteChange}
                   placeholder='Enter research notes for this conversation...'
-                  className='w-full h-full resize-none'
+                  className='w-full resize-none'
                   minRows={undefined}
                   maxRows={undefined}
                   fillAvailableHeight={true}
