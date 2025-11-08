@@ -80,7 +80,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   copied = false,
 }) => {
   return (
-    <div className='flex items-center gap-0.5 sm:gap-1 max-[767px]:opacity-100 opacity-0 group-hover:opacity-100 border-1 border-stone-300 dark:bg-yBlack-900 dark:border-1 dark:border-neutral-700 transition-opacity rounded-3xl duration-200 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_6px_2px_rgba(0,0,0,0.35)]'>
+    <div className='flex items-center gap-0.5 sm:gap-1 max-[767px]:opacity-100 opacity-0 group-hover:opacity-100 border-1 border-stone-300 dark:bg-yBlack-900 dark:border-1 dark:border-neutral-700 transition-opacity rounded-3xl duration-200 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_6px_2px_rgba(0,0,0,0.35)] [will-change:contents] [transform:translateZ(0)]'>
       <div className='flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 sm:py-1'>
         {isEditing ? (
           <>
@@ -652,7 +652,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           }
           <pre
             ref={preRef}
-            className={`not-prose thin-scrollbar overflow-auto rounded-2xl ring-0 outline-none bg-gray-100 text-sm lg:text-lg text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]`}
+            className={`not-prose thin-scrollbar pb-10 overflow-auto rounded-2xl ring-0 outline-none bg-gray-100 text-sm lg:text-lg text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
             {...props}
           >
             {children}
@@ -664,8 +664,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     return (
       <div
         id={`message-${id}`}
-        className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-all duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
+        className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
+        style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
         <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
@@ -680,7 +681,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Tool calls block */}
         {Array.isArray(toolCalls) && toolCalls.length > 0 && (
-          <div className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'>
+          <div className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'>
             <div className='mb-2 flex items-center justify-between'>
               <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300'>
                 Tool Calls ({toolCalls.length})
@@ -737,7 +738,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Reasoning / thinking block */}
         {typeof thinking === 'string' && thinking.trim().length > 0 && (
-          <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'>
+          <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'>
             <div className='mb-2 flex items-center justify-between'>
               <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
                 Reasoning
@@ -780,7 +781,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   return (
                     <div
                       key={`thinking-${block.index}-${idx}`}
-                      className='rounded-2xl border border-neutral-50 bg-neutral-50 p-2 sm:p-3 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.2)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'
+                      className='rounded-2xl border border-neutral-50 bg-neutral-50 p-2 sm:p-3 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.2)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
                     >
                       <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-orange-300/85 mb-2'>
                         Thinking
@@ -805,7 +806,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   return (
                     <div
                       key={`tool-use-${block.id}-${idx}`}
-                      className='rounded-2xl border border-blue-50 my-3 bg-neutral-50 p-1 sm:p-2 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'
+                      className='rounded-2xl border border-blue-50 my-3 bg-neutral-50 p-1 sm:p-2 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
                     >
                       <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300 mb-1'>
                         Tool: {block.name}
@@ -868,7 +869,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   return (
                     <div
                       key={`tool-result-${block.tool_use_id}-${idx}`}
-                      className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] ${
+                      className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
                         isError
                           ? 'border-red-50 bg-red-50 dark:border-red-900/40 dark:bg-neutral-900'
                           : 'border-green-50 bg-neutral-50 dark:border-green-900/40 dark:bg-neutral-900'
@@ -961,7 +962,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             {showMoreMenu && (
               <div
                 ref={moreMenuRef}
-                className={`absolute right-0 ${menuOpenUp ? 'bottom-full mb-1' : 'top-8'} z-20 w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)]`}
+                className={`absolute right-0 ${menuOpenUp ? 'bottom-full mb-1' : 'top-8'} z-20 w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
               >
                 {!showMoreInfo ? (
                   <div className='py-1 rounded-4xl'>
@@ -1078,7 +1079,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.15 }}
-              className='fixed z-[10000] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3'
+              className='fixed z-[10000] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 [will-change:contents] [transform:translateZ(0)]'
               style={{
                 left: `${getAdjustedExplainInputPosition()?.x || explainInputPosition.current.x}px`,
                 top: `${getAdjustedExplainInputPosition()?.y || explainInputPosition.current.y}px`,

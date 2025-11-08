@@ -47,8 +47,7 @@
   border: 1px solid #e5e5e5c4;
 }
 
-/* Dark mode base styles */
-.dark .acrylic-ultra-light-nb,
+/* Dark mode base styles .dark .acrylic-ultra-light-nb, */
 .dark .acrylic-ultra-light-nb-2,
 .dark .acrylic-ultra-light,
 .dark .acrylic-subtle,
@@ -146,7 +145,7 @@
 /* Interactive states */
 .acrylic-subtle:hover,
 .acrylic-light:hover,
-.acrylic:hover,
+/* .acrylic:hover, */
 .acrylic-strong:hover,
 .acrylic-extreme:hover {
   background-color: rgba(247, 247, 247, 0.68);
@@ -161,7 +160,7 @@
 }
 
 .dark .acrylic-subtle:hover,
-.dark .acrylic:hover,
+/* .dark .acrylic:hover, */
 .dark .acrylic-medium:hover,
 .dark .acrylic-strong:hover,
 .dark .acrylic-extreme:hover {

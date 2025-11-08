@@ -181,20 +181,22 @@ const Homepage: React.FC = () => {
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='relative z-10 flex-1 h-full flex flex-col w-full mr-2 ml-2 overflow-hidden sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
-        <div className='py-1 lg:py-1 xl:py-1 2xl:py-2 3xl:py-4 4xl:py-6 w-full  mx-auto shrink-0'>
+        <div className='py-1 lg:py-1 xl:py-1 2xl:py-0 3xl:py-4 4xl:py-6 w-full mx-auto shrink-0'>
           <div className='flex items-center justify-baseline'>
-            <div className='flex items-center flex-wrap gap-3 rounded-full pl-2 pr-3 py-2'>
-              <img
-                src='/img/logo-d.svg'
-                alt='Yggdrasil Logo'
-                className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22 dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)] acrylic-ultra-light-nb'
-              />
-              <img
-                src='/img/logo-l.svg'
-                alt='Yggdrasil Logo'
-                className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
-              />
-              <h1 className=' junicode-bold tracking-wide pb-5 2xl:pb-6 text-[28px] sm:text-[24px] lg:text-[44px] xl:text-[44px] 2xl:text-[70px] 3xl:text-[70px] 4xl:text-[44px] font-bold px-1 dark:text-neutral-100 '>
+            <div className='flex items-center flex-wrap gap-3 rounded-full pl-2 pr-3 py-2 2xl:pt-2'>
+              <div className='sm:pt-4 lg:pt-6'>
+                <img
+                  src='/img/logo-d.svg'
+                  alt='Yggdrasil Logo'
+                  className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)] acrylic-ultra-light-nb'
+                />
+                <img
+                  src='/img/logo-l-thick.svg'
+                  alt='Yggdrasil Logo'
+                  className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
+                />
+              </div>
+              <h1 className='junicode-bold tracking-wide pb-5 2xl:pb-2 text-[28px] sm:text-[40px] lg:text-[44px] xl:text-[48px] 2xl:text-[70px] 3xl:text-[70px] 4xl:text-[44px] px-1 dark:text-neutral-100 '>
                 Yggdrasil
               </h1>
             </div>

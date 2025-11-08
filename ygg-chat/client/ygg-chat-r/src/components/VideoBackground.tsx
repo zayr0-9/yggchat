@@ -23,7 +23,7 @@ const VideoBackground: React.FC = () => {
         autoPlay
         loop
         muted
-        className='fixed inset-0 w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 hidden dark:block'
+        className='fixed w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 hidden dark:block'
       >
         <source src='/video/d2.webm' type='video/webm' />
       </video>
