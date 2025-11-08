@@ -32,9 +32,9 @@ const LandingPage: React.FC = () => {
   }
 
   return (
-    <div className='relative w-full h-screen bg-gradient-to-b from-cyan-400 to-cyan-500 dark:from-yBlack-600 dark:to-yBlack-700 overflow-hidden'>
+    <div className='relative w-full h-screen bg-transparent dark:from-yBlack-600 dark:to-yBlack-700 overflow-hidden'>
       {/* Dark Backdrop Filter */}
-      <div className='absolute inset-0 w-full h-full bg-black/40 dark:bg-black/40' />
+      <div className='absolute inset-0 w-full h-full bg-black/10 dark:bg-black/10' />
 
       {/* Background Image Overlay */}
       <div
@@ -136,9 +136,9 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
           <img
             src='/img/logo-l-thick.svg'
             alt='Yggdrasil Logo'
-            className='w-18 h-18 sm:w-14 sm:h-14 md:w-18 md:h-18 lg:w-26 lg:h-26 xl:w-28 xl:h-28 2xl:w-36 2xl:h-36 dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
+            className='acrylic-light-dark w-18 h-18 sm:w-14 sm:h-14 md:w-18 md:h-18 lg:w-26 lg:h-26 xl:w-28 xl:h-28 2xl:w-36 2xl:h-36 dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
           />
-          <h1 className='jaini-regular pb-2 text-[64px] sm:text-6xl md:text-7xl lg:text-[104px] font-bold text-white dark:text-white text-center mb-4 md:mb-6 drop-shadow-lg'>
+          <h1 className='jaini-regular pb-2 text-[64px] sm:text-6xl md:text-7xl lg:text-[104px] text-white dark:text-white text-center mb-4 md:mb-6 drop-shadow-lg'>
             yggdrasil
           </h1>
         </div>

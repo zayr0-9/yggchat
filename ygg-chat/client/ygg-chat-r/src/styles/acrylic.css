@@ -12,6 +12,7 @@
 .acrylic-ultra-light,
 .acrylic-subtle,
 .acrylic-light,
+.acrylic-light-dark,
 .acrylic,
 .acrylic-strong,
 .acrylic-extreme {
@@ -38,6 +39,7 @@
 .acrylic-ultra-light,
 .acrylic-subtle,
 .acrylic-light,
+.acrylic-light-dark,
 .acrylic,
 .acrylic-medium,
 .acrylic-strong,
@@ -51,6 +53,7 @@
 .dark .acrylic-ultra-light,
 .dark .acrylic-subtle,
 .dark .acrylic-light,
+.dark .acrylic-light-dark,
 .dark .acrylic,
 .dark .acrylic-medium,
 .dark .acrylic-strong,
@@ -102,6 +105,15 @@
   background-color: rgba(24, 24, 24, 0.015);
 }
 
+/* Acrylic Light Dark - Only dark version */
+.acrylic-light-dark {
+  background-color: transparent;
+}
+
+.dark .acrylic-light-dark {
+  background-color: rgba(24, 24, 24, 0.015);
+}
+
 /* Acrylic Medium (Default) */
 .acrylic,
 .acrylic-medium {
@@ -140,6 +152,10 @@
   background-color: rgba(247, 247, 247, 0.68);
 }
 
+.acrylic-light-dark:hover {
+  background-color: rgba(247, 247, 247, 0.18);
+}
+
 .acrylic-medium:hover {
   background-color: rgba(247, 247, 247, 0.88);
 }
@@ -160,10 +176,15 @@
   background-color: rgba(24, 24, 24, 0.215);
 }
 
+.dark .acrylic-light-dark:hover {
+  background-color: rgba(24, 24, 24, 0.215);
+}
+
 /* Ensure content stays on top of the effect */
 .acrylic-ultra-light > *,
 .acrylic-subtle > *,
 .acrylic-light > *,
+.acrylic-light-dark > *,
 .acrylic > *,
 .acrylic-medium > *,
 .acrylic-strong > *,
@@ -186,6 +207,11 @@
   }
 
   .acrylic-light {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  .acrylic-light-dark {
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
   }
