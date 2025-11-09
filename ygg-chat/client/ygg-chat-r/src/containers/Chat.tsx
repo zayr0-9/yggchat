@@ -129,6 +129,7 @@ function Chat() {
   const [localModel, setLocalModel] = useState<Model[] | null>(null)
   // Dynamic input area height for adaptive padding
   const [inputAreaHeight, setInputAreaHeight] = useState(170)
+  const [containerHeight, setContainerHeight] = useState(1100)
 
   const handleCloseExpandedPreview = useCallback(() => {
     if (!expandedFilePath) return
@@ -274,6 +275,27 @@ function Chat() {
     }
   }, [])
 
+  // Measure messages container height dynamically
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const observer = new ResizeObserver(() => {
+      setContainerHeight(container.clientHeight)
+    })
+
+    observer.observe(container)
+
+    // Initial measurement
+    if (container.clientHeight > 0) {
+      setContainerHeight(container.clientHeight)
+    }
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
+
   // Consider the user to be "at the bottom" if within this many pixels
   const NEAR_BOTTOM_PX = 48
   const isNearBottom = (el: HTMLElement, threshold = NEAR_BOTTOM_PX) => {
@@ -281,6 +303,19 @@ function Chat() {
     const remaining = el.scrollHeight - el.scrollTop - el.clientHeight
     return remaining <= threshold
   }
+
+  // Helper: scroll to show latest message at top of viewport (for normal mode)
+  const scrollToShowLatestAtTop = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    console.log('scrolling to top')
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    // Scroll to position the latest message near the top of the viewport
+    // We scroll to the bottom, which naturally shows the newest message
+    const targetScroll = container.scrollHeight - container.clientHeight
+    console.log('targetScroll', targetScroll, container.scrollHeight, container.clientHeight)
+    container.scrollTo({ top: Math.max(0, targetScroll), behavior })
+  }, [])
 
   // Heimdall state from Redux
   const heimdallData = useAppSelector(selectHeimdallData)
@@ -534,11 +569,15 @@ function Chat() {
   }, [])
 
   // Auto-scroll to bottom when messages update, with refined behavior:
+  // - Only enabled when CC mode is active
   // - While streaming: keep pinned unless user scrolled away. If user returns near bottom, re-enable pinning.
   // - After streaming completes: only auto-scroll when there is no explicit selection path
   useEffect(() => {
     const container = messagesContainerRef.current
     if (!container) return
+
+    // Only enable auto-scroll when in CC mode
+    if (!ccMode) return
 
     // During streaming, keep pinned unless the user opted out by scrolling away.
     // If they scroll back near bottom, re-enable pinning and scroll.
@@ -571,6 +610,7 @@ function Chat() {
     streamState.finished,
     selectedPath,
     scheduleScrollToBottom,
+    ccMode,
   ])
 
   // Cleanup any pending rAF on unmount
@@ -608,6 +648,17 @@ function Chat() {
       }
     }
   }, [streamState.finished])
+
+  // Scroll to show new message at top when stream starts (normal mode only)
+  useEffect(() => {
+    if (streamState.active && !ccMode) {
+      // Scroll to position new message at top of viewport
+      // setTimeout(() => {
+      //   scrollToShowLatestAtTop('smooth')
+      // }, 450)
+      scrollToShowLatestAtTop('smooth')
+    }
+  }, [streamState.active, ccMode, scrollToShowLatestAtTop])
 
   // Scroll to selected node when path changes (only for user-initiated selections)
   useEffect(() => {
@@ -948,8 +999,10 @@ function Chat() {
 
   const handleSend = useCallback(
     (value: number) => {
-      // New send: re-enable auto-pinning until the user scrolls during this stream
-      userScrolledDuringStreamRef.current = false
+      // Re-enable auto-pinning for CC mode sends until the user scrolls during this stream
+      if (ccMode) {
+        userScrolledDuringStreamRef.current = false
+      }
       if (canSendLocal && currentConversationId) {
         // Check if this is a retrigger scenario (empty input + last message is user)
         const isRetrigger =
@@ -975,7 +1028,7 @@ function Chat() {
 
             const contentToRetrigger = lastUserMessage.content
 
-            // Immediately scroll to bottom
+            // Immediately scroll to bottom for CC mode retrigger
             scrollToBottomNow('auto')
 
             // Dispatch sendCCMessage with retrigger content
@@ -1004,7 +1057,7 @@ function Chat() {
             // Clear local input immediately after sending
             setLocalInput('')
 
-            // Immediately scroll to bottom
+            // Immediately scroll to bottom for CC mode send
             scrollToBottomNow('auto')
 
             // Dispatch sendCCMessage
@@ -1038,9 +1091,6 @@ function Chat() {
 
             const parent: MessageId | null = lastUserMessage.parent_id || null
             const contentToRetrigger = lastUserMessage.content
-
-            // Immediately scroll to bottom
-            scrollToBottomNow('auto')
 
             // Dispatch sendMessage with retrigger flag
             dispatch(
@@ -1149,8 +1199,6 @@ function Chat() {
             const inputToSend = { content: processedContent }
             // Clear local input immediately after sending
             setLocalInput('')
-            // Immediately scroll to bottom so the user sees the outgoing message/stream start
-            scrollToBottomNow('auto')
 
             // Dispatch a single sendMessage with repeatNum set to value.
             dispatch(
@@ -1922,13 +1970,17 @@ function Chat() {
 
         {/* Messages Display */}
         <div
-          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-neutral-900 flex-1 min-h-0 ${!heimdallVisible ? 'px-0 sm:px-4 md:px-8 lg:px-12 xl:px-20' : ''}`}
-          style={{ paddingBottom: `${inputAreaHeight}px` }}
+          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-neutral-900 flex-1 min-h-0 transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-4 md:px-8 lg:px-12 xl:px-20' : ''}`}
         >
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col pb-35 gap-5 2xl:gap-3 px-0 dark:border-neutral-700 border-stone-200 rounded-lg py-4 overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y p-3 bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
-            style={{ ['overflowAnchor' as any]: 'none' }}
+            className={`flex flex-col gap-4 px-0 pt-4 ease-in-out  dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
+            style={{
+              ['overflowAnchor' as any]: 'none',
+              // transform: 'translateZ(0)',
+              willChange: 'contents',
+              paddingBottom: `${containerHeight - 220}px`,
+            }}
           >
             {displayMessages.length === 0 ? (
               <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>

@@ -18,7 +18,7 @@ const LandingPage: React.FC = () => {
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0)
   const [isInFeaturesSection, setIsInFeaturesSection] = useState(false)
   const featureRefs = useRef<(HTMLDivElement | null)[]>([])
-  const featuresContainerRef = useRef<HTMLDivElement>(null)
+  // const featuresContainerRef = useRef<HTMLDivElement>(null)
   const featuresSectionRef = useRef<HTMLElement>(null)
 
   const features: Feature[] = [

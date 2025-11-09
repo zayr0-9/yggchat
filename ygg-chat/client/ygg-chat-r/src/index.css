@@ -455,3 +455,14 @@ html {
   /* SVG filters are defined inline in the HTML where the effect is used */
   /* Or injected dynamically via JavaScript if needed */
 }
+.smooth-height {
+  transition: height 0.3s ease-out;
+  overflow: hidden;
+}
+
+/* Modern browsers only */
+@supports (interpolate-size: allow-keywords) {
+  .smooth-height {
+    interpolate-size: allow-keywords;
+  }
+}
