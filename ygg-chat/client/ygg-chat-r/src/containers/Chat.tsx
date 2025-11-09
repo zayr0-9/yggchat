@@ -8,6 +8,7 @@ import { MessageId } from '../../../../shared/types'
 import { Button, ChatMessage, Heimdall, InputTextArea, Select, SettingsPane, TextField } from '../components'
 import {
   abortStreaming,
+  blobToDataURL,
   chatSliceActions,
   deleteMessage,
   editMessageWithBranching,
@@ -15,6 +16,7 @@ import {
   Message,
   Model,
   refreshCurrentPathAfterDelete,
+  resolveAttachmentUrl,
   selectConversationMessages,
   selectCurrentConversationId,
   selectCurrentPath,
@@ -426,6 +428,40 @@ function Chat() {
   useEffect(() => {
     if (reactQueryMessages && reactQueryMessages.length > 0) {
       dispatch(chatSliceActions.messagesLoaded(reactQueryMessages))
+
+      // Process attachments from React Query response
+      // This converts attachment URLs to base64 artifacts for display in ChatMessage
+      reactQueryMessages.forEach(msg => {
+        const includedAttachments = (msg as any).attachments
+        if (includedAttachments && Array.isArray(includedAttachments) && includedAttachments.length > 0) {
+          // Dispatch attachment metadata immediately
+          dispatch(chatSliceActions.attachmentsSetForMessage({
+            messageId: msg.id,
+            attachments: includedAttachments
+          }))
+
+          // Fetch and convert binaries to base64 asynchronously (don't await, let it run in background)
+          Promise.all(
+            includedAttachments.map(async (a: any) => {
+              const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path)
+              if (!url) return null
+              try {
+                const res = await fetch(url)
+                if (!res.ok) return null
+                const blob = await res.blob()
+                return await blobToDataURL(blob)
+              } catch {
+                return null
+              }
+            })
+          ).then(dataUrls => {
+            const validUrls = dataUrls.filter((x): x is string => Boolean(x))
+            if (validUrls.length > 0) {
+              dispatch(chatSliceActions.messageArtifactsSet({ messageId: msg.id, artifacts: validUrls }))
+            }
+          })
+        }
+      })
     }
   }, [reactQueryMessages, dispatch])
 

@@ -298,7 +298,7 @@ const updateMessageArtifactsInCache = (
 //   return response.json()
 // }
 // Helper: convert Blob to data URL
-const blobToDataURL = (blob: Blob): Promise<string> =>
+export const blobToDataURL = (blob: Blob): Promise<string> =>
   new Promise(resolve => {
     const reader = new FileReader()
     reader.onloadend = () => resolve(reader.result as string)
@@ -306,7 +306,7 @@ const blobToDataURL = (blob: Blob): Promise<string> =>
   })
 
 // Resolve an attachment's accessible URL from url or file_path
-const resolveAttachmentUrl = (urlOrPath?: string | null, filePath?: string | null): string | null => {
+export const resolveAttachmentUrl = (urlOrPath?: string | null, filePath?: string | null): string | null => {
   const origin = API_BASE.replace(/\/?api\/?$/, '')
   if (urlOrPath) {
     if (/^https?:\/\//i.test(urlOrPath)) return urlOrPath

@@ -76,10 +76,12 @@ export {
 // Convenience re-exports
 // New async thunks
 export {
+  blobToDataURL,
   fetchConversationMessages,
   fetchMessageTree,
   initializeConversationData,
   initializeUserAndConversation,
+  resolveAttachmentUrl,
   updateConversationTitle,
 } from './chatActions'
 
