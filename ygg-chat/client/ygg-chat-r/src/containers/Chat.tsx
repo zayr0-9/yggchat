@@ -1971,6 +1971,7 @@ function Chat() {
         {/* Messages Display */}
         <div
           className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-neutral-900 flex-1 min-h-0 transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-4 md:px-8 lg:px-12 xl:px-20' : ''}`}
+          style={{ paddingBottom: `${inputAreaHeight}px` }}
         >
           <div
             ref={messagesContainerRef}
