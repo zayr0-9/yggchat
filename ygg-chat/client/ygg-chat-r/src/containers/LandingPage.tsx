@@ -36,7 +36,7 @@ const LandingPage: React.FC = () => {
       superscript: '02',
       description:
         'Intelligent context management ensures your AI always remembers what matters. Track, organize, and maintain conversation state across branches with precision. Never lose important details in long conversations.',
-      videoSrc: '/dist/video/l3.webm',
+      videoSrc: '/video/l3.webm',
     },
     {
       id: 3,
@@ -44,7 +44,7 @@ const LandingPage: React.FC = () => {
       superscript: '03',
       description:
         'Empower your AI with autonomous capabilities. Create agents that can act independently, make decisions, and accomplish complex tasks. Perfect for automation and advanced workflows.',
-      videoSrc: '/dist/video/d2.webm',
+      videoSrc: '/video/d2.webm',
     },
     {
       id: 4,
@@ -52,7 +52,7 @@ const LandingPage: React.FC = () => {
       superscript: '04',
       description:
         'Switch between different AI models seamlessly. Leverage the best model for each task—whether you need speed, creativity, or specialized expertise. Compare outputs across models in real-time.',
-      videoSrc: '/dist/video/l3.webm',
+      videoSrc: '/video/l3.webm',
     },
   ]
 
