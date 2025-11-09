@@ -353,6 +353,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         e.preventDefault()
         setSelectedText(text)
         setContextMenuPosition({ x: e.clientX, y: e.clientY })
+        console.log(e.clientX, e.clientY)
         setContextMenuOpen(true)
       }
       // If no text selected, allow browser's default context menu to appear
@@ -666,7 +667,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         id={`message-${id}`}
         className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
-        style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
+        // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
         <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
