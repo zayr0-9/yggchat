@@ -1123,11 +1123,43 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
 
         for (const msg of normalizedMessages) {
           const alreadyFetched = Array.isArray(attachmentsByMessage[msg.id]) && attachmentsByMessage[msg.id].length > 0
-          const hasMeta = typeof msg.has_attachments !== 'undefined' || typeof msg.attachments_count !== 'undefined'
-          const indicatesAttachments =
-            msg.has_attachments === true || (typeof msg.attachments_count === 'number' && msg.attachments_count > 0)
 
-          if (!alreadyFetched) {
+          // Check if attachments are included in the response (optimized path)
+          const includedAttachments = (msg as any).attachments
+
+          if (!alreadyFetched && includedAttachments && Array.isArray(includedAttachments) && includedAttachments.length > 0) {
+            // Process included attachments - dispatch metadata immediately
+            dispatch(chatSliceActions.attachmentsSetForMessage({
+              messageId: msg.id,
+              attachments: includedAttachments
+            }))
+
+            // Fetch and convert binaries to base64 (async operation)
+            Promise.all(
+              includedAttachments.map(async (a: any) => {
+                const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path)
+                if (!url) return null
+                try {
+                  const res = await fetch(url)
+                  if (!res.ok) return null
+                  const blob = await res.blob()
+                  return await blobToDataURL(blob)
+                } catch {
+                  return null
+                }
+              })
+            ).then(dataUrls => {
+              const validUrls = dataUrls.filter((x): x is string => Boolean(x))
+              if (validUrls.length > 0) {
+                dispatch(chatSliceActions.messageArtifactsSet({ messageId: msg.id, artifacts: validUrls }))
+              }
+            })
+          } else if (!alreadyFetched) {
+            // Fallback: use old individual fetch logic if attachments not included
+            const hasMeta = typeof msg.has_attachments !== 'undefined' || typeof msg.attachments_count !== 'undefined'
+            const indicatesAttachments =
+              msg.has_attachments === true || (typeof msg.attachments_count === 'number' && msg.attachments_count > 0)
+
             if ((hasMeta && indicatesAttachments) || !hasMeta) {
               dispatch(fetchAttachmentsByMessage({ messageId: msg.id }))
             }

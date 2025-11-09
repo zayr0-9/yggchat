@@ -923,19 +923,33 @@ export class MessageService {
       .select(
         `
         *,
-        attachment_count:message_attachment_links(count),
-        file_content_count:message_file_content_links(count)
+        file_content_count:message_file_content_links(count),
+        attachment_links:message_attachment_links(
+          attachment_id,
+          message_attachments(*)
+        )
       `
       )
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
-    return (data || []).map((r: any) => ({
-      ...r,
-      has_attachments: (r.attachment_count?.[0]?.count || 0) > 0,
-      attachments_count: r.attachment_count?.[0]?.count || 0,
-      file_content_count: r.file_content_count?.[0]?.count || 0,
-    })) as Message[]
+    return (data || []).map((r: any) => {
+      const attachments = (r.attachment_links || []).map((link: any) => ({
+        ...link.message_attachments,
+        message_id: r.id,
+      }))
+
+      // Remove intermediate fields and compute counts from attachments array
+      const { attachment_links, attachment_count, ...cleanedMessage } = r
+
+      return {
+        ...cleanedMessage,
+        file_content_count: r.file_content_count?.[0]?.count || 0,
+        attachments_count: attachments.length,
+        has_attachments: attachments.length > 0,
+        attachments,
+      }
+    }) as Message[]
   }
 
   static async getMessageTree(client: SupabaseClient, conversationId: string): Promise<Message[]> {
