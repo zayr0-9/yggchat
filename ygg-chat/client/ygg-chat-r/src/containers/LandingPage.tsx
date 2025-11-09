@@ -28,7 +28,7 @@ const LandingPage: React.FC = () => {
       superscript: '01',
       description:
         "As conversations naturally branch into tangents and follow-up questions, Yggdrasil's intelligent navigation system visualizes and manages the full structure of your dialogue. Every edit spawns a new branch, ensuring an immutable, accurate log of every message. Nothing is ever lost, delivering complete transparency into the evolution of your thought.",
-      videoSrc: '/dist/video/d2.webm',
+      videoSrc: '/video/d2.webm',
     },
     {
       id: 2,
