@@ -661,215 +661,132 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       )
     }
 
-    const SmoothHeightWrapper: React.FC<{ children: React.ReactNode; className?: string }> = ({
-      children,
-      className,
-    }) => {
-      return (
-        <div
-          className={`grid transition-all duration-300 ease-out grid-rows-[0fr]${className}`}
-          style={{ gridTemplateRows: '1fr' }}
-        >
-          <div className='overflow-hidden min-h-0'>{children}</div>
-        </div>
-      )
-    }
-
     return (
-      <SmoothHeightWrapper>
-        <div
-          id={`message-${id}`}
-          className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
-          onContextMenu={handleContextMenu}
-          style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
-        >
-          {/* Header with role */}
-          <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
-            <div className='flex items-center justify-between max-w-32 dark:bg-neutral-800 shadow-[0px_0px_2.5px_-0.5px_rgba(0,0,0,0.25)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] rounded-4xl px-3 py-2'>
-              <span
-                className={`text-[14px] mt-0 sm:text-[14px] lg:text-[16px] 3xl:text-base font-semibold ${styles.role}`}
-              >
-                {styles.roleText}
-              </span>
-            </div>
+      <div
+        id={`message-${id}`}
+        className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
+        onContextMenu={handleContextMenu}
+        style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
+      >
+        {/* Header with role */}
+        <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
+          <div className='flex items-center justify-between max-w-32 dark:bg-neutral-800 shadow-[0px_0px_2.5px_-0.5px_rgba(0,0,0,0.25)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] rounded-4xl px-3 py-2'>
+            <span
+              className={`text-[14px] mt-0 sm:text-[14px] lg:text-[16px] 3xl:text-base font-semibold ${styles.role}`}
+            >
+              {styles.roleText}
+            </span>
           </div>
+        </div>
 
-          {/* Tool calls block */}
-          {Array.isArray(toolCalls) && toolCalls.length > 0 && (
-            <div className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'>
-              <div className='mb-2 flex items-center justify-between'>
-                <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300'>
-                  Tool Calls ({toolCalls.length})
-                </div>
-                <Button
-                  type='button'
-                  onClick={() => setShowToolCalls(s => !s)}
-                  className='ml-2 text-xs px-2 py-1 border-1 border-blue-300 text-blue-800 dark:text-blue-300 dark:border-blue-900/60 hover:bg-blue-100 dark:hover:bg-neutral-800'
-                  size='smaller'
-                  variant='outline'
-                  aria-expanded={showToolCalls}
-                  aria-controls={`tool-calls-content-${id}`}
-                >
-                  {showToolCalls ? 'Hide' : 'Show'}
-                </Button>
+        {/* Tool calls block */}
+        {Array.isArray(toolCalls) && toolCalls.length > 0 && (
+          <div className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'>
+            <div className='mb-2 flex items-center justify-between'>
+              <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300'>
+                Tool Calls ({toolCalls.length})
               </div>
-              {showToolCalls && (
-                <div
-                  id={`tool-calls-content-${id}`}
-                  className='space-y-3 text-xs sm:text-sm xl:text-[14px] 3xl:text-base '
-                >
-                  {toolCalls.map((toolCall, idx) => (
-                    <div key={toolCall.id || idx} className='bg-neutral-50 rounded-2xl dark:bg-neutral-900 py-2 '>
-                      <div className='flex items-center justify-between mb-2'>
-                        <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
-                        {/* <span className='text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'>
+              <Button
+                type='button'
+                onClick={() => setShowToolCalls(s => !s)}
+                className='ml-2 text-xs px-2 py-1 border-1 border-blue-300 text-blue-800 dark:text-blue-300 dark:border-blue-900/60 hover:bg-blue-100 dark:hover:bg-neutral-800'
+                size='smaller'
+                variant='outline'
+                aria-expanded={showToolCalls}
+                aria-controls={`tool-calls-content-${id}`}
+              >
+                {showToolCalls ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+            {showToolCalls && (
+              <div
+                id={`tool-calls-content-${id}`}
+                className='space-y-3 text-xs sm:text-sm xl:text-[14px] 3xl:text-base '
+              >
+                {toolCalls.map((toolCall, idx) => (
+                  <div key={toolCall.id || idx} className='bg-neutral-50 rounded-2xl dark:bg-neutral-900 py-2 '>
+                    <div className='flex items-center justify-between mb-2'>
+                      <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
+                      {/* <span className='text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'>
                         {toolCall.status}
                       </span> */}
-                      </div>
-                      {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                        <div className='text-xs space-y-1'>
-                          {Object.entries(toolCall.arguments).map(([key, value]) => (
-                            <div key={key} className='flex gap-2'>
-                              <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                              <span className='text-gray-800 dark:text-gray-200 break-all'>
-                                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {toolCall.result && (
-                        <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
-                          <div className='font-semibold mb-1'>Result:</div>
-                          <div className='break-all'>{toolCall.result}</div>
-                        </div>
-                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Reasoning / thinking block */}
-          {typeof thinking === 'string' && thinking.trim().length > 0 && (
-            <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'>
-              <div className='mb-2 flex items-center justify-between'>
-                <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
-                  Reasoning
-                </div>
-                <Button
-                  type='button'
-                  onClick={() => setShowThinking(s => !s)}
-                  className='ml-2 text-xs px-2 py-1 border-1 border-neutral-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-neutral-800'
-                  size='smaller'
-                  variant='outline2'
-                  aria-expanded={showThinking}
-                  aria-controls={`reasoning-content-${id}`}
-                >
-                  {showThinking ? 'Hide' : 'Show'}
-                </Button>
+                    {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                      <div className='text-xs space-y-1'>
+                        {Object.entries(toolCall.arguments).map(([key, value]) => (
+                          <div key={key} className='flex gap-2'>
+                            <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                            <span className='text-gray-800 dark:text-gray-200 break-all'>
+                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {toolCall.result && (
+                      <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
+                        <div className='font-semibold mb-1'>Result:</div>
+                        <div className='break-all'>{toolCall.result}</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-              {showThinking && (
-                <div
-                  id={`reasoning-content-${id}`}
-                  className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
-                >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                    components={{ pre: PreRenderer }}
-                  >
-                    {thinking}
-                  </ReactMarkdown>
-                </div>
-              )}
+            )}
+          </div>
+        )}
+
+        {/* Reasoning / thinking block */}
+        {typeof thinking === 'string' && thinking.trim().length > 0 && (
+          <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'>
+            <div className='mb-2 flex items-center justify-between'>
+              <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
+                Reasoning
+              </div>
+              <Button
+                type='button'
+                onClick={() => setShowThinking(s => !s)}
+                className='ml-2 text-xs px-2 py-1 border-1 border-neutral-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-neutral-800'
+                size='smaller'
+                variant='outline2'
+                aria-expanded={showThinking}
+                aria-controls={`reasoning-content-${id}`}
+              >
+                {showThinking ? 'Hide' : 'Show'}
+              </Button>
             </div>
-          )}
+            {showThinking && (
+              <div
+                id={`reasoning-content-${id}`}
+                className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
+              >
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                  components={{ pre: PreRenderer }}
+                >
+                  {thinking}
+                </ReactMarkdown>
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Sequential content blocks for ex_agent messages (Claude Code responses) */}
-          {Array.isArray(contentBlocks) && contentBlocks.length > 0 && (
-            <div className='space-y-3 mb-3'>
-              {contentBlocks.map((block, idx) => {
-                switch (block.type) {
-                  case 'thinking':
-                    return (
-                      <div
-                        key={`thinking-${block.index}-${idx}`}
-                        className='rounded-2xl border border-neutral-50 bg-neutral-50 p-2 sm:p-3 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.2)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
-                      >
-                        <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-orange-300/85 mb-2'>
-                          Thinking
-                        </div>
-                        <div className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'>
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                            components={{ pre: PreRenderer }}
-                          >
-                            {block.content}
-                          </ReactMarkdown>
-                        </div>
+        {/* Sequential content blocks for ex_agent messages (Claude Code responses) */}
+        {Array.isArray(contentBlocks) && contentBlocks.length > 0 && (
+          <div className='space-y-3 mb-3'>
+            {contentBlocks.map((block, idx) => {
+              switch (block.type) {
+                case 'thinking':
+                  return (
+                    <div
+                      key={`thinking-${block.index}-${idx}`}
+                      className='rounded-2xl border border-neutral-50 bg-neutral-50 p-2 sm:p-3 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.2)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                    >
+                      <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-orange-300/85 mb-2'>
+                        Thinking
                       </div>
-                    )
-                  case 'tool_use':
-                    const blockInput = (block.input ?? {}) as Record<string, any>
-                    const todos = Array.isArray(blockInput.todos)
-                      ? (blockInput.todos as Array<Record<string, any>>)
-                      : null
-                    const otherInputs = Object.entries(blockInput).filter(([key]) => key !== 'todos')
-                    return (
-                      <div
-                        key={`tool-use-${block.id}-${idx}`}
-                        className='rounded-2xl border border-blue-50 my-3 bg-neutral-50 p-1 sm:p-2 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
-                      >
-                        <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300 mb-1'>
-                          Tool: {block.name}
-                        </div>
-                        <div className='bg-neutral-50 dark:bg-neutral-900 px-2 pb-1 rounded-md text-xs sm:text-sm'>
-                          {todos && todos.length > 0 && (
-                            <div className='space-y-2'>
-                              <div className='font-semibold text-blue-700 dark:text-blue-300'>Todo Items</div>
-                              <ul className='space-y-1 list-disc list-inside text-gray-800 dark:text-gray-200'>
-                                {todos.map((todo, todoIdx) => (
-                                  <li key={todoIdx} className='ml-2'>
-                                    <div className='font-medium'>{todo.content ?? 'Untitled task'}</div>
-                                    <div className='text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2'>
-                                      {todo.status && (
-                                        <span className='inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'>
-                                          {String(todo.status)}
-                                        </span>
-                                      )}
-                                      {todo.activeForm && <span className='italic'>{String(todo.activeForm)}</span>}
-                                    </div>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {otherInputs.length > 0 && (
-                            <div className='space-y-1 mt-2'>
-                              <div className='font-semibold text-xs text-blue-700 dark:text-blue-300'>Input</div>
-                              {otherInputs.map(([key, value]) => (
-                                <div key={key} className='flex gap-2'>
-                                  <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                                  <span className='text-gray-800 dark:text-gray-200 break-all'>
-                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  case 'text':
-                    return (
-                      <div
-                        key={`text-${block.index}-${idx}`}
-                        className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
-                      >
+                      <div className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'>
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
@@ -878,43 +795,112 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                           {block.content}
                         </ReactMarkdown>
                       </div>
-                    )
-                  case 'tool_result':
-                    const isError = block.is_error
-                    return (
+                    </div>
+                  )
+                case 'tool_use':
+                  const blockInput = (block.input ?? {}) as Record<string, any>
+                  const todos = Array.isArray(blockInput.todos)
+                    ? (blockInput.todos as Array<Record<string, any>>)
+                    : null
+                  const otherInputs = Object.entries(blockInput).filter(([key]) => key !== 'todos')
+                  return (
+                    <div
+                      key={`tool-use-${block.id}-${idx}`}
+                      className='rounded-2xl border border-blue-50 my-3 bg-neutral-50 p-1 sm:p-2 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                    >
+                      <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300 mb-1'>
+                        Tool: {block.name}
+                      </div>
+                      <div className='bg-neutral-50 dark:bg-neutral-900 px-2 pb-1 rounded-md text-xs sm:text-sm'>
+                        {todos && todos.length > 0 && (
+                          <div className='space-y-2'>
+                            <div className='font-semibold text-blue-700 dark:text-blue-300'>Todo Items</div>
+                            <ul className='space-y-1 list-disc list-inside text-gray-800 dark:text-gray-200'>
+                              {todos.map((todo, todoIdx) => (
+                                <li key={todoIdx} className='ml-2'>
+                                  <div className='font-medium'>{todo.content ?? 'Untitled task'}</div>
+                                  <div className='text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2'>
+                                    {todo.status && (
+                                      <span className='inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'>
+                                        {String(todo.status)}
+                                      </span>
+                                    )}
+                                    {todo.activeForm && <span className='italic'>{String(todo.activeForm)}</span>}
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {otherInputs.length > 0 && (
+                          <div className='space-y-1 mt-2'>
+                            <div className='font-semibold text-xs text-blue-700 dark:text-blue-300'>Input</div>
+                            {otherInputs.map(([key, value]) => (
+                              <div key={key} className='flex gap-2'>
+                                <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                                <span className='text-gray-800 dark:text-gray-200 break-all'>
+                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                case 'text':
+                  return (
+                    <div
+                      key={`text-${block.index}-${idx}`}
+                      className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                        components={{ pre: PreRenderer }}
+                      >
+                        {block.content}
+                      </ReactMarkdown>
+                    </div>
+                  )
+                case 'tool_result':
+                  const isError = block.is_error
+                  return (
+                    <div
+                      key={`tool-result-${block.tool_use_id}-${idx}`}
+                      className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
+                        isError
+                          ? 'border-red-50 bg-red-50 dark:border-red-900/40 dark:bg-neutral-900'
+                          : 'border-green-50 bg-neutral-50 dark:border-green-900/40 dark:bg-neutral-900'
+                      }`}
+                    >
                       <div
-                        key={`tool-result-${block.tool_use_id}-${idx}`}
-                        className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
-                          isError
-                            ? 'border-red-50 bg-red-50 dark:border-red-900/40 dark:bg-neutral-900'
-                            : 'border-green-50 bg-neutral-50 dark:border-green-900/40 dark:bg-neutral-900'
+                        className={`text-xs sm:text-xs 3xl:text-base font-semibold uppercase tracking-wide mb-2 ${
+                          isError ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'
                         }`}
                       >
-                        <div
-                          className={`text-xs sm:text-xs 3xl:text-base font-semibold uppercase tracking-wide mb-2 ${
-                            isError ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'
-                          }`}
-                        >
-                          {isError ? 'Tool Error' : 'Tool Result'}
-                        </div>
-                        <div className='text-xs text-neutral-800 dark:text-neutral-50 sm:text-sm break-all whitespace-pre-wrap'>
-                          {typeof block.content === 'object'
-                            ? JSON.stringify(block.content, null, 2)
-                            : String(block.content)}
-                        </div>
+                        {isError ? 'Tool Error' : 'Tool Result'}
                       </div>
-                    )
-                  default:
-                    return null
-                }
-              })}
-            </div>
-          )}
+                      <div className='text-xs text-neutral-800 dark:text-neutral-50 sm:text-sm break-all whitespace-pre-wrap'>
+                        {typeof block.content === 'object'
+                          ? JSON.stringify(block.content, null, 2)
+                          : String(block.content)}
+                      </div>
+                    </div>
+                  )
+                default:
+                  return null
+              }
+            })}
+          </div>
+        )}
 
-          {/* Message content - only show if no contentBlocks present (to avoid duplication with content_blocks last element) */}
-          {(!contentBlocks || contentBlocks.length === 0) && (
-            <div className='prose px-4 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px]'>
-              {editingState ? (
+        {/* Message content - only show if no contentBlocks present (to avoid duplication with content_blocks last element) */}
+        {(!contentBlocks || contentBlocks.length === 0) && (
+          <>
+            {editingState ? (
+              <div className='px-4 w-full'>
                 <TextArea
                   value={editContent}
                   onChange={setEditContent}
@@ -942,7 +928,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     }
                   }}
                 />
-              ) : (
+              </div>
+            ) : (
+              <div className='prose px-4 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px]'>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
@@ -950,201 +938,201 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 >
                   {content}
                 </ReactMarkdown>
-              )}
-            </div>
-          )}
-          {modelName && (
-            <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
-          )}
-          {/* Actions row (at bottom) */}
-          <div className='flex items-center justify-end mt-3 mb-2'>
-            <div ref={moreButtonRef} className='relative'>
-              <MessageActions
-                onEdit={role === 'user' ? handleEdit : handleEdit}
-                onBranch={role === 'user' ? handleBranch : undefined}
-                onDelete={handleDelete}
-                onCopy={handleCopy}
-                onResend={role === 'assistant' ? handleResend : undefined}
-                onSave={handleSave}
-                onSaveBranch={handleSaveBranch}
-                onCancel={handleCancel}
-                onMore={handleMoreClick}
-                isEditing={editingState}
-                editMode={editMode}
-                copied={copied}
-              />
-              {/* More menu dropdown */}
-              {showMoreMenu && (
-                <div
-                  ref={moreMenuRef}
-                  className={`absolute right-0 ${menuOpenUp ? 'bottom-full mb-1' : 'top-8'} z-20 w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
-                >
-                  {!showMoreInfo ? (
-                    <div className='py-1 rounded-4xl'>
+              </div>
+            )}
+          </>
+        )}
+        {modelName && (
+          <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
+        )}
+        {/* Actions row (at bottom) */}
+        <div className='flex items-center justify-end mt-3 mb-2'>
+          <div ref={moreButtonRef} className='relative'>
+            <MessageActions
+              onEdit={role === 'user' ? handleEdit : handleEdit}
+              onBranch={role === 'user' ? handleBranch : undefined}
+              onDelete={handleDelete}
+              onCopy={handleCopy}
+              onResend={role === 'assistant' ? handleResend : undefined}
+              onSave={handleSave}
+              onSaveBranch={handleSaveBranch}
+              onCancel={handleCancel}
+              onMore={handleMoreClick}
+              isEditing={editingState}
+              editMode={editMode}
+              copied={copied}
+            />
+            {/* More menu dropdown */}
+            {showMoreMenu && (
+              <div
+                ref={moreMenuRef}
+                className={`absolute right-0 ${menuOpenUp ? 'bottom-full mb-1' : 'top-8'} z-20 w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
+              >
+                {!showMoreInfo ? (
+                  <div className='py-1 rounded-4xl'>
+                    <button
+                      onClick={handleMoreInfoClick}
+                      className='w-full text-left rounded-4xl px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 active:scale-95 transition-all duration-150'
+                    >
+                      More Info
+                    </button>
+                  </div>
+                ) : (
+                  <div className='p-2 sm:p-3'>
+                    <div className='flex items-center justify-between mb-1'>
+                      <h3 className='text-xs sm:text-sm 3xl:text-base font-semibold text-gray-700 dark:text-gray-300'>
+                        Message Info
+                      </h3>
                       <button
-                        onClick={handleMoreInfoClick}
-                        className='w-full text-left rounded-4xl px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 active:scale-95 transition-all duration-150'
+                        onClick={handleBackToMenu}
+                        className='text-xs sm:text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 active:scale-95 transition-all duration-150'
                       >
-                        More Info
+                        Back
                       </button>
                     </div>
-                  ) : (
-                    <div className='p-2 sm:p-3'>
-                      <div className='flex items-center justify-between mb-1'>
-                        <h3 className='text-xs sm:text-sm 3xl:text-base font-semibold text-gray-700 dark:text-gray-300'>
-                          Message Info
-                        </h3>
-                        <button
-                          onClick={handleBackToMenu}
-                          className='text-xs sm:text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 active:scale-95 transition-all duration-150'
-                        >
-                          Back
-                        </button>
-                      </div>
-                      <div className='max-h-64 sm:max-h-80 md:max-h-96 overflow-y-auto text-xs sm:text-sm space-y-1.5 pt-2'>
-                        {messageData ? (
-                          <>
-                            {Object.entries(messageData)
-                              .filter(
-                                ([key]) =>
-                                  key !== 'content' &&
-                                  key !== 'plain_text_content' &&
-                                  key !== 'artifacts' &&
-                                  key !== 'content_plain_text'
-                              )
-                              .map(([key, value]) => (
-                                <div key={key} className='flex gap-2'>
-                                  <span className='font-medium text-gray-600 dark:text-gray-400 shrink-0'>{key}:</span>
-                                  <span className='text-gray-800 dark:text-gray-200 break-all'>
-                                    {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-                                  </span>
-                                </div>
-                              ))}
-                          </>
-                        ) : (
-                          <p className='text-gray-500 dark:text-gray-400'>No message data found</p>
-                        )}
-                      </div>
+                    <div className='max-h-64 sm:max-h-80 md:max-h-96 overflow-y-auto text-xs sm:text-sm space-y-1.5 pt-2'>
+                      {messageData ? (
+                        <>
+                          {Object.entries(messageData)
+                            .filter(
+                              ([key]) =>
+                                key !== 'content' &&
+                                key !== 'plain_text_content' &&
+                                key !== 'artifacts' &&
+                                key !== 'content_plain_text'
+                            )
+                            .map(([key, value]) => (
+                              <div key={key} className='flex gap-2'>
+                                <span className='font-medium text-gray-600 dark:text-gray-400 shrink-0'>{key}:</span>
+                                <span className='text-gray-800 dark:text-gray-200 break-all'>
+                                  {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                        </>
+                      ) : (
+                        <p className='text-gray-500 dark:text-gray-400'>No message data found</p>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+        </div>
 
-          {/* Artifacts (images) */}
-          {Array.isArray(artifacts) && artifacts.length > 0 && (
-            <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3'>
-              {artifacts.map((dataUrl, idx) => (
-                <div
-                  key={`${id}-artifact-${idx}`}
-                  className='relative rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900'
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={dataUrl}
-                    alt={`attachment-${idx}`}
-                    className='w-full h-40 sm:h-48 md:h-56 lg:h-64 object-contain bg-neutral-100 dark:bg-neutral-800'
-                    loading='lazy'
-                  />
-                  {editingState && editMode === 'branch' && (
-                    <button
-                      type='button'
-                      title='Remove image'
-                      onClick={() => handleDeleteArtifact(idx)}
-                      className='absolute top-2 right-2 z-10 p-1.5 rounded-md bg-neutral-800/70 text-white hover:bg-neutral-700'
-                    >
-                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+        {/* Artifacts (images) */}
+        {Array.isArray(artifacts) && artifacts.length > 0 && (
+          <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3'>
+            {artifacts.map((dataUrl, idx) => (
+              <div
+                key={`${id}-artifact-${idx}`}
+                className='relative rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900'
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={dataUrl}
+                  alt={`attachment-${idx}`}
+                  className='w-full h-40 sm:h-48 md:h-56 lg:h-64 object-contain bg-neutral-100 dark:bg-neutral-800'
+                  loading='lazy'
+                />
+                {editingState && editMode === 'branch' && (
+                  <button
+                    type='button'
+                    title='Remove image'
+                    onClick={() => handleDeleteArtifact(idx)}
+                    className='absolute top-2 right-2 z-10 p-1.5 rounded-md bg-neutral-800/70 text-white hover:bg-neutral-700'
+                  >
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
-          {/* Edit instructions */}
-          {editingState && (
-            <div className='mt-2 text-xs sm:text-sm text-gray-500'>
-              Press Enter to save, Shift+Enter for new line, Escape to cancel
-            </div>
-          )}
+        {/* Edit instructions */}
+        {editingState && (
+          <div className='mt-2 text-xs sm:text-sm text-gray-500'>
+            Press Enter to save, Shift+Enter for new line, Escape to cancel
+          </div>
+        )}
 
-          {/* {timestamp && formatTimestamp(timestamp) && (
+        {/* {timestamp && formatTimestamp(timestamp) && (
           <div className='text-[9px] sm:text-xs 3xl:text-sm text-stone-400 pt-0.5 flex justify-end'>
             {formatTimestamp(timestamp)}
           </div>
         )} */}
 
-          {/* Context Menu */}
-          <ContextMenu
-            isOpen={contextMenuOpen}
-            position={contextMenuPosition}
-            items={contextMenuItems}
-            onClose={() => setContextMenuOpen(false)}
-          />
+        {/* Context Menu */}
+        <ContextMenu
+          isOpen={contextMenuOpen}
+          position={contextMenuPosition}
+          items={contextMenuItems}
+          onClose={() => setContextMenuOpen(false)}
+        />
 
-          {/* Floating Explain Input */}
-          <AnimatePresence>
-            {showExplainInput && explainInputPosition.current && (
-              <motion.div
-                ref={explainInputRef}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className='fixed z-[10000] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 [will-change:contents] [transform:translateZ(0)]'
-                style={{
-                  left: `${getAdjustedExplainInputPosition()?.x || explainInputPosition.current.x}px`,
-                  top: `${getAdjustedExplainInputPosition()?.y || explainInputPosition.current.y}px`,
-                }}
-              >
-                {/* <div className='mb-2 text-sm font-medium text-gray-700 dark:text-gray-300'>
+        {/* Floating Explain Input */}
+        <AnimatePresence>
+          {showExplainInput && explainInputPosition.current && (
+            <motion.div
+              ref={explainInputRef}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className='fixed z-[10000] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 [will-change:contents] [transform:translateZ(0)]'
+              style={{
+                left: `${getAdjustedExplainInputPosition()?.x || explainInputPosition.current.x}px`,
+                top: `${getAdjustedExplainInputPosition()?.y || explainInputPosition.current.y}px`,
+              }}
+            >
+              {/* <div className='mb-2 text-sm font-medium text-gray-700 dark:text-gray-300'>
                 Ask about selected text
               </div> */}
-                {/* Display selected text */}
-                <div className='mb-2 p-2 rounded-md bg-neutral-50 dark:bg-yBlack-800 border border-neutral-200 dark:border-neutral-700 max-h-[100px] overflow-y-auto'>
-                  <div className='text-xs text-gray-600 dark:text-gray-400 italic line-clamp-4'>"{selectedText}"</div>
-                </div>
-                <TextArea
-                  value={explainInputValue}
-                  onChange={setExplainInputValue}
-                  placeholder='Ask a question about the selected text...'
-                  autoFocus
-                  width='w-full'
-                  minRows={1}
-                  maxRows={2}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSendExplainInput()
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault()
-                      handleCancelExplainInput()
-                    }
-                  }}
-                />
-                <div className='mt-2 flex justify-end gap-2'>
-                  <button
-                    onClick={handleCancelExplainInput}
-                    className='px-3 py-1.5 text-sm rounded-md text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors'
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSendExplainInput}
-                    disabled={!explainInputValue.trim()}
-                    className='px-3 py-1.5 text-sm rounded-md bg-blue-500 hover:bg-blue-600 disabled:bg-neutral-300 disabled:cursor-not-allowed dark:disabled:bg-neutral-700 text-white transition-colors'
-                  >
-                    Send
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </SmoothHeightWrapper>
+              {/* Display selected text */}
+              <div className='mb-2 p-2 rounded-md bg-neutral-50 dark:bg-yBlack-800 border border-neutral-200 dark:border-neutral-700 max-h-[100px] overflow-y-auto'>
+                <div className='text-xs text-gray-600 dark:text-gray-400 italic line-clamp-4'>"{selectedText}"</div>
+              </div>
+              <TextArea
+                value={explainInputValue}
+                onChange={setExplainInputValue}
+                placeholder='Ask a question about the selected text...'
+                autoFocus
+                width='w-full'
+                minRows={1}
+                maxRows={2}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendExplainInput()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    handleCancelExplainInput()
+                  }
+                }}
+              />
+              <div className='mt-2 flex justify-end gap-2'>
+                <button
+                  onClick={handleCancelExplainInput}
+                  className='px-3 py-1.5 text-sm rounded-md text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors'
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendExplainInput}
+                  disabled={!explainInputValue.trim()}
+                  className='px-3 py-1.5 text-sm rounded-md bg-blue-500 hover:bg-blue-600 disabled:bg-neutral-300 disabled:cursor-not-allowed dark:disabled:bg-neutral-700 text-white transition-colors'
+                >
+                  Send
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     )
   }
 )

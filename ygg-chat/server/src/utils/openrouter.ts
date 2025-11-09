@@ -160,6 +160,8 @@ async function getOpenRouterClient() {
     if (referer) headers['HTTP-Referer'] = referer
     const title = process.env.OPENROUTER_TITLE || 'Yggdrasil Chat'
     headers['X-Title'] = title
+    headers['HTTP-Referer'] = 'https://yggchat.chat'
+    headers['X-Title'] = 'Yggdrasil Chat'
 
     openrouterInstance = new OpenAI({
       apiKey,

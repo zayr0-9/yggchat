@@ -249,6 +249,37 @@ const updateMessageCache = (queryClient: QueryClient | null, conversationId: Con
   }
 }
 
+/**
+ * Updates a message's artifacts in React Query cache
+ * Keeps React Query cache in sync with Redux state when artifacts are appended
+ * Essential for ensuring images/attachments appear immediately in sent messages
+ */
+const updateMessageArtifactsInCache = (
+  queryClient: QueryClient | null,
+  conversationId: ConversationId,
+  messageId: MessageId,
+  newArtifacts: string[]
+) => {
+  if (!queryClient || !newArtifacts.length) return
+
+  const cacheKey = ['conversations', conversationId, 'messages']
+  const existingData = queryClient.getQueryData<{ messages: Message[]; tree: any }>(cacheKey)
+
+  if (existingData) {
+    // Update the message artifacts in the messages array
+    const updatedMessages = existingData.messages.map(msg =>
+      msg.id === messageId
+        ? { ...msg, artifacts: [...(msg.artifacts || []), ...newArtifacts] }
+        : msg
+    )
+
+    queryClient.setQueryData(cacheKey, {
+      messages: updatedMessages,
+      tree: existingData.tree, // Tree structure doesn't need artifact updates
+    })
+  }
+}
+
 // Utility function for API calls
 // const apiCall = async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
 //   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -480,12 +511,15 @@ export const sendMessage = createAsyncThunk<
                 }
                 // Live-update: append current image drafts to this new user message's artifacts
                 if (drafts.length > 0) {
+                  const artifactDataUrls = drafts.map(d => d.dataUrl)
                   dispatch(
                     chatSliceActions.messageArtifactsAppended({
                       messageId: chunk.message.id,
-                      artifacts: drafts.map(d => d.dataUrl),
+                      artifacts: artifactDataUrls,
                     })
                   )
+                  // Sync artifacts to React Query cache so images appear immediately
+                  updateMessageArtifactsInCache(extra.queryClient, conversationId, chunk.message.id, artifactDataUrls)
                 }
                 // Auto-update conversation title with first 50 characters of the first user message
                 if (isFirstMessage && !titleUpdated) {
@@ -710,12 +744,15 @@ export const editMessageWithBranching = createAsyncThunk<
       // Before sending, reflect current image drafts in the UI by appending them
       // to the artifacts of the message being branched from.
       if (drafts.length > 0) {
+        const draftDataUrls = drafts.map(d => d.dataUrl)
         dispatch(
           chatSliceActions.messageArtifactsAppended({
             messageId: originalMessageId,
-            artifacts: drafts.map(d => d.dataUrl),
+            artifacts: draftDataUrls,
           })
         )
+        // Sync artifacts to React Query cache to keep UI consistent
+        updateMessageArtifactsInCache(extra.queryClient, conversationId, originalMessageId, draftDataUrls)
       }
 
       if (!modelName) {
@@ -804,6 +841,20 @@ export const editMessageWithBranching = createAsyncThunk<
                       artifacts: combinedArtifacts,
                     })
                   )
+                  // Sync artifacts to React Query cache so images appear immediately in branched message
+                  const cacheKey = ['conversations', conversationId, 'messages']
+                  const existingData = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>(cacheKey)
+                  if (existingData) {
+                    const updatedMessages = existingData.messages.map(msg =>
+                      msg.id === chunk.message.id
+                        ? { ...msg, artifacts: combinedArtifacts }
+                        : msg
+                    )
+                    extra.queryClient?.setQueryData(cacheKey, {
+                      messages: updatedMessages,
+                      tree: existingData.tree,
+                    })
+                  }
                 }
 
                 // Clear optimistic branch message immediately when real branch message confirmed (web mode only)
