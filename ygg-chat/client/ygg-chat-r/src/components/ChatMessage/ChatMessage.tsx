@@ -750,7 +750,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 const toolCall = event.toolCall
                 return (
                   <div
-                    key={`tool-${toolCall.id || idx}`}
+                    key={`tool-${toolCall.id}`}
                     className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
                   >
                     <div className='flex items-center justify-between mb-2'>

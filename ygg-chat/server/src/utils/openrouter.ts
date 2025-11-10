@@ -48,6 +48,28 @@ function zodToJsonSchema(zodSchema: any): any {
   return { type: 'object', properties: {} }
 }
 
+// Normalize Zod v4 type names to match the switch cases
+function getZodTypeName(def: any): string {
+  // Zod v4 uses lowercase type names, convert to PascalCase for consistency
+  if (def.type) {
+    const typeMap: Record<string, string> = {
+      'string': 'ZodString',
+      'number': 'ZodNumber',
+      'boolean': 'ZodBoolean',
+      'array': 'ZodArray',
+      'object': 'ZodObject',
+      'optional': 'ZodOptional',
+      'nullable': 'ZodNullable',
+      'enum': 'ZodEnum',
+      'union': 'ZodUnion',
+      'default': 'ZodDefault',
+      'effects': 'ZodEffects',
+    }
+    return typeMap[def.type] || def.type
+  }
+  return 'Unknown'
+}
+
 function convertZodField(field: any): any {
   const def = field._def
 
@@ -64,7 +86,7 @@ function convertZodField(field: any): any {
     return undefined
   }
 
-  switch (def.typeName) {
+  switch (getZodTypeName(def)) {
     case 'ZodString':
       const stringSchema: any = { type: 'string' }
       const stringDesc = getDescription(field)
@@ -102,7 +124,7 @@ function convertZodField(field: any): any {
     case 'ZodArray':
       const arraySchema: any = {
         type: 'array',
-        items: convertZodField(def.type),
+        items: convertZodField(def.element),
       }
       const arrayDesc = getDescription(field)
       if (arrayDesc) arraySchema.description = arrayDesc
@@ -760,7 +782,7 @@ export async function generateResponse(
       const openrouterClient = await getOpenRouterClient()
 
       // Log messages being sent to API
-      console.log('📤 [openrouter] Messages sent to API:')
+      // console.log('📤 [openrouter] Messages sent to API:')
       // console.log(JSON.stringify(formattedMessages, null, 2))
       // for (let i = 0; i < formattedMessages.length; i++) {
       //   const msg = formattedMessages[i]
