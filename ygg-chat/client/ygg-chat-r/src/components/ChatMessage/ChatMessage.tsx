@@ -789,7 +789,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 return (
                   <div
                     key={`text-${block.index}-${idx}`}
-                    className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
+                    className='prose px-4 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
                   >
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
@@ -982,7 +982,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 />
               </div>
             ) : (
-              <div className='prose px-4 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px]'>
+              <div className='prose px-4 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[20px]'>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}

@@ -74,6 +74,15 @@ function accumulateContentBlocks(events: any[]): any[] {
         input: event.toolCall.arguments || {},
       })
       i++
+    } else if (event.type === 'tool_result' && event.toolResult) {
+      // Tool result events - add as tool_result block
+      accumulated.push({
+        type: 'tool_result',
+        tool_use_id: event.toolResult.tool_use_id,
+        content: event.toolResult.content,
+        is_error: event.toolResult.is_error || false,
+      })
+      i++
     } else {
       i++
     }
@@ -1126,7 +1135,7 @@ router.post(
           chunk => {
             try {
               const obj = JSON.parse(chunk)
-              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | undefined
+              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | undefined
               const delta = String(obj?.delta ?? '')
               if (part === 'reasoning') {
                 assistantThinking += delta
@@ -1135,6 +1144,17 @@ router.post(
                 res.write(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '', iteration: i })}\n\n`
                 )
+              } else if (part === 'tool_result') {
+                // Handle tool result events (from tool execution)
+                if (obj?.toolResult) {
+                  console.log(`✅ [supaChat/repeat] Tool result received: ${obj.toolResult.tool_use_id}`)
+                  // Log tool result event
+                  contentBlocksEvents.push({ type: 'tool_result', toolResult: obj.toolResult })
+                  // Forward to client with structured data
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'tool_result', toolResult: obj.toolResult, iteration: i })}\n\n`
+                  )
+                }
               } else if (part === 'tool_call') {
                 // Get structured tool call from obj.toolCall (not from delta)
                 if (obj?.toolCall) {
@@ -1525,13 +1545,24 @@ router.post(
           chunk => {
             try {
               const obj = JSON.parse(chunk)
-              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | undefined
+              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | undefined
               const delta = String(obj?.delta ?? '')
               if (part === 'reasoning') {
                 assistantThinking += delta
                 // Log reasoning event
                 contentBlocksEvents.push({ type: 'reasoning', delta })
                 res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '' })}\n\n`)
+              } else if (part === 'tool_result') {
+                // Handle tool result events (from tool execution)
+                if (obj?.toolResult) {
+                  console.log(`✅ [supaChat] Tool result received: ${obj.toolResult.tool_use_id}`)
+                  // Log tool result event
+                  contentBlocksEvents.push({ type: 'tool_result', toolResult: obj.toolResult })
+                  // Forward to client with structured data
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'tool_result', toolResult: obj.toolResult, content: '' })}\n\n`
+                  )
+                }
               } else if (part === 'tool_call') {
                 // Get structured tool call from obj.toolCall (not from delta)
                 if (obj?.toolCall) {

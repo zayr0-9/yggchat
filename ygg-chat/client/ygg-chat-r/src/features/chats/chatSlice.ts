@@ -416,7 +416,10 @@ export const chatSlice = createSlice({
     },
 
     // Update Claude Code session info
-    ccSessionUpdated: (state, action: PayloadAction<{ sessionId: string; lastMessageAt: string; messageCount: number; cwd: string }>) => {
+    ccSessionUpdated: (
+      state,
+      action: PayloadAction<{ sessionId: string; lastMessageAt: string; messageCount: number; cwd: string }>
+    ) => {
       state.conversation.ccSession = action.payload
     },
 

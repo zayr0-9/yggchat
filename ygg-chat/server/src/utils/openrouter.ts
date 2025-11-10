@@ -1022,6 +1022,19 @@ export async function generateResponse(
           const result = await executeToolCall(toolCall.name, toolCall.arguments)
           console.log(`Tool ${toolCall.name} result:`, result.substring(0, 200) + (result.length > 200 ? '...' : ''))
 
+          // Determine if this is an error result
+          const isError = result.startsWith('Error')
+
+          // Stream tool_result event to client
+          onChunk(JSON.stringify({
+            part: 'tool_result',
+            toolResult: {
+              tool_use_id: toolCall.id,
+              content: result,
+              is_error: isError,
+            },
+          }))
+
           conversationMessages.push({
             role: 'user', // Tool results are treated as user messages in simple format
             content: `Tool ${toolCall.name} result: ${result}`,

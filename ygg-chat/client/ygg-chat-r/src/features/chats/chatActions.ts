@@ -549,6 +549,16 @@ export const sendMessage = createAsyncThunk<
                 }
               }
 
+              // Handle tool results (accumulated server-side into content_blocks)
+              if (chunk.part === 'tool_result' && chunk.toolResult) {
+                console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
+                // Display tool result in the streaming buffer for user feedback
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  content: `Tool result: ${chunk.toolResult.content.substring(0, 100)}...`,
+                }))
+              }
+
               // For streaming, accumulate or finalize per event
               if (chunk.type === 'generation_started') {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
@@ -885,6 +895,16 @@ export const editMessageWithBranching = createAsyncThunk<
                 }
               }
 
+              // Handle tool results (accumulated server-side into content_blocks)
+              if (chunk.part === 'tool_result' && chunk.toolResult) {
+                console.log(`✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
+                // Display tool result in the streaming buffer for user feedback
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  content: `Tool result: ${chunk.toolResult.content.substring(0, 100)}...`,
+                }))
+              }
+
               if (chunk.type === 'generation_started') {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
               } else {
@@ -1042,6 +1062,16 @@ export const sendMessageToBranch = createAsyncThunk<
                 dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
+              }
+
+              // Handle tool results (accumulated server-side into content_blocks)
+              if (chunk.part === 'tool_result' && chunk.toolResult) {
+                console.log(`✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
+                // Display tool result in the streaming buffer for user feedback
+                dispatch(chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  content: `Tool result: ${chunk.toolResult.content.substring(0, 100)}...`,
+                }))
               }
 
               if (chunk.type === 'generation_started') {
