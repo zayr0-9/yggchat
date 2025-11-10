@@ -13,6 +13,9 @@ export interface BaseMessage {
   // tool_calls can be string (SQLite) or parsed object/array (Supabase)
   // Frontend handles both formats transparently
   tool_calls?: string | any
+  // content_blocks can be string (SQLite) or parsed object/array (Supabase)
+  // Structured content with thinking, tool_use, tool_result, text blocks
+  content_blocks?: string | any
   content: string
   content_plain_text: string
   parent_id?: MessageId | null

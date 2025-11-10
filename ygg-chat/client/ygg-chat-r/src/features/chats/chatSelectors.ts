@@ -50,6 +50,8 @@ export const selectThinkingBuffer = createSelector([selectStreamState], stream =
 
 export const selectStreamError = createSelector([selectStreamState], stream => stream.error)
 
+export const selectStreamEvents = createSelector([selectStreamState], stream => stream.events)
+
 export const selectIsStreaming = createSelector([selectStreamState], stream => stream.active)
 
 // Combined state selectors - optimized

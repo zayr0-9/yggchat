@@ -32,6 +32,56 @@ import { getToolByName, updateToolEnabled } from '../utils/tools/index'
 
 const router = express.Router()
 
+/**
+ * Accumulates consecutive events of the same type into single blocks
+ * Matches client-side rendering logic in ChatMessage.tsx
+ */
+function accumulateContentBlocks(events: any[]): any[] {
+  if (!events || events.length === 0) return []
+
+  const accumulated: any[] = []
+  let i = 0
+
+  while (i < events.length) {
+    const event = events[i]
+
+    if (event.type === 'text' && event.delta) {
+      // Accumulate consecutive text events
+      let accumulatedText = event.delta
+      let j = i + 1
+      while (j < events.length && events[j].type === 'text' && events[j].delta) {
+        accumulatedText += events[j].delta
+        j++
+      }
+      accumulated.push({ type: 'text', content: accumulatedText })
+      i = j
+    } else if (event.type === 'reasoning' && event.delta) {
+      // Accumulate consecutive reasoning events
+      let accumulatedReasoning = event.delta
+      let j = i + 1
+      while (j < events.length && events[j].type === 'reasoning' && events[j].delta) {
+        accumulatedReasoning += events[j].delta
+        j++
+      }
+      accumulated.push({ type: 'thinking', content: accumulatedReasoning })
+      i = j
+    } else if (event.type === 'tool_call' && event.toolCall && event.complete) {
+      // Tool calls are already complete, add as-is
+      accumulated.push({
+        type: 'tool_use',
+        id: event.toolCall.id,
+        name: event.toolCall.name,
+        input: event.toolCall.arguments || {},
+      })
+      i++
+    } else {
+      i++
+    }
+  }
+
+  return accumulated
+}
+
 // Global search endpoint - Uses JWT auth so auth.uid() works correctly
 router.get(
   '/search',
@@ -1067,6 +1117,8 @@ router.post(
         let assistantContent = ''
         let assistantThinking = ''
         let assistantToolCalls = ''
+        // Sequential events array for this iteration
+        const contentBlocksEvents: any[] = []
 
         // Don't create placeholder message - will create after each iteration completes
         await generateResponse(
@@ -1078,6 +1130,8 @@ router.post(
               const delta = String(obj?.delta ?? '')
               if (part === 'reasoning') {
                 assistantThinking += delta
+                // Log reasoning event
+                contentBlocksEvents.push({ type: 'reasoning', delta })
                 res.write(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '', iteration: i })}\n\n`
                 )
@@ -1088,6 +1142,8 @@ router.post(
                   currentToolCalls.push(obj.toolCall)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
                   console.log(`✅ [supaChat/repeat] Accumulated tool call: ${obj.toolCall.name}`)
+                  // Log tool call event with complete flag
+                  contentBlocksEvents.push({ type: 'tool_call', toolCall: obj.toolCall, complete: true })
                   // Forward to client with structured data
                   res.write(
                     `data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, iteration: i })}\n\n`
@@ -1099,6 +1155,8 @@ router.post(
                     delta.substring(0, 100)
                   )
                   assistantContent += delta
+                  // Log as text event
+                  contentBlocksEvents.push({ type: 'text', delta })
                   res.write(
                     `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta, iteration: i })}\n\n`
                   )
@@ -1112,6 +1170,11 @@ router.post(
                     currentToolCalls.push(...jsonObjects)
                     assistantToolCalls = JSON.stringify(currentToolCalls)
 
+                    // Log each tool call as complete event
+                    for (const tc of jsonObjects) {
+                      contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                    }
+
                     res.write(
                       `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '', iteration: i })}\n\n`
                     )
@@ -1119,12 +1182,16 @@ router.post(
 
                   if (cleanedText) {
                     assistantContent += cleanedText
+                    // Log text event
+                    contentBlocksEvents.push({ type: 'text', delta: cleanedText })
                     res.write(
                       `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText, iteration: i })}\n\n`
                     )
                   }
                 } else {
                   assistantContent += delta
+                  // Log text event
+                  contentBlocksEvents.push({ type: 'text', delta })
                   res.write(
                     `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta, iteration: i })}\n\n`
                   )
@@ -1138,6 +1205,11 @@ router.post(
                   currentToolCalls.push(...jsonObjects)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
 
+                  // Log each tool call as complete event
+                  for (const tc of jsonObjects) {
+                    contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                  }
+
                   res.write(
                     `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '', iteration: i })}\n\n`
                   )
@@ -1145,12 +1217,16 @@ router.post(
 
                 if (cleanedText) {
                   assistantContent += cleanedText
+                  // Log text event
+                  contentBlocksEvents.push({ type: 'text', delta: cleanedText })
                   res.write(
                     `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText, iteration: i })}\n\n`
                   )
                 }
               } else {
                 assistantContent += chunk
+                // Log text event
+                contentBlocksEvents.push({ type: 'text', delta: chunk })
                 res.write(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: chunk, content: chunk, iteration: i })}\n\n`
                 )
@@ -1187,6 +1263,9 @@ router.post(
           // Validate assistantToolCalls before passing to MessageService.create
           console.log('🔧 [supaChat/repeat] assistantToolCalls value:', assistantToolCalls)
           console.log('🔧 [supaChat/repeat] iteration:', i)
+          console.log('🔧 [supaChat/repeat] Saving content_blocks with', contentBlocksEvents.length, 'events')
+          const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
+          console.log('🔧 [supaChat/repeat] Accumulated into', accumulatedBlocks.length, 'blocks')
 
           // Create assistant message with final content (not update placeholder)
           try {
@@ -1197,9 +1276,11 @@ router.post(
               userMessage.id,
               'assistant',
               cleanedContent,
-              assistantThinking,
+              '',
               selectedModel,
-              assistantToolCalls
+              undefined,
+              undefined,
+              accumulatedBlocks
             )
             // console.log(assistantMessage)
 
@@ -1431,6 +1512,8 @@ router.post(
       let assistantContent = ''
       let assistantThinking = ''
       let assistantToolCalls = ''
+      // Sequential events array to preserve order of chunks as received (for content_blocks)
+      const contentBlocksEvents: any[] = []
 
       // Don't create placeholder message - will create after streaming completes
       const { id: messageId, controller } = createGeneration(userMessage.id)
@@ -1446,6 +1529,8 @@ router.post(
               const delta = String(obj?.delta ?? '')
               if (part === 'reasoning') {
                 assistantThinking += delta
+                // Log reasoning event
+                contentBlocksEvents.push({ type: 'reasoning', delta })
                 res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '' })}\n\n`)
               } else if (part === 'tool_call') {
                 // Get structured tool call from obj.toolCall (not from delta)
@@ -1456,6 +1541,8 @@ router.post(
                   currentToolCalls.push(obj.toolCall)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
                   console.log('✅ [supaChat] Updated assistantToolCalls, current length:', currentToolCalls.length)
+                  // Log tool call event with complete flag
+                  contentBlocksEvents.push({ type: 'tool_call', toolCall: obj.toolCall, complete: true })
                   // Forward to client with structured data
                   res.write(
                     `data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, content: '' })}\n\n`
@@ -1467,6 +1554,8 @@ router.post(
                     delta.substring(0, 150)
                   )
                   assistantContent += delta
+                  // Log as text event
+                  contentBlocksEvents.push({ type: 'text', delta })
                   res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta })}\n\n`)
                 }
               } else {
@@ -1477,6 +1566,11 @@ router.post(
                     currentToolCalls.push(...jsonObjects)
                     assistantToolCalls = JSON.stringify(currentToolCalls)
 
+                    // Log each tool call as complete event
+                    for (const tc of jsonObjects) {
+                      contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                    }
+
                     res.write(
                       `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '' })}\n\n`
                     )
@@ -1484,12 +1578,16 @@ router.post(
 
                   if (cleanedText) {
                     assistantContent += cleanedText
+                    // Log text event
+                    contentBlocksEvents.push({ type: 'text', delta: cleanedText })
                     res.write(
                       `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText })}\n\n`
                     )
                   }
                 } else {
                   assistantContent += delta
+                  // Log text event
+                  contentBlocksEvents.push({ type: 'text', delta })
                   res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta })}\n\n`)
                 }
               }
@@ -1501,6 +1599,11 @@ router.post(
                   currentToolCalls.push(...jsonObjects)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
 
+                  // Log each tool call as complete event
+                  for (const tc of jsonObjects) {
+                    contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                  }
+
                   res.write(
                     `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '' })}\n\n`
                   )
@@ -1508,12 +1611,16 @@ router.post(
 
                 if (cleanedText) {
                   assistantContent += cleanedText
+                  // Log text event
+                  contentBlocksEvents.push({ type: 'text', delta: cleanedText })
                   res.write(
                     `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: cleanedText, content: cleanedText })}\n\n`
                   )
                 }
               } else {
                 assistantContent += chunk
+                // Log text event
+                contentBlocksEvents.push({ type: 'text', delta: chunk })
                 res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: chunk, content: chunk })}\n\n`)
               }
             }
@@ -1570,6 +1677,9 @@ router.post(
             '📤 [supaChat] Calling MessageService.create with tool_calls:',
             assistantToolCalls ? assistantToolCalls.substring(0, 100) : 'empty'
           )
+          console.log('📤 [supaChat] Saving content_blocks with', contentBlocksEvents.length, 'events')
+          const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
+          console.log('📤 [supaChat] Accumulated into', accumulatedBlocks.length, 'blocks')
           const assistantMessage = await MessageService.create(
             client,
             userId,
@@ -1577,9 +1687,11 @@ router.post(
             userMessage.id,
             'assistant',
             cleanedContent,
-            assistantThinking,
+            '',
             selectedModel,
-            assistantToolCalls
+            undefined,
+            undefined,
+            accumulatedBlocks
           )
           // console.log(assistantMessage)
           const cleanedMessage = { ...assistantMessage, content: cleanedContent }
@@ -1632,6 +1744,7 @@ router.post(
             // Create message with partial content from aborted generation
             console.log('🔧 [supaChat/abort] Saving partial content, toolCalls:', assistantToolCalls)
             try {
+              const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
               const assistantMessage = await MessageService.create(
                 client,
                 userId,
@@ -1639,9 +1752,11 @@ router.post(
                 userMessage.id,
                 'assistant',
                 cleanedContent,
-                assistantThinking,
+                '',
                 selectedModel,
-                assistantToolCalls
+                undefined,
+                undefined,
+                accumulatedBlocks
               )
               const cleanedMessage = { ...assistantMessage, content: cleanedContent }
               res.write(`data: ${JSON.stringify({ type: 'complete', message: cleanedMessage, aborted: true })}\n\n`)

@@ -75,6 +75,16 @@ export interface StreamChunk {
   chunkType?: 'content_delta' | 'thinking_delta' | 'tool_start' | 'tool_end' | 'tool_progress'
 }
 
+// Sequential event for streaming to preserve order
+export interface StreamEvent {
+  type: 'text' | 'reasoning' | 'tool_call'
+  content?: string
+  delta?: string
+  toolCall?: ToolCall
+  // Indicates if this is a complete block (not a delta)
+  complete?: boolean
+}
+
 export interface StreamState {
   active: boolean
   buffer: string
@@ -82,6 +92,8 @@ export interface StreamState {
   thinkingBuffer: string
   // separate array for tool calls while streaming
   toolCalls: ToolCall[]
+  // sequential events log to preserve order of chunks as received
+  events: StreamEvent[]
   messageId: MessageId | null
   error: string | null
   finished: boolean

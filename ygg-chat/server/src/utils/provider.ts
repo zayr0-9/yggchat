@@ -54,12 +54,79 @@ export async function generateResponse(
           .join('\n')}`
       : ''
 
-  // Prepare messages for AI SDK providers (text-only content objects)
+  // Helper function to reconstruct assistant message content with tool results and reasoning
+  const reconstructAssistantContent = (msg: Message): string | any[] => {
+    // If content_blocks exist, use them (structured format with tool_use/tool_result)
+    if (msg.content_blocks && Array.isArray(msg.content_blocks) && msg.content_blocks.length > 0) {
+      const blocks: any[] = []
+      for (const block of msg.content_blocks) {
+        if (block.type === 'text') {
+          blocks.push({ type: 'text', text: block.content })
+        } else if (block.type === 'thinking') {
+          blocks.push({ type: 'thinking', thinking: block.content })
+        } else if (block.type === 'tool_use') {
+          blocks.push({
+            type: 'tool_use',
+            id: block.id,
+            name: block.name,
+            input: block.input,
+          })
+        } else if (block.type === 'tool_result') {
+          blocks.push({
+            type: 'tool_result',
+            tool_use_id: block.tool_use_id,
+            content: block.content,
+            is_error: block.is_error,
+          })
+        }
+      }
+      return blocks.length > 0 ? blocks : msg.content
+    }
+
+    // Fallback: reconstruct from tool_calls and thinking_block
+    if ((msg.tool_calls || msg.thinking_block) && msg.role === 'assistant') {
+      const blocks: any[] = []
+
+      // Add thinking block if present
+      if (msg.thinking_block && msg.thinking_block.trim()) {
+        blocks.push({ type: 'thinking', thinking: msg.thinking_block })
+      }
+
+      // Add main content
+      if (msg.content && msg.content.trim()) {
+        blocks.push({ type: 'text', text: msg.content })
+      }
+
+      // Parse and add tool calls if present
+      if (msg.tool_calls) {
+        try {
+          const toolCalls = typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls
+          const toolCallsArray = Array.isArray(toolCalls) ? toolCalls : [toolCalls]
+          for (const tc of toolCallsArray) {
+            blocks.push({
+              type: 'tool_use',
+              id: tc.id,
+              name: tc.name,
+              input: tc.arguments || tc.input,
+            })
+          }
+        } catch (e) {
+          // If parsing fails, just use content
+        }
+      }
+
+      return blocks.length > 0 ? blocks : msg.content
+    }
+
+    return msg.content
+  }
+
+  // Prepare messages for AI SDK providers (with proper content reconstruction)
   const aiSdkBase = messages
     .filter(msg => msg.content && msg.content.trim() !== '')
     .map(msg => ({
       role: msg.role === 'ex_agent' ? 'assistant' : (msg.role as 'user' | 'assistant'),
-      content: msg.content
+      content: reconstructAssistantContent(msg)
     }))
 
   // Optionally prepend a dummy user context message

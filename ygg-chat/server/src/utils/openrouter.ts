@@ -759,6 +759,30 @@ export async function generateResponse(
     try {
       const openrouterClient = await getOpenRouterClient()
 
+      // Log messages being sent to API
+      console.log('📤 [openrouter] Messages sent to API:')
+      // console.log(JSON.stringify(formattedMessages, null, 2))
+      // for (let i = 0; i < formattedMessages.length; i++) {
+      //   const msg = formattedMessages[i]
+      //   if (typeof msg.content === 'string') {
+      //     console.log(`  [${i}] role=${msg.role}, content_type=string, length=${msg.content.length}`)
+      //   } else if (Array.isArray(msg.content)) {
+      //     console.log(`  [${i}] role=${msg.role}, content_type=array, blocks=${msg.content.length}`)
+      //     for (let j = 0; j < msg.content.length; j++) {
+      //       const block = msg.content[j]
+      //       if (block.type === 'text') {
+      //         console.log(`    [${j}] type=text, length=${block.text?.length || 0}`)
+      //       } else if (block.type === 'thinking') {
+      //         console.log(`    [${j}] type=thinking, length=${block.thinking?.length || 0}`)
+      //       } else if (block.type === 'tool_use') {
+      //         console.log(`    [${j}] type=tool_use, id=${block.id}, name=${block.name}`)
+      //       } else if (block.type === 'tool_result') {
+      //         console.log(`    [${j}] type=tool_result, tool_use_id=${block.tool_use_id}, is_error=${block.is_error}`)
+      //       }
+      //     }
+      //   }
+      // }
+
       const stream: any = await openrouterClient.chat.completions.create(
         {
           model, // e.g. "openrouter/auto" or a specific openrouter/<provider>/<model> id

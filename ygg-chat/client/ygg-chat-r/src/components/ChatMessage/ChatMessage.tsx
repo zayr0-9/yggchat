@@ -1,4 +1,4 @@
-import type { ContentBlock, ToolCall } from '@/features/chats/chatTypes'
+import type { ContentBlock, StreamEvent, ToolCall } from '@/features/chats/chatTypes'
 import type { RootState } from '@/store/store'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
@@ -32,6 +32,7 @@ interface ChatMessageProps {
   thinking?: string
   toolCalls?: ToolCall[]
   contentBlocks?: ContentBlock[]
+  streamEvents?: StreamEvent[]
   timestamp?: string | Date
   onEdit?: (id: string, newContent: string) => void
   onBranch?: (id: string, newContent: string) => void
@@ -216,6 +217,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     thinking,
     toolCalls,
     contentBlocks,
+    streamEvents,
     // timestamp,
     onEdit,
     onBranch,
@@ -239,8 +241,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [copied, setCopied] = useState(false)
     // Toggle visibility of the reasoning/thinking block
     const [showThinking, setShowThinking] = useState(true)
-    // Toggle visibility of the tool calls block
-    const [showToolCalls, setShowToolCalls] = useState(true)
     // More menu states
     const [showMoreMenu, setShowMoreMenu] = useState(false)
     const [showMoreInfo, setShowMoreInfo] = useState(false)
@@ -680,37 +680,212 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           </div>
         </div>
 
-        {/* Tool calls block */}
-        {Array.isArray(toolCalls) && toolCalls.length > 0 && (
-          <div className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'>
-            <div className='mb-2 flex items-center justify-between'>
-              <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300'>
-                Tool Calls ({toolCalls.length})
-              </div>
-              <Button
-                type='button'
-                onClick={() => setShowToolCalls(s => !s)}
-                className='ml-2 text-xs px-2 py-1 border-1 border-blue-300 text-blue-800 dark:text-blue-300 dark:border-blue-900/60 hover:bg-blue-100 dark:hover:bg-neutral-800'
-                size='smaller'
-                variant='outline'
-                aria-expanded={showToolCalls}
-                aria-controls={`tool-calls-content-${id}`}
-              >
-                {showToolCalls ? 'Hide' : 'Show'}
-              </Button>
-            </div>
-            {showToolCalls && (
-              <div
-                id={`tool-calls-content-${id}`}
-                className='space-y-3 text-xs sm:text-sm xl:text-[14px] 3xl:text-base '
-              >
-                {toolCalls.map((toolCall, idx) => (
-                  <div key={toolCall.id || idx} className='bg-neutral-50 rounded-2xl dark:bg-neutral-900 py-2 '>
+        {/* Prioritize rendering: streamEvents > contentBlocks > legacy fields */}
+        {/* Sequential streaming events - render in order as received */}
+        {Array.isArray(streamEvents) && streamEvents.length > 0 ? (
+          <div className='space-y-3 mb-3'>
+            {streamEvents.map((event, idx) => {
+              if (event.type === 'text') {
+                // Accumulate consecutive text events into one block
+                let accumulatedText = event.delta || ''
+                for (let i = idx + 1; i < streamEvents.length; i++) {
+                  if (streamEvents[i].type === 'text' && streamEvents[i].delta) {
+                    accumulatedText += streamEvents[i].delta
+                  } else {
+                    break
+                  }
+                }
+                // Only render if this is the first text event in the sequence
+                if (idx === 0 || streamEvents[idx - 1].type !== 'text') {
+                  return (
+                    <div
+                      key={`text-${idx}`}
+                      className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                        components={{ pre: PreRenderer }}
+                      >
+                        {accumulatedText}
+                      </ReactMarkdown>
+                    </div>
+                  )
+                }
+                return null
+              } else if (event.type === 'reasoning' && event.delta) {
+                // Accumulate consecutive reasoning events into one block
+                let accumulatedReasoning = event.delta || ''
+                for (let i = idx + 1; i < streamEvents.length; i++) {
+                  if (streamEvents[i].type === 'reasoning' && streamEvents[i].delta) {
+                    accumulatedReasoning += streamEvents[i].delta
+                  } else {
+                    break
+                  }
+                }
+                // Only render if this is the first reasoning event in the sequence
+                if (idx === 0 || streamEvents[idx - 1].type !== 'reasoning') {
+                  return (
+                    <div
+                      key={`reasoning-${idx}`}
+                      className='rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                    >
+                      <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300 mb-2'>
+                        Reasoning
+                      </div>
+                      <div className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                          components={{ pre: PreRenderer }}
+                        >
+                          {accumulatedReasoning}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              } else if (event.type === 'tool_call' && event.toolCall && event.complete) {
+                const toolCall = event.toolCall
+                return (
+                  <div
+                    key={`tool-${toolCall.id || idx}`}
+                    className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                  >
                     <div className='flex items-center justify-between mb-2'>
                       <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
-                      {/* <span className='text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'>
-                        {toolCall.status}
-                      </span> */}
+                    </div>
+                    {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                      <div className='text-xs space-y-1'>
+                        {Object.entries(toolCall.arguments).map(([key, value]) => (
+                          <div key={key} className='flex gap-2'>
+                            <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                            <span className='text-gray-800 dark:text-gray-200 break-all'>
+                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {toolCall.result && (
+                      <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
+                        <div className='font-semibold mb-1'>Result:</div>
+                        <div className='break-all'>{toolCall.result}</div>
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+              return null
+            })}
+          </div>
+        ) : Array.isArray(contentBlocks) && contentBlocks.length > 0 ? (
+          // Render content_blocks if available (prioritized over legacy fields)
+          // Uses same formatting as streaming events
+          <div className='space-y-3 mb-3'>
+            {contentBlocks.map((block, idx) => {
+              if (block.type === 'text') {
+                return (
+                  <div
+                    key={`text-${block.index}-${idx}`}
+                    className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                      components={{ pre: PreRenderer }}
+                    >
+                      {block.content}
+                    </ReactMarkdown>
+                  </div>
+                )
+              } else if (block.type === 'thinking') {
+                return (
+                  <div
+                    key={`thinking-${block.index}-${idx}`}
+                    className='rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                  >
+                    <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300 mb-2'>
+                      Reasoning
+                    </div>
+                    <div className='prose max-w-none dark:prose-invert w-full px-4 py-1 text-[14px] sm:text-[14px] 2xl:text-[18px] 3xl:text-[18px]'>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                        components={{ pre: PreRenderer }}
+                      >
+                        {block.content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )
+              } else if (block.type === 'tool_use') {
+                const toolUseBlock = block as any
+                return (
+                  <div
+                    key={`tool-${toolUseBlock.id}-${idx}`}
+                    className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                  >
+                    <div className='flex items-center justify-between mb-2'>
+                      <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolUseBlock.name}</div>
+                    </div>
+                    {toolUseBlock.input && Object.keys(toolUseBlock.input).length > 0 && (
+                      <div className='text-xs space-y-1 2xl:p-2'>
+                        {Object.entries(toolUseBlock.input).map(([key, value]) => (
+                          <div key={key} className='flex gap-2'>
+                            <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                            <span className='text-gray-800 dark:text-gray-200 break-all'>
+                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              } else if (block.type === 'tool_result') {
+                const toolResultBlock = block as any
+                const isError = toolResultBlock.is_error
+                return (
+                  <div
+                    key={`tool-result-${toolResultBlock.tool_use_id}-${idx}`}
+                    className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
+                      isError
+                        ? 'border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-neutral-900'
+                        : 'border-green-200 bg-green-50 dark:border-green-900/30 dark:bg-neutral-900'
+                    }`}
+                  >
+                    <div
+                      className={`font-semibold text-xs mb-2 ${
+                        isError ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'
+                      }`}
+                    >
+                      {isError ? 'Tool Error' : 'Tool Result'}
+                    </div>
+                    <div className='text-xs text-gray-800 dark:text-gray-200 break-all whitespace-pre-wrap'>
+                      {typeof toolResultBlock.content === 'object'
+                        ? JSON.stringify(toolResultBlock.content, null, 2)
+                        : String(toolResultBlock.content)}
+                    </div>
+                  </div>
+                )
+              }
+              return null
+            })}
+          </div>
+        ) : (
+          <>
+            {/* Fallback: render tool calls and reasoning separately if no streamEvents or contentBlocks */}
+            {Array.isArray(toolCalls) && toolCalls.length > 0 && (
+              <div className='space-y-3 mb-3'>
+                {toolCalls.map((toolCall, idx) => (
+                  <div
+                    key={toolCall.id || idx}
+                    className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                  >
+                    <div className='flex items-center justify-between mb-2'>
+                      <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
                     </div>
                     {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
                       <div className='text-xs space-y-1'>
@@ -734,171 +909,47 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 ))}
               </div>
             )}
-          </div>
-        )}
 
-        {/* Reasoning / thinking block */}
-        {typeof thinking === 'string' && thinking.trim().length > 0 && (
-          <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'>
-            <div className='mb-2 flex items-center justify-between'>
-              <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
-                Reasoning
-              </div>
-              <Button
-                type='button'
-                onClick={() => setShowThinking(s => !s)}
-                className='ml-2 text-xs px-2 py-1 border-1 border-neutral-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-neutral-800'
-                size='smaller'
-                variant='outline2'
-                aria-expanded={showThinking}
-                aria-controls={`reasoning-content-${id}`}
-              >
-                {showThinking ? 'Hide' : 'Show'}
-              </Button>
-            </div>
-            {showThinking && (
-              <div
-                id={`reasoning-content-${id}`}
-                className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
-              >
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                  components={{ pre: PreRenderer }}
-                >
-                  {thinking}
-                </ReactMarkdown>
+            {/* Reasoning / thinking block */}
+            {typeof thinking === 'string' && thinking.trim().length > 0 && (
+              <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'>
+                <div className='mb-2 flex items-center justify-between'>
+                  <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
+                    Reasoning
+                  </div>
+                  <Button
+                    type='button'
+                    onClick={() => setShowThinking(s => !s)}
+                    className='ml-2 text-xs px-2 py-1 border-1 border-neutral-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-neutral-800'
+                    size='smaller'
+                    variant='outline2'
+                    aria-expanded={showThinking}
+                    aria-controls={`reasoning-content-${id}`}
+                  >
+                    {showThinking ? 'Hide' : 'Show'}
+                  </Button>
+                </div>
+                {showThinking && (
+                  <div
+                    id={`reasoning-content-${id}`}
+                    className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                      components={{ pre: PreRenderer }}
+                    >
+                      {thinking}
+                    </ReactMarkdown>
+                  </div>
+                )}
               </div>
             )}
-          </div>
+          </>
         )}
 
-        {/* Sequential content blocks for ex_agent messages (Claude Code responses) */}
-        {Array.isArray(contentBlocks) && contentBlocks.length > 0 && (
-          <div className='space-y-3 mb-3'>
-            {contentBlocks.map((block, idx) => {
-              switch (block.type) {
-                case 'thinking':
-                  return (
-                    <div
-                      key={`thinking-${block.index}-${idx}`}
-                      className='rounded-2xl border border-neutral-50 bg-neutral-50 p-2 sm:p-3 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.2)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
-                    >
-                      <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-orange-300/85 mb-2'>
-                        Thinking
-                      </div>
-                      <div className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                          components={{ pre: PreRenderer }}
-                        >
-                          {block.content}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                  )
-                case 'tool_use':
-                  const blockInput = (block.input ?? {}) as Record<string, any>
-                  const todos = Array.isArray(blockInput.todos)
-                    ? (blockInput.todos as Array<Record<string, any>>)
-                    : null
-                  const otherInputs = Object.entries(blockInput).filter(([key]) => key !== 'todos')
-                  return (
-                    <div
-                      key={`tool-use-${block.id}-${idx}`}
-                      className='rounded-2xl border border-blue-50 my-3 bg-neutral-50 p-1 sm:p-2 dark:border-neutral-800 dark:bg-neutral-900 shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
-                    >
-                      <div className='text-xs sm:text-sm lg:text-xs py-1 3xl:text-base font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300 mb-1'>
-                        Tool: {block.name}
-                      </div>
-                      <div className='bg-neutral-50 dark:bg-neutral-900 px-2 pb-1 rounded-md text-xs sm:text-sm'>
-                        {todos && todos.length > 0 && (
-                          <div className='space-y-2'>
-                            <div className='font-semibold text-blue-700 dark:text-blue-300'>Todo Items</div>
-                            <ul className='space-y-1 list-disc list-inside text-gray-800 dark:text-gray-200'>
-                              {todos.map((todo, todoIdx) => (
-                                <li key={todoIdx} className='ml-2'>
-                                  <div className='font-medium'>{todo.content ?? 'Untitled task'}</div>
-                                  <div className='text-xs text-gray-600 dark:text-gray-400 flex flex-wrap gap-2'>
-                                    {todo.status && (
-                                      <span className='inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'>
-                                        {String(todo.status)}
-                                      </span>
-                                    )}
-                                    {todo.activeForm && <span className='italic'>{String(todo.activeForm)}</span>}
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {otherInputs.length > 0 && (
-                          <div className='space-y-1 mt-2'>
-                            <div className='font-semibold text-xs text-blue-700 dark:text-blue-300'>Input</div>
-                            {otherInputs.map(([key, value]) => (
-                              <div key={key} className='flex gap-2'>
-                                <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                                <span className='text-gray-800 dark:text-gray-200 break-all'>
-                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                case 'text':
-                  return (
-                    <div
-                      key={`text-${block.index}-${idx}`}
-                      className='prose max-w-none dark:prose-invert w-full text-xs sm:text-sm 3xl:text-base'
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                        components={{ pre: PreRenderer }}
-                      >
-                        {block.content}
-                      </ReactMarkdown>
-                    </div>
-                  )
-                case 'tool_result':
-                  const isError = block.is_error
-                  return (
-                    <div
-                      key={`tool-result-${block.tool_use_id}-${idx}`}
-                      className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_4px_-0.5px_rgba(0,0,0,0.1)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
-                        isError
-                          ? 'border-red-50 bg-red-50 dark:border-red-900/40 dark:bg-neutral-900'
-                          : 'border-green-50 bg-neutral-50 dark:border-green-900/40 dark:bg-neutral-900'
-                      }`}
-                    >
-                      <div
-                        className={`text-xs sm:text-xs 3xl:text-base font-semibold uppercase tracking-wide mb-2 ${
-                          isError ? 'text-red-800 dark:text-red-300' : 'text-green-800 dark:text-green-300'
-                        }`}
-                      >
-                        {isError ? 'Tool Error' : 'Tool Result'}
-                      </div>
-                      <div className='text-xs text-neutral-800 dark:text-neutral-50 sm:text-sm break-all whitespace-pre-wrap'>
-                        {typeof block.content === 'object'
-                          ? JSON.stringify(block.content, null, 2)
-                          : String(block.content)}
-                      </div>
-                    </div>
-                  )
-                default:
-                  return null
-              }
-            })}
-          </div>
-        )}
-
-        {/* Message content - only show if no contentBlocks present (to avoid duplication with content_blocks last element) */}
-        {(!contentBlocks || contentBlocks.length === 0) && (
+        {/* Message content - only show if no contentBlocks or streamEvents present (to avoid duplication) */}
+        {(!contentBlocks || contentBlocks.length === 0) && (!streamEvents || streamEvents.length === 0) && (
           <>
             {editingState ? (
               <div className='px-4 w-full'>

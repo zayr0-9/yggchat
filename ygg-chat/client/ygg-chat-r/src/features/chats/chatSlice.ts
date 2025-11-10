@@ -60,6 +60,7 @@ const makeInitialState = (): ChatState => ({
     buffer: '',
     thinkingBuffer: '',
     toolCalls: [],
+    events: [],
     messageId: null,
     error: null,
     finished: false,
@@ -201,23 +202,34 @@ export const chatSlice = createSlice({
       state.streaming.streamingMessageId = null
     },
 
-    // Streaming - optimized buffer management
+    // Streaming - optimized buffer management with sequential event logging
     streamChunkReceived: (state, action: PayloadAction<StreamChunk>) => {
       const chunk = action.payload
       if (chunk.type === 'reset') {
         state.streaming.buffer = ''
         state.streaming.thinkingBuffer = ''
         state.streaming.toolCalls = []
+        state.streaming.events = []
         state.streaming.error = null
         return
       }
 
       if (chunk.type === 'generation_started') {
         state.streaming.streamingMessageId = chunk.messageId || null
+        // Clear previous streaming events when starting new generation
+        state.streaming.events = []
+        state.streaming.buffer = ''
+        state.streaming.thinkingBuffer = ''
+        state.streaming.toolCalls = []
       } else if (chunk.type === 'chunk') {
         if (chunk.part === 'reasoning') {
           const delta = chunk.delta ?? chunk.content ?? ''
           state.streaming.thinkingBuffer += delta
+          // Log reasoning delta immediately so it appears during streaming
+          state.streaming.events.push({
+            type: 'reasoning',
+            delta,
+          })
         } else if (chunk.part === 'tool_call') {
           // Handle structured tool call data
           if (chunk.toolCall) {
@@ -227,10 +239,21 @@ export const chatSlice = createSlice({
             } else {
               state.streaming.toolCalls.push(chunk.toolCall)
             }
+            // Log complete tool call when we get the full structured data
+            state.streaming.events.push({
+              type: 'tool_call',
+              toolCall: chunk.toolCall,
+              complete: true,
+            })
           }
         } else {
           const delta = chunk.delta ?? chunk.content ?? ''
           state.streaming.buffer += delta
+          // Log text deltas as they come (text is typically streamed token by token)
+          state.streaming.events.push({
+            type: 'text',
+            delta,
+          })
         }
       } else if (chunk.type === 'tool_call') {
         // Handle structured tool call data in dedicated type
@@ -241,6 +264,12 @@ export const chatSlice = createSlice({
           } else {
             state.streaming.toolCalls.push(chunk.toolCall)
           }
+          // Log complete tool call
+          state.streaming.events.push({
+            type: 'tool_call',
+            toolCall: chunk.toolCall,
+            complete: true,
+          })
         }
       } else if (chunk.type === 'complete') {
         state.streaming.messageId = chunk.message?.id || null

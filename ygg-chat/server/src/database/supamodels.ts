@@ -835,7 +835,8 @@ export class MessageService {
     thinking_block: string,
     modelName?: string,
     tool_calls?: string,
-    note?: string
+    note?: string,
+    content_blocks?: any[]
   ): Promise<Message> {
     // Parse tool_calls safely - if invalid JSON, log and set to null
     let parsedToolCalls: any = null
@@ -900,6 +901,7 @@ export class MessageService {
         model_name: modelName || 'unknown',
         note: note || null,
         plain_text_content: plainTextContent,
+        content_blocks: content_blocks && content_blocks.length > 0 ? content_blocks : null,
       })
       .select()
       .single()

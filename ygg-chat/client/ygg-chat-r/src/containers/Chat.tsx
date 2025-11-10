@@ -1827,12 +1827,13 @@ function Chat() {
           }
         }
 
-        // Parse content_blocks for ex_agent messages with sequential rendering
+        // Parse content_blocks for assistant messages with sequential rendering
         // Handles both formats:
         // - String (from SQLite): needs JSON.parse()
         // - Object/Array (from Supabase): already parsed
+        // Prioritize content_blocks over legacy fields (content, thinking_block, tool_calls)
         let contentBlocks: ContentBlock[] | undefined = undefined
-        if (msg.role === 'ex_agent' && msg.content_blocks) {
+        if (msg.role === 'assistant' && msg.content_blocks) {
           try {
             if (typeof msg.content_blocks === 'object') {
               contentBlocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [msg.content_blocks]
@@ -1840,12 +1841,21 @@ function Chat() {
               const parsed = JSON.parse(msg.content_blocks)
               contentBlocks = Array.isArray(parsed) ? parsed : [parsed]
             }
-            // Sort by index to ensure chronological order
-            if (contentBlocks) {
+            // Ensure all blocks have an index property, add if missing
+            if (contentBlocks && contentBlocks.length > 0) {
+              contentBlocks = contentBlocks.map((block, idx) => ({
+                ...block,
+                index: block.index !== undefined ? block.index : idx
+              }))
+              // Sort by index to ensure chronological order
               contentBlocks.sort((a, b) => a.index - b.index)
+            } else {
+              // If content_blocks is empty after parsing, treat as undefined to use legacy rendering
+              contentBlocks = undefined
             }
           } catch (error) {
             console.warn(`Failed to parse content_blocks for message ${msg.id}`, error)
+            contentBlocks = undefined
           }
         }
 
@@ -2059,13 +2069,15 @@ function Chat() {
             {streamState.active &&
               (Boolean(streamState.buffer) ||
                 Boolean(streamState.thinkingBuffer) ||
-                streamState.toolCalls.length > 0) && (
+                streamState.toolCalls.length > 0 ||
+                streamState.events.length > 0) && (
                 <ChatMessage
                   id='streaming'
                   role='assistant'
                   content={streamState.buffer}
                   thinking={streamState.thinkingBuffer}
                   toolCalls={streamState.toolCalls}
+                  streamEvents={streamState.events}
                   width='w-full'
                   modelName={selectedModel?.name || undefined}
                   className=''
