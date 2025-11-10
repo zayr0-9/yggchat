@@ -552,10 +552,11 @@ export const sendMessage = createAsyncThunk<
               // Handle tool results (accumulated server-side into content_blocks)
               if (chunk.part === 'tool_result' && chunk.toolResult) {
                 console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
-                // Display tool result in the streaming buffer for user feedback
+                // Dispatch structured tool result data for proper rendering in streaming events
                 dispatch(chatSliceActions.streamChunkReceived({
                   type: 'chunk',
-                  content: `Tool result: ${chunk.toolResult.content.substring(0, 100)}...`,
+                  part: 'tool_result',
+                  toolResult: chunk.toolResult,
                 }))
               }
 
@@ -898,10 +899,11 @@ export const editMessageWithBranching = createAsyncThunk<
               // Handle tool results (accumulated server-side into content_blocks)
               if (chunk.part === 'tool_result' && chunk.toolResult) {
                 console.log(`✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
-                // Display tool result in the streaming buffer for user feedback
+                // Dispatch structured tool result data for proper rendering in streaming events
                 dispatch(chatSliceActions.streamChunkReceived({
                   type: 'chunk',
-                  content: `Tool result: ${chunk.toolResult.content.substring(0, 100)}...`,
+                  part: 'tool_result',
+                  toolResult: chunk.toolResult,
                 }))
               }
 
@@ -1067,10 +1069,11 @@ export const sendMessageToBranch = createAsyncThunk<
               // Handle tool results (accumulated server-side into content_blocks)
               if (chunk.part === 'tool_result' && chunk.toolResult) {
                 console.log(`✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
-                // Display tool result in the streaming buffer for user feedback
+                // Dispatch structured tool result data for proper rendering in streaming events
                 dispatch(chatSliceActions.streamChunkReceived({
                   type: 'chunk',
-                  content: `Tool result: ${chunk.toolResult.content.substring(0, 100)}...`,
+                  part: 'tool_result',
+                  toolResult: chunk.toolResult,
                 }))
               }
 

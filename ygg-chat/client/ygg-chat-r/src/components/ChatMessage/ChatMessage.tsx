@@ -776,6 +776,36 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     )}
                   </div>
                 )
+              } else if (event.type === 'tool_result' && event.toolResult) {
+                // Render streamed tool results with same formatting as completed tool_result blocks
+                const toolResult = event.toolResult
+                const isError = toolResult.is_error
+                return (
+                  <div
+                    key={`tool-result-${toolResult.tool_use_id}-${idx}`}
+                    className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] mx-3 ${
+                      isError
+                        ? 'border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-neutral-900'
+                        : 'border-green-200 bg-green-50 dark:border-green-900/30 dark:bg-neutral-900'
+                    }`}
+                  >
+                    <div
+                      className={`font-semibold text-xs mb-2 ${
+                        isError ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'
+                      }`}
+                    >
+                      {isError ? 'Tool Error' : 'Tool Result'}
+                    </div>
+                    <div className='text-xs text-gray-600 dark:text-gray-400 mb-2'>
+                      <span className='font-medium'>tool_use_id:</span> {toolResult.tool_use_id}
+                    </div>
+                    <div className='text-xs text-gray-800 dark:text-gray-200 break-all whitespace-pre-wrap'>
+                      {typeof toolResult.content === 'object'
+                        ? JSON.stringify(toolResult.content, null, 2)
+                        : String(toolResult.content)}
+                    </div>
+                  </div>
+                )
               }
               return null
             })}

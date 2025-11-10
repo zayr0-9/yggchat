@@ -253,6 +253,15 @@ export const chatSlice = createSlice({
               })
             }
           }
+        } else if (chunk.part === 'tool_result') {
+          // Handle tool result events during streaming
+          if (chunk.toolResult) {
+            state.streaming.events.push({
+              type: 'tool_result',
+              toolResult: chunk.toolResult,
+              complete: true,
+            })
+          }
         } else {
           const delta = chunk.delta ?? chunk.content ?? ''
           state.streaming.buffer += delta

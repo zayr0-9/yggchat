@@ -63,7 +63,7 @@ export interface StreamChunk {
   // delta is used for token-level updates from the server
   delta?: string
   // part distinguishes normal text from reasoning tokens from tool calls
-  part?: 'text' | 'reasoning' | 'tool_call'
+  part?: 'text' | 'reasoning' | 'tool_call' | 'tool_result'
   message?: Message
   error?: string
   // optional iteration index for multi-reply endpoints
@@ -71,16 +71,28 @@ export interface StreamChunk {
   messageId?: MessageId
   // structured tool call data
   toolCall?: ToolCall
+  // structured tool result data
+  toolResult?: {
+    tool_use_id: string
+    content: any
+    is_error: boolean
+  }
   // CC-specific chunk type (from Claude Code SDK streaming events)
   chunkType?: 'content_delta' | 'thinking_delta' | 'tool_start' | 'tool_end' | 'tool_progress'
 }
 
 // Sequential event for streaming to preserve order
 export interface StreamEvent {
-  type: 'text' | 'reasoning' | 'tool_call'
+  type: 'text' | 'reasoning' | 'tool_call' | 'tool_result'
   content?: string
   delta?: string
   toolCall?: ToolCall
+  // Tool result from streaming (matches server ToolResultBlock)
+  toolResult?: {
+    tool_use_id: string
+    content: any
+    is_error: boolean
+  }
   // Indicates if this is a complete block (not a delta)
   complete?: boolean
 }
