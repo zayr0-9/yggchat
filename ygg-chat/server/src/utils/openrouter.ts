@@ -899,7 +899,8 @@ export async function generateResponse(
             }
 
             // Try to send complete tool calls
-            if (currentToolCall && toolCallBuffer) {
+            // Only attempt to parse if buffer appears complete (has closing brace)
+            if (currentToolCall && toolCallBuffer && toolCallBuffer.includes('}')) {
               try {
                 // Try to parse as JSON first
                 console.log(
@@ -937,6 +938,9 @@ export async function generateResponse(
                   toolCalls.push(toolCallData)
                 }
                 console.log(`✅ [openrouter] Tool call added to execution list. Total tool calls: ${toolCalls.length}`)
+
+                // Reset buffer after successful parsing
+                toolCallBuffer = ''
               } catch (e) {
                 // If JSON parsing fails, check if we have empty object - this might be Grok's issue
                 console.error(`❌ [openrouter] Failed to parse tool call buffer:`, e)
@@ -958,9 +962,16 @@ export async function generateResponse(
                   } else {
                     toolCalls.push(toolCallData)
                   }
+                  // Reset buffer after handling
+                  toolCallBuffer = ''
+                } else {
+                  // For other parse errors on supposedly complete JSON, log but don't stop the stream
+                  console.warn(`⚠️ [openrouter] Tool call JSON incomplete or malformed, continuing to accumulate: ${toolCallBuffer.substring(0, 50)}...`)
                 }
-                // Otherwise JSON not complete yet, continue accumulating
               }
+            } else if (currentToolCall && toolCallBuffer) {
+              // Buffer exists but doesn't have closing brace yet, just keep accumulating
+              // Don't attempt to parse - wait for more chunks
             }
           }
           continue

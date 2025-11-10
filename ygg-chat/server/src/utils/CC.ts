@@ -1,4 +1,4 @@
-import { query, type CanUseTool } from '@anthropic-ai/claude-agent-sdk'
+import type { CanUseTool } from '@anthropic-ai/claude-agent-sdk'
 import { logMessageStats, parseAssistantMessage } from './CCParser'
 import type { CCResponse, OnResponse, OnStreamingChunk } from './CCTypes'
 
@@ -283,6 +283,9 @@ async function startChat(
   console.log(`[CC] ${isCommand ? 'Slash command' : 'User message'}: ${userMessage}`)
 
   try {
+    // Lazy import SDK - only loads when function is called
+    const { query } = await import('@anthropic-ai/claude-agent-sdk')
+
     // Create appropriate prompt format based on message type
     let prompt: any
     if (isCommand) {
@@ -406,6 +409,9 @@ async function resumeChat(
   console.log(`[CC] ${isCommand ? 'Slash command' : 'User message'}: ${userMessage}`)
 
   try {
+    // Lazy import SDK - only loads when function is called
+    const { query } = await import('@anthropic-ai/claude-agent-sdk')
+
     // Create appropriate prompt format based on message type
     let prompt: any
     if (isCommand) {

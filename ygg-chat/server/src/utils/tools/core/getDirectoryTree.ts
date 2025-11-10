@@ -11,6 +11,7 @@ export interface DirectoryOptions {
   maxDepth?: number
   includeHidden?: boolean
   includeSizes?: boolean
+  useFullPaths?: boolean
 }
 
 // Common ignore patterns
@@ -153,7 +154,7 @@ export async function extractDirectoryStructure(rootDir: string, options: Direct
   const result: string[] = []
 
   async function walkDirectory(currentPath: string, indent = '', depth = 0): Promise<void> {
-    if (maxDepth !== undefined && depth > 50) {
+    if (maxDepth !== undefined && depth > 1) {
       return
     }
 
@@ -173,7 +174,7 @@ export async function extractDirectoryStructure(rootDir: string, options: Direct
     }
 
     // Filter entries
-    const filteredEntries: Array<{ name: string; isDir: boolean; stats?: fs.Stats }> = []
+    const filteredEntries: Array<{ name: string; isDir: boolean; path: string; stats?: fs.Stats }> = []
 
     for (const entry of entries) {
       const entryPath = path.join(currentPath, entry)
@@ -199,11 +200,7 @@ export async function extractDirectoryStructure(rootDir: string, options: Direct
         continue
       }
 
-      filteredEntries.push({
-        name: entry,
-        isDir,
-        stats: includeSizes ? entryStats : undefined,
-      })
+      filteredEntries.push({ name: entry, isDir, path: entryPath, stats: includeSizes ? entryStats : undefined })
     }
 
     // Sort: directories first, then alphabetically (case-insensitive)
@@ -224,7 +221,7 @@ export async function extractDirectoryStructure(rootDir: string, options: Direct
         sizePart = ` (${getFileSizeStr(entry.stats.size)})`
       }
 
-      const line = `${indent}${prefixChar}${entry.name}${suffix}${sizePart}`
+      const line = `${entry.path}${suffix}${sizePart}`
       result.push(line)
 
       // Recurse into directories

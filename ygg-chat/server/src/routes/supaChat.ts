@@ -1800,13 +1800,51 @@ router.post(
             res.write(`data: ${JSON.stringify({ type: 'aborted' })}\n\n`)
           }
         } else {
-          // Non-abort error - just send error event (no cleanup needed)
-          res.write(
-            `data: ${JSON.stringify({
-              type: 'error',
-              error: error instanceof Error ? error.message : 'Unknown error',
-            })}\n\n`
-          )
+          // Non-abort error - save partial content if available before sending error
+          const cleanedContent = assistantContent.trim()
+
+          if (cleanedContent.trim() || assistantThinking.trim() || assistantToolCalls.trim() || contentBlocksEvents.length > 0) {
+            // We have accumulated content/events - save them before reporting error
+            try {
+              const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
+              console.log('🔧 [supaChat/error] Saving partial content before error, toolCalls:', assistantToolCalls)
+              const assistantMessage = await MessageService.create(
+                client,
+                userId,
+                conversationId,
+                userMessage.id,
+                'assistant',
+                cleanedContent,
+                '',
+                selectedModel,
+                undefined,
+                undefined,
+                accumulatedBlocks
+              )
+              // Send completion with accumulated content - treat as successful partial generation
+              // The error is logged on server but client sees it as a complete message
+              const cleanedMessage = { ...assistantMessage, content: cleanedContent }
+              res.write(`data: ${JSON.stringify({ type: 'complete', message: cleanedMessage })}\n\n`)
+              console.log('✅ [supaChat/error] Successfully saved partial content despite error:', error instanceof Error ? error.message : String(error))
+            } catch (saveError) {
+              // Failed to save partial content - report the error
+              console.error('❌ [supaChat/error] Failed to save partial message on error:', saveError)
+              res.write(
+                `data: ${JSON.stringify({
+                  type: 'error',
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                })}\n\n`
+              )
+            }
+          } else {
+            // No accumulated content - just send error event
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'error',
+                error: error instanceof Error ? error.message : 'Unknown error',
+              })}\n\n`
+            )
+          }
         }
       } finally {
         clearGeneration(messageId)
