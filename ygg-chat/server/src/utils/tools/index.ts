@@ -359,7 +359,7 @@ const tools: tools[] = [
         'Search code, files, and directories using ripgrep (rg), a powerful line-oriented search tool. Supports regex patterns, file filtering, and various output formats.',
       inputSchema: z.object({
         pattern: z.string().describe('Search pattern (regex or literal string)'),
-        searchPath: z.string().optional().describe('Directory or file path to search (defaults to current directory " ."')),
+        searchPath: z.string().optional().describe('Directory or file path to search (defaults to current directory ".")'),
         caseSensitive: z.boolean().optional().describe('Case-sensitive search (default false for case-insensitive)'),
         lineNumbers: z.boolean().optional().describe('Include line numbers in results (default true)'),
         count: z.boolean().optional().describe('Count matches per file instead of showing line content (default false)'),

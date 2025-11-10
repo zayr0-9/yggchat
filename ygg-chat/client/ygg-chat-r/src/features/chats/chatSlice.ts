@@ -230,7 +230,7 @@ export const chatSlice = createSlice({
             type: 'reasoning',
             delta,
           })
-        } else if (chunk.part === 'tool_call' || chunk.type === 'tool_call') {
+        } else if (chunk.part === 'tool_call') {
           // Handle structured tool call data (supports both legacy and new formats)
           if (chunk.toolCall) {
             const existingIndex = state.streaming.toolCalls.findIndex(tc => tc.id === chunk.toolCall!.id)
@@ -261,6 +261,29 @@ export const chatSlice = createSlice({
             type: 'text',
             delta,
           })
+        }
+      } else if (chunk.type === 'tool_call') {
+        // Handle legacy tool_call format (chunk.type === 'tool_call' directly)
+        if (chunk.toolCall) {
+          const existingIndex = state.streaming.toolCalls.findIndex(tc => tc.id === chunk.toolCall!.id)
+          if (existingIndex >= 0) {
+            state.streaming.toolCalls[existingIndex] = chunk.toolCall
+          } else {
+            state.streaming.toolCalls.push(chunk.toolCall)
+          }
+
+          // Only add to events if this tool call ID hasn't been logged yet (deduplication)
+          const eventExists = state.streaming.events.some(
+            e => e.type === 'tool_call' && e.toolCall?.id === chunk.toolCall!.id
+          )
+
+          if (!eventExists) {
+            state.streaming.events.push({
+              type: 'tool_call',
+              toolCall: chunk.toolCall,
+              complete: true,
+            })
+          }
         }
       } else if (chunk.type === 'complete') {
         state.streaming.messageId = chunk.message?.id || null
