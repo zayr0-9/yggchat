@@ -1908,127 +1908,133 @@ function Chat() {
         className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-[100dvh] dark:bg-neutral-900 bg-neutral-50 overflow-hidden'
         style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : '100%' }}
       >
-        {/* Conversation Title Editor */}
-        {currentConversationId && (
-          <div className='flex flex-col z-50 gap-2 mt-2 mb-1 xl:mb-1 xl:mt-2 2xl:mb-0 bg-transparent 2xl:mt-1 mx-2 rounded-2xl pr-2'>
-            <div className=' rounded-2xl flex items-center gap-2 py-1 xl:py-1 2xl:p-1 mt-1 bg-transparent shadow-[0_2px_5px_1px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65)]'>
-              <Button
-                variant='outline2'
-                size='medium'
-                className='transition-transform duration-100 active:scale-95'
-                aria-label='Conversations'
-                onClick={() => {
-                  const projectId = selectedProject?.id || currentConversation?.project_id
-                  navigate(projectId ? `/conversationPage?projectId=${projectId}` : '/conversationPage')
-                }}
-              >
-                <i className='bx bx-chat text-2xl' aria-hidden='true'></i>
-              </Button>
-
-              <Button
-                variant='outline2'
-                size='medium'
-                className='transition-transform duration-100 active:scale-95'
-                aria-label={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
-                onClick={() => {
-                  const newValue = !heimdallVisible
-                  setHeimdallVisible(newValue)
-                  try {
-                    window.localStorage.setItem('chat:heimdallVisible', String(newValue))
-                  } catch {}
-                }}
-                title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
-              >
-                <i
-                  className={`bx ${heimdallVisible ? 'bx-sidebar' : 'bx-layout'} text-2xl transition-transform duration-200`}
-                  aria-hidden='true'
-                ></i>
-              </Button>
-
-              {editingTitle ? (
-                <>
-                  <TextField
-                    value={titleInput}
-                    onChange={val => {
-                      setTitleInput(val)
-                    }}
-                    placeholder='Conversation title'
-                    size='large'
-                  />
-                  <Button
-                    variant='outline2'
-                    size='medium'
-                    className=''
-                    aria-label='Confirm edit'
-                    onClick={() => setEditingTitle(false)}
-                  >
-                    <i className='bx bx-check text-2xl' aria-hidden='true'></i>
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Select
-                    value={currentConversationId ? String(currentConversationId) : ''}
-                    onChange={val => {
-                      const conv = sortedConversations.find(c => String(c.id) === val)
-                      // Use setTimeout to defer navigation and allow Select to close properly
-                      setTimeout(() => navigate(`/chat/${conv?.project_id || projectIdFromUrl || 'unknown'}/${val}`), 0)
-                    }}
-                    options={sortedConversations.map(conv => ({
-                      value: String(conv.id),
-                      label: conv.title || 'Untitled Conversation',
-                    }))}
-                    blur='high'
-                    placeholder='Select conversation...'
-                    disabled={sortedConversations.length === 0}
-                    className='flex-1 transition-transform min-w-0 outline-1 outline-neutral-200/40 dark:outline-neutral-700 rounded-lg'
-                    searchBarVisible={true}
-                  />
-                  <div ref={optionsRef} className='relative'>
-                    <Button
-                      variant='outline2'
-                      size='small'
-                      className='transition-transform duration-100 active:scale-95'
-                      aria-label='Options'
-                      onClick={() => setOptionsOpen(!optionsOpen)}
-                    >
-                      <i className='bx bx-dots-vertical-rounded text-xl' aria-hidden='true'></i>
-                    </Button>
-                    {optionsOpen && (
-                      <div className='absolute right-0 top-full mt-1 z-50 bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl w-max'>
-                        <button
-                          className='w-full text-left px-3 py-2 text-sm text-stone-800 dark:text-stone-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors rounded-t-lg whitespace-nowrap'
-                          onClick={() => {
-                            setEditingTitle(true)
-                            setOptionsOpen(false)
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className='w-full text-left px-3 py-2 text-sm text-stone-800 dark:text-stone-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors rounded-b-lg whitespace-nowrap'
-                          onClick={handleCloneConversation}
-                          disabled={cloningConversation}
-                        >
-                          {cloningConversation ? 'Cloning...' : 'Clone Chat'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Messages Display */}
+
         <div
-          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-neutral-900 flex-1 min-h-0 transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-4 md:px-8 lg:px-12 xl:px-20' : ''}`}
+          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-transparent flex-1 min-h-0 transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-4 md:px-8 lg:px-12 xl:px-20' : ''}`}
           style={{ paddingBottom: `${inputAreaHeight}px` }}
         >
+          {/* Conversation Title Editor */}
+          {currentConversationId && (
+            <div
+              className={`absolute z-500 mb-2 top-0 left-0 px-2 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+            >
+              <div className=' rounded-2xl flex items-center gap-2 py-1 xl:py-1 2xl:p-2 mt-1 bg-transparent acrylic shadow-[0_2px_5px_1px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65)]  '>
+                <Button
+                  variant='outline2'
+                  size='medium'
+                  className='transition-transform duration-100 active:scale-95'
+                  aria-label='Conversations'
+                  onClick={() => {
+                    const projectId = selectedProject?.id || currentConversation?.project_id
+                    navigate(projectId ? `/conversationPage?projectId=${projectId}` : '/conversationPage')
+                  }}
+                >
+                  <i className='bx bx-chat text-2xl' aria-hidden='true'></i>
+                </Button>
+
+                <Button
+                  variant='outline2'
+                  size='medium'
+                  className='transition-transform duration-100 active:scale-95'
+                  aria-label={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
+                  onClick={() => {
+                    const newValue = !heimdallVisible
+                    setHeimdallVisible(newValue)
+                    try {
+                      window.localStorage.setItem('chat:heimdallVisible', String(newValue))
+                    } catch {}
+                  }}
+                  title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
+                >
+                  <i
+                    className={`bx ${heimdallVisible ? 'bx-sidebar' : 'bx-layout'} text-2xl transition-transform duration-200`}
+                    aria-hidden='true'
+                  ></i>
+                </Button>
+
+                {editingTitle ? (
+                  <>
+                    <TextField
+                      value={titleInput}
+                      onChange={val => {
+                        setTitleInput(val)
+                      }}
+                      placeholder='Conversation title'
+                      size='large'
+                    />
+                    <Button
+                      variant='outline2'
+                      size='medium'
+                      className=''
+                      aria-label='Confirm edit'
+                      onClick={() => setEditingTitle(false)}
+                    >
+                      <i className='bx bx-check text-2xl' aria-hidden='true'></i>
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Select
+                      value={currentConversationId ? String(currentConversationId) : ''}
+                      onChange={val => {
+                        const conv = sortedConversations.find(c => String(c.id) === val)
+                        // Use setTimeout to defer navigation and allow Select to close properly
+                        setTimeout(
+                          () => navigate(`/chat/${conv?.project_id || projectIdFromUrl || 'unknown'}/${val}`),
+                          0
+                        )
+                      }}
+                      options={sortedConversations.map(conv => ({
+                        value: String(conv.id),
+                        label: conv.title || 'Untitled Conversation',
+                      }))}
+                      blur='high'
+                      placeholder='Select conversation...'
+                      disabled={sortedConversations.length === 0}
+                      className='flex-1 transition-transform min-w-0 outline-1 outline-neutral-200/40 dark:outline-neutral-700 rounded-lg'
+                      searchBarVisible={true}
+                    />
+                    <div ref={optionsRef} className='relative'>
+                      <Button
+                        variant='outline2'
+                        size='small'
+                        className='transition-transform duration-100 active:scale-95'
+                        aria-label='Options'
+                        onClick={() => setOptionsOpen(!optionsOpen)}
+                      >
+                        <i className='bx bx-dots-vertical-rounded text-xl' aria-hidden='true'></i>
+                      </Button>
+                      {optionsOpen && (
+                        <div className='absolute right-0 top-full mt-1 z-50 bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl w-max'>
+                          <button
+                            className='w-full text-left px-3 py-2 text-sm text-stone-800 dark:text-stone-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors rounded-t-lg whitespace-nowrap'
+                            onClick={() => {
+                              setEditingTitle(true)
+                              setOptionsOpen(false)
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className='w-full text-left px-3 py-2 text-sm text-stone-800 dark:text-stone-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors rounded-b-lg whitespace-nowrap'
+                            onClick={handleCloneConversation}
+                            disabled={cloningConversation}
+                          >
+                            {cloningConversation ? 'Cloning...' : 'Clone Chat'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col gap-4 px-0 pt-4 ease-in-out  dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
+            className={`flex flex-col pt-20 gap-4 px-0 pt-4 ease-in-out  dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
             style={{
               ['overflowAnchor' as any]: 'none',
               // transform: 'translateZ(0)',
