@@ -1,5 +1,4 @@
 import { db } from '../../../database/db'
-import { MessageService } from '../../../database/models'
 
 export interface SearchHistoryParams {
   query: string
@@ -15,13 +14,8 @@ function sanitizeFTSQuery(query: string): string {
 }
 
 /**
- * Search chat history across conversation / project / user or globally.
- *
- * Priority:
- *  - conversationId -> MessageService.searchInConversation
- *  - projectId -> MessageService.searchMessagesByProject
- *  - userId -> MessageService.searchAllUserMessages
- *  - otherwise -> global FTS search across all messages
+ * Search chat history using SQLite FTS5.
+ * Supports filtering by conversation, project, or user.
  */
 export async function searchHistory(params: SearchHistoryParams) {
   const { query, userId, projectId, conversationId, limit = 10 } = params
@@ -29,33 +23,38 @@ export async function searchHistory(params: SearchHistoryParams) {
   if (!query || !String(query).trim()) return []
 
   try {
-    if (conversationId != null) {
-      // search within a single conversation
-      return MessageService.searchInConversation(String(query), String(conversationId))
-    }
-
-    if (projectId != null) {
-      return MessageService.searchMessagesByProject(String(query), String(projectId))
-    }
-
-    if (userId != null) {
-      return MessageService.searchAllUserMessages(String(query), String(userId), Number(limit || 10))
-    }
-
-    // Fallback: perform a global FTS search across all messages
     const sanitized = sanitizeFTSQuery(String(query))
     const safeLimit = Math.max(1, Math.min(1000, Number(limit || 10)))
 
-    const stmt = db.prepare(
-      `SELECT m.*, m.plain_text_content AS content_plain_text, highlight(messages_fts, 0, '<mark>', '</mark>') as highlighted
+    let sql = `SELECT m.*, m.plain_text_content AS content_plain_text, highlight(messages_fts, 0, '<mark>', '</mark>') as highlighted
        FROM messages m
        JOIN messages_fts ON m.id = messages_fts.message_id
-       WHERE messages_fts MATCH ?
-       ORDER BY rank
-       LIMIT ?`
-    )
+       WHERE messages_fts MATCH ?`
+    const params_arr: any[] = [sanitized]
 
-    const rows = stmt.all(sanitized, safeLimit)
+    // Add optional filters
+    if (conversationId != null) {
+      sql += ` AND m.conversation_id = ?`
+      params_arr.push(String(conversationId))
+    }
+
+    if (projectId != null) {
+      sql += ` AND m.conversation_id IN (
+        SELECT id FROM conversations WHERE project_id = ?
+      )`
+      params_arr.push(String(projectId))
+    }
+
+    if (userId != null) {
+      sql += ` AND m.owner_id = ?`
+      params_arr.push(String(userId))
+    }
+
+    sql += ` ORDER BY rank LIMIT ?`
+    params_arr.push(safeLimit)
+
+    const stmt = db.prepare(sql)
+    const rows = stmt.all(...params_arr)
     return rows
   } catch (err) {
     // eslint-disable-next-line no-console

@@ -43,16 +43,6 @@ export const supabaseAdmin: SupabaseClient = createClient(supabaseUrl, supabaseS
 // Keeping for backward compatibility during migration
 export const supabase: SupabaseClient = supabaseAdmin
 
-// Utility function to sanitize FTS queries
-function sanitizeFTSQuery(query: string): string {
-  // PostgreSQL FTS uses different syntax than SQLite
-  return query
-    .trim()
-    .split(/\s+/)
-    .map(w => w.replace(/[^\w\s]/g, ''))
-    .filter(w => w.length > 0)
-    .join(' | ')
-}
 
 // Interfaces matching Supabase schema
 
@@ -99,21 +89,8 @@ export interface Message extends Omit<BaseMessage, 'id' | 'conversation_id' | 'p
   conversation_id: string
   owner_id: string
   parent_id?: string | null
-  search_vector?: any
   ex_agent_session_id?: string | null
   ex_agent_type?: string | null
-}
-
-export interface SearchResult extends Message {
-  highlighted?: string
-  highlight?: string
-  conversation_title?: string
-  rank?: number
-}
-
-export interface SearchResultWithSnippet extends Message {
-  snippet: string
-  rank?: number
 }
 
 export interface Attachment {
@@ -1108,83 +1085,6 @@ export class MessageService {
     return uniqueModels.slice(0, safeLimit)
   }
 
-  // Full Text Search methods - these use RPC which respects auth.uid()
-  static async searchInConversation(
-    client: SupabaseClient,
-    query: string,
-    conversationId: string
-  ): Promise<SearchResult[]> {
-    const { data, error } = await client.rpc('search_messages', {
-      conversation_id: conversationId,
-      query_text: query,
-    })
-
-    if (error) throw error
-    return (data || []) as SearchResult[]
-  }
-
-  static async searchAllUserMessages(
-    client: SupabaseClient,
-    query: string,
-    limit: number = 50
-  ): Promise<SearchResult[]> {
-    const { data, error } = await client.rpc('search_all_user_messages', {
-      query_text: query,
-      limit_count: limit,
-      offset_count: 0,
-    })
-
-    if (error) throw error
-    return (data || []) as SearchResult[]
-  }
-
-  static async searchMessagesByProject(
-    client: SupabaseClient,
-    query: string,
-    projectId: string
-  ): Promise<SearchResult[]> {
-    const { data, error } = await client.rpc('search_messages_by_project', {
-      project_id: projectId,
-      query_text: query,
-    })
-
-    if (error) throw error
-    return (data || []) as SearchResult[]
-  }
-
-  static async searchWithSnippets(
-    client: SupabaseClient,
-    query: string,
-    conversationId: string
-  ): Promise<SearchResultWithSnippet[]> {
-    // Use the same RPC as searchInConversation, just return with snippet (highlight)
-    const { data, error } = await client.rpc('search_messages', {
-      conversation_id: conversationId,
-      query_text: query,
-    })
-
-    if (error) throw error
-    return (data || []).map((r: any) => ({
-      ...r,
-      snippet: r.highlight,
-    })) as SearchResultWithSnippet[]
-  }
-
-  static async searchAllUserMessagesPaginated(
-    client: SupabaseClient,
-    query: string,
-    limit: number = 50,
-    offset: number = 0
-  ): Promise<SearchResult[]> {
-    const { data, error } = await client.rpc('search_all_user_messages', {
-      query_text: query,
-      limit_count: limit,
-      offset_count: offset,
-    })
-
-    if (error) throw error
-    return (data || []) as SearchResult[]
-  }
 }
 
 export class ProviderCostService {

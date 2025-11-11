@@ -1,11 +1,11 @@
 // server/src/routes/search.ts
 import express from 'express'
-import { MessageService } from '../database/models'
 import { asyncHandler } from '../utils/asyncHandler'
 
 const router = express.Router()
 
-// Global search across all messages (no auth/user filter yet)
+// Global search endpoint - Placeholder for future implementation
+// Message search has been removed. Search functionality now uses SQLite FTS5 locally.
 router.get(
   '/search',
   asyncHandler(async (req, res) => {
@@ -14,8 +14,8 @@ router.get(
       return res.status(400).json({ error: 'Query parameter q required' })
     }
 
-    const results = MessageService.searchAllUserMessages(query, '1', 50)
-    res.json(results)
+    // This endpoint is preserved for future use (e.g., chat title search)
+    res.json([])
   })
 )
 

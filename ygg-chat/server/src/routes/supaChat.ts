@@ -91,7 +91,8 @@ function accumulateContentBlocks(events: any[]): any[] {
   return accumulated
 }
 
-// Global search endpoint - Uses JWT auth so auth.uid() works correctly
+// Global search endpoint - Placeholder for future chat title search
+// TODO: Replace with search_conversations or similar when implementing chat title search
 router.get(
   '/search',
   expensiveOperationsRateLimiter, // Apply expensive operations rate limiter
@@ -103,21 +104,14 @@ router.get(
       return res.status(400).json({ error: 'Missing q parameter' })
     }
 
-    // Use RPC with authenticated client - auth.uid() will work!
-    const { data, error } = await client.rpc('search_messages', {
-      query_text: q,
-    })
-
-    if (error) {
-      console.error('Search error:', error)
-      throw error
-    }
-
-    res.json(data || [])
+    // Message search has been removed. Search functionality now uses SQLite FTS5 locally.
+    // This endpoint is preserved for future use (chat title search, etc.)
+    res.json([])
   })
 )
 
-// Search by project - Uses JWT auth so auth.uid() works correctly
+// Search by project - Placeholder for future chat title search
+// TODO: Replace with project-specific chat title search when implementing
 router.get(
   '/search/project',
   asyncHandler(async (req, res) => {
@@ -133,18 +127,9 @@ router.get(
       return res.status(400).json({ error: 'Missing projectId parameter' })
     }
 
-    // Use RPC with authenticated client for project search
-    const { data, error } = await client.rpc('search_messages_by_project', {
-      query_text: q,
-      project_id: projectId,
-    })
-
-    if (error) {
-      console.error('Project search error:', error)
-      throw error
-    }
-
-    res.json(data || [])
+    // Message search has been removed. Search functionality now uses SQLite FTS5 locally.
+    // This endpoint is preserved for future use (project-specific chat title search, etc.)
+    res.json([])
   })
 )
 
