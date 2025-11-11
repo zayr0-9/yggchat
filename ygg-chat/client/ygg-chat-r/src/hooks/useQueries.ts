@@ -253,14 +253,28 @@ export function useConversationMessages(conversationId: ConversationId | null) {
  * Helper function to convert model name string to Model object
  */
 const stringToModel = (modelName: string): Model => ({
+  id: modelName,
   name: modelName,
   version: '1.0.0',
   displayName: modelName,
   description: `${modelName} model`,
+  contextLength: 4096,
+  maxCompletionTokens: 2048,
   inputTokenLimit: 4096,
   outputTokenLimit: 2048,
+  promptCost: 0,
+  completionCost: 0,
+  requestCost: 0,
   thinking: false,
-  supportedGenerationMethods: ['chat', 'completion'],
+  supportsImages: false,
+  supportsWebSearch: false,
+  supportsStructuredOutputs: false,
+  inputModalities: ['text'],
+  outputModalities: ['text'],
+  defaultTemperature: null,
+  defaultTopP: null,
+  defaultFrequencyPenalty: null,
+  topProviderContextLength: null,
 })
 
 /**
@@ -335,8 +349,15 @@ export function useModels(provider: string | null) {
 
       // Determine selected model: use localStorage if valid, otherwise use server default
       const storedSelection = getStoredSelectedModel()
-      const selectedModel =
-        storedSelection && models.some(m => m.name === storedSelection.name) ? storedSelection : defaultModel
+      let selectedModel = defaultModel
+      
+      // If stored selection exists and matches a model in the list, use the full model data from the list
+      if (storedSelection) {
+        const matchedModel = models.find(m => m.name === storedSelection.name)
+        if (matchedModel) {
+          selectedModel = matchedModel
+        }
+      }
 
       return {
         models,
@@ -370,14 +391,28 @@ export function useRecentModels(limit: number = 5) {
 
       // Map plain names to BaseModel shape with sensible defaults
       const normalized: BaseModel[] = models.map(name => ({
+        id: name,
         name,
         version: '',
         displayName: name,
         description: '',
+        contextLength: 0,
+        maxCompletionTokens: 0,
         inputTokenLimit: 0,
         outputTokenLimit: 0,
+        promptCost: 0,
+        completionCost: 0,
+        requestCost: 0,
         thinking: false,
-        supportedGenerationMethods: [],
+        supportsImages: false,
+        supportsWebSearch: false,
+        supportsStructuredOutputs: false,
+        inputModalities: ['text'],
+        outputModalities: ['text'],
+        defaultTemperature: null,
+        defaultTopP: null,
+        defaultFrequencyPenalty: null,
+        topProviderContextLength: null,
       }))
 
       return normalized

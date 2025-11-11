@@ -215,14 +215,57 @@ router.get(
             !!capabilities?.reasoning ||
             /thinking/i.test(name) ||
             /thinking/i.test(displayName)
+
+          // Extract pricing information
+          const promptCost = Number(m?.pricing?.prompt ?? 0)
+          const completionCost = Number(m?.pricing?.completion ?? 0)
+          const requestCost = Number(m?.pricing?.request ?? 0)
+
+          // Extract modality support
+          const inputModalities: string[] = Array.isArray(m?.architecture?.modality?.input)
+            ? m.architecture.modality.input
+            : m?.supports_vision
+              ? ['text', 'image']
+              : ['text']
+          const outputModalities: string[] = Array.isArray(m?.architecture?.modality?.output)
+            ? m.architecture.modality.output
+            : m?.supports_vision
+              ? ['text', 'image']
+              : ['text']
+
+          // Extract default parameters
+          const defaultTemperature = m?.top_level_parameters?.temperature ?? null
+          const defaultTopP = m?.top_level_parameters?.top_p ?? null
+          const defaultFrequencyPenalty = m?.top_level_parameters?.frequency_penalty ?? null
+
+          // Extract context and completion limits
+          const contextLength = inputTokenLimit
+          const maxCompletionTokens = outputTokenLimit
+          const topProviderContextLength = Number(m?.top_provider?.context_length ?? null) || null
+
           return {
+            id: rawId,
             name,
             version: String(m?.version || ''),
             displayName,
             description,
+            contextLength,
+            maxCompletionTokens,
             inputTokenLimit,
             outputTokenLimit,
+            promptCost,
+            completionCost,
+            requestCost,
             thinking,
+            supportsImages: !!m?.supports_vision || inputModalities.includes('image'),
+            supportsWebSearch: !!capabilities?.web_search || supportedParams.includes('web_search'),
+            supportsStructuredOutputs: !!capabilities?.structured_outputs || supportedParams.includes('structured_outputs'),
+            inputModalities,
+            outputModalities,
+            defaultTemperature,
+            defaultTopP,
+            defaultFrequencyPenalty,
+            topProviderContextLength,
             supportedGenerationMethods: supportedParams,
           }
         })

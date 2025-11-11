@@ -34,14 +34,41 @@ export interface BaseMessage {
 }
 
 export interface BaseModel {
+  // Basic identification
+  id: string
   name: string
-  version: string
   displayName: string
+  version: string
   description: string
+
+  // Context and limits
+  contextLength: number
+  maxCompletionTokens: number
   inputTokenLimit: number
   outputTokenLimit: number
+
+  // Pricing
+  promptCost: number
+  completionCost: number
+  requestCost: number
+
+  // Capabilities
   thinking: boolean
-  supportedGenerationMethods: string[]
+  supportsImages: boolean
+  supportsWebSearch: boolean
+  supportsStructuredOutputs: boolean
+
+  // Modality support - arrays to handle multiple modalities
+  inputModalities: string[] // e.g., ['text', 'image'] or ['text']
+  outputModalities: string[] // e.g., ['text'] or ['text', 'image']
+
+  // Key parameters with defaults
+  defaultTemperature: number | null
+  defaultTopP: number | null
+  defaultFrequencyPenalty: number | null
+
+  // Provider info
+  topProviderContextLength: number | null
 }
 
 export interface Project {
