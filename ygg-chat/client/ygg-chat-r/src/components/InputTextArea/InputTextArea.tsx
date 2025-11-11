@@ -440,7 +440,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
     primary:
       'text-stone-900 dark:text-stone-200 placeholder-neutral-700 dark:placeholder-neutral-200 border-secondary-600 outline-none focus:border-secondary-600 focus:ring-1 focus:ring-opacity-50 dark:focus:ring-secondary-600',
     outline:
-      'px-3 py-2 sm:px-4 sm:py-3 md:px-4 md:py-3 lg:px-5 lg:py-4 2xl:px-5 2xl:py-4 3xl:px-6 3xl:py-5 4xl:px-8 4xl:py-6 rounded-3xl overflow-hidden bg-transparent text-neutral-900 dark:text-neutral-300 border border-neutral-300 focus:border-neutral-400 dark:border-neutral-700 outline-none  dark:border-neutral-700 dark:focus:border-neutral-600 ',
+      'px-3 py-2 sm:px-4 sm:py-3 md:px-4 md:py-3 lg:px-5 lg:py-4 2xl:px-5 2xl:py-4 3xl:px-6 3xl:py-5 4xl:px-8 4xl:py-6 rounded-3xl overflow-hidden bg-transparent text-neutral-900 dark:text-neutral-300 border border-neutral-300 focus:border-neutral-400 dark:border-neutral-700 outline-none dark:border-neutral-700 dark:focus:border-neutral-600 ',
   }
 
   const baseStyles = outline
