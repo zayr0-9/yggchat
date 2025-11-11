@@ -53,17 +53,17 @@ function getZodTypeName(def: any): string {
   // Zod v4 uses lowercase type names, convert to PascalCase for consistency
   if (def.type) {
     const typeMap: Record<string, string> = {
-      'string': 'ZodString',
-      'number': 'ZodNumber',
-      'boolean': 'ZodBoolean',
-      'array': 'ZodArray',
-      'object': 'ZodObject',
-      'optional': 'ZodOptional',
-      'nullable': 'ZodNullable',
-      'enum': 'ZodEnum',
-      'union': 'ZodUnion',
-      'default': 'ZodDefault',
-      'effects': 'ZodEffects',
+      string: 'ZodString',
+      number: 'ZodNumber',
+      boolean: 'ZodBoolean',
+      array: 'ZodArray',
+      object: 'ZodObject',
+      optional: 'ZodOptional',
+      nullable: 'ZodNullable',
+      enum: 'ZodEnum',
+      union: 'ZodUnion',
+      default: 'ZodDefault',
+      effects: 'ZodEffects',
     }
     return typeMap[def.type] || def.type
   }
@@ -180,10 +180,10 @@ async function getOpenRouterClient() {
     const headers: Record<string, string> = {}
     const referer = process.env.OPENROUTER_REFERER || process.env.SITE_URL
     if (referer) headers['HTTP-Referer'] = referer
-    const title = process.env.OPENROUTER_TITLE || 'Yggdrasil Chat'
+    const title = process.env.OPENROUTER_TITLE || 'Yggdrasil'
     headers['X-Title'] = title
-    headers['HTTP-Referer'] = 'https://yggchat.chat'
-    headers['X-Title'] = 'Yggdrasil Chat'
+    headers['HTTP-Referer'] = 'https://yggchat.com'
+    headers['X-Title'] = 'Yggdrasil'
 
     openrouterInstance = new OpenAI({
       apiKey,
@@ -966,7 +966,9 @@ export async function generateResponse(
                   toolCallBuffer = ''
                 } else {
                   // For other parse errors on supposedly complete JSON, log but don't stop the stream
-                  console.warn(`⚠️ [openrouter] Tool call JSON incomplete or malformed, continuing to accumulate: ${toolCallBuffer.substring(0, 50)}...`)
+                  console.warn(
+                    `⚠️ [openrouter] Tool call JSON incomplete or malformed, continuing to accumulate: ${toolCallBuffer.substring(0, 50)}...`
+                  )
                 }
               }
             } else if (currentToolCall && toolCallBuffer) {
@@ -1037,14 +1039,16 @@ export async function generateResponse(
           const isError = result.startsWith('Error')
 
           // Stream tool_result event to client
-          onChunk(JSON.stringify({
-            part: 'tool_result',
-            toolResult: {
-              tool_use_id: toolCall.id,
-              content: result,
-              is_error: isError,
-            },
-          }))
+          onChunk(
+            JSON.stringify({
+              part: 'tool_result',
+              toolResult: {
+                tool_use_id: toolCall.id,
+                content: result,
+                is_error: isError,
+              },
+            })
+          )
 
           conversationMessages.push({
             role: 'user', // Tool results are treated as user messages in simple format

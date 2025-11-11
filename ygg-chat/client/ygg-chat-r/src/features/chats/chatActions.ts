@@ -1637,6 +1637,7 @@ export const insertBulkMessages = createAsyncThunk<
       model_name?: string
       tool_calls?: string
       note?: string
+      content_blocks?: any
     }>
   },
   { extra: ThunkExtraArgument }

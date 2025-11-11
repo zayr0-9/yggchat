@@ -1358,6 +1358,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         model_name?: string
         tool_calls?: string
         note?: string
+        content_blocks?: any
       }> = []
 
       const seen = new Set<string>()
@@ -1375,6 +1376,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             model_name: msg.model_name || 'unknown',
             tool_calls: msg.tool_calls || undefined,
             note: msg.note || undefined,
+            content_blocks: msg.content_blocks || undefined,
           })
         }
       }

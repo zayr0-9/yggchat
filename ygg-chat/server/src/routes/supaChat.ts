@@ -825,6 +825,7 @@ router.post(
         model_name?: string
         tool_calls?: string
         note?: string
+        content_blocks?: any
       }>
     }
 
@@ -853,7 +854,8 @@ router.post(
         msg.thinking_block || '',
         msg.model_name || 'unknown',
         msg.tool_calls || undefined,
-        msg.note || undefined
+        msg.note || undefined,
+        msg.content_blocks || undefined
       )
       createdMessages.push(newMessage)
       lastMessageId = newMessage.id
