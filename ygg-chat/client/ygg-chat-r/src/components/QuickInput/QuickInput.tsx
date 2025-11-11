@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { chatSliceActions, Model, sendMessage } from '../../features/chats'
 import { Conversation, createConversation } from '../../features/conversations'
 import { useAppDispatch } from '../../hooks/redux'
-import { useModels } from '../../hooks/useQueries'
+import { useModels, useSelectModel } from '../../hooks/useQueries'
 import { Button } from '../Button/button'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { Select } from '../Select/Select'
@@ -21,8 +21,9 @@ export const QuickInput: React.FC = () => {
   // const [spinRefresh, setSpinRefresh] = useState(false)
   const [currentProvider] = useState('openrouter') // Default provider
 
-  // Fetch models and refresh mutation
+  // Fetch models and mutation for model selection
   const { data: modelsData } = useModels(currentProvider)
+  const selectModelMutation = useSelectModel()
   const models = modelsData?.models || []
   // const refreshModelsMutation = useRefreshModels()
 
@@ -39,9 +40,10 @@ export const QuickInput: React.FC = () => {
       const model = models.find(m => m.name === modelName)
       if (model) {
         setSelectedModel(model)
+        selectModelMutation.mutate({ provider: currentProvider, model })
       }
     },
-    [models]
+    [models, selectModelMutation, currentProvider]
   )
 
   // Handle refresh models
@@ -79,9 +81,8 @@ export const QuickInput: React.FC = () => {
       // 3. Navigate to new conversation
       navigate(`/chat/null/${result.id}`)
 
-      // 4. Set conversation and model in Redux
+      // 4. Set conversation in Redux (model selection is already persisted via mutation)
       dispatch(chatSliceActions.conversationSet(result.id))
-      dispatch(chatSliceActions.modelSelected({ model: selectedModel, persist: true }))
 
       // 5. Clear input
       setQuickChatInput('')

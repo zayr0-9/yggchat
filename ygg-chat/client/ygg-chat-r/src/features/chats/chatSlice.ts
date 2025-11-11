@@ -9,31 +9,10 @@ import {
   ImageDraft,
   Message,
   MessageInput,
-  Model,
-  ModelSelectionPayload,
   StreamChunk,
 } from './chatTypes'
 
-const getStoredSelectedModel = (): Model | null => {
-  try {
-    const raw = localStorage.getItem('selectedModel')
-    if (!raw) return null
-    const parsed = JSON.parse(raw)
-    if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
-      return parsed as Model
-    }
-    // Legacy formats (plain string, etc.) are ignored
-    return null
-  } catch {
-    return null
-  }
-}
-
 const makeInitialState = (): ChatState => ({
-  models: {
-    selected: getStoredSelectedModel(),
-    default: null,
-  },
   providerState: {
     providers: Object.values(providersList.providers),
     currentProvider: localStorage.getItem('currentProvider') || null,
@@ -110,25 +89,6 @@ export const chatSlice = createSlice({
       state.providerState.currentProvider = action.payload
       localStorage.setItem('currentProvider', action.payload)
     },
-    // Model management - only handles selected model (list managed by React Query)
-    modelSelected: (state, action: PayloadAction<ModelSelectionPayload>) => {
-      state.models.selected = action.payload.model
-
-      if (action.payload.persist) {
-        localStorage.setItem('selectedModel', JSON.stringify(action.payload.model))
-      }
-    },
-
-    // Set default model (used when no model is selected)
-    defaultModelSet: (state, action: PayloadAction<Model>) => {
-      state.models.default = action.payload
-      // If no model selected yet, use the default
-      if (!state.models.selected) {
-        state.models.selected = action.payload
-        localStorage.setItem('selectedModel', JSON.stringify(action.payload))
-      }
-    },
-
     // Composition - validation integrated
     inputChanged: (state, action: PayloadAction<Partial<MessageInput>>) => {
       Object.assign(state.composition.input, action.payload)

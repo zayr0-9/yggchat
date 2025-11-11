@@ -30,7 +30,6 @@ import {
   // Chat selectors
   selectMultiReplyCount,
   selectProviderState,
-  selectSelectedModel,
   selectSendingState,
   selectStreamState,
   sendCCBranch,
@@ -63,6 +62,8 @@ import {
   useModels,
   useRecentModels,
   useRefreshModels,
+  useSelectModel,
+  useSelectedModel,
 } from '../hooks/useQueries'
 import { cloneConversation } from '../utils/api'
 import { parseId } from '../utils/helpers'
@@ -92,7 +93,6 @@ function Chat() {
   const projectIdFromUrl = projectIdParam === 'null' ? null : projectIdParam || null
 
   // Redux selectors
-  const selectedModel = useAppSelector(selectSelectedModel)
   const providers = useAppSelector(selectProviderState)
   const messageInput = useAppSelector(selectMessageInput)
   // const canSendFromRedux = useAppSelector(selectCanSend)
@@ -330,6 +330,8 @@ function Chat() {
   const { data: modelsData } = useModels(providers.currentProvider)
   const { data: recentModelsData } = useRecentModels(5)
   const refreshModelsMutation = useRefreshModels()
+  const selectModelMutation = useSelectModel()
+  const selectedModel = useSelectedModel(providers.currentProvider)
 
   // Extract models array from React Query response
   const models = modelsData?.models || []
@@ -993,12 +995,12 @@ function Chat() {
     (modelName: string) => {
       const model = models.find(m => m.name === modelName)
       if (model) {
-        dispatch(chatSliceActions.modelSelected({ model, persist: true }))
+        selectModelMutation.mutate({ provider: providers.currentProvider, model })
       } else {
         console.warn('Selected model not found:', modelName)
       }
     },
-    [models, dispatch]
+    [models, selectModelMutation, providers.currentProvider]
   )
   // Commented out - provider selection removed from UI, defaulting to OpenRouter
   // const handleProviderSelect = useCallback(

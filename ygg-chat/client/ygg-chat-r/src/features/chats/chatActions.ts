@@ -326,21 +326,9 @@ export const resolveAttachmentUrl = (urlOrPath?: string | null, filePath?: strin
   }
   return null
 }
-// Model operations have been migrated to React Query
-// See useModels, useRecentModels, and useRefreshModels in hooks/useQueries.ts
-// Redux now only manages selected model state, not the model list cache
-
-// Model selection with persistence
-// Note: Model availability verification should be done in the UI layer using React Query
-export const selectModel = createAsyncThunk<Model, Model, { state: RootState; extra: ThunkExtraArgument }>(
-  'chat/selectModel',
-  async (model: Model, { dispatch }) => {
-    // Model availability is now checked via React Query in the UI
-    // Redux only handles the selection state
-    dispatch(chatSliceActions.modelSelected({ model, persist: true }))
-    return model
-  }
-)
+// Model operations have been fully migrated to React Query
+// See useModels, useRecentModels, useRefreshModels, and useSelectModel in hooks/useQueries.ts
+// Model selection state is now managed entirely by React Query and localStorage
 
 // Streaming message sending with proper error handling
 export const sendMessage = createAsyncThunk<
@@ -367,7 +355,15 @@ export const sendMessage = createAsyncThunk<
       const currentPathIds = state.chat.conversation.currentPath.filter(id => id !== 'root')
       const currentPathMessages = currentPathIds.map(id => currentMessages.find(m => m.id === id))
       const isFirstMessage = (currentMessages?.length || 0) === 0
-      const selectedName = state.chat.models.selected?.name || state.chat.models.default?.name
+
+      // Read selected model from React Query cache
+      const provider = state.chat.providerState.currentProvider
+      const modelsData = extra.queryClient?.getQueryData<{
+        models: Model[],
+        default: Model,
+        selected: Model
+      }>(['models', provider])
+      const selectedName = modelsData?.selected?.name || modelsData?.default?.name
       const modelName = input.modelOverride || selectedName
       // Map UI provider to server provider id
       const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
@@ -738,7 +734,15 @@ export const editMessageWithBranching = createAsyncThunk<
       const currentPathMessages = truncatedPathIds
         .map(id => currentMessages.find(m => m.id === id))
         .filter(Boolean) as Message[]
-      const selectedName = state.chat.models.selected?.name || state.chat.models.default?.name
+      
+      // Read selected model from React Query cache
+      const provider = state.chat.providerState.currentProvider
+      const modelsData = extra.queryClient?.getQueryData<{
+        models: Model[],
+        default: Model,
+        selected: Model
+      }>(['models', provider])
+      const selectedName = modelsData?.selected?.name || modelsData?.default?.name
       const modelName = modelOverride || selectedName
       const parentId = originalMessage.parent_id
 
@@ -987,7 +991,15 @@ export const sendMessageToBranch = createAsyncThunk<
       signal.addEventListener('abort', () => controller?.abort())
 
       const state = getState() as RootState
-      const selectedName = state.chat.models.selected?.name || state.chat.models.default?.name
+      
+      // Read selected model from React Query cache
+      const provider = state.chat.providerState.currentProvider
+      const modelsData = extra.queryClient?.getQueryData<{
+        models: Model[],
+        default: Model,
+        selected: Model
+      }>(['models', provider])
+      const selectedName = modelsData?.selected?.name || modelsData?.default?.name
       const modelName = modelOverride || selectedName
       // Map UI provider to server provider id
       const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()

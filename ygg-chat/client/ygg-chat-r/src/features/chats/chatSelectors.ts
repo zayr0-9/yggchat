@@ -5,25 +5,14 @@ import { RootState } from '../../store/store'
 // Base selector
 const selectChatState = (state: RootState) => state.chat
 
-// Model selectors - Note: Model list is now managed by React Query (useModels hook)
-// Redux only stores selected and default models
+// Model selectors - Model selection is now managed by React Query (useSelectedModel hook)
 export const selectProviderState = createSelector([selectChatState], chat => chat.providerState)
-
-export const selectSelectedModel = createSelector([selectChatState], chat => chat.models.selected)
-
-export const selectDefaultModel = createSelector([selectChatState], chat => chat.models.default)
 
 export const conversationContext = createSelector([selectChatState], chat => chat.conversation.context)
 
 export const selectMultiReplyCount = createSelector([selectChatState], chat => chat.composition.multiReplyCount)
 
 export const getSelectedNodes = createSelector([selectChatState], chat => chat.selectedNodes)
-
-// Get effective model (selected or default)
-export const selectEffectiveModel = createSelector(
-  [selectSelectedModel, selectDefaultModel],
-  (selected, defaultModel) => selected || defaultModel
-)
 
 // Note: Model availability check should now be done using useModels React Query hook
 // This selector is kept for backward compatibility but will always return false
@@ -54,11 +43,7 @@ export const selectStreamEvents = createSelector([selectStreamState], stream => 
 
 export const selectIsStreaming = createSelector([selectStreamState], stream => stream.active)
 
-// Combined state selectors - optimized
-export const selectCanSend = createSelector(
-  [selectInputValid, selectChatState, selectEffectiveModel],
-  (valid, chat, model) => valid && !chat.composition.sending && !chat.streaming.active && !!model
-)
+// Note: selectCanSend is deprecated - use local canSendLocal in Chat.tsx component which checks selectedModel from React Query
 
 export const selectSendingState = createSelector([selectChatState], chat => ({
   sending: chat.composition.sending,
@@ -87,12 +72,7 @@ export const HeimdallDataReset = createSelector([selectHeimdallState], h => {
   h.error = null
 })
 
-// Combined model state for UI - simplified (model list managed by React Query)
-export const selectModelState = createSelector([selectSelectedModel, selectDefaultModel], (selected, defaultModel) => ({
-  selected,
-  default: defaultModel,
-  effective: selected || defaultModel,
-}))
+// Note: selectModelState is deprecated - use useSelectedModel and useModels from useQueries.ts
 
 // Conversation selectors
 export const selectConversationState = createSelector([selectChatState], chat => chat.conversation)

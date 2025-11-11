@@ -264,13 +264,32 @@ const stringToModel = (modelName: string): Model => ({
 })
 
 /**
+ * Helper function to read selected model from localStorage
+ * Returns null if not found or invalid
+ */
+const getStoredSelectedModel = (): Model | null => {
+  try {
+    const raw = localStorage.getItem('selectedModel')
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object' && typeof parsed.name === 'string') {
+      return parsed as Model
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Fetch models for a specific provider
  * Cache key: ['models', provider]
  *
  * Supports multiple providers: ollama, gemini, anthropic, openai, openrouter, lmstudio
  * Automatically deduplicates requests and caches results
  *
- * Returns: { models: Model[], default: Model }
+ * Returns: { models: Model[], default: Model, selected: Model }
+ * The selected field contains the currently selected model (persisted from localStorage or defaults to server default)
  */
 export function useModels(provider: string | null) {
   const { accessToken } = useAuth()
@@ -310,10 +329,19 @@ export function useModels(provider: string | null) {
       // Handle both string[] and Model[] responses
       const isStringArray = Array.isArray(response.models) && typeof response.models[0] === 'string'
 
+      const models = isStringArray ? (response.models as string[]).map(stringToModel) : (response.models as Model[])
+      const defaultModel =
+        typeof response.default === 'string' ? stringToModel(response.default as string) : (response.default as Model)
+
+      // Determine selected model: use localStorage if valid, otherwise use server default
+      const storedSelection = getStoredSelectedModel()
+      const selectedModel =
+        storedSelection && models.some(m => m.name === storedSelection.name) ? storedSelection : defaultModel
+
       return {
-        models: isStringArray ? (response.models as string[]).map(stringToModel) : (response.models as Model[]),
-        default:
-          typeof response.default === 'string' ? stringToModel(response.default as string) : (response.default as Model),
+        models,
+        default: defaultModel,
+        selected: selectedModel, // Always populated - either from localStorage (if valid) or from server default
       }
     },
     enabled: !!provider && !!accessToken,
@@ -445,4 +473,58 @@ export function useRefreshModels() {
       queryClient.setQueryData(['models', provider], data)
     },
   })
+}
+
+/**
+ * Mutation hook for selecting a model for the current provider
+ * Updates both React Query cache and localStorage
+ *
+ * Usage:
+ * const selectModelMutation = useSelectModel()
+ * selectModelMutation.mutate({ provider: 'openrouter', model: selectedModel })
+ */
+export function useSelectModel() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ provider, model }: { provider: string; model: Model }) => {
+      // Persist to localStorage
+      localStorage.setItem('selectedModel', JSON.stringify(model))
+      return { provider, model }
+    },
+    onSuccess: ({ provider, model }) => {
+      // Update the React Query cache with selected model
+      queryClient.setQueryData(['models', provider], (oldData: any) => {
+        if (!oldData) return oldData
+        return {
+          ...oldData,
+          selected: model,
+        }
+      })
+    },
+  })
+}
+
+/**
+ * Hook to get the currently selected model for a provider
+ * Returns the selected model from the cache, or null if loading
+ *
+ * Usage:
+ * const selectedModel = useSelectedModel(currentProvider)
+ */
+export function useSelectedModel(provider: string | null) {
+  const { data } = useModels(provider)
+  return data?.selected || null
+}
+
+/**
+ * Hook to get the effective model (always returns a model, never null)
+ * Returns selected model if available, otherwise default model
+ *
+ * Usage:
+ * const effectiveModel = useEffectiveModel(currentProvider)
+ */
+export function useEffectiveModel(provider: string | null) {
+  const { data } = useModels(provider)
+  return data?.selected || data?.default || null
 }

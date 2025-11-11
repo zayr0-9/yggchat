@@ -6,9 +6,7 @@ export type {
   Message,
   MessageInput,
   Model,
-  ModelSelectionPayload,
   ModelsResponse,
-  ModelState,
   SendCCBranchPayload,
   SendCCMessagePayload,
   SendMessagePayload,
@@ -20,15 +18,14 @@ export type {
 export { default as chatReducer, chatSliceActions } from './chatSlice'
 
 // Async actions
-// Note: Model fetching thunks (fetchModels, fetchModelsForCurrentProvider, etc.)
-// have been migrated to React Query. See hooks/useQueries.ts for useModels, useRecentModels, useRefreshModels
+// Note: Model selection (selectModel) has been migrated to React Query. See hooks/useQueries.ts for useSelectModel
+// Model fetching thunks (fetchModels, fetchModelsForCurrentProvider, etc.) have been migrated to React Query
 export {
   abortStreaming,
   deleteMessage,
   editMessageWithBranching,
   getCCSessionInfo,
   refreshCurrentPathAfterDelete,
-  selectModel,
   sendCCBranch,
   sendCCMessage,
   sendMessage,
@@ -37,20 +34,17 @@ export {
 } from './chatActions'
 
 // Selectors - grouped by feature
-// Note: selectModels, selectModelsLoading, selectModelsError removed - use React Query hooks instead
+// Note: Model-related selectors removed - use React Query hooks (useSelectedModel, useModels, useSelectModel)
+// selectCanSend deprecated - use local canSendLocal in components
 export {
   conversationContext,
   HeimdallDataReset,
   selectBookmarkedMessages,
-  // Combined selectors
-  selectCanSend,
   selectConversationMessages,
   selectConversationState,
   selectCurrentConversationId,
   selectCurrentPath,
-  selectDefaultModel,
   selectDisplayMessages,
-  selectEffectiveModel,
   selectExcludedMessages,
   selectFilteredMessages,
   selectFocusedChatMessageId,
@@ -62,9 +56,7 @@ export {
   selectMessageInput,
   // UI selectors
   selectModelSelectorOpen,
-  selectModelState,
   selectProviderState,
-  selectSelectedModel,
   selectSendingState,
   selectStreamBuffer,
   selectStreamError,

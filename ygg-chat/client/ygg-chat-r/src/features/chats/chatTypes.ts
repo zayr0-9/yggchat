@@ -114,13 +114,6 @@ export interface StreamState {
 
 export interface Model extends BaseModel {}
 
-// Model types - simplified (model list managed by React Query)
-// Redux only stores the selected model and default model
-export interface ModelState {
-  selected: Model | null // Currently selected model
-  default: Model | null // Default model from server (fallback)
-}
-
 export interface Provider {
   name: string
   url: string
@@ -195,7 +188,6 @@ export interface InitializationState {
 }
 
 export interface ChatState {
-  models: ModelState
   providerState: ProviderState
   composition: CompositionState
   streaming: StreamState
