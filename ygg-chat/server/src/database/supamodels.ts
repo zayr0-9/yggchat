@@ -800,7 +800,8 @@ export class ConversationService {
         msg.thinking_block || '',
         msg.model_name,
         msg.tool_calls || undefined,
-        msg.note || undefined
+        msg.note || undefined,
+        msg.content_blocks || undefined
       )
 
       if (newMsg) {
@@ -896,8 +897,8 @@ export class MessageService {
         parent_id: parentId,
         role,
         content,
-        thinking_block,
-        tool_calls: parsedToolCalls,
+        thinking_block: null,
+        tool_calls: null,
         model_name: modelName || 'unknown',
         note: note || null,
         plain_text_content: plainTextContent,
