@@ -236,12 +236,186 @@ const contentBlocksToEditableText = (blocks: ContentBlock[] | undefined): string
 }
 
 // Helper function to convert edited text back to contentBlocks
+// Robust parser that handles malformed input gracefully
 const editableTextToContentBlocks = (text: string): ContentBlock[] => {
-  return [{
-    type: 'text',
-    index: 0,
-    content: text
-  }]
+  if (!text || !text.trim()) {
+    return []
+  }
+
+  const blocks: ContentBlock[] = []
+  let currentIndex = 0
+
+  // Regex patterns for block detection - non-greedy and careful matching
+  const thinkingPattern = /\[THINKING\]([\s\S]*?)\[\/THINKING\]/g
+  const toolUsePattern = /\[TOOL_USE:\s*([^\]]+)\]([\s\S]*?)\[\/TOOL_USE\]/g
+  const toolResultPattern = /\[TOOL_RESULT\]([\s\S]*?)\[\/TOOL_RESULT\]/g
+
+  // Find all potential blocks with their positions
+  interface PotentialBlock {
+    type: 'thinking' | 'tool_use' | 'tool_result'
+    start: number
+    end: number
+    content: string
+    name?: string
+  }
+
+  const potentialBlocks: PotentialBlock[] = []
+
+  // Detect THINKING blocks
+  let match
+  thinkingPattern.lastIndex = 0
+  while ((match = thinkingPattern.exec(text)) !== null) {
+    potentialBlocks.push({
+      type: 'thinking',
+      start: match.index,
+      end: match.index + match[0].length,
+      content: match[1].trim(),
+    })
+  }
+
+  // Detect TOOL_USE blocks
+  toolUsePattern.lastIndex = 0
+  while ((match = toolUsePattern.exec(text)) !== null) {
+    const toolName = match[1].trim()
+    const toolInput = match[2].trim()
+
+    // Validate JSON - if invalid, skip this block (treat as plain text)
+    try {
+      JSON.parse(toolInput)
+      potentialBlocks.push({
+        type: 'tool_use',
+        start: match.index,
+        end: match.index + match[0].length,
+        name: toolName,
+        content: toolInput,
+      })
+    } catch (e) {
+      // Invalid JSON - skip this block, will be treated as plain text later
+    }
+  }
+
+  // Detect TOOL_RESULT blocks
+  toolResultPattern.lastIndex = 0
+  while ((match = toolResultPattern.exec(text)) !== null) {
+    potentialBlocks.push({
+      type: 'tool_result',
+      start: match.index,
+      end: match.index + match[0].length,
+      content: match[1].trim(),
+    })
+  }
+
+  // Sort blocks by position
+  potentialBlocks.sort((a, b) => a.start - b.start)
+
+  // Check for overlapping blocks (nested/malformed tags) - skip overlapping ones
+  const validBlocks: PotentialBlock[] = []
+  for (const block of potentialBlocks) {
+    let overlaps = false
+
+    for (const validBlock of validBlocks) {
+      // Check if blocks overlap
+      if (block.start < validBlock.end && block.end > validBlock.start) {
+        overlaps = true
+        break
+      }
+    }
+
+    if (!overlaps) {
+      validBlocks.push(block)
+    }
+  }
+
+  // Build final content blocks
+  let position = 0
+
+  for (const block of validBlocks) {
+    // Add plain text before this block
+    if (block.start > position) {
+      const plainText = text.substring(position, block.start).trim()
+      if (plainText) {
+        blocks.push({
+          type: 'text',
+          index: currentIndex++,
+          content: plainText,
+        })
+      }
+    }
+
+    // Add the structured block
+    if (block.type === 'thinking') {
+      blocks.push({
+        type: 'thinking',
+        index: currentIndex++,
+        content: block.content,
+      })
+    } else if (block.type === 'tool_use' && block.name) {
+      try {
+        blocks.push({
+          type: 'tool_use',
+          index: currentIndex++,
+          id: `tool_${Date.now()}_${currentIndex}`,
+          name: block.name,
+          input: JSON.parse(block.content),
+        })
+      } catch (e) {
+        // Shouldn't happen due to earlier validation, but as fallback treat as text
+        const textContent = text.substring(block.start, block.end)
+        blocks.push({
+          type: 'text',
+          index: currentIndex++,
+          content: textContent,
+        })
+      }
+    } else if (block.type === 'tool_result') {
+      // Try to parse content as JSON, otherwise use as string
+      let resultContent: any
+      try {
+        resultContent = JSON.parse(block.content)
+      } catch (e) {
+        resultContent = block.content
+      }
+
+      blocks.push({
+        type: 'tool_result',
+        index: currentIndex++,
+        tool_use_id: 'unknown_tool',
+        content: resultContent,
+        is_error: false,
+      })
+    }
+
+    position = block.end
+  }
+
+  // Add remaining plain text
+  if (position < text.length) {
+    const plainText = text.substring(position).trim()
+    if (plainText) {
+      blocks.push({
+        type: 'text',
+        index: currentIndex++,
+        content: plainText,
+      })
+    }
+  }
+
+  // If no blocks were created, return everything as plain text
+  if (blocks.length === 0) {
+    const trimmedText = text.trim()
+    if (trimmedText) {
+      return [
+        {
+          type: 'text',
+          index: 0,
+          content: trimmedText,
+        },
+      ]
+    }
+    return []
+  }
+
+  return blocks
 }
 
 const ChatMessage: React.FC<ChatMessageProps> = React.memo(
