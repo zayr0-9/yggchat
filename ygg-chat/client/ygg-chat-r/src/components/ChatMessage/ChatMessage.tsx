@@ -907,7 +907,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     <div className='flex items-center justify-between mb-2'>
                       <div
                         className={`font-semibold text-[16px] ${
-                          isError ? 'text-red-700 dark:text-red-300' : 'text-stone-700 dark:text-stone-300'
+                          isError ? 'text-red-700 dark:text-red-300' : 'text-stone-700 dark:text-green-800'
                         }`}
                       >
                         {isError ? 'Tool Error' : 'Tool Result'}
@@ -1090,7 +1090,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     <div className='flex items-center justify-between mb-2'>
                       <div
                         className={`font-semibold text-[16px] ${
-                          isError ? 'text-red-700 dark:text-red-300' : 'text-green-800 dark:text-green-300'
+                          isError ? 'text-red-700 dark:text-red-300' : 'text-green-800 dark:text-green-800'
                         }`}
                       >
                         {isError ? 'Tool Error' : 'Tool Result'}

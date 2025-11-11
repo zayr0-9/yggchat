@@ -558,10 +558,8 @@ export const sendMessage = createAsyncThunk<
                   part: 'tool_result',
                   toolResult: chunk.toolResult,
                 }))
-              }
-
-              // For streaming, accumulate or finalize per event
-              if (chunk.type === 'generation_started') {
+                // Skip generic chunk handler to prevent duplicate dispatch
+              } else if (chunk.type === 'generation_started') {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
               } else if (chunk.type === 'chunk') {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
@@ -905,9 +903,8 @@ export const editMessageWithBranching = createAsyncThunk<
                   part: 'tool_result',
                   toolResult: chunk.toolResult,
                 }))
-              }
-
-              if (chunk.type === 'generation_started') {
+                // Skip generic chunk handler to prevent duplicate dispatch
+              } else if (chunk.type === 'generation_started') {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
               } else {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
@@ -1075,9 +1072,8 @@ export const sendMessageToBranch = createAsyncThunk<
                   part: 'tool_result',
                   toolResult: chunk.toolResult,
                 }))
-              }
-
-              if (chunk.type === 'generation_started') {
+                // Skip generic chunk handler to prevent duplicate dispatch
+              } else if (chunk.type === 'generation_started') {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
               } else {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))

@@ -256,11 +256,18 @@ export const chatSlice = createSlice({
         } else if (chunk.part === 'tool_result') {
           // Handle tool result events during streaming
           if (chunk.toolResult) {
-            state.streaming.events.push({
-              type: 'tool_result',
-              toolResult: chunk.toolResult,
-              complete: true,
-            })
+            // Only add to events if this tool_use_id hasn't been logged yet (deduplication)
+            const resultExists = state.streaming.events.some(
+              e => e.type === 'tool_result' && e.toolResult?.tool_use_id === chunk.toolResult!.tool_use_id
+            )
+
+            if (!resultExists) {
+              state.streaming.events.push({
+                type: 'tool_result',
+                toolResult: chunk.toolResult,
+                complete: true,
+              })
+            }
           }
         } else {
           const delta = chunk.delta ?? chunk.content ?? ''
