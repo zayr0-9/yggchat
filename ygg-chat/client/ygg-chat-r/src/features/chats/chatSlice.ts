@@ -371,12 +371,13 @@ export const chatSlice = createSlice({
       state.conversation.messages = []
     },
 
-    messageUpdated: (state, action: PayloadAction<{ id: MessageId; content: string; note?: string }>) => {
-      const { id, content, note } = action.payload
+    messageUpdated: (state, action: PayloadAction<{ id: MessageId; content: string; note?: string; content_blocks?: any }>) => {
+      const { id, content, note, content_blocks } = action.payload
       const msg = state.conversation.messages.find(m => m.id === id)
       if (msg) {
         msg.content = content
         if (note !== undefined) msg.note = note
+        if (content_blocks) msg.content_blocks = content_blocks
       }
     },
 

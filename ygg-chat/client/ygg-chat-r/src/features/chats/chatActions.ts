@@ -196,7 +196,8 @@ const updateMessageInCache = (
   conversationId: ConversationId,
   messageId: MessageId,
   updatedContent: string,
-  updatedNote?: string
+  updatedNote?: string,
+  updatedContentBlocks?: any
 ) => {
   if (!queryClient) return
 
@@ -212,6 +213,7 @@ const updateMessageInCache = (
             content: updatedContent,
             content_plain_text: updatedContent,
             ...(updatedNote !== undefined && { note: updatedNote }),
+            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
           }
         : msg
     )
@@ -617,22 +619,27 @@ export const sendMessage = createAsyncThunk<
 
 export const updateMessage = createAsyncThunk<
   Message,
-  { id: MessageId; content: string; note?: string },
+  { id: MessageId; content: string; note?: string; content_blocks?: any },
   { state: RootState; extra: ThunkExtraArgument }
->('chat/updateMessage', async ({ id, content, note }, { dispatch, getState, extra, rejectWithValue }) => {
+>('chat/updateMessage', async ({ id, content, note, content_blocks }, { dispatch, getState, extra, rejectWithValue }) => {
   const { auth } = extra
   try {
+    const body: any = { content, note }
+    if (content_blocks) {
+      body.content_blocks = content_blocks
+    }
+
     const updated = await apiCall<Message>(`/messages/${id}`, auth.accessToken, {
       method: 'PUT',
-      body: JSON.stringify({ content, note }),
+      body: JSON.stringify(body),
     })
-    dispatch(chatSliceActions.messageUpdated({ id, content, note }))
+    dispatch(chatSliceActions.messageUpdated({ id, content, note, content_blocks }))
 
     // Sync to React Query cache immediately
     const state = getState()
     const conversationId = state.chat.conversation.currentConversationId
     if (conversationId) {
-      updateMessageInCache(extra.queryClient, conversationId, id, content, note)
+      updateMessageInCache(extra.queryClient, conversationId, id, content, note, content_blocks)
     }
 
     return updated

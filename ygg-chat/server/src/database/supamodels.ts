@@ -987,7 +987,8 @@ export class MessageService {
     content: string,
     thinking_block: string | null = null,
     tool_calls: string | null = null,
-    note: string | null = null
+    note: string | null = null,
+    content_blocks: any = null
   ): Promise<Message | undefined> {
     // Compute plain text content before update to save an API call
     let plainTextContent: string
@@ -998,16 +999,24 @@ export class MessageService {
       plainTextContent = content
     }
 
+    // Build update object - only include content_blocks if provided
+    const updateObj: any = {
+      content,
+      thinking_block,
+      tool_calls: tool_calls ? JSON.parse(tool_calls) : null,
+      note,
+      plain_text_content: plainTextContent,
+    }
+
+    // Include content_blocks in update if provided
+    if (content_blocks) {
+      updateObj.content_blocks = content_blocks
+    }
+
     // Single UPDATE query with all fields including plain_text_content
     const { data } = await client
       .from('messages')
-      .update({
-        content,
-        thinking_block,
-        tool_calls: tool_calls ? JSON.parse(tool_calls) : null,
-        note,
-        plain_text_content: plainTextContent,
-      })
+      .update(updateObj)
       .eq('id', id)
       .select()
       .single()

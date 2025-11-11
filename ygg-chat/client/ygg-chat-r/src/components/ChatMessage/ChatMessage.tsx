@@ -34,8 +34,8 @@ interface ChatMessageProps {
   contentBlocks?: ContentBlock[]
   streamEvents?: StreamEvent[]
   timestamp?: string | Date
-  onEdit?: (id: string, newContent: string) => void
-  onBranch?: (id: string, newContent: string) => void
+  onEdit?: (id: string, newContent: string, newContentBlocks?: ContentBlock[]) => void
+  onBranch?: (id: string, newContent: string, newContentBlocks?: ContentBlock[]) => void
   onDelete?: (id: string) => void
   onCopy?: (content: string) => void
   onResend?: (id: string) => void
@@ -213,6 +213,37 @@ const MessageActions: React.FC<MessageActionsProps> = ({
 const COLLAPSED_CONTENT_CHAR_LIMIT = 80
 const COLLAPSED_CONTENT_WORD_LIMIT = 15
 
+// Helper function to convert contentBlocks to editable text
+const contentBlocksToEditableText = (blocks: ContentBlock[] | undefined): string => {
+  if (!blocks || blocks.length === 0) return ''
+
+  return blocks
+    .sort((a, b) => a.index - b.index)
+    .map(block => {
+      if (block.type === 'text') {
+        return block.content
+      } else if (block.type === 'thinking') {
+        return `[THINKING]\n${block.content}\n[/THINKING]`
+      } else if (block.type === 'tool_use') {
+        return `[TOOL_USE: ${block.name}]\n${JSON.stringify(block.input, null, 2)}\n[/TOOL_USE]`
+      } else if (block.type === 'tool_result') {
+        const resultContent = typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2)
+        return `[TOOL_RESULT]\n${resultContent}\n[/TOOL_RESULT]`
+      }
+      return ''
+    })
+    .join('\n\n')
+}
+
+// Helper function to convert edited text back to contentBlocks
+const editableTextToContentBlocks = (text: string): ContentBlock[] => {
+  return [{
+    type: 'text',
+    index: 0,
+    content: text
+  }]
+}
+
 const ChatMessage: React.FC<ChatMessageProps> = React.memo(
   ({
     id,
@@ -279,14 +310,16 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const handleEdit = () => {
       dispatch(chatSliceActions.editingBranchSet(false))
       setEditingState(true)
-      setEditContent(content)
+      // Use contentBlocks if available, otherwise use simple content
+      setEditContent(contentBlocks && contentBlocks.length > 0 ? contentBlocksToEditableText(contentBlocks) : content)
       setEditMode('edit')
     }
 
     const handleBranch = () => {
       dispatch(chatSliceActions.editingBranchSet(true))
       setEditingState(true)
-      setEditContent(content)
+      // Use contentBlocks if available, otherwise use simple content
+      setEditContent(contentBlocks && contentBlocks.length > 0 ? contentBlocksToEditableText(contentBlocks) : content)
       setEditMode('branch')
     }
 
@@ -300,7 +333,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
 
       if (onEdit && trimmedContent !== content) {
-        onEdit(id, trimmedContent)
+        // Convert edited text back to contentBlocks if original had contentBlocks
+        const newContentBlocks = contentBlocks && contentBlocks.length > 0 ? editableTextToContentBlocks(trimmedContent) : undefined
+        onEdit(id, trimmedContent, newContentBlocks)
       }
       dispatch(chatSliceActions.editingBranchSet(false))
       setEditingState(false)
@@ -308,7 +343,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
     const handleSaveBranch = () => {
       if (onBranch) {
-        onBranch(id, editContent.trim())
+        // Convert edited text back to contentBlocks if original had contentBlocks
+        const newContentBlocks = contentBlocks && contentBlocks.length > 0 ? editableTextToContentBlocks(editContent.trim()) : undefined
+        onBranch(id, editContent.trim(), newContentBlocks)
       }
       dispatch(chatSliceActions.editingBranchSet(false))
       // Clear any image drafts after branching is initiated
@@ -739,7 +776,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Prioritize rendering: streamEvents > contentBlocks > legacy fields */}
         {/* Sequential streaming events - render in order as received */}
-        {Array.isArray(streamEvents) && streamEvents.length > 0 ? (
+        {!editingState && Array.isArray(streamEvents) && streamEvents.length > 0 ? (
           <div className='space-y-3 mb-3'>
             {streamEvents.map((event, idx) => {
               if (event.type === 'text') {
@@ -953,7 +990,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               return null
             })}
           </div>
-        ) : Array.isArray(contentBlocks) && contentBlocks.length > 0 ? (
+        ) : !editingState && Array.isArray(contentBlocks) && contentBlocks.length > 0 ? (
           // Render content_blocks if available (prioritized over legacy fields)
           // Uses same formatting as streaming events
           <div className='space-y-3 mb-3'>
@@ -1247,40 +1284,41 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           </>
         )}
 
-        {/* Message content - only show if no contentBlocks or streamEvents present (to avoid duplication) */}
-        {(!contentBlocks || contentBlocks.length === 0) && (!streamEvents || streamEvents.length === 0) && (
+        {/* Message content - show edit mode or normal display */}
+        {editingState ? (
+          <div className='px-4 w-full'>
+            <TextArea
+              value={editContent}
+              onChange={setEditContent}
+              placeholder='Edit your message...'
+              minRows={2}
+              maxRows={40}
+              maxLength={20000}
+              autoFocus
+              width='w-full'
+              onContextMenu={(e: React.MouseEvent<HTMLTextAreaElement>) => {
+                // Always show default browser menu in TextArea, never the custom menu
+                e.stopPropagation()
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  if (editMode === 'branch') {
+                    handleSaveBranch()
+                  } else {
+                    handleSave()
+                  }
+                } else if (e.key === 'Escape') {
+                  e.preventDefault()
+                  handleCancel()
+                }
+              }}
+            />
+          </div>
+        ) : (
           <>
-            {editingState ? (
-              <div className='px-4 w-full'>
-                <TextArea
-                  value={editContent}
-                  onChange={setEditContent}
-                  placeholder='Edit your message...'
-                  minRows={2}
-                  maxRows={40}
-                  maxLength={20000}
-                  autoFocus
-                  width='w-full'
-                  onContextMenu={(e: React.MouseEvent<HTMLTextAreaElement>) => {
-                    // Always show default browser menu in TextArea, never the custom menu
-                    e.stopPropagation()
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      if (editMode === 'branch') {
-                        handleSaveBranch()
-                      } else {
-                        handleSave()
-                      }
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault()
-                      handleCancel()
-                    }
-                  }}
-                />
-              </div>
-            ) : (
+            {/* Display mode - only show if no contentBlocks or streamEvents present (to avoid duplication) */}
+            {(!contentBlocks || contentBlocks.length === 0) && (!streamEvents || streamEvents.length === 0) && (
               <div className='prose px-4 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[20px]'>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}

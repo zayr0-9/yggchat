@@ -1301,18 +1301,22 @@ function Chat() {
   }, [streamState.streamingMessageId, dispatch])
 
   const handleMessageEdit = useCallback(
-    (id: string, newContent: string) => {
+    (id: string, newContent: string, newContentBlocks?: any) => {
       const parsedId = parseId(id)
       // Only dispatch updateMessage thunk - it will dispatch messageUpdated internally on success
       // This prevents double updates and race conditions
-      dispatch(updateMessage({ id: parsedId, content: newContent }))
+      const updatePayload: any = { id: parsedId, content: newContent }
+      if (newContentBlocks) {
+        updatePayload.content_blocks = newContentBlocks
+      }
+      dispatch(updateMessage(updatePayload))
       // console.log(parsedId)
     },
     [dispatch]
   )
 
   const handleMessageBranch = useCallback(
-    (id: string, newContent: string) => {
+    (id: string, newContent: string, _newContentBlocks?: any) => {
       if (currentConversationId) {
         // Replace any @file mentions with actual file contents before branching
         const processed = replaceFileMentionsWithPath(newContent)

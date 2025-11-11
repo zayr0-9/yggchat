@@ -1870,14 +1870,14 @@ router.put(
   '/messages/:id',
   asyncHandler(async (req, res) => {
     const messageId = req.params.id
-    const { content, note } = req.body
+    const { content, note, content_blocks } = req.body
     const { client, userId } = await verifyAuth(req)
 
     if (!content) return res.status(400).json({ error: 'Content required' })
 
-    // Pass parameters in correct order: (client, id, content, thinking_block, tool_calls, note)
+    // Pass parameters in correct order: (client, id, content, thinking_block, tool_calls, note, content_blocks)
     // null for thinking_block and tool_calls preserves existing values
-    const updated = await MessageService.update(client, messageId, content, null, null, note)
+    const updated = await MessageService.update(client, messageId, content, null, null, note, content_blocks)
     if (!updated) return res.status(404).json({ error: 'Message not found' })
 
     res.json(updated)
