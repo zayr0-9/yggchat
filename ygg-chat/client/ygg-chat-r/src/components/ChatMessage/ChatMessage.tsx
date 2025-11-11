@@ -209,6 +209,10 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   )
 }
 
+// Configuration for collapsed content display
+const COLLAPSED_CONTENT_CHAR_LIMIT = 80
+const COLLAPSED_CONTENT_WORD_LIMIT = 15
+
 const ChatMessage: React.FC<ChatMessageProps> = React.memo(
   ({
     id,
@@ -240,7 +244,17 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [editMode, setEditMode] = useState<'edit' | 'branch'>('edit')
     const [copied, setCopied] = useState(false)
     // Toggle visibility of the reasoning/thinking block
-    const [showThinking, setShowThinking] = useState(true)
+    const [showThinking, setShowThinking] = useState(false)
+    // Track expanded/collapsed state for tool calls, tool results, and reasoning blocks
+    const [expandedBlocks, setExpandedBlocks] = useState<{
+      toolCalls: Set<string>
+      toolResults: Set<string>
+      reasoning: Set<number>
+    }>({
+      toolCalls: new Set(),
+      toolResults: new Set(),
+      reasoning: new Set(),
+    })
     // More menu states
     const [showMoreMenu, setShowMoreMenu] = useState(false)
     const [showMoreInfo, setShowMoreInfo] = useState(false)
@@ -662,6 +676,49 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       )
     }
 
+    // Toggle function for collapsible blocks
+    const toggleBlock = (type: 'toolCalls' | 'toolResults' | 'reasoning', id: string | number) => {
+      setExpandedBlocks(prev => {
+        const newState = { ...prev }
+        const currentSet = prev[type]
+        const set = new Set([...Array.from(currentSet as any)])
+        if (set.has(id as any)) {
+          set.delete(id as any)
+        } else {
+          set.add(id as any)
+        }
+        newState[type] = set as any
+        return newState
+      })
+    }
+
+    // Extract path-like parameters from tool arguments
+    const extractPathParam = (args: any): string | null => {
+      if (!args || typeof args !== 'object') return null
+      const pathKeys = ['file_path', 'path', 'directory', 'dir', 'output_path', 'input_path', 'filepath']
+      for (const key of pathKeys) {
+        if (args[key] && typeof args[key] === 'string') {
+          return args[key]
+        }
+      }
+      return null
+    }
+
+    // Truncate content to first N words
+    const truncateWords = (text: string | any, maxWords: number = COLLAPSED_CONTENT_WORD_LIMIT): string => {
+      const content = typeof text === 'object' ? JSON.stringify(text) : String(text)
+      const words = content.split(/\s+/)
+      if (words.length <= maxWords) return content
+      return words.slice(0, maxWords).join(' ') + '...'
+    }
+
+    // Truncate content to first N characters
+    const truncateChars = (text: string | any, maxChars: number = COLLAPSED_CONTENT_CHAR_LIMIT): string => {
+      const content = typeof text === 'object' ? JSON.stringify(text) : String(text)
+      if (content.length <= maxChars) return content
+      return content.slice(0, maxChars) + '...'
+    }
+
     return (
       <div
         id={`message-${id}`}
@@ -725,53 +782,110 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 }
                 // Only render if this is the first reasoning event in the sequence
                 if (idx === 0 || streamEvents[idx - 1].type !== 'reasoning') {
+                  const isExpanded = expandedBlocks.reasoning.has(idx)
                   return (
                     <div
                       key={`reasoning-${idx}`}
-                      className='rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                      className='relative rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
                     >
-                      <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300 mb-2'>
-                        Reasoning
-                      </div>
-                      <div className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                          components={{ pre: PreRenderer }}
+                      <div className='flex items-center justify-between'>
+                        <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
+                          Reasoning
+                        </div>
+                        <Button
+                          variant='outline2'
+                          size='small'
+                          onClick={() => toggleBlock('reasoning', idx)}
+                          title={isExpanded ? 'Hide details' : 'Show details'}
                         >
-                          {accumulatedReasoning}
-                        </ReactMarkdown>
+                          {isExpanded ? (
+                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                            </svg>
+                          ) : (
+                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                            </svg>
+                          )}
+                        </Button>
                       </div>
+                      {isExpanded ? (
+                        <div className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px] mt-2'>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                            components={{ pre: PreRenderer }}
+                          >
+                            {accumulatedReasoning}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div className='text-xs text-neutral-600 dark:text-neutral-400 mt-2'>
+                          {truncateWords(accumulatedReasoning)}
+                        </div>
+                      )}
                     </div>
                   )
                 }
                 return null
               } else if (event.type === 'tool_call' && event.toolCall && event.complete) {
                 const toolCall = event.toolCall
+                const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolCall.id}-${idx}`)
+                const pathParam = extractPathParam(toolCall.arguments)
                 return (
                   <div
-                    key={`tool-${toolCall.id}`}
-                    className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                    key={`tool-${toolCall.id}-${idx}`}
+                    className='relative mb-3 mx-3 rounded-xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
                   >
                     <div className='flex items-center justify-between mb-2'>
                       <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
+                      <Button
+                        variant='outline2'
+                        size='small'
+                        onClick={() => toggleBlock('toolCalls', `tool-call-${toolCall.id}-${idx}`)}
+                        title={isExpanded ? 'Hide details' : 'Show details'}
+                      >
+                        {isExpanded ? (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                          </svg>
+                        ) : (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                          </svg>
+                        )}
+                      </Button>
                     </div>
-                    {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                      <div className='text-xs space-y-1'>
-                        {Object.entries(toolCall.arguments).map(([key, value]) => (
-                          <div key={key} className='flex gap-2'>
-                            <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                            <span className='text-gray-800 dark:text-gray-200 break-all'>
-                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                            </span>
+                    {isExpanded ? (
+                      <>
+                        {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                          <div className='text-xs space-y-1'>
+                            {Object.entries(toolCall.arguments).map(([key, value]) => (
+                              <div key={key} className='flex gap-2'>
+                                <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                                <span className='text-gray-800 dark:text-gray-200 break-all'>
+                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    {toolCall.result && (
-                      <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
-                        <div className='font-semibold mb-1'>Result:</div>
-                        <div className='break-all'>{toolCall.result}</div>
+                        )}
+                        {toolCall.result && (
+                          <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
+                            <div className='font-semibold mb-1'>Result:</div>
+                            <div className='break-all'>{toolCall.result}</div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className='text-xs text-blue-600 dark:text-blue-300'>
+                        {pathParam ? (
+                          <>
+                            <span className='font-medium'>path:</span> {pathParam}
+                          </>
+                        ) : (
+                          <span className='text-gray-600 dark:text-gray-400'>View details</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -780,30 +894,59 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 // Render streamed tool results with same formatting as completed tool_result blocks
                 const toolResult = event.toolResult
                 const isError = toolResult.is_error
+                const isExpanded = expandedBlocks.toolResults.has(`tool-result-${toolResult.tool_use_id}-${idx}`)
                 return (
                   <div
                     key={`tool-result-${toolResult.tool_use_id}-${idx}`}
-                    className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] mx-3 ${
+                    className={`relative mb-5 mx-3 p-2 rounded-xl border my-2 text-xs shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
                       isError
                         ? 'border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-neutral-900'
-                        : 'border-green-200 bg-green-50 dark:border-green-900/30 dark:bg-neutral-900'
+                        : 'border-green-200 bg-neutral-50 dark:border-green-900/30 dark:bg-neutral-900'
                     }`}
                   >
-                    <div
-                      className={`font-semibold text-xs mb-2 ${
-                        isError ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'
-                      }`}
-                    >
-                      {isError ? 'Tool Error' : 'Tool Result'}
+                    <div className='flex items-center justify-between mb-2'>
+                      <div
+                        className={`font-semibold text-[16px] ${
+                          isError ? 'text-red-700 dark:text-red-300' : 'text-stone-700 dark:text-stone-300'
+                        }`}
+                      >
+                        {isError ? 'Tool Error' : 'Tool Result'}
+                      </div>
+                      <Button
+                        variant='outline2'
+                        size='small'
+                        onClick={() => toggleBlock('toolResults', `tool-result-${toolResult.tool_use_id}-${idx}`)}
+                        title={isExpanded ? 'Hide details' : 'Show details'}
+                      >
+                        {isExpanded ? (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                          </svg>
+                        ) : (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                          </svg>
+                        )}
+                      </Button>
                     </div>
-                    <div className='text-xs text-gray-600 dark:text-gray-400 mb-2'>
-                      <span className='font-medium'>tool_use_id:</span> {toolResult.tool_use_id}
-                    </div>
-                    <div className='text-xs text-gray-800 dark:text-gray-200 break-all whitespace-pre-wrap'>
-                      {typeof toolResult.content === 'object'
-                        ? JSON.stringify(toolResult.content, null, 2)
-                        : String(toolResult.content)}
-                    </div>
+                    {isExpanded ? (
+                      <>
+                        <div className='text-xs text-stone-600 dark:text-stone-300 mb-2'>
+                          <span className='font-medium'>tool_use_id:</span> {toolResult.tool_use_id}
+                        </div>
+                        <div className='text-xs text-stone-600 dark:text-stone-300 break-all whitespace-pre-wrap'>
+                          {typeof toolResult.content === 'object'
+                            ? JSON.stringify(toolResult.content, null, 2)
+                            : String(toolResult.content)}
+                        </div>
+                      </>
+                    ) : (
+                      <div
+                        className={`text-xs ${isError ? 'text-red-600 dark:text-red-400' : 'text-stone-600 dark:text-stone-300'}`}
+                      >
+                        {truncateChars(toolResult.content)}
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -819,7 +962,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 return (
                   <div
                     key={`text-${block.index}-${idx}`}
-                    className='prose px-4 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
+                    className='prose sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
                   >
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
@@ -831,45 +974,102 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   </div>
                 )
               } else if (block.type === 'thinking') {
+                const isExpanded = expandedBlocks.reasoning.has(block.index)
                 return (
                   <div
                     key={`thinking-${block.index}-${idx}`}
-                    className='rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                    className='relative mb-5 mx-3 rounded-xl p-2 border border-neutral-100 bg-neutral-50 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
                   >
-                    <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300 mb-2'>
-                      Reasoning
-                    </div>
-                    <div className='prose max-w-none dark:prose-invert w-full px-4 py-1 text-[14px] sm:text-[14px] 2xl:text-[18px] 3xl:text-[18px]'>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                        components={{ pre: PreRenderer }}
+                    <div className='flex items-center justify-between mb-2'>
+                      <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
+                        Reasoning
+                      </div>
+                      <Button
+                        variant='outline2'
+                        size='small'
+                        onClick={() => toggleBlock('reasoning', block.index)}
+                        title={isExpanded ? 'Hide details' : 'Show details'}
                       >
-                        {block.content}
-                      </ReactMarkdown>
+                        {isExpanded ? (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                          </svg>
+                        ) : (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                          </svg>
+                        )}
+                      </Button>
                     </div>
+                    {isExpanded ? (
+                      <div className='prose max-w-none dark:prose-invert w-full px-4 py-1 text-[14px] sm:text-[14px] 2xl:text-[18px] 3xl:text-[18px]'>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                          components={{ pre: PreRenderer }}
+                        >
+                          {block.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                        {truncateWords(block.content)}
+                      </div>
+                    )}
                   </div>
                 )
               } else if (block.type === 'tool_use') {
                 const toolUseBlock = block as any
+                const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolUseBlock.id}-${idx}`)
+                const pathParam = extractPathParam(toolUseBlock.input)
                 return (
                   <div
                     key={`tool-${toolUseBlock.id}-${idx}`}
-                    className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                    className='relative mb-5 mx-3 rounded-xl border border-blue-200 bg-neutral-50 p-2 sm:p-2 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
                   >
                     <div className='flex items-center justify-between mb-2'>
                       <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolUseBlock.name}</div>
+                      <Button
+                        variant='outline2'
+                        size='small'
+                        onClick={() => toggleBlock('toolCalls', `tool-call-${toolUseBlock.id}-${idx}`)}
+                        title={isExpanded ? 'Hide details' : 'Show details'}
+                      >
+                        {isExpanded ? (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                          </svg>
+                        ) : (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                          </svg>
+                        )}
+                      </Button>
                     </div>
-                    {toolUseBlock.input && Object.keys(toolUseBlock.input).length > 0 && (
-                      <div className='text-xs space-y-1 2xl:p-2'>
-                        {Object.entries(toolUseBlock.input).map(([key, value]) => (
-                          <div key={key} className='flex gap-2'>
-                            <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                            <span className='text-gray-800 dark:text-gray-200 break-all'>
-                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                            </span>
+                    {isExpanded ? (
+                      <>
+                        {toolUseBlock.input && Object.keys(toolUseBlock.input).length > 0 && (
+                          <div className='text-xs space-y-1 2xl:p-2'>
+                            {Object.entries(toolUseBlock.input).map(([key, value]) => (
+                              <div key={key} className='flex gap-2'>
+                                <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                                <span className='text-gray-800 dark:text-gray-200 break-all'>
+                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        )}
+                      </>
+                    ) : (
+                      <div className='text-xs text-blue-600 dark:text-blue-300'>
+                        {pathParam ? (
+                          <>
+                            <span className='font-medium'>path:</span> {pathParam}
+                          </>
+                        ) : (
+                          <span className='text-gray-600 dark:text-gray-400'>View details</span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -877,27 +1077,54 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               } else if (block.type === 'tool_result') {
                 const toolResultBlock = block as any
                 const isError = toolResultBlock.is_error
+                const isExpanded = expandedBlocks.toolResults.has(`tool-result-${toolResultBlock.tool_use_id}-${idx}`)
                 return (
                   <div
                     key={`tool-result-${toolResultBlock.tool_use_id}-${idx}`}
-                    className={`rounded-2xl border p-2 sm:p-3 my-2 text-xs shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
+                    className={`relative mb-5 mx-3 rounded-xl border p-2 sm:p-2 my-2 text-xs shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
                       isError
                         ? 'border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-neutral-900'
-                        : 'border-green-200 bg-green-50 dark:border-green-900/30 dark:bg-neutral-900'
+                        : 'border-green-500/30 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-900'
                     }`}
                   >
-                    <div
-                      className={`font-semibold text-xs mb-2 ${
-                        isError ? 'text-red-700 dark:text-red-300' : 'text-green-700 dark:text-green-300'
-                      }`}
-                    >
-                      {isError ? 'Tool Error' : 'Tool Result'}
+                    <div className='flex items-center justify-between mb-2'>
+                      <div
+                        className={`font-semibold text-[16px] ${
+                          isError ? 'text-red-700 dark:text-red-300' : 'text-green-800 dark:text-green-300'
+                        }`}
+                      >
+                        {isError ? 'Tool Error' : 'Tool Result'}
+                      </div>
+                      <Button
+                        variant='outline2'
+                        size='small'
+                        onClick={() => toggleBlock('toolResults', `tool-result-${toolResultBlock.tool_use_id}-${idx}`)}
+                        title={isExpanded ? 'Hide details' : 'Show details'}
+                      >
+                        {isExpanded ? (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                          </svg>
+                        ) : (
+                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                          </svg>
+                        )}
+                      </Button>
                     </div>
-                    <div className='text-xs text-gray-800 dark:text-gray-200 break-all whitespace-pre-wrap'>
-                      {typeof toolResultBlock.content === 'object'
-                        ? JSON.stringify(toolResultBlock.content, null, 2)
-                        : String(toolResultBlock.content)}
-                    </div>
+                    {isExpanded ? (
+                      <div className='text-xs text-stone-600 dark:text-stone-300 break-all whitespace-pre-wrap'>
+                        {typeof toolResultBlock.content === 'object'
+                          ? JSON.stringify(toolResultBlock.content, null, 2)
+                          : String(toolResultBlock.content)}
+                      </div>
+                    ) : (
+                      <div
+                        className={`text-xs ${isError ? 'text-red-600 dark:text-red-400' : 'text-stone-600 dark:text-stone-300'}`}
+                      >
+                        {truncateChars(toolResultBlock.content)}
+                      </div>
+                    )}
                   </div>
                 )
               }
@@ -909,57 +1136,97 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             {/* Fallback: render tool calls and reasoning separately if no streamEvents or contentBlocks */}
             {Array.isArray(toolCalls) && toolCalls.length > 0 && (
               <div className='space-y-3 mb-3'>
-                {toolCalls.map((toolCall, idx) => (
-                  <div
-                    key={toolCall.id || idx}
-                    className='mb-3 mx-3 rounded-2xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
-                  >
-                    <div className='flex items-center justify-between mb-2'>
-                      <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
+                {toolCalls.map((toolCall, idx) => {
+                  const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolCall.id}-${idx}`)
+                  const pathParam = extractPathParam(toolCall.arguments)
+                  return (
+                    <div
+                      key={`${toolCall.id}-${idx}`}
+                      className='relative mb-3 mx-3 rounded-xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                    >
+                      <div className='flex items-center justify-between mb-2'>
+                        <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
+                        <Button
+                          variant='outline2'
+                          size='small'
+                          onClick={() => toggleBlock('toolCalls', `tool-call-${toolCall.id}-${idx}`)}
+                          title={isExpanded ? 'Hide details' : 'Show details'}
+                        >
+                          {isExpanded ? (
+                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                            </svg>
+                          ) : (
+                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                            </svg>
+                          )}
+                        </Button>
+                      </div>
+                      {isExpanded ? (
+                        <>
+                          {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                            <div className='text-xs space-y-1'>
+                              {Object.entries(toolCall.arguments).map(([key, value]) => (
+                                <div key={key} className='flex gap-2'>
+                                  <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
+                                  <span className='text-gray-800 dark:text-gray-200 break-all'>
+                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {toolCall.result && (
+                            <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
+                              <div className='font-semibold mb-1'>Result:</div>
+                              <div className='break-all'>{toolCall.result}</div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className='text-xs text-blue-600 dark:text-blue-300'>
+                          {pathParam ? (
+                            <>
+                              <span className='font-medium'>path:</span> {pathParam}
+                            </>
+                          ) : (
+                            <span className='text-gray-600 dark:text-gray-400'>View details</span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                      <div className='text-xs space-y-1'>
-                        {Object.entries(toolCall.arguments).map(([key, value]) => (
-                          <div key={key} className='flex gap-2'>
-                            <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                            <span className='text-gray-800 dark:text-gray-200 break-all'>
-                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {toolCall.result && (
-                      <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
-                        <div className='font-semibold mb-1'>Result:</div>
-                        <div className='break-all'>{toolCall.result}</div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
             {/* Reasoning / thinking block */}
             {typeof thinking === 'string' && thinking.trim().length > 0 && (
-              <div className='mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'>
+              <div className='relative mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'>
                 <div className='mb-2 flex items-center justify-between'>
                   <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
                     Reasoning
                   </div>
-                  <Button
-                    type='button'
+                  <button
                     onClick={() => setShowThinking(s => !s)}
-                    className='ml-2 text-xs px-2 py-1 border-1 border-neutral-50 text-amber-800 dark:text-amber-300 dark:border-amber-900/60 hover:bg-amber-100 dark:hover:bg-neutral-800'
-                    size='smaller'
-                    variant='outline2'
+                    className='p-1 rounded-md text-xs hover:bg-black/10 dark:hover:bg-white/10 transition-colors'
+                    title={showThinking ? 'Hide details' : 'Show details'}
                     aria-expanded={showThinking}
                     aria-controls={`reasoning-content-${id}`}
                   >
-                    {showThinking ? 'Hide' : 'Show'}
-                  </Button>
+                    {showThinking ? (
+                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                      </svg>
+                    ) : (
+                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                      </svg>
+                    )}
+                  </button>
                 </div>
-                {showThinking && (
+                {showThinking ? (
                   <div
                     id={`reasoning-content-${id}`}
                     className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
@@ -972,6 +1239,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       {thinking}
                     </ReactMarkdown>
                   </div>
+                ) : (
+                  <div className='text-xs text-neutral-600 dark:text-neutral-400'>{truncateWords(thinking)}</div>
                 )}
               </div>
             )}
