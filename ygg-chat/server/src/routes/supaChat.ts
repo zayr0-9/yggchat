@@ -221,14 +221,15 @@ router.get(
           const completionCost = Number(m?.pricing?.completion ?? 0)
           const requestCost = Number(m?.pricing?.request ?? 0)
 
-          // Extract modality support
-          const inputModalities: string[] = Array.isArray(m?.architecture?.modality?.input)
-            ? m.architecture.modality.input
+          // Extract modality support from architecture object
+          // OpenRouter API structure: architecture.input_modalities and architecture.output_modalities
+          const inputModalities: string[] = Array.isArray(m?.architecture?.input_modalities)
+            ? m.architecture.input_modalities
             : m?.supports_vision
               ? ['text', 'image']
               : ['text']
-          const outputModalities: string[] = Array.isArray(m?.architecture?.modality?.output)
-            ? m.architecture.modality.output
+          const outputModalities: string[] = Array.isArray(m?.architecture?.output_modalities)
+            ? m.architecture.output_modalities
             : m?.supports_vision
               ? ['text', 'image']
               : ['text']

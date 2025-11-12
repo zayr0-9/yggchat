@@ -1,5 +1,6 @@
 // React Query hooks for data fetching with automatic caching and deduplication
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import type { BaseModel, Project } from '../../../../shared/types'
 import { ConversationId, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
@@ -562,4 +563,160 @@ export function useSelectedModel(provider: string | null) {
 export function useEffectiveModel(provider: string | null) {
   const { data } = useModels(provider)
   return data?.selected || data?.default || null
+}
+
+/**
+ * Hook to manage a local mutable copy of models with filtering capabilities
+ * Creates a working copy that can be filtered by various criteria without affecting the cache
+ *
+ * Supports filtering by:
+ * - generationMethods (e.g., 'streaming', 'completion')
+ * - promptCost (min/max range)
+ * - completionCost (min/max range)
+ * - thinking (boolean - models with reasoning capability)
+ * - supportsImages (boolean)
+ * - supportsWebSearch (boolean)
+ *
+ * Usage:
+ * const { filteredModels, applyFilters, clearFilters } = useFilteredModels(provider)
+ * applyFilters({ thinking: true, supportsImages: true })
+ */
+export interface ModelFilters {
+  thinking?: boolean
+  supportsImages?: boolean
+  supportsWebSearch?: boolean
+  supportsStructuredOutputs?: boolean
+  promptCostMin?: number
+  promptCostMax?: number
+  completionCostMin?: number
+  completionCostMax?: number
+  contextLengthMax?: number
+}
+
+export interface ModelSortOptions {
+  sortBy?: 'promptCost' | 'completionCost'
+  sortOrder?: 'low-to-high' | 'high-to-low'
+}
+
+export function useFilteredModels(provider: string | null) {
+  const { data: modelsData } = useModels(provider)
+  const [localModels, setLocalModels] = useState<BaseModel[]>([])
+  const [filters, setFilters] = useState<ModelFilters>({})
+  const [sortOptions, setSortOptions] = useState<ModelSortOptions>({})
+
+  // Initialize local copy when models data changes
+  useEffect(() => {
+    if (modelsData?.models) {
+      setLocalModels([...modelsData.models])
+    }
+  }, [modelsData?.models])
+
+  // Apply filters and sorting to local copy
+  const filteredModels = useMemo(() => {
+    let result = localModels.filter(model => {
+      // Filter by thinking capability
+      if (filters.thinking !== undefined && model.thinking !== filters.thinking) {
+        return false
+      }
+
+      // Filter by image support
+      if (filters.supportsImages !== undefined && model.supportsImages !== filters.supportsImages) {
+        return false
+      }
+
+      // Filter by web search support
+      if (filters.supportsWebSearch !== undefined && model.supportsWebSearch !== filters.supportsWebSearch) {
+        return false
+      }
+
+      // Filter by structured outputs support
+      if (filters.supportsStructuredOutputs !== undefined && model.supportsStructuredOutputs !== filters.supportsStructuredOutputs) {
+        return false
+      }
+
+      // Filter by prompt cost range
+      if (filters.promptCostMin !== undefined && model.promptCost < filters.promptCostMin) {
+        return false
+      }
+      if (filters.promptCostMax !== undefined && model.promptCost > filters.promptCostMax) {
+        return false
+      }
+
+      // Filter by completion cost range
+      if (filters.completionCostMin !== undefined && model.completionCost < filters.completionCostMin) {
+        return false
+      }
+      if (filters.completionCostMax !== undefined && model.completionCost > filters.completionCostMax) {
+        return false
+      }
+
+      // Filter by minimum context length requirement
+      if (filters.contextLengthMax !== undefined && model.contextLength < filters.contextLengthMax) {
+        return false
+      }
+
+      return true
+    })
+
+    // Apply sorting if specified
+    if (sortOptions.sortBy) {
+      const ascending = sortOptions.sortOrder === 'low-to-high'
+      result = [...result].sort((a, b) => {
+        const aVal = a[sortOptions.sortBy as keyof BaseModel]
+        const bVal = b[sortOptions.sortBy as keyof BaseModel]
+
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return ascending ? aVal - bVal : bVal - aVal
+        }
+
+        return 0
+      })
+    }
+
+    return result
+  }, [localModels, filters, sortOptions])
+
+  const applyFilters = useCallback((newFilters: ModelFilters) => {
+    setFilters(newFilters)
+  }, [])
+
+  const clearFilters = useCallback(() => {
+    setFilters({})
+    setSortOptions({})
+  }, [])
+
+  const applySorting = useCallback((sortOpts: ModelSortOptions) => {
+    setSortOptions(sortOpts)
+  }, [])
+
+  const sortByField = useCallback((field: keyof BaseModel, ascending = true) => {
+    setLocalModels(prev => {
+      const sorted = [...prev].sort((a, b) => {
+        const aVal = a[field]
+        const bVal = b[field]
+
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return ascending ? aVal - bVal : bVal - aVal
+        }
+
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+          return ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
+        }
+
+        return 0
+      })
+      return sorted
+    })
+  }, [])
+
+  return {
+    filteredModels,
+    allModels: localModels,
+    filters,
+    sortOptions,
+    applyFilters,
+    clearFilters,
+    applySorting,
+    sortByField,
+  }
 }

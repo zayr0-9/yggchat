@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import type { BaseModel } from '../../../../../shared/types'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
+import { ModelInfoModal } from '../ModelInfoModal/ModelInfoModal'
 
 export type SelectOption = { value: string; label?: string }
 
@@ -15,6 +17,8 @@ interface SelectProps {
   searchBarVisible?: boolean
   size?: 'small' | 'medium' | 'large'
   blur?: 'low' | 'high'
+  filterUI?: React.ReactNode
+  modelData?: Record<string, BaseModel>
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -27,10 +31,14 @@ export const Select: React.FC<SelectProps> = ({
   searchBarVisible = false,
   size = 'medium',
   blur = 'low',
+  filterUI,
+  modelData,
 }) => {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number>(-1)
   const [searchTerm, setSearchTerm] = useState('')
+  const [showModelInfo, setShowModelInfo] = useState(false)
+  const [selectedModelForInfo, setSelectedModelForInfo] = useState<BaseModel | null>(null)
   const btnRef = useRef<HTMLButtonElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
@@ -107,7 +115,7 @@ export const Select: React.FC<SelectProps> = ({
       const shouldOpenUp = spaceBelow < 200 && spaceAbove > spaceBelow
       const available = (shouldOpenUp ? spaceAbove : spaceBelow) - 8 // 8px margin
       // Cap to a reasonable range for usability
-      const maxH = Math.max(160, Math.min(360, available))
+      const maxH = Math.max(160, Math.min(460, available))
       setListMaxHeight(Number.isFinite(maxH) ? maxH : 280)
 
       // Calculate fixed position based on button rect
@@ -210,6 +218,11 @@ export const Select: React.FC<SelectProps> = ({
               width: `${dropdownPosition.width}px`,
             }}
           >
+            {filterUI && (
+              <div className='px-2 py-2 border-b acrylic-medium dark:bg-transparent border-neutral-200 dark:border-neutral-900'>
+                {filterUI}
+              </div>
+            )}
             {searchBarVisible && (
               <div className='px-2 py-2 border-b acrylic-medium dark:bg-transparent border-neutral-200 dark:border-neutral-900'>
                 <input
@@ -234,26 +247,43 @@ export const Select: React.FC<SelectProps> = ({
               ) : (
                 filteredOptions.map((opt, idx) => {
                   const isSelected = value === opt.value
+                  const modelInfo = modelData?.[opt.value]
                   return (
-                    <Button
-                      key={opt.value}
-                      variant='outline2'
-                      size='medium'
-                      type='button'
-                      role='option'
-                      aria-selected={isSelected}
-                      onMouseEnter={() => setActiveIndex(idx)}
-                      onMouseDown={e => {
-                        // Select on mousedown to beat any outside click handlers and avoid losing the event
-                        e.preventDefault()
-                        e.stopPropagation()
-                        handleSelect(opt.value)
-                      }}
-                      onClick={() => handleSelect(opt.value)}
-                      className={`w-full line-clamp-3 hover:bg-neutral-200 text-left ${isSelected ? 'font-medium' : ''}`}
-                    >
-                      {opt.label}
-                    </Button>
+                    <div key={opt.value} className='flex items-center gap-0'>
+                      <Button
+                        variant='outline2'
+                        size='medium'
+                        type='button'
+                        role='option'
+                        aria-selected={isSelected}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        onMouseDown={e => {
+                          // Select on mousedown to beat any outside click handlers and avoid losing the event
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleSelect(opt.value)
+                        }}
+                        onClick={() => handleSelect(opt.value)}
+                        className={`flex-1 line-clamp-3 hover:bg-neutral-200 justify-start text-left ${isSelected ? 'font-medium' : ''}`}
+                      >
+                        {opt.label}
+                      </Button>
+                      {modelInfo && (
+                        <button
+                          type='button'
+                          onClick={e => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setSelectedModelForInfo(modelInfo)
+                            setShowModelInfo(true)
+                          }}
+                          className='px-2 py-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors rounded-r-lg'
+                          aria-label='View model details'
+                        >
+                          <i className='bx bx-dots-vertical-rounded text-neutral-600 dark:text-neutral-300' />
+                        </button>
+                      )}
+                    </div>
                   )
                 })
               )}
@@ -261,6 +291,8 @@ export const Select: React.FC<SelectProps> = ({
           </div>,
           document.body
         )}
+
+      <ModelInfoModal model={selectedModelForInfo} isOpen={showModelInfo} onClose={() => setShowModelInfo(false)} />
     </div>
   )
 }

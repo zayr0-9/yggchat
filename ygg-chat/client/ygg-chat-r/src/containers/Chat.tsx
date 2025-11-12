@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { MessageId } from '../../../../shared/types'
 import { Button, ChatMessage, Heimdall, InputTextArea, Select, SettingsPane, TextField } from '../components'
+import { ModelFilterUI } from '../components/ModelFilterUI/ModelFilterUI'
 import {
   abortStreaming,
   blobToDataURL,
@@ -14,7 +15,6 @@ import {
   editMessageWithBranching,
   initializeUserAndConversation,
   Message,
-  Model,
   refreshCurrentPathAfterDelete,
   resolveAttachmentUrl,
   selectConversationMessages,
@@ -59,11 +59,11 @@ import {
   ResearchNoteItem,
   useConversationMessages,
   useConversationsByProject,
+  useFilteredModels,
   useModels,
-  useRecentModels,
   useRefreshModels,
-  useSelectModel,
   useSelectedModel,
+  useSelectModel,
 } from '../hooks/useQueries'
 import { cloneConversation } from '../utils/api'
 import { parseId } from '../utils/helpers'
@@ -127,8 +127,6 @@ function Chat() {
   const [openingFilePath, setOpeningFilePath] = useState<string | null>(null)
   // Anchor position for fixed expanded panel (viewport coords)
   const [expandedAnchor, setExpandedAnchor] = useState<{ left: number; top: number } | null>(null)
-  // Local copy of model list to prioritize recent models
-  const [localModel, setLocalModel] = useState<Model[] | null>(null)
   // Dynamic input area height for adaptive padding
   const [inputAreaHeight, setInputAreaHeight] = useState(170)
   const [containerHeight, setContainerHeight] = useState(1100)
@@ -328,14 +326,18 @@ function Chat() {
 
   // React Query hooks for model management
   const { data: modelsData } = useModels(providers.currentProvider)
-  const { data: recentModelsData } = useRecentModels(5)
+  // const { data: recentModelsData } = useRecentModels(5)
   const refreshModelsMutation = useRefreshModels()
   const selectModelMutation = useSelectModel()
   const selectedModel = useSelectedModel(providers.currentProvider)
 
+  // Filtered models hook for local filtering and sorting
+  const { filteredModels, filters, sortOptions, applyFilters, clearFilters, applySorting } = useFilteredModels(
+    providers.currentProvider
+  )
+
   // Extract models array from React Query response
   const models = modelsData?.models || []
-  const recentModels = recentModelsData || []
   // Conversation title editing
   const currentConversation = useAppSelector(
     currentConversationId ? makeSelectConversationById(currentConversationId) : () => null
@@ -921,43 +923,7 @@ function Chat() {
 
   // Models are now loaded automatically via React Query hooks
   // No manual loading needed - React Query handles caching and refetching
-
-  // Keep a local copy of models to allow reordering with recent models
-  useEffect(() => {
-    if (models && models.length > 0) {
-      setLocalModel(models)
-    } else {
-      setLocalModel(null)
-    }
-  }, [models])
-
-  // When recent models arrive, move them (alphabetically) to the front of the local list without duplicates
-  useEffect(() => {
-    if (!recentModels || recentModels.length === 0) return
-
-    setLocalModel(prev => {
-      const base = (prev && prev.length ? prev : models) || []
-      if (base.length === 0) return prev
-
-      // Only consider recent models that exist in the current base list
-      const baseNames = new Set(base.map(m => m.name))
-      const recentSorted = [...recentModels]
-        .filter(m => baseNames.has(m.name))
-        .sort((a, b) => a.name.localeCompare(b.name))
-
-      // If no recent models intersect with the base list, keep existing ordering
-      if (recentSorted.length === 0) return prev
-
-      const recentNames = new Set(recentSorted.map(m => m.name))
-
-      // Filter out any names that are in recent from the base list
-      const filtered = base.filter(m => !recentNames.has(m.name))
-
-      // Merge recent first
-      const merged: Model[] = [...recentSorted, ...filtered]
-      return merged
-    })
-  }, [recentModels, models])
+  // Filtering and sorting is handled by useFilteredModels hook
 
   // Sync local input with Redux state when conversation changes
   useEffect(() => {
@@ -2231,12 +2197,22 @@ function Chat() {
                   <Select
                     value={selectedModel?.name || ''}
                     onChange={handleModelSelect}
-                    options={(localModel ?? models).map(m => m.name)}
+                    options={filteredModels.map(m => m.name)}
                     placeholder='Select a model...'
                     blur='high'
-                    disabled={(localModel ?? models).length === 0}
+                    disabled={filteredModels.length === 0}
                     className='flex-1 max-w-48 sm:max-w-40 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99 rounded-4xl'
                     searchBarVisible={true}
+                    modelData={Object.fromEntries(filteredModels.map(m => [m.name, m]))}
+                    filterUI={
+                      <ModelFilterUI
+                        filters={filters}
+                        sortOptions={sortOptions}
+                        onFiltersChange={applyFilters}
+                        onSortChange={applySorting}
+                        onClearFilters={clearFilters}
+                      />
+                    }
                   />
                   <Button
                     variant='outline2'
