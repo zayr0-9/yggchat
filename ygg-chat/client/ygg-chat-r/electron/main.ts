@@ -1,9 +1,13 @@
+import { ChildProcess, spawn } from 'child_process'
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import path from 'path'
-import { spawn, ChildProcess } from 'child_process'
+import { fileURLToPath } from 'url'
+import Conf from 'conf'
+import os from 'os'
+import fs from 'fs'
 
-// In CommonJS, __dirname is available by default
-// No need for fileURLToPath or import.meta.url
+// ESM: Get __dirname from import.meta.url
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
 let serverProcess: ChildProcess | null = null
@@ -13,15 +17,135 @@ const PROTOCOL = 'yggchat'
 
 // Persistent storage for session data (initialized async)
 let store: any = null
+let storeInitialized = false
 
-// Initialize electron-store (ESM module, needs dynamic import)
+// In-memory fallback storage
+const memoryStore = new Map<string, any>()
+
+// Initialize conf (ESM module)
 async function initializeStore() {
-  const { default: Store } = await import('electron-store')
-  store = new Store({
-    name: 'ygg-chat-auth',
-    encryptionKey: 'ygg-chat-electron-storage-key', // Optional encryption
-  })
-  console.log('[Electron] Storage initialized')
+  try {
+    const configDir = path.join(os.homedir(), '.config', 'ygg-chat-r')
+    const configFile = path.join(configDir, 'config.json')
+    
+    // Check if config file exists and is corrupted
+    if (fs.existsSync(configFile)) {
+      try {
+        const content = fs.readFileSync(configFile, 'utf-8')
+        // Try to parse to validate JSON
+        JSON.parse(content)
+      } catch (parseError) {
+        console.warn('[Electron] Config file corrupted, removing:', configFile)
+        try {
+          fs.unlinkSync(configFile)
+        } catch (unlinkError) {
+          console.warn('[Electron] Failed to remove corrupted config file:', unlinkError)
+        }
+      }
+    }
+    
+    // Initialize conf (ESM library)
+    store = new Conf({
+      projectName: 'ygg-chat-r',
+      configFileMode: 0o600,
+    })
+    storeInitialized = true
+    console.log('[Electron] Storage initialized successfully (conf)')
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : ''
+    console.error('[Electron] Failed to initialize conf storage')
+    console.error('[Electron] Error message:', errorMsg)
+    console.error('[Electron] Error stack:', errorStack)
+    console.warn('[Electron] ⚠️  Using in-memory fallback storage')
+    console.warn('[Electron] Note: Data will not persist after app restart')
+    storeInitialized = true // Mark as initialized even with fallback
+  }
+}
+
+// Helper functions for storage access with fallback
+function getFromStore(key: string): any {
+  if (!storeInitialized) {
+    console.warn('[Electron] Store not yet initialized')
+    return null
+  }
+
+  try {
+    if (store) {
+      return store.get(key)
+    } else {
+      // Use in-memory fallback
+      return memoryStore.get(key) || null
+    }
+  } catch (error) {
+    console.error('[Electron] Error reading from store:', error)
+    return memoryStore.get(key) || null
+  }
+}
+
+function setInStore(key: string, value: any): boolean {
+  if (!storeInitialized) {
+    console.warn('[Electron] Store not yet initialized')
+    return false
+  }
+
+  try {
+    if (store) {
+      store.set(key, value)
+      return true
+    } else {
+      // Use in-memory fallback
+      memoryStore.set(key, value)
+      return true
+    }
+  } catch (error) {
+    console.error('[Electron] Error writing to store:', error)
+    // Fallback to memory
+    memoryStore.set(key, value)
+    return false
+  }
+}
+
+function deleteFromStore(key: string): boolean {
+  if (!storeInitialized) {
+    console.warn('[Electron] Store not yet initialized')
+    return false
+  }
+
+  try {
+    if (store) {
+      store.delete(key)
+      return true
+    } else {
+      memoryStore.delete(key)
+      return true
+    }
+  } catch (error) {
+    console.error('[Electron] Error deleting from store:', error)
+    memoryStore.delete(key)
+    return false
+  }
+}
+
+function clearStore(): boolean {
+  if (!storeInitialized) {
+    console.warn('[Electron] Store not yet initialized')
+    return false
+  }
+
+  try {
+    if (store) {
+      store.clear()
+      return true
+    } else {
+      memoryStore.clear()
+      return true
+    }
+  } catch (error) {
+    console.error('[Electron] Error clearing store:', error)
+    memoryStore.clear()
+    return false
+  }
 }
 
 // Start embedded Express server
@@ -216,17 +340,17 @@ ipcMain.handle('auth:logout', async () => {
   return { success: true }
 })
 
-// Storage - Persistent storage using electron-store
+// Storage - Persistent storage using electron-store with fallback
 ipcMain.handle('storage:get', async (_event, key: string) => {
   console.log('[Electron IPC] storage:get called for key:', key)
 
-  if (!store) {
+  if (!storeInitialized) {
     console.error('[Electron IPC] Storage not initialized yet')
     return null
   }
 
   try {
-    const value = store.get(key)
+    const value = getFromStore(key)
     console.log('[Electron IPC] Retrieved value:', value ? 'found' : 'not found')
     return value || null
   } catch (error) {
@@ -238,7 +362,7 @@ ipcMain.handle('storage:get', async (_event, key: string) => {
 ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
   console.log('[Electron IPC] storage:set called for key:', key)
 
-  if (!store) {
+  if (!storeInitialized) {
     console.error('[Electron IPC] Storage not initialized yet')
     return { success: false, error: 'Storage not initialized' }
   }
@@ -246,13 +370,14 @@ ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
   try {
     if (value === null || value === undefined) {
       // Delete key if value is null/undefined
-      store.delete(key)
+      const success = deleteFromStore(key)
       console.log('[Electron IPC] Deleted key from storage')
+      return { success }
     } else {
-      store.set(key, value)
+      const success = setInStore(key, value)
       console.log('[Electron IPC] Stored successfully')
+      return { success }
     }
-    return { success: true }
   } catch (error) {
     console.error('[Electron IPC] Failed to set storage:', error)
     return { success: false, error: String(error) }
@@ -263,14 +388,14 @@ ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
 ipcMain.handle('storage:clear', async () => {
   console.log('[Electron IPC] storage:clear called - clearing all stored data')
 
-  if (!store) {
+  if (!storeInitialized) {
     console.error('[Electron IPC] Storage not initialized yet')
     return { success: false, error: 'Storage not initialized' }
   }
 
   try {
-    store.clear()
-    return { success: true }
+    const success = clearStore()
+    return { success }
   } catch (error) {
     console.error('[Electron IPC] Failed to clear storage:', error)
     return { success: false, error: String(error) }
