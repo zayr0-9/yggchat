@@ -14,6 +14,9 @@
     "build:electron": "cross-env BUILD_TARGET=electron tsc -b && cross-env BUILD_TARGET=electron vite build",
     "build:electron:main": "tsc -p electron/tsconfig.json && node -e \"require('fs').renameSync('electron/main.js', 'electron/main.cjs'); require('fs').renameSync('electron/preload.js', 'electron/preload.cjs')\"",
     "package:electron": "electron-builder",
+    "build:win": "npm run build:electron && npm run build:electron:main && electron-builder --win",
+    "build:linux": "npm run build:electron && npm run build:electron:main && electron-builder --linux",
+    "build:all": "npm run build:electron && npm run build:electron:main && electron-builder --win --linux",
     "electron": "electron .",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -62,7 +65,7 @@
     "@vitejs/plugin-react-swc": "^3.9.0",
     "autoprefixer": "^10.4.21",
     "cross-env": "^7.0.3",
-    "electron": "^34.0.0",
+    "electron": "34.0.0",
     "electron-builder": "^26.0.0",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",

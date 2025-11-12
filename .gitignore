@@ -19,6 +19,14 @@ pnpm-debug.log*
 # TypeScript
 /**/*.tsbuildinfo
 
+# Electron build output
+release/
+*.AppImage
+*.exe
+*.dmg
+*.snap
+*.deb
+*.rpm
 # Logs
 logs
 *.log
