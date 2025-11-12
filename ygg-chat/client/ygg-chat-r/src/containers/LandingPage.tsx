@@ -123,7 +123,7 @@ const LandingPage: React.FC = () => {
   }
 
   return (
-    <div className='relative w-full min-h-screen' style={{ scrollSnapType: 'y mandatory' }}>
+    <div className='w-full dark:bg-blue-900 bg-blue-200 min-h-screen' style={{ scrollSnapType: 'y mandatory' }}>
       {/* Header Navigation */}
       <nav className='sticky top-0 rounded-b-2xl z-30 flex items-center justify-between px-6 sm:px-4 md:px-8 py-2 md:py-3 bg-transparent dark:bg-transparent transition-all duration-300'>
         {/* Logo */}
@@ -149,7 +149,7 @@ const LandingPage: React.FC = () => {
             Features
           </button>
           <button
-            onClick={() => handleNavigation('#pricing')}
+            onClick={() => handleNavigation('/paymentplan')}
             className={`${isInFeaturesSection ? 'text-black' : 'text-white'} dark:text-gray-200 hover:bg-neutral-200/30 rounded-2xl p-2 px-3 active:scale-97 dark:hover:text-neutral-50 transition-colors duration-200 font-medium`}
           >
             Pricing

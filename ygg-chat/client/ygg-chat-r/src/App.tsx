@@ -3,7 +3,7 @@ import './App.css'
 import { LiquidGlassSVG } from './components/LiquidGlassSVG'
 import ProtectedRoute from './components/ProtectedRoute'
 import VideoBackground from './components/VideoBackground'
-import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, Settings } from './containers'
+import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, PaymentPlans, Settings } from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 function App() {
@@ -20,6 +20,8 @@ function App() {
         <Route path='/landingpage' element={<LandingPage />} />
         {/* Public route */}
         <Route path='/login' element={<Login />} />
+        {/* Public route */}
+        <Route path='/paymentplan' element={<PaymentPlans />} />
         {/* Protected routes */}
         <Route
           path='/conversationPage'

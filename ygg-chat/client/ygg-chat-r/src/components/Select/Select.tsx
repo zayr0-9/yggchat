@@ -277,7 +277,7 @@ export const Select: React.FC<SelectProps> = ({
                             setSelectedModelForInfo(modelInfo)
                             setShowModelInfo(true)
                           }}
-                          className='px-2 py-2 hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors rounded-r-lg'
+                          className='px-2 py-2 hover:bg-neutral-200 dark:hover:bg-neutral-700/20 transition-colors rounded-lg'
                           aria-label='View model details'
                         >
                           <i className='bx bx-dots-vertical-rounded text-neutral-600 dark:text-neutral-300' />

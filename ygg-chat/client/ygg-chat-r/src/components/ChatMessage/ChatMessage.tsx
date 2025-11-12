@@ -508,7 +508,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
       if (onEdit && trimmedContent !== content) {
         // Convert edited text back to contentBlocks if original had contentBlocks
-        const newContentBlocks = contentBlocks && contentBlocks.length > 0 ? editableTextToContentBlocks(trimmedContent) : undefined
+        const newContentBlocks =
+          contentBlocks && contentBlocks.length > 0 ? editableTextToContentBlocks(trimmedContent) : undefined
         onEdit(id, trimmedContent, newContentBlocks)
       }
       dispatch(chatSliceActions.editingBranchSet(false))
@@ -518,7 +519,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const handleSaveBranch = () => {
       if (onBranch) {
         // Convert edited text back to contentBlocks if original had contentBlocks
-        const newContentBlocks = contentBlocks && contentBlocks.length > 0 ? editableTextToContentBlocks(editContent.trim()) : undefined
+        const newContentBlocks =
+          contentBlocks && contentBlocks.length > 0 ? editableTextToContentBlocks(editContent.trim()) : undefined
         onBranch(id, editContent.trim(), newContentBlocks)
       }
       dispatch(chatSliceActions.editingBranchSet(false))
@@ -797,7 +799,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         case 'user':
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-0 border-l-yellow-500 dark:border-l-yPurple-400 bg-neutral-50 dark:bg-yBlack-800'
+              ? 'bg-gray-800 border-l-0 border-l-yellow-500 dark:border-l-yPurple-400 bg-neutral-50 dark:bg-neutral-900'
               : transparentContainer,
             role: 'text-indigo-800 dark:text-yPurple-50',
             roleText: 'User',
@@ -1021,7 +1023,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                         </Button>
                       </div>
                       {isExpanded ? (
-                        <div className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px] mt-2'>
+                        <div className='prose max-w-none dark:prose-invert w-full text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px] mt-2'>
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
@@ -1213,7 +1215,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       </Button>
                     </div>
                     {isExpanded ? (
-                      <div className='prose max-w-none dark:prose-invert w-full px-4 py-1 text-[14px] sm:text-[14px] 2xl:text-[18px] 3xl:text-[18px]'>
+                      <div className='prose max-w-none dark:prose-invert w-full px-4 py-1 text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px]'>
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
