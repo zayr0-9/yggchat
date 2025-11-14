@@ -65,9 +65,17 @@ export async function readTextFile(
   }
 
   const sizeBytes = stats.size
-  const toRead = Math.min(sizeBytes, maxBytes)
 
-  // Read only up to maxBytes
+  // Determine if we need line-based access
+  const needsLineAccess =
+    options.startLine !== undefined ||
+    options.endLine !== undefined ||
+    (options.ranges && options.ranges.length > 0)
+
+  // Only apply maxBytes truncation if NOT doing line-based slicing
+  const toRead = needsLineAccess ? sizeBytes : Math.min(sizeBytes, maxBytes)
+
+  // Read only up to maxBytes (or full file if line ranges specified)
   let buf: Buffer
   if (toRead === sizeBytes) {
     buf = await fs.promises.readFile(abs)
@@ -87,7 +95,7 @@ export async function readTextFile(
   }
 
   let content = buf.toString('utf8')
-  const truncated = sizeBytes > maxBytes
+  const truncated = !needsLineAccess && sizeBytes > maxBytes
 
   // Handle line-range slicing if requested
   let actualStartLine: number | undefined

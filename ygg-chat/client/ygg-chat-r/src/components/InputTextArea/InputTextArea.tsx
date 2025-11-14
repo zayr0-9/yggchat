@@ -472,6 +472,35 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
       )}
 
       <div className={`relative`}>
+        {/* Floating file list */}
+        {showFileList && filteredFiles.length > 0 && (
+          <div
+            ref={listRef}
+            className='absolute z-50 mb-1 acrylic-light lg:w-80 2xl:w-full max-h-60 overflow-y-auto border border-gray-600 rounded-lg shadow-lg thin-scrollbar'
+            style={{
+              bottom: '100%',
+              left: 0,
+            }}
+          >
+            {filteredFiles.map((file, index) => (
+              <div
+                key={file.path}
+                className={`px-3 py-2 cursor-pointer text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] border-gray-400 last:border-b-0 ${
+                  index === selectedFileIndex
+                    ? 'bg-slate-200 dark:bg-secondary-800 text-stone-800 dark:text-stone-200'
+                    : 'text-stone-800 dark:text-stone-200'
+                }`}
+                onClick={() => handleFileSelection(file)}
+                onMouseEnter={() => setSelectedFileIndex(index)}
+              >
+                <div className='font-medium truncate'>{file.name}</div>
+                <div className='text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate'>
+                  {file.path}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           ref={textareaRef}
           id={id}
@@ -508,35 +537,6 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
             Shift+Enter
             <br />
             for new line
-          </div>
-        )}
-        {/* Floating file list */}
-        {showFileList && filteredFiles.length > 0 && (
-          <div
-            ref={listRef}
-            className='absolute z-50 mb-1 w-80 max-h-60 overflow-y-auto dark:bg-secondary-600 bg-slate-50 border border-gray-600 rounded-lg shadow-lg thin-scrollbar'
-            style={{
-              bottom: '100%',
-              left: 0,
-            }}
-          >
-            {filteredFiles.map((file, index) => (
-              <div
-                key={file.path}
-                className={`px-3 py-2 cursor-pointer text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] border-gray-400 last:border-b-0 ${
-                  index === selectedFileIndex
-                    ? 'bg-slate-200 dark:bg-secondary-800 text-stone-800 dark:text-stone-200'
-                    : 'text-stone-800 dark:text-stone-200'
-                }`}
-                onClick={() => handleFileSelection(file)}
-                onMouseEnter={() => setSelectedFileIndex(index)}
-              >
-                <div className='font-medium truncate'>{file.name}</div>
-                <div className='text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate'>
-                  {file.path}
-                </div>
-              </div>
-            ))}
           </div>
         )}
       </div>
