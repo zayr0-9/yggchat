@@ -332,9 +332,8 @@ function Chat() {
   const selectedModel = useSelectedModel(providers.currentProvider)
 
   // Filtered models hook for local filtering and sorting
-  const { filteredModels, filters, sortOptions, applyFilters, clearFilters, applySorting } = useFilteredModels(
-    providers.currentProvider
-  )
+  const { filteredModels, filters, sortOptions, applyFilters, clearFilters, applySorting, refreshFavorites } =
+    useFilteredModels(providers.currentProvider)
 
   // Extract models array from React Query response
   const models = modelsData?.models || []
@@ -2204,6 +2203,7 @@ function Chat() {
                     className='flex-1 max-w-48 sm:max-w-40 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99 rounded-4xl'
                     searchBarVisible={true}
                     modelData={Object.fromEntries(filteredModels.map(m => [m.name, m]))}
+                    onFavoritesChange={refreshFavorites}
                     filterUI={
                       <ModelFilterUI
                         filters={filters}

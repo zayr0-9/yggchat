@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { BaseModel } from '../../../../../shared/types'
 import { useIsMobile } from '../../hooks/useMediaQuery'
+import { getFavoritedModels, setFavoritedModels as saveFavoritedModels, toggleModelFavorite } from '../../utils/favorites'
 import { Button } from '../Button/button'
 import { ModelInfoModal } from '../ModelInfoModal/ModelInfoModal'
 
@@ -19,6 +20,7 @@ interface SelectProps {
   blur?: 'low' | 'high'
   filterUI?: React.ReactNode
   modelData?: Record<string, BaseModel>
+  onFavoritesChange?: () => void
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -33,18 +35,41 @@ export const Select: React.FC<SelectProps> = ({
   blur = 'low',
   filterUI,
   modelData,
+  onFavoritesChange,
 }) => {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number>(-1)
   const [searchTerm, setSearchTerm] = useState('')
   const [showModelInfo, setShowModelInfo] = useState(false)
   const [selectedModelForInfo, setSelectedModelForInfo] = useState<BaseModel | null>(null)
+  const [favoritedModels, setFavoritedModels] = useState<string[]>(() => getFavoritedModels())
   const btnRef = useRef<HTMLButtonElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
   const [listMaxHeight, setListMaxHeight] = useState<number | undefined>(undefined)
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null)
   const isMobile = useIsMobile()
+
+  // Toggle favorite status and persist to localStorage
+  const toggleFavorite = useCallback(
+    (modelName: string) => {
+      setFavoritedModels(prev => {
+        const updated = toggleModelFavorite(modelName, prev)
+        saveFavoritedModels(updated)
+        onFavoritesChange?.()
+        return updated
+      })
+    },
+    [onFavoritesChange]
+  )
+
+  // Check if a model is favorited
+  const isFavorite = useCallback(
+    (modelName: string) => {
+      return favoritedModels.includes(modelName)
+    },
+    [favoritedModels]
+  )
 
   const normOptions: SelectOption[] = useMemo(() => {
     const out: SelectOption[] = []
@@ -269,19 +294,35 @@ export const Select: React.FC<SelectProps> = ({
                         {opt.label}
                       </Button>
                       {modelInfo && (
-                        <button
-                          type='button'
-                          onClick={e => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            setSelectedModelForInfo(modelInfo)
-                            setShowModelInfo(true)
-                          }}
-                          className='px-2 py-2 hover:bg-neutral-200 dark:hover:bg-neutral-700/20 transition-colors rounded-lg'
-                          aria-label='View model details'
-                        >
-                          <i className='bx bx-dots-vertical-rounded text-neutral-600 dark:text-neutral-300' />
-                        </button>
+                        <>
+                          <button
+                            type='button'
+                            onClick={e => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              toggleFavorite(opt.value)
+                            }}
+                            className='px-2 py-2 hover:bg-neutral-200 dark:hover:bg-neutral-700/20 transition-colors rounded-lg'
+                            aria-label={isFavorite(opt.value) ? 'Remove from favorites' : 'Add to favorites'}
+                          >
+                            <i
+                              className={`bx ${isFavorite(opt.value) ? 'bxs-star' : 'bx-star'} text-neutral-600 dark:text-neutral-300`}
+                            />
+                          </button>
+                          <button
+                            type='button'
+                            onClick={e => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setSelectedModelForInfo(modelInfo)
+                              setShowModelInfo(true)
+                            }}
+                            className='px-2 py-2 hover:bg-neutral-200 dark:hover:bg-neutral-700/20 transition-colors rounded-lg'
+                            aria-label='View model details'
+                          >
+                            <i className='bx bx-dots-vertical-rounded text-neutral-600 dark:text-neutral-300' />
+                          </button>
+                        </>
                       )}
                     </div>
                   )

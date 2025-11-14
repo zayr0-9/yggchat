@@ -7,6 +7,7 @@ import { ConversationId, ProjectId, ProjectWithLatestConversation } from '../../
 import type { Message, Model } from '../features/chats/chatTypes'
 import type { Conversation } from '../features/conversations/conversationTypes'
 import { api } from '../utils/api'
+import { getFavoritedModels } from '../utils/favorites'
 import { useAuth } from './useAuth'
 
 /**
@@ -603,6 +604,19 @@ export function useFilteredModels(provider: string | null) {
   const [localModels, setLocalModels] = useState<BaseModel[]>([])
   const [filters, setFilters] = useState<ModelFilters>({})
   const [sortOptions, setSortOptions] = useState<ModelSortOptions>({})
+  const [favoritedModels, setFavoritedModels] = useState<string[]>(() => getFavoritedModels())
+
+  // Sync favorites from localStorage on window focus (handles cross-tab updates)
+  useEffect(() => {
+    const syncFavorites = () => {
+      setFavoritedModels(getFavoritedModels())
+    }
+
+    window.addEventListener('focus', syncFavorites)
+    return () => {
+      window.removeEventListener('focus', syncFavorites)
+    }
+  }, [])
 
   // Initialize local copy when models data changes
   useEffect(() => {
@@ -673,19 +687,34 @@ export function useFilteredModels(provider: string | null) {
       })
     }
 
-    // Move selected model to the front if it exists in filtered results
+    // Three-tier sorting: 1. Selected model, 2. Favorited models, 3. All others
+    // This maintains the relative sorting from filters/sort options within each group
     if (modelsData?.selected) {
-      const selectedIndex = result.findIndex(m => m.name === modelsData.selected.name)
-      if (selectedIndex > 0) {
-        // Remove selected model from its current position
-        const [selectedModel] = result.splice(selectedIndex, 1)
-        // Add it to the front
-        result.unshift(selectedModel)
-      }
+      const selectedName = modelsData.selected.name
+
+      result.sort((a, b) => {
+        const aIsSelected = a.name === selectedName
+        const bIsSelected = b.name === selectedName
+        const aIsFavorite = favoritedModels.includes(a.name)
+        const bIsFavorite = favoritedModels.includes(b.name)
+
+        // Selected model always comes first
+        if (aIsSelected && !bIsSelected) return -1
+        if (!aIsSelected && bIsSelected) return 1
+
+        // Among non-selected models, favorites come before non-favorites
+        if (!aIsSelected && !bIsSelected) {
+          if (aIsFavorite && !bIsFavorite) return -1
+          if (!aIsFavorite && bIsFavorite) return 1
+        }
+
+        // Maintain original order (from filters/sort) for models in the same tier
+        return 0
+      })
     }
 
     return result
-  }, [localModels, filters, sortOptions, modelsData?.selected])
+  }, [localModels, filters, sortOptions, modelsData?.selected, favoritedModels])
 
   const applyFilters = useCallback((newFilters: ModelFilters) => {
     setFilters(newFilters)
@@ -729,5 +758,6 @@ export function useFilteredModels(provider: string | null) {
     clearFilters,
     applySorting,
     sortByField,
+    refreshFavorites: () => setFavoritedModels(getFavoritedModels()),
   }
 }
