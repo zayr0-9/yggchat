@@ -54,7 +54,10 @@ if (redisUrl) {
   redisClient = new Redis(redisConfig)
 }
 
-export { redisClient }
+const ATTACHMENT_CACHE_TTL_SECONDS = parseInt(process.env.ATTACHMENT_CACHE_TTL_SECONDS || '900', 10)
+const ATTACHMENT_CACHE_MAX_BYTES = parseInt(process.env.ATTACHMENT_CACHE_MAX_BYTES || '0', 10)
+
+export { redisClient, ATTACHMENT_CACHE_TTL_SECONDS, ATTACHMENT_CACHE_MAX_BYTES }
 
 // Connection event handlers
 redisClient.on('connect', () => {

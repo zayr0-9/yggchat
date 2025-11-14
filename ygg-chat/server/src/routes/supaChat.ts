@@ -1289,6 +1289,7 @@ router.post(
             url: a?.url || undefined,
             mimeType: (a as any)?.mime_type,
             filePath: (a as any)?.storage_path,
+            sha256: (a as any)?.sha256,
           })),
           systemPrompt,
           controller.signal,
@@ -1692,6 +1693,7 @@ router.post(
             url: a?.url || undefined,
             mimeType: (a as any)?.mime_type,
             filePath: a?.url || (a as any)?.storage_path,
+            sha256: (a as any)?.sha256,
           })),
 
           systemPrompt,

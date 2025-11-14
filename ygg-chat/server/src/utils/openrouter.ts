@@ -8,6 +8,7 @@ import { supabaseAdmin } from '../database/supamodels'
 import { getApiKey } from './apiKeyManager'
 import { moneyAdd, moneyFormat, moneyMax, moneyMultiply } from './money'
 import tools from './tools'
+import { getCachedAttachmentBase64 } from './attachmentCache'
 
 // Helper function to convert Zod schema to JSON schema
 function zodToJsonSchema(zodSchema: any): any {
@@ -1412,9 +1413,9 @@ async function executeToolCall(toolName: string, args: string): Promise<string> 
 // Helper function to handle image attachments
 async function handleImageAttachments(
   formattedMessages: any[],
-  attachments?: Array<{ mimeType?: string; filePath?: string }>
+  attachments?: Array<{ mimeType?: string; filePath?: string; sha256?: string }>
 ) {
-  const imageAtts = (attachments || []).filter(a => a.filePath)
+  const imageAtts = (attachments || []).filter(a => a.filePath || a.sha256)
   if (imageAtts.length === 0) return formattedMessages
 
   // Convert user/assistant to structured parts; keep system as plain string
@@ -1445,8 +1446,19 @@ async function handleImageAttachments(
       let imageBuffer: Buffer | null = null
       let mediaType = att.mimeType || 'image/jpeg'
 
+      // First, check Redis cache if sha256 is available
+      if (att.sha256) {
+        const cached = await getCachedAttachmentBase64(att.sha256)
+        if (cached) {
+          console.log(`Cache hit for attachment sha256:${att.sha256.substring(0, 12)}...`)
+          parts.push({ type: 'image_url', image_url: { url: `data:${cached.mimeType};base64,${cached.base64}` } })
+          continue // Skip disk/network read
+        }
+        console.log(`Cache miss for attachment sha256:${att.sha256.substring(0, 12)}...`)
+      }
+
       // Check if filePath is a Supabase Storage URL
-      if (att.filePath!.startsWith('http')) {
+      if (att.filePath && att.filePath.startsWith('http')) {
         console.log(`Fetching image from Supabase Storage:${att.filePath}`)
 
         // Extract the path from the Supabase URL
@@ -1484,21 +1496,21 @@ async function handleImageAttachments(
           console.error(`Invalid Supabase Storage URL format:${att.filePath}`)
           continue
         }
-      } else {
+      } else if (att.filePath) {
         // Try to read as local file (for backwards compatibility)
         console.log(`Attempting to read local file:${att.filePath}`)
 
         const baseDir = path.resolve(__dirname, '..')
-        let abs = path.isAbsolute(att.filePath!) ? att.filePath! : path.join(baseDir, att.filePath!)
+        let abs = path.isAbsolute(att.filePath) ? att.filePath : path.join(baseDir, att.filePath)
 
         if (!fs.existsSync(abs)) {
           // Try alternative paths
           const candidates = [
-            path.resolve(__dirname, '..', 'routes', att.filePath!),
-            path.resolve(__dirname, att.filePath!),
-            path.resolve(process.cwd(), att.filePath!),
-            path.resolve(process.cwd(), 'dist', att.filePath!),
-            path.resolve(process.cwd(), 'src', att.filePath!),
+            path.resolve(__dirname, '..', 'routes', att.filePath),
+            path.resolve(__dirname, att.filePath),
+            path.resolve(process.cwd(), att.filePath),
+            path.resolve(process.cwd(), 'dist', att.filePath),
+            path.resolve(process.cwd(), 'src', att.filePath),
           ]
           const found = candidates.find(p => fs.existsSync(p))
           if (found) {
@@ -1511,6 +1523,10 @@ async function handleImageAttachments(
         }
 
         imageBuffer = fs.readFileSync(abs)
+      } else {
+        // No filePath and cache miss - skip this attachment
+        console.error(`No file path available for attachment with sha256:${att.sha256}`)
+        continue
       }
 
       if (imageBuffer) {

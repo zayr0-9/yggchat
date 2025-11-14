@@ -231,3 +231,10 @@ export async function generateResponse(
       throw new Error(`Unknown provider: ${provider}`)
   }
 }
+export type ProviderAttachment = {
+  url?: string
+  mimeType?: string
+  filePath?: string
+  sha256?: string
+  base64Data?: string
+}

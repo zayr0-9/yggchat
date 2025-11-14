@@ -4,6 +4,7 @@ import path from 'path'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { AttachmentService } from '../database/supamodels'
 import { supabase } from '../database/supamodels'
+import { cacheAttachmentBase64 } from './attachmentCache'
 
 export type Base64AttachmentInput = {
   dataUrl: string
@@ -77,6 +78,8 @@ export async function saveBase64ImageAttachmentsForMessage(
       const base64 = match[2]
       const buffer = Buffer.from(base64, 'base64')
       const sha256 = crypto.createHash('sha256').update(buffer).digest('hex')
+
+      cacheAttachmentBase64({ sha256, mimeType, base64, sizeBytes: buffer.length })
 
       // Check if an attachment with this hash already exists (deduplication)
       const existing = await AttachmentService.findBySha256(client, sha256)

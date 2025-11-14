@@ -2,8 +2,10 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { AttachmentService } from '../database/models'
 import { MessageId } from '../../../shared/types'
+import type { Attachment } from '../database/models'
+import { AttachmentService } from '../database/models'
+import { cacheAttachmentBase64 } from './attachmentCache'
 
 export type Base64AttachmentInput = {
   dataUrl: string
@@ -51,6 +53,8 @@ export function saveBase64ImageAttachmentsForMessage(messageId: MessageId, items
       const base64 = match[2]
       const buffer = Buffer.from(base64, 'base64')
       const sha256 = crypto.createHash('sha256').update(buffer).digest('hex')
+
+      cacheAttachmentBase64({ sha256, mimeType, base64, sizeBytes: buffer.length })
       // If an attachment with this hash already exists, just link it to this message and skip writing a new file
       const existing = AttachmentService.findBySha256(sha256)
       if (existing) {
