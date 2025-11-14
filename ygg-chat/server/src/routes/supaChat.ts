@@ -1,5 +1,4 @@
 // server/src/routes/supaChat.ts
-import type { SupabaseClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import express from 'express'
 import fs from 'fs'
@@ -9,7 +8,6 @@ import {
   AttachmentService,
   buildMessageTree,
   ConversationService,
-  createAuthenticatedClient,
   FileContentService,
   MessageService,
   ProjectService,
@@ -20,7 +18,7 @@ import {
   authenticatedRateLimiter,
   expensiveOperationsRateLimiter,
 } from '../middleware/rateLimiter'
-import { verifyAuth, getAuthToken } from '../middleware/supaAuth'
+import { verifyAuth } from '../middleware/supaAuth'
 import { asyncHandler } from '../utils/asyncHandler'
 import { SelectedFileContent } from '../utils/fileMentionProcessor'
 import { abortGeneration, clearGeneration, createGeneration } from '../utils/generationManager'
@@ -260,7 +258,8 @@ router.get(
             thinking,
             supportsImages: !!m?.supports_vision || inputModalities.includes('image'),
             supportsWebSearch: !!capabilities?.web_search || supportedParams.includes('web_search'),
-            supportsStructuredOutputs: !!capabilities?.structured_outputs || supportedParams.includes('structured_outputs'),
+            supportsStructuredOutputs:
+              !!capabilities?.structured_outputs || supportedParams.includes('structured_outputs'),
             inputModalities,
             outputModalities,
             defaultTemperature,
@@ -1692,8 +1691,9 @@ router.post(
           createdAttachments.map(a => ({
             url: a?.url || undefined,
             mimeType: (a as any)?.mime_type,
-            filePath: (a as any)?.storage_path,
+            filePath: a?.url || (a as any)?.storage_path,
           })),
+
           systemPrompt,
           controller.signal,
           combinedContext ? combinedContext : null,
@@ -1834,7 +1834,12 @@ router.post(
           // Non-abort error - save partial content if available before sending error
           const cleanedContent = assistantContent.trim()
 
-          if (cleanedContent.trim() || assistantThinking.trim() || assistantToolCalls.trim() || contentBlocksEvents.length > 0) {
+          if (
+            cleanedContent.trim() ||
+            assistantThinking.trim() ||
+            assistantToolCalls.trim() ||
+            contentBlocksEvents.length > 0
+          ) {
             // We have accumulated content/events - save them before reporting error
             try {
               const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
@@ -1856,7 +1861,10 @@ router.post(
               // The error is logged on server but client sees it as a complete message
               const cleanedMessage = { ...assistantMessage, content: cleanedContent }
               res.write(`data: ${JSON.stringify({ type: 'complete', message: cleanedMessage })}\n\n`)
-              console.log('✅ [supaChat/error] Successfully saved partial content despite error:', error instanceof Error ? error.message : String(error))
+              console.log(
+                '✅ [supaChat/error] Successfully saved partial content despite error:',
+                error instanceof Error ? error.message : String(error)
+              )
             } catch (saveError) {
               // Failed to save partial content - report the error
               console.error('❌ [supaChat/error] Failed to save partial message on error:', saveError)

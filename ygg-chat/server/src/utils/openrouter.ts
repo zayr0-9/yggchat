@@ -401,7 +401,7 @@ async function reserveCreditsForGeneration(
       // Check for specific error types
       if (error.message.includes('insufficient_credits')) {
         throw new Error(
-          `Insufficient credits. You need ${moneyFormat(reservedCredits)} credits, but your balance is lower. Please add more credits.`
+          `Insufficient credits. You need ${moneyFormat(reservedCredits * 100)} credits, but your balance is lower. Please add more credits.`
         )
       }
       throw new Error(`Credit reservation failed: ${error.message}`)
@@ -876,7 +876,7 @@ export async function generateResponse(
 
         // Handle tool calls
         if (delta.tool_calls) {
-          console.log('🔧 [openrouter] Tool call delta received:', JSON.stringify(delta.tool_calls))
+          // console.log('🔧 [openrouter] Tool call delta received:', JSON.stringify(delta.tool_calls))
           for (const toolCall of delta.tool_calls) {
             if (toolCall.id && toolCall.function?.name) {
               // New tool call
@@ -886,16 +886,16 @@ export async function generateResponse(
                 arguments: toolCall.function.arguments || '',
               }
               toolCallBuffer = toolCall.function.arguments || ''
-              console.log(
-                `🔧 [openrouter] New tool call detected: name=${currentToolCall.name}, id=${currentToolCall.id}`
-              )
+              // console.log(
+              //   `🔧 [openrouter] New tool call detected: name=${currentToolCall.name}, id=${currentToolCall.id}`
+              // )
             } else if (currentToolCall && toolCall.function?.arguments) {
               // Continue existing tool call
               toolCallBuffer += toolCall.function.arguments
               currentToolCall.arguments = toolCallBuffer
-              console.log(
-                `🔧 [openrouter] Continuing tool call ${currentToolCall.name}, accumulated buffer length: ${toolCallBuffer.length}`
-              )
+              // console.log(
+              //   `🔧 [openrouter] Continuing tool call ${currentToolCall.name}, accumulated buffer length: ${toolCallBuffer.length}`
+              // )
             }
 
             // Try to send complete tool calls
@@ -903,9 +903,9 @@ export async function generateResponse(
             if (currentToolCall && toolCallBuffer && toolCallBuffer.includes('}')) {
               try {
                 // Try to parse as JSON first
-                console.log(
-                  `🔧 [openrouter] Attempting to parse toolCallBuffer: ${toolCallBuffer.substring(0, 100)}...`
-                )
+                // console.log(
+                //   `🔧 [openrouter] Attempting to parse toolCallBuffer: ${toolCallBuffer.substring(0, 100)}...`
+                // )
                 JSON.parse(toolCallBuffer)
                 const toolCallData = {
                   id: currentToolCall.id,
@@ -913,8 +913,8 @@ export async function generateResponse(
                   arguments: toolCallBuffer,
                 }
 
-                console.log(`✅ [openrouter] Tool call JSON parsed successfully. tool_detail=${tool_detail}`)
-                console.log(`✅ [openrouter] toolCallData to send:`, JSON.stringify(toolCallData))
+                // console.log(`✅ [openrouter] Tool call JSON parsed successfully. tool_detail=${tool_detail}`)
+                // console.log(`✅ [openrouter] toolCallData to send:`, JSON.stringify(toolCallData))
 
                 // Send structured tool call data to client
                 const toolCallEvent = {
@@ -927,7 +927,7 @@ export async function generateResponse(
                   },
                 }
 
-                console.log(`✅ [openrouter] Sending tool call event:`, JSON.stringify(toolCallEvent).substring(0, 200))
+                // console.log(`✅ [openrouter] Sending tool call event:`, JSON.stringify(toolCallEvent).substring(0, 200))
                 onChunk(JSON.stringify(toolCallEvent))
 
                 // Add to our tool calls list for execution
@@ -937,7 +937,7 @@ export async function generateResponse(
                 } else {
                   toolCalls.push(toolCallData)
                 }
-                console.log(`✅ [openrouter] Tool call added to execution list. Total tool calls: ${toolCalls.length}`)
+                // console.log(`✅ [openrouter] Tool call added to execution list. Total tool calls: ${toolCalls.length}`)
 
                 // Reset buffer after successful parsing
                 toolCallBuffer = ''
@@ -946,9 +946,9 @@ export async function generateResponse(
                 console.error(`❌ [openrouter] Failed to parse tool call buffer:`, e)
                 console.error(`❌ [openrouter] Buffer content: ${toolCallBuffer}`)
                 if (toolCallBuffer === '{}' || !toolCallBuffer.trim()) {
-                  console.log(
-                    `Warning: Tool call ${currentToolCall.name} has empty arguments, will try to extract from content`
-                  )
+                  // console.log(
+                  //   `Warning: Tool call ${currentToolCall.name} has empty arguments, will try to extract from content`
+                  // )
                   // Store the tool call anyway, we'll try to parse from content later
                   const toolCallData = {
                     id: currentToolCall.id,
@@ -1019,10 +1019,10 @@ export async function generateResponse(
           (tc, index, arr) => arr.findIndex(t => t.name === tc.name && t.arguments === tc.arguments) === index
         )
 
-        console.log(
-          `Executing ${uniqueToolCalls.length} unique tool calls:`,
-          uniqueToolCalls.map(tc => tc.name)
-        )
+        // console.log(
+        //   `Executing ${uniqueToolCalls.length} unique tool calls:`,
+        //   uniqueToolCalls.map(tc => tc.name)
+        // )
 
         // Add assistant message with tool calls to conversation
         conversationMessages.push({
@@ -1033,7 +1033,7 @@ export async function generateResponse(
         // Execute tools and add their results
         for (const toolCall of uniqueToolCalls) {
           const result = await executeToolCall(toolCall.name, toolCall.arguments)
-          console.log(`Tool ${toolCall.name} result:`, result.substring(0, 200) + (result.length > 200 ? '...' : ''))
+          // console.log(`Tool ${toolCall.name} result:`, result.substring(0, 200) + (result.length > 200 ? '...' : ''))
 
           // Determine if this is an error result
           const isError = result.startsWith('Error')
@@ -1327,7 +1327,7 @@ async function logGenerationCost(
     totals.totalCompletionTokens += usage.completion_tokens || 0
     totals.totalReasoningTokens += usage.reasoning_tokens || 0
     // Debug: Log the entire usage object to see its structure
-    console.log('📊 Usage object received:', JSON.stringify(usage, null, 2))
+    // console.log('📊 Usage object received:', JSON.stringify(usage, null, 2))
 
     // Try multiple fields for OpenRouter credits
     let creditsFromUsage = 0
@@ -1442,33 +1442,89 @@ async function handleImageAttachments(
   const parts: any[] = []
   for (const att of imageAtts) {
     try {
-      const baseDir = path.resolve(__dirname, '..')
-      let abs = path.isAbsolute(att.filePath!) ? att.filePath! : path.join(baseDir, att.filePath!)
-      if (!fs.existsSync(abs)) {
-        const tryRoutes = path.resolve(__dirname, '..', 'routes', att.filePath!)
-        const tryHere = path.resolve(__dirname, att.filePath!)
-        const tryCwd = path.resolve(process.cwd(), att.filePath!)
-        const tryDist = path.resolve(process.cwd(), 'dist', att.filePath!)
-        const trySrc = path.resolve(process.cwd(), 'src', att.filePath!)
-        const candidates = [tryRoutes, tryHere, tryCwd, tryDist, trySrc]
-        const found = candidates.find(p => fs.existsSync(p))
-        if (found) {
-          abs = found
-          console.log(`Resolved attachment path: ${abs}`)
+      let imageBuffer: Buffer | null = null
+      let mediaType = att.mimeType || 'image/jpeg'
+
+      // Check if filePath is a Supabase Storage URL
+      if (att.filePath!.startsWith('http')) {
+        console.log(`Fetching image from Supabase Storage:${att.filePath}`)
+
+        // Extract the path from the Supabase URL
+        // Format: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
+        const url = new URL(att.filePath!)
+        const pathSegments = url.pathname.split('/')
+        const bucketIndex = pathSegments.findIndex(seg => seg === 'public') + 1
+
+        if (bucketIndex > 0 && bucketIndex < pathSegments.length - 1) {
+          const bucketName = pathSegments[bucketIndex]
+          const objectPath = pathSegments.slice(bucketIndex + 1).join('/')
+
+          // Download the file from Supabase Storage
+          const { data, error } = await supabaseAdmin.storage.from(bucketName).download(objectPath)
+
+          if (error) {
+            console.error(`Error downloading from Supabase Storage:${error.message}`)
+            continue
+          }
+
+          if (data) {
+            // Convert to buffer
+            const arrayBuffer = await data.arrayBuffer()
+            imageBuffer = Buffer.from(arrayBuffer)
+
+            // Try to get the mime type from the download response
+            const contentType = data.type
+            if (contentType && contentType !== 'application/octet-stream') {
+              mediaType = contentType
+            }
+
+            console.log(`Successfully downloaded image from Supabase:${objectPath}`)
+          }
+        } else {
+          console.error(`Invalid Supabase Storage URL format:${att.filePath}`)
+          continue
         }
+      } else {
+        // Try to read as local file (for backwards compatibility)
+        console.log(`Attempting to read local file:${att.filePath}`)
+
+        const baseDir = path.resolve(__dirname, '..')
+        let abs = path.isAbsolute(att.filePath!) ? att.filePath! : path.join(baseDir, att.filePath!)
+
+        if (!fs.existsSync(abs)) {
+          // Try alternative paths
+          const candidates = [
+            path.resolve(__dirname, '..', 'routes', att.filePath!),
+            path.resolve(__dirname, att.filePath!),
+            path.resolve(process.cwd(), att.filePath!),
+            path.resolve(process.cwd(), 'dist', att.filePath!),
+            path.resolve(process.cwd(), 'src', att.filePath!),
+          ]
+          const found = candidates.find(p => fs.existsSync(p))
+          if (found) {
+            abs = found
+            console.log(`Resolved attachment path:${abs}`)
+          } else {
+            console.error(`Local file not found:${att.filePath}`)
+            continue
+          }
+        }
+
+        imageBuffer = fs.readFileSync(abs)
       }
-      const buf = fs.readFileSync(abs)
-      const mediaType = att.mimeType || 'image/jpeg'
-      const base64 = buf.toString('base64')
-      // Add image in OpenAI format
-      parts.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${mediaType};base64,${base64}`,
-        },
-      })
-    } catch {
-      // Ignore failed attachment read
+
+      if (imageBuffer) {
+        // Convert to base64
+        const base64 = imageBuffer.toString('base64')
+
+        // Add image in OpenAI format
+        parts.push({ type: 'image_url', image_url: { url: `data:${mediaType};base64,${base64}` } })
+
+        console.log(`Successfully processed image attachment:${att.filePath}`)
+      }
+    } catch (error) {
+      console.error(`Error processing attachment${att.filePath}:`, error)
+      // Continue with other attachments even if one fails
     }
   }
 
