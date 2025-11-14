@@ -4,6 +4,7 @@ import { readTextFile, ReadFileOptions } from './readFile'
 
 export interface ReadMultipleOptions extends ReadFileOptions {
   baseDir?: string // used to compute the header-relative path separator
+  // Inherits startLine, endLine, maxBytes from ReadFileOptions
 }
 
 export async function readMultipleTextFiles(
@@ -16,6 +17,9 @@ export async function readMultipleTextFiles(
     absolutePath: string
     sizeBytes: number
     truncated: boolean
+    startLine?: number
+    endLine?: number
+    totalLines?: number
   }>
 }> {
   if (!Array.isArray(inputPaths) || inputPaths.length === 0) {
@@ -35,10 +39,17 @@ export async function readMultipleTextFiles(
     absolutePath: string
     sizeBytes: number
     truncated: boolean
+    startLine?: number
+    endLine?: number
+    totalLines?: number
   }> = []
 
   for (const p of inputPaths) {
-    const res = await readTextFile(p, { maxBytes: options.maxBytes })
+    const res = await readTextFile(p, {
+      maxBytes: options.maxBytes,
+      startLine: options.startLine,
+      endLine: options.endLine,
+    })
     const rel = path.relative(baseDir, res.absolutePath).replaceAll('\\', '/')
 
     // Separator is the relative path itself, on its own line
@@ -51,6 +62,9 @@ export async function readMultipleTextFiles(
       absolutePath: res.absolutePath,
       sizeBytes: res.sizeBytes,
       truncated: res.truncated,
+      startLine: res.startLine,
+      endLine: res.endLine,
+      totalLines: res.totalLines,
     })
   }
 

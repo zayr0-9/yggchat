@@ -11,13 +11,13 @@ import { createServer } from 'http'
 import { env } from 'process'
 import { WebSocket, WebSocketServer } from 'ws'
 import { db, initializeDatabase, initializeStatements } from './database/db'
+import { globalRateLimiter, logRateLimiterConfig } from './middleware/rateLimiter'
 import chatRoutes from './routes/chat'
 import settingsRoutes from './routes/settings'
 import { stripMarkdownToText } from './utils/markdownStripper'
 import { preloadModelPricing } from './utils/openrouter'
 import tools from './utils/tools/index'
 import { startReconciliationWorker } from './workers/openrouter-reconciliation'
-import { globalRateLimiter, logRateLimiterConfig } from './middleware/rateLimiter'
 
 const app = express()
 const server = createServer(app)
@@ -49,6 +49,11 @@ wss.on('connection', (ws, request) => {
   ws.on('message', data => {
     try {
       const message = JSON.parse(data.toString())
+
+      if (message.type === 'ping') {
+        client.ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }))
+        return // don’t broadcast heartbeat traffic
+      }
 
       // Relay messages from extension to all frontend clients
       if (client.type === 'extension') {

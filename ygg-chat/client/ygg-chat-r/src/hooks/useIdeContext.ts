@@ -141,7 +141,11 @@ export function useIdeContext(): UseIdeContextReturn {
 
     try {
       isConnecting = true
-      const websocketUrl = 'ws://localhost:3001/ide-context?type=frontend&id=ygg-chat'
+      // Dynamically construct WebSocket URL from the same API base URL
+      const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+      const wsProtocol = apiBase.startsWith('https') ? 'wss' : 'ws'
+      const wsHost = apiBase.replace(/^https?:\/\//, '').replace(/\/api$/, '')
+      const websocketUrl = `${wsProtocol}://${wsHost}/ide-context?type=frontend&id=ygg-chat`
       globalWebSocket = new WebSocket(websocketUrl)
 
       // Add a connection timeout

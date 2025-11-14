@@ -7,7 +7,7 @@ import { createTextFile } from './core/createFile'
 import { deleteFile, safeDeleteFile } from './core/deleteFile'
 import { editFile } from './core/editFile'
 import { extractDirectoryStructure } from './core/getDirectoryTree'
-import { readTextFile } from './core/readFile'
+import { readTextFile, readFileContinuation } from './core/readFile'
 import { readMultipleTextFiles } from './core/readFiles'
 import searchHistory from './core/searchHistory'
 import { ripgrepSearch } from './core/ripgrep'  
@@ -82,7 +82,7 @@ const tools: tools[] = [
     enabled: true,
     tool: {
       description:
-        'Read the contents of a text file (code, config, docs). Rejects likely-binary files and truncates large files for safety.',
+        'Read the contents of a text file (code, config, docs). Supports reading full files, single ranges, or multiple disjoint ranges. Rejects likely-binary files and truncates large files for safety.',
       inputSchema: z.object({
         path: z.string().describe('The file path to read (absolute or relative)'),
         maxBytes: z
@@ -92,10 +92,45 @@ const tools: tools[] = [
           .max(5 * 1024 * 1024)
           .optional()
           .describe('Optional safety limit on bytes to read (1 to 5MB); defaults to 204800 (200KB)'),
+        startLine: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Optional 1-based line number to start reading from (inclusive). Use for single range reads. Ignored if ranges is provided.'),
+        endLine: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Optional 1-based line number to stop reading at (inclusive). Use with startLine for single range. Ignored if ranges is provided.'),
+        ranges: z
+          .array(
+            z.object({
+              startLine: z.number().int().min(1).describe('1-based start line (inclusive)'),
+              endLine: z.number().int().min(1).describe('1-based end line (inclusive)'),
+            })
+          )
+          .optional()
+          .describe(
+            'Optional array of multiple line ranges to read. Each range will be separated with a "// Lines X-Y" comment. Use this to read disjoint sections in a single call, avoiding overlaps and duplicate context.'
+          ),
       }),
-      execute: async ({ path, maxBytes }: { path: string; maxBytes?: number }) => {
+      execute: async ({
+        path,
+        maxBytes,
+        startLine,
+        endLine,
+        ranges,
+      }: {
+        path: string
+        maxBytes?: number
+        startLine?: number
+        endLine?: number
+        ranges?: Array<{ startLine: number; endLine: number }>
+      }) => {
         try {
-          const res = await readTextFile(path, { maxBytes })
+          const res = await readTextFile(path, { maxBytes, startLine, endLine, ranges })
           return {
             success: true,
             path,
@@ -103,6 +138,10 @@ const tools: tools[] = [
             sizeBytes: res.sizeBytes,
             truncated: res.truncated,
             content: res.content,
+            startLine: res.startLine,
+            endLine: res.endLine,
+            totalLines: res.totalLines,
+            ranges: res.ranges,
           }
         } catch (error) {
           return {
@@ -133,10 +172,34 @@ const tools: tools[] = [
           .max(5 * 1024 * 1024)
           .optional()
           .describe('Optional per-file safety limit on bytes to read (1 to 5MB); defaults to 204800 (200KB)'),
+        startLine: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Optional 1-based line number to start reading from (inclusive). Applies to all files.'),
+        endLine: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('Optional 1-based line number to stop reading at (inclusive). Applies to all files.'),
       }),
-      execute: async ({ paths, baseDir, maxBytes }: { paths: string[]; baseDir?: string; maxBytes?: number }) => {
+      execute: async ({
+        paths,
+        baseDir,
+        maxBytes,
+        startLine,
+        endLine,
+      }: {
+        paths: string[]
+        baseDir?: string
+        maxBytes?: number
+        startLine?: number
+        endLine?: number
+      }) => {
         try {
-          const res = await readMultipleTextFiles(paths, { baseDir, maxBytes })
+          const res = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine })
           return {
             success: true,
             combined: res.combined,
@@ -145,6 +208,66 @@ const tools: tools[] = [
         } catch (error) {
           return {
             success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred',
+          }
+        }
+      },
+    },
+  },
+  {
+    name: 'read_file_continuation',
+    enabled: true,
+    tool: {
+      description:
+        'Read the next chunk of a file after a specific line number. Designed for pagination to avoid duplicate reads. Use this when you previously read a file up to line N and want to continue reading from line N+1.',
+      inputSchema: z.object({
+        path: z.string().describe('The file path to read (absolute or relative)'),
+        afterLine: z
+          .number()
+          .int()
+          .min(0)
+          .describe('1-based line number to start reading after (exclusive). Use 0 to read from the beginning.'),
+        numLines: z
+          .number()
+          .int()
+          .min(1)
+          .describe('Number of lines to read after the specified line'),
+        maxBytes: z
+          .number()
+          .int()
+          .min(1)
+          .max(5 * 1024 * 1024)
+          .optional()
+          .describe('Optional safety limit on bytes to read (1 to 5MB); defaults to 204800 (200KB)'),
+      }),
+      execute: async ({
+        path,
+        afterLine,
+        numLines,
+        maxBytes,
+      }: {
+        path: string
+        afterLine: number
+        numLines: number
+        maxBytes?: number
+      }) => {
+        try {
+          const res = await readFileContinuation(path, afterLine, numLines, { maxBytes })
+          return {
+            success: true,
+            path,
+            absolutePath: res.absolutePath,
+            sizeBytes: res.sizeBytes,
+            truncated: res.truncated,
+            content: res.content,
+            startLine: res.startLine,
+            endLine: res.endLine,
+            totalLines: res.totalLines,
+          }
+        } catch (error) {
+          return {
+            success: false,
+            path,
             error: error instanceof Error ? error.message : 'Unknown error occurred',
           }
         }
@@ -356,7 +479,7 @@ const tools: tools[] = [
     enabled: true,
     tool: {
       description:
-        'Search code, files, and directories using ripgrep (rg), a powerful line-oriented search tool. Supports regex patterns, file filtering, and various output formats.',
+        'Search code, files, and directories using ripgrep (rg), a powerful line-oriented search tool. Supports regex patterns, file filtering, and various output formats. IMPORTANT: Results have multiple limits to prevent overwhelming output: (1) max 500 match results, (2) max 50,000 total characters across all matches, (3) individual lines truncated at 500 characters. If any limit is exceeded, you will receive an error asking you to narrow your search using more specific patterns, glob filters, reduced search paths, or maxCount parameter.',
       inputSchema: z.object({
         pattern: z.string().describe('Search pattern (regex or literal string)'),
         searchPath: z.string().optional().describe('Directory or file path to search (defaults to current directory ".")'),

@@ -2,6 +2,19 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
 
+const DEFAULT_MAX_OUTPUT_CHARS = (() => {
+  const envValue = Number(process.env.RIPGREP_MAX_OUTPUT_CHARS ?? process.env.RIPGREP_OUTPUT_LIMIT)
+  if (Number.isFinite(envValue) && envValue > 0) {
+    return Math.floor(envValue)
+  }
+  return 1000
+})()
+
+// Multi-layered limits to prevent overwhelming responses
+const MAX_RESULT_LINES = 500 // Maximum number of match objects
+const MAX_LINE_LENGTH = 500 // Maximum characters per individual line (will truncate)
+const MAX_TOTAL_CHARS = 3000 // Maximum total characters across all match content
+
 export interface RipgrepOptions {
   caseSensitive?: boolean // -s (case-sensitive) vs -i (case-insensitive)
   lineNumbers?: boolean // -n (show line numbers)
@@ -12,6 +25,7 @@ export interface RipgrepOptions {
   hidden?: boolean // --hidden (search hidden files)
   noIgnore?: boolean // --no-ignore (ignore .gitignore)
   contextLines?: number // -C (context lines before and after)
+  maxOutputChars?: number // Optional limit on total output characters returned
 }
 
 export interface RipgrepResult {
@@ -43,7 +57,13 @@ export async function ripgrepSearch(
     hidden = false,
     noIgnore = false,
     contextLines,
+    maxOutputChars: userMaxOutputChars,
   } = options
+
+  const maxOutputChars =
+    Number.isFinite(userMaxOutputChars) && userMaxOutputChars !== undefined && userMaxOutputChars > 0
+      ? Math.floor(userMaxOutputChars)
+      : DEFAULT_MAX_OUTPUT_CHARS
 
   // Build rg command arguments
   const args: string[] = []
@@ -99,7 +119,7 @@ export async function ripgrepSearch(
     args.push('--json')
   }
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const command = `rg ${args.join(' ')}`
     const child = spawn('rg', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -108,15 +128,15 @@ export async function ripgrepSearch(
     let stdout = ''
     let stderr = ''
 
-    child.stdout.on('data', (data) => {
+    child.stdout.on('data', data => {
       stdout += data.toString('utf8')
     })
 
-    child.stderr.on('data', (data) => {
+    child.stderr.on('data', data => {
       stderr += data.toString('utf8')
     })
 
-    child.on('error', (error) => {
+    child.on('error', error => {
       resolve({
         success: false,
         matches: [],
@@ -126,7 +146,7 @@ export async function ripgrepSearch(
       })
     })
 
-    child.on('close', (code) => {
+    child.on('close', code => {
       const durationMs = Date.now() - startTime
 
       // rg returns 0 when matches found, 1 when no matches, 2 for error
@@ -146,6 +166,46 @@ export async function ripgrepSearch(
           count,
           filesWithMatches,
         })
+
+        // Multi-layered limit checks
+
+        // Check 1: Number of match objects
+        if (matches.length > MAX_RESULT_LINES) {
+          resolve({
+            success: false,
+            matches: [],
+            error: `Search returned too many matches (${matches.length} matches, limit is ${MAX_RESULT_LINES}). Please narrow your search by: (1) using a more specific pattern, (2) adding a glob filter (e.g., '*.ts'), (3) reducing the search path, or (4) using maxCount to limit matches per file.`,
+            command,
+            durationMs,
+          })
+          return
+        }
+
+        // Check 2: Total character count across all match content
+        let totalChars = 0
+        for (const match of matches) {
+          if (match.line) {
+            totalChars += match.line.length
+          }
+        }
+
+        if (totalChars > MAX_TOTAL_CHARS) {
+          resolve({
+            success: false,
+            matches: [],
+            error: `Search output too large (${totalChars} characters, limit is ${MAX_TOTAL_CHARS}). Please narrow your search by: (1) using a more specific pattern, (2) adding a glob filter (e.g., '*.ts'), (3) reducing the search path, or (4) using maxCount to limit matches per file.`,
+            command,
+            durationMs,
+          })
+          return
+        }
+
+        // Check 3: Truncate individual lines that are too long
+        for (const match of matches) {
+          if (match.line && match.line.length > MAX_LINE_LENGTH) {
+            match.line = match.line.substring(0, MAX_LINE_LENGTH) + '... [truncated]'
+          }
+        }
 
         resolve({
           success: true,
@@ -229,7 +289,7 @@ function parseRipgrepOutput(
         if (data.type === 'match' && data.data) {
           const { path: filePath, lines: matchLines, line_number } = data.data
           const file = typeof filePath === 'string' ? filePath : filePath?.text || ''
-          
+
           if (matchLines && matchLines.text) {
             matches.push({
               file,

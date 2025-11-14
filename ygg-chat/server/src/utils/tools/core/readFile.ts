@@ -2,8 +2,17 @@
 import * as fs from 'fs'
 import * as path from 'path'
 
+export interface LineRange {
+  startLine: number // 1-based line number to start reading from (inclusive)
+  endLine: number // 1-based line number to stop reading at (inclusive)
+}
+
 export interface ReadFileOptions {
   maxBytes?: number // safety limit to avoid huge reads; default ~200KB
+  startLine?: number // 1-based line number to start reading from (inclusive) - for single range
+  endLine?: number // 1-based line number to stop reading at (inclusive) - for single range
+  ranges?: LineRange[] // multiple disjoint ranges to read in a single call
+  // Note: if 'ranges' is provided, startLine/endLine are ignored
 }
 
 function isLikelyBinary(buf: Buffer): boolean {
@@ -20,15 +29,25 @@ function isLikelyBinary(buf: Buffer): boolean {
   return suspicious / len > 0.3
 }
 
-export async function readTextFile(
-  inputPath: string,
-  options: ReadFileOptions = {}
-): Promise<{
+export interface ReadFileResult {
   content: string
   truncated: boolean
   sizeBytes: number
   absolutePath: string
-}> {
+  startLine?: number
+  endLine?: number
+  totalLines?: number
+  ranges?: Array<{
+    startLine: number
+    endLine: number
+    lineCount: number
+  }>
+}
+
+export async function readTextFile(
+  inputPath: string,
+  options: ReadFileOptions = {}
+): Promise<ReadFileResult> {
   const maxBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 200 * 1024
 
   // Resolve absolute path
@@ -67,8 +86,121 @@ export async function readTextFile(
     throw new Error('Binary file detected; reading binary is not supported by this tool')
   }
 
-  const content = buf.toString('utf8')
+  let content = buf.toString('utf8')
   const truncated = sizeBytes > maxBytes
 
-  return { content, truncated, sizeBytes, absolutePath: abs }
+  // Handle line-range slicing if requested
+  let actualStartLine: number | undefined
+  let actualEndLine: number | undefined
+  let totalLines: number | undefined
+  let rangesInfo: Array<{ startLine: number; endLine: number; lineCount: number }> | undefined
+
+  // Multi-range support takes precedence
+  if (options.ranges && options.ranges.length > 0) {
+    const lines = content.split('\n')
+    totalLines = lines.length
+
+    // Validate and process each range
+    const selectedParts: string[] = []
+    rangesInfo = []
+
+    for (const range of options.ranges) {
+      const start = Math.max(1, range.startLine)
+      const end = Math.min(totalLines, range.endLine)
+
+      if (start > totalLines) {
+        throw new Error(`Range startLine ${start} exceeds total lines ${totalLines} in file`)
+      }
+      if (end < start) {
+        throw new Error(`Range endLine ${end} cannot be less than startLine ${start}`)
+      }
+
+      // Extract lines for this range (convert to 0-based indexing)
+      const rangeLines = lines.slice(start - 1, end)
+
+      // Add a header comment to mark the range
+      selectedParts.push(`// Lines ${start}-${end}`)
+      selectedParts.push(rangeLines.join('\n'))
+      selectedParts.push('') // blank line between ranges
+
+      rangesInfo.push({
+        startLine: start,
+        endLine: end,
+        lineCount: rangeLines.length,
+      })
+    }
+
+    // Remove trailing blank line
+    if (selectedParts[selectedParts.length - 1] === '') {
+      selectedParts.pop()
+    }
+
+    content = selectedParts.join('\n')
+  } else if (options.startLine !== undefined || options.endLine !== undefined) {
+    // Single range support (backward compatible)
+    const lines = content.split('\n')
+    totalLines = lines.length
+
+    // Validate and normalize line numbers (1-based to 0-based)
+    const start = options.startLine !== undefined ? Math.max(1, options.startLine) : 1
+    const end = options.endLine !== undefined ? Math.min(totalLines, options.endLine) : totalLines
+
+    if (start > totalLines) {
+      throw new Error(`startLine ${start} exceeds total lines ${totalLines} in file`)
+    }
+    if (end < start) {
+      throw new Error(`endLine ${end} cannot be less than startLine ${start}`)
+    }
+
+    // Slice the lines (convert to 0-based indexing)
+    const selectedLines = lines.slice(start - 1, end)
+    content = selectedLines.join('\n')
+
+    actualStartLine = start
+    actualEndLine = end
+  }
+
+  return {
+    content,
+    truncated,
+    sizeBytes,
+    absolutePath: abs,
+    startLine: actualStartLine,
+    endLine: actualEndLine,
+    totalLines,
+    ranges: rangesInfo,
+  }
+}
+
+/**
+ * Read the next chunk of a file after a given line number.
+ * Useful for pagination and avoiding duplicate reads.
+ *
+ * @param inputPath - File path to read
+ * @param afterLine - 1-based line number to start reading after (exclusive)
+ * @param numLines - Number of lines to read
+ * @param options - Additional read options (maxBytes, etc.)
+ * @returns ReadFileResult with the continuation content
+ */
+export async function readFileContinuation(
+  inputPath: string,
+  afterLine: number,
+  numLines: number,
+  options: Omit<ReadFileOptions, 'startLine' | 'endLine' | 'ranges'> = {}
+): Promise<ReadFileResult> {
+  if (afterLine < 0) {
+    throw new Error('afterLine must be >= 0 (use 0 to read from beginning)')
+  }
+  if (numLines < 1) {
+    throw new Error('numLines must be >= 1')
+  }
+
+  const startLine = afterLine + 1
+  const endLine = afterLine + numLines
+
+  return readTextFile(inputPath, {
+    ...options,
+    startLine,
+    endLine,
+  })
 }
