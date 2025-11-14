@@ -673,8 +673,19 @@ export function useFilteredModels(provider: string | null) {
       })
     }
 
+    // Move selected model to the front if it exists in filtered results
+    if (modelsData?.selected) {
+      const selectedIndex = result.findIndex(m => m.name === modelsData.selected.name)
+      if (selectedIndex > 0) {
+        // Remove selected model from its current position
+        const [selectedModel] = result.splice(selectedIndex, 1)
+        // Add it to the front
+        result.unshift(selectedModel)
+      }
+    }
+
     return result
-  }, [localModels, filters, sortOptions])
+  }, [localModels, filters, sortOptions, modelsData?.selected])
 
   const applyFilters = useCallback((newFilters: ModelFilters) => {
     setFilters(newFilters)
