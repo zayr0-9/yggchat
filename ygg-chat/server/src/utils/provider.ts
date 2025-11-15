@@ -57,6 +57,9 @@ export async function generateResponse(
   // Convert a single message's content_blocks to OpenAI format messages
   // Handles sequential blocks: [text, tool_use, tool_result, text] -> multiple messages
   const convertContentBlocksToOpenAIMessages = (contentBlocks: any[]): any[] => {
+    // console.log('📦 [provider] Converting content_blocks:', contentBlocks.length, 'blocks')
+    // console.log('📦 [provider] Block types:', contentBlocks.map(b => b.type))
+
     const result: any[] = []
     let currentText = ''
     let currentToolCalls: any[] = []
@@ -64,6 +67,7 @@ export async function generateResponse(
 
     for (let i = 0; i < contentBlocks.length; i++) {
       const block = contentBlocks[i]
+      // console.log(`📦 [provider] Processing block ${i}: type=${block.type}`)
 
       if (block.type === 'text') {
         const textContent = block.content || block.text || ''
@@ -99,7 +103,18 @@ export async function generateResponse(
         // Skip thinking blocks for OpenAI format (handled via reasoning param)
         // Could optionally prepend to text as a note
       } else if (block.type === 'tool_use') {
+        // IMPORTANT: Flush any pending tool results FIRST before adding new tool call
+        // This ensures proper interleaving: assistant(calls) → tool(results) → assistant(calls) → ...
+        if (pendingToolResults.length > 0) {
+          console.log(`🔄 [provider] Flushing ${pendingToolResults.length} pending tool results before new tool_use`)
+          for (const toolResult of pendingToolResults) {
+            result.push(toolResult)
+          }
+          pendingToolResults = []
+        }
+
         // Convert to OpenAI tool_call format
+        console.log(`🔧 [provider] Found tool_use: id=${block.id}, name=${block.name}`)
         const toolCall = {
           id: block.id,
           type: 'function' as const,
@@ -110,8 +125,10 @@ export async function generateResponse(
         }
         currentToolCalls.push(toolCall)
       } else if (block.type === 'tool_result') {
+        // console.log(`✅ [provider] Found tool_result: tool_use_id=${block.tool_use_id}`)
         // If we have accumulated tool calls, flush them first
         if (currentToolCalls.length > 0) {
+          // console.log(`🔄 [provider] Flushing ${currentToolCalls.length} tool calls before tool_result`)
           result.push({
             role: 'assistant',
             content: currentText || null,
@@ -127,6 +144,7 @@ export async function generateResponse(
           tool_call_id: block.tool_use_id,
           content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content || ''),
         }
+        console.log(`✅ [provider] Created tool result message: tool_call_id=${toolResultMsg.tool_call_id}`)
         pendingToolResults.push(toolResultMsg)
       }
     }
@@ -154,21 +172,40 @@ export async function generateResponse(
       })
     }
 
+    console.log(`📦 [provider] Conversion result: ${result.length} messages`)
+    result.forEach((msg, idx) => {
+      if (msg.role === 'tool') {
+        console.log(`  [${idx}] role=tool, tool_call_id=${msg.tool_call_id}`)
+      } else if (msg.tool_calls) {
+        console.log(`  [${idx}] role=assistant, tool_calls=${msg.tool_calls.length}`)
+      } else {
+        console.log(`  [${idx}] role=${msg.role}, content_length=${msg.content?.length || 0}`)
+      }
+    })
+
     return result
   }
 
   // Convert messages to OpenAI format, properly handling tool_calls and tool results
   const convertMessagesToOpenAIFormat = (msgs: Message[]): any[] => {
+    console.log(`📤 [provider] Converting ${msgs.length} messages to OpenAI format`)
     const result: any[] = []
 
-    for (const msg of msgs) {
+    for (let msgIdx = 0; msgIdx < msgs.length; msgIdx++) {
+      const msg = msgs[msgIdx]
       const role = msg.role === 'ex_agent' ? 'assistant' : msg.role
+
+      console.log(
+        `📤 [provider] Message ${msgIdx}: role=${msg.role}, has_content_blocks=${!!(msg.content_blocks && msg.content_blocks.length > 0)}, content_length=${msg.content?.length || 0}`
+      )
 
       // Check if message has content_blocks with tool information
       if (msg.content_blocks && Array.isArray(msg.content_blocks) && msg.content_blocks.length > 0) {
+        console.log(`📤 [provider] Message ${msgIdx} has ${msg.content_blocks.length} content_blocks`)
         if (role === 'assistant') {
           // Convert content_blocks to proper OpenAI message sequence
           const convertedMessages = convertContentBlocksToOpenAIMessages(msg.content_blocks)
+          console.log(`📤 [provider] Message ${msgIdx} expanded to ${convertedMessages.length} OpenAI messages`)
           result.push(...convertedMessages)
         } else {
           // For user messages, just extract text content
@@ -193,7 +230,8 @@ export async function generateResponse(
             type: 'function' as const,
             function: {
               name: tc.name,
-              arguments: typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || tc.input || {}),
+              arguments:
+                typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || tc.input || {}),
             },
           }))
         } catch (e) {
@@ -220,6 +258,14 @@ export async function generateResponse(
         })
       }
     }
+
+    console.log(`📤 [provider] Final OpenAI format: ${result.length} messages total`)
+    console.log(
+      `📤 [provider] Message roles:`,
+      result.map(m => m.role)
+    )
+    console.log(`📤 [provider] Tool messages count:`, result.filter(m => m.role === 'tool').length)
+    console.log(`📤 [provider] Assistant messages with tool_calls:`, result.filter(m => m.tool_calls).length)
 
     return result
   }

@@ -1,42 +1,138 @@
 // ygg-chat/server/src/utils/tools/core/glob.ts
 import * as path from 'path'
+import * as fs from 'fs'
 import { glob as globCallback } from 'glob'
 import { promisify } from 'util'
+import os from 'os'
 
 const globAsync = promisify(globCallback)
 
+const DEFAULT_MAX_MATCHES = 1000
+const DEFAULT_TIMEOUT_MS = 5000
+const DIRECTORY_DEPTH_LIMIT = 6
+const DEFAULT_IGNORE_PATTERNS = [
+  '**/node_modules/**',
+  '**/.git/**',
+  '**/.svn/**',
+  '**/.hg/**',
+  '**/.idea/**',
+  '**/.vscode/**',
+  '**/.next/**',
+  '**/.nuxt/**',
+  '**/.cache/**',
+  '**/dist/**',
+  '**/build/**',
+  '**/coverage/**',
+  '**/tmp/**',
+  '**/temp/**',
+  '**/*.min.js',
+]
+
+function resolveWorkspaceRoot(): string {
+  const candidates = [
+    process.env.WORKSPACE_ROOT,
+    path.resolve(__dirname, '../../../../../'),
+    process.cwd(),
+  ].filter(Boolean) as string[]
+
+  for (const candidate of candidates) {
+    try {
+      const resolved = path.resolve(candidate)
+      if (!fs.existsSync(resolved)) continue
+      const stats = fs.statSync(resolved)
+      if (stats.isDirectory()) {
+        return resolved
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return process.cwd()
+}
+
+const WORKSPACE_ROOT = resolveWorkspaceRoot()
+const NORMALIZED_ROOT = path.resolve(WORKSPACE_ROOT)
+const HOMEDIR = os.homedir()
+
+function isFsRoot(dir: string): boolean {
+  const resolved = path.resolve(dir)
+  const root = path.parse(resolved).root
+  return resolved === root
+}
+
+function ensureWithinWorkspace(cwd: string): string {
+  const resolved = path.resolve(cwd || WORKSPACE_ROOT)
+  const normalized = resolved.replace(/\\/g, '/').replace(/\/+/g, '/')
+  const normalizedRoot = NORMALIZED_ROOT.replace(/\\/g, '/').replace(/\/+/g, '/')
+
+  if (!normalized.startsWith(normalizedRoot)) {
+    throw new Error(`cwd '${cwd}' is outside the workspace root (${WORKSPACE_ROOT}).`)
+  }
+
+  if (isFsRoot(resolved) || resolved === '/' || resolved === '/root' || resolved === HOMEDIR) {
+    throw new Error('Glob search restricted: please use a project directory within the workspace, not filesystem root or home directory.')
+  }
+
+  return resolved
+}
+
+function mergeIgnorePatterns(defaults: string[], custom?: string | string[]): string[] {
+  if (!custom) return defaults
+  const userPatterns = Array.isArray(custom) ? custom : [custom]
+  const cleaned = userPatterns.filter(Boolean)
+  return Array.from(new Set([...defaults, ...cleaned]))
+}
+
+function enforcePatternDepth(pattern: string): string {
+  const segments = pattern.split('/').filter(Boolean)
+  if (segments.length <= DIRECTORY_DEPTH_LIMIT) return pattern
+  return segments.slice(0, DIRECTORY_DEPTH_LIMIT).join('/')
+}
+
 export interface GlobOptions {
-  cwd?: string // Current working directory
-  ignore?: string | string[] // Patterns to ignore
-  dot?: boolean // Include dotfiles (default: false)
-  absolute?: boolean // Return absolute paths (default: false)
-  mark?: boolean // Add / suffix to directories (default: false)
-  nosort?: boolean // Don't sort results (default: false)
-  nocase?: boolean // Case-insensitive matching on Windows (default: false)
-  nodir?: boolean // Don't match directories (default: false)
-  follow?: boolean // Follow symbolic links (default: false)
-  realpath?: boolean // Return resolved absolute paths (default: false)
-  stat?: boolean // Call stat() on all results (default: false)
-  withFileTypes?: boolean // Return Dirent objects instead of paths
+  cwd?: string
+  ignore?: string | string[]
+  dot?: boolean
+  absolute?: boolean
+  mark?: boolean
+  nosort?: boolean
+  nocase?: boolean
+  nodir?: boolean
+  follow?: boolean
+  realpath?: boolean
+  stat?: boolean
+  withFileTypes?: boolean
+  maxMatches?: number
+  timeoutMs?: number
 }
 
 export interface GlobResult {
   success: boolean
-  matches: string[] // File paths that matched the pattern
+  matches: string[]
   error?: string
   pattern?: string
   cwd?: string
   durationMs?: number
+  totalMatches?: number
 }
 
 export async function globSearch(
   pattern: string,
   options: GlobOptions = {}
 ): Promise<GlobResult> {
+  if (!pattern || pattern.trim() === '') {
+    return {
+      success: false,
+      matches: [],
+      error: 'Pattern cannot be empty',
+    }
+  }
+
   const startTime = Date.now()
-  
+
   const {
-    cwd = process.cwd(),
+    cwd = WORKSPACE_ROOT,
     ignore,
     dot = false,
     absolute = false,
@@ -48,15 +144,18 @@ export async function globSearch(
     realpath = false,
     stat = false,
     withFileTypes = false,
+    maxMatches = DEFAULT_MAX_MATCHES,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
   } = options
 
   try {
-    // Resolve cwd to absolute path for consistency
-    const resolvedCwd = path.resolve(cwd)
+    const resolvedCwd = ensureWithinWorkspace(cwd)
+    const sanitizedPattern = enforcePatternDepth(pattern)
+    const ignorePatterns = mergeIgnorePatterns(DEFAULT_IGNORE_PATTERNS, ignore)
 
-    // Build glob options
     const globOptions: any = {
       cwd: resolvedCwd,
+      ignore: ignorePatterns,
       dot,
       absolute,
       mark,
@@ -69,39 +168,57 @@ export async function globSearch(
       withFileTypes,
     }
 
-    // Add ignore patterns if provided
-    if (ignore) {
-      globOptions.ignore = Array.isArray(ignore) ? ignore : [ignore]
+    let results: any[]
+    try {
+      results = await Promise.race([
+        globAsync(sanitizedPattern, globOptions),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Glob search timed out. Narrow the pattern or specify a smaller cwd.')), timeoutMs)
+        ),
+      ]) as any[]
+    } catch (error: any) {
+      throw new Error(error?.message || 'Glob search failed')
     }
 
-    // Execute glob search
-    const results = await globAsync(pattern, globOptions)
-
-    // Convert results to strings if withFileTypes is true
-    let matches: string[]
-    if (withFileTypes) {
-      matches = (results as any[]).map((dirent: any) => dirent.fullpath() || dirent.path)
-    } else {
-      matches = results as string[]
+    if (!Array.isArray(results)) {
+      throw new Error('Glob search did not return an array of results')
     }
+
+    if (results.length > maxMatches) {
+      return {
+        success: false,
+        matches: [],
+        error: `Too many matches (${results.length} > ${maxMatches}). Narrow the pattern or reduce cwd scope.`,
+        pattern: sanitizedPattern,
+        cwd: resolvedCwd,
+        durationMs: Date.now() - startTime,
+        totalMatches: results.length,
+      }
+    }
+
+    const matches = withFileTypes
+      ? (results as any[]).map((dirent: any) => dirent?.fullpath?.() || dirent?.path || String(dirent))
+      : (results as string[])
 
     return {
       success: true,
       matches,
-      pattern,
+      pattern: sanitizedPattern,
       cwd: resolvedCwd,
       durationMs: Date.now() - startTime,
+      totalMatches: matches.length,
     }
   } catch (error: any) {
     return {
       success: false,
       matches: [],
-      error: `Glob search failed: ${error.message}`,
+      error: error?.message || 'Glob search failed',
       pattern,
-      cwd: path.resolve(cwd),
+      cwd,
       durationMs: Date.now() - startTime,
     }
   }
 }
 
 export default globSearch
+

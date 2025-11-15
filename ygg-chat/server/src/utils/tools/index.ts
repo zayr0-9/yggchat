@@ -10,7 +10,8 @@ import { extractDirectoryStructure } from './core/getDirectoryTree'
 import { readTextFile, readFileContinuation } from './core/readFile'
 import { readMultipleTextFiles } from './core/readFiles'
 import searchHistory from './core/searchHistory'
-import { ripgrepSearch } from './core/ripgrep'  
+import { ripgrepSearch } from './core/ripgrep'
+import { globSearch } from './core/glob'  
 // export const directoryTool = tool({
 //   description:
 //     'Get the directory structure of a specified path. Useful for understanding project organization, finding files, or exploring codebases.',
@@ -442,7 +443,12 @@ const tools: tools[] = [
           .describe('Number of results to skip (default 0)'),
         safesearch: z.enum(['strict', 'moderate', 'off']).optional().describe('Safe search setting (default moderate)'),
         country: z.string().optional().describe('Country code for localized results (e.g., "US", "GB")'),
-        search_lang: z.string().optional().describe('Language for search results (e.g., "en", "es")'),
+        search_lang: z
+          .string()
+          .optional()
+          .describe(
+            'Language for search results using Brave-supported codes (e.g., "en", "es", "pt-br", "zh-hant"). Must be one of Brave Search API\'s allowed values: ar, eu, bn, bg, ca, zh-hans, zh-hant, hr, cs, da, nl, en, en-gb, et, fi, fr, gl, de, el, gu, he, hi, hu, is, it, jp, kn, ko, lv, lt, ms, ml, mr, nb, pl, pt-br, pt-pt, pa, ro, ru, sr, sk, sl, es, sv, ta, te, th, tr, uk, or vi.'
+          ),
         extra_snippets: z
           .boolean()
           .optional()
@@ -538,6 +544,54 @@ const tools: tools[] = [
             pattern,
             searchPath,
           }
+        }
+      },
+    },
+  },
+  {
+    name: 'glob',
+    enabled: true,
+    tool: {
+      description: 'Search for files using glob patterns with flexible matching and filtering options',
+      inputSchema: z.object({
+        pattern: z.string().describe('Glob pattern to match files (e.g., "*.ts", "src/**/*.js")'),
+        cwd: z.string().optional().describe('Current working directory to search from'),
+        ignore: z.string().or(z.array(z.string())).optional().describe('Patterns to ignore'),
+        dot: z.boolean().optional().describe('Include dotfiles (default: false)'),
+        absolute: z.boolean().optional().describe('Return absolute paths (default: false)'),
+        mark: z.boolean().optional().describe('Add / suffix to directories (default: false)'),
+        nosort: z.boolean().optional().describe('Do not sort results (default: false)'),
+        nocase: z.boolean().optional().describe('Case-insensitive matching on Windows (default: false)'),
+        nodir: z.boolean().optional().describe('Do not match directories (default: false)'),
+        follow: z.boolean().optional().describe('Follow symbolic links (default: false)'),
+        realpath: z.boolean().optional().describe('Return resolved absolute paths (default: false)'),
+        stat: z.boolean().optional().describe('Call stat() on all results (default: false)'),
+        withFileTypes: z.boolean().optional().describe('Return file type objects instead of paths (default: false)'),
+      }),
+      execute: async ({ pattern, cwd, ignore, dot, absolute, mark, nosort, nocase, nodir, follow, realpath, stat, withFileTypes }: any) => {
+        try {
+          const result = await globSearch(pattern, {
+            cwd,
+            ignore,
+            dot,
+            absolute,
+            mark,
+            nosort,
+            nocase,
+            nodir,
+            follow,
+            realpath,
+            stat,
+            withFileTypes,
+          });
+          return result;
+        } catch (error) {
+          return {
+            success: false,
+            matches: [],
+            error: error instanceof Error ? error.message : 'Unknown error during glob search',
+            pattern,
+          };
         }
       },
     },
