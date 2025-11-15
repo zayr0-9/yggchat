@@ -195,8 +195,12 @@ export async function generateResponse(
       const msg = msgs[msgIdx]
       const role = msg.role === 'ex_agent' ? 'assistant' : msg.role
 
+      // Check if message has artifacts (images)
+      const msgArtifacts = (msg as any).artifacts
+      const hasArtifacts = Array.isArray(msgArtifacts) && msgArtifacts.length > 0
+
       console.log(
-        `📤 [provider] Message ${msgIdx}: role=${msg.role}, has_content_blocks=${!!(msg.content_blocks && msg.content_blocks.length > 0)}, content_length=${msg.content?.length || 0}`
+        `📤 [provider] Message ${msgIdx}: role=${msg.role}, has_content_blocks=${!!(msg.content_blocks && msg.content_blocks.length > 0)}, has_artifacts=${hasArtifacts}, content_length=${msg.content?.length || 0}`
       )
 
       // Check if message has content_blocks with tool information
@@ -214,10 +218,22 @@ export async function generateResponse(
             .map((block: any) => block.content || block.text || '')
             .join('')
           if (textContent || msg.content) {
-            result.push({
-              role: role as 'user' | 'assistant',
-              content: textContent || msg.content || '',
-            })
+            // Check if user message has artifacts (images)
+            if (hasArtifacts) {
+              const contentParts: any[] = [{ type: 'text', text: textContent || msg.content || '' }]
+              for (const artifact of msgArtifacts) {
+                if (typeof artifact === 'string' && artifact.startsWith('data:')) {
+                  contentParts.push({ type: 'image_url', image_url: { url: artifact } })
+                }
+              }
+              console.log(`📤 [provider] Message ${msgIdx} (user with artifacts): ${contentParts.length} parts`)
+              result.push({ role: 'user', content: contentParts })
+            } else {
+              result.push({
+                role: role as 'user' | 'assistant',
+                content: textContent || msg.content || '',
+              })
+            }
           }
         }
       } else if (msg.tool_calls && msg.role === 'assistant') {
@@ -251,11 +267,23 @@ export async function generateResponse(
           })
         }
       } else if (msg.content && msg.content.trim()) {
-        // Regular message without tool_calls
-        result.push({
-          role: role as 'user' | 'assistant',
-          content: msg.content,
-        })
+        // Regular message without tool_calls - check for artifacts
+        if (role === 'user' && hasArtifacts) {
+          // User message with images - convert to multipart format
+          const contentParts: any[] = [{ type: 'text', text: msg.content }]
+          for (const artifact of msgArtifacts) {
+            if (typeof artifact === 'string' && artifact.startsWith('data:')) {
+              contentParts.push({ type: 'image_url', image_url: { url: artifact } })
+            }
+          }
+          console.log(`📤 [provider] Message ${msgIdx} (user with artifacts): ${contentParts.length} parts`)
+          result.push({ role: 'user', content: contentParts })
+        } else {
+          result.push({
+            role: role as 'user' | 'assistant',
+            content: msg.content,
+          })
+        }
       }
     }
 

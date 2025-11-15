@@ -1463,11 +1463,18 @@ async function handleImageAttachments(
   if (imageAtts.length === 0) return formattedMessages
 
   // Convert user/assistant to structured parts; keep system as plain string
-  formattedMessages = formattedMessages.map((m: any) =>
-    m.role === 'system'
-      ? { role: m.role, content: String(m.content || '') }
-      : { role: m.role, content: [{ type: 'text', text: String(m.content || '') }] }
-  )
+  // IMPORTANT: Preserve existing structured content (e.g., messages that already have image_url parts)
+  formattedMessages = formattedMessages.map((m: any) => {
+    if (m.role === 'system') {
+      return { role: m.role, content: String(m.content || '') }
+    }
+    // If content is already an array (structured), preserve it
+    if (Array.isArray(m.content)) {
+      return { ...m }
+    }
+    // Convert string content to structured format
+    return { role: m.role, content: [{ type: 'text', text: String(m.content || '') }] }
+  })
 
   // Find last user message index
   let lastUserIdx = -1

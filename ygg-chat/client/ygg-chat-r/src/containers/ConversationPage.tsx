@@ -423,7 +423,7 @@ const ConversationPage: React.FC = () => {
       {showDeleteConfirm && conversationToDelete && (
         <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
           <div className='bg-neutral-100 text-neutral-900 mica-medium dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'>
-            <h3 className='text-xl font-semibold mb-2 dark:text-neutral-100'>Delete Conversation?</h3>
+            <h3 className='text-xl font-semibold mb-2 dark:text-neutral-100'>Delete Chat?</h3>
             <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-4'>
               Are you sure you want to delete "
               <span className='font-medium'>

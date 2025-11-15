@@ -435,7 +435,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
 
       {/* Image draft previews */}
       {imageDrafts && imageDrafts.length > 0 && (
-        <div className='mt-2 flex flex-wrap gap-2'>
+        <div className='mt-2 px-2 flex flex-wrap gap-2'>
           {imageDrafts.map((img, idx) => (
             <div
               key={idx}

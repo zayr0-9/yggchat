@@ -20,10 +20,19 @@
   isolation: isolate;
   background-image: url('/img/noise.png');
   background-repeat: repeat;
-  box-shadow: 0 0 5.6px rgba(0, 0, 0, 0.29);
+
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease;
+}
+
+.acrylic-subtle,
+.acrylic-light,
+.acrylic-light-dark,
+.acrylic,
+.acrylic-strong,
+.acrylic-extreme {
+  box-shadow: 0 0 5.6px rgba(0, 0, 0, 0.29);
 }
 
 .acrylic-medium {

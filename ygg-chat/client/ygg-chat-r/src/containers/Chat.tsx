@@ -1325,8 +1325,8 @@ function Chat() {
                 id: `branch-temp-${Date.now()}`,
                 conversation_id: currentConversationId,
                 role: 'user' as const,
-                content: newContent,
-                content_plain_text: newContent,
+                content: processed,
+                content_plain_text: processed,
                 parent_id: originalMessage.parent_id,
                 children_ids: [],
                 created_at: new Date().toISOString(),
@@ -1343,7 +1343,7 @@ function Chat() {
             editMessageWithBranching({
               conversationId: currentConversationId,
               originalMessageId: parsedId,
-              newContent: newContent,
+              newContent: processed,
               modelOverride: selectedModel?.name,
               think: think,
             })
@@ -1474,7 +1474,7 @@ function Chat() {
             editMessageWithBranching({
               conversationId: currentConversationId,
               originalMessageId: parsedId,
-              newContent: newContent,
+              newContent: processed,
               modelOverride: selectedModel?.name,
               think: think,
             })
@@ -2081,7 +2081,7 @@ function Chat() {
           {/* Controls row (above) */}
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
-          <div className='acrylic pb-1 pt-3 2xl:pt-4 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
+          <div className='acrylic-light dark:acrylic-ultra-light pb-1 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
             <InputTextArea
               value={localInput}
               onChange={handleInputChange}
@@ -2096,7 +2096,7 @@ function Chat() {
             />
             {/* Selected file chips moved from InputTextArea */}
             {selectedFilesForChat && selectedFilesForChat.length > 0 && (
-              <div className='mt-2 flex flex-wrap gap-2'>
+              <div className='m-2 flex flex-wrap gap-2'>
                 {selectedFilesForChat.map(file => {
                   const displayName =
                     file.name || file.relativePath.split('/').pop() || file.path.split('/').pop() || file.relativePath
@@ -2106,7 +2106,7 @@ function Chat() {
                   return (
                     <div
                       key={file.path}
-                      className='relative group inline-flex items-center gap-2 max-w-full rounded-md border border-neutral-500 dark:bg-yBlack-900 dark:text-neutral-200 text-neutral-800 px-2 py-1 text-sm'
+                      className='relative px-2 group inline-flex items-center gap-2 max-w-full rounded-md border border-neutral-500 dark:bg-yBlack-900/20 dark:text-neutral-200 text-neutral-800 text-sm'
                       title={file.relativePath || file.path}
                       onClick={e => {
                         if (!isExpanded) {
@@ -2490,7 +2490,7 @@ function Chat() {
           return (
             <div
               className={`fixed z-[100000] -translate-y-full rounded-lg shadow-2xl border border-gray-600 p-3 transform transition-all duration-100 ease-out dark:bg-neutral-900 bg-slate-100 pointer-events-auto`}
-              style={{ left, top, maxWidth: '90vw', width: 'clamp(90vw, 90vw, 56rem)' }}
+              style={{ left, top, maxWidth: '30vw', width: 'clamp(90vw, 90vw, 56rem)' }}
               onMouseDown={e => e.stopPropagation()}
               onMouseUp={e => e.stopPropagation()}
               onClick={e => e.stopPropagation()}
@@ -2509,7 +2509,7 @@ function Chat() {
                 </button>
               </div>
               <div
-                className={`text-xs font-mono whitespace-pre-wrap break-words text-stone-800 dark:text-stone-200 ${isClosing ? 'opacity-50' : 'opacity-100'} transition-opacity duration-100 overflow-auto max-h-[60vh] overscroll-contain select-text`}
+                className={`text-xs font-mono whitespace-pre-wrap break-words text-stone-800 dark:text-stone-200 ${isClosing ? 'opacity-50' : 'opacity-100'} transition-opacity duration-100 overflow-auto thin-scrollbar max-h-[60vh] overscroll-contain select-text`}
               >
                 {file.contents}
               </div>
