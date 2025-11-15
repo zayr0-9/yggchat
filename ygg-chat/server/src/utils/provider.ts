@@ -54,88 +54,183 @@ export async function generateResponse(
           .join('\n')}`
       : ''
 
-  // Helper function to reconstruct assistant message content with tool results and reasoning
-  const reconstructAssistantContent = (msg: Message): string | any[] => {
-    // If content_blocks exist, use them (structured format with tool_use/tool_result)
-    if (msg.content_blocks && Array.isArray(msg.content_blocks) && msg.content_blocks.length > 0) {
-      const blocks: any[] = []
-      for (const block of msg.content_blocks) {
-        if (block.type === 'text') {
-          blocks.push({ type: 'text', text: block.content })
-        } else if (block.type === 'thinking') {
-          blocks.push({ type: 'thinking', thinking: block.content })
-        } else if (block.type === 'tool_use') {
-          blocks.push({
-            type: 'tool_use',
-            id: block.id,
-            name: block.name,
-            input: block.input,
-          })
-        } else if (block.type === 'tool_result') {
-          blocks.push({
-            type: 'tool_result',
-            tool_use_id: block.tool_use_id,
-            content: block.content,
-            is_error: block.is_error,
-          })
-        }
-      }
-      return blocks.length > 0 ? blocks : msg.content
-    }
+  // Convert a single message's content_blocks to OpenAI format messages
+  // Handles sequential blocks: [text, tool_use, tool_result, text] -> multiple messages
+  const convertContentBlocksToOpenAIMessages = (contentBlocks: any[]): any[] => {
+    const result: any[] = []
+    let currentText = ''
+    let currentToolCalls: any[] = []
+    let pendingToolResults: any[] = []
 
-    // Fallback: reconstruct from tool_calls and thinking_block
-    if ((msg.tool_calls || msg.thinking_block) && msg.role === 'assistant') {
-      const blocks: any[] = []
+    for (let i = 0; i < contentBlocks.length; i++) {
+      const block = contentBlocks[i]
 
-      // Add thinking block if present
-      if (msg.thinking_block && msg.thinking_block.trim()) {
-        blocks.push({ type: 'thinking', thinking: msg.thinking_block })
-      }
+      if (block.type === 'text') {
+        const textContent = block.content || block.text || ''
 
-      // Add main content
-      if (msg.content && msg.content.trim()) {
-        blocks.push({ type: 'text', text: msg.content })
-      }
-
-      // Parse and add tool calls if present
-      if (msg.tool_calls) {
-        try {
-          const toolCalls = typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls
-          const toolCallsArray = Array.isArray(toolCalls) ? toolCalls : [toolCalls]
-          for (const tc of toolCallsArray) {
-            blocks.push({
-              type: 'tool_use',
-              id: tc.id,
-              name: tc.name,
-              input: tc.arguments || tc.input,
-            })
+        // If we have pending tool results, we need to flush them first
+        // then this text becomes a new assistant message
+        if (pendingToolResults.length > 0) {
+          // Flush tool results
+          for (const toolResult of pendingToolResults) {
+            result.push(toolResult)
           }
-        } catch (e) {
-          // If parsing fails, just use content
-        }
-      }
+          pendingToolResults = []
 
-      return blocks.length > 0 ? blocks : msg.content
+          // This text is the assistant's response after tool execution
+          // We'll accumulate it in case there are more text blocks
+          currentText = textContent
+        } else if (currentToolCalls.length > 0) {
+          // We have tool calls but haven't flushed them yet
+          // This shouldn't happen (tool_result should come before next text)
+          // But handle it by flushing the tool calls first
+          result.push({
+            role: 'assistant',
+            content: currentText || null,
+            tool_calls: currentToolCalls,
+          })
+          currentText = textContent
+          currentToolCalls = []
+        } else {
+          // Normal case: accumulate text
+          currentText += textContent
+        }
+      } else if (block.type === 'thinking') {
+        // Skip thinking blocks for OpenAI format (handled via reasoning param)
+        // Could optionally prepend to text as a note
+      } else if (block.type === 'tool_use') {
+        // Convert to OpenAI tool_call format
+        const toolCall = {
+          id: block.id,
+          type: 'function' as const,
+          function: {
+            name: block.name,
+            arguments: typeof block.input === 'string' ? block.input : JSON.stringify(block.input || {}),
+          },
+        }
+        currentToolCalls.push(toolCall)
+      } else if (block.type === 'tool_result') {
+        // If we have accumulated tool calls, flush them first
+        if (currentToolCalls.length > 0) {
+          result.push({
+            role: 'assistant',
+            content: currentText || null,
+            tool_calls: currentToolCalls,
+          })
+          currentText = ''
+          currentToolCalls = []
+        }
+
+        // Create tool result message
+        const toolResultMsg = {
+          role: 'tool' as const,
+          tool_call_id: block.tool_use_id,
+          content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content || ''),
+        }
+        pendingToolResults.push(toolResultMsg)
+      }
     }
 
-    return msg.content
+    // Flush any remaining content
+    if (currentToolCalls.length > 0) {
+      result.push({
+        role: 'assistant',
+        content: currentText || null,
+        tool_calls: currentToolCalls,
+      })
+      currentText = ''
+    }
+
+    // Flush pending tool results
+    for (const toolResult of pendingToolResults) {
+      result.push(toolResult)
+    }
+
+    // If we have remaining text (after tool results), create final assistant message
+    if (currentText.trim()) {
+      result.push({
+        role: 'assistant',
+        content: currentText,
+      })
+    }
+
+    return result
   }
 
-  // Prepare messages for AI SDK providers (with proper content reconstruction)
-  const aiSdkBase = messages
-    .filter(msg => msg.content && msg.content.trim() !== '')
-    .map(msg => ({
-      role: msg.role === 'ex_agent' ? 'assistant' : (msg.role as 'user' | 'assistant'),
-      content: reconstructAssistantContent(msg)
-    }))
+  // Convert messages to OpenAI format, properly handling tool_calls and tool results
+  const convertMessagesToOpenAIFormat = (msgs: Message[]): any[] => {
+    const result: any[] = []
+
+    for (const msg of msgs) {
+      const role = msg.role === 'ex_agent' ? 'assistant' : msg.role
+
+      // Check if message has content_blocks with tool information
+      if (msg.content_blocks && Array.isArray(msg.content_blocks) && msg.content_blocks.length > 0) {
+        if (role === 'assistant') {
+          // Convert content_blocks to proper OpenAI message sequence
+          const convertedMessages = convertContentBlocksToOpenAIMessages(msg.content_blocks)
+          result.push(...convertedMessages)
+        } else {
+          // For user messages, just extract text content
+          const textContent = msg.content_blocks
+            .filter((block: any) => block.type === 'text')
+            .map((block: any) => block.content || block.text || '')
+            .join('')
+          if (textContent || msg.content) {
+            result.push({
+              role: role as 'user' | 'assistant',
+              content: textContent || msg.content || '',
+            })
+          }
+        }
+      } else if (msg.tool_calls && msg.role === 'assistant') {
+        // Fallback: handle old format with tool_calls as JSON string
+        let parsedToolCalls: any[] = []
+        try {
+          const toolCallsData = typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls
+          parsedToolCalls = (Array.isArray(toolCallsData) ? toolCallsData : [toolCallsData]).map((tc: any) => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: {
+              name: tc.name,
+              arguments: typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || tc.input || {}),
+            },
+          }))
+        } catch (e) {
+          // If parsing fails, skip tool_calls
+        }
+
+        if (parsedToolCalls.length > 0) {
+          result.push({
+            role: 'assistant',
+            content: msg.content || null,
+            tool_calls: parsedToolCalls,
+          })
+        } else if (msg.content && msg.content.trim()) {
+          result.push({
+            role: 'assistant',
+            content: msg.content,
+          })
+        }
+      } else if (msg.content && msg.content.trim()) {
+        // Regular message without tool_calls
+        result.push({
+          role: role as 'user' | 'assistant',
+          content: msg.content,
+        })
+      }
+    }
+
+    return result
+  }
+
+  // Prepare messages for AI SDK providers (with proper OpenAI format)
+  const aiSdkBase = convertMessagesToOpenAIFormat(messages)
 
   // Optionally prepend a dummy user context message
   const aiSdkMessages =
     conversationContext && conversationContext.trim()
-      ? ([{ role: 'user' as const, content: conversationContext.trim() }, ...aiSdkBase] as Array<{
-          role: 'user' | 'assistant'
-          content: string
-        }>)
+      ? [{ role: 'user' as const, content: conversationContext.trim() }, ...aiSdkBase]
       : aiSdkBase
 
   const aiSdkMessagesWithNote = attachmentNote
@@ -143,19 +238,14 @@ export async function generateResponse(
     : aiSdkMessages
 
   // Prepend system prompt (for AI SDK providers) if provided
+  // Note: aiSdkBase may contain tool messages and tool_calls, so we use 'any' for flexibility
   const aiSdkForOpenAI = systemPrompt
-    ? ([{ role: 'system' as const, content: systemPrompt }, ...aiSdkMessagesWithNote] as Array<{
-        role: 'user' | 'assistant' | 'system'
-        content: string
-      }>)
-    : (aiSdkMessagesWithNote as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>)
+    ? [{ role: 'system' as const, content: systemPrompt }, ...aiSdkMessagesWithNote]
+    : aiSdkMessagesWithNote
 
   const aiSdkForGemini = systemPrompt
-    ? ([{ role: 'system' as const, content: systemPrompt }, ...aiSdkMessages] as Array<{
-        role: 'user' | 'assistant' | 'system'
-        content: string
-      }>)
-    : (aiSdkMessages as Array<{ role: 'user' | 'assistant' | 'system'; content: string }>)
+    ? [{ role: 'system' as const, content: systemPrompt }, ...aiSdkMessages]
+    : aiSdkMessages
 
   const aiSdkForAnthropic = aiSdkForGemini
 
