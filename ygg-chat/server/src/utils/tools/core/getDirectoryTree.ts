@@ -7,6 +7,65 @@ const readdir = promisify(fs.readdir)
 const stat = promisify(fs.stat)
 const readFile = promisify(fs.readFile)
 
+function normalizeForComparison(inputPath: string): string {
+  return path.resolve(inputPath).replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/?$/, '')
+}
+
+function detectWorkspaceRoot(): string {
+  const candidates = [process.env.WORKSPACE_ROOT?.trim(), path.resolve(__dirname, '../../../../../'), process.cwd()]
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    try {
+      const resolved = path.resolve(candidate)
+      const stats = fs.statSync(resolved)
+      if (stats.isDirectory()) {
+        return resolved
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return path.resolve(process.cwd())
+}
+
+const WORKSPACE_ROOT = detectWorkspaceRoot()
+const NORMALIZED_WORKSPACE_ROOT = normalizeForComparison(WORKSPACE_ROOT)
+const WORKSPACE_PREFIX = `${NORMALIZED_WORKSPACE_ROOT}/`
+
+const isSameOrSubPath = (candidate: string, root: string): boolean => {
+  if (candidate === root) return true
+  if (!candidate.startsWith(root)) return false
+  return candidate[root.length] === '/' || candidate[root.length - 1] === '/'
+}
+
+function ensurePathWithinWorkspace(candidatePath: string): string {
+  const resolved = path.resolve(candidatePath)
+  const normalized = normalizeForComparison(resolved)
+
+  if (isSameOrSubPath(normalized, NORMALIZED_WORKSPACE_ROOT)) {
+    return resolved
+  }
+
+  throw new Error(`Path '${candidatePath}' is outside the allowed workspace root (${WORKSPACE_ROOT}).`)
+}
+
+function resolveRequestedDirectory(rootDir: string): string {
+  const sanitized = rootDir?.trim() || '.'
+  const isAbsoluteInput = path.isAbsolute(sanitized)
+  const parsedRoot = path.parse(sanitized).root
+  const isFsRootRequest = isAbsoluteInput && parsedRoot.length > 0 && normalizeForComparison(sanitized) === normalizeForComparison(parsedRoot)
+
+  const candidate = isFsRootRequest
+    ? WORKSPACE_ROOT
+    : isAbsoluteInput
+      ? sanitized
+      : path.resolve(WORKSPACE_ROOT, sanitized)
+
+  return ensurePathWithinWorkspace(candidate)
+}
+
 export interface DirectoryOptions {
   maxDepth?: number
   includeHidden?: boolean
@@ -134,19 +193,32 @@ function getFileSizeStr(sizeBytes: number): string {
   return `${size.toFixed(1)}${units[unitIndex]}`
 }
 
-export async function extractDirectoryStructure(rootDir: string, options: DirectoryOptions = {}): Promise<string> {
+function limitDepth(maxDepth?: number): number | undefined {
+  if (maxDepth === undefined) {
+    return undefined
+  }
+
+  if (Number.isNaN(maxDepth) || maxDepth < 1) {
+    return 1
+  }
+
+  return Math.min(5, Math.floor(maxDepth))
+}
+
+export async function extractDirectoryStructure(rawRootDir: string, options: DirectoryOptions = {}): Promise<string> {
   const { maxDepth, includeHidden = false, includeSizes = false } = options
 
-  const resolvedRootDir = path.resolve(rootDir)
+  const resolvedRootDir = resolveRequestedDirectory(rawRootDir)
+  const maxDepthLimit = limitDepth(maxDepth)
 
   // Check if directory exists
   try {
     const rootStat = await stat(resolvedRootDir)
     if (!rootStat.isDirectory()) {
-      throw new Error(`'${rootDir}' is not a directory`)
+      throw new Error(`'${rawRootDir}' is not a directory`)
     }
   } catch (error) {
-    throw new Error(`Directory '${rootDir}' does not exist or is not accessible`)
+    throw new Error(`Directory '${rawRootDir}' does not exist or is not accessible`)
   }
 
   // Load ignore patterns
@@ -154,7 +226,7 @@ export async function extractDirectoryStructure(rootDir: string, options: Direct
   const result: string[] = []
 
   async function walkDirectory(currentPath: string, indent = '', depth = 0): Promise<void> {
-    if (maxDepth !== undefined && depth > 1) {
+    if (maxDepthLimit !== undefined && depth >= maxDepthLimit) {
       return
     }
 

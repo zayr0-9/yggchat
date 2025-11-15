@@ -1043,8 +1043,16 @@ export async function generateResponse(
         // Add assistant message with tool calls to conversation
         conversationMessages.push({
           role: 'assistant',
-          content: assistantContent || 'I need to use some tools to help you.',
-        })
+          content: assistantContent || null,
+          tool_calls: uniqueToolCalls.map(tc => ({
+            id: tc.id,
+            type: 'function' as const,
+            function: {
+              name: tc.name,
+              arguments: tc.arguments,
+            },
+          })),
+        } as any)
 
         // Execute tools and add their results
         for (const toolCall of uniqueToolCalls) {
@@ -1067,9 +1075,10 @@ export async function generateResponse(
           )
 
           conversationMessages.push({
-            role: 'user', // Tool results are treated as user messages in simple format
-            content: `Tool ${toolCall.name} result: ${result}`,
-          })
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: result,
+          } as any)
         }
 
         // Continue to next step to process tool results

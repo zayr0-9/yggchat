@@ -476,7 +476,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
         {showFileList && filteredFiles.length > 0 && (
           <div
             ref={listRef}
-            className='absolute z-50 mb-1 acrylic-light lg:w-80 2xl:w-full max-h-60 overflow-y-auto border border-gray-600 rounded-lg shadow-lg thin-scrollbar'
+            className='absolute z-50 mb-1 acrylic-light w-full max-h-60 overflow-y-auto border border-gray-600 rounded-lg shadow-lg thin-scrollbar'
             style={{
               bottom: '100%',
               left: 0,
