@@ -9,7 +9,8 @@ import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
 import { chatSliceActions } from '../features/chats'
 import { deleteProject, projectsLoaded, setSelectedProject } from '../features/projects'
-import { useAppDispatch } from '../hooks/redux'
+import { selectCurrentUser } from '../features/users'
+import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { useProjects, useResearchNotes } from '../hooks/useQueries'
@@ -23,6 +24,8 @@ const Homepage: React.FC = () => {
   const queryClient = useQueryClient()
   const { userId } = useAuth()
   const isMobile = useIsMobile()
+  const currentUser = useAppSelector(selectCurrentUser)
+  const quickChatProjectId = currentUser?.quick_chat_project_id || null
 
   // Use React Query for data fetching (with automatic caching and deduplication)
   // Projects now include latest_conversation_updated_at, eliminating need to fetch all conversations
@@ -356,23 +359,25 @@ const Homepage: React.FC = () => {
                             aria-hidden='true'
                           ></i>
                         </Button>
-                        <Button
-                          variant='acrylic'
-                          size='circle'
-                          rounded='full'
-                          className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
-                          onClick={
-                            (e => {
-                              ;(e as unknown as React.MouseEvent).stopPropagation()
-                              handleDeleteProject(project.id)
-                            }) as unknown as () => void
-                          }
-                        >
-                          <i
-                            className='bx bx-trash-alt text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none'
-                            aria-hidden='true'
-                          ></i>
-                        </Button>
+                        {project.id !== quickChatProjectId && (
+                          <Button
+                            variant='acrylic'
+                            size='circle'
+                            rounded='full'
+                            className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
+                            onClick={
+                              (e => {
+                                ;(e as unknown as React.MouseEvent).stopPropagation()
+                                handleDeleteProject(project.id)
+                              }) as unknown as () => void
+                            }
+                          >
+                            <i
+                              className='bx bx-trash-alt text-lg transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                              aria-hidden='true'
+                            ></i>
+                          </Button>
+                        )}
                       </div>
                     </div>
                     {project.created_at && (

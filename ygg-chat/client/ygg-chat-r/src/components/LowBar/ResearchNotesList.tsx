@@ -223,7 +223,7 @@ export const ResearchNotesList: React.FC<ResearchNotesListProps> = ({
               return (
                 <div
                   key={note.id}
-                  className='p-3 bg-transparent acrylic-medium dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 shadow-sm transition-all duration-200 ease-in-out'
+                  className='p-3 bg-neutral-100 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700 transition-all duration-200 ease-in-out'
                 >
                   {/* Clickable header area - navigates to chat */}
                   <div onClick={() => handleNoteClick(note)} className='cursor-pointer transition-opacity duration-150'>

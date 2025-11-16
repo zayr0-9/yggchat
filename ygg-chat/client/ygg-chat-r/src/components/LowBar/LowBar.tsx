@@ -189,7 +189,7 @@ export const LowBar: React.FC<LowBarProps> = ({
       }`}
     >
       {/* Container with shadow and border */}
-      <div className='h-full flex flex-col dark:bg-transparent border border-transparent dark:border-neutral-900 rounded-3xl overflow-hidden shadow-[0px_0px_3px_1px_rgba(0,0,0,0.09)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700'>
+      <div className='h-full flex flex-col acrylic-light dark:bg-transparent border border-transparent dark:border-neutral-900 rounded-3xl overflow-hidden shadow-[0px_0px_3px_1px_rgba(0,0,0,0.09)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700'>
         {/* Header bar (always visible) */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}

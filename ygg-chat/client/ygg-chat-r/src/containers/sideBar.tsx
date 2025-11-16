@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ConversationId, Project } from '../../../../shared/types'
 import { Button } from '../components'
-import SearchList from '../components/SearchList/SearchList'
 import { chatSliceActions } from '../features/chats'
 import { activeConversationIdSet } from '../features/conversations'
 import { searchActions, selectSearchLoading, selectSearchQuery, selectSearchResults } from '../features/search'
@@ -125,18 +124,15 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           size='circle'
           rounded='full'
           onClick={toggleCollapse}
-          className={`${isCollapsed ? 'mx-auto' : ''} transition-transform duration-200`}
+          className={`${isCollapsed ? 'mx-auto' : ' mr-2'} transition-transform duration-200 hover:scale-103`}
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <i
-            className={`bx ${isCollapsed ? 'bx-chevron-right' : 'bx-chevron-left'} text-2xl transition-transform duration-200 active:scale-90`}
-            aria-hidden='true'
-          ></i>
+          <i className={`bx ${isCollapsed ? 'bx-chevron-right' : 'bx-chevron-left'} text-2xl `} aria-hidden='true'></i>
         </Button>
       </div>
 
       {/* Search Section */}
-      {!isCollapsed && (
+      {/* {!isCollapsed && (
         <div className='px-2 relative z-50'>
           <SearchList
             value={searchQuery}
@@ -149,10 +145,10 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
             dropdownVariant='neutral'
           />
         </div>
-      )}
+      )} */}
 
       {/* Conversations List */}
-      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-8 2xl:pt-10 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0'>
+      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-2 2xl:pt-2 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0'>
         {loading && (
           <div
             className={`text-xs text-gray-500 dark:text-gray-300 px-2 py-1 ${isCollapsed ? 'text-center' : ''}`}

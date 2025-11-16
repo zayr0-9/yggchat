@@ -2158,7 +2158,7 @@ function Chat() {
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   <div
-                    className='ide-status text-neutral-900 max-w-1/3 sm:max-w-1/4 dark:text-neutral-200 break-words line-clamp-2 text-right'
+                    className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-28 max-w-1/3 dark:text-neutral-200 break-words line-clamp-2 text-right'
                     title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                   >
                     {ideContext?.extensionConnected ? '' : ''}
@@ -2200,7 +2200,7 @@ function Chat() {
                     placeholder='Select a model...'
                     blur='high'
                     disabled={filteredModels.length === 0}
-                    className='flex-1 max-w-48 sm:max-w-40 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99 rounded-4xl'
+                    className='flex-1 max-w-42 sm:max-w-48 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99 rounded-4xl'
                     searchBarVisible={true}
                     modelData={Object.fromEntries(filteredModels.map(m => [m.name, m]))}
                     onFavoritesChange={refreshFavorites}
@@ -2214,7 +2214,7 @@ function Chat() {
                       />
                     }
                   />
-                  <Button
+                  {/* <Button
                     variant='outline2'
                     className='rounded-full'
                     size='medium'
@@ -2228,7 +2228,7 @@ function Chat() {
                       aria-hidden='true'
                       onAnimationEnd={() => setSpinRefresh(false)}
                     ></i>
-                  </Button>
+                  </Button> */}
                   {selectedModel?.thinking && (
                     <Button variant='outline2' className='rounded-full' size='medium' onClick={() => setThink(t => !t)}>
                       {think ? (

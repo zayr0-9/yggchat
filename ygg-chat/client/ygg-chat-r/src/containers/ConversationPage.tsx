@@ -303,7 +303,9 @@ const ConversationPage: React.FC = () => {
                 onClick={handleEditProject}
                 className='group dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_1px_rgba(0,0,0,0.45)]'
               >
-                <p className='transition-transform duration-100 group-active:scale-95'>Project Settings</p>
+                <p className='transition-transform duration-100 text-black dark:text-neutral-100 group-active:scale-95'>
+                  Project Settings
+                </p>
               </Button>
             </div>
           </div>
@@ -317,7 +319,9 @@ const ConversationPage: React.FC = () => {
                 onClick={handleNewConversation}
                 className='group dark:outline-2 rounded-4xl dark:hover:bg-neutral-800 transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-300/20'
               >
-                <p className='transition-transform duration-100 group-active:scale-95'>New Chat</p>
+                <p className='transition-transform duration-100 text-black dark:text-neutral-100 group-active:scale-95'>
+                  New Chat
+                </p>
               </Button>
             </div>
 
