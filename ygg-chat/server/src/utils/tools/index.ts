@@ -7,11 +7,11 @@ import { createTextFile } from './core/createFile'
 import { deleteFile, safeDeleteFile } from './core/deleteFile'
 import { editFile } from './core/editFile'
 import { extractDirectoryStructure } from './core/getDirectoryTree'
-import { readTextFile, readFileContinuation } from './core/readFile'
+import { globSearch } from './core/glob'
+import { readFileContinuation, readTextFile } from './core/readFile'
 import { readMultipleTextFiles } from './core/readFiles'
-import searchHistory from './core/searchHistory'
 import { ripgrepSearch } from './core/ripgrep'
-import { globSearch } from './core/glob'  
+import searchHistory from './core/searchHistory'
 // export const directoryTool = tool({
 //   description:
 //     'Get the directory structure of a specified path. Useful for understanding project organization, finding files, or exploring codebases.',
@@ -80,7 +80,7 @@ const tools: tools[] = [
   },
   {
     name: 'read_file',
-    enabled: true,
+    enabled: false,
     tool: {
       description:
         'Read the contents of a text file (code, config, docs). Supports reading full files, single ranges, or multiple disjoint ranges. Rejects likely-binary files and truncates large files for safety.',
@@ -98,13 +98,17 @@ const tools: tools[] = [
           .int()
           .min(1)
           .optional()
-          .describe('Optional 1-based line number to start reading from (inclusive). Use for single range reads. Ignored if ranges is provided.'),
+          .describe(
+            'Optional 1-based line number to start reading from (inclusive). Use for single range reads. Ignored if ranges is provided.'
+          ),
         endLine: z
           .number()
           .int()
           .min(1)
           .optional()
-          .describe('Optional 1-based line number to stop reading at (inclusive). Use with startLine for single range. Ignored if ranges is provided.'),
+          .describe(
+            'Optional 1-based line number to stop reading at (inclusive). Use with startLine for single range. Ignored if ranges is provided.'
+          ),
         ranges: z
           .array(
             z.object({
@@ -156,7 +160,7 @@ const tools: tools[] = [
   },
   {
     name: 'read_files',
-    enabled: true,
+    enabled: false,
     tool: {
       description:
         "Read multiple text/code/config files and return a single concatenated string, separated by each file's relative path header.",
@@ -217,7 +221,7 @@ const tools: tools[] = [
   },
   {
     name: 'read_file_continuation',
-    enabled: true,
+    enabled: false,
     tool: {
       description:
         'Read the next chunk of a file after a specific line number. Designed for pagination to avoid duplicate reads. Use this when you previously read a file up to line N and want to continue reading from line N+1.',
@@ -228,11 +232,7 @@ const tools: tools[] = [
           .int()
           .min(0)
           .describe('1-based line number to start reading after (exclusive). Use 0 to read from the beginning.'),
-        numLines: z
-          .number()
-          .int()
-          .min(1)
-          .describe('Number of lines to read after the specified line'),
+        numLines: z.number().int().min(1).describe('Number of lines to read after the specified line'),
         maxBytes: z
           .number()
           .int()
@@ -288,14 +288,8 @@ const tools: tools[] = [
           .boolean()
           .optional()
           .describe('If true, create parent directories as needed (default true).'),
-        overwrite: z
-          .boolean()
-          .optional()
-          .describe('If true, overwrite existing file (default false).'),
-        executable: z
-          .boolean()
-          .optional()
-          .describe('If true, make the file executable on POSIX systems.'),
+        overwrite: z.boolean().optional().describe('If true, overwrite existing file (default false).'),
+        executable: z.boolean().optional().describe('If true, make the file executable on POSIX systems.'),
       }),
       execute: async ({ path, content, directory, createParentDirs, overwrite, executable }: any) => {
         try {
@@ -359,10 +353,7 @@ const tools: tools[] = [
         searchPattern: z.string().optional().describe('The text pattern to find (required for replace operations)'),
         replacement: z.string().optional().describe('The replacement text (required for replace operations)'),
         content: z.string().optional().describe('Content to append (required for append operation)'),
-        createBackup: z
-          .boolean()
-          .optional()
-          .describe('Whether to create a backup before editing (default false)'),
+        createBackup: z.boolean().optional().describe('Whether to create a backup before editing (default false)'),
         encoding: z.string().optional().describe('File encoding (default utf8)'),
       }),
       execute: async ({ path, operation, searchPattern, replacement, content, createBackup, encoding }: any) => {
@@ -383,29 +374,10 @@ const tools: tools[] = [
       description: 'Search chat history across user, project, or conversation using the DB FTS utilities.',
       inputSchema: z.object({
         query: z.string().describe('The search query to run'),
-        userId: z
-          .number()
-          .int()
-          .optional()
-          .nullable()
-          .describe('Optional user id to scope search'),
-        projectId: z
-          .number()
-          .int()
-          .optional()
-          .nullable()
-          .describe('Optional project id to scope search'),
-        conversationId: z
-          .number()
-          .int()
-          .optional()
-          .nullable()
-          .describe('Optional conversation id to scope search'),
-        limit: z
-          .number()
-          .int()
-          .optional()
-          .describe('Optional result limit (default 10)'),
+        userId: z.number().int().optional().nullable().describe('Optional user id to scope search'),
+        projectId: z.number().int().optional().nullable().describe('Optional project id to scope search'),
+        conversationId: z.number().int().optional().nullable().describe('Optional conversation id to scope search'),
+        limit: z.number().int().optional().describe('Optional result limit (default 10)'),
       }),
       execute: async ({ query, userId, projectId, conversationId, limit }: any) => {
         try {
@@ -428,19 +400,8 @@ const tools: tools[] = [
         'Search the web using Brave Search API. Returns web search results with titles, URLs, and descriptions.',
       inputSchema: z.object({
         query: z.string().describe('The search query to execute'),
-        count: z
-          .number()
-          .int()
-          .min(1)
-          .max(20)
-          .optional()
-          .describe('Number of results to return (default 10, max 20)'),
-        offset: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .describe('Number of results to skip (default 0)'),
+        count: z.number().int().min(1).max(20).optional().describe('Number of results to return (default 10, max 20)'),
+        offset: z.number().int().min(0).optional().describe('Number of results to skip (default 0)'),
         safesearch: z.enum(['strict', 'moderate', 'off']).optional().describe('Safe search setting (default moderate)'),
         country: z.string().optional().describe('Country code for localized results (e.g., "US", "GB")'),
         search_lang: z
@@ -449,14 +410,8 @@ const tools: tools[] = [
           .describe(
             'Language for search results using Brave-supported codes (e.g., "en", "es", "pt-br", "zh-hant"). Must be one of Brave Search API\'s allowed values: ar, eu, bn, bg, ca, zh-hans, zh-hant, hr, cs, da, nl, en, en-gb, et, fi, fr, gl, de, el, gu, he, hi, hu, is, it, jp, kn, ko, lv, lt, ms, ml, mr, nb, pl, pt-br, pt-pt, pa, ro, ru, sr, sk, sl, es, sv, ta, te, th, tr, uk, or vi.'
           ),
-        extra_snippets: z
-          .boolean()
-          .optional()
-          .describe('Include extra snippets in results'),
-        summary: z
-          .boolean()
-          .optional()
-          .describe('Include AI-generated summary'),
+        extra_snippets: z.boolean().optional().describe('Include extra snippets in results'),
+        summary: z.boolean().optional().describe('Include AI-generated summary'),
       }),
       execute: async ({ query, count, offset, safesearch, country, search_lang, extra_snippets, summary }: any) => {
         try {
@@ -482,16 +437,22 @@ const tools: tools[] = [
   },
   {
     name: 'ripgrep',
-    enabled: true,
+    enabled: false,
     tool: {
       description:
         'Search code, files, and directories using ripgrep (rg), a powerful line-oriented search tool. Supports regex patterns, file filtering, and various output formats. IMPORTANT: Results have multiple limits to prevent overwhelming output: (1) max 500 match results, (2) max 50,000 total characters across all matches, (3) individual lines truncated at 500 characters. If any limit is exceeded, you will receive an error asking you to narrow your search using more specific patterns, glob filters, reduced search paths, or maxCount parameter.',
       inputSchema: z.object({
         pattern: z.string().describe('Search pattern (regex or literal string)'),
-        searchPath: z.string().optional().describe('Directory or file path to search (defaults to current directory ".")'),
+        searchPath: z
+          .string()
+          .optional()
+          .describe('Directory or file path to search (defaults to current directory ".")'),
         caseSensitive: z.boolean().optional().describe('Case-sensitive search (default false for case-insensitive)'),
         lineNumbers: z.boolean().optional().describe('Include line numbers in results (default true)'),
-        count: z.boolean().optional().describe('Count matches per file instead of showing line content (default false)'),
+        count: z
+          .boolean()
+          .optional()
+          .describe('Count matches per file instead of showing line content (default false)'),
         filesWithMatches: z.boolean().optional().describe('List only filenames with matches (default false)'),
         maxCount: z.number().int().min(1).optional().describe('Maximum matches per file'),
         glob: z.string().optional().describe('File pattern glob (e.g., "*.ts", "src/**/*.js")'),
@@ -550,7 +511,7 @@ const tools: tools[] = [
   },
   {
     name: 'glob',
-    enabled: true,
+    enabled: false,
     tool: {
       description: 'Search for files using glob patterns with flexible matching and filtering options',
       inputSchema: z.object({
@@ -568,7 +529,21 @@ const tools: tools[] = [
         stat: z.boolean().optional().describe('Call stat() on all results (default: false)'),
         withFileTypes: z.boolean().optional().describe('Return file type objects instead of paths (default: false)'),
       }),
-      execute: async ({ pattern, cwd, ignore, dot, absolute, mark, nosort, nocase, nodir, follow, realpath, stat, withFileTypes }: any) => {
+      execute: async ({
+        pattern,
+        cwd,
+        ignore,
+        dot,
+        absolute,
+        mark,
+        nosort,
+        nocase,
+        nodir,
+        follow,
+        realpath,
+        stat,
+        withFileTypes,
+      }: any) => {
         try {
           const result = await globSearch(pattern, {
             cwd,
@@ -583,51 +558,36 @@ const tools: tools[] = [
             realpath,
             stat,
             withFileTypes,
-          });
-          return result;
+          })
+          return result
         } catch (error) {
           return {
             success: false,
             matches: [],
             error: error instanceof Error ? error.message : 'Unknown error during glob search',
             pattern,
-          };
+          }
         }
       },
     },
   },
   {
     name: 'browse_web',
-    enabled: true,
+    enabled: false,
     tool: {
       description:
         'Browse a web page and extract its content, including text, headings, links, images, and metadata. Uses Playwright to handle JavaScript-rendered content. Supports both headless and non-headless modes for bot detection avoidance. Use headless mode as default unless specified by user.',
       inputSchema: z.object({
         url: z.string().url().describe('The URL to browse and extract content from'),
         waitForSelector: z.string().optional().describe('Optional CSS selector to wait for before extracting content'),
-        timeout: z
-          .number()
-          .int()
-          .min(5000)
-          .max(60000)
-          .optional()
-          .describe('Timeout in milliseconds (default 30000)'),
+        timeout: z.number().int().min(5000).max(60000).optional().describe('Timeout in milliseconds (default 30000)'),
         waitForNetworkIdle: z
           .boolean()
           .optional()
           .describe('Wait for network to be idle before extracting (default true)'),
-        extractImages: z
-          .boolean()
-          .optional()
-          .describe('Extract image information (default true)'),
-        extractLinks: z
-          .boolean()
-          .optional()
-          .describe('Extract link information (default true)'),
-        extractMetadata: z
-          .boolean()
-          .optional()
-          .describe('Extract page metadata (default true)'),
+        extractImages: z.boolean().optional().describe('Extract image information (default true)'),
+        extractLinks: z.boolean().optional().describe('Extract link information (default true)'),
+        extractMetadata: z.boolean().optional().describe('Extract page metadata (default true)'),
         headless: z
           .boolean()
           .optional()
@@ -658,10 +618,7 @@ const tools: tools[] = [
           .max(10000)
           .optional()
           .describe('Delay between retries in milliseconds (default 1000)'),
-        useBrave: z
-          .boolean()
-          .optional()
-          .describe('Use Brave browser instead of Chromium (default false)'),
+        useBrave: z.boolean().optional().describe('Use Brave browser instead of Chromium (default false)'),
         executablePath: z.string().optional().describe('Custom path to browser executable (overrides useBrave)'),
       }),
       execute: async ({
