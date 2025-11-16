@@ -3,6 +3,7 @@ import { Session, User } from '@supabase/supabase-js'
 import { setUser, clearUser } from '../features/users/usersSlice'
 import { store } from '../store/store'
 import { updateThunkExtraAuth } from '../store/thunkExtra'
+import { API_BASE } from '../utils/api'
 import { getAuthProvider, type AuthProvider as IAuthProvider } from '../lib/auth'
 
 export interface AuthContextType {
@@ -69,7 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     try {
       console.log('[AuthContext] Fetching user profile for:', userId)
-      const response = await fetch(`/api/users/${userId}`, {
+      const response = await fetch(`${API_BASE}/users/${userId}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
