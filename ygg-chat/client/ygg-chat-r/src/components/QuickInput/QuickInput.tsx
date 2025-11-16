@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { chatSliceActions, Model, sendMessage } from '../../features/chats'
 import { Conversation, createConversation } from '../../features/conversations'
 import { convContextSet, systemPromptSet } from '../../features/conversations/conversationSlice'
-import { useAppDispatch } from '../../hooks/redux'
+import { fetchProjectById } from '../../features/projects'
+import { selectCurrentUser } from '../../features/users'
+import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { useModels, useSelectModel } from '../../hooks/useQueries'
 import { Button } from '../Button/button'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
@@ -14,6 +16,8 @@ export const QuickInput: React.FC = () => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const currentUser = useAppSelector(selectCurrentUser)
+  const quickChatProjectId = currentUser?.quick_chat_project_id || null
 
   // Local state
   const [quickChatInput, setQuickChatInput] = useState('')
@@ -60,17 +64,22 @@ export const QuickInput: React.FC = () => {
     if (!trimmedInput || !selectedModel) return
 
     try {
-      // 1. Create conversation with null project_id
+      // 1. Fetch and set quick chat project in Redux (if we have one)
+      if (quickChatProjectId) {
+        await dispatch(fetchProjectById(quickChatProjectId)).unwrap()
+      }
+
+      // 2. Create conversation with quick chat project
       const result = await dispatch(
         createConversation({
           title: trimmedInput.slice(0, 50), // First 50 chars as title
-          projectId: null, // NULL for quick chats
+          projectId: quickChatProjectId, // Use user's default quick chat project
           systemPrompt: null,
           conversationContext: null,
         })
       ).unwrap()
 
-      // 2. Update React Query caches
+      // 3. Update React Query caches
       queryClient.setQueryData(['conversations'], (old: Conversation[] | undefined) => {
         return old ? [result, ...old] : [result]
       })
@@ -79,19 +88,19 @@ export const QuickInput: React.FC = () => {
         return old ? [result, ...old] : [result]
       })
 
-      // 3. Navigate to new conversation
-      navigate(`/chat/null/${result.id}`)
+      // 4. Navigate to new conversation
+      navigate(`/chat/${quickChatProjectId || 'null'}/${result.id}`)
 
-      // 4. Set conversation in Redux (model selection is already persisted via mutation)
+      // 5. Set conversation in Redux (model selection is already persisted via mutation)
       dispatch(chatSliceActions.conversationSet(result.id))
-      // 5. Clear conversation-level system prompt and context for quick chats
+      // 6. Clear conversation-level system prompt and context for quick chats
       dispatch(systemPromptSet(null))
       dispatch(convContextSet(null))
 
-      // 5. Clear input
+      // 7. Clear input
       setQuickChatInput('')
 
-      // 6. Send message after short delay (wait for navigation)
+      // 8. Send message after short delay (wait for navigation)
       setTimeout(() => {
         dispatch(
           sendMessage({
@@ -107,7 +116,7 @@ export const QuickInput: React.FC = () => {
     } catch (error) {
       console.error('Failed to create quick chat:', error)
     }
-  }, [quickChatInput, selectedModel, think, dispatch, queryClient, navigate])
+  }, [quickChatInput, selectedModel, think, dispatch, queryClient, navigate, quickChatProjectId])
 
   // Handle Enter key press
   const handleKeyDown = useCallback(

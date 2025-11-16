@@ -1,12 +1,13 @@
 // features/users/usersTypes.ts
 
 export interface User {
-  id: number
+  id: string
   username: string
   created_at: string
-  favourite_conversations?: number[]
+  favourite_conversations?: string[]
   credit_limit?: number
   credit_left?: number
+  quick_chat_project_id?: string
 }
 
 export interface UserSettings {

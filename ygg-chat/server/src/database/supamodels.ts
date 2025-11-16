@@ -59,6 +59,7 @@ export interface Profile {
   reset_period: 'none' | 'daily' | 'monthly' | 'yearly'
   stripe_customer_id?: string | null
   active_subscription_id?: string | null
+  quick_chat_project_id?: string | null
 }
 
 export interface User extends Profile {}

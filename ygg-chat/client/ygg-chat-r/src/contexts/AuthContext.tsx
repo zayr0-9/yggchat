@@ -1,5 +1,7 @@
 import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { Session, User } from '@supabase/supabase-js'
+import { setUser, clearUser } from '../features/users/usersSlice'
+import { store } from '../store/store'
 import { updateThunkExtraAuth } from '../store/thunkExtra'
 import { getAuthProvider, type AuthProvider as IAuthProvider } from '../lib/auth'
 
@@ -57,6 +59,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     })
   }, [])
 
+  // Fetch user profile from API and sync to Redux
+  const syncUserProfile = useCallback(async (userId: string | null, accessToken: string | null) => {
+    if (!userId || !accessToken) {
+      console.log('[AuthContext] Clearing user profile from Redux')
+      store.dispatch(clearUser())
+      return
+    }
+
+    try {
+      console.log('[AuthContext] Fetching user profile for:', userId)
+      const response = await fetch(`/api/users/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (!response.ok) {
+        console.error('[AuthContext] Failed to fetch user profile:', response.statusText)
+        return
+      }
+
+      const profile = await response.json()
+      console.log('[AuthContext] User profile fetched:', profile.username)
+
+      // Dispatch to Redux
+      store.dispatch(setUser(profile))
+    } catch (error) {
+      console.error('[AuthContext] Error fetching user profile:', error)
+    }
+  }, [])
+
   // Initialize auth provider on mount
   useEffect(() => {
     let mounted = true
@@ -86,6 +120,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           userId: session.userId,
         })
 
+        // Sync user profile to Redux
+        await syncUserProfile(session.userId, session.accessToken)
+
         // Subscribe to auth state changes
         unsubscribe = authProvider.onAuthStateChange(async (user) => {
           if (!mounted) return
@@ -99,6 +136,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             accessToken: session.accessToken,
             userId: user?.id ?? null,
           })
+
+          // Sync user profile to Redux
+          await syncUserProfile(user?.id ?? null, session.accessToken)
         })
 
         // Set up periodic token refresh if provider requires network auth
@@ -168,7 +208,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         clearInterval(refreshInterval)
       }
     }
-  }, [updateAuthState])
+  }, [updateAuthState, syncUserProfile])
 
   // Sign in using the provider
   const signIn = useCallback(async (credentials: { email: string; password: string }) => {
@@ -189,11 +229,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         accessToken: authState.accessToken,
         userId: authState.userId,
       })
+
+      // Sync user profile to Redux
+      await syncUserProfile(authState.userId, authState.accessToken)
     } catch (error) {
       console.error('[AuthContext] Sign in failed:', error)
       throw error
     }
-  }, [provider, updateAuthState])
+  }, [provider, updateAuthState, syncUserProfile])
 
   // Sign out using the provider
   const signOut = useCallback(async () => {
@@ -214,11 +257,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         accessToken: null,
         userId: null,
       })
+
+      // Clear user profile from Redux
+      await syncUserProfile(null, null)
     } catch (error) {
       console.error('[AuthContext] Sign out failed:', error)
       throw error
     }
-  }, [provider, updateAuthState])
+  }, [provider, updateAuthState, syncUserProfile])
 
   // Reload session from storage (for Electron OAuth flow)
   const reloadSession = useCallback(async () => {
@@ -245,6 +291,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           userId: session.userId,
         })
 
+        // Sync user profile to Redux
+        await syncUserProfile(session.userId, session.accessToken)
+
         console.log('[AuthContext] Session reloaded successfully')
       } catch (error) {
         console.error('[AuthContext] Failed to reload session:', error)
@@ -252,7 +301,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } else {
       console.log('[AuthContext] Provider does not support session reload')
     }
-  }, [provider, updateAuthState])
+  }, [provider, updateAuthState, syncUserProfile])
 
   // Memoize context value to prevent re-render cascades
   // Only updates when authState or signIn/signOut actually changes
