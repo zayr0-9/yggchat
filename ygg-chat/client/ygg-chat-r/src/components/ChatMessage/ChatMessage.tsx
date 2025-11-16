@@ -520,6 +520,25 @@ const formatToolResultContent = (content: any) => {
   }
 }
 
+const formatToolResultSummary = (content: any): string | null => {
+  try {
+    const data = typeof content === 'string' ? JSON.parse(content) : content
+    if (!data || typeof data !== 'object' || !('success' in data)) return null
+    return `${data.success}`
+  } catch {
+    return null
+  }
+}
+
+const getFirstArgPair = (args: any): string | null => {
+  if (!args || typeof args !== 'object') return null
+  const firstKey = Object.keys(args)[0]
+  if (!firstKey) return null
+  const val = args[firstKey]
+  const displayVal = typeof val === 'string' ? val.slice(0, 60) + (val.length > 60 ? '...' : '') : String(val)
+  return `${firstKey}: ${displayVal}`
+}
+
 const ChatMessage: React.FC<ChatMessageProps> = React.memo(
   ({
     id,
@@ -1040,11 +1059,21 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const toggleKey = `tool-group-${key}`
       const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
       const pathParam = extractPathParam(group.args)
-      const summary =
+      const argPair = getFirstArgPair(group.args)
+      const resultSummary =
         group.results.length > 0
-          ? truncateChars(formatToolResultContent(group.results[0].content))
-          : pathParam || 'View details'
-
+          ? formatToolResultSummary(group.results[0].content) ||
+            truncateChars(formatToolResultContent(group.results[0].content))
+          : null
+      const summary = resultSummary
+        ? argPair
+          ? `${resultSummary} | ${argPair} `
+          : resultSummary
+        : pathParam || (
+            <span className='inline-flex items-center gap-1 text-blue-500 dark:text-blue-300'>
+              <i className='bx bx-dots-horizontal-rounded text-2xl animate-pulse'></i>
+            </span>
+          )
       return (
         <div
           key={toggleKey}

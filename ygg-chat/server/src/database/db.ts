@@ -62,13 +62,16 @@ export function initializeDatabase() {
       conversation_id TEXT NOT NULL,
       parent_id TEXT,
       children_ids TEXT DEFAULT '[]',
-      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'ex_agent')),
       content TEXT NOT NULL,
       plain_text_content TEXT,
       thinking_block TEXT,
       tool_calls TEXT,
       model_name TEXT DEFAULT 'unknown',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ex_agent_session_id TEXT,
+      ex_agent_type TEXT,
+      content_blocks TEXT,
       FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
       FOREIGN KEY (parent_id) REFERENCES messages(id) ON DELETE CASCADE
     )
@@ -389,6 +392,27 @@ export function initializeDatabase() {
     // Column already exists, ignore the error
   }
 
+  // Add migration for ex_agent_session_id on messages if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN ex_agent_session_id TEXT`)
+  } catch (error) {
+    // Column already exists, ignore the error
+  }
+
+  // Add migration for ex_agent_type on messages if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN ex_agent_type TEXT`)
+  } catch (error) {
+    // Column already exists, ignore the error
+  }
+
+  // Add migration for content_blocks on messages if it doesn't exist
+  try {
+    db.exec(`ALTER TABLE messages ADD COLUMN content_blocks TEXT`)
+  } catch (error) {
+    // Column already exists, ignore the error
+  }
+
   // Add migration for user_id on projects if it doesn't exist
   try {
     db.exec(`ALTER TABLE projects ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE`)
@@ -570,7 +594,7 @@ export function initializeStatements() {
 
     // Messages - Core operations
     createMessage: db.prepare(
-      'INSERT INTO messages (id, conversation_id, parent_id, role, content, thinking_block, tool_calls, children_ids, model_name, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO messages (id, conversation_id, parent_id, role, content, thinking_block, tool_calls, children_ids, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ),
     getMessageById: db.prepare(`
       SELECT 
@@ -611,7 +635,7 @@ export function initializeStatements() {
     getLastMessage: db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1'),
     deleteMessagesByConversation: db.prepare('DELETE FROM messages WHERE conversation_id = ?'),
     updateMessage: db.prepare(
-      'UPDATE messages SET content = ?, thinking_block = ?, tool_calls = ?, note = ? WHERE id = ?'
+      'UPDATE messages SET content = ?, thinking_block = ?, tool_calls = ?, note = ?, content_blocks = ? WHERE id = ?'
     ),
     deleteMessage: db.prepare('DELETE FROM messages WHERE id = ?'),
     // Batch delete messages by an array of IDs (pass JSON array string as the parameter)

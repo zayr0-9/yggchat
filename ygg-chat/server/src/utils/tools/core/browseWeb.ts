@@ -1,4 +1,11 @@
 import { Browser, BrowserContext, chromium, Page } from 'playwright'
+import path from 'path'
+
+// Set Playwright browsers path relative to project root (not hardcoded)
+// This ensures browsers persist across WSL reboots and work with dist builds
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(__dirname, '..', '..', '..', '..', '.playwright-browsers')
+}
 
 // Browser session management
 class BrowserSession {
