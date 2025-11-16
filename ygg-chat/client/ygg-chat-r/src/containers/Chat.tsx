@@ -61,7 +61,6 @@ import {
   useConversationsByProject,
   useFilteredModels,
   useModels,
-  useRefreshModels,
   useSelectedModel,
   useSelectModel,
 } from '../hooks/useQueries'
@@ -327,7 +326,7 @@ function Chat() {
   // React Query hooks for model management
   const { data: modelsData } = useModels(providers.currentProvider)
   // const { data: recentModelsData } = useRecentModels(5)
-  const refreshModelsMutation = useRefreshModels()
+  // const refreshModelsMutation = useRefreshModels()
   const selectModelMutation = useSelectModel()
   const selectedModel = useSelectedModel(providers.currentProvider)
 
@@ -527,7 +526,7 @@ function Chat() {
   const isMobile = useIsMobile()
   // One-time spin flags for icon buttons
   const [spinSettings, setSpinSettings] = useState(false)
-  const [spinRefresh, setSpinRefresh] = useState(false)
+  // const [spinRefresh, setSpinRefresh] = useState(false)
   // Session-level delete confirmation preference and modal state
   const [confirmDel, setconfirmDel] = useState<boolean>(true)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
@@ -1768,11 +1767,11 @@ function Chat() {
   }, [currentConversationId, accessToken, navigate, queryClient])
 
   // Refresh models using React Query mutation
-  const handleRefreshModels = useCallback(() => {
-    if (providers.currentProvider) {
-      refreshModelsMutation.mutate(providers.currentProvider)
-    }
-  }, [providers.currentProvider, refreshModelsMutation])
+  // const handleRefreshModels = useCallback(() => {
+  //   if (providers.currentProvider) {
+  //     refreshModelsMutation.mutate(providers.currentProvider)
+  //   }
+  // }, [providers.currentProvider, refreshModelsMutation])
 
   // Memoized message list to prevent re-rendering all messages when unrelated state changes
   const memoizedMessageList = useMemo(() => {

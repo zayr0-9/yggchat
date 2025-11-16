@@ -242,7 +242,11 @@ export interface Conversation {
   updated_at: string
 }
 
-export interface Message extends BaseMessage {}
+export interface Message extends BaseMessage {
+  ex_agent_session_id?: string | null
+  ex_agent_type?: string | null
+  content_blocks?: string | null
+}
 
 // Search result interfaces
 export interface SearchResult extends Message {
@@ -497,7 +501,10 @@ export class ConversationService {
         msg.thinking_block || '',
         msg.model_name,
         msg.tool_calls || undefined,
-        msg.note || undefined
+        msg.note || undefined,
+        msg.ex_agent_session_id || null,
+        msg.ex_agent_type || null,
+        msg.content_blocks || null
       )
 
       const newMsgId = newMsg.id
@@ -529,7 +536,10 @@ export class MessageService {
     thinking_block: string,
     modelName?: string,
     tool_calls?: string,
-    note?: string
+    note?: string,
+    ex_agent_session_id?: string | null,
+    ex_agent_type?: string | null,
+    content_blocks?: string | null
     // children: []
   ): Message {
     const id = generateId()
@@ -542,8 +552,11 @@ export class MessageService {
       thinking_block,
       tool_calls || null,
       '[]',
-      modelName,
-      note || null
+      modelName || 'unknown',
+      note || null,
+      ex_agent_session_id || null,
+      ex_agent_type || null,
+      content_blocks || null
     )
     // Fire-and-forget: compute and persist plain text content, triggers will update FTS
     try {
@@ -646,9 +659,10 @@ export class MessageService {
     content: string,
     thinking_block: string | null = null,
     tool_calls: string | null = null,
-    note: string | null = null
+    note: string | null = null,
+    content_blocks: string | null = null
   ): Message | undefined {
-    statements.updateMessage.run(content, thinking_block, tool_calls, note, id)
+    statements.updateMessage.run(content, thinking_block, tool_calls, note, content_blocks, id)
     // Fire-and-forget: update plain text content
     try {
       stripMarkdownToText(content)

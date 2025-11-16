@@ -4,8 +4,8 @@ import { ConversationId, Project } from '../../../../shared/types'
 import { Button } from '../components'
 import { chatSliceActions } from '../features/chats'
 import { activeConversationIdSet } from '../features/conversations'
-import { searchActions, selectSearchLoading, selectSearchQuery, selectSearchResults } from '../features/search'
-import { useAppDispatch, useAppSelector } from '../hooks/redux'
+// import { searchActions, selectSearchLoading, selectSearchQuery, selectSearchResults } from '../features/search'
+import { useAppDispatch } from '../hooks/redux'
 import { useRecentConversations } from '../hooks/useQueries'
 
 interface SideBarProps {
@@ -24,9 +24,9 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
   const error = queryError ? String(queryError) : null
 
   // Search functionality
-  const searchLoading = useAppSelector(selectSearchLoading)
-  const searchResults = useAppSelector(selectSearchResults)
-  const searchQuery = useAppSelector(selectSearchQuery)
+  // const searchLoading = useAppSelector(selectSearchLoading)
+  // const searchResults = useAppSelector(selectSearchResults)
+  // const searchQuery = useAppSelector(selectSearchQuery)
 
   // Drawer collapse state with localStorage persistence and mobile-first default
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
@@ -91,21 +91,21 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
     setIsCollapsed(prev => !prev)
   }
 
-  const handleSearchChange = (value: string) => {
-    dispatch(searchActions.queryChanged(value))
-  }
+  // const handleSearchChange = (value: string) => {
+  //   dispatch(searchActions.queryChanged(value))
+  // }
 
-  const handleSearchSubmit = () => {
-    if (searchQuery.trim()) {
-      dispatch(searchActions.performSearch(searchQuery))
-    }
-  }
+  // const handleSearchSubmit = () => {
+  //   if (searchQuery.trim()) {
+  //     dispatch(searchActions.performSearch(searchQuery))
+  //   }
+  // }
 
-  const handleResultClick = (conversationId: string, messageId: string) => {
-    const conversation = conversations.find(c => c.id === conversationId)
-    dispatch(chatSliceActions.conversationSet(conversationId))
-    navigate(`/chat/${conversation?.project_id || 'unknown'}/${conversationId}#${messageId}`)
-  }
+  // const handleResultClick = (conversationId: string, messageId: string) => {
+  //   const conversation = conversations.find(c => c.id === conversationId)
+  //   dispatch(chatSliceActions.conversationSet(conversationId))
+  //   navigate(`/chat/${conversation?.project_id || 'unknown'}/${conversationId}#${messageId}`)
+  // }
 
   return (
     <aside
