@@ -11,8 +11,7 @@
     "build": "tsc",
     "start": "node dist/server/src/index.js",
     "type-check": "tsc --noEmit",
-    "test:supabase": "ts-node src/database/testSupabase.ts",
-    "postinstall": "npx playwright install chromium --with-deps"
+    "test:supabase": "ts-node src/database/testSupabase.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.4",

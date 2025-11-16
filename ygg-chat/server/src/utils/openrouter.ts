@@ -787,46 +787,46 @@ export async function generateResponse(
     try {
       const openrouterClient = await getOpenRouterClient()
 
-      // Log messages being sent to API
-      console.log('📤 [openrouter] Messages sent to API:')
-      console.log('📤 [openrouter] Total messages:', formattedMessages.length)
-      for (let i = 0; i < formattedMessages.length; i++) {
-        const msg = formattedMessages[i]
-        if (msg.role === 'tool') {
-          console.log(
-            `  [${i}] role=tool, tool_call_id=${msg.tool_call_id}, content_length=${msg.content?.length || 0}`
-          )
-        } else if (msg.tool_calls) {
-          console.log(
-            `  [${i}] role=${msg.role}, has_tool_calls=true, tool_count=${msg.tool_calls.length}, content=${msg.content ? 'present' : 'null'}`
-          )
-          for (const tc of msg.tool_calls) {
-            console.log(`    tool_call: id=${tc.id}, type=${tc.type}, function.name=${tc.function?.name}`)
-          }
-        } else if (typeof msg.content === 'string') {
-          console.log(`  [${i}] role=${msg.role}, content_type=string, length=${msg.content.length}`)
-        } else if (Array.isArray(msg.content)) {
-          console.log(`  [${i}] role=${msg.role}, content_type=array, blocks=${msg.content.length}`)
-          for (let j = 0; j < msg.content.length; j++) {
-            const block = msg.content[j]
-            if (block.type === 'text') {
-              console.log(`    [${j}] type=text, length=${block.text?.length || 0}`)
-            } else if (block.type === 'thinking') {
-              console.log(`    [${j}] type=thinking, length=${block.thinking?.length || 0}`)
-            } else if (block.type === 'tool_use') {
-              console.log(`    [${j}] type=tool_use, id=${block.id}, name=${block.name}`)
-            } else if (block.type === 'tool_result') {
-              console.log(`    [${j}] type=tool_result, tool_use_id=${block.tool_use_id}, is_error=${block.is_error}`)
-            }
-          }
-        } else {
-          console.log(`  [${i}] role=${msg.role}, content_type=${typeof msg.content}`)
-        }
-      }
-      console.log(
-        '📤 [openrouter] Full message payload:',
-        JSON.stringify(formattedMessages, null, 2).substring(0, 5000)
-      )
+      // // Log messages being sent to API
+      // console.log('📤 [openrouter] Messages sent to API:')
+      // console.log('📤 [openrouter] Total messages:', formattedMessages.length)
+      // for (let i = 0; i < formattedMessages.length; i++) {
+      //   const msg = formattedMessages[i]
+      //   if (msg.role === 'tool') {
+      //     // console.log(
+      //     //   `  [${i}] role=tool, tool_call_id=${msg.tool_call_id}, content_length=${msg.content?.length || 0}`
+      //     // )
+      //   } else if (msg.tool_calls) {
+      //     console.log(
+      //       `  [${i}] role=${msg.role}, has_tool_calls=true, tool_count=${msg.tool_calls.length}, content=${msg.content ? 'present' : 'null'}`
+      //     )
+      //     for (const tc of msg.tool_calls) {
+      //       console.log(`    tool_call: id=${tc.id}, type=${tc.type}, function.name=${tc.function?.name}`)
+      //     }
+      //   } else if (typeof msg.content === 'string') {
+      //     console.log(`  [${i}] role=${msg.role}, content_type=string, length=${msg.content.length}`)
+      //   } else if (Array.isArray(msg.content)) {
+      //     console.log(`  [${i}] role=${msg.role}, content_type=array, blocks=${msg.content.length}`)
+      //     for (let j = 0; j < msg.content.length; j++) {
+      //       const block = msg.content[j]
+      //       if (block.type === 'text') {
+      //         console.log(`    [${j}] type=text, length=${block.text?.length || 0}`)
+      //       } else if (block.type === 'thinking') {
+      //         console.log(`    [${j}] type=thinking, length=${block.thinking?.length || 0}`)
+      //       } else if (block.type === 'tool_use') {
+      //         console.log(`    [${j}] type=tool_use, id=${block.id}, name=${block.name}`)
+      //       } else if (block.type === 'tool_result') {
+      //         console.log(`    [${j}] type=tool_result, tool_use_id=${block.tool_use_id}, is_error=${block.is_error}`)
+      //       }
+      //     }
+      //   } else {
+      //     console.log(`  [${i}] role=${msg.role}, content_type=${typeof msg.content}`)
+      //   }
+      // }
+      // console.log(
+      //   '📤 [openrouter] Full message payload:',
+      //   JSON.stringify(formattedMessages, null, 2).substring(0, 5000)
+      // )
 
       const stream: any = await openrouterClient.chat.completions.create(
         {

@@ -112,7 +112,7 @@ export async function generateResponse(
         // IMPORTANT: Flush any pending tool results FIRST before adding new tool call
         // This ensures proper interleaving: assistant(calls) → tool(results) → assistant(calls) → ...
         if (pendingToolResults.length > 0) {
-          console.log(`🔄 [provider] Flushing ${pendingToolResults.length} pending tool results before new tool_use`)
+          // console.log(`🔄 [provider] Flushing ${pendingToolResults.length} pending tool results before new tool_use`)
           for (const toolResult of pendingToolResults) {
             result.push(toolResult)
           }
@@ -120,7 +120,7 @@ export async function generateResponse(
         }
 
         // Convert to OpenAI tool_call format
-        console.log(`🔧 [provider] Found tool_use: id=${block.id}, name=${block.name}`)
+        // console.log(`🔧 [provider] Found tool_use: id=${block.id}, name=${block.name}`)
         const toolCall = {
           id: block.id,
           type: 'function' as const,
@@ -150,7 +150,7 @@ export async function generateResponse(
           tool_call_id: block.tool_use_id,
           content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content || ''),
         }
-        console.log(`✅ [provider] Created tool result message: tool_call_id=${toolResultMsg.tool_call_id}`)
+        // console.log(`✅ [provider] Created tool result message: tool_call_id=${toolResultMsg.tool_call_id}`)
         pendingToolResults.push(toolResultMsg)
       }
     }
@@ -178,23 +178,23 @@ export async function generateResponse(
       })
     }
 
-    console.log(`📦 [provider] Conversion result: ${result.length} messages`)
-    result.forEach((msg, idx) => {
-      if (msg.role === 'tool') {
-        console.log(`  [${idx}] role=tool, tool_call_id=${msg.tool_call_id}`)
-      } else if (msg.tool_calls) {
-        console.log(`  [${idx}] role=assistant, tool_calls=${msg.tool_calls.length}`)
-      } else {
-        console.log(`  [${idx}] role=${msg.role}, content_length=${msg.content?.length || 0}`)
-      }
-    })
+    // console.log(`📦 [provider] Conversion result: ${result.length} messages`)
+    // result.forEach((msg, idx) => {
+    //   if (msg.role === 'tool') {
+    //     console.log(`  [${idx}] role=tool, tool_call_id=${msg.tool_call_id}`)
+    //   } else if (msg.tool_calls) {
+    //     console.log(`  [${idx}] role=assistant, tool_calls=${msg.tool_calls.length}`)
+    //   } else {
+    //     console.log(`  [${idx}] role=${msg.role}, content_length=${msg.content?.length || 0}`)
+    //   }
+    // })
 
     return result
   }
 
   // Convert messages to OpenAI format, properly handling tool_calls and tool results
   const convertMessagesToOpenAIFormat = (msgs: Message[]): any[] => {
-    console.log(`📤 [provider] Converting ${msgs.length} messages to OpenAI format`)
+    // console.log(`📤 [provider] Converting ${msgs.length} messages to OpenAI format`)
     const result: any[] = []
 
     for (let msgIdx = 0; msgIdx < msgs.length; msgIdx++) {
@@ -205,17 +205,17 @@ export async function generateResponse(
       const msgArtifacts = (msg as any).artifacts
       const hasArtifacts = Array.isArray(msgArtifacts) && msgArtifacts.length > 0
 
-      console.log(
-        `📤 [provider] Message ${msgIdx}: role=${msg.role}, has_content_blocks=${!!(msg.content_blocks && msg.content_blocks.length > 0)}, has_artifacts=${hasArtifacts}, content_length=${msg.content?.length || 0}`
-      )
+      // console.log(
+      //   `📤 [provider] Message ${msgIdx}: role=${msg.role}, has_content_blocks=${!!(msg.content_blocks && msg.content_blocks.length > 0)}, has_artifacts=${hasArtifacts}, content_length=${msg.content?.length || 0}`
+      // )
 
       // Check if message has content_blocks with tool information
       if (msg.content_blocks && Array.isArray(msg.content_blocks) && msg.content_blocks.length > 0) {
-        console.log(`📤 [provider] Message ${msgIdx} has ${msg.content_blocks.length} content_blocks`)
+        // console.log(`📤 [provider] Message ${msgIdx} has ${msg.content_blocks.length} content_blocks`)
         if (role === 'assistant') {
           // Convert content_blocks to proper OpenAI message sequence
           const convertedMessages = convertContentBlocksToOpenAIMessages(msg.content_blocks)
-          console.log(`📤 [provider] Message ${msgIdx} expanded to ${convertedMessages.length} OpenAI messages`)
+          // console.log(`📤 [provider] Message ${msgIdx} expanded to ${convertedMessages.length} OpenAI messages`)
           result.push(...convertedMessages)
         } else {
           // For user messages, just extract text content
@@ -232,7 +232,7 @@ export async function generateResponse(
                   contentParts.push({ type: 'image_url', image_url: { url: artifact } })
                 }
               }
-              console.log(`📤 [provider] Message ${msgIdx} (user with artifacts): ${contentParts.length} parts`)
+              // console.log(`📤 [provider] Message ${msgIdx} (user with artifacts): ${contentParts.length} parts`)
               result.push({ role: 'user', content: contentParts })
             } else {
               result.push({
@@ -282,7 +282,7 @@ export async function generateResponse(
               contentParts.push({ type: 'image_url', image_url: { url: artifact } })
             }
           }
-          console.log(`📤 [provider] Message ${msgIdx} (user with artifacts): ${contentParts.length} parts`)
+          // console.log(`📤 [provider] Message ${msgIdx} (user with artifacts): ${contentParts.length} parts`)
           result.push({ role: 'user', content: contentParts })
         } else {
           result.push({
@@ -293,13 +293,13 @@ export async function generateResponse(
       }
     }
 
-    console.log(`📤 [provider] Final OpenAI format: ${result.length} messages total`)
-    console.log(
-      `📤 [provider] Message roles:`,
-      result.map(m => m.role)
-    )
-    console.log(`📤 [provider] Tool messages count:`, result.filter(m => m.role === 'tool').length)
-    console.log(`📤 [provider] Assistant messages with tool_calls:`, result.filter(m => m.tool_calls).length)
+    // console.log(`📤 [provider] Final OpenAI format: ${result.length} messages total`)
+    // console.log(
+    //   `📤 [provider] Message roles:`,
+    //   result.map(m => m.role)
+    // )
+    // console.log(`📤 [provider] Tool messages count:`, result.filter(m => m.role === 'tool').length)
+    // console.log(`📤 [provider] Assistant messages with tool_calls:`, result.filter(m => m.tool_calls).length)
 
     return result
   }
