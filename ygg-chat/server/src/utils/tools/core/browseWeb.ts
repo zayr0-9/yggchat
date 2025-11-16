@@ -6,7 +6,7 @@ import { Browser, BrowserContext, chromium, Page } from 'playwright'
 // if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
 //   process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(__dirname, '..', '..', '..', '..', '.playwright-browsers')
 // }
-
+//test
 // Browser session management
 class BrowserSession {
   private static instance: BrowserSession
