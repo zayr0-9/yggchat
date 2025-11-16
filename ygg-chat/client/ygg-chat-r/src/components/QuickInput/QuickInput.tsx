@@ -3,6 +3,7 @@ import React, { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { chatSliceActions, Model, sendMessage } from '../../features/chats'
 import { Conversation, createConversation } from '../../features/conversations'
+import { convContextSet, systemPromptSet } from '../../features/conversations/conversationSlice'
 import { useAppDispatch } from '../../hooks/redux'
 import { useModels, useSelectModel } from '../../hooks/useQueries'
 import { Button } from '../Button/button'
@@ -83,6 +84,9 @@ export const QuickInput: React.FC = () => {
 
       // 4. Set conversation in Redux (model selection is already persisted via mutation)
       dispatch(chatSliceActions.conversationSet(result.id))
+      // 5. Clear conversation-level system prompt and context for quick chats
+      dispatch(systemPromptSet(null))
+      dispatch(convContextSet(null))
 
       // 5. Clear input
       setQuickChatInput('')

@@ -476,7 +476,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
         {showFileList && filteredFiles.length > 0 && (
           <div
             ref={listRef}
-            className='absolute acrylic-ultra-light z-50 mb-1 w-full max-h-60 overflow-y-auto rounded-3xl thin-scrollbar'
+            className='absolute acrylic-input-chat-light z-50 mb-1 w-full max-h-60 overflow-y-auto rounded-b-lg rounded-3xl thin-scrollbar'
             style={{
               bottom: '100%',
               left: 0,
@@ -485,7 +485,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
             {filteredFiles.map((file, index) => (
               <div
                 key={file.path}
-                className={`px-3 py-2 cursor-pointer text-[10px] rounded-lg sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] border-gray-400 last:border-b-0 ${
+                className={`px-3 py-2 cursor-pointer text-[10px] rounded-lg sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] last:border-b-0 ${
                   index === selectedFileIndex
                     ? 'text-stone-800 dark:bg-neutral-700 bg-neutral-200 transform transition-all duration-100 mx-1 dark:text-stone-200'
                     : 'text-stone-800 dark:text-stone-200'
@@ -493,9 +493,11 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
                 onClick={() => handleFileSelection(file)}
                 onMouseEnter={() => setSelectedFileIndex(index)}
               >
-                <div className='pl-2 font-medium truncate'>{file.name}</div>
-                <div className='pl-2 text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate'>
-                  {file.path}
+                <div className='flex justify-between'>
+                  <div className='pl-2 font-medium truncate'>{file.name}</div>
+                  <div className='pl-2 text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate'>
+                    {file.path}
+                  </div>
                 </div>
               </div>
             ))}
@@ -517,7 +519,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
           onPaste={handlePaste}
           disabled={state === 'disabled'}
           // maxLength={maxLength}
-          className={`${stateStyles[state]}  thin-scrollbar resize-none ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${className}`}
+          className={`${stateStyles[state]} mt-2 thin-scrollbar resize-none ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${className}`}
           aria-invalid={state === 'error'}
           aria-describedby={state === 'error' && errorMessage ? errorId : undefined}
           autoFocus={autoFocus}

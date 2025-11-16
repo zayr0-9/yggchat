@@ -204,7 +204,7 @@ const Homepage: React.FC = () => {
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between'>
-            <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[22px] 4xl:text-[22px] py-2 font-bold dark:text-neutral-100'>
+            <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[38px] 4xl:text-[38px] py-2 font-bold dark:text-neutral-100'>
               Projects
             </h2>
             <div className='flex items-center gap-3 my-1 mr-1 rounded-4xl '>
@@ -255,7 +255,7 @@ const Homepage: React.FC = () => {
           </div>
 
           {/* New Project Button + Sort Controls + Search */}
-          <div className='mb-0 z-5000 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-300/12 outline-neutral-50/10 acrylic-ultra-light rounded-4xl shadow-[0px_12px_7px_2.5px_rgba(255,255,255,0.95)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
+          <div className='mb-0 z-5000 flex p-2 flex-wrap justify-between items-center gap-3 outline-2 dark:outline-neutral-300/12 outline-neutral-50/10 acrylic-ultra-light rounded-4xl shadow-[0px_2px_7px_2.5px_rgba(0,0,0,0.10)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)] 2xl:p-3'>
             <div className='flex items-center gap-1'>
               <Button
                 variant='acrylic'

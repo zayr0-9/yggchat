@@ -75,7 +75,10 @@ export const createConversation = createAsyncThunk<
   { state: RootState; extra: ThunkExtraArgument }
 >(
   'conversations/create',
-  async ({ title, projectId: providedProjectId, systemPrompt, conversationContext }, { getState, extra, rejectWithValue }) => {
+  async (
+    { title, projectId: providedProjectId, systemPrompt, conversationContext },
+    { getState, extra, rejectWithValue }
+  ) => {
     try {
       const { auth } = extra
 
@@ -85,7 +88,7 @@ export const createConversation = createAsyncThunk<
 
       // Use provided projectId if available, otherwise fall back to selected project from state
       const selectedProject = getState().projects.selectedProject
-      const projectId = providedProjectId !== undefined ? providedProjectId : (selectedProject?.id || null)
+      const projectId = providedProjectId !== undefined ? providedProjectId : selectedProject?.id || null
 
       return await api.post<Conversation>('/conversations', auth.accessToken, {
         userId: auth.userId,

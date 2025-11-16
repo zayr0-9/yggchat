@@ -211,6 +211,52 @@ export const TextArea: React.FC<TextAreaProps> = ({
       .catch(err => console.error('Failed to read dropped images', err))
   }
 
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (state === 'disabled') return
+
+    const items = Array.from(e.clipboardData?.items || [])
+    const imageItems = items.filter(item => item.type.startsWith('image/'))
+
+    if (imageItems.length === 0) return
+
+    e.preventDefault()
+
+    Promise.all(
+      imageItems.map(async (item, index) => {
+        const file = item.getAsFile()
+        if (!file) return null
+
+        return {
+          dataUrl: await fileToDataUrl(file),
+          name: `pasted-image-${Date.now()}-${index}.${file.type.split('/')[1]}`,
+          type: file.type,
+          size: file.size,
+        }
+      })
+    )
+      .then(results => {
+        const drafts = results.filter(Boolean) as Array<{
+          dataUrl: string
+          name: string
+          type: string
+          size: number
+        }>
+
+        if (drafts.length > 0) {
+          dispatch(chatSliceActions.imageDraftsAppended(drafts))
+          if (focusedMessageId != null) {
+            dispatch(
+              chatSliceActions.messageArtifactsAppended({
+                messageId: focusedMessageId,
+                artifacts: drafts.map(d => d.dataUrl),
+              })
+            )
+          }
+        }
+      })
+      .catch(err => console.error('Failed to read pasted images', err))
+  }
+
   const handleFileSelection = async (file: { path: string; name: string; mention: string }) => {
     try {
       await requestFileContent(file.path)
@@ -380,6 +426,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
+          onPaste={handlePaste}
           disabled={state === 'disabled'}
           className={`${stateStyles[state]} thin-scrollbar ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${fillAvailableHeight ? 'flex-1' : ''} ${className}`}
           aria-invalid={state === 'error'}
@@ -403,34 +450,38 @@ export const TextArea: React.FC<TextAreaProps> = ({
         )}
 
         {/* Floating file list */}
-        {showFileList && filteredFiles.length > 0 && (
-          <div
-            ref={listRef}
-            className='absolute z-50 mb-1 w-80 max-h-60 overflow-y-auto dark:bg-secondary-600 bg-slate-50 border border-gray-600 rounded-lg shadow-lg'
-            style={{
-              bottom: dropdownDirection === 'up' ? '100%' : undefined,
-              top: dropdownDirection === 'down' ? '100%' : undefined,
-              left: 0,
-              maxHeight: dropdownMaxHeight ? `${dropdownMaxHeight}px` : undefined,
-            }}
-          >
-            {filteredFiles.map((file, index) => (
-              <div
-                key={file.path}
-                className={`px-3 py-2 cursor-pointer text-sm border-b border-gray-700 last:border-b-0 ${
-                  index === selectedFileIndex
-                    ? 'bg-slate-200 dark:bg-secondary-800 text-stone-800 dark:text-stone-200'
-                    : 'text-stone-800 dark:text-stone-200'
-                }`}
-                onClick={() => handleFileSelection(file)}
-                onMouseEnter={() => setSelectedFileIndex(index)}
-              >
-                <div className='font-medium truncate'>{file.name}</div>
-                <div className='text-xs text-stone-400 truncate'>{file.path}</div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div className='relative'>
+          {showFileList && filteredFiles.length > 0 && (
+            <div
+              ref={listRef}
+              className='absolute z-50 mb-1 w-full max-h-60 overflow-y-auto thin-scrollbar dark:bg-neutral-900 bg-neutral-50 rounded-lg shadow-lg'
+              style={{
+                bottom: dropdownDirection === 'up' ? '100%' : undefined,
+                top: dropdownDirection === 'down' ? '100%' : undefined,
+                left: 0,
+                maxHeight: dropdownMaxHeight ? `${dropdownMaxHeight}px` : undefined,
+              }}
+            >
+              {filteredFiles.map((file, index) => (
+                <div
+                  key={file.path}
+                  className={`px-3 py-2 cursor-pointer text-sm rounded-lg last:border-b-0 ${
+                    index === selectedFileIndex
+                      ? 'text-stone-800 dark:bg-neutral-700 bg-neutral-200 transform transition-all duration-100 mx-1 dark:text-stone-200'
+                      : 'text-stone-800 dark:text-stone-200'
+                  }`}
+                  onClick={() => handleFileSelection(file)}
+                  onMouseEnter={() => setSelectedFileIndex(index)}
+                >
+                  <div className='flex justify-between'>
+                    <div className='font-medium truncate'>{file.name}</div>
+                    <div className='text-xs text-stone-400 truncate'>{file.path}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Image draft previews */}

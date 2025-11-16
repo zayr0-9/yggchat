@@ -64,13 +64,17 @@ function accumulateContentBlocks(events: any[]): any[] {
       accumulated.push({ type: 'thinking', content: accumulatedReasoning })
       i = j
     } else if (event.type === 'tool_call' && event.toolCall && event.complete) {
-      // Tool calls are already complete, add as-is
-      accumulated.push({
-        type: 'tool_use',
-        id: event.toolCall.id,
-        name: event.toolCall.name,
-        input: event.toolCall.arguments || {},
-      })
+      // Tool calls are already complete, add as-is (only if valid)
+      if (event.toolCall.id && event.toolCall.name) {
+        accumulated.push({
+          type: 'tool_use',
+          id: event.toolCall.id,
+          name: event.toolCall.name,
+          input: event.toolCall.arguments || {},
+        })
+      } else {
+        console.warn('⚠️ [supaChat] Skipping invalid tool_call event:', event.toolCall)
+      }
       i++
     } else if (event.type === 'tool_result' && event.toolResult) {
       // Tool result events - add as tool_result block
@@ -1220,9 +1224,11 @@ router.post(
                     currentToolCalls.push(...jsonObjects)
                     assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                    // Log each tool call as complete event
+                    // Log each tool call as complete event (only if valid)
                     for (const tc of jsonObjects) {
-                      contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                      if (tc.id && tc.name) {
+                        contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                      }
                     }
 
                     res.write(
@@ -1255,9 +1261,11 @@ router.post(
                   currentToolCalls.push(...jsonObjects)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                  // Log each tool call as complete event
+                  // Log each tool call as complete event (only if valid)
                   for (const tc of jsonObjects) {
-                    contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                    if (tc.id && tc.name) {
+                      contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                    }
                   }
 
                   res.write(
@@ -1628,9 +1636,11 @@ router.post(
                     currentToolCalls.push(...jsonObjects)
                     assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                    // Log each tool call as complete event
+                    // Log each tool call as complete event (only if valid)
                     for (const tc of jsonObjects) {
-                      contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                      if (tc.id && tc.name) {
+                        contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                      }
                     }
 
                     res.write(
@@ -1661,9 +1671,11 @@ router.post(
                   currentToolCalls.push(...jsonObjects)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                  // Log each tool call as complete event
+                  // Log each tool call as complete event (only if valid)
                   for (const tc of jsonObjects) {
-                    contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                    if (tc.id && tc.name) {
+                      contentBlocksEvents.push({ type: 'tool_call', toolCall: tc, complete: true })
+                    }
                   }
 
                   res.write(

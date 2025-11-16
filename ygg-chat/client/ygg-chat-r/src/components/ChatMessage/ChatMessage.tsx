@@ -3,7 +3,7 @@ import type { RootState } from '@/store/store'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useDispatch, useSelector } from 'react-redux'
 import rehypeHighlight from 'rehype-highlight'
@@ -210,7 +210,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
 }
 
 // Configuration for collapsed content display
-const COLLAPSED_CONTENT_CHAR_LIMIT = 80
+const COLLAPSED_CONTENT_CHAR_LIMIT = 130
 const COLLAPSED_CONTENT_WORD_LIMIT = 15
 
 // Helper function to convert contentBlocks to editable text
@@ -418,6 +418,108 @@ const editableTextToContentBlocks = (text: string): ContentBlock[] => {
   return blocks
 }
 
+interface ToolCallRenderGroup {
+  id: string
+  name?: string
+  args?: Record<string, any> | null
+  results: Array<{ content: any; is_error?: boolean }>
+  anchorIndex: number
+}
+
+const buildToolCallGroupsFromStream = (events?: StreamEvent[]) => {
+  if (!events || events.length === 0) return new Map<number, ToolCallRenderGroup>()
+
+  const groupsById = new Map<string, ToolCallRenderGroup>()
+  const mapByIndex = new Map<number, ToolCallRenderGroup>()
+
+  events.forEach((event, idx) => {
+    if (event.type === 'tool_call' && event.toolCall) {
+      const id = event.toolCall.id
+      if (!groupsById.has(id)) {
+        groupsById.set(id, {
+          id,
+          name: event.toolCall.name,
+          args: event.toolCall.arguments,
+          results: [],
+          anchorIndex: idx,
+        })
+      }
+      // Map ALL tool_call events with same ID to their group (prevents duplicates during streaming)
+      mapByIndex.set(idx, groupsById.get(id)!)
+    } else if (event.type === 'tool_result' && event.toolResult) {
+      const target = groupsById.get(event.toolResult.tool_use_id)
+      if (target) {
+        target.results.push({ content: event.toolResult.content, is_error: event.toolResult.is_error })
+        if (!mapByIndex.has(idx)) {
+          mapByIndex.set(idx, target)
+        }
+      } else {
+        const fallback: ToolCallRenderGroup = {
+          id: event.toolResult.tool_use_id,
+          name: 'Tool result',
+          args: null,
+          results: [{ content: event.toolResult.content, is_error: event.toolResult.is_error }],
+          anchorIndex: idx,
+        }
+        mapByIndex.set(idx, fallback)
+      }
+    }
+  })
+
+  return mapByIndex
+}
+
+const buildToolCallGroupsFromBlocks = (blocks?: ContentBlock[]) => {
+  if (!blocks || blocks.length === 0) return new Map<number, ToolCallRenderGroup>()
+
+  const groupsById = new Map<string, ToolCallRenderGroup>()
+  const mapByIndex = new Map<number, ToolCallRenderGroup>()
+
+  blocks.forEach((block, idx) => {
+    if (block.type === 'tool_use') {
+      const id = block.id || `tool-${idx}`
+      if (!groupsById.has(id)) {
+        const group: ToolCallRenderGroup = {
+          id,
+          name: block.name,
+          args: block.input,
+          results: [],
+          anchorIndex: idx,
+        }
+        groupsById.set(id, group)
+        mapByIndex.set(idx, group)
+      }
+    } else if (block.type === 'tool_result') {
+      const id = block.tool_use_id || `tool-result-${idx}`
+      const target = groupsById.get(id)
+      if (target) {
+        target.results.push({ content: block.content, is_error: block.is_error })
+      } else {
+        const fallback: ToolCallRenderGroup = {
+          id,
+          name: 'Tool Result',
+          args: null,
+          results: [{ content: block.content, is_error: block.is_error }],
+          anchorIndex: idx,
+        }
+        mapByIndex.set(idx, fallback)
+      }
+    }
+  })
+
+  return mapByIndex
+}
+
+const formatToolResultContent = (content: any) => {
+  if (typeof content === 'string') return content
+  if (content == null) return ''
+  try {
+    return JSON.stringify(content, null, 2)
+  } catch {
+    return String(content)
+  }
+}
+
 const ChatMessage: React.FC<ChatMessageProps> = React.memo(
   ({
     id,
@@ -471,6 +573,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
     const [selectedText, setSelectedText] = useState<string>('')
     // Explain input states
+    const streamToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromStream(streamEvents), [streamEvents])
+    const contentToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromBlocks(contentBlocks), [contentBlocks])
     const [showExplainInput, setShowExplainInput] = useState(false)
     const [explainInputValue, setExplainInputValue] = useState('')
     const explainInputPosition = useRef<{ x: number; y: number } | null>(null)
@@ -932,6 +1036,87 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return content.slice(0, maxChars) + '...'
     }
 
+    const renderToolCallGroupCard = (group: ToolCallRenderGroup, key: string) => {
+      const toggleKey = `tool-group-${key}`
+      const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
+      const pathParam = extractPathParam(group.args)
+      const summary =
+        group.results.length > 0
+          ? truncateChars(formatToolResultContent(group.results[0].content))
+          : pathParam || 'View details'
+
+      return (
+        <div
+          key={toggleKey}
+          className='tool-call-card relative p-2 mb-4 mx-3 rounded-xl border border-neutral-200/70 bg-blue-50/40 dark:border-neutral-900/40 dark:bg-neutral-900/70 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'
+        >
+          <div className='flex items-start justify-between gap-4'>
+            <div className='flex items-start gap-3'>
+              <p className='text-base font-semibold text-blue-900 dark:text-blue-100'>{group.name || 'Tool Result'}</p>
+              {!isExpanded && (
+                <div className='text-xs pt-1 text-blue-700 dark:text-blue-200 line-clamp-3'>{summary}</div>
+              )}
+            </div>
+
+            <Button
+              variant='outline2'
+              size='small'
+              onClick={() => toggleBlock('toolCalls', toggleKey)}
+              title={isExpanded ? 'Hide details' : 'Show details'}
+            >
+              {isExpanded ? (
+                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                </svg>
+              ) : (
+                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                </svg>
+              )}
+            </Button>
+          </div>
+
+          {isExpanded && (
+            <div className='mt-3 space-y-3 text-xs text-slate-700 dark:text-slate-200'>
+              {group.args && Object.keys(group.args).length > 0 && (
+                <div className='rounded-xl border border-neutral-200/60 dark:border-neutral-900/40 bg-white dark:bg-yBlack-900/70 p-3 space-y-1'>
+                  <p className='text-[11px] uppercase font-semibold text-blue-500 dark:text-blue-300'>Inputs</p>
+                  {Object.entries(group.args).map(([key, value]) => (
+                    <div key={key} className='flex gap-2'>
+                      <span className='font-medium text-gray-600 dark:text-gray-300'>{key}:</span>
+                      <span className='text-gray-800 dark:text-gray-100 break-all'>
+                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {group.results.length > 0 && (
+                <div className='space-y-2'>
+                  {group.results.map((result, resultIdx) => (
+                    <div
+                      key={`${group.id}-result-${resultIdx}`}
+                      className={`rounded-xl border p-3 whitespace-pre-wrap leading-relaxed ${
+                        result.is_error
+                          ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
+                          : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
+                      }`}
+                    >
+                      <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
+                        <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
+                      </div>
+                      {formatToolResultContent(result.content)}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )
+    }
+
     return (
       <div
         id={`message-${id}`}
@@ -955,6 +1140,16 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         {!editingState && Array.isArray(streamEvents) && streamEvents.length > 0 ? (
           <div className='space-y-3 mb-3'>
             {streamEvents.map((event, idx) => {
+              const groupedTool = streamToolGroupsByIndex.get(idx)
+              if (groupedTool) {
+                // Only render the group card at the anchor index (first occurrence)
+                // Skip duplicate tool_call events with the same ID
+                if (groupedTool.anchorIndex === idx) {
+                  return renderToolCallGroupCard(groupedTool, `stream-${groupedTool.id}-${idx}`)
+                }
+                return null // Skip duplicate tool events
+              }
+
               if (event.type === 'text') {
                 // Accumulate consecutive text events into one block
                 let accumulatedText = event.delta || ''
@@ -999,7 +1194,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   return (
                     <div
                       key={`reasoning-${idx}`}
-                      className='relative rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                      className='relative rounded-xl p-2 bg-neutral-50 mx-3 sm:px-2 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
                     >
                       <div className='flex items-center justify-between'>
                         <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
@@ -1048,7 +1243,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 return (
                   <div
                     key={`tool-${toolCall.id}-${idx}`}
-                    className='relative mb-3 mx-3 rounded-xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                    className='relative mb-3 mx-3 rounded-xl border border-neutral-200 bg-neutral-50 p-2 sm:p-3 dark:border-neutral-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
                   >
                     <div className='flex items-center justify-between mb-2'>
                       <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
@@ -1171,6 +1366,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           // Uses same formatting as streaming events
           <div className='space-y-3 mb-3'>
             {contentBlocks.map((block, idx) => {
+              const groupedTool = contentToolGroupsByIndex.get(idx)
+              if (groupedTool) {
+                return renderToolCallGroupCard(groupedTool, `block-${groupedTool.id}-${idx}`)
+              }
+
               if (block.type === 'text') {
                 return (
                   <div
@@ -1191,7 +1391,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 return (
                   <div
                     key={`thinking-${block.index}-${idx}`}
-                    className='relative mb-5 mx-3 rounded-xl p-2 border border-neutral-100 bg-neutral-50 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                    className='relative mb-5 mx-3 rounded-xl p-2 border border-neutral-100 bg-neutral-50 sm:px-2 dark:border-1 dark:border-transparent dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
                   >
                     <div className='flex items-center justify-between mb-2'>
                       <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
@@ -1231,115 +1431,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     )}
                   </div>
                 )
-              } else if (block.type === 'tool_use') {
-                const toolUseBlock = block as any
-                const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolUseBlock.id}-${idx}`)
-                const pathParam = extractPathParam(toolUseBlock.input)
-                return (
-                  <div
-                    key={`tool-${toolUseBlock.id}-${idx}`}
-                    className='relative mb-5 mx-3 rounded-xl border border-blue-200 bg-neutral-50 p-2 sm:p-2 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
-                  >
-                    <div className='flex items-center justify-between mb-2'>
-                      <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolUseBlock.name}</div>
-                      <Button
-                        variant='outline2'
-                        size='small'
-                        onClick={() => toggleBlock('toolCalls', `tool-call-${toolUseBlock.id}-${idx}`)}
-                        title={isExpanded ? 'Hide details' : 'Show details'}
-                      >
-                        {isExpanded ? (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                          </svg>
-                        ) : (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                          </svg>
-                        )}
-                      </Button>
-                    </div>
-                    {isExpanded ? (
-                      <>
-                        {toolUseBlock.input && Object.keys(toolUseBlock.input).length > 0 && (
-                          <div className='text-xs space-y-1 2xl:p-2'>
-                            {Object.entries(toolUseBlock.input).map(([key, value]) => (
-                              <div key={key} className='flex gap-2'>
-                                <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                                <span className='text-gray-800 dark:text-gray-200 break-all'>
-                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className='text-xs text-blue-600 dark:text-blue-300'>
-                        {pathParam ? (
-                          <>
-                            <span className='font-medium'>path:</span> {pathParam}
-                          </>
-                        ) : (
-                          <span className='text-gray-600 dark:text-gray-400'>View details</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )
-              } else if (block.type === 'tool_result') {
-                const toolResultBlock = block as any
-                const isError = toolResultBlock.is_error
-                const isExpanded = expandedBlocks.toolResults.has(`tool-result-${toolResultBlock.tool_use_id}-${idx}`)
-                return (
-                  <div
-                    key={`tool-result-${toolResultBlock.tool_use_id}-${idx}`}
-                    className={`relative mb-5 mx-3 rounded-xl border p-2 sm:p-2 my-2 text-xs shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
-                      isError
-                        ? 'border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-neutral-900'
-                        : 'border-green-500/30 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-900'
-                    }`}
-                  >
-                    <div className='flex items-center justify-between mb-2'>
-                      <div
-                        className={`font-semibold text-[16px] ${
-                          isError ? 'text-red-700 dark:text-red-300' : 'text-green-800 dark:text-green-800'
-                        }`}
-                      >
-                        {isError ? 'Tool Error' : 'Tool Result'}
-                      </div>
-                      <Button
-                        variant='outline2'
-                        size='small'
-                        onClick={() => toggleBlock('toolResults', `tool-result-${toolResultBlock.tool_use_id}-${idx}`)}
-                        title={isExpanded ? 'Hide details' : 'Show details'}
-                      >
-                        {isExpanded ? (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                          </svg>
-                        ) : (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                          </svg>
-                        )}
-                      </Button>
-                    </div>
-                    {isExpanded ? (
-                      <div className='text-xs text-stone-600 dark:text-stone-300 break-all whitespace-pre-wrap'>
-                        {typeof toolResultBlock.content === 'object'
-                          ? JSON.stringify(toolResultBlock.content, null, 2)
-                          : String(toolResultBlock.content)}
-                      </div>
-                    ) : (
-                      <div
-                        className={`text-xs ${isError ? 'text-red-600 dark:text-red-400' : 'text-stone-600 dark:text-stone-300'}`}
-                      >
-                        {truncateChars(toolResultBlock.content)}
-                      </div>
-                    )}
-                  </div>
-                )
               }
               return null
             })}
@@ -1349,68 +1440,20 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             {/* Fallback: render tool calls and reasoning separately if no streamEvents or contentBlocks */}
             {Array.isArray(toolCalls) && toolCalls.length > 0 && (
               <div className='space-y-3 mb-3'>
-                {toolCalls.map((toolCall, idx) => {
-                  const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolCall.id}-${idx}`)
-                  const pathParam = extractPathParam(toolCall.arguments)
-                  return (
-                    <div
-                      key={`${toolCall.id}-${idx}`}
-                      className='relative mb-3 mx-3 rounded-xl border border-blue-200 bg-neutral-50 p-2 sm:p-3 dark:border-blue-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
-                    >
-                      <div className='flex items-center justify-between mb-2'>
-                        <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
-                        <Button
-                          variant='outline2'
-                          size='small'
-                          onClick={() => toggleBlock('toolCalls', `tool-call-${toolCall.id}-${idx}`)}
-                          title={isExpanded ? 'Hide details' : 'Show details'}
-                        >
-                          {isExpanded ? (
-                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                            </svg>
-                          ) : (
-                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                            </svg>
-                          )}
-                        </Button>
-                      </div>
-                      {isExpanded ? (
-                        <>
-                          {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                            <div className='text-xs space-y-1'>
-                              {Object.entries(toolCall.arguments).map(([key, value]) => (
-                                <div key={key} className='flex gap-2'>
-                                  <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                                  <span className='text-gray-800 dark:text-gray-200 break-all'>
-                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {toolCall.result && (
-                            <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
-                              <div className='font-semibold mb-1'>Result:</div>
-                              <div className='break-all'>{toolCall.result}</div>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className='text-xs text-blue-600 dark:text-blue-300'>
-                          {pathParam ? (
-                            <>
-                              <span className='font-medium'>path:</span> {pathParam}
-                            </>
-                          ) : (
-                            <span className='text-gray-600 dark:text-gray-400'>View details</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                {toolCalls.map((toolCall, idx) =>
+                  renderToolCallGroupCard(
+                    {
+                      id: toolCall.id,
+                      name: toolCall.name,
+                      args: toolCall.arguments,
+                      results: toolCall.result
+                        ? [{ content: toolCall.result, is_error: toolCall.status === 'executing' && false }]
+                        : [],
+                      anchorIndex: idx,
+                    },
+                    `legacy-${toolCall.id}-${idx}`
                   )
-                })}
+                )}
               </div>
             )}
 
@@ -1462,7 +1505,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
         {/* Message content - show edit mode or normal display */}
         {editingState ? (
-          <div className='px-4 w-full'>
+          <div className='px-4 w-full relative'>
             <TextArea
               value={editContent}
               onChange={setEditContent}

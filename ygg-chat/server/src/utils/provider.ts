@@ -103,6 +103,12 @@ export async function generateResponse(
         // Skip thinking blocks for OpenAI format (handled via reasoning param)
         // Could optionally prepend to text as a note
       } else if (block.type === 'tool_use') {
+        // Skip invalid tool_use blocks that are missing required fields
+        if (!block.id || !block.name) {
+          console.error(`❌ [provider] Skipping invalid tool_use block: id=${block.id}, name=${block.name}`)
+          continue
+        }
+
         // IMPORTANT: Flush any pending tool results FIRST before adding new tool call
         // This ensures proper interleaving: assistant(calls) → tool(results) → assistant(calls) → ...
         if (pendingToolResults.length > 0) {

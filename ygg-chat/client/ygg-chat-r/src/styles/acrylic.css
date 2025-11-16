@@ -12,8 +12,8 @@
 .acrylic-ultra-light,
 .acrylic-subtle,
 .acrylic-light,
+.acrylic-input-chat-light,
 .acrylic-light-dark,
-.acrylic,
 .acrylic-strong,
 .acrylic-extreme {
   position: relative;
@@ -48,6 +48,7 @@
 .acrylic-ultra-light,
 .acrylic-subtle,
 .acrylic-light,
+.acrylic-input-chat-light,
 .acrylic-light-dark,
 .acrylic,
 .acrylic-medium,
@@ -61,6 +62,7 @@
 .dark .acrylic-ultra-light,
 .dark .acrylic-subtle,
 .dark .acrylic-light,
+.dark .acrylic-input-chat-light,
 .dark .acrylic-light-dark,
 .dark .acrylic,
 .dark .acrylic-medium,
@@ -113,6 +115,15 @@
   background-color: rgba(24, 24, 24, 0.015);
 }
 
+.acrylic-input-chat-light {
+  background-color: rgba(247, 247, 247, 0.557); /* 56% opacity */
+  border: 1px ridge #e5e5e5cb;
+}
+
+.dark .acrylic-input-chat-light {
+  background-color: rgba(24, 24, 24, 0.015);
+}
+
 /* Acrylic Light Dark - Only dark version */
 .acrylic-light-dark {
   background-color: transparent;
@@ -154,6 +165,7 @@
 /* Interactive states */
 .acrylic-subtle:hover,
 .acrylic-light:hover,
+.acrylic-input-chat-light:hover,
 /* .acrylic:hover, */
 .acrylic-strong:hover,
 .acrylic-extreme:hover {
@@ -184,6 +196,10 @@
   background-color: rgba(24, 24, 24, 0.215);
 }
 
+.dark .acrylic-input-chat-light:hover {
+  background-color: rgba(24, 24, 24, 0.215);
+}
+
 .dark .acrylic-light-dark:hover {
   background-color: rgba(24, 24, 24, 0.215);
 }
@@ -192,6 +208,7 @@
 .acrylic-ultra-light > *,
 .acrylic-subtle > *,
 .acrylic-light > *,
+.acrylic-input-chat-light > *,
 .acrylic-light-dark > *,
 .acrylic > *,
 .acrylic-medium > *,
@@ -215,6 +232,11 @@
   }
 
   .acrylic-light {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  .acrylic-input-chat-light {
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
   }

@@ -6,9 +6,9 @@ import { MessageId } from '../../../shared/types'
 import { ProviderCostService } from '../database/models'
 import { supabaseAdmin } from '../database/supamodels'
 import { getApiKey } from './apiKeyManager'
+import { getCachedAttachmentBase64 } from './attachmentCache'
 import { moneyAdd, moneyFormat, moneyMax, moneyMultiply } from './money'
 import tools from './tools'
-import { getCachedAttachmentBase64 } from './attachmentCache'
 
 // Helper function to convert Zod schema to JSON schema
 function zodToJsonSchema(zodSchema: any): any {
@@ -793,9 +793,13 @@ export async function generateResponse(
       for (let i = 0; i < formattedMessages.length; i++) {
         const msg = formattedMessages[i]
         if (msg.role === 'tool') {
-          console.log(`  [${i}] role=tool, tool_call_id=${msg.tool_call_id}, content_length=${msg.content?.length || 0}`)
+          console.log(
+            `  [${i}] role=tool, tool_call_id=${msg.tool_call_id}, content_length=${msg.content?.length || 0}`
+          )
         } else if (msg.tool_calls) {
-          console.log(`  [${i}] role=${msg.role}, has_tool_calls=true, tool_count=${msg.tool_calls.length}, content=${msg.content ? 'present' : 'null'}`)
+          console.log(
+            `  [${i}] role=${msg.role}, has_tool_calls=true, tool_count=${msg.tool_calls.length}, content=${msg.content ? 'present' : 'null'}`
+          )
           for (const tc of msg.tool_calls) {
             console.log(`    tool_call: id=${tc.id}, type=${tc.type}, function.name=${tc.function?.name}`)
           }
@@ -819,7 +823,10 @@ export async function generateResponse(
           console.log(`  [${i}] role=${msg.role}, content_type=${typeof msg.content}`)
         }
       }
-      console.log('📤 [openrouter] Full message payload:', JSON.stringify(formattedMessages, null, 2).substring(0, 5000))
+      console.log(
+        '📤 [openrouter] Full message payload:',
+        JSON.stringify(formattedMessages, null, 2).substring(0, 5000)
+      )
 
       const stream: any = await openrouterClient.chat.completions.create(
         {
@@ -1144,6 +1151,7 @@ export async function generateResponse(
         (error?.status === 404 && errorMsg.includes('tool use')) ||
         (error?.status === 400 && errorMsg.includes('Provider returned error')) ||
         errorMsg.includes('No endpoints found that support tool use')
+      console.log('provider error', error)
 
       if (isToolError && openaiTools.length > 0) {
         try {
@@ -1266,7 +1274,9 @@ export async function generateResponse(
         const lastMessages = formattedMessages.slice(-5)
         for (let i = 0; i < lastMessages.length; i++) {
           const msg = lastMessages[i]
-          console.error(`    [${formattedMessages.length - 5 + i}] role=${msg.role}, has_tool_calls=${!!msg.tool_calls}, content_type=${typeof msg.content}`)
+          console.error(
+            `    [${formattedMessages.length - 5 + i}] role=${msg.role}, has_tool_calls=${!!msg.tool_calls}, content_type=${typeof msg.content}`
+          )
         }
 
         const errorMessage = error?.error?.message || error?.message || String(error)

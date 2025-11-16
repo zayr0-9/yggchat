@@ -2081,7 +2081,7 @@ function Chat() {
           {/* Controls row (above) */}
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
-          <div className='acrylic-light dark:acrylic-ultra-light pb-1 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
+          <div className='acrylic-subtle pb-1 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
             <InputTextArea
               value={localInput}
               onChange={handleInputChange}

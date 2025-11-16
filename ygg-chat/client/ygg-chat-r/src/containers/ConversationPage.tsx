@@ -205,11 +205,9 @@ const ConversationPage: React.FC = () => {
   }
 
   const handleNewConversation = async () => {
-    // TODO: Link conversation to project when backend supports it
     const payload = selectedProject
       ? {
           title: `${selectedProject.name} Conversation`,
-          // Add project_id when backend supports it
         }
       : {}
     const result = await dispatch(createConversation(payload)).unwrap()
@@ -294,7 +292,7 @@ const ConversationPage: React.FC = () => {
         </div>
         <div className='px-1 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between max-w-full '>
-            <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
+            <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[38px] 4xl:text-[38px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
               Chats
             </h2>
             <div className='flex items-center gap-2 my-1 p-0 lg:p-1 '>
