@@ -13,8 +13,8 @@ export const environment = import.meta.env.VITE_ENVIRONMENT || 'local'
  * @returns The current valid access token or null
  */
 async function ensureValidToken(): Promise<string | null> {
-  // Skip for non-web environments
-  if (environment !== 'web') {
+  // Skip for non-web/electron environments (local mode doesn't need token refresh)
+  if (environment !== 'web' && environment !== 'electron') {
     return null
   }
 
@@ -59,7 +59,7 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
       headers: {
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...optionsHeaders, // Spread headers from options
-        ...(token && environment === 'web' ? { Authorization: `Bearer ${token}` } : {}), // Add Authorization header with JWT in web mode
+        ...(token && (environment === 'web' || environment === 'electron') ? { Authorization: `Bearer ${token}` } : {}), // Add Authorization header with JWT in web/electron mode
       },
     })
   }
