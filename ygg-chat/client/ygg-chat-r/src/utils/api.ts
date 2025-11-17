@@ -67,7 +67,7 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
   let response = await makeRequest(tokenToUse)
 
   // Handle 401 Unauthorized: Try to refresh token and retry once
-  if (response.status === 401 && environment === 'web') {
+  if (response.status === 401 && (environment === 'web' || environment === 'electron')) {
     console.warn('[api] Received 401 Unauthorized, attempting token refresh and retry...')
 
     try {
@@ -168,7 +168,7 @@ export const createStreamingRequest = async (
     const headers = {
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...optionsHeaders, // Spread the headers from options
-      ...(token && environment === 'web' ? { Authorization: `Bearer ${token}` } : {}), // Add Authorization header with JWT in web mode
+      ...(token && (environment === 'web' || environment === 'electron') ? { Authorization: `Bearer ${token}` } : {}), // Add Authorization header with JWT in web/electron mode
     }
 
     return fetch(`${API_BASE}${endpoint}`, {
@@ -180,7 +180,7 @@ export const createStreamingRequest = async (
   let response = await makeStreamRequest(tokenToUse)
 
   // Handle 401 Unauthorized: Try to refresh token and retry once
-  if (response.status === 401 && environment === 'web') {
+  if (response.status === 401 && (environment === 'web' || environment === 'electron')) {
     console.warn('[api] Streaming request received 401, attempting token refresh and retry...')
 
     try {
