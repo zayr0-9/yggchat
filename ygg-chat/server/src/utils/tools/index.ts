@@ -53,7 +53,7 @@ interface tools {
 const tools: tools[] = [
   {
     name: 'directory',
-    enabled: true,
+    enabled: false,
     tool: {
       description:
         'Get the directory structure of a specified path. Useful for understanding project organization, finding files, or exploring codebases.',

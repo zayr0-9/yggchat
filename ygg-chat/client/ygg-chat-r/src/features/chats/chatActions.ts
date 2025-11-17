@@ -522,7 +522,11 @@ export const sendMessage = createAsyncThunk<
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
                 // Sync user message to local SQLite (fire-and-forget)
-                dualSync.syncMessage(chunk.message)
+                dualSync.syncMessage({
+                  ...chunk.message,
+                  user_id: auth.userId,
+                  project_id: selectedProject?.id || null,
+                })
                 // Clear optimistic message immediately when real user message confirmed (web mode only)
                 const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
                 if (isWebMode) {
@@ -574,7 +578,11 @@ export const sendMessage = createAsyncThunk<
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
                 // Sync assistant message to local SQLite (fire-and-forget)
-                dualSync.syncMessage(chunk.message)
+                dualSync.syncMessage({
+                  ...chunk.message,
+                  user_id: auth.userId,
+                  project_id: selectedProject?.id || null,
+                })
                 // Sync provider cost if available
                 if (chunk.cost) {
                   dualSync.syncProviderCost({
@@ -653,7 +661,15 @@ export const updateMessage = createAsyncThunk<
     }
 
     // Sync message update to local SQLite (fire-and-forget)
-    dualSync.syncMessage(updated, 'update')
+    const selectedProject = selectSelectedProject(state)
+    dualSync.syncMessage(
+      {
+        ...updated,
+        user_id: auth.userId,
+        project_id: selectedProject?.id || null,
+      },
+      'update'
+    )
 
     return updated
   } catch (error) {
@@ -894,7 +910,11 @@ export const editMessageWithBranching = createAsyncThunk<
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
                 // Sync user message to local SQLite (fire-and-forget)
-                dualSync.syncMessage(chunk.message)
+                dualSync.syncMessage({
+                  ...chunk.message,
+                  user_id: auth.userId,
+                  project_id: selectedProject?.id || null,
+                })
                 // Live-update: ensure the new branched user message shows all intended artifacts immediately
                 // Use the combined list (existing - deleted + drafts) we computed prior to the request
                 if (combinedArtifacts.length > 0) {
@@ -952,7 +972,11 @@ export const editMessageWithBranching = createAsyncThunk<
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
                 // Sync assistant message to local SQLite (fire-and-forget)
-                dualSync.syncMessage(chunk.message)
+                dualSync.syncMessage({
+                  ...chunk.message,
+                  user_id: auth.userId,
+                  project_id: selectedProject?.id || null,
+                })
                 // Sync provider cost if available
                 if (chunk.cost) {
                   dualSync.syncProviderCost({
@@ -1112,7 +1136,11 @@ export const sendMessageToBranch = createAsyncThunk<
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
                 // Sync user message to local SQLite (fire-and-forget)
-                dualSync.syncMessage(chunk.message)
+                dualSync.syncMessage({
+                  ...chunk.message,
+                  user_id: auth.userId,
+                  project_id: selectedProject?.id || null,
+                })
               }
 
               // Handle tool results (accumulated server-side into content_blocks)
@@ -1137,7 +1165,11 @@ export const sendMessageToBranch = createAsyncThunk<
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
                 // Sync assistant message to local SQLite (fire-and-forget)
-                dualSync.syncMessage(chunk.message)
+                dualSync.syncMessage({
+                  ...chunk.message,
+                  user_id: auth.userId,
+                  project_id: selectedProject?.id || null,
+                })
                 // Sync provider cost if available
                 if (chunk.cost) {
                   dualSync.syncProviderCost({

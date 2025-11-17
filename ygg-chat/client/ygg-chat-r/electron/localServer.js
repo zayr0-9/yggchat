@@ -205,12 +205,47 @@ function initializeLocalDatabase(dbPath) {
     };
     console.log('[LocalServer] Database initialized successfully');
 }
+// Helper functions to ensure dependencies exist before sync operations
+function ensureUserExists(userId) {
+    if (!db)
+        return;
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
+    if (!existing) {
+        console.log('[LocalServer] Auto-creating user stub:', userId);
+        db.prepare('INSERT INTO users (id, username, created_at) VALUES (?, ?, ?)').run(userId, `synced-user-${userId.substring(0, 8)}`, new Date().toISOString());
+    }
+}
+function ensureProjectExists(projectId, userId) {
+    if (!db)
+        return;
+    ensureUserExists(userId); // Project requires user to exist
+    const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+    if (!existing) {
+        console.log('[LocalServer] Auto-creating project stub:', projectId);
+        const now = new Date().toISOString();
+        db.prepare('INSERT INTO projects (id, name, user_id, context, system_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(projectId, 'Synced Project', userId, null, null, now, now);
+    }
+}
+function ensureConversationExists(conversationId, userId, projectId) {
+    if (!db)
+        return;
+    ensureUserExists(userId); // Conversation requires user to exist
+    if (projectId) {
+        ensureProjectExists(projectId, userId); // If project is set, ensure it exists
+    }
+    const existing = db.prepare('SELECT id FROM conversations WHERE id = ?').get(conversationId);
+    if (!existing) {
+        console.log('[LocalServer] Auto-creating conversation stub:', conversationId);
+        const now = new Date().toISOString();
+        db.prepare('INSERT INTO conversations (id, project_id, user_id, title, model_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(conversationId, projectId || null, userId, 'Synced Conversation', 'unknown', now, now);
+    }
+}
 // Setup Express app
 function setupServer() {
     app.use(cors());
     app.use(express.json({ limit: '25mb' }));
     // Health check
-    app.get('/api/health', (req, res) => {
+    app.get('/api/health', (_req, res) => {
         res.json({ status: 'ok', mode: 'local-sync' });
     });
     // Sync User
@@ -229,8 +264,16 @@ function setupServer() {
     // Sync Project
     app.post('/api/sync/project', (req, res) => {
         try {
-            const { id, name, user_id, context, system_prompt, created_at, updated_at } = req.body;
-            statements.upsertProject.run(id, name, user_id, context || null, system_prompt || null, created_at || new Date().toISOString(), updated_at || new Date().toISOString());
+            const { id, name, user_id, owner_id, context, system_prompt, created_at, updated_at } = req.body;
+            // Handle owner_id -> user_id mapping (Railway sends owner_id)
+            const effectiveUserId = user_id || owner_id;
+            if (!effectiveUserId) {
+                res.status(400).json({ error: 'Missing user_id or owner_id' });
+                return;
+            }
+            // Ensure user exists before upserting project
+            ensureUserExists(effectiveUserId);
+            statements.upsertProject.run(id, name, effectiveUserId, context || null, system_prompt || null, created_at || new Date().toISOString(), updated_at || new Date().toISOString());
             console.log('[LocalServer] Synced project:', id);
             res.json({ success: true, id });
         }
@@ -254,8 +297,20 @@ function setupServer() {
     // Sync Conversation
     app.post('/api/sync/conversation', (req, res) => {
         try {
-            const { id, project_id, user_id, title, model_name, system_prompt, conversation_context, research_note, cwd, created_at, updated_at, } = req.body;
-            statements.upsertConversation.run(id, project_id || null, user_id, title || null, model_name || 'unknown', system_prompt || null, conversation_context || null, research_note || null, cwd || null, created_at || new Date().toISOString(), updated_at || new Date().toISOString());
+            const { id, project_id, user_id, owner_id, // Railway uses owner_id, local uses user_id
+            title, model_name, system_prompt, conversation_context, research_note, cwd, created_at, updated_at, } = req.body;
+            // Handle owner_id -> user_id mapping (Railway sends owner_id)
+            const effectiveUserId = user_id || owner_id;
+            if (!effectiveUserId) {
+                res.status(400).json({ error: 'Missing user_id or owner_id' });
+                return;
+            }
+            // Ensure dependencies exist before upserting conversation
+            ensureUserExists(effectiveUserId);
+            if (project_id) {
+                ensureProjectExists(project_id, effectiveUserId);
+            }
+            statements.upsertConversation.run(id, project_id || null, effectiveUserId, title || null, model_name || 'unknown', system_prompt || null, conversation_context || null, research_note || null, cwd || null, created_at || new Date().toISOString(), updated_at || new Date().toISOString());
             console.log('[LocalServer] Synced conversation:', id);
             res.json({ success: true, id });
         }
@@ -279,7 +334,36 @@ function setupServer() {
     // Sync Message
     app.post('/api/sync/message', (req, res) => {
         try {
-            const { id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at, } = req.body;
+            const { id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at, 
+            // Additional context for dependency creation
+            user_id, owner_id, project_id, } = req.body;
+            if (!conversation_id) {
+                res.status(400).json({ error: 'Missing conversation_id' });
+                return;
+            }
+            // Ensure conversation exists before upserting message
+            // Try to get user_id from request body or from existing conversation
+            let effectiveUserId = user_id || owner_id;
+            let effectiveProjectId = project_id;
+            // If no user_id provided, try to get it from the existing conversation
+            if (!effectiveUserId && db) {
+                const existingConv = db
+                    .prepare('SELECT user_id, project_id FROM conversations WHERE id = ?')
+                    .get(conversation_id);
+                if (existingConv) {
+                    effectiveUserId = existingConv.user_id;
+                    effectiveProjectId = effectiveProjectId || existingConv.project_id;
+                }
+            }
+            // If we have user context, ensure dependencies exist
+            if (effectiveUserId) {
+                ensureConversationExists(conversation_id, effectiveUserId, effectiveProjectId || null);
+            }
+            else {
+                // No user context and conversation doesn't exist - this will fail on FK constraint
+                // Log warning but proceed anyway (might succeed if conversation exists)
+                console.warn('[LocalServer] No user context for message sync, conversation may not exist:', conversation_id);
+            }
             statements.upsertMessage.run(id, conversation_id, parent_id || null, typeof children_ids === 'string' ? children_ids : JSON.stringify(children_ids || []), role, content, plain_text_content || null, thinking_block || null, typeof tool_calls === 'string' ? tool_calls : JSON.stringify(tool_calls || null), model_name || 'unknown', note || null, ex_agent_session_id || null, ex_agent_type || null, typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null), created_at || new Date().toISOString());
             console.log('[LocalServer] Synced message:', id);
             res.json({ success: true, id });
@@ -336,7 +420,8 @@ function setupServer() {
     app.post('/api/sync/batch', (req, res) => {
         const { operations } = req.body;
         if (!Array.isArray(operations)) {
-            return res.status(400).json({ error: 'Operations must be an array' });
+            res.status(400).json({ error: 'Operations must be an array' });
+            return;
         }
         const results = [];
         // Use transaction for atomicity
@@ -407,7 +492,7 @@ function setupServer() {
         }
     });
     // Stats endpoint
-    app.get('/api/sync/stats', (req, res) => {
+    app.get('/api/sync/stats', (_req, res) => {
         try {
             const stats = {
                 projects: db.prepare('SELECT COUNT(*) as count FROM projects').get(),
