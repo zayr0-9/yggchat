@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
 import { isUserAllowlisted } from '../lib/auth/allowlist'
-import { dualSync } from '../lib/sync/dualSyncManager'
 import { supabase } from '../lib/supabase'
+import { dualSync } from '../lib/sync/dualSyncManager'
 import { API_BASE } from '../utils/api'
 
 const Login: React.FC = () => {
@@ -133,7 +133,7 @@ const Login: React.FC = () => {
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                userId: userId,
+                id: userId,
                 username: username,
               }),
             })
