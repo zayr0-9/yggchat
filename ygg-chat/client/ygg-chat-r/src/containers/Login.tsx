@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
 import { isUserAllowlisted } from '../lib/auth/allowlist'
-import { supabase } from '../lib/supabase'
 import { dualSync } from '../lib/sync/dualSyncManager'
-import { API_BASE } from '../utils/api'
+import { supabase } from '../lib/supabase'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -121,69 +120,44 @@ const Login: React.FC = () => {
 
           console.log('[Login] User authorized, completing sign-in')
 
-          // Create local user in database with Supabase user ID (Electron only)
-          try {
-            const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
+          // Use Supabase user data directly for local SQLite sync (no Railway call needed)
+          const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
 
-            console.log('[Login] Creating local user in database...', { userId, username })
+          console.log('[Login] Syncing Supabase user to local SQLite...', { userId, username })
 
-            const userResponse = await fetch(`${API_BASE}/users`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                id: userId,
-                username: username,
-              }),
-            })
+          // Sync user to local SQLite database (fire-and-forget)
+          dualSync.syncUser({
+            id: userId,
+            username: username,
+            created_at: data.session.user.created_at,
+          })
 
-            if (!userResponse.ok) {
-              throw new Error('Failed to create local user')
-            }
-
-            const localUser = await userResponse.json()
-            console.log('[Login] Local user created successfully:', localUser)
-
-            // Sync user to local SQLite database (fire-and-forget)
-            dualSync.syncUser({
-              id: localUser.id,
-              username: localUser.username,
-              created_at: localUser.created_at,
-            })
-
-            // Save OAuth session to Electron storage so ElectronAuthProvider can use it
-            if (window.electronAPI?.storage) {
-              try {
-                const authStateForStorage = {
-                  user: {
-                    id: localUser.id,
-                    email: data.session.user.email || 'unknown',
-                    username: localUser.username,
-                  },
-                  session: {
-                    access_token: access_token,
-                  },
-                  loading: false,
-                  accessToken: access_token,
-                  userId: localUser.id,
-                }
-
-                await window.electronAPI.storage.set('auth_session', authStateForStorage)
-                console.log('[Login] OAuth session saved to Electron storage')
-
-                // Reload the session in AuthContext to update user state
-                await reloadSession()
-                console.log('[Login] Auth session reloaded in context')
-              } catch (storageError) {
-                console.error('[Login] Failed to save OAuth session to storage:', storageError)
+          // Save OAuth session to Electron storage so ElectronAuthProvider can use it
+          if (window.electronAPI?.storage) {
+            try {
+              const authStateForStorage = {
+                user: {
+                  id: userId,
+                  email: data.session.user.email || 'unknown',
+                  username: username,
+                },
+                session: {
+                  access_token: access_token,
+                },
+                loading: false,
+                accessToken: access_token,
+                userId: userId,
               }
+
+              await window.electronAPI.storage.set('auth_session', authStateForStorage)
+              console.log('[Login] OAuth session saved to Electron storage')
+
+              // Reload the session in AuthContext to update user state
+              await reloadSession()
+              console.log('[Login] Auth session reloaded in context')
+            } catch (storageError) {
+              console.error('[Login] Failed to save OAuth session to storage:', storageError)
             }
-          } catch (userCreationError) {
-            console.error('[Login] Failed to create local user:', userCreationError)
-            setError('Failed to create local user account. Please try again.')
-            setLoading(false)
-            return
           }
         } else if (data.session?.user && !isElectronMode) {
           // Web mode: Session is already set in Supabase, AuthContext will pick it up
