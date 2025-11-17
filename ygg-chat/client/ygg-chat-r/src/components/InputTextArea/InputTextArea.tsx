@@ -25,6 +25,7 @@ interface TextAreaProps {
   maxRows?: number
   autoFocus?: boolean
   showCharCount?: boolean
+  showHelp?: boolean
   outline?: boolean
   onProcessMessage?: (processMessage: (message: string) => string) => void
   variant?: 'primary' | 'outline'
@@ -46,6 +47,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   maxRows = 25,
   autoFocus = false,
   showCharCount = false,
+  showHelp = true,
   outline = false,
   onProcessMessage,
   variant = 'primary',
@@ -528,13 +530,13 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
 
         {/* Character count indicator */}
         {showCharCount && (
-          <div className='absolute top-1 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] text-stone-800 dark:text-stone-200'>
+          <div className='absolute bottom-5 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] text-stone-800 dark:text-stone-200'>
             {value.length}
           </div>
         )}
-        {/* Character count indicator */}
-        {value.length <= 0 && (
-          <div className='absolute top-1 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] text-stone-800 dark:text-stone-200'>
+        {/* Help text indicator */}
+        {showHelp && value.length <= 0 && (
+          <div className='absolute top-4 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] text-stone-800 dark:text-stone-200'>
             {/* {value.length}/{maxLength} */}
             Shift+Enter
             <br />

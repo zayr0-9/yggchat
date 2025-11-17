@@ -146,16 +146,16 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       />
 
       {/* Modal */}
-      <div className='py-2'>
+      <div className='py-2 w-5xl'>
         <div
-          className={`relative z-50 mx-4 max-w-3xl rounded-3xl px-12 py-4 lg:py-6 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${
+          className={`relative z-50 mx-4 rounded-3xl px-12 py-4 lg:py-6 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${
             tools.some(tool => tool.enabled) ? 'h-[80vh]' : 'h-[58vh]'
           }`}
           onClick={e => e.stopPropagation()}
           style={{ scrollbarGutter: 'stable' }}
         >
           <div className='flex justify-between items-center mb-3 py-4'>
-            <h2 className='text-2xl font-semibold text-stone-800 dark:text-stone-200'>AI Settings</h2>
+            <h2 className='text-2xl font-semibold text-stone-800 dark:text-stone-200'>Chat Settings</h2>
             <button onClick={onClose} className='p-1 rounded-md transition-colors' aria-label='Close settings'>
               <i className='bx bx-x text-2xl text-gray-600 dark:text-gray-400 active:scale-95'></i>
             </button>
@@ -174,6 +174,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
                 width='w-full'
                 showCharCount
                 outline={true}
+                showHelp={false}
                 variant='outline'
                 className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
               />
@@ -191,6 +192,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
                 width='w-full'
                 variant='outline'
                 outline={true}
+                showHelp={false}
                 showCharCount={true}
                 className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
               />

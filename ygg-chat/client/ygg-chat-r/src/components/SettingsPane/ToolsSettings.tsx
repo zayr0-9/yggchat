@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { fetchTools, updateToolEnabled } from '../../features/chats/chatActions'
 import { selectTools } from '../../features/chats/chatSelectors'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
@@ -8,6 +9,9 @@ export const ToolsSettings: React.FC = () => {
   const dispatch = useAppDispatch()
   const tools = useAppSelector(selectTools)
   const [updatingTools, setUpdatingTools] = useState<Set<string>>(new Set())
+  const [showDesktopModal, setShowDesktopModal] = useState(false)
+
+  const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
 
   useEffect(() => {
     // Fetch tools when component mounts
@@ -36,6 +40,12 @@ export const ToolsSettings: React.FC = () => {
   }
 
   const handleValkyrieToggle = async () => {
+    // Show modal in web mode instead of toggling
+    if (isWebMode) {
+      setShowDesktopModal(true)
+      return
+    }
+
     const enableAll = !someToolsEnabled // If no tools enabled, enable all; if some/all enabled, disable all
     const toolsToUpdate = tools.filter(tool => tool.enabled !== enableAll)
 
@@ -117,48 +127,88 @@ export const ToolsSettings: React.FC = () => {
         </div>
       </div>
 
-      {/* Individual Tools - Only show when Valkyrie is active */}
-      <div
-        className={`overflow-hidden transition-all duration-500 ease-in-out ${
-          valkyrieActive ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-        }`}
-      >
-        <div className='space-y-4'>
-          <h3 className='text-md mt-3 font-medium text-stone-700 dark:text-stone-300 mb-3'>Individual Tools</h3>
+      {/* Individual Tools - Only show when Valkyrie is active and not in web mode */}
+      {!isWebMode && (
+        <div
+          className={`overflow-hidden transition-all duration-500 ease-in-out ${
+            valkyrieActive ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+          }`}
+        >
+          <div className='space-y-4'>
+            <h3 className='text-md mt-3 font-medium text-stone-700 dark:text-stone-300 mb-3'>Individual Tools</h3>
 
-          <div className='space-y-4 px-2 bg-transparent'>
-            {tools.map(tool => (
-              <div
-                key={tool.name}
-                className='flex items-center justify-between p-3 rounded-lg border-1 border-gray-300 dark:border-neutral-600 drop-shadow-xl shadow-[0_6px_12px_1px_rgba(0,0,0,0.05),0_0px_2px_1px_rgba(0,0,0,0.02)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)] '
-              >
-                <div className='flex-1'>
-                  <div className='font-medium text-stone-800 dark:text-stone-200'>
-                    {tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </div>
-                  <div className='text-sm text-gray-600 dark:text-gray-400 mt-1'>{tool.tool.description}</div>
-                </div>
-
-                <Button
-                  variant={tool.enabled ? 'outline2' : 'outline2'}
-                  size='medium'
-                  onClick={() => handleToggle(tool.name, tool.enabled)}
-                  disabled={updatingTools.has(tool.name)}
-                  className='ml-4 min-w-[40px] flex items-center justify-center'
+            <div className='space-y-4 px-2 bg-transparent'>
+              {tools.map(tool => (
+                <div
+                  key={tool.name}
+                  className='flex items-center justify-between p-3 rounded-lg border-1 border-gray-300 dark:border-neutral-600 drop-shadow-xl shadow-[0_6px_12px_1px_rgba(0,0,0,0.05),0_0px_2px_1px_rgba(0,0,0,0.02)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)] '
                 >
-                  {updatingTools.has(tool.name) ? (
-                    '...'
-                  ) : tool.enabled ? (
-                    <i className='bx bx-check text-xl active:scale-95'></i>
-                  ) : (
-                    <i className='bx bx-x text-xl active:scale-95'></i>
-                  )}
-                </Button>
-              </div>
-            ))}
+                  <div className='flex-1'>
+                    <div className='font-medium text-stone-800 dark:text-stone-200'>
+                      {tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </div>
+                    <div className='text-sm text-gray-600 dark:text-gray-400 mt-1'>{tool.tool.description}</div>
+                  </div>
+
+                  <Button
+                    variant={tool.enabled ? 'outline2' : 'outline2'}
+                    size='medium'
+                    onClick={() => handleToggle(tool.name, tool.enabled)}
+                    disabled={updatingTools.has(tool.name)}
+                    className='ml-4 min-w-[40px] flex items-center justify-center'
+                  >
+                    {updatingTools.has(tool.name) ? (
+                      '...'
+                    ) : tool.enabled ? (
+                      <i className='bx bx-check text-xl active:scale-95'></i>
+                    ) : (
+                      <i className='bx bx-x text-xl active:scale-95'></i>
+                    )}
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Desktop App Feature Modal */}
+      {showDesktopModal &&
+        createPortal(
+          <div
+            className='fixed inset-0 z-[200] flex items-center justify-center'
+            onClick={() => setShowDesktopModal(false)}
+          >
+            <div className='absolute inset-0 bg-black/50 backdrop-blur-sm' />
+            <div
+              className='relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6'
+              onClick={e => e.stopPropagation()}
+            >
+              <div className='flex items-center justify-between mb-4'>
+                <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100'>Desktop App Feature</h3>
+                <button
+                  onClick={() => setShowDesktopModal(false)}
+                  className='text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors'
+                >
+                  <i className='bx bx-x text-2xl'></i>
+                </button>
+              </div>
+              <div className='text-gray-600 dark:text-gray-300 mb-6'>
+                <p className='mb-3'>
+                  Agent tools and AI capabilities are available exclusively in the{' '}
+                  <strong>Yggdrasil Desktop App</strong>.
+                </p>
+                <p>Download the desktop application to unlock advanced features including agent mode and tool execution.</p>
+              </div>
+              <div className='flex justify-end'>
+                <Button variant='outline2' size='medium' onClick={() => setShowDesktopModal(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
