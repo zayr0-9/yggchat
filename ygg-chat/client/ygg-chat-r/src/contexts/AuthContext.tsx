@@ -5,6 +5,7 @@ import { store } from '../store/store'
 import { updateThunkExtraAuth } from '../store/thunkExtra'
 import { API_BASE } from '../utils/api'
 import { getAuthProvider, type AuthProvider as IAuthProvider } from '../lib/auth'
+import { dualSync } from '../lib/sync/dualSyncManager'
 
 export interface AuthContextType {
   user: User | null
@@ -87,6 +88,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Dispatch to Redux
       store.dispatch(setUser(profile))
+
+      // Sync user to local SQLite database (Electron mode only)
+      const isElectronMode =
+        (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
+        import.meta.env.VITE_ENVIRONMENT === 'electron'
+
+      if (isElectronMode) {
+        console.log('[AuthContext] Syncing user to local SQLite:', profile.id)
+        dualSync.syncUser({
+          id: profile.id,
+          username: profile.username,
+          created_at: profile.created_at,
+        })
+      }
     } catch (error) {
       console.error('[AuthContext] Error fetching user profile:', error)
     }

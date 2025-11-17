@@ -174,7 +174,7 @@ const Login: React.FC = () => {
     })
 
     return cleanup
-  }, [isElectronMode])
+  }, [isElectronMode, reloadSession])
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
     setLoading(true)
