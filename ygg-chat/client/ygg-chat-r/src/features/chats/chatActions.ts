@@ -19,6 +19,7 @@ import {
   SendCCMessagePayload,
   tools,
 } from './chatTypes'
+import { dualSync } from '../../lib/sync/dualSyncManager'
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
 
@@ -520,6 +521,8 @@ export const sendMessage = createAsyncThunk<
                 dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                // Sync user message to local SQLite (fire-and-forget)
+                dualSync.syncMessage(chunk.message)
                 // Clear optimistic message immediately when real user message confirmed (web mode only)
                 const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
                 if (isWebMode) {
@@ -570,6 +573,15 @@ export const sendMessage = createAsyncThunk<
                 dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                // Sync assistant message to local SQLite (fire-and-forget)
+                dualSync.syncMessage(chunk.message)
+                // Sync provider cost if available
+                if (chunk.cost) {
+                  dualSync.syncProviderCost({
+                    ...chunk.cost,
+                    message_id: chunk.message.id,
+                  })
+                }
                 // Reset streaming buffer for next iteration
                 dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
                 messageId = chunk.message.id
@@ -640,6 +652,9 @@ export const updateMessage = createAsyncThunk<
       updateMessageInCache(extra.queryClient, conversationId, id, content, note, content_blocks)
     }
 
+    // Sync message update to local SQLite (fire-and-forget)
+    dualSync.syncMessage(updated, 'update')
+
     return updated
   } catch (error) {
     return rejectWithValue(error instanceof Error ? error.message : 'Update failed')
@@ -698,6 +713,8 @@ export const deleteMessage = createAsyncThunk<
     await apiCall(`/messages/${id}`, auth.accessToken, { method: 'DELETE' })
     // Sync React Query cache immediately
     removeMessagesFromCache(extra.queryClient, conversationId, [id])
+    // Sync message deletion to local SQLite (fire-and-forget)
+    dualSync.syncMessage({ id }, 'delete')
     // Refetch conversation messages to ensure sync with server
     await dispatch(fetchConversationMessages(conversationId))
     return id
@@ -876,6 +893,8 @@ export const editMessageWithBranching = createAsyncThunk<
                 dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                // Sync user message to local SQLite (fire-and-forget)
+                dualSync.syncMessage(chunk.message)
                 // Live-update: ensure the new branched user message shows all intended artifacts immediately
                 // Use the combined list (existing - deleted + drafts) we computed prior to the request
                 if (combinedArtifacts.length > 0) {
@@ -932,6 +951,15 @@ export const editMessageWithBranching = createAsyncThunk<
                 dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                // Sync assistant message to local SQLite (fire-and-forget)
+                dualSync.syncMessage(chunk.message)
+                // Sync provider cost if available
+                if (chunk.cost) {
+                  dualSync.syncProviderCost({
+                    ...chunk.cost,
+                    message_id: chunk.message.id,
+                  })
+                }
               } else if (chunk.type === 'aborted') {
                 // Server deleted the empty assistant message, no need to keep it in client state
                 dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
@@ -1083,6 +1111,8 @@ export const sendMessageToBranch = createAsyncThunk<
                 dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                // Sync user message to local SQLite (fire-and-forget)
+                dualSync.syncMessage(chunk.message)
               }
 
               // Handle tool results (accumulated server-side into content_blocks)
@@ -1106,6 +1136,15 @@ export const sendMessageToBranch = createAsyncThunk<
                 dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
                 // Sync to React Query cache immediately
                 updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                // Sync assistant message to local SQLite (fire-and-forget)
+                dualSync.syncMessage(chunk.message)
+                // Sync provider cost if available
+                if (chunk.cost) {
+                  dualSync.syncProviderCost({
+                    ...chunk.cost,
+                    message_id: chunk.message.id,
+                  })
+                }
               } else if (chunk.type === 'aborted') {
                 // Server deleted the empty assistant message, no need to keep it in client state
                 dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))

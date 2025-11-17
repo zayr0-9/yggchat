@@ -13,6 +13,7 @@ import {
 } from '../../utils/api'
 import { convContextSet, systemPromptSet } from './conversationSlice'
 import { Conversation } from './conversationTypes'
+import { dualSync } from '../../lib/sync/dualSyncManager'
 
 // Fetch conversations for current user
 // Note: fetchRecentModels has been migrated to React Query (see useRecentModels in hooks/useQueries.ts)
@@ -90,13 +91,24 @@ export const createConversation = createAsyncThunk<
       const selectedProject = getState().projects.selectedProject
       const projectId = providedProjectId !== undefined ? providedProjectId : selectedProject?.id || null
 
-      return await api.post<Conversation>('/conversations', auth.accessToken, {
+      const conversation = await api.post<Conversation>('/conversations', auth.accessToken, {
         userId: auth.userId,
         title: title || null,
         projectId,
         systemPrompt,
         conversationContext,
       })
+
+      // Sync to local SQLite (fire-and-forget)
+      dualSync.syncConversation({
+        ...conversation,
+        user_id: auth.userId,
+        project_id: projectId,
+        system_prompt: systemPrompt || null,
+        conversation_context: conversationContext || null,
+      })
+
+      return conversation
     } catch (err) {
       return rejectWithValue(err instanceof Error ? err.message : 'Failed to create conversation')
     }
@@ -111,7 +123,12 @@ export const updateConversation = createAsyncThunk<
 >('conversations/update', async ({ id, title }, { extra, rejectWithValue }) => {
   try {
     const { auth } = extra
-    return await api.patch<Conversation>(`/conversations/${id}/`, auth.accessToken, { title })
+    const conversation = await api.patch<Conversation>(`/conversations/${id}/`, auth.accessToken, { title })
+
+    // Sync to local SQLite (fire-and-forget)
+    dualSync.syncConversation(conversation, 'update')
+
+    return conversation
   } catch (err) {
     return rejectWithValue(err instanceof Error ? err.message : 'Failed to update conversation')
   }
@@ -126,6 +143,10 @@ export const deleteConversation = createAsyncThunk<
   try {
     const { auth } = extra
     await api.delete(`/conversations/${id}/`, auth.accessToken)
+
+    // Sync deletion to local SQLite (fire-and-forget)
+    dualSync.syncConversation({ id }, 'delete')
+
     return id
   } catch (err) {
     return rejectWithValue(err instanceof Error ? err.message : 'Failed to delete conversation')

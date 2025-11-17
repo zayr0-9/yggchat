@@ -5,12 +5,14 @@ import { fileURLToPath } from 'url'
 import Conf from 'conf'
 import os from 'os'
 import fs from 'fs'
+import { startLocalServer, stopLocalServer } from './localServer.js'
 
 // ESM: Get __dirname from import.meta.url
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
 let serverProcess: ChildProcess | null = null
+let localServerStarted = false
 
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat'
@@ -289,7 +291,20 @@ app.whenReady().then(async () => {
     await initializeStore()
     console.log('[Electron] Storage initialized, starting server...')
     await startServer()
-    console.log('[Electron] Server started, creating window...')
+    console.log('[Electron] Server started, starting local sync server...')
+
+    // Start local SQLite server for dual-sync (port 3002)
+    try {
+      const localDbPath = path.join(app.getPath('userData'), 'local-sync.db')
+      await startLocalServer(3002, localDbPath)
+      localServerStarted = true
+      console.log('[Electron] Local sync server started on port 3002')
+    } catch (localServerError) {
+      console.warn('[Electron] Failed to start local sync server:', localServerError)
+      console.warn('[Electron] Continuing without local sync - data will not be synced locally')
+    }
+
+    console.log('[Electron] Creating window...')
     createWindow()
   } catch (error) {
     console.error('[Electron] Failed to start:', error)
@@ -303,6 +318,13 @@ app.on('window-all-closed', () => {
     console.log('[Electron] Killing server process...')
     serverProcess.kill()
     serverProcess = null
+  }
+
+  // Stop local sync server
+  if (localServerStarted) {
+    console.log('[Electron] Stopping local sync server...')
+    stopLocalServer().catch(err => console.error('[Electron] Error stopping local server:', err))
+    localServerStarted = false
   }
 
   if (process.platform !== 'darwin') {
@@ -321,6 +343,12 @@ app.on('before-quit', () => {
   if (serverProcess) {
     serverProcess.kill()
     serverProcess = null
+  }
+
+  // Ensure local sync server is stopped
+  if (localServerStarted) {
+    stopLocalServer().catch(err => console.error('[Electron] Error stopping local server on quit:', err))
+    localServerStarted = false
   }
 })
 
@@ -420,5 +448,14 @@ ipcMain.handle('auth:openExternal', async (_event, url: string) => {
   } catch (error) {
     console.error('[Electron IPC] Failed to open external URL:', error)
     return { success: false, error: String(error) }
+  }
+})
+
+// Local sync server status
+ipcMain.handle('sync:status', async () => {
+  return {
+    localServerRunning: localServerStarted,
+    localServerPort: 3002,
+    localServerUrl: 'http://127.0.0.1:3002',
   }
 })

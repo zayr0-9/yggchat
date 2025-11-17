@@ -1,0 +1,642 @@
+// electron/localServer.ts
+// Embedded local SQLite server for dual-sync in Electron mode
+// This server runs on port 3002 and handles sync operations from Railway to local SQLite
+
+import express from 'express'
+import cors from 'cors'
+import path from 'path'
+import fs from 'fs'
+import Database from 'better-sqlite3'
+import { v4 as uuidv4 } from 'uuid'
+
+const app = express()
+let server: any = null
+let db: Database.Database | null = null
+let statements: any = {}
+
+// Initialize database at specified path
+function initializeLocalDatabase(dbPath: string) {
+  console.log('[LocalServer] Initializing database at:', dbPath)
+
+  // Ensure directory exists
+  const dbDir = path.dirname(dbPath)
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true })
+  }
+
+  db = new Database(dbPath)
+  db.pragma('foreign_keys = ON')
+
+  // Create tables (minimal schema for sync operations)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      user_id TEXT,
+      context TEXT,
+      system_prompt TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      user_id TEXT NOT NULL,
+      title TEXT,
+      model_name TEXT DEFAULT 'unknown',
+      system_prompt TEXT,
+      conversation_context TEXT,
+      research_note TEXT,
+      cwd TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      parent_id TEXT,
+      children_ids TEXT DEFAULT '[]',
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'ex_agent')),
+      content TEXT NOT NULL,
+      plain_text_content TEXT,
+      thinking_block TEXT,
+      tool_calls TEXT,
+      model_name TEXT DEFAULT 'unknown',
+      note TEXT,
+      ex_agent_session_id TEXT,
+      ex_agent_type TEXT,
+      content_blocks TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (parent_id) REFERENCES messages(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS message_attachments (
+      id TEXT PRIMARY KEY,
+      message_id TEXT,
+      kind TEXT NOT NULL CHECK (kind IN ('image')),
+      mime_type TEXT NOT NULL,
+      storage TEXT NOT NULL CHECK (storage IN ('file','url')) DEFAULT 'file',
+      url TEXT,
+      file_path TEXT,
+      width INTEGER,
+      height INTEGER,
+      size_bytes INTEGER,
+      sha256 TEXT UNIQUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS message_attachment_links (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL,
+      attachment_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+      FOREIGN KEY (attachment_id) REFERENCES message_attachments(id) ON DELETE CASCADE,
+      UNIQUE(message_id, attachment_id)
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS provider_cost (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      prompt_tokens INTEGER DEFAULT 0,
+      completion_tokens INTEGER DEFAULT 0,
+      reasoning_tokens INTEGER DEFAULT 0,
+      approx_cost REAL DEFAULT 0.0,
+      api_credit_cost REAL DEFAULT 0.0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+    )
+  `)
+
+  // Create indexes
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_parent_id ON messages(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
+  `)
+
+  // Prepare statements
+  statements = {
+    // Users
+    upsertUser: db.prepare(`
+      INSERT INTO users (id, username, created_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET username = excluded.username
+    `),
+
+    // Projects
+    upsertProject: db.prepare(`
+      INSERT INTO projects (id, name, user_id, context, system_prompt, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        context = excluded.context,
+        system_prompt = excluded.system_prompt,
+        updated_at = excluded.updated_at
+    `),
+    deleteProject: db.prepare('DELETE FROM projects WHERE id = ?'),
+    getProjectById: db.prepare('SELECT * FROM projects WHERE id = ?'),
+
+    // Conversations
+    upsertConversation: db.prepare(`
+      INSERT INTO conversations (id, project_id, user_id, title, model_name, system_prompt, conversation_context, research_note, cwd, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        project_id = excluded.project_id,
+        title = excluded.title,
+        model_name = excluded.model_name,
+        system_prompt = excluded.system_prompt,
+        conversation_context = excluded.conversation_context,
+        research_note = excluded.research_note,
+        cwd = excluded.cwd,
+        updated_at = excluded.updated_at
+    `),
+    deleteConversation: db.prepare('DELETE FROM conversations WHERE id = ?'),
+    getConversationById: db.prepare('SELECT * FROM conversations WHERE id = ?'),
+
+    // Messages
+    upsertMessage: db.prepare(`
+      INSERT INTO messages (id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        content = excluded.content,
+        plain_text_content = excluded.plain_text_content,
+        thinking_block = excluded.thinking_block,
+        tool_calls = excluded.tool_calls,
+        note = excluded.note,
+        content_blocks = excluded.content_blocks
+    `),
+    deleteMessage: db.prepare('DELETE FROM messages WHERE id = ?'),
+    getMessageById: db.prepare('SELECT * FROM messages WHERE id = ?'),
+
+    // Attachments
+    upsertAttachment: db.prepare(`
+      INSERT INTO message_attachments (id, message_id, kind, mime_type, storage, url, file_path, width, height, size_bytes, sha256, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        url = excluded.url,
+        file_path = excluded.file_path
+    `),
+    linkAttachment: db.prepare(`
+      INSERT OR IGNORE INTO message_attachment_links (id, message_id, attachment_id, created_at)
+      VALUES (?, ?, ?, ?)
+    `),
+
+    // Provider Cost
+    upsertProviderCost: db.prepare(`
+      INSERT INTO provider_cost (id, user_id, message_id, prompt_tokens, completion_tokens, reasoning_tokens, approx_cost, api_credit_cost, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        prompt_tokens = excluded.prompt_tokens,
+        completion_tokens = excluded.completion_tokens,
+        reasoning_tokens = excluded.reasoning_tokens,
+        approx_cost = excluded.approx_cost,
+        api_credit_cost = excluded.api_credit_cost
+    `),
+  }
+
+  console.log('[LocalServer] Database initialized successfully')
+}
+
+// Setup Express app
+function setupServer() {
+  app.use(cors())
+  app.use(express.json({ limit: '25mb' }))
+
+  // Health check
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', mode: 'local-sync' })
+  })
+
+  // Sync User
+  app.post('/api/sync/user', (req, res) => {
+    try {
+      const { id, username, created_at } = req.body
+      statements.upsertUser.run(id, username, created_at || new Date().toISOString())
+      console.log('[LocalServer] Synced user:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error syncing user:', error)
+      res.status(500).json({ error: 'Failed to sync user' })
+    }
+  })
+
+  // Sync Project
+  app.post('/api/sync/project', (req, res) => {
+    try {
+      const { id, name, user_id, context, system_prompt, created_at, updated_at } = req.body
+      statements.upsertProject.run(
+        id,
+        name,
+        user_id,
+        context || null,
+        system_prompt || null,
+        created_at || new Date().toISOString(),
+        updated_at || new Date().toISOString()
+      )
+      console.log('[LocalServer] Synced project:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error syncing project:', error)
+      res.status(500).json({ error: 'Failed to sync project' })
+    }
+  })
+
+  app.delete('/api/sync/project/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      statements.deleteProject.run(id)
+      console.log('[LocalServer] Deleted project:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error deleting project:', error)
+      res.status(500).json({ error: 'Failed to delete project' })
+    }
+  })
+
+  // Sync Conversation
+  app.post('/api/sync/conversation', (req, res) => {
+    try {
+      const {
+        id,
+        project_id,
+        user_id,
+        title,
+        model_name,
+        system_prompt,
+        conversation_context,
+        research_note,
+        cwd,
+        created_at,
+        updated_at,
+      } = req.body
+      statements.upsertConversation.run(
+        id,
+        project_id || null,
+        user_id,
+        title || null,
+        model_name || 'unknown',
+        system_prompt || null,
+        conversation_context || null,
+        research_note || null,
+        cwd || null,
+        created_at || new Date().toISOString(),
+        updated_at || new Date().toISOString()
+      )
+      console.log('[LocalServer] Synced conversation:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error syncing conversation:', error)
+      res.status(500).json({ error: 'Failed to sync conversation' })
+    }
+  })
+
+  app.delete('/api/sync/conversation/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      statements.deleteConversation.run(id)
+      console.log('[LocalServer] Deleted conversation:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error deleting conversation:', error)
+      res.status(500).json({ error: 'Failed to delete conversation' })
+    }
+  })
+
+  // Sync Message
+  app.post('/api/sync/message', (req, res) => {
+    try {
+      const {
+        id,
+        conversation_id,
+        parent_id,
+        children_ids,
+        role,
+        content,
+        plain_text_content,
+        thinking_block,
+        tool_calls,
+        model_name,
+        note,
+        ex_agent_session_id,
+        ex_agent_type,
+        content_blocks,
+        created_at,
+      } = req.body
+
+      statements.upsertMessage.run(
+        id,
+        conversation_id,
+        parent_id || null,
+        typeof children_ids === 'string' ? children_ids : JSON.stringify(children_ids || []),
+        role,
+        content,
+        plain_text_content || null,
+        thinking_block || null,
+        typeof tool_calls === 'string' ? tool_calls : JSON.stringify(tool_calls || null),
+        model_name || 'unknown',
+        note || null,
+        ex_agent_session_id || null,
+        ex_agent_type || null,
+        typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null),
+        created_at || new Date().toISOString()
+      )
+      console.log('[LocalServer] Synced message:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error syncing message:', error)
+      res.status(500).json({ error: 'Failed to sync message' })
+    }
+  })
+
+  app.delete('/api/sync/message/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      statements.deleteMessage.run(id)
+      console.log('[LocalServer] Deleted message:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error deleting message:', error)
+      res.status(500).json({ error: 'Failed to delete message' })
+    }
+  })
+
+  // Sync Attachment
+  app.post('/api/sync/attachment', (req, res) => {
+    try {
+      const { id, message_id, kind, mime_type, storage, url, file_path, width, height, size_bytes, sha256, created_at } =
+        req.body
+
+      statements.upsertAttachment.run(
+        id,
+        message_id || null,
+        kind,
+        mime_type,
+        storage || 'url',
+        url || null,
+        file_path || null,
+        width || null,
+        height || null,
+        size_bytes || null,
+        sha256 || null,
+        created_at || new Date().toISOString()
+      )
+
+      // Link attachment to message if message_id provided
+      if (message_id) {
+        const linkId = uuidv4()
+        statements.linkAttachment.run(linkId, message_id, id, new Date().toISOString())
+      }
+
+      console.log('[LocalServer] Synced attachment:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error syncing attachment:', error)
+      res.status(500).json({ error: 'Failed to sync attachment' })
+    }
+  })
+
+  // Sync Provider Cost
+  app.post('/api/sync/provider-cost', (req, res) => {
+    try {
+      const {
+        id,
+        user_id,
+        message_id,
+        prompt_tokens,
+        completion_tokens,
+        reasoning_tokens,
+        approx_cost,
+        api_credit_cost,
+        created_at,
+      } = req.body
+
+      statements.upsertProviderCost.run(
+        id,
+        user_id,
+        message_id,
+        prompt_tokens || 0,
+        completion_tokens || 0,
+        reasoning_tokens || 0,
+        approx_cost || 0,
+        api_credit_cost || 0,
+        created_at || new Date().toISOString()
+      )
+      console.log('[LocalServer] Synced provider cost:', id)
+      res.json({ success: true, id })
+    } catch (error) {
+      console.error('[LocalServer] Error syncing provider cost:', error)
+      res.status(500).json({ error: 'Failed to sync provider cost' })
+    }
+  })
+
+  // Batch sync endpoint for efficiency
+  app.post('/api/sync/batch', (req, res) => {
+    const { operations } = req.body as { operations: Array<{ type: string; action: string; data: any }> }
+
+    if (!Array.isArray(operations)) {
+      return res.status(400).json({ error: 'Operations must be an array' })
+    }
+
+    const results: Array<{ success: boolean; type: string; id?: string; error?: string }> = []
+
+    // Use transaction for atomicity
+    const transaction = db!.transaction(() => {
+      for (const op of operations) {
+        try {
+          switch (op.type) {
+            case 'user':
+              if (op.action === 'create' || op.action === 'update') {
+                statements.upsertUser.run(op.data.id, op.data.username, op.data.created_at || new Date().toISOString())
+                results.push({ success: true, type: 'user', id: op.data.id })
+              }
+              break
+
+            case 'project':
+              if (op.action === 'create' || op.action === 'update') {
+                statements.upsertProject.run(
+                  op.data.id,
+                  op.data.name,
+                  op.data.user_id,
+                  op.data.context || null,
+                  op.data.system_prompt || null,
+                  op.data.created_at || new Date().toISOString(),
+                  op.data.updated_at || new Date().toISOString()
+                )
+                results.push({ success: true, type: 'project', id: op.data.id })
+              } else if (op.action === 'delete') {
+                statements.deleteProject.run(op.data.id)
+                results.push({ success: true, type: 'project', id: op.data.id })
+              }
+              break
+
+            case 'conversation':
+              if (op.action === 'create' || op.action === 'update') {
+                statements.upsertConversation.run(
+                  op.data.id,
+                  op.data.project_id || null,
+                  op.data.user_id,
+                  op.data.title || null,
+                  op.data.model_name || 'unknown',
+                  op.data.system_prompt || null,
+                  op.data.conversation_context || null,
+                  op.data.research_note || null,
+                  op.data.cwd || null,
+                  op.data.created_at || new Date().toISOString(),
+                  op.data.updated_at || new Date().toISOString()
+                )
+                results.push({ success: true, type: 'conversation', id: op.data.id })
+              } else if (op.action === 'delete') {
+                statements.deleteConversation.run(op.data.id)
+                results.push({ success: true, type: 'conversation', id: op.data.id })
+              }
+              break
+
+            case 'message':
+              if (op.action === 'create' || op.action === 'update') {
+                statements.upsertMessage.run(
+                  op.data.id,
+                  op.data.conversation_id,
+                  op.data.parent_id || null,
+                  typeof op.data.children_ids === 'string'
+                    ? op.data.children_ids
+                    : JSON.stringify(op.data.children_ids || []),
+                  op.data.role,
+                  op.data.content,
+                  op.data.plain_text_content || null,
+                  op.data.thinking_block || null,
+                  typeof op.data.tool_calls === 'string'
+                    ? op.data.tool_calls
+                    : JSON.stringify(op.data.tool_calls || null),
+                  op.data.model_name || 'unknown',
+                  op.data.note || null,
+                  op.data.ex_agent_session_id || null,
+                  op.data.ex_agent_type || null,
+                  typeof op.data.content_blocks === 'string'
+                    ? op.data.content_blocks
+                    : JSON.stringify(op.data.content_blocks || null),
+                  op.data.created_at || new Date().toISOString()
+                )
+                results.push({ success: true, type: 'message', id: op.data.id })
+              } else if (op.action === 'delete') {
+                statements.deleteMessage.run(op.data.id)
+                results.push({ success: true, type: 'message', id: op.data.id })
+              }
+              break
+
+            default:
+              results.push({ success: false, type: op.type, error: `Unknown operation type: ${op.type}` })
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error)
+          results.push({ success: false, type: op.type, error: errorMsg })
+        }
+      }
+    })
+
+    try {
+      transaction()
+      console.log(`[LocalServer] Batch sync completed: ${results.filter(r => r.success).length}/${operations.length} succeeded`)
+      res.json({ success: true, results })
+    } catch (error) {
+      console.error('[LocalServer] Batch sync failed:', error)
+      res.status(500).json({ error: 'Batch sync failed', results })
+    }
+  })
+
+  // Stats endpoint
+  app.get('/api/sync/stats', (req, res) => {
+    try {
+      const stats = {
+        projects: db!.prepare('SELECT COUNT(*) as count FROM projects').get() as { count: number },
+        conversations: db!.prepare('SELECT COUNT(*) as count FROM conversations').get() as { count: number },
+        messages: db!.prepare('SELECT COUNT(*) as count FROM messages').get() as { count: number },
+        attachments: db!.prepare('SELECT COUNT(*) as count FROM message_attachments').get() as { count: number },
+      }
+      res.json(stats)
+    } catch (error) {
+      console.error('[LocalServer] Error getting stats:', error)
+      res.status(500).json({ error: 'Failed to get stats' })
+    }
+  })
+}
+
+// Start the server
+export function startLocalServer(port: number = 3002, dbPath?: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      const actualDbPath = dbPath || path.join(process.cwd(), 'data', 'local-sync.db')
+      initializeLocalDatabase(actualDbPath)
+      setupServer()
+
+      server = app.listen(port, '127.0.0.1', () => {
+        console.log(`[LocalServer] Local sync server running on http://127.0.0.1:${port}`)
+        console.log(`[LocalServer] Database path: ${actualDbPath}`)
+        resolve()
+      })
+
+      server.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'EADDRINUSE') {
+          console.error(`[LocalServer] Port ${port} is already in use`)
+          reject(new Error(`Port ${port} is already in use`))
+        } else {
+          console.error('[LocalServer] Server error:', err)
+          reject(err)
+        }
+      })
+    } catch (error) {
+      console.error('[LocalServer] Failed to start:', error)
+      reject(error)
+    }
+  })
+}
+
+// Stop the server
+export function stopLocalServer(): Promise<void> {
+  return new Promise(resolve => {
+    if (server) {
+      server.close(() => {
+        console.log('[LocalServer] Server stopped')
+        if (db) {
+          db.close()
+          db = null
+        }
+        server = null
+        resolve()
+      })
+    } else {
+      resolve()
+    }
+  })
+}
+
+// Export for direct usage
+export { app, db }
