@@ -1,6 +1,7 @@
 # Dual-Sync Implementation Plan for Electron Mode
 
 ## Overview
+
 Sync data between Railway server (remote/authoritative) and local SQLite database in Electron mode. Railway handles AI generation; local SQLite provides offline access and backup.
 
 **Strategy**: Railway-first, write-through sync (not bidirectional)
@@ -10,14 +11,18 @@ Sync data between Railway server (remote/authoritative) and local SQLite databas
 ## Phase 1: Local Server Infrastructure (~4-6 hours)
 
 ### 1.1 Create Embedded Express Server
+
 **New File**: `electron/localServer.ts`
+
 - Import server routes and models from `ygg-chat/server/src/`
 - Initialize SQLite database in Electron app data directory (`app.getPath('userData')`)
 - Run on `localhost:3002` (separate from dev server port 3001)
 - Apply same schema as production (`db.ts` migrations)
 
 ### 1.2 Update Electron Main Process
+
 **Modify**: `electron/main.ts`
+
 - Import and start local server on `app.whenReady()`
 - Gracefully stop server on `app.on('before-quit')`
 - Handle port conflicts with retry logic
@@ -28,7 +33,9 @@ Sync data between Railway server (remote/authoritative) and local SQLite databas
 ## Phase 2: Sync Layer (~3-4 hours)
 
 ### 2.1 Create Sync Manager
+
 **New File**: `src/lib/sync/syncManager.ts`
+
 ```typescript
 interface SyncOperation {
   id: string
@@ -50,7 +57,9 @@ class SyncManager {
 ```
 
 ### 2.2 Implement Sync Operations
+
 **New File**: `src/lib/sync/operations.ts`
+
 - `syncProject(projectData)` - Replicate project to local DB
 - `syncConversation(conversationData)` - Replicate conversation
 - `syncMessage(messageData)` - Replicate message with all metadata
@@ -62,7 +71,9 @@ class SyncManager {
 ## Phase 3: API Layer Integration (~6-8 hours)
 
 ### 3.1 Create Dual-API Wrapper
+
 **New File**: `src/utils/dualApi.ts`
+
 ```typescript
 import { api as railwayApi } from './api'
 import { environment } from './api'
@@ -92,27 +103,30 @@ export const dualApi = {
 ```
 
 ### 3.2 Modify Project Actions
+
 **Modify**: `src/features/projects/projectActions.ts`
+
 ```typescript
-export const createProject = createAsyncThunk(
-  'projects/create',
-  async (projectData, { extra }) => {
-    const result = await dualApi.post('/projects', token, projectData)
-    // Local sync happens automatically in dualApi
-    return result
-  }
-)
+export const createProject = createAsyncThunk('projects/create', async (projectData, { extra }) => {
+  const result = await dualApi.post('/projects', token, projectData)
+  // Local sync happens automatically in dualApi
+  return result
+})
 ```
 
 ### 3.3 Modify Conversation Actions
+
 **Modify**: `src/features/conversations/conversationActions.ts`
+
 - Wrap `createConversation` with dual sync
 - Wrap `updateConversation` with dual sync
 - Wrap `deleteConversation` with dual sync
 - Wrap `updateSystemPrompt`, `updateContext`, `updateResearchNote`
 
 ### 3.4 Modify Message Actions
+
 **Modify**: `src/features/chats/chatActions.ts`
+
 - Special handling for streaming (see Phase 4)
 - Wrap `updateMessage` with dual sync
 - Wrap `deleteMessage` with dual sync
@@ -122,7 +136,9 @@ export const createProject = createAsyncThunk(
 ## Phase 4: Streaming Message Sync (~4-6 hours)
 
 ### 4.1 Handle Complete SSE Event
+
 **Modify**: `src/features/chats/chatActions.ts` (sendMessage thunk)
+
 ```typescript
 // Inside SSE event loop
 if (chunk.type === 'complete') {
@@ -147,7 +163,9 @@ if (chunk.type === 'complete') {
 ```
 
 ### 4.2 Attachment Replication
+
 **New File**: `src/lib/sync/attachmentSync.ts`
+
 ```typescript
 async function syncAttachmentToLocal(attachment: Attachment): Promise<void> {
   // 1. Download from Railway CDN
@@ -157,15 +175,18 @@ async function syncAttachmentToLocal(attachment: Attachment): Promise<void> {
   // 2. Upload to local server
   const formData = new FormData()
   formData.append('file', blob, attachment.filename)
-  formData.append('metadata', JSON.stringify({
-    id: attachment.id,
-    message_id: attachment.message_id,
-    // ... other metadata
-  }))
+  formData.append(
+    'metadata',
+    JSON.stringify({
+      id: attachment.id,
+      message_id: attachment.message_id,
+      // ... other metadata
+    })
+  )
 
   await fetch(`${LOCAL_API_BASE}/attachments/sync`, {
     method: 'POST',
-    body: formData
+    body: formData,
   })
 }
 ```
@@ -175,7 +196,9 @@ async function syncAttachmentToLocal(attachment: Attachment): Promise<void> {
 ## Phase 5: Environment Configuration (~2-4 hours)
 
 ### 5.1 Update Environment Variables
+
 **Modify**: `.env.electron`
+
 ```
 VITE_ENVIRONMENT=electron
 VITE_API_URL=https://your-railway-server.railway.app/api
@@ -183,13 +206,17 @@ VITE_LOCAL_API_URL=http://localhost:3002/api
 ```
 
 ### 5.2 User ID Consistency
+
 **Important**: Ensure same user ID between Railway and local
+
 - On first Electron launch, register user with Railway
 - Store Railway user ID in local database
 - Use this ID for all operations
 
 ### 5.3 Build Configuration
+
 **Modify**: `electron-builder.json`
+
 ```json
 {
   "extraResources": [
@@ -206,7 +233,9 @@ VITE_LOCAL_API_URL=http://localhost:3002/api
 ```
 
 ### 5.4 Local Server Sync Endpoints
+
 **New Routes on Local Server**: `electron/routes/sync.ts`
+
 ```typescript
 // POST /api/sync/project - Accepts full project object
 // POST /api/sync/conversation - Accepts full conversation object
@@ -220,6 +249,7 @@ VITE_LOCAL_API_URL=http://localhost:3002/api
 ## Key Files Summary
 
 ### Create New Files:
+
 1. `electron/localServer.ts` - Embedded Express server
 2. `electron/routes/sync.ts` - Sync-specific endpoints
 3. `src/lib/sync/syncManager.ts` - Queue and coordination
@@ -228,6 +258,7 @@ VITE_LOCAL_API_URL=http://localhost:3002/api
 6. `src/utils/dualApi.ts` - Dual-write wrapper
 
 ### Modify Existing Files:
+
 1. `electron/main.ts` - Start/stop local server
 2. `electron/preload.ts` - Expose sync status (optional)
 3. `src/features/projects/projectActions.ts` - Use dualApi
@@ -236,6 +267,7 @@ VITE_LOCAL_API_URL=http://localhost:3002/api
 6. `src/utils/api.ts` - Export environment for checks
 
 ### Copy/Bundle:
+
 1. Server database schema (`db.ts`) → Electron bundle
 2. Server models (`models.ts`) → Electron bundle
 3. Shared types already accessible
@@ -245,24 +277,28 @@ VITE_LOCAL_API_URL=http://localhost:3002/api
 ## Important Considerations
 
 ### Data Consistency
+
 - **Railway is authoritative** - Local is replica
 - **Same UUIDs** - Use Railway-generated IDs locally
 - **Eventual consistency** - Local may lag behind Railway
 - **No conflict resolution** - Railway always wins
 
 ### Error Handling
+
 - **Fire-and-forget sync** - Don't block UI on local failures
 - **Retry queue** - Failed syncs retried with backoff
 - **Error logging** - Track sync failures for debugging
 - **Graceful degradation** - App works if local sync fails
 
 ### Performance
+
 - **Async sync** - Don't wait for local write
 - **Batch operations** - Group related syncs
 - **Selective sync** - Only sync relevant data
 - **Compression** - Compress large content before storage
 
 ### Security
+
 - **Local server localhost only** - No external access
 - **No auth needed locally** - Trust electron process
 - **Sanitize data** - Validate before writing to local DB
@@ -313,31 +349,55 @@ VITE_LOCAL_API_URL=http://localhost:3002/api
   - [x] Add type definitions (@types/better-sqlite3, @types/express, @types/cors)
   - [x] Configure electron-builder for native module rebuilding
   - [x] Add electron-rebuild for native dependencies
-- [ ] Testing & Polish
-  - [ ] Run `npm install` to install new dependencies
-  - [ ] Test Electron app starts local server on port 3002
-  - [ ] Test sync operations fire after Railway API calls
-  - [ ] Verify local SQLite database is created and populated
+- [x] Testing & Polish
+  - [x] Run `npm install` to install new dependencies
+  - [x] Test Electron app starts local server on port 3002
+  - [x] Test sync operations fire after Railway API calls
+  - [x] Verify local SQLite database is created and populated
+        All dual-sync fixes are complete. Here's a summary of the changes:
+        Summary of Changes for auth bugs
+  - [x] electron/localServer.ts
+  - [x] Added helper functions to ensure dependencies exist before sync:
+  - [x] ensureUserExists() - auto-creates stub user if not found
+  - [x] ensureProjectExists() - auto-creates stub project with user dependency
+  - [x] ensureConversationExists() - auto-creates stub conversation with user/project dependencies
+  - [x] Updated sync endpoints to handle owner_id → user_id mapping (Railway sends owner_id, local SQLite uses user_id):
+  - [x] /api/sync/project - Now accepts owner_id and ensures user exists
+  - [x] /api/sync/conversation - Now accepts owner_id and ensures user/project dependencies exist
+  - [x] /api/sync/message - Now queries existing conversation for user context if not provided, then ensures conversation exists
+  2. src/features/chats/chatActions.ts
+  - [x] Updated all dualSync.syncMessage() calls to include user context:
+  - [x] Added user_id: auth.userId
+  - [x] Added project_id: selectedProject?.id || null
+  - [x] This applies to all message sync operations across createStreamingMessage, sendMessageToBranch, and updateMessage functions
+  - [x] These changes ensure that:
+  - [x] Foreign key constraints won't fail because dependencies are auto-created
+  - [x] Schema differences between Railway and local SQLite are properly handled
+  - [x] User context is available for creating stub records when syncing messages
 
 ## Quick Start
 
 1. Install dependencies:
+
    ```bash
    cd ygg-chat/client/ygg-chat-r
    npm install
    ```
 
 2. For Electron builds with native modules:
+
    ```bash
    npx electron-rebuild
    ```
 
 3. Start Electron dev mode:
+
    ```bash
    npm run dev:electron
    ```
 
 4. Check local sync server:
+
    ```bash
    curl http://127.0.0.1:3002/api/health
    # Expected: { "status": "ok", "mode": "local-sync" }
@@ -351,10 +411,12 @@ VITE_LOCAL_API_URL=http://localhost:3002/api
 ## Files Created/Modified
 
 ### Created:
+
 - `electron/localServer.ts` - Embedded Express server with SQLite
 - `src/lib/sync/dualSyncManager.ts` - Client-side sync coordinator
 
 ### Modified:
+
 - `electron/main.ts` - Local server lifecycle management
 - `src/features/projects/projectActions.ts` - Added dualSync calls
 - `src/features/conversations/conversationActions.ts` - Added dualSync calls
