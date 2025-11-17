@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
 import { isUserAllowlisted } from '../lib/auth/allowlist'
+import { dualSync } from '../lib/sync/dualSyncManager'
 import { supabase } from '../lib/supabase'
+import { API_BASE } from '../utils/api'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -125,7 +127,7 @@ const Login: React.FC = () => {
 
             console.log('[Login] Creating local user in database...', { userId, username })
 
-            const userResponse = await fetch('/api/users', {
+            const userResponse = await fetch(`${API_BASE}/users`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -142,6 +144,13 @@ const Login: React.FC = () => {
 
             const localUser = await userResponse.json()
             console.log('[Login] Local user created successfully:', localUser)
+
+            // Sync user to local SQLite database (fire-and-forget)
+            dualSync.syncUser({
+              id: localUser.id,
+              username: localUser.username,
+              created_at: localUser.created_at,
+            })
 
             // Save OAuth session to Electron storage so ElectronAuthProvider can use it
             if (window.electronAPI?.storage) {

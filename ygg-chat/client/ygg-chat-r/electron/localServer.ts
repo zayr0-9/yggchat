@@ -232,7 +232,7 @@ function setupServer() {
   app.use(express.json({ limit: '25mb' }))
 
   // Health check
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', mode: 'local-sync' })
   })
 
@@ -463,7 +463,8 @@ function setupServer() {
     const { operations } = req.body as { operations: Array<{ type: string; action: string; data: any }> }
 
     if (!Array.isArray(operations)) {
-      return res.status(400).json({ error: 'Operations must be an array' })
+      res.status(400).json({ error: 'Operations must be an array' })
+      return
     }
 
     const results: Array<{ success: boolean; type: string; id?: string; error?: string }> = []
@@ -573,7 +574,7 @@ function setupServer() {
   })
 
   // Stats endpoint
-  app.get('/api/sync/stats', (req, res) => {
+  app.get('/api/sync/stats', (_req, res) => {
     try {
       const stats = {
         projects: db!.prepare('SELECT COUNT(*) as count FROM projects').get() as { count: number },
