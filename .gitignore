@@ -1,6 +1,7 @@
 # Root-level
 /node_modules
 ygg-chat/node_modules/
+ygg-chat/packages/local-sync-server/node_modules/
 /.env
 .DS_Store
 npm-debug.log*
@@ -61,7 +62,8 @@ ygg-chat/server/src/data/uploads/
 /web/.env.local
 /web/*.log
 /web/tsconfig.tsbuildinfo
-
+#local-server
+ygg-chat/packages/local-sync-server/dist/
 # Misc
 *.local
 *.tmp
