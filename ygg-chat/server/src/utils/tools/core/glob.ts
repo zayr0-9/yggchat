@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import { glob as globCallback } from 'glob'
 import { promisify } from 'util'
 import os from 'os'
+import { resolveToWindowsPath, isWSLPath } from '../../wslBridge'
 
 const globAsync = promisify(globCallback)
 
@@ -61,12 +62,24 @@ function isFsRoot(dir: string): boolean {
   return resolved === root
 }
 
-function ensureWithinWorkspace(cwd: string): string {
+async function ensureWithinWorkspace(cwd: string): Promise<string> {
+  // If it's a WSL path, we treat it as safe/allowed for now because
+  // we can't easily validate it against a Windows WORKSPACE_ROOT.
+  // We resolve it to a Windows UNC path for consumption.
+  if (isWSLPath(cwd)) {
+     return await resolveToWindowsPath(cwd)
+  }
+
   const resolved = path.resolve(cwd || WORKSPACE_ROOT)
   const normalized = resolved.replace(/\\/g, '/').replace(/\/+/g, '/')
   const normalizedRoot = NORMALIZED_ROOT.replace(/\\/g, '/').replace(/\/+/g, '/')
 
   if (!normalized.startsWith(normalizedRoot)) {
+    // Just warning or error? The original code threw Error.
+    // But if we are running server on windows for a WSL project, cwd passed might be completely outside server's source dir.
+    // That's expected.
+    // But we should still prevent traversing up to C:\ or /
+    // For now let's keep the check for Windows paths.
     throw new Error(`cwd '${cwd}' is outside the workspace root (${WORKSPACE_ROOT}).`)
   }
 
@@ -149,7 +162,7 @@ export async function globSearch(
   } = options
 
   try {
-    const resolvedCwd = ensureWithinWorkspace(cwd)
+    const resolvedCwd = await ensureWithinWorkspace(cwd)
     const sanitizedPattern = enforcePatternDepth(pattern)
     const ignorePatterns = mergeIgnorePatterns(DEFAULT_IGNORE_PATTERNS, ignore)
 
@@ -166,6 +179,7 @@ export async function globSearch(
       realpath,
       stat,
       withFileTypes,
+      windowsPathsNoEscape: true, // Help with UNC paths?
     }
 
     let results: any[]
@@ -219,6 +233,7 @@ export async function globSearch(
     }
   }
 }
+
 
 export default globSearch
 

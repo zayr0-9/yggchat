@@ -1,6 +1,7 @@
 // ygg-chat/server/src/utils/tools/core/ripgrep.ts
 import { spawn } from 'child_process'
 import * as path from 'path'
+import { isWSLPath, getWSLCommandArgs } from '../../wslBridge'
 
 const DEFAULT_MAX_OUTPUT_CHARS = (() => {
   const envValue = Number(process.env.RIPGREP_MAX_OUTPUT_CHARS ?? process.env.RIPGREP_OUTPUT_LIMIT)
@@ -65,6 +66,8 @@ export async function ripgrepSearch(
       ? Math.floor(userMaxOutputChars)
       : DEFAULT_MAX_OUTPUT_CHARS
 
+  const isWSL = isWSLPath(searchPath)
+
   // Build rg command arguments
   const args: string[] = []
 
@@ -72,7 +75,8 @@ export async function ripgrepSearch(
   args.push(pattern)
 
   // Path to search
-  const resolvedPath = path.resolve(searchPath)
+  // If WSL, keep as is. If Windows, resolve it.
+  const resolvedPath = isWSL ? searchPath : path.resolve(searchPath)
   args.push(resolvedPath)
 
   // Options
@@ -119,9 +123,18 @@ export async function ripgrepSearch(
     args.push('--json')
   }
 
+  let cmd = 'rg'
+  let cmdArgs = args
+
+  if (isWSL) {
+    const wsl = await getWSLCommandArgs('rg', args)
+    cmd = wsl[0]
+    cmdArgs = wsl[1]
+  }
+
   return new Promise(resolve => {
-    const command = `rg ${args.join(' ')}`
-    const child = spawn('rg', args, {
+    const command = `${cmd} ${cmdArgs.join(' ')}`
+    const child = spawn(cmd, cmdArgs, {
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 

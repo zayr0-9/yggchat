@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { isWSLPath, resolveToWindowsPath } from '../../wslBridge';
 
 /**
  * Deletes a file at the specified path
@@ -10,7 +11,12 @@ import path from 'path';
 export async function deleteFile(filePath: string): Promise<void> {
   try {
     // Resolve the path to handle relative paths
-    const resolvedPath = path.resolve(filePath);
+    let resolvedPath = filePath;
+    if (isWSLPath(filePath)) {
+      resolvedPath = await resolveToWindowsPath(filePath);
+    } else {
+      resolvedPath = path.resolve(filePath);
+    }
     
     // Check if file exists
     try {
@@ -41,7 +47,12 @@ export async function safeDeleteFile(
   filePath: string, 
   allowedExtensions?: string[]
 ): Promise<void> {
-  const resolvedPath = path.resolve(filePath);
+  let resolvedPath = filePath;
+  if (isWSLPath(filePath)) {
+    resolvedPath = await resolveToWindowsPath(filePath);
+  } else {
+    resolvedPath = path.resolve(filePath);
+  }
   
   // Validate file extension if provided
   if (allowedExtensions && allowedExtensions.length > 0) {

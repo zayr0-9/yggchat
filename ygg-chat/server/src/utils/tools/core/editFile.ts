@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { readTextFile } from './readFile'
+import { isWSLPath, resolveToWindowsPath } from '../../wslBridge'
 
 export interface EditFileOptions {
   createBackup?: boolean
@@ -269,7 +270,12 @@ export async function appendToFile(
   const { createBackup = false, encoding = 'utf8' } = options
 
   try {
-    const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
+    let absolutePath = filePath
+    if (isWSLPath(filePath)) {
+      absolutePath = await resolveToWindowsPath(filePath)
+    } else {
+      absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
+    }
 
     let originalContent = ''
     let fileExists = true
@@ -277,6 +283,8 @@ export async function appendToFile(
     try {
       const fileData = await readTextFile(filePath)
       originalContent = fileData.content
+      // Update absolutePath from read result just in case
+      absolutePath = fileData.absolutePath
     } catch {
       fileExists = false
     }

@@ -1,6 +1,7 @@
 // ygg-chat/server/src/utils/tools/core/readFile.ts
 import * as fs from 'fs'
 import * as path from 'path'
+import { resolveToWindowsPath, isWSLPath } from '../../wslBridge'
 
 export interface LineRange {
   startLine: number // 1-based line number to start reading from (inclusive)
@@ -51,7 +52,12 @@ export async function readTextFile(
   const maxBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 200 * 1024
 
   // Resolve absolute path
-  const abs = path.isAbsolute(inputPath) ? inputPath : path.resolve(process.cwd(), inputPath)
+  let abs = inputPath
+  if (isWSLPath(inputPath)) {
+    abs = await resolveToWindowsPath(inputPath)
+  } else {
+    abs = path.isAbsolute(inputPath) ? inputPath : path.resolve(process.cwd(), inputPath)
+  }
 
   // Check existence and get size
   let stats: fs.Stats
@@ -212,3 +218,4 @@ export async function readFileContinuation(
     endLine,
   })
 }
+

@@ -1,6 +1,7 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
+import { isWSLPath, resolveToWindowsPath } from '../../wslBridge'
 
 export interface CreateFileOptions {
   directory?: string
@@ -41,17 +42,39 @@ export async function createTextFile(
   try {
     // Determine the target path
     let targetPath: string
-    if (!path.isAbsolute(filePath) && directory) {
-      targetPath = path.resolve(directory, filePath)
-    } else if (!path.isAbsolute(filePath)) {
-      targetPath = path.resolve(process.cwd(), filePath)
-    } else {
+    let isWSL = false
+
+    if (directory && isWSLPath(directory)) {
+      isWSL = true
+      // Join manually for WSL paths to avoid backslash issues
+      if (isWSLPath(filePath)) { // Absolute WSL path
+        targetPath = filePath
+      } else {
+        // Assume relative path, simple join
+        targetPath = directory.replace(/\/$/, '') + '/' + filePath
+      }
+    } else if (isWSLPath(filePath)) {
+      isWSL = true
       targetPath = filePath
+    } else {
+      // Standard logic
+      if (!path.isAbsolute(filePath) && directory) {
+        targetPath = path.resolve(directory, filePath)
+      } else if (!path.isAbsolute(filePath)) {
+        targetPath = path.resolve(process.cwd(), filePath)
+      } else {
+        targetPath = filePath
+      }
+    }
+    
+    let windowsPath = targetPath
+    if (isWSL) {
+      windowsPath = await resolveToWindowsPath(targetPath)
     }
 
     // Check if file already exists
     const fileExists = await fs.promises
-      .access(targetPath, fs.constants.F_OK)
+      .access(windowsPath, fs.constants.F_OK)
       .then(() => true)
       .catch(() => false)
 
@@ -66,12 +89,18 @@ export async function createTextFile(
     }
 
     // Create parent directories if needed
-    const parentDir = path.dirname(targetPath)
+    const parentDir = isWSL ? targetPath.substring(0, targetPath.lastIndexOf('/')) : path.dirname(targetPath)
     let dirsCreated = false
+    
+    // We need the windows path for the parent dir too
+    let windowsParentDir = parentDir
+    if (isWSL) {
+      windowsParentDir = await resolveToWindowsPath(parentDir)
+    }
 
     if (createParentDirs) {
       try {
-        await fs.promises.mkdir(parentDir, { recursive: true })
+        await fs.promises.mkdir(windowsParentDir, { recursive: true })
         dirsCreated = true
       } catch (mkdirError: any) {
         return {
@@ -85,7 +114,7 @@ export async function createTextFile(
     } else {
       // Check if parent directory exists
       const dirExists = await fs.promises
-        .access(parentDir, fs.constants.F_OK)
+        .access(windowsParentDir, fs.constants.F_OK)
         .then(() => true)
         .catch(() => false)
 
@@ -101,19 +130,20 @@ export async function createTextFile(
     }
 
     // Write the file
-    await fs.promises.writeFile(targetPath, content, 'utf8')
+    await fs.promises.writeFile(windowsPath, content, 'utf8')
 
     // Make executable if requested and supported by platform
-    if (executable && process.platform !== 'win32') {
+    // If WSL, we should try chmod even if process.platform is win32
+    if (executable && (process.platform !== 'win32' || isWSL)) {
       try {
-        await fs.promises.chmod(targetPath, 0o755)
+        await fs.promises.chmod(windowsPath, 0o755)
       } catch (chmodError: any) {
         // Non-failure: try to continue even if chmod fails
         console.warn(`Warning: Could not make file executable: ${chmodError.message}`)
       }
     }
 
-    const stats = await fs.promises.stat(targetPath)
+    const stats = await fs.promises.stat(windowsPath)
 
     const message = dirsCreated
       ? `File created successfully at ${targetPath} (parent directories created)`

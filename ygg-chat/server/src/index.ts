@@ -276,7 +276,7 @@ if (env.VITE_ENVIRONMENT === 'web') {
 }
 
 ;(async () => {
-  server.listen(3001, () => {
+  server.listen(3001, '0.0.0.0', () => {
     console.log('🚀 Server on :3001')
     console.log('🔌 WebSocket IDE Context on ws://localhost:3001/ide-context')
 
