@@ -105,8 +105,32 @@ Or simpler: Use `electron-rebuild` on the server directory before packaging.
     *   Check `path.join(process.resourcesPath, 'server', 'dist', 'index.js')`.
     *   Ensure `extraResources` structure matches this expectation.
 
-## Summary of Changes to Make
-1.  Edit `ygg-chat/client/ygg-chat-r/package.json`.
-2.  Add `build:server` command.
-3.  Add `extraResources` configuration.
-4.  Add `electron-rebuild` step for server dependencies.
+## Build Instructions
+
+To build the Windows application:
+
+1.  **Navigate to the Client Directory**:
+    ```bash
+    cd ygg-chat/client/ygg-chat-r
+    ```
+
+2.  **Install Dependencies**:
+    Ensure all dependencies are installed for both client and server.
+    ```bash
+    npm install
+    cd ../../server && npm install && cd ../client/ygg-chat-r
+    ```
+
+3.  **Rebuild Native Modules**:
+    Rebuild `better-sqlite3` for Electron.
+    ```bash
+    npm run rebuild:server
+    ```
+
+4.  **Build for Windows**:
+    Run the build script which handles server build, client build, main process compilation, and packaging.
+    ```bash
+    npm run build:win
+    ```
+
+The output installer will be located in `ygg-chat/client/ygg-chat-r/release/`.

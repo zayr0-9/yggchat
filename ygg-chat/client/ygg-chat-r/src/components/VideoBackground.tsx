@@ -1,4 +1,5 @@
 import React from 'react'
+import { getAssetPath } from '../utils/assetPath'
 
 /**
  * Shared video background component that persists across route navigation.
@@ -15,7 +16,7 @@ const VideoBackground: React.FC = () => {
         muted
         className='fixed inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 dark:hidden'
       >
-        <source src='/video/l3.webm' type='video/webm' />
+        <source src={getAssetPath('video/l3.webm')} type='video/webm' />
       </video>
 
       {/* Video Background - Dark Mode */}
@@ -25,7 +26,7 @@ const VideoBackground: React.FC = () => {
         muted
         className='fixed w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:blur-[1px] object-cover z-0 hidden dark:block'
       >
-        <source src='/video/d2.webm' type='video/webm' />
+        <source src={getAssetPath('video/d2.webm')} type='video/webm' />
       </video>
     </>
   )

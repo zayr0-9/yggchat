@@ -18,7 +18,12 @@
 .acrylic-extreme {
   position: relative;
   isolation: isolate;
-  background-image: url('/img/noise.png');
+  /* Using absolute path for Web, but this might fail in Electron if base is ./ 
+     However, CSS url resolution in Vite usually rebases assets. 
+     If it fails in Electron, we might need to inline the image or use a relative path like ../../../public/img/noise.png (if public is accessible via relative) 
+     Actually, Vite handles /img/noise.png correctly for base: './' if it's in public/ 
+     Let's try removing the leading slash to let Vite resolve it relative to base */
+  background-image: url('img/noise.png');
   background-repeat: repeat;
 
   transition:
@@ -38,7 +43,7 @@
 .acrylic-medium {
   position: relative;
   isolation: isolate;
-  background-image: url('/img/noise.png');
+  background-image: url('img/noise.png');
   background-repeat: repeat;
   transition:
     background-color 0.2s ease,

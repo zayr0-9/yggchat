@@ -17,6 +17,7 @@ import { useProjects, useResearchNotes } from '../hooks/useQueries'
 import { sortProjects } from '../utils/sortProjects'
 import EditProject from './EditProject'
 import SideBar from './sideBar'
+import { getAssetPath } from '../utils/assetPath'
 
 const Homepage: React.FC = () => {
   const dispatch = useAppDispatch()
@@ -189,12 +190,12 @@ const Homepage: React.FC = () => {
             <div className='flex items-center flex-wrap gap-3 rounded-full pl-2 pr-3 py-2 2xl:pt-2'>
               <div className='sm:pt-4 lg:pt-6'>
                 <img
-                  src='/img/logo-d.svg'
+                  src={getAssetPath('img/logo-d.svg')}
                   alt='Yggdrasil Logo'
                   className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)] acrylic-ultra-light-nb'
                 />
                 <img
-                  src='/img/logo-l-thick.svg'
+                  src={getAssetPath('img/logo-l-thick.svg')}
                   alt='Yggdrasil Logo'
                   className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.55)]'
                 />

@@ -3,6 +3,7 @@ import 'boxicons/css/boxicons.min.css'
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/Button/button'
+import { getAssetPath } from '../utils/assetPath'
 
 interface Feature {
   id: number
@@ -28,7 +29,7 @@ const LandingPage: React.FC = () => {
       superscript: '01',
       description:
         "As conversations naturally branch into tangents and follow-up questions, Yggdrasil's intelligent navigation system visualizes and manages the full structure of your dialogue. Every edit spawns a new branch, ensuring an immutable, accurate log of every message. Nothing is ever lost, delivering complete transparency into the evolution of your thought.",
-      videoSrc: '/video/d2.webm',
+      videoSrc: getAssetPath('video/d2.webm'),
     },
     {
       id: 2,
@@ -36,7 +37,7 @@ const LandingPage: React.FC = () => {
       superscript: '02',
       description:
         'Intelligent context management ensures your AI always remembers what matters. Track, organize, and maintain conversation state across branches with precision. Never lose important details in long conversations.',
-      videoSrc: '/video/l3.webm',
+      videoSrc: getAssetPath('video/l3.webm'),
     },
     {
       id: 3,
@@ -44,7 +45,7 @@ const LandingPage: React.FC = () => {
       superscript: '03',
       description:
         'Empower your AI with autonomous capabilities. Create agents that can act independently, make decisions, and accomplish complex tasks. Perfect for automation and advanced workflows.',
-      videoSrc: '/video/d2.webm',
+      videoSrc: getAssetPath('video/d2.webm'),
     },
     {
       id: 4,
@@ -52,7 +53,7 @@ const LandingPage: React.FC = () => {
       superscript: '04',
       description:
         'Switch between different AI models seamlessly. Leverage the best model for each task—whether you need speed, creativity, or specialized expertise. Compare outputs across models in real-time.',
-      videoSrc: '/video/l3.webm',
+      videoSrc: getAssetPath('video/l3.webm'),
     },
   ]
 
@@ -224,7 +225,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
 
           <div className='mr-2 lg:mr-6 flex items-center flex-wrap gap-6 lg:gap-10 rounded-full'>
             <img
-              src='/img/logo-l-thick.svg'
+              src={getAssetPath('img/logo-l-thick.svg')}
               alt='Yggdrasil Logo'
               className='acrylic-light-dark w-18 h-18 sm:w-14 sm:h-14 md:w-18 md:h-18 lg:w-26 lg:h-26 xl:w-28 xl:h-28 2xl:w-36 2xl:h-36 dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
             />
