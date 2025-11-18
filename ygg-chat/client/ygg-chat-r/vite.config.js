@@ -9,6 +9,8 @@ export default defineConfig(function (_a) {
     var isElectron = buildTarget === 'electron';
     var isWeb = buildTarget === 'web';
     return {
+        // Use relative paths for Electron (file:// protocol requires ./ instead of /)
+        base: isElectron ? './' : '/',
         plugins: [react(), tailwindcss()],
         // Define compile-time constants for conditional code
         define: {

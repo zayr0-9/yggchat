@@ -24,6 +24,7 @@ interface ElectronAPI {
     login: (credentials: any) => Promise<any>
     logout: () => Promise<void>
     openExternal: (url: string) => Promise<{ success: boolean; error?: string }>
+    openOAuthWindow: (url: string) => Promise<{ success: boolean; error?: string }>
     onOAuthCallback: (callback: (url: string) => void) => () => void
   }
   storage: {

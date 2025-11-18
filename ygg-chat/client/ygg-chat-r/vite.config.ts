@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
   const isWeb = buildTarget === 'web'
 
   return {
+    // Use relative paths for Electron (file:// protocol requires ./ instead of /)
+    base: isElectron ? './' : '/',
+
     plugins: [react(), tailwindcss()],
 
     // Define compile-time constants for conditional code

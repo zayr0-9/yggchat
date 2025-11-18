@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './App.css'
 import { LiquidGlassSVG } from './components/LiquidGlassSVG'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -6,9 +6,17 @@ import VideoBackground from './components/VideoBackground'
 import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, PaymentPlans, Settings } from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
+// Use HashRouter for Electron (file:// protocol requires hash-based routing)
+// Use BrowserRouter for web (standard HTML5 history API)
+const isElectron =
+  (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
+  import.meta.env.VITE_ENVIRONMENT === 'electron'
+
+const Router = isElectron ? HashRouter : BrowserRouter
+
 function App() {
   return (
-    <BrowserRouter>
+    <Router>
       {/* Persistent video background across all routes */}
       <VideoBackground />
       {/* SVG filters for liquid glass effect */}
@@ -75,7 +83,7 @@ function App() {
         {/* Fallback */}
         <Route path='*' element={<Navigate to='/' replace />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   )
 }
 

@@ -155,7 +155,8 @@ function startServer(): Promise<void> {
   return new Promise((resolve, reject) => {
     // In production, server is bundled separately
     // In development, it's running separately via npm run dev:electron
-    const isDev = process.env.NODE_ENV !== 'production'
+    // Use app.isPackaged for reliable detection (true when running from installer)
+    const isDev = !app.isPackaged
 
     if (isDev) {
       console.log('[Electron] Development mode - assuming server is already running on port 3001')
@@ -202,7 +203,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
+      preload: path.join(__dirname, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -217,7 +218,8 @@ function createWindow() {
   })
 
   // Load the app
-  const isDev = process.env.NODE_ENV !== 'production'
+  // Use app.isPackaged for reliable detection (true when running from installer)
+  const isDev = !app.isPackaged
 
   if (isDev) {
     // Development: Load from Vite dev server
@@ -225,6 +227,7 @@ function createWindow() {
     mainWindow.webContents.openDevTools()
   } else {
     // Production: Load from built files
+    console.log('[Electron] Production mode - loading from dist-electron/index.html')
     mainWindow.loadFile(path.join(__dirname, '../dist-electron/index.html'))
   }
 
@@ -449,6 +452,78 @@ ipcMain.handle('auth:openExternal', async (_event, url: string) => {
     console.error('[Electron IPC] Failed to open external URL:', error)
     return { success: false, error: String(error) }
   }
+})
+
+// Open OAuth URL in a new BrowserWindow (for WSL/Linux compatibility)
+ipcMain.handle('auth:openOAuthWindow', async (_event, url: string) => {
+  console.log('[Electron IPC] Opening OAuth window:', url)
+
+  return new Promise((resolve) => {
+    // Create a modal window for OAuth
+    const oauthWindow = new BrowserWindow({
+      width: 500,
+      height: 700,
+      modal: true,
+      parent: mainWindow || undefined,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+      },
+      title: 'Sign in',
+      autoHideMenuBar: true,
+    })
+
+    // Load the OAuth URL
+    oauthWindow.loadURL(url)
+
+    // Handle navigation to callback URL
+    const handleNavigation = (navigationUrl: string) => {
+      console.log('[Electron OAuth] Navigation detected:', navigationUrl)
+
+      // Check if this is our callback URL
+      if (navigationUrl.startsWith(`${PROTOCOL}://`)) {
+        console.log('[Electron OAuth] Callback URL detected, closing window')
+
+        // Close the OAuth window
+        oauthWindow.close()
+
+        // Send the callback to handleOAuthCallback function
+        handleOAuthCallback(navigationUrl)
+
+        resolve({ success: true })
+        return true
+      }
+      return false
+    }
+
+    // Listen for redirects (works for most OAuth providers)
+    oauthWindow.webContents.on('will-redirect', (event, navigationUrl) => {
+      if (handleNavigation(navigationUrl)) {
+        event.preventDefault()
+      }
+    })
+
+    // Listen for navigation (backup for providers that don't redirect)
+    oauthWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+      if (handleNavigation(navigationUrl)) {
+        event.preventDefault()
+      }
+    })
+
+    // Handle window close
+    oauthWindow.on('closed', () => {
+      console.log('[Electron OAuth] Window closed')
+      resolve({ success: true })
+    })
+
+    // Handle errors
+    oauthWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+      console.error('[Electron OAuth] Failed to load:', errorCode, errorDescription)
+      oauthWindow.close()
+      resolve({ success: false, error: errorDescription })
+    })
+  })
 })
 
 // Local sync server status

@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
 import { isUserAllowlisted } from '../lib/auth/allowlist'
-import { dualSync } from '../lib/sync/dualSyncManager'
 import { supabase } from '../lib/supabase'
+import { dualSync } from '../lib/sync/dualSyncManager'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
@@ -185,9 +185,19 @@ const Login: React.FC = () => {
         throw new Error('Supabase client not available. Please check your environment configuration.')
       }
 
-      // Check if running in Electron and use external browser
-      if (window.electronAPI?.auth?.openExternal) {
-        console.log('[Login] Electron detected - opening OAuth in external browser')
+      // Check if running in Electron
+      if (window.electronAPI?.auth) {
+        // Get platform info to determine the best OAuth method
+        let platform: string | null = null
+        if (window.electronAPI?.platformInfo?.get) {
+          try {
+            const info = await window.electronAPI.platformInfo.get()
+            platform = info.platform
+            console.log('[Login] Platform detected:', platform)
+          } catch (error) {
+            console.error('[Login] Failed to get platform info:', error)
+          }
+        }
 
         // Get the OAuth URL from Supabase
         const { data, error } = await supabase.auth.signInWithOAuth({
@@ -201,14 +211,29 @@ const Login: React.FC = () => {
         if (error) throw error
 
         if (data?.url) {
-          // Open the OAuth URL in the user's default browser
-          const result = await window.electronAPI.auth.openExternal(data.url)
+          // On Linux (WSL), use OAuth window to avoid blank browser issues
+          // On Windows/Mac, use external browser for better UX
+          // const useOAuthWindow = platform === 'linux' && window.electronAPI.auth.openOAuthWindow
+          const useOAuthWindow = true
+          if (useOAuthWindow) {
+            console.log('[Login] Linux/WSL detected - opening OAuth in Electron window')
+            const result = await window.electronAPI.auth.openOAuthWindow(data.url)
 
-          if (!result.success) {
-            throw new Error('Failed to open external browser')
+            if (!result.success) {
+              throw new Error('Failed to open OAuth window')
+            }
+
+            console.log('[Login] OAuth window opened, waiting for callback...')
+          } else {
+            console.log('[Login] Opening OAuth in external browser')
+            const result = await window.electronAPI.auth.openExternal(data.url)
+
+            if (!result.success) {
+              throw new Error('Failed to open external browser')
+            }
+
+            console.log('[Login] OAuth URL opened in external browser, waiting for callback...')
           }
-
-          console.log('[Login] OAuth URL opened in external browser, waiting for callback...')
           // Loading state will be cleared when callback is received
         } else {
           throw new Error('No OAuth URL returned from Supabase')

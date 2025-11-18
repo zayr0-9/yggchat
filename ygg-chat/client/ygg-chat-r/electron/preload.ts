@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     login: (credentials: any) => ipcRenderer.invoke('auth:login', credentials),
     logout: () => ipcRenderer.invoke('auth:logout'),
     openExternal: (url: string) => ipcRenderer.invoke('auth:openExternal', url),
+    openOAuthWindow: (url: string) => ipcRenderer.invoke('auth:openOAuthWindow', url),
     onOAuthCallback: (callback: (url: string) => void) => {
       const listener = (_event: any, url: string) => callback(url)
       ipcRenderer.on('oauth:callback', listener)
