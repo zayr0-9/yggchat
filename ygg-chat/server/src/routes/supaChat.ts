@@ -1402,6 +1402,7 @@ router.post(
       think,
       selectedFiles,
       retrigger = false,
+      executionMode = 'server',
     } = req.body as {
       content: string
       messages?: any[]
@@ -1414,9 +1415,12 @@ router.post(
       think?: boolean
       selectedFiles?: SelectedFileContent[]
       retrigger?: boolean
+      executionMode?: 'server' | 'client'
     }
 
-    if (!content && !retrigger) {
+    const isContinuation = !content && Array.isArray(messages) && messages.length > 0
+
+    if (!content && !retrigger && !isContinuation) {
       return res.status(400).json({ error: 'Message content required' })
     }
     // console.log('server | test', systemPrompt, clientProjectContext, clientConversationContext)
@@ -1505,7 +1509,7 @@ router.post(
       parentId = lastMessage?.id || null
     }
 
-    // Save user message with proper parent ID (skip if retrigger)
+    // Save user message with proper parent ID (skip if retrigger or continuation)
     let userMessage
     if (retrigger) {
       // For retrigger, get the last user message instead of creating a new one
@@ -1515,6 +1519,11 @@ router.post(
       }
       userMessage = lastMessage
       // console.log('server | retriggering from existing user message', userMessage.id)
+    } else if (isContinuation) {
+      // For continuation, use the last message from provided history as the "user" context anchor
+      // or find the last actual user message in the history
+      const lastMsg = messages![messages!.length - 1]
+      userMessage = { ...lastMsg, id: lastMsg.id || 'temp-continuation-id' }
     } else {
       userMessage = await MessageService.create(
         client,
@@ -1554,8 +1563,8 @@ router.post(
       'Access-Control-Allow-Headers': 'Cache-Control',
     })
 
-    // Send user message immediately (only if not retrigger)
-    if (!retrigger) {
+    // Send user message immediately (only if not retrigger and not continuation)
+    if (!retrigger && !isContinuation) {
       res.write(`data: ${JSON.stringify({ type: 'user_message', message: userMessage })}\n\n`)
     }
 
@@ -1566,7 +1575,13 @@ router.post(
         : []
 
       const userMessageForAI = { ...userMessage, content: processedContent }
-      const combinedMessages = Array.isArray(messages) ? [...messages, userMessageForAI] : [userMessageForAI]
+      
+      let combinedMessages: any[] = []
+      if (isContinuation) {
+        combinedMessages = messages || []
+      } else {
+        combinedMessages = Array.isArray(messages) ? [...messages, userMessageForAI] : [userMessageForAI]
+      }
 
       let assistantContent = ''
       let assistantThinking = ''
@@ -1713,7 +1728,9 @@ router.post(
           combinedContext ? combinedContext : null,
           think,
           undefined, // No assistant message ID yet (will create after streaming)
-          userId
+          userId,
+          conversationId,
+          executionMode
         )
 
         // Clean up content and extract tool calls after streaming completes

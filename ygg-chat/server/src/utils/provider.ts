@@ -42,7 +42,8 @@ export async function generateResponse(
   think?: boolean,
   messageId?: MessageId,
   userId?: string,
-  conversationId?: string
+  conversationId?: string,
+  executionMode: 'server' | 'client' = 'server'
 ): Promise<void> {
   const providerModel = getProviderModel(provider, model)
 
@@ -389,7 +390,8 @@ export async function generateResponse(
         messageId,
         userId,
         true,
-        conversationId
+        conversationId,
+        executionMode
       )
     }
     case 'lmstudio': {

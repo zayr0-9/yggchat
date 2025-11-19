@@ -23,6 +23,9 @@ import { dualSync } from '../../lib/sync/dualSyncManager'
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
 
+// Local API base for tool execution
+const LOCAL_API_BASE = 'http://localhost:3001/api'
+
 /*
 The Complete Toolkit: ThunkAPI Object
 When you create an async thunk, the second parameter receives what's called the ThunkAPI object.
@@ -327,6 +330,31 @@ export const resolveAttachmentUrl = (urlOrPath?: string | null, filePath?: strin
   }
   return null
 }
+
+const executeLocalTool = async (toolCall: any) => {
+  try {
+    console.log(`🔧 Executing local tool: ${toolCall.name}`)
+    const response = await fetch(`${LOCAL_API_BASE}/tools/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        toolName: toolCall.name, 
+        args: toolCall.arguments 
+      })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`Tool execution failed: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    return data.result
+  } catch (error) {
+    console.error(`Local tool execution error:`, error)
+    return `Error executing tool ${toolCall.name}: ${error instanceof Error ? error.message : String(error)}`
+  }
+}
+
 // Model operations have been fully migrated to React Query
 // See useModels, useRecentModels, useRefreshModels, and useSelectModel in hooks/useQueries.ts
 // Model selection state is now managed entirely by React Query and localStorage
@@ -394,224 +422,380 @@ export const sendMessage = createAsyncThunk<
 
       // Get selected files for chat from IDE context
       const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
-      let response = null
-
-      if (!modelName) {
-        throw new Error('No model selected')
-      }
-
-      if (repeatNum > 1) {
-        response = await createStreamingRequest(`/conversations/${conversationId}/messages/repeat`, auth.accessToken, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: currentPathMessages.map(m => ({
-              id: m.id,
-              conversation_id: m.conversation_id,
-              parent_id: m.parent_id,
-              children_ids: m.children_ids,
-              role: m.role,
-              thinking_block: m.thinking_block,
-              tool_calls: m.tool_calls,
-              content_blocks: m.content_blocks,
-              content: m.content,
-              content_plain_text: m.content_plain_text,
-              created_at: m.created_at,
-              model_name: m.model_name,
-              partial: m.partial,
-              artifacts: m.artifacts,
-            })),
-            content: input.content.trim(),
-            modelName: modelName,
-            // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
-            parentId: parent,
-            systemPrompt: systemPrompt,
-            conversationContext: combinedContext,
-            projectContext,
-            provider: serverProvider,
-            repeatNum: repeatNum,
-            attachmentsBase64,
-            selectedFiles: selectedFilesForChat,
-            think,
-            retrigger,
-          }),
-          signal: controller.signal,
-        })
-      } else {
-        response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: currentPathMessages.map(m => ({
-              id: m.id,
-              conversation_id: m.conversation_id,
-              parent_id: m.parent_id,
-              children_ids: m.children_ids,
-              role: m.role,
-              thinking_block: m.thinking_block,
-              tool_calls: m.tool_calls,
-              content_blocks: m.content_blocks,
-              content: m.content,
-              content_plain_text: m.content_plain_text,
-              created_at: m.created_at,
-              model_name: m.model_name,
-              partial: m.partial,
-              artifacts: m.artifacts,
-            })),
-            content: input.content.trim(),
-            modelName: modelName,
-            // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
-            parentId: parent,
-            systemPrompt: systemPrompt,
-            conversationContext: combinedContext,
-            projectContext,
-            provider: serverProvider,
-            attachmentsBase64,
-            selectedFiles: selectedFilesForChat,
-            think,
-            retrigger,
-          }),
-          signal: controller.signal,
-        })
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to send message'}`)
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No stream reader available')
-
-      const decoder = new TextDecoder()
+      
+      // Determine execution mode
+      const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+      const executionMode = isWebMode ? 'server' : 'client'
+      
+      let currentTurnHistory = [...currentPathMessages]
+      let currentTurnContent = input.content.trim()
+      let continueTurn = true
+      let turnCount = 0
+      const MAX_TURNS = 10
+      
       let messageId: MessageId | null = null
       let userMessage: any = null
-      // Guard to ensure we only try to update the title once per send
-      let titleUpdated = false
-      // Buffer for incomplete lines across chunks
-      let buffer = ''
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+      while (continueTurn && turnCount < MAX_TURNS) {
+        turnCount++
+        continueTurn = false // Default to stop unless tool calls occur
 
-          // Append new data to buffer and split by newlines
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
+        let response = null
 
-          // Keep the last incomplete line in the buffer
-          buffer = lines.pop() || ''
+        if (!modelName) {
+          throw new Error('No model selected')
+        }
 
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
+        if (repeatNum > 1 && turnCount === 1) {
+          response = await createStreamingRequest(`/conversations/${conversationId}/messages/repeat`, auth.accessToken, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: currentTurnHistory.map(m => ({
+                id: m.id,
+                conversation_id: m.conversation_id,
+                parent_id: m.parent_id,
+                children_ids: m.children_ids,
+                role: m.role,
+                thinking_block: m.thinking_block,
+                tool_calls: m.tool_calls,
+                content_blocks: m.content_blocks,
+                content: m.content,
+                content_plain_text: m.content_plain_text,
+                created_at: m.created_at,
+                model_name: m.model_name,
+                partial: m.partial,
+                artifacts: m.artifacts,
+              })),
+              content: currentTurnContent,
+              modelName: modelName,
+              // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
+              parentId: parent,
+              systemPrompt: systemPrompt,
+              conversationContext: combinedContext,
+              projectContext,
+              provider: serverProvider,
+              repeatNum: repeatNum,
+              attachmentsBase64,
+              selectedFiles: selectedFilesForChat,
+              think,
+              retrigger,
+              executionMode,
+            }),
+            signal: controller.signal,
+          })
+        } else {
+          response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: currentTurnHistory.map(m => ({
+                id: m.id,
+                conversation_id: m.conversation_id,
+                parent_id: m.parent_id,
+                children_ids: m.children_ids,
+                role: m.role,
+                thinking_block: m.thinking_block,
+                tool_calls: m.tool_calls,
+                content_blocks: m.content_blocks,
+                content: m.content,
+                content_plain_text: m.content_plain_text,
+                created_at: m.created_at,
+                model_name: m.model_name,
+                partial: m.partial,
+                artifacts: m.artifacts,
+              })),
+              content: currentTurnContent, // Empty for tool continuation
+              modelName: modelName,
+              // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
+              parentId: parent,
+              systemPrompt: systemPrompt,
+              conversationContext: combinedContext,
+              projectContext,
+              provider: serverProvider,
+              attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined, // Only send attachments on first turn
+              selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
+              think,
+              retrigger: turnCount === 1 ? retrigger : false,
+              executionMode,
+            }),
+            signal: controller.signal,
+          })
+        }
 
-            try {
-              const chunk = JSON.parse(line.slice(6))
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to send message'}`)
+        }
 
-              if (chunk.type === 'user_message' && chunk.message) {
-                userMessage = chunk.message
-                // console.log('we got userMessage', userMessage)
-                if (!chunk.message.timestamp) {
-                  chunk.message.timestamp = new Date().toISOString()
-                }
-                // Add to messages list
-                dispatch(chatSliceActions.messageAdded(chunk.message))
-                // And update currentPath to navigate to this new node
-                dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
-                // Sync to React Query cache immediately
-                updateMessageCache(extra.queryClient, conversationId, chunk.message)
-                // Sync user message to local SQLite (fire-and-forget)
-                dualSync.syncMessage({
-                  ...chunk.message,
-                  user_id: auth.userId,
-                  project_id: selectedProject?.id || null,
-                })
-                // Clear optimistic message immediately when real user message confirmed (web mode only)
-                const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
-                if (isWebMode) {
-                  dispatch(chatSliceActions.optimisticMessageCleared())
-                }
-                // Live-update: append current image drafts to this new user message's artifacts
-                if (drafts.length > 0) {
-                  const artifactDataUrls = drafts.map(d => d.dataUrl)
-                  dispatch(
-                    chatSliceActions.messageArtifactsAppended({
-                      messageId: chunk.message.id,
-                      artifacts: artifactDataUrls,
-                    })
-                  )
-                  // Sync artifacts to React Query cache so images appear immediately
-                  updateMessageArtifactsInCache(extra.queryClient, conversationId, chunk.message.id, artifactDataUrls)
-                }
-                // Auto-update conversation title with first 50 characters of the first user message
-                if (isFirstMessage && !titleUpdated) {
-                  const contentForTitle = (chunk.message?.content || '').trim().replace(/\s+/g, ' ')
-                  const baseTitle = contentForTitle.slice(0, 50)
-                  const title = baseTitle ? `${baseTitle}...` : ''
-                  if (title) {
-                    ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
-                    titleUpdated = true
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('No stream reader available')
+
+        const decoder = new TextDecoder()
+        // Guard to ensure we only try to update the title once per send
+        let titleUpdated = false
+        // Buffer for incomplete lines across chunks
+        let buffer = ''
+        
+        // State for this turn
+        let assistantMessageContent = ''
+        let assistantThinking = ''
+        let assistantToolCalls: any[] = []
+        let turnAssistantMessageId: string | null = null
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            // Append new data to buffer and split by newlines
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+
+            // Keep the last incomplete line in the buffer
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+
+              try {
+                const chunk = JSON.parse(line.slice(6))
+
+                if (chunk.type === 'user_message' && chunk.message) {
+                  userMessage = chunk.message
+                  // console.log('we got userMessage', userMessage)
+                  if (!chunk.message.timestamp) {
+                    chunk.message.timestamp = new Date().toISOString()
+                  }
+                  // Add to messages list
+                  dispatch(chatSliceActions.messageAdded(chunk.message))
+                  // And update currentPath to navigate to this new node
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  // Sync to React Query cache immediately
+                  updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                  // Sync user message to local SQLite (fire-and-forget)
+                  dualSync.syncMessage({
+                    ...chunk.message,
+                    user_id: auth.userId,
+                    project_id: selectedProject?.id || null,
+                  })
+                  
+                  // Add to local history tracking for next turn
+                  currentTurnHistory.push(chunk.message)
+                  
+                  // Clear optimistic message immediately when real user message confirmed (web mode only)
+                  if (isWebMode) {
+                    dispatch(chatSliceActions.optimisticMessageCleared())
+                  }
+                  // Live-update: append current image drafts to this new user message's artifacts
+                  if (drafts.length > 0) {
+                    const artifactDataUrls = drafts.map(d => d.dataUrl)
+                    dispatch(
+                      chatSliceActions.messageArtifactsAppended({
+                        messageId: chunk.message.id,
+                        artifacts: artifactDataUrls,
+                      })
+                    )
+                    // Sync artifacts to React Query cache so images appear immediately
+                    updateMessageArtifactsInCache(extra.queryClient, conversationId, chunk.message.id, artifactDataUrls)
+                  }
+                  // Auto-update conversation title with first 50 characters of the first user message
+                  if (isFirstMessage && !titleUpdated) {
+                    const contentForTitle = (chunk.message?.content || '').trim().replace(/\s+/g, ' ')
+                    const baseTitle = contentForTitle.slice(0, 50)
+                    const title = baseTitle ? `${baseTitle}...` : ''
+                    if (title) {
+                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      titleUpdated = true
+                    }
                   }
                 }
-              }
 
-              // Handle tool results (accumulated server-side into content_blocks)
-              if (chunk.part === 'tool_result' && chunk.toolResult) {
-                console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
-                // Dispatch structured tool result data for proper rendering in streaming events
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'chunk',
-                  part: 'tool_result',
-                  toolResult: chunk.toolResult,
-                }))
-                // Skip generic chunk handler to prevent duplicate dispatch
-              } else if (chunk.type === 'generation_started') {
-                dispatch(chatSliceActions.streamChunkReceived(chunk))
-              } else if (chunk.type === 'chunk') {
-                dispatch(chatSliceActions.streamChunkReceived(chunk))
-              } else if (chunk.type === 'complete' && chunk.message) {
-                // Push each assistant reply as its own message
-                dispatch(chatSliceActions.messageAdded(chunk.message))
-                // Update branch/path to point to the completed assistant message
-                dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
-                // Sync to React Query cache immediately
-                updateMessageCache(extra.queryClient, conversationId, chunk.message)
-                // Sync assistant message to local SQLite (fire-and-forget)
-                dualSync.syncMessage({
-                  ...chunk.message,
-                  user_id: auth.userId,
-                  project_id: selectedProject?.id || null,
-                })
-                // Sync provider cost if available
-                if (chunk.cost) {
-                  dualSync.syncProviderCost({
-                    ...chunk.cost,
-                    message_id: chunk.message.id,
+                // Handle tool results (accumulated server-side into content_blocks)
+                if (chunk.part === 'tool_result' && chunk.toolResult) {
+                  console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
+                  // Dispatch structured tool result data for proper rendering in streaming events
+                  dispatch(chatSliceActions.streamChunkReceived({
+                    type: 'chunk',
+                    part: 'tool_result',
+                    toolResult: chunk.toolResult,
+                  }))
+                  // Skip generic chunk handler to prevent duplicate dispatch
+                } else if (chunk.part === 'tool_call' && chunk.toolCall) {
+                  // Accumulate tool calls locally
+                  // We assume server sends structured tool calls
+                  // Check if we already have this tool call (by id) to avoid duplicates if server resends
+                  const exists = assistantToolCalls.some(tc => tc.id === chunk.toolCall.id)
+                  if (!exists) {
+                    assistantToolCalls.push(chunk.toolCall)
+                  }
+                  
+                  dispatch(chatSliceActions.streamChunkReceived({
+                    type: 'chunk',
+                    part: 'tool_call',
+                    toolCall: chunk.toolCall,
+                  }))
+                } else if (chunk.type === 'generation_started') {
+                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  if (chunk.messageId) {
+                    turnAssistantMessageId = chunk.messageId
+                    // If this is the first assistant message (not continuation), it might not be in history yet
+                    // But we usually get 'complete' event later
+                  }
+                } else if (chunk.type === 'chunk') {
+                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  // Accumulate text/reasoning for local reconstruction if needed
+                  if (chunk.part === 'text' && chunk.content) {
+                    assistantMessageContent += chunk.content // Note: chunk.content is delta usually, verify
+                  } else if (chunk.part === 'text' && chunk.delta) {
+                    assistantMessageContent += chunk.delta
+                  } else if (chunk.part === 'reasoning' && chunk.delta) {
+                    assistantThinking += chunk.delta
+                  }
+                } else if (chunk.type === 'complete' && chunk.message) {
+                  // Push each assistant reply as its own message
+                  dispatch(chatSliceActions.messageAdded(chunk.message))
+                  // Update branch/path to point to the completed assistant message
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  // Sync to React Query cache immediately
+                  updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                  // Sync assistant message to local SQLite (fire-and-forget)
+                  dualSync.syncMessage({
+                    ...chunk.message,
+                    user_id: auth.userId,
+                    project_id: selectedProject?.id || null,
                   })
+                  
+                  // Add to local history
+                  currentTurnHistory.push(chunk.message)
+                  
+                  // Sync provider cost if available
+                  if (chunk.cost) {
+                    dualSync.syncProviderCost({
+                      ...chunk.cost,
+                      message_id: chunk.message.id,
+                    })
+                  }
+                  // Reset streaming buffer for next iteration
+                  dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
+                  messageId = chunk.message.id
+                } else if (chunk.type === 'aborted') {
+                  // Server deleted the empty assistant message, no need to keep it in client state
+                  dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
+                } else if (chunk.type === 'error') {
+                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  throw new Error(chunk.error || 'Stream error')
                 }
-                // Reset streaming buffer for next iteration
-                dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
-                messageId = chunk.message.id
-              } else if (chunk.type === 'aborted') {
-                // Server deleted the empty assistant message, no need to keep it in client state
-                dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
-              } else if (chunk.type === 'error') {
-                dispatch(chatSliceActions.streamChunkReceived(chunk))
-                throw new Error(chunk.error || 'Stream error')
-              }
-            } catch (parseError) {
-              // Silently skip malformed JSON chunks (e.g., emoji-prefixed tool indicators)
-              // These are often tool call markers from the server that aren't valid JSON
-              if (line.length > 100) {
-                console.warn('Failed to parse chunk:', line.substring(0, 100) + '...', parseError)
+              } catch (parseError) {
+                // Silently skip malformed JSON chunks (e.g., emoji-prefixed tool indicators)
+                // These are often tool call markers from the server that aren't valid JSON
+                if (line.length > 100) {
+                  console.warn('Failed to parse chunk:', line.substring(0, 100) + '...', parseError)
+                }
               }
             }
           }
+        } finally {
+          reader.releaseLock()
         }
-      } finally {
-        reader.releaseLock()
-      }
+        
+        // End of stream for this turn. Check if we have pending tool calls to execute locally.
+        if (assistantToolCalls.length > 0 && executionMode === 'client') {
+          console.log(`🛠️ [chatActions] Executing ${assistantToolCalls.length} tool calls locally...`)
+          
+          // 1. Synthesize Assistant Message if we didn't get a 'complete' event
+          // (In client mode, server aborts before sending 'complete')
+          if (!messageId && turnAssistantMessageId) {
+             // Create ephemeral assistant message
+             const assistantMsg: any = {
+               id: turnAssistantMessageId,
+               conversation_id: conversationId,
+               role: 'assistant',
+               content: assistantMessageContent,
+               thinking_block: assistantThinking,
+               tool_calls: assistantToolCalls, // Store as array (or string if needed by backend, but we are client side now)
+               created_at: new Date().toISOString(),
+               model_name: modelName,
+               parent_id: userMessage?.id || parent // Link to parent
+             }
+             
+             // Dispatch to Redux
+             dispatch(chatSliceActions.messageAdded(assistantMsg))
+             dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+             updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+             
+             // Sync to DB (so it persists)
+             dualSync.syncMessage({
+               ...assistantMsg,
+               user_id: auth.userId,
+               project_id: selectedProject?.id || null,
+             })
+             
+             // Update history
+             currentTurnHistory.push(assistantMsg)
+             messageId = assistantMsg.id
+          }
+          
+          // 2. Execute tools
+          for (const toolCall of assistantToolCalls) {
+            // Dispatch tool execution start/progress if you have UI for it? 
+            // The streamChunkReceived already showed the pending tool call
+            
+            const result = await executeLocalTool(toolCall)
+            
+            // 3. Create Tool Message
+            const toolMsg: any = {
+              id: `tool-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              conversation_id: conversationId,
+              role: 'tool',
+              content: typeof result === 'string' ? result : JSON.stringify(result),
+              tool_call_id: toolCall.id,
+              created_at: new Date().toISOString(),
+              model_name: modelName,
+              parent_id: messageId // Parent is the assistant message
+            }
+            
+            // Dispatch
+            dispatch(chatSliceActions.messageAdded(toolMsg))
+            dispatch(chatSliceActions.messageBranchCreated({ newMessage: toolMsg }))
+            
+            // Sync
+            dualSync.syncMessage({
+              ...toolMsg,
+              user_id: auth.userId,
+              project_id: selectedProject?.id || null,
+            })
+            
+            // Update history
+            currentTurnHistory.push(toolMsg)
+            
+            // Inform UI of tool result (so the pending tool call updates)
+            dispatch(chatSliceActions.streamChunkReceived({
+              type: 'chunk',
+              part: 'tool_result',
+              toolResult: {
+                tool_use_id: toolCall.id,
+                content: toolMsg.content,
+                is_error: false // We handle errors in executeLocalTool returns
+              },
+            }))
+          }
+          
+          // 4. Prepare for next turn (continuation)
+          currentTurnContent = '' // No new user input
+          parent = currentTurnHistory[currentTurnHistory.length - 1].id // Parent is last tool message
+          continueTurn = true // Loop again to send tool results to LLM
+          
+          // Reset buffers
+          assistantMessageContent = ''
+          assistantThinking = ''
+          assistantToolCalls = []
+          
+        } else {
+          // No tool calls or server handled it -> finish
+          continueTurn = false
+        }
+      } // end while loop
 
       if (messageId) {
         dispatch(chatSliceActions.streamCompleted({ messageId }))

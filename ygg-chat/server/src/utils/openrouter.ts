@@ -639,7 +639,8 @@ export async function generateResponse(
   messageId?: MessageId,
   userId?: string,
   tool_detail: boolean = true,
-  conversationId?: string
+  conversationId?: string,
+  executionMode: 'server' | 'client' = 'server'
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
   let stepCount = 0
@@ -1060,6 +1061,47 @@ export async function generateResponse(
             },
           })),
         } as any)
+
+        // Check execution mode - if 'client', abort here and let client handle execution
+        if (executionMode === 'client') {
+          console.log('🛑 [openrouter] Client-side execution mode: halting generation for tool execution')
+          
+          // Stream a special halt event if needed, or rely on the pending tool_calls sent earlier
+          // We've already sent tool_call events with status='pending'
+          
+          // We still need to log cost for this partial run
+          if (!finalUsage) {
+            finalUsage = createEstimatedUsage(formattedMessages, assistantContent)
+          }
+          // Log cost and finish provider run (as succeeded, since it successfully generated the tool call)
+          if (currentProviderRunId) {
+            await finishProviderRun(currentProviderRunId, 'succeeded', finalUsage)
+          }
+          
+          // Log generation cost
+          try {
+            const totals = {
+              totalPromptTokens,
+              totalCompletionTokens,
+              totalReasoningTokens,
+              totalCostUSD,
+              totalOpenRouterCredits,
+            }
+            await logGenerationCost(model, stepCount, finalUsage, totals)
+            
+            // Update totals
+            totalPromptTokens = totals.totalPromptTokens
+            totalCompletionTokens = totals.totalCompletionTokens
+            totalReasoningTokens = totals.totalReasoningTokens
+            totalCostUSD = totals.totalCostUSD
+            totalOpenRouterCredits = totals.totalOpenRouterCredits
+          } catch (logError) {
+            console.error('Error logging generation cost:', logError)
+          }
+
+          // Stop the loop and return - client will resume with tool results
+          return
+        }
 
         // Execute tools and add their results
         for (const toolCall of uniqueToolCalls) {

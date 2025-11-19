@@ -401,6 +401,45 @@ router.patch(
   })
 )
 
+// Execute tool
+router.post(
+  '/tools/execute',
+  asyncHandler(async (req, res) => {
+    const { toolName, args } = req.body
+
+    if (!toolName) {
+      return res.status(400).json({ error: 'Tool name required' })
+    }
+
+    const tool = getToolByName(toolName)
+    if (!tool) {
+      return res.status(404).json({ error: `Tool '${toolName}' not found` })
+    }
+
+    if (!tool.enabled) {
+      return res.status(403).json({ error: `Tool '${toolName}' is disabled` })
+    }
+
+    try {
+      // Parse args if it's a string
+      const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args || {}
+      console.log(`🔧 Executing tool: ${toolName}`, parsedArgs)
+      
+      const result = await tool.tool.execute(parsedArgs)
+      
+      // Return result as string to be consistent with LLM expectation
+      const stringResult = typeof result === 'string' ? result : JSON.stringify(result)
+      res.json({ result: stringResult })
+    } catch (error) {
+      console.error(`Error executing tool ${toolName}:`, error)
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : 'Unknown error executing tool',
+        is_error: true 
+      })
+    }
+  })
+)
+
 // Create or get user
 router.post(
   '/users',
