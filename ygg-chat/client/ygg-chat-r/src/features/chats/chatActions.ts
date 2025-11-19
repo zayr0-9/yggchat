@@ -24,7 +24,7 @@ import { dualSync } from '../../lib/sync/dualSyncManager'
 // import { conversationActions } from '../conversations'
 
 // Local API base for tool execution
-const LOCAL_API_BASE = 'http://localhost:3001/api'
+const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
 
 /*
 The Complete Toolkit: ThunkAPI Object
@@ -425,7 +425,9 @@ export const sendMessage = createAsyncThunk<
       
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
-      const executionMode = isWebMode ? 'server' : 'client'
+      // For local tool execution support (GemTools), we prefer client mode even in web environment
+      // This allows the client to intercept tool calls and execute them via the local server (3002)
+      const executionMode = 'client'
       
       let currentTurnHistory = [...currentPathMessages]
       let currentTurnContent = input.content.trim()

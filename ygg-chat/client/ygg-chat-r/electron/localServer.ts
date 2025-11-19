@@ -676,6 +676,112 @@ function setupServer() {
     }
   })
 
+  // Tool Execution Endpoint
+  app.post('/api/tools/execute', async (req, res) => {
+    try {
+      const { toolName, args } = req.body
+      console.log(`[LocalServer] Executing tool: ${toolName}`)
+
+      let result: any = `Tool ${toolName} not implemented on local server`
+      const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+
+      // Simple FS tools implementation
+      switch (toolName) {
+        case 'read_file': {
+          const { path: filePath } = parsedArgs
+          if (!filePath) throw new Error('path is required')
+          const content = fs.readFileSync(filePath, 'utf8')
+          result = content
+          break
+        }
+        case 'read_files': {
+          const { paths } = parsedArgs
+          if (!Array.isArray(paths)) throw new Error('paths array is required')
+          
+          const results = []
+          for (const p of paths) {
+            try {
+              const content = fs.readFileSync(p, 'utf8')
+              results.push(`--- ${p} ---\n${content}`)
+            } catch (e) {
+              results.push(`--- ${p} ---\nError reading file: ${e instanceof Error ? e.message : String(e)}`)
+            }
+          }
+          result = { combined: results.join('\n\n') }
+          break
+        }
+        case 'create_file': {
+          const { path: filePath, content } = parsedArgs
+          if (!filePath) throw new Error('path is required')
+          const dir = path.dirname(filePath)
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+          fs.writeFileSync(filePath, content || '', 'utf8')
+          result = `File created at ${filePath}`
+          break
+        }
+        case 'edit_file': {
+          const { path: filePath, operation, searchPattern, replacement, content } = parsedArgs
+          if (!filePath) throw new Error('path is required')
+          if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`)
+          
+          let fileContent = fs.readFileSync(filePath, 'utf8')
+          
+          if (operation === 'append') {
+             fileContent += (content || '')
+          } else if (operation === 'replace' || operation === 'replace_first') {
+             if (!searchPattern) throw new Error('searchPattern is required for replace')
+             const regex = new RegExp(searchPattern, operation === 'replace' ? 'g' : '')
+             fileContent = fileContent.replace(regex, replacement || '')
+          }
+          
+          fs.writeFileSync(filePath, fileContent, 'utf8')
+          result = `File edited: ${filePath}`
+          break
+        }
+        case 'delete_file': {
+          const { path: filePath } = parsedArgs
+          if (!filePath) throw new Error('path is required')
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath)
+            result = `File deleted: ${filePath}`
+          } else {
+            result = `File not found: ${filePath}`
+          }
+          break
+        }
+        case 'directory': {
+           const { path: dirPath } = parsedArgs
+           const targetPath = dirPath || process.cwd()
+           if (!fs.existsSync(targetPath)) throw new Error(`Directory not found: ${targetPath}`)
+           
+           const entries = fs.readdirSync(targetPath, { withFileTypes: true })
+           const structure = entries.map(ent => ({
+             name: ent.name,
+             type: ent.isDirectory() ? 'directory' : 'file'
+           }))
+           result = JSON.stringify(structure, null, 2)
+           break
+        }
+        case 'glob': {
+           // Minimal glob implementation using readdir (recursive)
+           // For now, just return "Not implemented" or use a library if available
+           // Since we don't have 'glob' package, we'll skip or implement simple recursion
+           result = "Glob tool not fully implemented on local server yet (requires 'glob' package)"
+           break
+        }
+        default:
+          // Pass through to allow client to handle unknown tools or error
+          console.warn(`[LocalServer] Unknown tool: ${toolName}`)
+      }
+
+      res.json({ result })
+    } catch (error) {
+      console.error('[LocalServer] Tool execution error:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.json({ result: `Error executing tool: ${msg}` }) // Return error as result string
+    }
+  })
+
   // Stats endpoint
   app.get('/api/sync/stats', (_req, res) => {
     try {
