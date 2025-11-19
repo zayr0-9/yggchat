@@ -189,21 +189,25 @@ if (env.VITE_ENVIRONMENT === 'web') {
 
 // Debug middleware to log all requests
 app.use('/api', (req, res, next) => {
-  // console.log('[Debug Middleware] Method:', req.method)
-  // console.log('[Debug Middleware] URL:', req.url)
+  console.log('[Debug Middleware] Method:', req.method)
+  console.log('[Debug Middleware] URL:', req.url)
   // console.log('[Debug Middleware] Headers:', req.headers)
   next()
 })
 // Route handling based on environment
+console.log('[Startup] Checking environment for route loading:', env.VITE_ENVIRONMENT)
 if (env.VITE_ENVIRONMENT === 'web') {
+  console.log('[Startup] Web mode detected. Loading supaChat routes...')
   // Web mode: Use Supabase routes with Redis-backed rate limiting
   const supaChat = require('./routes/supaChat').default
+  console.log('[Startup] supaChat router loaded. Stack length:', supaChat?.stack?.length)
   app.use('/api', supaChat)
 
   // Agent routes: Claude Code and other external agents
   const supaAgents = require('./routes/supaAgents').default
   app.use('/api/agents', supaAgents)
 } else {
+  console.log('[Startup] Local/Electron mode detected. Loading standard chat routes...')
   // Local and Electron modes: Use direct chat routes (no Supabase)
   app.use('/api', chatRoutes)
 }
