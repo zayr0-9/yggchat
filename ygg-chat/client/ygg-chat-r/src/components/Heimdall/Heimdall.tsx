@@ -1762,7 +1762,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const renderNodes = (): JSX.Element[] => {
-    return Object.values(visiblePositions).map(({ x, y, node }) => {
+    return Object.values(visiblePositions)
+      .filter(({ node }) => node.message && node.message.trim().length > 0)
+      .map(({ x, y, node }) => {
       const isExpanded = !compactMode || node.id === focusedNodeId
       const nodeIdParsed = parseId(node.id)
       const isNodeSelected =

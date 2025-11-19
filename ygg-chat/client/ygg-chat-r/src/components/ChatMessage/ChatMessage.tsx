@@ -1154,15 +1154,17 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
-        <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
-          <div className='flex items-center justify-between max-w-32 dark:bg-neutral-800 shadow-[0px_0px_2.5px_-0.5px_rgba(0,0,0,0.25)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] rounded-4xl px-3 py-2'>
-            <span
-              className={`text-[14px] mt-0 sm:text-[14px] lg:text-[16px] 3xl:text-base font-semibold ${styles.role}`}
-            >
-              {styles.roleText}
-            </span>
+        {role === 'user' && (
+          <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
+            <div className='flex items-center justify-between max-w-32 dark:bg-neutral-800 shadow-[0px_0px_2.5px_-0.5px_rgba(0,0,0,0.25)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] rounded-4xl px-3 py-2'>
+              <span
+                className={`text-[14px] mt-0 sm:text-[14px] lg:text-[16px] 3xl:text-base font-semibold ${styles.role}`}
+              >
+                {styles.roleText}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Prioritize rendering: streamEvents > contentBlocks > legacy fields */}
         {/* Sequential streaming events - render in order as received */}
