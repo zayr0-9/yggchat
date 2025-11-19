@@ -28,6 +28,8 @@ import { generateResponse } from '../utils/provider'
 import { saveBase64ImageAttachmentsForMessage } from '../utils/supaAttachments'
 import { getToolByName, updateToolEnabled } from '../utils/tools/index'
 
+console.error('[supaChat] 🚀 Router file loaded/executing')
+
 const router = express.Router()
 
 /**
