@@ -276,9 +276,10 @@ if (env.VITE_ENVIRONMENT === 'web') {
 }
 
 ;(async () => {
-  server.listen(3001, '0.0.0.0', () => {
-    console.log('🚀 Server on :3001')
-    console.log('🔌 WebSocket IDE Context on ws://localhost:3001/ide-context')
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 3001
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Server on :${port}`)
+    console.log(`🔌 WebSocket IDE Context on ws://localhost:${port}/ide-context`)
 
     // Log rate limiter configuration (only in web mode)
     if (env.VITE_ENVIRONMENT === 'web') {
