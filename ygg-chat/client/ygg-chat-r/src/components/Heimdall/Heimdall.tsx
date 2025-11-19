@@ -730,10 +730,18 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
   // Helper to recursively filter the tree
   const filterEmptyNodes = (node: ChatNode): ChatNode | null => {
-    // Filter logic:
-    // 1. If current node has no content, return null (removes node + subtree)
-    // 2. Otherwise, recursively filter children
-    if (!node.message || node.message.trim().length === 0) {
+    // Look up full message to check for structured content (blocks, tools, etc.)
+    const fullMsg = allMessages.find(m => String(m.id) === String(node.id))
+
+    const hasContent =
+      (node.message && node.message.trim().length > 0) ||
+      (fullMsg &&
+        ((fullMsg.content && fullMsg.content.trim().length > 0) ||
+          (Array.isArray(fullMsg.content_blocks) && fullMsg.content_blocks.length > 0) ||
+          (Array.isArray(fullMsg.tool_calls) && fullMsg.tool_calls.length > 0) ||
+          (fullMsg.thinking_block && fullMsg.thinking_block.trim().length > 0)))
+
+    if (!hasContent) {
       return null
     }
 
@@ -753,7 +761,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     const rawData = chatData ?? lastDataRef.current ?? null
     if (!rawData) return null
     return filterEmptyNodes(rawData)
-  }, [chatData])
+  }, [chatData, allMessages])
 
   // Calculate path from root to a specific node
   const getPathToNode = (targetNodeId: string, node?: ChatNode | null, path: string[] = []): string[] | null => {
