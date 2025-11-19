@@ -8,11 +8,13 @@ export type ProjectId = string
 export interface BaseMessage {
   id: MessageId
   conversation_id: ConversationId
-  role: 'user' | 'assistant' | 'system' | 'ex_agent'
+  role: 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
   thinking_block?: string
   // tool_calls can be string (SQLite) or parsed object/array (Supabase)
   // Frontend handles both formats transparently
   tool_calls?: string | any
+  // tool_call_id links tool messages back to the assistant's tool_use block
+  tool_call_id?: string | null
   // content_blocks can be string (SQLite) or parsed object/array (Supabase)
   // Structured content with thinking, tool_use, tool_result, text blocks
   content_blocks?: string | any

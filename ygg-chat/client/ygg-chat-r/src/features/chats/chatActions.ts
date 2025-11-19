@@ -20,6 +20,7 @@ import {
   tools,
 } from './chatTypes'
 import { dualSync } from '../../lib/sync/dualSyncManager'
+import { v4 as uuidv4 } from 'uuid'
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
 
@@ -329,6 +330,20 @@ export const resolveAttachmentUrl = (urlOrPath?: string | null, filePath?: strin
     return `${origin}/${fp}`
   }
   return null
+}
+
+// Helper: Parse content_blocks from string or array format
+const parseContentBlocks = (blocks: string | any[] | undefined): any[] => {
+  if (!blocks) return []
+  if (Array.isArray(blocks)) return blocks
+  if (typeof blocks === 'string') {
+    try {
+      return JSON.parse(blocks)
+    } catch {
+      return []
+    }
+  }
+  return []
 }
 
 const executeLocalTool = async (toolCall: any) => {
@@ -738,54 +753,65 @@ export const sendMessage = createAsyncThunk<
              messageId = assistantMsg.id
           }
           
-          // 2. Execute tools
+          // 2. Execute tools and append tool_result blocks to assistant message
+          const toolResultBlocks: any[] = []
+
           for (const toolCall of assistantToolCalls) {
-            // Dispatch tool execution start/progress if you have UI for it? 
-            // The streamChunkReceived already showed the pending tool call
-            
+            // Execute tool
             const result = await executeLocalTool(toolCall)
-            
-            // 3. Create Tool Message
-            const toolMsg: any = {
-              id: `tool-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-              conversation_id: conversationId,
-              role: 'tool',
+
+            // Create tool_result block (NOT a separate message)
+            const toolResultBlock = {
+              type: 'tool_result',
+              tool_use_id: toolCall.id,
               content: typeof result === 'string' ? result : JSON.stringify(result),
-              tool_call_id: toolCall.id,
-              created_at: new Date().toISOString(),
-              model_name: modelName,
-              parent_id: messageId // Parent is the assistant message
+              is_error: false // We handle errors in executeLocalTool returns
             }
-            
-            // Dispatch
-            dispatch(chatSliceActions.messageAdded(toolMsg))
-            dispatch(chatSliceActions.messageBranchCreated({ newMessage: toolMsg }))
-            
-            // Sync
-            dualSync.syncMessage({
-              ...toolMsg,
-              user_id: auth.userId,
-              project_id: selectedProject?.id || null,
-            })
-            
-            // Update history
-            currentTurnHistory.push(toolMsg)
-            
-            // Inform UI of tool result (so the pending tool call updates)
+
+            toolResultBlocks.push(toolResultBlock)
+
+            // Inform UI of tool result for real-time display
             dispatch(chatSliceActions.streamChunkReceived({
               type: 'chunk',
               part: 'tool_result',
               toolResult: {
                 tool_use_id: toolCall.id,
-                content: toolMsg.content,
-                is_error: false // We handle errors in executeLocalTool returns
+                content: toolResultBlock.content,
+                is_error: false
               },
             }))
           }
-          
+
+          // 3. Update assistant message with tool results
+          if (toolResultBlocks.length > 0 && messageId) {
+            // Find the assistant message from history
+            const assistantMessage = currentTurnHistory.find(msg => msg.id === messageId)
+            if (assistantMessage) {
+              // Parse existing content_blocks
+              const existingBlocks = parseContentBlocks(assistantMessage.content_blocks)
+              const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+              // Update message via updateMessage thunk (syncs to both local and cloud)
+              await dispatch(updateMessage({
+                id: assistantMessage.id,
+                content: assistantMessage.content,
+                content_blocks: updatedContentBlocks
+              }))
+
+              // Update the assistant message in currentTurnHistory
+              const historyIndex = currentTurnHistory.findIndex(msg => msg.id === assistantMessage.id)
+              if (historyIndex !== -1) {
+                currentTurnHistory[historyIndex] = {
+                  ...currentTurnHistory[historyIndex],
+                  content_blocks: updatedContentBlocks
+                }
+              }
+            }
+          }
+
           // 4. Prepare for next turn (continuation)
           currentTurnContent = '' // No new user input
-          parent = currentTurnHistory[currentTurnHistory.length - 1].id // Parent is last tool message
+          parent = messageId // Parent is the assistant message (not tool message)
           continueTurn = true // Loop again to send tool results to LLM
           
           // Reset buffers

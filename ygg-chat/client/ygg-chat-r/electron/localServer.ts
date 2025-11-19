@@ -24,6 +24,13 @@ function initializeLocalDatabase(dbPath: string) {
     fs.mkdirSync(dbDir, { recursive: true })
   }
 
+  // DEV MODE: Delete old database if it exists to force schema recreation
+  // Remove this in production and add proper migrations
+  if (fs.existsSync(dbPath)) {
+    console.log('[LocalServer] DEV MODE: Deleting old database to recreate with new schema')
+    fs.unlinkSync(dbPath)
+  }
+
   db = new Database(dbPath)
   db.pragma('foreign_keys = ON')
 
@@ -73,11 +80,12 @@ function initializeLocalDatabase(dbPath: string) {
       conversation_id TEXT NOT NULL,
       parent_id TEXT,
       children_ids TEXT DEFAULT '[]',
-      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'ex_agent')),
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'ex_agent', 'tool')),
       content TEXT NOT NULL,
       plain_text_content TEXT,
       thinking_block TEXT,
       tool_calls TEXT,
+      tool_call_id TEXT,
       model_name TEXT DEFAULT 'unknown',
       note TEXT,
       ex_agent_session_id TEXT,
@@ -184,13 +192,14 @@ function initializeLocalDatabase(dbPath: string) {
 
     // Messages
     upsertMessage: db.prepare(`
-      INSERT INTO messages (id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, tool_call_id, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         content = excluded.content,
         plain_text_content = excluded.plain_text_content,
         thinking_block = excluded.thinking_block,
         tool_calls = excluded.tool_calls,
+        tool_call_id = excluded.tool_call_id,
         note = excluded.note,
         content_blocks = excluded.content_blocks
     `),
@@ -413,6 +422,7 @@ function setupServer() {
         plain_text_content,
         thinking_block,
         tool_calls,
+        tool_call_id,
         model_name,
         note,
         ex_agent_session_id,
@@ -465,6 +475,7 @@ function setupServer() {
         plain_text_content || null,
         thinking_block || null,
         typeof tool_calls === 'string' ? tool_calls : JSON.stringify(tool_calls || null),
+        tool_call_id || null,
         model_name || 'unknown',
         note || null,
         ex_agent_session_id || null,
@@ -640,6 +651,7 @@ function setupServer() {
                   typeof op.data.tool_calls === 'string'
                     ? op.data.tool_calls
                     : JSON.stringify(op.data.tool_calls || null),
+                  op.data.tool_call_id || null,
                   op.data.model_name || 'unknown',
                   op.data.note || null,
                   op.data.ex_agent_session_id || null,
