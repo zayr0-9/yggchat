@@ -730,6 +730,12 @@ export const sendMessage = createAsyncThunk<
                content: assistantMessageContent,
                thinking_block: assistantThinking,
                tool_calls: assistantToolCalls, // Store as array (or string if needed by backend, but we are client side now)
+               content_blocks: assistantToolCalls.map(tc => ({
+                 type: 'tool_use',
+                 id: tc.id,
+                 name: tc.name,
+                 input: tc.input
+               })),
                created_at: new Date().toISOString(),
                model_name: modelName,
                parent_id: userMessage?.id || parent // Link to parent
@@ -876,6 +882,7 @@ export const updateMessage = createAsyncThunk<
     dualSync.syncMessage(
       {
         ...updated,
+        content_blocks: content_blocks, // Explicitly include from request to ensure local sync
         user_id: auth.userId,
         project_id: selectedProject?.id || null,
       },
