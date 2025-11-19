@@ -754,11 +754,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     const hasContent =
       (node.message && node.message.trim().length > 0) ||
-      (fullMsg &&
-        ((fullMsg.content && fullMsg.content.trim().length > 0) ||
-          (Array.isArray(fullMsg.content_blocks) && fullMsg.content_blocks.length > 0) ||
-          (Array.isArray(fullMsg.tool_calls) && fullMsg.tool_calls.length > 0) ||
-          (fullMsg.thinking_block && fullMsg.thinking_block.trim().length > 0)))
+      (fullMsg && fullMsg.content && fullMsg.content.trim().length > 0)
 
     if (!hasContent) {
       return null
