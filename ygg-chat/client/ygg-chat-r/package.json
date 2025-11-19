@@ -5,7 +5,6 @@
   "type": "module",
   "main": "electron/main.mjs",
   "scripts": {
-    "predev": "node scripts/check-env.js",
     "dev": "cross-env BUILD_TARGET=web vite",
     "dev:local": "cross-env BUILD_TARGET=local vite",
     "dev:electron": "cross-env BUILD_TARGET=electron vite",
@@ -13,15 +12,16 @@
     "build:web": "cross-env BUILD_TARGET=web tsc -b && cross-env BUILD_TARGET=web vite build",
     "build:electron": "cross-env BUILD_TARGET=electron tsc -b && cross-env BUILD_TARGET=electron vite build",
     "build:electron:main": "tsc -p electron/tsconfig.json && node -e \"require('fs').renameSync('electron/main.js', 'electron/main.mjs'); require('fs').renameSync('electron/preload.js', 'electron/preload.mjs')\"",
-    "package:electron": "electron-builder",
-    "build:win": "npm run build:server && npm run build:electron && npm run build:electron:main && electron-builder --win",
     "build:server": "cd ../../server && npm install && npm run build",
     "rebuild:server": "cd ../../server && npm rebuild better-sqlite3 --runtime=electron --target=34.0.0 --dist-url=https://electronjs.org/headers --build-from-source",
+    "build:win": "npm run build:server && npm run build:electron && npm run build:electron:main && electron-builder --win",
     "build:linux": "npm run build:electron && npm run build:electron:main && electron-builder --linux",
     "build:all": "npm run build:electron && npm run build:electron:main && electron-builder --win --linux",
-    "electron": "electron .",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predev": "node scripts/check-env.js",
+    "electron": "electron .",
+    "package:electron": "electron-builder"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.5",
@@ -89,32 +89,69 @@
   "build": {
     "appId": "com.yggdrasil.chat",
     "productName": "Yggdrasil Chat",
+    "directories": {
+      "output": "release"
+    },
     "files": [
       "dist-electron/**/*",
       "electron/**/*",
       "!electron/tsconfig.json"
     ],
-    "directories": {
-      "output": "release"
-    },
-    "nativeRebuilder": "sequential",
-    "npmRebuild": true,
-    "mac": {
-      "category": "public.app-category.productivity",
-      "target": [
-        "dmg"
-      ]
-    },
+    "extraResources": [
+      {
+        "from": "../../server/dist",
+        "to": "server/dist",
+        "filter": [
+          "**/*",
+          "!**/supamodels.js",
+          "!**/supaChat.js",
+          "!**/stripe.js",
+          "!**/CCSupabase.js",
+          "!**/supaAttachments.js",
+          "!**/openrouter-reconciliation.js",
+          "!**/openrouter.js",
+          "!**/openai.js",
+          "!**/provider.js"
+        ]
+      },
+      {
+        "from": "../../server/node_modules",
+        "to": "server/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../../server/package.json",
+        "to": "server/package.json"
+      },
+      {
+        "from": "../../server/src/database",
+        "to": "server/src/database",
+        "filter": [
+          "**/*.sql",
+          "**/*.txt"
+        ]
+      }
+    ],
     "win": {
       "target": [
         "nsis"
       ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
     },
     "linux": {
       "target": [
         "AppImage"
       ],
       "category": "Office"
-    }
+    },
+    "npmRebuild": true,
+    "nativeRebuilder": "sequential"
   }
 }

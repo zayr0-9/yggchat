@@ -17,7 +17,6 @@ import settingsRoutes from './routes/settings'
 import { stripMarkdownToText } from './utils/markdownStripper'
 import { preloadModelPricing } from './utils/openrouter'
 import tools from './utils/tools/index'
-import { startReconciliationWorker } from './workers/openrouter-reconciliation'
 
 const app = express()
 const server = createServer(app)
@@ -269,6 +268,7 @@ preloadModelPricing().catch(error => {
 
 // Start OpenRouter reconciliation worker (only in web mode where Supabase is available)
 if (env.VITE_ENVIRONMENT === 'web') {
+  const { startReconciliationWorker } = require('./workers/openrouter-reconciliation')
   startReconciliationWorker()
   console.log('✅ OpenRouter reconciliation worker started')
 } else {
