@@ -1646,11 +1646,33 @@ router.put(
   '/messages/:id',
   asyncHandler(async (req, res) => {
     const messageId = req.params.id
-    const { content, note } = req.body
+    const { content, note, content_blocks } = req.body
 
-    if (!content) return res.status(400).json({ error: 'Content required' })
+    // Allow empty content if content_blocks is present, otherwise require content
+    if (!content && !content_blocks) {
+      return res.status(400).json({ error: 'Content or content_blocks required' })
+    }
 
-    const updated = MessageService.update(messageId, content, undefined, undefined, note)
+    // Derive content from content_blocks if content is empty
+    let finalContent = content
+    if (!content && content_blocks) {
+      // Extract text from text blocks in content_blocks
+      const textBlocks = Array.isArray(content_blocks)
+        ? content_blocks.filter((block: any) => block.type === 'text')
+        : []
+
+      if (textBlocks.length > 0) {
+        finalContent = textBlocks.map((block: any) => block.text || '').join('\n')
+      } else {
+        // No text blocks, use empty string (tool-only message)
+        finalContent = ''
+      }
+    }
+
+    // Convert content_blocks to JSON string for SQLite storage
+    const contentBlocksJson = content_blocks ? JSON.stringify(content_blocks) : null
+
+    const updated = MessageService.update(messageId, finalContent, undefined, undefined, note, contentBlocksJson)
     if (!updated) return res.status(404).json({ error: 'Message not found' })
 
     res.json(updated)
