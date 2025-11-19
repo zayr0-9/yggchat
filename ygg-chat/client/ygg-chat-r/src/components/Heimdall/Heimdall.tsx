@@ -1910,7 +1910,20 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             /> */}
             <foreignObject width={nodeWidth} height={nodeHeight} style={{ pointerEvents: 'none', userSelect: 'none' }}>
               <div className='p-3 text-stone-800 dark:text-stone-300 text-sm h-full flex items-center'>
-                <p className='line-clamp-3 '>{node.message}</p>
+                <p className='line-clamp-3 '>
+                  {node.message && node.message.trim().length > 0
+                    ? node.message
+                    : (() => {
+                        const nodeIdParsed = parseId(node.id)
+                        if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) return '...'
+                        const msg = getCurrentMessage(nodeIdParsed)
+                        if (msg?.tool_calls && msg.tool_calls.length > 0) {
+                          const toolNames = msg.tool_calls.map((tc: any) => tc.name).join(', ')
+                          return toolNames || 'Tool Call'
+                        }
+                        return '...'
+                      })()}
+                </p>
               </div>
             </foreignObject>
             {/* Note indicator for expanded view */}
