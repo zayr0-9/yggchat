@@ -747,8 +747,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
   }, [chatData])
 
-  // Helper to recursively filter the tree
-  const filterEmptyNodes = (node: ChatNode): ChatNode | null => {
+  // Helper to recursively filter and flatten the tree
+  const filterEmptyNodes = (node: ChatNode): ChatNode[] => {
     // Look up full message to check for structured content (blocks, tools, etc.)
     const fullMsg = allMessages.find(m => String(m.id) === String(node.id))
 
@@ -759,24 +759,40 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           (Array.isArray(fullMsg.content_blocks) &&
             fullMsg.content_blocks.some((b: any) => b.type === 'text' && b.text && b.text.trim().length > 0))))
 
-    if (!hasContent) {
-      return null
-    }
-
+    // 1. Process children first using flatMap to flatten the results
     let filteredChildren: ChatNode[] = []
     if (node.children && node.children.length > 0) {
-      filteredChildren = node.children.map(filterEmptyNodes).filter((n): n is ChatNode => n !== null)
+      filteredChildren = node.children.flatMap(filterEmptyNodes)
     }
 
-    // Return a new object so we don't mutate the original tree
-    return { ...node, children: filteredChildren }
+    // 2. If node is empty, skip it and return its children (promotion)
+    if (!hasContent) {
+      return filteredChildren
+    }
+
+    // 3. Otherwise, keep the node with updated children
+    return [{ ...node, children: filteredChildren }]
   }
 
   // Use provided data or fallback to last known (prevents flash on refresh). Do NOT show a fake empty node.
   const currentChatData = useMemo(() => {
     const rawData = chatData ?? lastDataRef.current ?? null
     if (!rawData) return null
-    return filterEmptyMessages ? filterEmptyNodes(rawData) : rawData
+
+    if (filterEmptyMessages) {
+      const result = filterEmptyNodes(rawData)
+
+      if (result.length === 0) return null
+
+      // If we have exactly one root, use it
+      if (result.length === 1) return result[0]
+
+      // If the root was filtered out but left multiple children,
+      // we must keep the root to maintain a single tree structure.
+      return { ...rawData, children: result }
+    }
+
+    return rawData
   }, [chatData, allMessages, filterEmptyMessages])
 
   // Calculate path from root to a specific node
