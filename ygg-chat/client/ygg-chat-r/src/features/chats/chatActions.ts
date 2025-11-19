@@ -20,7 +20,6 @@ import {
   tools,
 } from './chatTypes'
 import { dualSync } from '../../lib/sync/dualSyncManager'
-import { v4 as uuidv4 } from 'uuid'
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
 

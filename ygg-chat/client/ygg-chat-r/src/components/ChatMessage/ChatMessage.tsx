@@ -13,7 +13,7 @@ import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
 import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
 import { TextArea } from '../TextArea/TextArea'
-type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent'
+type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
 // Updated to use valid Tailwind classes
 type ChatMessageWidth =
   | 'max-w-sm'
