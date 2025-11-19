@@ -1154,7 +1154,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
-        {role === 'user' ? (
+        {role === 'user' && (
           <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
             <div className='flex items-center justify-between max-w-32 dark:bg-neutral-800 shadow-[0px_0px_2.5px_-0.5px_rgba(0,0,0,0.25)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] rounded-4xl px-3 py-2'>
               <span
@@ -1164,8 +1164,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               </span>
             </div>
           </div>
-        ) : (
-          <div className='w-full border-t border-neutral-200 dark:border-neutral-800 my-4 mb-8'></div>
         )}
 
         {/* Prioritize rendering: streamEvents > contentBlocks > legacy fields */}
@@ -1585,6 +1583,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         )}
         {modelName && (
           <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
+        )}
+        {role === 'user' && (
+          <div className='w-full border-t border-neutral-200 dark:border-neutral-800 my-4 mb-8'></div>
         )}
         {/* Actions row (at bottom) */}
         <div className='flex items-center justify-end mt-3 mb-2'>
