@@ -1574,7 +1574,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         right >= viewportBounds.minX &&
         left <= viewportBounds.maxX &&
         bottom >= viewportBounds.minY &&
-        top <= viewportBounds.maxY
+        top <= viewportBounds.maxY &&
+        pos.node.message &&
+        pos.node.message.trim().length > 0
       ) {
         visible[id] = pos
       } else {
@@ -1738,7 +1740,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         // Draw connections to each child
         node.children.forEach(child => {
           const childPos = positions[child.id]
-          if (childPos) {
+          // Skip drawing connections to empty nodes
+          if (childPos && child.message && child.message.trim().length > 0) {
             drawConnection(parentPos, childPos, child)
           }
         })
@@ -1752,7 +1755,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       if (parentId) {
         const parentPos = positions[parentId]
         // Only draw if parent exists but is NOT visible (culled)
-        if (parentPos && !visiblePositions[parentId]) {
+        if (
+          parentPos &&
+          !visiblePositions[parentId] &&
+          // Ensure parent isn't empty (though it shouldn't be if child is visible, usually)
+          parentPos.node.message &&
+          parentPos.node.message.trim().length > 0
+        ) {
           drawConnection(parentPos, pos, node)
         }
       }
@@ -1762,9 +1771,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }
 
   const renderNodes = (): JSX.Element[] => {
-    return Object.values(visiblePositions)
-      .filter(({ node }) => node.message && node.message.trim().length > 0)
-      .map(({ x, y, node }) => {
+    return Object.values(visiblePositions).map(({ x, y, node }) => {
       const isExpanded = !compactMode || node.id === focusedNodeId
       const nodeIdParsed = parseId(node.id)
       const isNodeSelected =

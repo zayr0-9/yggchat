@@ -4,14 +4,20 @@ import { fetchTools, updateToolEnabled } from '../../features/chats/chatActions'
 import { selectTools } from '../../features/chats/chatSelectors'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { Button } from '../Button/button'
+import { TextField } from '../TextField/TextField'
 
 export const ToolsSettings: React.FC = () => {
   const dispatch = useAppDispatch()
   const tools = useAppSelector(selectTools)
   const [updatingTools, setUpdatingTools] = useState<Set<string>>(new Set())
   const [showDesktopModal, setShowDesktopModal] = useState(false)
+  const [wslDistro, setWslDistro] = useState(localStorage.getItem('ygg_wsl_distro') || '')
 
   const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+
+  useEffect(() => {
+    localStorage.setItem('ygg_wsl_distro', wslDistro)
+  }, [wslDistro])
 
   useEffect(() => {
     // Fetch tools when component mounts
@@ -126,6 +132,19 @@ export const ToolsSettings: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* WSL Configuration */}
+      {!isWebMode && (
+        <div className='pt-2 px-1'>
+          <TextField
+            label='WSL Distribution (Optional)'
+            placeholder='e.g. Ubuntu-20.04'
+            value={wslDistro}
+            onChange={setWslDistro}
+            helperText='Specify a WSL distribution to run tools within. Leave empty for default behavior.'
+          />
+        </div>
+      )}
 
       {/* Individual Tools - Only show when Valkyrie is active and not in web mode */}
       {!isWebMode && (
