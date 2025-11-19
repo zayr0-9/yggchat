@@ -1921,6 +1921,14 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                           const toolNames = msg.tool_calls.map((tc: any) => tc.name).join(', ')
                           return toolNames || 'Tool Call'
                         }
+                        // Check content_blocks for tool_use
+                        if (msg?.content_blocks && Array.isArray(msg.content_blocks)) {
+                          const toolUses = msg.content_blocks.filter((block: any) => block.type === 'tool_use')
+                          if (toolUses.length > 0) {
+                            const toolNames = toolUses.map((tc: any) => tc.name).join(', ')
+                            return toolNames || 'Tool Call'
+                          }
+                        }
                         return '...'
                       })()}
                 </p>
