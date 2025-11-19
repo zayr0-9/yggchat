@@ -728,8 +728,32 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
   }, [chatData])
 
+  // Helper to recursively filter the tree
+  const filterEmptyNodes = (node: ChatNode): ChatNode | null => {
+    // Filter logic:
+    // 1. If current node has no content, return null (removes node + subtree)
+    // 2. Otherwise, recursively filter children
+    if (!node.message || node.message.trim().length === 0) {
+      return null
+    }
+
+    let filteredChildren: ChatNode[] = []
+    if (node.children && node.children.length > 0) {
+      filteredChildren = node.children
+        .map(filterEmptyNodes)
+        .filter((n): n is ChatNode => n !== null)
+    }
+
+    // Return a new object so we don't mutate the original tree
+    return { ...node, children: filteredChildren }
+  }
+
   // Use provided data or fallback to last known (prevents flash on refresh). Do NOT show a fake empty node.
-  const currentChatData = useMemo(() => chatData ?? lastDataRef.current ?? null, [chatData])
+  const currentChatData = useMemo(() => {
+    const rawData = chatData ?? lastDataRef.current ?? null
+    if (!rawData) return null
+    return filterEmptyNodes(rawData)
+  }, [chatData])
 
   // Calculate path from root to a specific node
   const getPathToNode = (targetNodeId: string, node?: ChatNode | null, path: string[] = []): string[] | null => {
@@ -1574,9 +1598,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         right >= viewportBounds.minX &&
         left <= viewportBounds.maxX &&
         bottom >= viewportBounds.minY &&
-        top <= viewportBounds.maxY &&
-        pos.node.message &&
-        pos.node.message.trim().length > 0
+        top <= viewportBounds.maxY
       ) {
         visible[id] = pos
       } else {
@@ -1740,8 +1762,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         // Draw connections to each child
         node.children.forEach(child => {
           const childPos = positions[child.id]
-          // Skip drawing connections to empty nodes
-          if (childPos && child.message && child.message.trim().length > 0) {
+          if (childPos) {
             drawConnection(parentPos, childPos, child)
           }
         })
@@ -1755,13 +1776,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       if (parentId) {
         const parentPos = positions[parentId]
         // Only draw if parent exists but is NOT visible (culled)
-        if (
-          parentPos &&
-          !visiblePositions[parentId] &&
-          // Ensure parent isn't empty (though it shouldn't be if child is visible, usually)
-          parentPos.node.message &&
-          parentPos.node.message.trim().length > 0
-        ) {
+        if (parentPos && !visiblePositions[parentId]) {
           drawConnection(parentPos, pos, node)
         }
       }
