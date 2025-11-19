@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import type { JSX } from 'react'
@@ -127,6 +128,24 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     pending: { point: { clientX: number; clientY: number }; targetZoom: number } | null
   } | null>(null)
   const isPinchingRef = useRef<boolean>(false)
+
+  // Filter state
+  const [filterEmptyMessages, setFilterEmptyMessages] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('heimdall-filter-empty')
+      return saved !== null ? JSON.parse(saved) : true
+    } catch {
+      return true
+    }
+  })
+
+  const toggleFilterEmptyMessages = useCallback(() => {
+    setFilterEmptyMessages(prev => {
+      const next = !prev
+      localStorage.setItem('heimdall-filter-empty', JSON.stringify(next))
+      return next
+    })
+  }, [])
 
   // Keep a stable inner offset so the whole tree does not shift when nodes are added/removed
   const offsetRef = useRef<{ x: number; y: number } | null>(null)
@@ -760,8 +779,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const currentChatData = useMemo(() => {
     const rawData = chatData ?? lastDataRef.current ?? null
     if (!rawData) return null
-    return filterEmptyNodes(rawData)
-  }, [chatData, allMessages])
+    return filterEmptyMessages ? filterEmptyNodes(rawData) : rawData
+  }, [chatData, allMessages, filterEmptyMessages])
 
   // Calculate path from root to a specific node
   const getPathToNode = (targetNodeId: string, node?: ChatNode | null, path: string[] = []): string[] | null => {
@@ -2194,6 +2213,17 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           title='Reset View'
         >
           <RotateCcw size={20} />
+        </button>
+        <button
+          onClick={toggleFilterEmptyMessages}
+          className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${
+            filterEmptyMessages
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-100'
+              : 'bg-neutral-50 text-stone-800 dark:text-stone-200 dark:bg-yBlack-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+          }`}
+          title={filterEmptyMessages ? 'Show Empty Messages' : 'Hide Empty Messages'}
+        >
+          <i className='bx bx-filter text-xl' />
         </button>
         <button
           onClick={() => {
