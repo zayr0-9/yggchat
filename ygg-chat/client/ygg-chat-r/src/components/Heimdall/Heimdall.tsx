@@ -754,7 +754,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     const hasContent =
       (node.message && node.message.trim().length > 0) ||
-      (fullMsg && fullMsg.content && fullMsg.content.trim().length > 0)
+      (fullMsg &&
+        ((fullMsg.content && fullMsg.content.trim().length > 0) ||
+          (Array.isArray(fullMsg.content_blocks) &&
+            fullMsg.content_blocks.some((b: any) => b.type === 'text' && b.text && b.text.trim().length > 0))))
 
     if (!hasContent) {
       return null
@@ -762,9 +765,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     let filteredChildren: ChatNode[] = []
     if (node.children && node.children.length > 0) {
-      filteredChildren = node.children
-        .map(filterEmptyNodes)
-        .filter((n): n is ChatNode => n !== null)
+      filteredChildren = node.children.map(filterEmptyNodes).filter((n): n is ChatNode => n !== null)
     }
 
     // Return a new object so we don't mutate the original tree
