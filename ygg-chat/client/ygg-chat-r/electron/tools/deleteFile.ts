@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge';
+import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js';
 
 /**
  * Deletes a file at the specified path

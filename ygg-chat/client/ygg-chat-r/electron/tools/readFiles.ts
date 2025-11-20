@@ -1,5 +1,5 @@
 import * as path from 'path'
-import { readTextFile, ReadFileOptions } from './readFile'
+import { readTextFile, ReadFileOptions } from './readFile.js'
 
 export interface ReadMultipleOptions extends ReadFileOptions {
   baseDir?: string // used to compute the header-relative path separator

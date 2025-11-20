@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { readTextFile } from './readFile'
-import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge'
+import { readTextFile } from './readFile.js'
+import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
 
 export interface EditFileOptions {
   createBackup?: boolean

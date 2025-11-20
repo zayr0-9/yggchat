@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { resolveToWindowsPath, isWSLPath } from '../utils/wslBridge'
+import { resolveToWindowsPath, isWSLPath } from '../utils/wslBridge.js'
 
 export interface LineRange {
   startLine: number // 1-based line number to start reading from (inclusive)

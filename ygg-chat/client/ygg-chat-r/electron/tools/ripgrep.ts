@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
-import { isWSLPath, getWSLCommandArgs } from '../utils/wslBridge'
+import { isWSLPath, getWSLCommandArgs } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_OUTPUT_CHARS = (() => {
   const envValue = Number(process.env.RIPGREP_MAX_OUTPUT_CHARS ?? process.env.RIPGREP_OUTPUT_LIMIT)

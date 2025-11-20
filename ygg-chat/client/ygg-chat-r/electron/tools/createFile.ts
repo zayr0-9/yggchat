@@ -1,6 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge'
+import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
 
 export interface CreateFileOptions {
   directory?: string

@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { promisify } from 'util'
-import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge'
+import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
 
 const readdir = promisify(fs.readdir)
 const stat = promisify(fs.stat)

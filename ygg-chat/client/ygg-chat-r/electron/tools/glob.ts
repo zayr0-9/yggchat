@@ -1,7 +1,7 @@
 import * as path from 'path'
 import { glob } from 'glob'
 import os from 'os'
-import { resolveToWindowsPath, isWSLPath } from '../utils/wslBridge'
+import { resolveToWindowsPath, isWSLPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_MATCHES = 1000
 const DEFAULT_TIMEOUT_MS = 5000

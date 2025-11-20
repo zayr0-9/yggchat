@@ -11,14 +11,14 @@ import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
 
 // Tool imports
-import { createTextFile } from './tools/createFile'
-import { deleteFile, safeDeleteFile } from './tools/deleteFile'
-import { extractDirectoryStructure } from './tools/directory'
-import { editFile } from './tools/editFile'
-import { globSearch } from './tools/glob'
-import { readTextFile } from './tools/readFile'
-import { readMultipleTextFiles } from './tools/readFiles'
-import { ripgrepSearch } from './tools/ripgrep'
+import { createTextFile } from './tools/createFile.js'
+import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
+import { extractDirectoryStructure } from './tools/directory.js'
+import { editFile } from './tools/editFile.js'
+import { globSearch } from './tools/glob.js'
+import { readTextFile } from './tools/readFile.js'
+import { readMultipleTextFiles } from './tools/readFiles.js'
+import { ripgrepSearch } from './tools/ripgrep.js'
 
 const app = express()
 let server: any = null
