@@ -10,7 +10,7 @@ export const ToolsSettings: React.FC = () => {
   const tools = useAppSelector(selectTools)
   const [updatingTools, setUpdatingTools] = useState<Set<string>>(new Set())
   const [showDesktopModal, setShowDesktopModal] = useState(false)
-  const [wslDistro, setWslDistro] = useState(localStorage.getItem('ygg_wsl_distro') || '')
+  const wslDistro = localStorage.getItem('ygg_wsl_distro') || ''
 
   const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
 
