@@ -3,140 +3,28 @@
 // This server runs on port 3002 and handles sync operations from Railway to local SQLite
 
 import Database from 'better-sqlite3'
-import { exec } from 'child_process'
 import cors from 'cors'
 import express from 'express'
 import fs from 'fs'
-import { glob } from 'glob'
 import path from 'path'
-import { promisify } from 'util'
 import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
 
-const execAsync = promisify(exec)
+// Tool imports
+import { createTextFile } from './tools/createFile'
+import { deleteFile, safeDeleteFile } from './tools/deleteFile'
+import { extractDirectoryStructure } from './tools/directory'
+import { editFile } from './tools/editFile'
+import { globSearch } from './tools/glob'
+import { readTextFile } from './tools/readFile'
+import { readMultipleTextFiles } from './tools/readFiles'
+import { ripgrepSearch } from './tools/ripgrep'
+
 const app = express()
 let server: any = null
 let wss: WebSocketServer | null = null
 let db: Database.Database | null = null
 let statements: any = {}
-
-// WSL Helper Utilities
-// Cached default distro
-let defaultDistro: string | null = null
-
-/**
- * Check if the current platform is Windows
- */
-function isWindows(): boolean {
-  return process.platform === 'win32'
-}
-
-/**
- * Get the default WSL distribution with robust fallback and caching
- */
-async function getWslDistro(): Promise<string> {
-  if (defaultDistro) return defaultDistro
-
-  try {
-    // Try verbose list to find the default (marked with *)
-    // wsl.exe outputs UTF-16LE, so we must read as buffer and decode explicitly
-    const { stdout: buffer } = await execAsync('wsl.exe --list --verbose', { encoding: 'buffer' })
-    const stdout = buffer.toString('utf16le').replace(/^\uFEFF/, '') // Remove BOM if present
-    const lines = stdout.split('\n')
-
-    for (const line of lines) {
-      if (line.trim().startsWith('*')) {
-        // Format example: * Ubuntu Running 2
-        const parts = line.trim().split(/\s+/)
-        if (parts.length >= 2) {
-          defaultDistro = parts[1]
-          return defaultDistro
-        }
-      }
-    }
-
-    // Fallback to simple list if verbose parsing fails
-    const { stdout: simpleBuffer } = await execAsync('wsl.exe --list --quiet', { encoding: 'buffer' })
-    const simpleOut = simpleBuffer.toString('utf16le').replace(/^\uFEFF/, '')
-    const firstDistro = simpleOut.split(/\s+/)[0]
-    if (firstDistro) {
-      defaultDistro = firstDistro
-      return defaultDistro
-    }
-
-    throw new Error('No WSL distributions found')
-  } catch (error) {
-    console.error('[LocalServer] Failed to detect WSL distro:', error)
-    // Final fallback
-    return 'Ubuntu'
-  }
-}
-
-/**
- * Convert a potential WSL path to a Windows UNC path if needed.
- * Rules:
- * 1. Must be running on Windows
- * 2. Path must start with '/' (and not be a windows drive letter like C:/)
- * 3. OR context explicitly indicates WSL usage (via rootPath detection)
- */
-async function resolveToWindowsPath(filePath: string, rootPathContext?: string | null): Promise<string> {
-  // Log entry into resolution
-  console.log(`[LocalServer] Resolving path: "${filePath}" (len=${filePath.length}) with context: "${rootPathContext}"`)
-  console.log(`[LocalServer] Platform: ${process.platform}`)
-  
-  if (!isWindows()) {
-    console.log('[LocalServer] Not Windows, returning original path')
-    return filePath
-  }
-
-  // Check if it looks like a WSL path (starts with / and not a drive letter)
-  const trimmedPath = filePath.trim()
-  const startsWithSlash = trimmedPath.startsWith('/')
-  const isDriveLetter = trimmedPath.match(/^[a-zA-Z]:/)
-  const looksLikeWsl = startsWithSlash && !isDriveLetter
-  
-  console.log(`[LocalServer] Path analysis: startsWithSlash=${startsWithSlash}, isDriveLetter=${!!isDriveLetter}, looksLikeWsl=${looksLikeWsl}`)
-
-  // Check if context implies WSL (rootPath starts with / on Windows)
-  const contextImpliesWsl = rootPathContext
-    ? rootPathContext.startsWith('/') && !rootPathContext.match(/^[a-zA-Z]:/)
-    : false
-    
-  console.log(`[LocalServer] Path resolution checks: looksLikeWsl=${looksLikeWsl}, contextImpliesWsl=${contextImpliesWsl}`)
-
-  if (looksLikeWsl || (contextImpliesWsl && !trimmedPath.match(/^[a-zA-Z]:/))) {
-    try {
-      const distro = await getWslDistro()
-      console.log(`[LocalServer] Detected WSL distro: ${distro}`)
-      
-      // Ensure we don't double-prefix if it's already a UNC path
-      if (trimmedPath.startsWith('\\\\wsl$')) return trimmedPath
-
-      // Handle relative paths if any, though usually tools send absolute
-      const cleanPath = trimmedPath.replace(/\//g, '\\')
-
-      // If path starts with \, remove it to append cleanly
-      const finalPath = cleanPath.startsWith('\\') ? cleanPath.substring(1) : cleanPath
-
-      const uncPath = `\\\\wsl$\\${distro}\\${finalPath}`
-      console.log(`[LocalServer] Resolved UNC path: ${uncPath}`)
-      return uncPath
-    } catch (err) {
-      console.warn('[LocalServer] Failed to resolve WSL path, using original:', err)
-      return filePath
-    }
-  }
-
-  return filePath
-}
-
-/**
- * Centralized path normalizer for tool execution
- */
-async function normalizeToolPath(p: string | undefined, rootPathContext?: string | null): Promise<string | undefined> {
-  if (!p) return undefined
-  return resolveToWindowsPath(p, rootPathContext)
-}
 
 // Initialize database at specified path
 function initializeLocalDatabase(dbPath: string) {
@@ -989,137 +877,112 @@ function setupServer() {
 
       let result: any = `Tool ${toolName} not implemented on local server`
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
-
-      // Helper to resolve paths for WSL if needed
-      const resolvePath = (p: string) => normalizeToolPath(p, rootPath)
-
-      // Simple FS tools implementation
+      
       switch (toolName) {
         case 'read_file': {
-          const { path: filePath } = parsedArgs
+          const { path: filePath, maxBytes, startLine, endLine, ranges } = parsedArgs
           if (!filePath) throw new Error('path is required')
-
-          const resolvedPath = await resolvePath(filePath)
-          if (!resolvedPath) throw new Error('Invalid path')
-
-          const content = fs.readFileSync(resolvedPath, 'utf8')
-          result = content
+          
+          const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges })
+          result = { success: true, ...fileRes }
           break
         }
         case 'read_files': {
-          const { paths } = parsedArgs
-          if (!Array.isArray(paths)) throw new Error('paths array is required')
-
-          const results = []
-          for (const p of paths) {
-            try {
-              const resolvedPath = await resolvePath(p)
-              if (!resolvedPath) throw new Error(`Invalid path: ${p}`)
-
-              const content = fs.readFileSync(resolvedPath, 'utf8')
-              results.push(`--- ${p} ---\n${content}`)
-            } catch (e) {
-              results.push(`--- ${p} ---\nError reading file: ${e instanceof Error ? e.message : String(e)}`)
-            }
-          }
-          result = { combined: results.join('\n\n') }
+          const { paths, baseDir, maxBytes, startLine, endLine } = parsedArgs
+          if (!paths) throw new Error('paths are required')
+          
+          const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine })
+          result = { success: true, ...filesRes }
           break
         }
         case 'create_file': {
-          const { path: filePath, content } = parsedArgs
+          const { path: filePath, content, directory, createParentDirs, overwrite, executable } = parsedArgs
           if (!filePath) throw new Error('path is required')
-
-          const resolvedPath = await resolvePath(filePath)
-          if (!resolvedPath) throw new Error('Invalid path')
-
-          const dir = path.dirname(resolvedPath)
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-          fs.writeFileSync(resolvedPath, content || '', 'utf8')
-          result = `File created at ${filePath}`
+          
+          result = await createTextFile(filePath, content, { directory, createParentDirs, overwrite, executable })
           break
         }
         case 'edit_file': {
-          const { path: filePath, operation, searchPattern, replacement, content } = parsedArgs
+          const { path: filePath, operation, searchPattern, replacement, content, createBackup, encoding, enableFuzzyMatching, fuzzyThreshold, preserveIndentation } = parsedArgs
           if (!filePath) throw new Error('path is required')
-
-          const resolvedPath = await resolvePath(filePath)
-          if (!resolvedPath) throw new Error('Invalid path')
-
-          if (!fs.existsSync(resolvedPath)) throw new Error(`File not found: ${filePath}`)
-
-          let fileContent = fs.readFileSync(resolvedPath, 'utf8')
-
-          if (operation === 'append') {
-            fileContent += content || ''
-          } else if (operation === 'replace' || operation === 'replace_first') {
-            if (!searchPattern) throw new Error('searchPattern is required for replace')
-
-            // Handle escaped regex patterns if needed, but usually we just use the string
-            // Assuming searchPattern is a regex string
-            const regex = new RegExp(searchPattern, operation === 'replace' ? 'g' : '')
-            fileContent = fileContent.replace(regex, replacement || '')
-          }
-
-          fs.writeFileSync(resolvedPath, fileContent, 'utf8')
-          result = `File edited: ${filePath}`
+          
+          result = await editFile(filePath, operation, {
+            searchPattern,
+            replacement,
+            content,
+            createBackup,
+            encoding,
+            enableFuzzyMatching,
+            fuzzyThreshold,
+            preserveIndentation
+          })
           break
         }
         case 'delete_file': {
-          const { path: filePath } = parsedArgs
+          const { path: filePath, allowedExtensions } = parsedArgs
           if (!filePath) throw new Error('path is required')
-
-          const resolvedPath = await resolvePath(filePath)
-          if (!resolvedPath) throw new Error('Invalid path')
-
-          if (fs.existsSync(resolvedPath)) {
-            fs.unlinkSync(resolvedPath)
-            result = `File deleted: ${filePath}`
+          
+          if (allowedExtensions) {
+            await safeDeleteFile(filePath, allowedExtensions)
           } else {
-            result = `File not found: ${filePath}`
+            await deleteFile(filePath)
           }
+          result = { success: true, path: filePath }
           break
         }
         case 'directory': {
-          const { path: dirPath } = parsedArgs
-          const targetPath = (await resolvePath(dirPath)) || (await resolvePath(process.cwd()))
-
-          if (!targetPath || !fs.existsSync(targetPath))
-            throw new Error(`Directory not found: ${targetPath || dirPath}`)
-
-          const entries = fs.readdirSync(targetPath, { withFileTypes: true })
-          const structure = entries.map(ent => ({
-            name: ent.name,
-            type: ent.isDirectory() ? 'directory' : 'file',
-          }))
-          result = JSON.stringify(structure, null, 2)
+          const { path: dirPath, maxDepth, includeHidden, includeSizes } = parsedArgs
+          // Use rootPath from request if dirPath is not absolute or not provided?
+          // The directory tool logic resolves against process.cwd() if relative.
+          // If rootPath is sent by client, maybe we should change CWD?
+          // But let's just pass the path.
+          
+          const structure = await extractDirectoryStructure(dirPath || rootPath || '.', { maxDepth, includeHidden, includeSizes })
+          result = { success: true, structure, path: dirPath }
           break
         }
         case 'glob': {
-          const { pattern, cwd } = parsedArgs
+          const { pattern, cwd, ignore, dot, absolute } = parsedArgs
           if (!pattern) throw new Error('pattern is required')
-
-          const resolvedCwd = await resolvePath(cwd || process.cwd())
-          if (!resolvedCwd) throw new Error('Invalid cwd')
-
-          // Use glob.sync from the 'glob' package
-          const files = glob.sync(pattern, { cwd: resolvedCwd, absolute: true })
-
-          // If we are in WSL mode, the results will be UNC paths (\\wsl$\Distro\home\...)
-          // We should probably convert them back to POSIX paths for the AI to understand
-          // But for now, returning absolute paths as found is safer for consistency
-          result = files
+          
+          const actualCwd = cwd || rootPath // Prefer explicit cwd, fallback to rootPath
+          result = await globSearch(pattern, { cwd: actualCwd, ignore, dot, absolute })
+          break
+        }
+        case 'ripgrep': {
+          const { regex, pattern, path: dirPath, glob: globPattern, case_insensitive, lineNumbers, count, filesWithMatches, maxCount, hidden, noIgnore, contextLines } = parsedArgs
+          const query = regex || pattern
+          if (!query) throw new Error('pattern or regex is required')
+          
+          const searchPath = dirPath || rootPath || '.'
+          
+          // Map parameters to new tool options (snake_case from some clients to camelCase)
+          // Client seems to send 'case_insensitive' (snake), but new tool uses 'caseSensitive' (camel, boolean inverted)
+          // Check old localServer impl: it used `caseSensitive: !case_insensitive`
+          
+          result = await ripgrepSearch(query, searchPath, {
+            caseSensitive: !case_insensitive,
+            glob: globPattern,
+            lineNumbers,
+            count,
+            filesWithMatches,
+            maxCount,
+            hidden,
+            noIgnore,
+            contextLines
+          })
           break
         }
         default:
-          // Pass through to allow client to handle unknown tools or error
           console.warn(`[LocalServer] Unknown tool: ${toolName}`)
+          result = { success: false, error: `Unknown tool: ${toolName}` }
       }
 
       res.json({ result })
     } catch (error) {
       console.error('[LocalServer] Tool execution error:', error)
       const msg = error instanceof Error ? error.message : String(error)
-      res.json({ result: `Error executing tool: ${msg}` }) // Return error as result string
+      res.json({ result: { success: false, error: msg } }) // Consistent error format?
     }
   })
 

@@ -1,0 +1,121 @@
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec)
+
+// Cached default distro
+let defaultDistro: string | null = null
+
+/**
+ * Check if the current platform is Windows
+ */
+export function isWindows(): boolean {
+  return process.platform === 'win32'
+}
+
+/**
+ * Get the default WSL distribution with robust fallback and caching
+ */
+export async function getDefaultDistro(): Promise<string> {
+  if (defaultDistro) return defaultDistro
+
+  try {
+    // Try verbose list to find the default (marked with *)
+    // wsl.exe outputs UTF-16LE, so we must read as buffer and decode explicitly
+    const { stdout: buffer } = await execAsync('wsl.exe --list --verbose', { encoding: 'buffer' })
+    const stdout = buffer.toString('utf16le').replace(/^\uFEFF/, '') // Remove BOM if present
+    const lines = stdout.split('\n')
+
+    for (const line of lines) {
+      if (line.trim().startsWith('*')) {
+        // Format example: * Ubuntu Running 2
+        const parts = line.trim().split(/\s+/)
+        if (parts.length >= 2) {
+          defaultDistro = parts[1]
+          return defaultDistro
+        }
+      }
+    }
+
+    // Fallback to simple list if verbose parsing fails
+    const { stdout: simpleBuffer } = await execAsync('wsl.exe --list --quiet', { encoding: 'buffer' })
+    const simpleOut = simpleBuffer.toString('utf16le').replace(/^\uFEFF/, '')
+    const firstDistro = simpleOut.split(/\s+/)[0]
+    if (firstDistro) {
+      defaultDistro = firstDistro
+      return defaultDistro
+    }
+
+    throw new Error('No WSL distributions found')
+  } catch (error) {
+    console.error('[LocalServer] Failed to detect WSL distro:', error)
+    // Final fallback
+    return 'Ubuntu'
+  }
+}
+
+/**
+ * Check if a path is a WSL path (starts with / and not a drive letter)
+ * Only relevant if running on Windows.
+ */
+export function isWSLPath(filePath: string): boolean {
+  if (!isWindows()) return false
+  
+  const trimmedPath = filePath.trim()
+  const startsWithSlash = trimmedPath.startsWith('/')
+  const isDriveLetter = trimmedPath.match(/^[a-zA-Z]:/)
+  
+  return startsWithSlash && !isDriveLetter
+}
+
+/**
+ * Convert a potential WSL path to a Windows UNC path if needed.
+ */
+export async function resolveToWindowsPath(filePath: string): Promise<string> {
+  // If not windows, just return the path
+  if (!isWindows()) {
+    return filePath
+  }
+
+  // Check if it looks like a WSL path (starts with / and not a drive letter)
+  const trimmedPath = filePath.trim()
+  if (!isWSLPath(trimmedPath)) {
+      return filePath
+  }
+  
+  try {
+    const distro = await getDefaultDistro()
+    
+    // Ensure we don't double-prefix if it's already a UNC path
+    if (trimmedPath.startsWith('\\\\wsl$')) return trimmedPath
+
+    // Handle relative paths if any, though usually tools send absolute
+    const cleanPath = trimmedPath.replace(/\//g, '\\')
+
+    // If path starts with \, remove it to append cleanly
+    const finalPath = cleanPath.startsWith('\\') ? cleanPath.substring(1) : cleanPath
+
+    const uncPath = `\\\\wsl$\\${distro}\\${finalPath}`
+    return uncPath
+  } catch (err) {
+    console.warn('[LocalServer] Failed to resolve WSL path, using original:', err)
+    return filePath
+  }
+}
+
+export async function getWSLCommandArgs(
+  command: string, 
+  args: string[] = [], 
+  cwd?: string
+): Promise<[string, string[]]> {
+  const distro = await getDefaultDistro()
+  const finalArgs = ['-d', distro]
+  
+  if (cwd) {
+    finalArgs.push('--cd', cwd)
+  }
+  
+  finalArgs.push('-e', command, ...args)
+  
+  return ['wsl.exe', finalArgs]
+}
