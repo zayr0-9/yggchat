@@ -1064,43 +1064,50 @@ export async function generateResponse(
 
         // Check execution mode - if 'client', abort here and let client handle execution
         if (executionMode === 'client') {
-          console.log('🛑 [openrouter] Client-side execution mode: halting generation for tool execution')
-          
-          // Stream a special halt event if needed, or rely on the pending tool_calls sent earlier
-          // We've already sent tool_call events with status='pending'
-          
-          // We still need to log cost for this partial run
-          if (!finalUsage) {
-            finalUsage = createEstimatedUsage(formattedMessages, assistantContent)
-          }
-          // Log cost and finish provider run (as succeeded, since it successfully generated the tool call)
-          if (currentProviderRunId) {
-            await finishProviderRun(currentProviderRunId, 'succeeded', finalUsage)
-          }
-          
-          // Log generation cost
-          try {
-            const totals = {
-              totalPromptTokens,
-              totalCompletionTokens,
-              totalReasoningTokens,
-              totalCostUSD,
-              totalOpenRouterCredits,
-            }
-            await logGenerationCost(model, stepCount, finalUsage, totals)
-            
-            // Update totals
-            totalPromptTokens = totals.totalPromptTokens
-            totalCompletionTokens = totals.totalCompletionTokens
-            totalReasoningTokens = totals.totalReasoningTokens
-            totalCostUSD = totals.totalCostUSD
-            totalOpenRouterCredits = totals.totalOpenRouterCredits
-          } catch (logError) {
-            console.error('Error logging generation cost:', logError)
-          }
+          // Exception for cloud-only tools that should run on server
+          const SERVER_SIDE_TOOLS = ['brave_search']
+          const shouldRunOnServer = uniqueToolCalls.every(tc => SERVER_SIDE_TOOLS.includes(tc.name))
 
-          // Stop the loop and return - client will resume with tool results
-          return
+          if (!shouldRunOnServer) {
+            console.log('🛑 [openrouter] Client-side execution mode: halting generation for tool execution')
+            
+            // Stream a special halt event if needed, or rely on the pending tool_calls sent earlier
+            // We've already sent tool_call events with status='pending'
+            
+            // We still need to log cost for this partial run
+            if (!finalUsage) {
+              finalUsage = createEstimatedUsage(formattedMessages, assistantContent)
+            }
+            // Log cost and finish provider run (as succeeded, since it successfully generated the tool call)
+            if (currentProviderRunId) {
+              await finishProviderRun(currentProviderRunId, 'succeeded', finalUsage)
+            }
+            
+            // Log generation cost
+            try {
+              const totals = {
+                totalPromptTokens,
+                totalCompletionTokens,
+                totalReasoningTokens,
+                totalCostUSD,
+                totalOpenRouterCredits,
+              }
+              await logGenerationCost(model, stepCount, finalUsage, totals)
+              
+              // Update totals
+              totalPromptTokens = totals.totalPromptTokens
+              totalCompletionTokens = totals.totalCompletionTokens
+              totalReasoningTokens = totals.totalReasoningTokens
+              totalCostUSD = totals.totalCostUSD
+              totalOpenRouterCredits = totals.totalOpenRouterCredits
+            } catch (logError) {
+              console.error('Error logging generation cost:', logError)
+            }
+
+            // Stop the loop and return - client will resume with tool results
+            return
+          }
+          console.log('⚡ [openrouter] Executing server-side tools despite client mode:', uniqueToolCalls.map(t => t.name))
         }
 
         // Execute tools and add their results

@@ -587,6 +587,8 @@ export const sendMessage = createAsyncThunk<
         let assistantThinking = ''
         let assistantToolCalls: any[] = []
         let turnAssistantMessageId: string | null = null
+        // Track processed tool calls (already executed on server)
+        const processedToolCallIds = new Set<string>()
 
         try {
           while (true) {
@@ -659,6 +661,10 @@ export const sendMessage = createAsyncThunk<
                 // Handle tool results (accumulated server-side into content_blocks)
                 if (chunk.part === 'tool_result' && chunk.toolResult) {
                   console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
+                  
+                  // Mark this tool call as processed by server
+                  processedToolCallIds.add(chunk.toolResult.tool_use_id)
+
                   // Dispatch structured tool result data for proper rendering in streaming events
                   dispatch(
                     chatSliceActions.streamChunkReceived({
@@ -750,119 +756,140 @@ export const sendMessage = createAsyncThunk<
 
         // End of stream for this turn. Check if we have pending tool calls to execute locally.
         if (assistantToolCalls.length > 0 && executionMode === 'client') {
-          console.log(`🛠️ [chatActions] Executing ${assistantToolCalls.length} tool calls locally...`)
-
-          // 1. Synthesize Assistant Message if we didn't get a 'complete' event
-          // (In client mode, server aborts before sending 'complete')
-          if (!messageId && turnAssistantMessageId) {
-            // Create ephemeral assistant message
-            const assistantMsg: any = {
-              id: turnAssistantMessageId,
-              conversation_id: conversationId,
-              role: 'assistant',
-              content: assistantMessageContent,
-              thinking_block: assistantThinking,
-              tool_calls: assistantToolCalls, // Store as array (or string if needed by backend, but we are client side now)
-              content_blocks: assistantToolCalls.map(tc => ({
-                type: 'tool_use',
-                id: tc.id,
-                name: tc.name,
-                input: tc.input,
-              })),
-              created_at: new Date().toISOString(),
-              model_name: modelName,
-              parent_id: userMessage?.id || parent, // Link to parent
+          // Filter out tool calls that were already processed by server
+          const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
+          
+          if (pendingToolCalls.length > 0) {
+            console.log(`🛠️ [chatActions] Executing ${pendingToolCalls.length} tool calls locally...`)
+            
+            if (processedToolCallIds.size > 0) {
+              console.log(`⏩ [chatActions] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
             }
 
-            // Dispatch to Redux
-            dispatch(chatSliceActions.messageAdded(assistantMsg))
-            dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
-            updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+            // 1. Synthesize Assistant Message if we didn't get a 'complete' event
+            // (In client mode, server aborts before sending 'complete')
+            if (!messageId && turnAssistantMessageId) {
+              // Create ephemeral assistant message
+              const assistantMsg: any = {
+                id: turnAssistantMessageId,
+                conversation_id: conversationId,
+                role: 'assistant',
+                content: assistantMessageContent,
+                thinking_block: assistantThinking,
+                tool_calls: assistantToolCalls, // Store as array (or string if needed by backend, but we are client side now)
+                content_blocks: assistantToolCalls.map(tc => ({
+                  type: 'tool_use',
+                  id: tc.id,
+                  name: tc.name,
+                  input: tc.input,
+                })),
+                created_at: new Date().toISOString(),
+                model_name: modelName,
+                parent_id: userMessage?.id || parent, // Link to parent
+              }
 
-            // Sync to DB (so it persists)
-            dualSync.syncMessage({
-              ...assistantMsg,
-              user_id: auth.userId,
-              project_id: selectedProject?.id || null,
-            })
+              // Dispatch to Redux
+              dispatch(chatSliceActions.messageAdded(assistantMsg))
+              dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+              updateMessageCache(extra.queryClient, conversationId, assistantMsg)
 
-            // Update history
-            currentTurnHistory.push(assistantMsg)
-            messageId = assistantMsg.id
-          }
-
-          // 2. Execute tools and append tool_result blocks to assistant message
-          const toolResultBlocks: any[] = []
-
-          // Get rootPath from IDE context to help determine if we're in WSL
-          const rootPath = state.ideContext.workspace?.rootPath || null
-          console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
-          for (const toolCall of assistantToolCalls) {
-            // Execute tool
-            const result = await executeToolWithPermissionCheck(dispatch, toolCall, rootPath)
-
-            // Create tool_result block (NOT a separate message)
-            const toolResultBlock = {
-              type: 'tool_result',
-              tool_use_id: toolCall.id,
-              content: typeof result === 'string' ? result : JSON.stringify(result),
-              is_error: false, // We handle errors in executeLocalTool returns
-            }
-
-            toolResultBlocks.push(toolResultBlock)
-
-            // Inform UI of tool result for real-time display
-            dispatch(
-              chatSliceActions.streamChunkReceived({
-                type: 'chunk',
-                part: 'tool_result',
-                toolResult: {
-                  tool_use_id: toolCall.id,
-                  content: toolResultBlock.content,
-                  is_error: false,
-                },
+              // Sync to DB (so it persists)
+              dualSync.syncMessage({
+                ...assistantMsg,
+                user_id: auth.userId,
+                project_id: selectedProject?.id || null,
               })
-            )
-          }
 
-          // 3. Update assistant message with tool results
-          if (toolResultBlocks.length > 0 && messageId) {
-            // Find the assistant message from history
-            const assistantMessage = currentTurnHistory.find(msg => msg.id === messageId)
-            if (assistantMessage) {
-              // Parse existing content_blocks
-              const existingBlocks = parseContentBlocks(assistantMessage.content_blocks)
-              const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+              // Update history
+              currentTurnHistory.push(assistantMsg)
+              messageId = assistantMsg.id
+            }
 
-              // Update message via updateMessage thunk (syncs to both local and cloud)
-              await dispatch(
-                updateMessage({
-                  id: assistantMessage.id,
-                  content: assistantMessage.content,
-                  content_blocks: updatedContentBlocks,
+            // 2. Execute tools and append tool_result blocks to assistant message
+            const toolResultBlocks: any[] = []
+
+            // Get rootPath from IDE context to help determine if we're in WSL
+            const rootPath = state.ideContext.workspace?.rootPath || null
+            console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
+            for (const toolCall of pendingToolCalls) {
+              // Execute tool
+              const result = await executeToolWithPermissionCheck(dispatch, toolCall, rootPath)
+
+              // Create tool_result block (NOT a separate message)
+              const toolResultBlock = {
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                content: typeof result === 'string' ? result : JSON.stringify(result),
+                is_error: false, // We handle errors in executeLocalTool returns
+              }
+
+              toolResultBlocks.push(toolResultBlock)
+
+              // Inform UI of tool result for real-time display
+              dispatch(
+                chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  part: 'tool_result',
+                  toolResult: {
+                    tool_use_id: toolCall.id,
+                    content: toolResultBlock.content,
+                    is_error: false,
+                  },
                 })
               )
+            }
 
-              // Update the assistant message in currentTurnHistory
-              const historyIndex = currentTurnHistory.findIndex(msg => msg.id === assistantMessage.id)
-              if (historyIndex !== -1) {
-                currentTurnHistory[historyIndex] = {
-                  ...currentTurnHistory[historyIndex],
-                  content_blocks: updatedContentBlocks,
+            // 3. Update assistant message with tool results
+            if (toolResultBlocks.length > 0 && messageId) {
+              // Find the assistant message from history
+              const assistantMessage = currentTurnHistory.find(msg => msg.id === messageId)
+              if (assistantMessage) {
+                // Parse existing content_blocks
+                const existingBlocks = parseContentBlocks(assistantMessage.content_blocks)
+                const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+                // Update message via updateMessage thunk (syncs to both local and cloud)
+                await dispatch(
+                  updateMessage({
+                    id: assistantMessage.id,
+                    content: assistantMessage.content,
+                    content_blocks: updatedContentBlocks,
+                  })
+                )
+
+                // Update the assistant message in currentTurnHistory
+                const historyIndex = currentTurnHistory.findIndex(msg => msg.id === assistantMessage.id)
+                if (historyIndex !== -1) {
+                  currentTurnHistory[historyIndex] = {
+                    ...currentTurnHistory[historyIndex],
+                    content_blocks: updatedContentBlocks,
+                  }
                 }
               }
             }
+
+            // 4. Prepare for next turn (continuation)
+            currentTurnContent = '' // No new user input
+            parent = messageId // Parent is the assistant message (not tool message)
+            continueTurn = true // Loop again to send tool results to LLM
+
+            // Reset buffers
+            assistantMessageContent = ''
+            assistantThinking = ''
+            assistantToolCalls = []
+          } else {
+            // All tool calls handled by server (or none exist)
+            if (assistantToolCalls.length > 0 && processedToolCallIds.size > 0) {
+              console.log('✅ [chatActions] All tool calls handled by server')
+              // Ensure message state is complete if we have a messageId
+              if (messageId) {
+                // This might be redundant if server sent 'complete', but ensures safety
+              }
+            }
+            
+            // If no pending calls, we're done with this turn
+            continueTurn = false
           }
-
-          // 4. Prepare for next turn (continuation)
-          currentTurnContent = '' // No new user input
-          parent = messageId // Parent is the assistant message (not tool message)
-          continueTurn = true // Loop again to send tool results to LLM
-
-          // Reset buffers
-          assistantMessageContent = ''
-          assistantThinking = ''
-          assistantToolCalls = []
         } else {
           // No tool calls or server handled it -> finish
           continueTurn = false
@@ -1139,6 +1166,8 @@ export const editMessageWithBranching = createAsyncThunk<
       let userMessage: any = null
       // Buffer for incomplete lines across chunks
       let buffer = ''
+      // Track processed tool calls (already executed on server)
+      const processedToolCallIds = new Set<string>()
 
       try {
         while (true) {
@@ -1210,6 +1239,10 @@ export const editMessageWithBranching = createAsyncThunk<
                 console.log(
                   `✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
                 )
+                
+                // Mark this tool call as processed by server
+                processedToolCallIds.add(chunk.toolResult.tool_use_id)
+                
                 // Dispatch structured tool result data for proper rendering in streaming events
                 dispatch(
                   chatSliceActions.streamChunkReceived({
@@ -1373,6 +1406,8 @@ export const sendMessageToBranch = createAsyncThunk<
       let userMessage: any = null
       // Buffer for incomplete lines across chunks
       let buffer = ''
+      // Track processed tool calls (already executed on server)
+      const processedToolCallIds = new Set<string>()
 
       try {
         while (true) {
@@ -1410,6 +1445,10 @@ export const sendMessageToBranch = createAsyncThunk<
                 console.log(
                   `✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
                 )
+                
+                // Mark this tool call as processed by server
+                processedToolCallIds.add(chunk.toolResult.tool_use_id)
+                
                 // Dispatch structured tool result data for proper rendering in streaming events
                 dispatch(
                   chatSliceActions.streamChunkReceived({
