@@ -238,6 +238,7 @@ export interface Conversation {
   system_prompt?: string | null
   conversation_context?: string | null
   research_note?: string | null
+  cwd?: string | null
   created_at: string
   updated_at: string
 }
@@ -445,6 +446,11 @@ export class ConversationService {
 
   static updateResearchNote(id: string, researchNote: string | null): Conversation | undefined {
     statements.updateConversationResearchNote.run(researchNote, id)
+    return statements.getConversationById.get(id) as Conversation | undefined
+  }
+
+  static updateCwd(id: string, cwd: string | null): Conversation | undefined {
+    statements.updateConversationCwd.run(cwd, id)
     return statements.getConversationById.get(id) as Conversation | undefined
   }
 

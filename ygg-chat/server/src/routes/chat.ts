@@ -753,6 +753,32 @@ router.patch(
   })
 )
 
+// Update conversation cwd
+router.patch(
+  '/conversations/:id/cwd',
+  asyncHandler(async (req, res) => {
+    const conversationId = req.params.id
+    const { cwd } = req.body as { cwd?: string | null }
+
+    const existing = ConversationService.getById(conversationId)
+    if (!existing) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+
+    if (typeof cwd === 'undefined') {
+      return res.status(400).json({ error: 'cwd is required (string or null)' })
+    }
+    if (cwd !== null && typeof cwd !== 'string') {
+      return res.status(400).json({ error: 'cwd must be a string or null' })
+    }
+
+    const normalizedCwd = typeof cwd === 'string' && cwd.trim().length === 0 ? null : (cwd as string | null)
+
+    const updated = ConversationService.updateCwd(conversationId, normalizedCwd)
+    res.json(updated)
+  })
+)
+
 // Clone conversation
 router.post(
   '/conversations/:id/clone',

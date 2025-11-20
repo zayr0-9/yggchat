@@ -586,6 +586,9 @@ export function initializeStatements() {
     updateConversationResearchNote: db.prepare(
       'UPDATE conversations SET research_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ),
+    updateConversationCwd: db.prepare(
+      'UPDATE conversations SET cwd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ),
     getConversationByProjectId: db.prepare('SELECT * FROM conversations WHERE project_id = ?'),
     getConversationContext: db.prepare('SELECT conversation_context FROM conversations WHERE id = ?'),
     updateConversationTimestamp: db.prepare('UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?'),

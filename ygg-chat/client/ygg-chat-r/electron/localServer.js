@@ -172,6 +172,8 @@ function initializeLocalDatabase(dbPath) {
     `),
         deleteConversation: db.prepare('DELETE FROM conversations WHERE id = ?'),
         getConversationById: db.prepare('SELECT * FROM conversations WHERE id = ?'),
+        updateConversationResearchNote: db.prepare('UPDATE conversations SET research_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'),
+        updateConversationCwd: db.prepare('UPDATE conversations SET cwd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'),
         // Messages
         upsertMessage: db.prepare(`
       INSERT INTO messages (id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, tool_call_id, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at)
@@ -674,6 +676,46 @@ function setupServer() {
         catch (error) {
             console.error('[LocalServer] Error getting stats:', error);
             res.status(500).json({ error: 'Failed to get stats' });
+        }
+    });
+    // Update conversation research note
+    app.patch('/api/conversations/:id/research-note', (req, res) => {
+        try {
+            const { id } = req.params;
+            const { researchNote } = req.body;
+            const normalizedResearchNote = typeof researchNote === 'string' && researchNote.trim().length === 0 ? null : researchNote;
+            statements.updateConversationResearchNote.run(normalizedResearchNote, id);
+            const updated = statements.getConversationById.get(id);
+            if (updated) {
+                res.json(updated);
+            }
+            else {
+                res.status(404).json({ error: 'Conversation not found' });
+            }
+        }
+        catch (error) {
+            console.error('[LocalServer] Error updating research note:', error);
+            res.status(500).json({ error: 'Failed to update research note' });
+        }
+    });
+    // Update conversation cwd
+    app.patch('/api/conversations/:id/cwd', (req, res) => {
+        try {
+            const { id } = req.params;
+            const { cwd } = req.body;
+            const normalizedCwd = typeof cwd === 'string' && cwd.trim().length === 0 ? null : cwd;
+            statements.updateConversationCwd.run(normalizedCwd, id);
+            const updated = statements.getConversationById.get(id);
+            if (updated) {
+                res.json(updated);
+            }
+            else {
+                res.status(404).json({ error: 'Conversation not found' });
+            }
+        }
+        catch (error) {
+            console.error('[LocalServer] Error updating cwd:', error);
+            res.status(500).json({ error: 'Failed to update cwd' });
         }
     });
 }
