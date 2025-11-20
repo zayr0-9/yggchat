@@ -1066,7 +1066,7 @@ export const editMessageWithBranching = createAsyncThunk<
       }>(['models', provider])
       const selectedName = modelsData?.selected?.name || modelsData?.default?.name
       const modelName = modelOverride || selectedName
-      const parentId = originalMessage.parent_id
+      let activeParentId = originalMessage.parent_id
 
       // Map UI provider to server provider id
       const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
@@ -1117,186 +1117,364 @@ export const editMessageWithBranching = createAsyncThunk<
         throw new Error('No model selected')
       }
       const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
+      
+      // Determine execution mode
+      const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+      const executionMode = 'client' // Prefer client execution for tools
 
-      // Create new user message as a branch
-      const response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: currentPathMessages.map(m => ({
-            id: m.id,
-            conversation_id: m.conversation_id,
-            parent_id: m.parent_id,
-            children_ids: m.children_ids,
-            role: m.role,
-            thinking_block: m.thinking_block,
-            tool_calls: m.tool_calls,
-            content_blocks: m.content_blocks,
-            content: m.content,
-            content_plain_text: m.content_plain_text,
-            created_at: m.created_at,
-            model_name: m.model_name,
-            partial: m.partial,
-            artifacts: m.artifacts,
-          })),
-          content: newContent,
-          modelName,
-          parentId: parentId, // Branch from the same parent as original
-          systemPrompt: systemPrompt,
-          conversationContext: combinedContext,
-          projectContext,
-          provider: serverProvider,
-          attachmentsBase64,
-          selectedFiles: selectedFilesForChat,
-          think,
-        }),
-        signal: controller.signal,
-      })
+      let currentTurnHistory = [...currentPathMessages]
+      let currentTurnContent = newContent
+      let continueTurn = true
+      let turnCount = 0
+      const MAX_TURNS = 10
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No stream reader available')
-
-      const decoder = new TextDecoder()
       let messageId: MessageId | null = null
       let userMessage: any = null
-      // Buffer for incomplete lines across chunks
-      let buffer = ''
-      // Track processed tool calls (already executed on server)
-      const processedToolCallIds = new Set<string>()
+      
+      while (continueTurn && turnCount < MAX_TURNS) {
+        turnCount++
+        continueTurn = false
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+        // Create new user message as a branch (or continuation)
+        const response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: currentTurnHistory.map(m => ({
+              id: m.id,
+              conversation_id: m.conversation_id,
+              parent_id: m.parent_id,
+              children_ids: m.children_ids,
+              role: m.role,
+              thinking_block: m.thinking_block,
+              tool_calls: m.tool_calls,
+              content_blocks: m.content_blocks,
+              content: m.content,
+              content_plain_text: m.content_plain_text,
+              created_at: m.created_at,
+              model_name: m.model_name,
+              partial: m.partial,
+              artifacts: m.artifacts,
+            })),
+            content: currentTurnContent,
+            modelName,
+            parentId: activeParentId, // Branch from the same parent as original (or updated parent)
+            systemPrompt: systemPrompt,
+            conversationContext: combinedContext,
+            projectContext,
+            provider: serverProvider,
+            attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
+            selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
+            think,
+            executionMode,
+          }),
+          signal: controller.signal,
+        })
 
-          // Append new data to buffer and split by newlines
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
+        }
 
-          // Keep the last incomplete line in the buffer
-          buffer = lines.pop() || ''
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('No stream reader available')
 
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
+        const decoder = new TextDecoder()
+        // Buffer for incomplete lines across chunks
+        let buffer = ''
+        
+        // State for this turn
+        let assistantMessageContent = ''
+        let assistantThinking = ''
+        let assistantToolCalls: any[] = []
+        let turnAssistantMessageId: string | null = null
+        // Track processed tool calls (already executed on server)
+        const processedToolCallIds = new Set<string>()
 
-            try {
-              const chunk = JSON.parse(line.slice(6))
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
 
-              if (chunk.type === 'user_message' && chunk.message) {
-                userMessage = chunk.message
-                // Ensure message is in store
-                if (!chunk.message.timestamp) {
-                  chunk.message.timestamp = new Date().toISOString()
-                }
-                dispatch(chatSliceActions.messageAdded(chunk.message))
-                // And update currentPath to this new user branch node
-                dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
-                // Sync to React Query cache immediately
-                updateMessageCache(extra.queryClient, conversationId, chunk.message)
-                // Sync user message to local SQLite (fire-and-forget)
-                dualSync.syncMessage({
-                  ...chunk.message,
-                  user_id: auth.userId,
-                  project_id: selectedProject?.id || null,
-                })
-                // Live-update: ensure the new branched user message shows all intended artifacts immediately
-                // Use the combined list (existing - deleted + drafts) we computed prior to the request
-                if (combinedArtifacts.length > 0) {
-                  dispatch(
-                    chatSliceActions.messageArtifactsSet({
-                      messageId: chunk.message.id,
-                      artifacts: combinedArtifacts,
-                    })
-                  )
-                  // Sync artifacts to React Query cache so images appear immediately in branched message
-                  const cacheKey = ['conversations', conversationId, 'messages']
-                  const existingData = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>(cacheKey)
-                  if (existingData) {
-                    const updatedMessages = existingData.messages.map(msg =>
-                      msg.id === chunk.message.id ? { ...msg, artifacts: combinedArtifacts } : msg
+            // Append new data to buffer and split by newlines
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+
+            // Keep the last incomplete line in the buffer
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+
+              try {
+                const chunk = JSON.parse(line.slice(6))
+
+                if (chunk.type === 'user_message' && chunk.message) {
+                  userMessage = chunk.message
+                  // Ensure message is in store
+                  if (!chunk.message.timestamp) {
+                    chunk.message.timestamp = new Date().toISOString()
+                  }
+                  dispatch(chatSliceActions.messageAdded(chunk.message))
+                  // And update currentPath to this new user branch node
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  // Sync to React Query cache immediately
+                  updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                  // Sync user message to local SQLite (fire-and-forget)
+                  dualSync.syncMessage({
+                    ...chunk.message,
+                    user_id: auth.userId,
+                    project_id: selectedProject?.id || null,
+                  })
+                  
+                  // Add to local history for next turn
+                  currentTurnHistory.push(chunk.message)
+                  
+                  // Live-update: ensure the new branched user message shows all intended artifacts immediately
+                  // Use the combined list (existing - deleted + drafts) we computed prior to the request
+                  if (combinedArtifacts.length > 0) {
+                    dispatch(
+                      chatSliceActions.messageArtifactsSet({
+                        messageId: chunk.message.id,
+                        artifacts: combinedArtifacts,
+                      })
                     )
-                    extra.queryClient?.setQueryData(cacheKey, {
-                      messages: updatedMessages,
-                      tree: existingData.tree,
-                    })
+                    // Sync artifacts to React Query cache so images appear immediately in branched message
+                    const cacheKey = ['conversations', conversationId, 'messages']
+                    const existingData = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>(cacheKey)
+                    if (existingData) {
+                      const updatedMessages = existingData.messages.map(msg =>
+                        msg.id === chunk.message.id ? { ...msg, artifacts: combinedArtifacts } : msg
+                      )
+                      extra.queryClient?.setQueryData(cacheKey, {
+                        messages: updatedMessages,
+                        tree: existingData.tree,
+                      })
+                    }
+                  }
+
+                  // Clear optimistic branch message immediately when real branch message confirmed (web mode only)
+                  if (isWebMode) {
+                    dispatch(chatSliceActions.optimisticBranchMessageCleared())
                   }
                 }
 
-                // Clear optimistic branch message immediately when real branch message confirmed (web mode only)
-                const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
-                if (isWebMode) {
-                  dispatch(chatSliceActions.optimisticBranchMessageCleared())
-                }
-              }
-
-              // Handle tool results (accumulated server-side into content_blocks)
-              if (chunk.part === 'tool_result' && chunk.toolResult) {
-                console.log(
-                  `✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
-                )
-                
-                // Mark this tool call as processed by server
-                processedToolCallIds.add(chunk.toolResult.tool_use_id)
-                
-                // Dispatch structured tool result data for proper rendering in streaming events
-                dispatch(
-                  chatSliceActions.streamChunkReceived({
-                    type: 'chunk',
-                    part: 'tool_result',
-                    toolResult: chunk.toolResult,
+                // Handle tool results (accumulated server-side into content_blocks)
+                if (chunk.part === 'tool_result' && chunk.toolResult) {
+                  console.log(
+                    `✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
+                  )
+                  
+                  // Mark this tool call as processed by server
+                  processedToolCallIds.add(chunk.toolResult.tool_use_id)
+                  
+                  // Dispatch structured tool result data for proper rendering in streaming events
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({
+                      type: 'chunk',
+                      part: 'tool_result',
+                      toolResult: chunk.toolResult,
+                    })
+                  )
+                  // Skip generic chunk handler to prevent duplicate dispatch
+                } else if (chunk.part === 'tool_call' && chunk.toolCall) {
+                  // Accumulate tool calls locally
+                  const exists = assistantToolCalls.some(tc => tc.id === chunk.toolCall.id)
+                  if (!exists) {
+                    assistantToolCalls.push(chunk.toolCall)
+                  }
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({
+                      type: 'chunk',
+                      part: 'tool_call',
+                      toolCall: chunk.toolCall,
+                    })
+                  )
+                } else if (chunk.type === 'generation_started') {
+                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  if (chunk.messageId) {
+                    turnAssistantMessageId = chunk.messageId
+                  }
+                } else if (chunk.type === 'chunk') {
+                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  if (chunk.part === 'text' && chunk.content) {
+                    assistantMessageContent += chunk.content
+                  } else if (chunk.part === 'text' && chunk.delta) {
+                    assistantMessageContent += chunk.delta
+                  } else if (chunk.part === 'reasoning' && chunk.delta) {
+                    assistantThinking += chunk.delta
+                  }
+                } else if (chunk.type === 'complete' && chunk.message) {
+                  messageId = chunk.message.id
+                  // Store assistant message
+                  dispatch(chatSliceActions.messageAdded(chunk.message))
+                  // Navigate path to completed assistant reply
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  // Sync to React Query cache immediately
+                  updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                  // Sync assistant message to local SQLite (fire-and-forget)
+                  dualSync.syncMessage({
+                    ...chunk.message,
+                    user_id: auth.userId,
+                    project_id: selectedProject?.id || null,
                   })
-                )
-                // Skip generic chunk handler to prevent duplicate dispatch
-              } else if (chunk.type === 'generation_started') {
-                dispatch(chatSliceActions.streamChunkReceived(chunk))
-              } else {
-                dispatch(chatSliceActions.streamChunkReceived(chunk))
-              }
+                  
+                  // Add to local history
+                  currentTurnHistory.push(chunk.message)
 
-              if (chunk.type === 'complete' && chunk.message) {
-                messageId = chunk.message.id
-                // Store assistant message
-                dispatch(chatSliceActions.messageAdded(chunk.message))
-                // Navigate path to completed assistant reply
-                dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
-                // Sync to React Query cache immediately
-                updateMessageCache(extra.queryClient, conversationId, chunk.message)
-                // Sync assistant message to local SQLite (fire-and-forget)
-                dualSync.syncMessage({
-                  ...chunk.message,
-                  user_id: auth.userId,
-                  project_id: selectedProject?.id || null,
-                })
-                // Sync provider cost if available
-                if (chunk.cost) {
-                  dualSync.syncProviderCost({
-                    ...chunk.cost,
-                    message_id: chunk.message.id,
-                  })
+                  // Sync provider cost if available
+                  if (chunk.cost) {
+                    dualSync.syncProviderCost({
+                      ...chunk.cost,
+                      message_id: chunk.message.id,
+                    })
+                  }
+                  // Reset streaming buffer for next iteration
+                  dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
+                } else if (chunk.type === 'aborted') {
+                  // Server deleted the empty assistant message, no need to keep it in client state
+                  dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
+                } else if (chunk.type === 'error') {
+                  throw new Error(chunk.error || 'Stream error')
                 }
-              } else if (chunk.type === 'aborted') {
-                // Server deleted the empty assistant message, no need to keep it in client state
-                dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
-              } else if (chunk.type === 'error') {
-                throw new Error(chunk.error || 'Stream error')
-              }
-            } catch (parseError) {
-              // Silently skip malformed JSON chunks (e.g., emoji-prefixed tool indicators)
-              // These are often tool call markers from the server that aren't valid JSON
-              if (line.length > 100) {
-                console.warn('Failed to parse chunk:', line.substring(0, 100) + '...', parseError)
+              } catch (parseError) {
+                // Silently skip malformed JSON chunks (e.g., emoji-prefixed tool indicators)
+                // These are often tool call markers from the server that aren't valid JSON
+                if (line.length > 100) {
+                  console.warn('Failed to parse chunk:', line.substring(0, 100) + '...', parseError)
+                }
               }
             }
           }
+        } finally {
+          reader.releaseLock()
         }
-      } finally {
-        reader.releaseLock()
-      }
+
+        // End of stream for this turn. Check if we have pending tool calls to execute locally.
+        if (assistantToolCalls.length > 0 && executionMode === 'client') {
+          // Filter out tool calls that were already processed by server
+          const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
+          
+          if (pendingToolCalls.length > 0) {
+            console.log(`🛠️ [editMessageWithBranching] Executing ${pendingToolCalls.length} tool calls locally...`)
+            
+            if (processedToolCallIds.size > 0) {
+              console.log(`⏩ [editMessageWithBranching] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
+            }
+
+            // 1. Synthesize Assistant Message if we didn't get a 'complete' event
+            if (!messageId && turnAssistantMessageId) {
+              // Create ephemeral assistant message
+              const assistantMsg: any = {
+                id: turnAssistantMessageId,
+                conversation_id: conversationId,
+                role: 'assistant',
+                content: assistantMessageContent,
+                thinking_block: assistantThinking,
+                tool_calls: assistantToolCalls,
+                content_blocks: assistantToolCalls.map(tc => ({
+                  type: 'tool_use',
+                  id: tc.id,
+                  name: tc.name,
+                  input: tc.input,
+                })),
+                created_at: new Date().toISOString(),
+                model_name: modelName,
+                parent_id: userMessage?.id || activeParentId, // Link to parent (user msg or previous parent)
+              }
+
+              // Dispatch to Redux
+              dispatch(chatSliceActions.messageAdded(assistantMsg))
+              dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+              updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+
+              // Sync to DB
+              dualSync.syncMessage({
+                ...assistantMsg,
+                user_id: auth.userId,
+                project_id: selectedProject?.id || null,
+              })
+
+              // Update history
+              currentTurnHistory.push(assistantMsg)
+              messageId = assistantMsg.id
+            }
+
+            // 2. Execute tools and append tool_result blocks to assistant message
+            const toolResultBlocks: any[] = []
+            const rootPath = state.ideContext.workspace?.rootPath || null
+
+            for (const toolCall of pendingToolCalls) {
+              // Execute tool
+              const result = await executeToolWithPermissionCheck(dispatch, toolCall, rootPath)
+
+              // Create tool_result block
+              const toolResultBlock = {
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                content: typeof result === 'string' ? result : JSON.stringify(result),
+                is_error: false,
+              }
+
+              toolResultBlocks.push(toolResultBlock)
+
+              // Inform UI of tool result
+              dispatch(
+                chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  part: 'tool_result',
+                  toolResult: {
+                    tool_use_id: toolCall.id,
+                    content: toolResultBlock.content,
+                    is_error: false,
+                  },
+                })
+              )
+            }
+
+            // 3. Update assistant message with tool results
+            if (toolResultBlocks.length > 0 && messageId) {
+              const assistantMessage = currentTurnHistory.find(msg => msg.id === messageId)
+              if (assistantMessage) {
+                const existingBlocks = parseContentBlocks(assistantMessage.content_blocks)
+                const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+                await dispatch(
+                  updateMessage({
+                    id: assistantMessage.id,
+                    content: assistantMessage.content,
+                    content_blocks: updatedContentBlocks,
+                  })
+                )
+
+                // Update the assistant message in currentTurnHistory
+                const historyIndex = currentTurnHistory.findIndex(msg => msg.id === assistantMessage.id)
+                if (historyIndex !== -1) {
+                  currentTurnHistory[historyIndex] = {
+                    ...currentTurnHistory[historyIndex],
+                    content_blocks: updatedContentBlocks,
+                  }
+                }
+              }
+            }
+
+            // 4. Prepare for next turn
+            currentTurnContent = '' 
+            activeParentId = messageId // Parent is the assistant message (not tool message)
+            continueTurn = true 
+            assistantMessageContent = ''
+            assistantThinking = ''
+            assistantToolCalls = []
+          } else {
+            if (assistantToolCalls.length > 0 && processedToolCallIds.size > 0) {
+               console.log('✅ [editMessageWithBranching] All tool calls handled by server')
+            }
+            continueTurn = false
+          }
+        } else {
+          continueTurn = false
+        }
+      } // end while loop
 
       if (messageId) {
         dispatch(chatSliceActions.streamCompleted({ messageId }))
@@ -1375,131 +1553,314 @@ export const sendMessageToBranch = createAsyncThunk<
         throw new Error('No model selected')
       }
 
-      const response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content,
-          modelName,
-          parentId,
-          systemPrompt,
-          conversationContext: combinedContext,
-          projectContext,
-          provider: serverProvider,
-          attachmentsBase64,
-          selectedFiles: selectedFilesForChat,
-          think,
-        }),
-        signal: controller.signal,
-      })
+      // Determine execution mode
+      const executionMode = 'client'
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`HTTP ${response.status}: ${errorText}`)
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No stream reader available')
-
-      const decoder = new TextDecoder()
+      let currentTurnContent = content
+      let currentParentId = parentId
+      let continueTurn = true
+      let turnCount = 0
+      const MAX_TURNS = 10
       let messageId: MessageId | null = null
       let userMessage: any = null
-      // Buffer for incomplete lines across chunks
-      let buffer = ''
-      // Track processed tool calls (already executed on server)
-      const processedToolCallIds = new Set<string>()
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+      while (continueTurn && turnCount < MAX_TURNS) {
+        turnCount++
+        continueTurn = false
 
-          // Append new data to buffer and split by newlines
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
+        const response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: currentTurnContent,
+            modelName,
+            parentId: currentParentId,
+            systemPrompt,
+            conversationContext: combinedContext,
+            projectContext,
+            provider: serverProvider,
+            attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
+            selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
+            think,
+            executionMode,
+          }),
+          signal: controller.signal,
+        })
 
-          // Keep the last incomplete line in the buffer
-          buffer = lines.pop() || ''
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`HTTP ${response.status}: ${errorText}`)
+        }
 
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('No stream reader available')
 
-            try {
-              const chunk = JSON.parse(line.slice(6))
+        const decoder = new TextDecoder()
+        // Buffer for incomplete lines across chunks
+        let buffer = ''
+        
+        // State for this turn
+        let assistantMessageContent = ''
+        let assistantThinking = ''
+        let assistantToolCalls: any[] = []
+        let turnAssistantMessageId: string | null = null
+        // Track processed tool calls (already executed on server)
+        const processedToolCallIds = new Set<string>()
 
-              if (chunk.type === 'user_message' && chunk.message) {
-                userMessage = chunk.message
-                dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
-                // Sync to React Query cache immediately
-                updateMessageCache(extra.queryClient, conversationId, chunk.message)
-                // Sync user message to local SQLite (fire-and-forget)
-                dualSync.syncMessage({
-                  ...chunk.message,
-                  user_id: auth.userId,
-                  project_id: selectedProject?.id || null,
-                })
-              }
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
 
-              // Handle tool results (accumulated server-side into content_blocks)
-              if (chunk.part === 'tool_result' && chunk.toolResult) {
-                console.log(
-                  `✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
-                )
-                
-                // Mark this tool call as processed by server
-                processedToolCallIds.add(chunk.toolResult.tool_use_id)
-                
-                // Dispatch structured tool result data for proper rendering in streaming events
-                dispatch(
-                  chatSliceActions.streamChunkReceived({
-                    type: 'chunk',
-                    part: 'tool_result',
-                    toolResult: chunk.toolResult,
-                  })
-                )
-                // Skip generic chunk handler to prevent duplicate dispatch
-              } else if (chunk.type === 'generation_started') {
-                dispatch(chatSliceActions.streamChunkReceived(chunk))
-              } else {
-                dispatch(chatSliceActions.streamChunkReceived(chunk))
-              }
+            // Append new data to buffer and split by newlines
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
 
-              if (chunk.type === 'complete' && chunk.message) {
-                messageId = chunk.message.id
-                dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
-                // Sync to React Query cache immediately
-                updateMessageCache(extra.queryClient, conversationId, chunk.message)
-                // Sync assistant message to local SQLite (fire-and-forget)
-                dualSync.syncMessage({
-                  ...chunk.message,
-                  user_id: auth.userId,
-                  project_id: selectedProject?.id || null,
-                })
-                // Sync provider cost if available
-                if (chunk.cost) {
-                  dualSync.syncProviderCost({
-                    ...chunk.cost,
-                    message_id: chunk.message.id,
+            // Keep the last incomplete line in the buffer
+            buffer = lines.pop() || ''
+
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+
+              try {
+                const chunk = JSON.parse(line.slice(6))
+
+                if (chunk.type === 'user_message' && chunk.message) {
+                  userMessage = chunk.message
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  // Sync to React Query cache immediately
+                  updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                  // Sync user message to local SQLite (fire-and-forget)
+                  dualSync.syncMessage({
+                    ...chunk.message,
+                    user_id: auth.userId,
+                    project_id: selectedProject?.id || null,
                   })
                 }
-              } else if (chunk.type === 'aborted') {
-                // Server deleted the empty assistant message, no need to keep it in client state
-                dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
-              } else if (chunk.type === 'error') {
-                throw new Error(chunk.error || 'Stream error')
-              }
-            } catch (parseError) {
-              // Silently skip malformed JSON chunks (e.g., emoji-prefixed tool indicators)
-              // These are often tool call markers from the server that aren't valid JSON
-              if (line.length > 100) {
-                console.warn('Failed to parse chunk:', line.substring(0, 100) + '...', parseError)
+
+                // Handle tool results (accumulated server-side into content_blocks)
+                if (chunk.part === 'tool_result' && chunk.toolResult) {
+                  console.log(
+                    `✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
+                  )
+                  
+                  // Mark this tool call as processed by server
+                  processedToolCallIds.add(chunk.toolResult.tool_use_id)
+                  
+                  // Dispatch structured tool result data for proper rendering in streaming events
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({
+                      type: 'chunk',
+                      part: 'tool_result',
+                      toolResult: chunk.toolResult,
+                    })
+                  )
+                  // Skip generic chunk handler to prevent duplicate dispatch
+                } else if (chunk.part === 'tool_call' && chunk.toolCall) {
+                  // Accumulate tool calls locally
+                  const exists = assistantToolCalls.some(tc => tc.id === chunk.toolCall.id)
+                  if (!exists) {
+                    assistantToolCalls.push(chunk.toolCall)
+                  }
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({
+                      type: 'chunk',
+                      part: 'tool_call',
+                      toolCall: chunk.toolCall,
+                    })
+                  )
+                } else if (chunk.type === 'generation_started') {
+                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  if (chunk.messageId) {
+                    turnAssistantMessageId = chunk.messageId
+                  }
+                } else if (chunk.type === 'chunk') {
+                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  if (chunk.part === 'text' && chunk.content) {
+                    assistantMessageContent += chunk.content
+                  } else if (chunk.part === 'text' && chunk.delta) {
+                    assistantMessageContent += chunk.delta
+                  } else if (chunk.part === 'reasoning' && chunk.delta) {
+                    assistantThinking += chunk.delta
+                  }
+                } else if (chunk.type === 'complete' && chunk.message) {
+                  messageId = chunk.message.id
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  // Sync to React Query cache immediately
+                  updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                  // Sync assistant message to local SQLite (fire-and-forget)
+                  dualSync.syncMessage({
+                    ...chunk.message,
+                    user_id: auth.userId,
+                    project_id: selectedProject?.id || null,
+                  })
+                  // Sync provider cost if available
+                  if (chunk.cost) {
+                    dualSync.syncProviderCost({
+                      ...chunk.cost,
+                      message_id: chunk.message.id,
+                    })
+                  }
+                  // Reset streaming buffer for next iteration
+                  dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
+                } else if (chunk.type === 'aborted') {
+                  // Server deleted the empty assistant message, no need to keep it in client state
+                  dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
+                } else if (chunk.type === 'error') {
+                  throw new Error(chunk.error || 'Stream error')
+                }
+              } catch (parseError) {
+                // Silently skip malformed JSON chunks (e.g., emoji-prefixed tool indicators)
+                // These are often tool call markers from the server that aren't valid JSON
+                if (line.length > 100) {
+                  console.warn('Failed to parse chunk:', line.substring(0, 100) + '...', parseError)
+                }
               }
             }
           }
+        } finally {
+          reader.releaseLock()
         }
-      } finally {
-        reader.releaseLock()
-      }
+
+        // End of stream for this turn. Check if we have pending tool calls to execute locally.
+        if (assistantToolCalls.length > 0 && executionMode === 'client') {
+          // Filter out tool calls that were already processed by server
+          const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
+          
+          if (pendingToolCalls.length > 0) {
+            console.log(`🛠️ [sendMessageToBranch] Executing ${pendingToolCalls.length} tool calls locally...`)
+            
+            if (processedToolCallIds.size > 0) {
+              console.log(`⏩ [sendMessageToBranch] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
+            }
+
+            // 1. Synthesize Assistant Message if we didn't get a 'complete' event
+            if (!messageId && turnAssistantMessageId) {
+              // Create ephemeral assistant message
+              const assistantMsg: any = {
+                id: turnAssistantMessageId,
+                conversation_id: conversationId,
+                role: 'assistant',
+                content: assistantMessageContent,
+                thinking_block: assistantThinking,
+                tool_calls: assistantToolCalls,
+                content_blocks: assistantToolCalls.map(tc => ({
+                  type: 'tool_use',
+                  id: tc.id,
+                  name: tc.name,
+                  input: tc.input,
+                })),
+                created_at: new Date().toISOString(),
+                model_name: modelName,
+                parent_id: userMessage?.id || currentParentId, // Link to parent
+              }
+
+              // Dispatch to Redux (optimistic)
+              dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+              // Normally we'd check if it's already added, but branch created adds it to path?
+              // Actually messageBranchCreated usually updates path.
+              // We should also add message to store if not there?
+              // 'messageBranchCreated' in chatSlice handles adding to messages array?
+              // Let's check 'messageAdded' usage in previous thunk. 
+              // It calls 'messageAdded' THEN 'messageBranchCreated'.
+              
+              dispatch(chatSliceActions.messageAdded(assistantMsg))
+              // Re-dispatch branch created to ensure path is correct?
+              // Actually if we just do messageAdded, it might not update path.
+              // messageBranchCreated logic usually takes the message and updates path.
+              // Let's call both to be safe and consistent with loop above.
+              
+              updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+
+              // Sync to DB
+              dualSync.syncMessage({
+                ...assistantMsg,
+                user_id: auth.userId,
+                project_id: selectedProject?.id || null,
+              })
+
+              messageId = assistantMsg.id
+            }
+
+            // 2. Execute tools and append tool_result blocks to assistant message
+            const toolResultBlocks: any[] = []
+            const rootPath = state.ideContext.workspace?.rootPath || null
+
+            for (const toolCall of pendingToolCalls) {
+              // Execute tool
+              const result = await executeToolWithPermissionCheck(dispatch, toolCall, rootPath)
+
+              // Create tool_result block
+              const toolResultBlock = {
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                content: typeof result === 'string' ? result : JSON.stringify(result),
+                is_error: false,
+              }
+
+              toolResultBlocks.push(toolResultBlock)
+
+              // Inform UI of tool result
+              dispatch(
+                chatSliceActions.streamChunkReceived({
+                  type: 'chunk',
+                  part: 'tool_result',
+                  toolResult: {
+                    tool_use_id: toolCall.id,
+                    content: toolResultBlock.content,
+                    is_error: false,
+                  },
+                })
+              )
+            }
+
+            // 3. Update assistant message with tool results
+            if (toolResultBlocks.length > 0 && messageId) {
+              // We need to fetch the message content to append blocks
+              // Ideally we have it in `assistantMessageContent` + `assistantToolCalls`
+              // But we better use `updateMessage` thunk which handles state update.
+              // However, `updateMessage` takes `content`.
+              
+              // We need to construct the `content_blocks` array.
+              // Existing blocks are `assistantToolCalls` (converted to blocks).
+              // Plus `toolResultBlocks`.
+              
+              // Wait, if we synthesized the message, `content_blocks` is set.
+              // If server sent it, we might not have local `content_blocks` in `assistantMsg` variable if we relied on server 'complete'.
+              // But `messageId` is set.
+              
+              // Let's get the message from state to be sure.
+              const currentMessages = getState().chat.conversation.messages
+              const assistantMessage = currentMessages.find(m => m.id === messageId)
+              
+              if (assistantMessage) {
+                const existingBlocks = parseContentBlocks(assistantMessage.content_blocks)
+                const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+                await dispatch(
+                  updateMessage({
+                    id: assistantMessage.id,
+                    content: assistantMessage.content,
+                    content_blocks: updatedContentBlocks,
+                  })
+                )
+              }
+            }
+
+            // 4. Prepare for next turn
+            currentTurnContent = '' 
+            currentParentId = messageId // Parent is the assistant message
+            continueTurn = true
+            assistantMessageContent = ''
+            assistantThinking = ''
+            assistantToolCalls = []
+          } else {
+            continueTurn = false
+          }
+        } else {
+           continueTurn = false
+        }
+      } // end while loop
 
       if (messageId) {
         dispatch(chatSliceActions.streamCompleted({ messageId }))
