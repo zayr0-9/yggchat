@@ -1933,6 +1933,23 @@ function Chat() {
                   ></i>
                 </Button>
 
+                <Button
+                  variant='outline2'
+                  size='medium'
+                  className='transition-transform duration-100 active:scale-95'
+                  aria-label='Refresh Messages'
+                  onClick={() => {
+                    if (currentConversationId) {
+                      queryClient.invalidateQueries({
+                        queryKey: ['conversations', currentConversationId, 'messages'],
+                      })
+                    }
+                  }}
+                  title='Refresh Messages'
+                >
+                  <i className='bx bx-refresh text-2xl' aria-hidden='true'></i>
+                </Button>
+
                 {editingTitle ? (
                   <>
                     <TextField
