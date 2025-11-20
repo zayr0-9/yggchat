@@ -184,7 +184,7 @@ const Homepage: React.FC = () => {
   }
 
   return (
-    <div className='relative h-screen flex'>
+    <div className='relative h-full flex'>
       {/* Dark Overlay */}
       <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/30 z-0' />
       {!isMobile && <SideBar limit={12} projects={allProjects} />}

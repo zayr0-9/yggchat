@@ -102,7 +102,7 @@ const Settings: React.FC = () => {
 
   if (loading) {
     return (
-      <div className='bg-neutral-100 min-h-screen dark:bg-yBlack-900'>
+      <div className='bg-neutral-100 min-h-full dark:bg-yBlack-900'>
         <div className='p-6 max-w-4xl mx-auto'>
           <div className='flex items-center justify-center min-h-[200px]'>
             <p className='text-stone-600 dark:text-stone-400'>Loading environment variables...</p>
@@ -113,7 +113,7 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className='bg-neutral-100 min-h-screen dark:bg-yBlack-900'>
+    <div className='bg-neutral-100 min-h-full dark:bg-yBlack-900'>
       <div className='p-6 max-w-5xl mx-auto'>
         {/* Header */}
         <div className='flex items-center justify-between mb-6 py-4'>

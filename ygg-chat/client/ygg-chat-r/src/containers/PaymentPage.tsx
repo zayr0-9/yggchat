@@ -174,7 +174,7 @@ const PaymentPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className='min-h-screen bg-zinc-50 dark:bg-yBlack-500 flex items-center justify-center'>
+      <div className='min-h-full bg-zinc-50 dark:bg-yBlack-500 flex items-center justify-center'>
         <p className='text-xl dark:text-neutral-100'>Loading...</p>
       </div>
     )
@@ -183,7 +183,7 @@ const PaymentPage: React.FC = () => {
   // Show alternative UI for Electron/local modes (no payments)
   if (!paymentsSupported || isElectronOrLocal) {
     return (
-      <div className='min-h-screen bg-zinc-50 dark:bg-yBlack-500'>
+      <div className='min-h-full bg-zinc-50 dark:bg-yBlack-500'>
         <div className='max-w-4xl mx-auto px-4 py-8'>
           {/* Header */}
           <div className='flex items-center justify-between mb-8'>
@@ -253,7 +253,7 @@ const PaymentPage: React.FC = () => {
   }
 
   return (
-    <div className='min-h-screen bg-zinc-50 dark:bg-yBlack-500'>
+    <div className='min-h-full bg-zinc-50 dark:bg-yBlack-500'>
       <div className='max-w-7xl mx-auto px-4 py-8'>
         {/* Header */}
         <div className='flex items-center justify-between mb-8'>

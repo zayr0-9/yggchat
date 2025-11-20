@@ -114,7 +114,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
   return (
     <aside
-      className={`relative z-10 h-screen bg-transparent dark:bg-transparent shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16 acrylic-subtle' : 'w-64 md:w-72 lg:w-80 xl:w-90 acrylic-light'} ${className}`}
+      className={`relative z-10 h-full bg-transparent dark:bg-transparent shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out flex-shrink-0 ${isCollapsed ? 'w-16 acrylic-subtle' : 'w-64 md:w-72 lg:w-80 xl:w-90 acrylic-light'} ${className}`}
       aria-label='Recent conversations'
     >
       {/* Toggle Button */}

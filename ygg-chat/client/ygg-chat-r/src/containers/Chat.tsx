@@ -1885,9 +1885,9 @@ function Chat() {
   // incorrect parent linking that could break currentPath after branching.
 
   return (
-    <div ref={containerRef} className='flex h-[100dvh] overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
+    <div ref={containerRef} className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
       <div
-        className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-[100dvh] dark:bg-neutral-900 bg-neutral-50 overflow-hidden'
+        className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden'
         style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : '100%' }}
       >
         {/* Messages Display */}
