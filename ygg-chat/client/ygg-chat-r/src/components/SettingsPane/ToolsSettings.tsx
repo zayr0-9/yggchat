@@ -4,7 +4,6 @@ import { fetchTools, updateToolEnabled } from '../../features/chats/chatActions'
 import { selectTools } from '../../features/chats/chatSelectors'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { Button } from '../Button/button'
-import { TextField } from '../TextField/TextField'
 
 export const ToolsSettings: React.FC = () => {
   const dispatch = useAppDispatch()
@@ -133,7 +132,7 @@ export const ToolsSettings: React.FC = () => {
         </div>
       </div>
 
-      {/* WSL Configuration */}
+      {/* WSL Configuration
       {!isWebMode && (
         <div className='pt-2 px-1'>
           <TextField
@@ -144,7 +143,7 @@ export const ToolsSettings: React.FC = () => {
             helperText='Specify a WSL distribution to run tools within. Leave empty for default behavior.'
           />
         </div>
-      )}
+      )} */}
 
       {/* Individual Tools - Only show when Valkyrie is active and not in web mode */}
       {!isWebMode && (
@@ -217,7 +216,9 @@ export const ToolsSettings: React.FC = () => {
                   Agent tools and AI capabilities are available exclusively in the{' '}
                   <strong>Yggdrasil Desktop App</strong>.
                 </p>
-                <p>Download the desktop application to unlock advanced features including agent mode and tool execution.</p>
+                <p>
+                  Download the desktop application to unlock advanced features including agent mode and tool execution.
+                </p>
               </div>
               <div className='flex justify-end'>
                 <Button variant='outline2' size='medium' onClick={() => setShowDesktopModal(false)}>

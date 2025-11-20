@@ -1,10 +1,10 @@
 import { ChildProcess, spawn } from 'child_process'
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import Conf from 'conf'
+import { app, BrowserWindow, ipcMain, shell, nativeTheme } from 'electron'
+import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import Conf from 'conf'
-import os from 'os'
-import fs from 'fs'
 import { startLocalServer, stopLocalServer } from './localServer.js'
 
 // ESM: Get __dirname from import.meta.url
@@ -29,7 +29,7 @@ async function initializeStore() {
   try {
     const configDir = path.join(os.homedir(), '.config', 'ygg-chat-r')
     const configFile = path.join(configDir, 'config.json')
-    
+
     // Check if config file exists and is corrupted
     if (fs.existsSync(configFile)) {
       try {
@@ -45,7 +45,7 @@ async function initializeStore() {
         }
       }
     }
-    
+
     // Initialize conf (ESM library)
     store = new Conf({
       projectName: 'ygg-chat-r',
@@ -196,6 +196,18 @@ function startServer(): Promise<void> {
   })
 }
 
+function applyTitleBarTheme(win: BrowserWindow) {
+  const isDark = nativeTheme.shouldUseDarkColors
+  win.setTitleBarOverlay({
+    color: isDark ? '#101828' : '#f2f4f7',
+    symbolColor: isDark ? '#f2f4f7' : '#0f172a',
+  })
+}
+
+nativeTheme.on('updated', () => {
+  if (mainWindow) applyTitleBarTheme(mainWindow)
+})
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -208,9 +220,12 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
     },
-    titleBarStyle: 'default',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: true,
     show: false, // Don't show until ready
   })
+
+  applyTitleBarTheme(mainWindow)
 
   // Show window when ready to avoid flicker
   mainWindow.once('ready-to-show', () => {
@@ -220,6 +235,11 @@ function createWindow() {
   // Load the app
   // Use app.isPackaged for reliable detection (true when running from installer)
   const isDev = !app.isPackaged
+
+  if (!isDev) {
+    mainWindow.setMenu(null) // removes File/Edit/View in production
+    mainWindow.removeMenu() // defensive (older Electron versions)
+  }
 
   if (isDev) {
     // Development: Load from Vite dev server
@@ -458,7 +478,7 @@ ipcMain.handle('auth:openExternal', async (_event, url: string) => {
 ipcMain.handle('auth:openOAuthWindow', async (_event, url: string) => {
   console.log('[Electron IPC] Opening OAuth window:', url)
 
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     // Create a modal window for OAuth
     const oauthWindow = new BrowserWindow({
       width: 500,
