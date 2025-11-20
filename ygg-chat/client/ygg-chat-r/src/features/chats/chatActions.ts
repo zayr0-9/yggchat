@@ -26,7 +26,7 @@ import { dualSync } from '../../lib/sync/dualSyncManager'
 // Local API base for tool execution
 const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
 // Remote API base for syncing from cloud (Railway)
-const REMOTE_API_BASE = 'https://webdrasil-production.up.railway.app/api'
+const REMOTE_API_BASE = import.meta.env.VITE_API_URL || 'https://webdrasil-production.up.railway.app/api'
 
 /*
 The Complete Toolkit: ThunkAPI Object
