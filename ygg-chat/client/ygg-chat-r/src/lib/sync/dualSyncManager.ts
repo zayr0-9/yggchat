@@ -239,7 +239,7 @@ class DualSyncManager {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: method === 'POST' ? JSON.stringify(operation.data) : undefined,
+      body: (method === 'POST' || method === 'PATCH') ? JSON.stringify(operation.data) : undefined,
       signal: AbortSignal.timeout(5000),
     })
 
