@@ -309,7 +309,9 @@ class DualSyncManager {
       }
 
       const result = await response.json()
-      console.log(`[DualSync] Batch sync completed: ${result.results.filter((r: any) => r.success).length}/${operations.length} succeeded`)
+      console.log(
+        `[DualSync] Batch sync completed: ${result.results.filter((r: any) => r.success).length}/${operations.length} succeeded`
+      )
       this.lastSyncAt = new Date().toISOString()
       this.notifyStatusChange()
     } catch (error) {
@@ -342,26 +344,6 @@ class DualSyncManager {
       console.warn('[DualSync] Failed to get local stats:', error)
     }
     return null
-  }
-
-  // Check if a conversation exists locally
-  async checkConversationExists(conversationId: string): Promise<boolean> {
-    if (!this.enabled) return false
-
-    try {
-      const response = await fetch(`${LOCAL_API_BASE}/sync/conversation/${conversationId}`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(2000),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        return !!data.exists
-      }
-    } catch (error) {
-      console.warn('[DualSync] Failed to check conversation existence:', error)
-    }
-    return false
   }
 
   // Check if a conversation exists locally
