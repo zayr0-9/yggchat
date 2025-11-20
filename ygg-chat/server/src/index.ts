@@ -21,9 +21,6 @@ import tools from './utils/tools/index'
 const app = express()
 const server = createServer(app)
 
-// WebSocket Server for IDE Context
-const wss = new WebSocketServer({ server, path: '/ide-context' })
-
 interface ConnectedClient {
   ws: WebSocket
   type: 'extension' | 'frontend'
@@ -32,112 +29,117 @@ interface ConnectedClient {
 
 const clients = new Set<ConnectedClient>()
 
-wss.on('connection', (ws, request) => {
-  const url = new URL(request.url!, `http://${request.headers.host}`)
-  const clientType = url.searchParams.get('type') as 'extension' | 'frontend'
-  const clientId = url.searchParams.get('id') || 'anonymous'
+// WebSocket Server for IDE Context (only in non-web environments)
+if (env.VITE_ENVIRONMENT !== 'web') {
+  const wss = new WebSocketServer({ server, path: '/ide-context' })
 
-  const client: ConnectedClient = {
-    ws,
-    type: clientType || 'frontend',
-    id: clientId,
-  }
+  wss.on('connection', (ws, request) => {
+    const url = new URL(request.url!, `http://${request.headers.host}`)
+    const clientType = url.searchParams.get('type') as 'extension' | 'frontend'
+    const clientId = url.searchParams.get('id') || 'anonymous'
 
-  clients.add(client)
+    const client: ConnectedClient = {
+      ws,
+      type: clientType || 'frontend',
+      id: clientId,
+    }
 
-  ws.on('message', data => {
-    try {
-      const message = JSON.parse(data.toString())
+    clients.add(client)
 
-      if (message.type === 'ping') {
-        client.ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }))
-        return // don’t broadcast heartbeat traffic
-      }
+    ws.on('message', data => {
+      try {
+        const message = JSON.parse(data.toString())
 
-      // Relay messages from extension to all frontend clients
-      if (client.type === 'extension') {
-        const outgoing = {
-          ...message,
-          // Normalize requestId to be present at the top-level if available in data
-          requestId: message.requestId ?? message.data?.requestId,
+        if (message.type === 'ping') {
+          client.ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }))
+          return // don’t broadcast heartbeat traffic
         }
 
-        clients.forEach(c => {
-          if (c.type === 'frontend' && c.ws.readyState === c.ws.OPEN) {
-            c.ws.send(JSON.stringify(outgoing))
+        // Relay messages from extension to all frontend clients
+        if (client.type === 'extension') {
+          const outgoing = {
+            ...message,
+            // Normalize requestId to be present at the top-level if available in data
+            requestId: message.requestId ?? message.data?.requestId,
           }
-        })
-      }
-
-      // Handle frontend requests to extension
-      if (client.type === 'frontend') {
-        if (message.type === 'request_context') {
-          const extensionClients = Array.from(clients).filter(
-            c => c.type === 'extension' && c.ws.readyState === c.ws.OPEN
-          )
 
           clients.forEach(c => {
-            if (c.type === 'extension' && c.ws.readyState === c.ws.OPEN) {
-              c.ws.send(
-                JSON.stringify({
-                  type: 'request_context',
-                  requestId: message.requestId,
-                })
-              )
+            if (c.type === 'frontend' && c.ws.readyState === c.ws.OPEN) {
+              c.ws.send(JSON.stringify(outgoing))
             }
           })
+        }
 
-          if (extensionClients.length === 0) {
-            console.warn('⚠️ No extensions available to handle context request')
-            // Send back an empty response so frontend stops waiting
-            client.ws.send(
-              JSON.stringify({
-                type: 'context_response',
-                requestId: message.requestId,
-                data: {
-                  workspace: { name: null, rootPath: null },
-                  openFiles: [],
-                  allFiles: [],
-                  activeFile: null,
-                  currentSelection: null,
-                },
-              })
+        // Handle frontend requests to extension
+        if (client.type === 'frontend') {
+          if (message.type === 'request_context') {
+            const extensionClients = Array.from(clients).filter(
+              c => c.type === 'extension' && c.ws.readyState === c.ws.OPEN
             )
-          }
-        } else if (message.type === 'request_file_content') {
-          const extensionClients = Array.from(clients).filter(
-            c => c.type === 'extension' && c.ws.readyState === c.ws.OPEN
-          )
 
-          clients.forEach(c => {
-            if (c.type === 'extension' && c.ws.readyState === c.ws.OPEN) {
-              c.ws.send(
+            clients.forEach(c => {
+              if (c.type === 'extension' && c.ws.readyState === c.ws.OPEN) {
+                c.ws.send(
+                  JSON.stringify({
+                    type: 'request_context',
+                    requestId: message.requestId,
+                  })
+                )
+              }
+            })
+
+            if (extensionClients.length === 0) {
+              console.warn('⚠️ No extensions available to handle context request')
+              // Send back an empty response so frontend stops waiting
+              client.ws.send(
                 JSON.stringify({
-                  type: 'request_file_content',
+                  type: 'context_response',
                   requestId: message.requestId,
                   data: {
-                    path: message.data.path,
+                    workspace: { name: null, rootPath: null },
+                    openFiles: [],
+                    allFiles: [],
+                    activeFile: null,
+                    currentSelection: null,
                   },
                 })
               )
             }
-          })
+          } else if (message.type === 'request_file_content') {
+            const extensionClients = Array.from(clients).filter(
+              c => c.type === 'extension' && c.ws.readyState === c.ws.OPEN
+            )
+
+            clients.forEach(c => {
+              if (c.type === 'extension' && c.ws.readyState === c.ws.OPEN) {
+                c.ws.send(
+                  JSON.stringify({
+                    type: 'request_file_content',
+                    requestId: message.requestId,
+                    data: {
+                      path: message.data.path,
+                    },
+                  })
+                )
+              }
+            })
+          }
         }
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error)
       }
-    } catch (error) {
-      console.error('Failed to parse WebSocket message:', error)
-    }
-  })
+    })
 
-  ws.on('close', () => {
-    clients.delete(client)
-  })
+    ws.on('close', () => {
+      clients.delete(client)
+    })
 
-  ws.on('error', error => {
-    console.error(`WebSocket error for ${client.type}:`, error)
-    clients.delete(client)
+    ws.on('error', error => {
+      console.error(`WebSocket error for ${client.type}:`, error)
+      clients.delete(client)
+    })
   })
-})
+}
 
 // CORS configuration
 const allowedOrigins = [
