@@ -22,6 +22,7 @@ export interface SelectionInfo {
 
 export interface WorkspaceInfo {
   name: string | null
+  rootPath: string | null
   totalFiles: number
   lastScanned: string
 }

@@ -362,7 +362,7 @@ function initializeWebSocketServer(serverInstance: any) {
                   type: 'context_response',
                   requestId: message.requestId,
                   data: {
-                    workspace: null,
+                    workspace: { name: null, rootPath: null },
                     openFiles: [],
                     allFiles: [],
                     activeFile: null,

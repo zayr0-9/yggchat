@@ -216,9 +216,13 @@ export function useIdeContext(): UseIdeContextReturn {
               globalDispatch(setExtensionStatus(isRealExtensionResponse))
 
               if (projectState.workspace) {
+                const name = typeof projectState.workspace === 'string' ? projectState.workspace : projectState.workspace.name
+                const rootPath = typeof projectState.workspace === 'string' ? null : projectState.workspace.rootPath
+
                 globalDispatch(
                   updateWorkspace({
-                    name: projectState.workspace,
+                    name,
+                    rootPath,
                     totalFiles: projectState.allFiles?.length || 0,
                     lastScanned: new Date().toISOString(),
                   })
