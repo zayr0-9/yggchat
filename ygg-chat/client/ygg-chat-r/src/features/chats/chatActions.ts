@@ -773,7 +773,7 @@ export const sendMessage = createAsyncThunk<
 
           // Get rootPath from IDE context to help determine if we're in WSL
           const rootPath = state.ideContext.workspace?.rootPath || null
-
+          console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
           for (const toolCall of assistantToolCalls) {
             // Execute tool
             const result = await executeLocalTool(toolCall, rootPath)
