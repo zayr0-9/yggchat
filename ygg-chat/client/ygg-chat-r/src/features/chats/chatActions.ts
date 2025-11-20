@@ -350,6 +350,7 @@ const parseContentBlocks = (blocks: string | any[] | undefined): any[] => {
 const executeLocalTool = async (toolCall: any, rootPath: string | null) => {
   try {
     console.log(`🔧 Executing local tool: ${toolCall.name}`)
+    console.log(`[chatActions] rootPath passed to tool: ${rootPath}`)
     const response = await fetch(`${LOCAL_API_BASE}/tools/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

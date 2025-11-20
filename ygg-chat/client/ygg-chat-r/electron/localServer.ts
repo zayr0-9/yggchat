@@ -77,29 +77,47 @@ async function getWslDistro(): Promise<string> {
  * 3. OR context explicitly indicates WSL usage (via rootPath detection)
  */
 async function resolveToWindowsPath(filePath: string, rootPathContext?: string | null): Promise<string> {
-  if (!isWindows()) return filePath
+  // Log entry into resolution
+  console.log(`[LocalServer] Resolving path: "${filePath}" (len=${filePath.length}) with context: "${rootPathContext}"`)
+  console.log(`[LocalServer] Platform: ${process.platform}`)
+  
+  if (!isWindows()) {
+    console.log('[LocalServer] Not Windows, returning original path')
+    return filePath
+  }
 
   // Check if it looks like a WSL path (starts with / and not a drive letter)
-  const looksLikeWsl = filePath.startsWith('/') && !filePath.match(/^[a-zA-Z]:/)
+  const trimmedPath = filePath.trim()
+  const startsWithSlash = trimmedPath.startsWith('/')
+  const isDriveLetter = trimmedPath.match(/^[a-zA-Z]:/)
+  const looksLikeWsl = startsWithSlash && !isDriveLetter
+  
+  console.log(`[LocalServer] Path analysis: startsWithSlash=${startsWithSlash}, isDriveLetter=${!!isDriveLetter}, looksLikeWsl=${looksLikeWsl}`)
 
   // Check if context implies WSL (rootPath starts with / on Windows)
   const contextImpliesWsl = rootPathContext
     ? rootPathContext.startsWith('/') && !rootPathContext.match(/^[a-zA-Z]:/)
     : false
+    
+  console.log(`[LocalServer] Path resolution checks: looksLikeWsl=${looksLikeWsl}, contextImpliesWsl=${contextImpliesWsl}`)
 
-  if (looksLikeWsl || (contextImpliesWsl && !filePath.match(/^[a-zA-Z]:/))) {
+  if (looksLikeWsl || (contextImpliesWsl && !trimmedPath.match(/^[a-zA-Z]:/))) {
     try {
       const distro = await getWslDistro()
+      console.log(`[LocalServer] Detected WSL distro: ${distro}`)
+      
       // Ensure we don't double-prefix if it's already a UNC path
-      if (filePath.startsWith('\\\\wsl$')) return filePath
+      if (trimmedPath.startsWith('\\\\wsl$')) return trimmedPath
 
       // Handle relative paths if any, though usually tools send absolute
-      const cleanPath = filePath.replace(/\//g, '\\')
+      const cleanPath = trimmedPath.replace(/\//g, '\\')
 
       // If path starts with \, remove it to append cleanly
       const finalPath = cleanPath.startsWith('\\') ? cleanPath.substring(1) : cleanPath
 
-      return `\\\\wsl$\\${distro}\\${finalPath}`
+      const uncPath = `\\\\wsl$\\${distro}\\${finalPath}`
+      console.log(`[LocalServer] Resolved UNC path: ${uncPath}`)
+      return uncPath
     } catch (err) {
       console.warn('[LocalServer] Failed to resolve WSL path, using original:', err)
       return filePath
