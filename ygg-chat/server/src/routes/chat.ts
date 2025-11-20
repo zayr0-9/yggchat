@@ -631,6 +631,21 @@ router.patch(
   })
 )
 
+// Get conversation by ID
+router.get(
+  '/conversations/:id',
+  asyncHandler(async (req, res) => {
+    const conversationId = req.params.id
+    const conversation = ConversationService.getById(conversationId)
+    
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+    
+    res.json(conversation)
+  })
+)
+
 // Get conversation system prompt
 router.get(
   '/conversations/:id/system-prompt',

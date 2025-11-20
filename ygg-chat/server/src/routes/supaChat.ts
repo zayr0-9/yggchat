@@ -713,6 +713,24 @@ router.patch(
   })
 )
 
+// Get conversation by ID
+router.get(
+  '/conversations/:id',
+  authenticatedRateLimiter,
+  asyncHandler(async (req, res) => {
+    const conversationId = req.params.id
+    const { client } = await verifyAuth(req)
+    
+    const conversation = await ConversationService.getById(client, conversationId)
+    
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+    
+    res.json(conversation)
+  })
+)
+
 // Get conversation system prompt
 router.get(
   '/conversations/:id/system-prompt',

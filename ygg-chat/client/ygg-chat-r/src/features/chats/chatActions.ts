@@ -25,6 +25,8 @@ import { dualSync } from '../../lib/sync/dualSyncManager'
 
 // Local API base for tool execution
 const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
+// Remote API base for syncing from cloud (Railway)
+const REMOTE_API_BASE = 'https://webdrasil-production.up.railway.app/api'
 
 /*
 The Complete Toolkit: ThunkAPI Object
@@ -1453,7 +1455,22 @@ export const syncConversationToLocal = createAsyncThunk<
     let projectId: string | null = selectSelectedProject(state)?.id || null
 
     if (!exists) {
-      const conversation = await apiCall<Conversation>(`/conversations/${conversationId}`, auth.accessToken)
+      // Fetch conversation from REMOTE source of truth (Cloud), not local API
+      let conversation: Conversation | null = null
+      try {
+        const res = await fetch(`${REMOTE_API_BASE}/conversations/${conversationId}`, {
+          headers: {
+            'Authorization': `Bearer ${auth.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        })
+        if (res.ok) {
+          conversation = await res.json()
+        }
+      } catch (e) {
+        console.warn('Failed to fetch remote conversation for sync', e)
+      }
+
       if (conversation) {
         projectId = conversation.project_id || projectId
 
@@ -1465,10 +1482,18 @@ export const syncConversationToLocal = createAsyncThunk<
             const projectsCache = extra.queryClient?.getQueryData<any[]>(['projects', auth.userId])
             let project = projectsCache?.find(p => String(p.id) === String(projectId))
 
-            // If not in cache, fetch from API
+            // If not in cache, fetch from REMOTE API
             if (!project) {
               try {
-                project = await apiCall<any>(`/projects/${projectId}`, auth.accessToken)
+                const projRes = await fetch(`${REMOTE_API_BASE}/projects/${projectId}`, {
+                  headers: {
+                    'Authorization': `Bearer ${auth.accessToken}`,
+                    'Content-Type': 'application/json'
+                  }
+                })
+                if (projRes.ok) {
+                  project = await projRes.json()
+                }
               } catch (e) {
                 console.warn(`Failed to fetch project ${projectId} for sync`, e)
               }
