@@ -344,6 +344,46 @@ class DualSyncManager {
     return null
   }
 
+  // Check if a conversation exists locally
+  async checkConversationExists(conversationId: string): Promise<boolean> {
+    if (!this.enabled) return false
+
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}/sync/conversation/${conversationId}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        return !!data.exists
+      }
+    } catch (error) {
+      console.warn('[DualSync] Failed to check conversation existence:', error)
+    }
+    return false
+  }
+
+  // Check if a conversation exists locally
+  async checkConversationExists(conversationId: string): Promise<boolean> {
+    if (!this.enabled) return false
+
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}/sync/conversation/${conversationId}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        return !!data.exists
+      }
+    } catch (error) {
+      console.warn('[DualSync] Failed to check conversation existence:', error)
+    }
+    return false
+  }
+
   // Clear error log
   clearErrors(): void {
     this.errors = []
@@ -380,6 +420,7 @@ export const dualSync = {
   syncProviderCost: (data: any) => getDualSyncManager().syncProviderCost(data),
   syncBatch: (operations: Array<{ type: string; action: string; data: any }>) =>
     getDualSyncManager().syncBatch(operations),
+  checkConversationExists: (id: string) => getDualSyncManager().checkConversationExists(id),
   getStatus: () => getDualSyncManager().getStatus(),
   setEnabled: (enabled: boolean) => getDualSyncManager().setEnabled(enabled),
   refresh: () => getDualSyncManager().refresh(),

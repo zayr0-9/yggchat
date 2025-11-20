@@ -409,6 +409,38 @@ function setupServer() {
     }
   })
 
+  // Get Conversation (for checking existence)
+  app.get('/api/sync/conversation/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const conversation = statements.getConversationById.get(id)
+      if (conversation) {
+        res.json({ exists: true, conversation })
+      } else {
+        res.json({ exists: false })
+      }
+    } catch (error) {
+      console.error('[LocalServer] Error getting conversation:', error)
+      res.status(500).json({ error: 'Failed to get conversation' })
+    }
+  })
+
+  // Get Conversation (for checking existence)
+  app.get('/api/sync/conversation/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const conversation = statements.getConversationById.get(id)
+      if (conversation) {
+        res.json({ exists: true, conversation })
+      } else {
+        res.json({ exists: false })
+      }
+    } catch (error) {
+      console.error('[LocalServer] Error getting conversation:', error)
+      res.status(500).json({ error: 'Failed to get conversation' })
+    }
+  })
+
   // Sync Message
   app.post('/api/sync/message', (req, res) => {
     try {

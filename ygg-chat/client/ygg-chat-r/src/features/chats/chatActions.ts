@@ -1530,6 +1530,40 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
 
       // console.log('treeData', treeData)
       dispatch(chatSliceActions.heimdallDataLoaded({ treeData }))
+
+      // Sync messages to local SQLite if in Electron mode
+      if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
+        const exists = await dualSync.checkConversationExists(conversationId)
+        const selectedProject = selectSelectedProject(state)
+
+        if (!exists) {
+          try {
+            const conversation = await apiCall<Conversation>(
+              `/conversations/${conversationId}`,
+              auth.accessToken
+            )
+            if (conversation) {
+              dualSync.syncConversation(conversation)
+            }
+          } catch (e) {
+            console.warn('Failed to fetch/sync conversation for local sync', e)
+          }
+        }
+
+        if (messages && messages.length > 0) {
+          const operations = messages.map(msg => ({
+            type: 'message',
+            action: 'create',
+            data: {
+              ...msg,
+              user_id: auth.userId,
+              project_id: selectedProject?.id || null,
+            },
+          }))
+          dualSync.syncBatch(operations)
+        }
+      }
+
       return response
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch message tree'
