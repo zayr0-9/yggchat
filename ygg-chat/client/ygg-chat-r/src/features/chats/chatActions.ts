@@ -347,7 +347,7 @@ const parseContentBlocks = (blocks: string | any[] | undefined): any[] => {
   return []
 }
 
-const executeLocalTool = async (toolCall: any) => {
+const executeLocalTool = async (toolCall: any, rootPath: string | null) => {
   try {
     console.log(`🔧 Executing local tool: ${toolCall.name}`)
     const response = await fetch(`${LOCAL_API_BASE}/tools/execute`, {
@@ -355,7 +355,8 @@ const executeLocalTool = async (toolCall: any) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         toolName: toolCall.name, 
-        args: toolCall.arguments 
+        args: toolCall.arguments,
+        rootPath // Pass rootPath to help server determine execution context (WSL vs Local)
       })
     })
     
@@ -762,10 +763,13 @@ export const sendMessage = createAsyncThunk<
           
           // 2. Execute tools and append tool_result blocks to assistant message
           const toolResultBlocks: any[] = []
+          
+          // Get rootPath from IDE context to help determine if we're in WSL
+          const rootPath = state.ideContext.workspace?.rootPath || null
 
           for (const toolCall of assistantToolCalls) {
             // Execute tool
-            const result = await executeLocalTool(toolCall)
+            const result = await executeLocalTool(toolCall, rootPath)
 
             // Create tool_result block (NOT a separate message)
             const toolResultBlock = {
