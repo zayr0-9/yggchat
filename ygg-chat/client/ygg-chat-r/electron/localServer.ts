@@ -873,8 +873,13 @@ function setupServer() {
       const normalizedResearchNote =
         typeof researchNote === 'string' && researchNote.trim().length === 0 ? null : (researchNote as string | null)
 
-      statements.updateConversationResearchNote.run(normalizedResearchNote, id)
+      console.log(`[LocalServer] Update research note for ${id}. Payload: "${researchNote}", Normalized: "${normalizedResearchNote}"`)
+
+      const result = statements.updateConversationResearchNote.run(normalizedResearchNote, id)
+      console.log(`[LocalServer] Update result: changes=${result.changes}`)
+
       const updated = statements.getConversationById.get(id)
+      console.log(`[LocalServer] Updated record research_note: "${updated?.research_note}"`)
       
       if (updated) {
         res.json(updated)
