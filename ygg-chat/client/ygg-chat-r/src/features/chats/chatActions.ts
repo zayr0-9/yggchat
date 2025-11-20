@@ -371,6 +371,29 @@ const executeLocalTool = async (toolCall: any, rootPath: string | null) => {
   }
 }
 
+let pendingPermissionResolve: ((allowed: boolean) => void) | null = null
+
+const executeToolWithPermissionCheck = async (
+  dispatch: any,
+  toolCall: any,
+  rootPath: string | null
+) => {
+  // Dispatch request to show dialog
+  dispatch(chatSliceActions.toolPermissionRequested({ toolCall }))
+
+  // Wait for user response
+  const allowed = await new Promise<boolean>(resolve => {
+    pendingPermissionResolve = resolve
+  })
+
+  // Execute or Fake response
+  if (allowed) {
+    return await executeLocalTool(toolCall, rootPath)
+  } else {
+    return 'User cancelled tool call'
+  }
+}
+
 // Model operations have been fully migrated to React Query
 // See useModels, useRecentModels, useRefreshModels, and useSelectModel in hooks/useQueries.ts
 // Model selection state is now managed entirely by React Query and localStorage
@@ -776,7 +799,7 @@ export const sendMessage = createAsyncThunk<
           console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
           for (const toolCall of assistantToolCalls) {
             // Execute tool
-            const result = await executeLocalTool(toolCall, rootPath)
+            const result = await executeToolWithPermissionCheck(dispatch, toolCall, rootPath)
 
             // Create tool_result block (NOT a separate message)
             const toolResultBlock = {
@@ -2469,3 +2492,16 @@ export const sendCCBranch = createAsyncThunk<
 //     }
 //   }
 // )
+
+export const respondToToolPermission = createAsyncThunk<
+  void,
+  boolean,
+  { state: RootState; extra: ThunkExtraArgument }
+>('chat/respondToToolPermission', async (allowed, { dispatch }) => {
+  if (pendingPermissionResolve) {
+    pendingPermissionResolve(allowed)
+    pendingPermissionResolve = null
+  }
+  dispatch(chatSliceActions.toolPermissionResponded())
+})
+

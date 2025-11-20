@@ -10,6 +10,7 @@ import {
   Message,
   MessageInput,
   StreamChunk,
+  ToolCallPermissionRequest,
 } from './chatTypes'
 
 const makeInitialState = (): ChatState => ({
@@ -76,6 +77,7 @@ const makeInitialState = (): ChatState => ({
     backup: {},
   },
   tools: [],
+  toolCallPermissionRequest: null,
 })
 
 const initialState: ChatState = makeInitialState()
@@ -547,6 +549,14 @@ export const chatSlice = createSlice({
     },
     toolsError: (_state, action: PayloadAction<string>) => {
       console.error('Tools error:', action.payload)
+    },
+
+    toolPermissionRequested: (state, action: PayloadAction<ToolCallPermissionRequest>) => {
+      state.toolCallPermissionRequest = action.payload
+    },
+
+    toolPermissionResponded: state => {
+      state.toolCallPermissionRequest = null
     },
 
     stateReset: () => makeInitialState(),

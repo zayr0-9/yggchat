@@ -26,6 +26,7 @@ export {
   editMessageWithBranching,
   getCCSessionInfo,
   refreshCurrentPathAfterDelete,
+  respondToToolPermission,
   sendCCBranch,
   sendCCMessage,
   sendMessage,

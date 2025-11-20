@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { MessageId } from '../../../../shared/types'
-import { Button, ChatMessage, Heimdall, InputTextArea, Select, SettingsPane, TextField } from '../components'
+import { Button, ChatMessage, Heimdall, InputTextArea, Select, SettingsPane, TextField, ToolPermissionDialog } from '../components'
 import { ModelFilterUI } from '../components/ModelFilterUI/ModelFilterUI'
 import {
   abortStreaming,
@@ -17,6 +17,7 @@ import {
   Message,
   refreshCurrentPathAfterDelete,
   resolveAttachmentUrl,
+  respondToToolPermission,
   selectConversationMessages,
   selectCurrentConversationId,
   selectCurrentPath,
@@ -101,6 +102,7 @@ function Chat() {
   const conversationMessages = useAppSelector(selectConversationMessages)
   const displayMessages = useAppSelector(selectDisplayMessages)
   const currentConversationId = useAppSelector(selectCurrentConversationId)
+  const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
 
   // React Query for message fetching (automatic deduplication and caching)
   // Use URL-derived ID to ensure correct fetching even on page refresh
@@ -2112,6 +2114,13 @@ function Chat() {
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
           <div className='acrylic-subtle pb-1 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
+            {toolCallPermissionRequest && (
+              <ToolPermissionDialog
+                toolCall={toolCallPermissionRequest.toolCall}
+                onGrant={() => dispatch(respondToToolPermission(true))}
+                onDeny={() => dispatch(respondToToolPermission(false))}
+              />
+            )}
             <InputTextArea
               value={localInput}
               onChange={handleInputChange}

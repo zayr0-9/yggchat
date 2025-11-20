@@ -187,6 +187,10 @@ export interface InitializationState {
   userId: string | null
 }
 
+export interface ToolCallPermissionRequest {
+  toolCall: ToolCall
+}
+
 export interface ChatState {
   providerState: ProviderState
   composition: CompositionState
@@ -200,6 +204,7 @@ export interface ChatState {
   selectedNodes: MessageId[]
   attachments: AttachmentsState
   tools: tools[]
+  toolCallPermissionRequest: ToolCallPermissionRequest | null
 }
 
 // Action payloads
