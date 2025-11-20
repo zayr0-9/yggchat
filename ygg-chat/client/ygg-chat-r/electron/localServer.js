@@ -19,6 +19,12 @@ function initializeLocalDatabase(dbPath) {
     if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
     }
+    // DEV MODE: Delete old database if it exists to force schema recreation
+    // Remove this in production and add proper migrations
+    if (fs.existsSync(dbPath)) {
+        console.log('[LocalServer] DEV MODE: Deleting old database to recreate with new schema');
+        fs.unlinkSync(dbPath);
+    }
     db = new Database(dbPath);
     db.pragma('foreign_keys = ON');
     // Create tables (minimal schema for sync operations)
@@ -64,11 +70,12 @@ function initializeLocalDatabase(dbPath) {
       conversation_id TEXT NOT NULL,
       parent_id TEXT,
       children_ids TEXT DEFAULT '[]',
-      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'ex_agent')),
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'ex_agent', 'tool')),
       content TEXT NOT NULL,
       plain_text_content TEXT,
       thinking_block TEXT,
       tool_calls TEXT,
+      tool_call_id TEXT,
       model_name TEXT DEFAULT 'unknown',
       note TEXT,
       ex_agent_session_id TEXT,
@@ -167,13 +174,14 @@ function initializeLocalDatabase(dbPath) {
         getConversationById: db.prepare('SELECT * FROM conversations WHERE id = ?'),
         // Messages
         upsertMessage: db.prepare(`
-      INSERT INTO messages (id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO messages (id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, tool_call_id, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         content = excluded.content,
         plain_text_content = excluded.plain_text_content,
         thinking_block = excluded.thinking_block,
         tool_calls = excluded.tool_calls,
+        tool_call_id = excluded.tool_call_id,
         note = excluded.note,
         content_blocks = excluded.content_blocks
     `),
@@ -331,10 +339,44 @@ function setupServer() {
             res.status(500).json({ error: 'Failed to delete conversation' });
         }
     });
+    // Get Conversation (for checking existence)
+    app.get('/api/sync/conversation/:id', (req, res) => {
+        try {
+            const { id } = req.params;
+            const conversation = statements.getConversationById.get(id);
+            if (conversation) {
+                res.json({ exists: true, conversation });
+            }
+            else {
+                res.json({ exists: false });
+            }
+        }
+        catch (error) {
+            console.error('[LocalServer] Error getting conversation:', error);
+            res.status(500).json({ error: 'Failed to get conversation' });
+        }
+    });
+    // Get Conversation (for checking existence)
+    app.get('/api/sync/conversation/:id', (req, res) => {
+        try {
+            const { id } = req.params;
+            const conversation = statements.getConversationById.get(id);
+            if (conversation) {
+                res.json({ exists: true, conversation });
+            }
+            else {
+                res.json({ exists: false });
+            }
+        }
+        catch (error) {
+            console.error('[LocalServer] Error getting conversation:', error);
+            res.status(500).json({ error: 'Failed to get conversation' });
+        }
+    });
     // Sync Message
     app.post('/api/sync/message', (req, res) => {
         try {
-            const { id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at, 
+            const { id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, tool_call_id, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at, 
             // Additional context for dependency creation
             user_id, owner_id, project_id, } = req.body;
             if (!conversation_id) {
@@ -364,7 +406,7 @@ function setupServer() {
                 // Log warning but proceed anyway (might succeed if conversation exists)
                 console.warn('[LocalServer] No user context for message sync, conversation may not exist:', conversation_id);
             }
-            statements.upsertMessage.run(id, conversation_id, parent_id || null, typeof children_ids === 'string' ? children_ids : JSON.stringify(children_ids || []), role, content, plain_text_content || null, thinking_block || null, typeof tool_calls === 'string' ? tool_calls : JSON.stringify(tool_calls || null), model_name || 'unknown', note || null, ex_agent_session_id || null, ex_agent_type || null, typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null), created_at || new Date().toISOString());
+            statements.upsertMessage.run(id, conversation_id, parent_id || null, typeof children_ids === 'string' ? children_ids : JSON.stringify(children_ids || []), role, content, plain_text_content || null, thinking_block || null, typeof tool_calls === 'string' ? tool_calls : JSON.stringify(tool_calls || null), tool_call_id || null, model_name || 'unknown', note || null, ex_agent_session_id || null, ex_agent_type || null, typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null), created_at || new Date().toISOString());
             console.log('[LocalServer] Synced message:', id);
             res.json({ success: true, id });
         }
@@ -461,7 +503,7 @@ function setupServer() {
                                     ? op.data.children_ids
                                     : JSON.stringify(op.data.children_ids || []), op.data.role, op.data.content, op.data.plain_text_content || null, op.data.thinking_block || null, typeof op.data.tool_calls === 'string'
                                     ? op.data.tool_calls
-                                    : JSON.stringify(op.data.tool_calls || null), op.data.model_name || 'unknown', op.data.note || null, op.data.ex_agent_session_id || null, op.data.ex_agent_type || null, typeof op.data.content_blocks === 'string'
+                                    : JSON.stringify(op.data.tool_calls || null), op.data.tool_call_id || null, op.data.model_name || 'unknown', op.data.note || null, op.data.ex_agent_session_id || null, op.data.ex_agent_type || null, typeof op.data.content_blocks === 'string'
                                     ? op.data.content_blocks
                                     : JSON.stringify(op.data.content_blocks || null), op.data.created_at || new Date().toISOString());
                                 results.push({ success: true, type: 'message', id: op.data.id });
@@ -489,6 +531,116 @@ function setupServer() {
         catch (error) {
             console.error('[LocalServer] Batch sync failed:', error);
             res.status(500).json({ error: 'Batch sync failed', results });
+        }
+    });
+    // Tool Execution Endpoint
+    app.post('/api/tools/execute', async (req, res) => {
+        try {
+            const { toolName, args } = req.body;
+            console.log(`[LocalServer] Executing tool: ${toolName}`);
+            let result = `Tool ${toolName} not implemented on local server`;
+            const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args;
+            // Simple FS tools implementation
+            switch (toolName) {
+                case 'read_file': {
+                    const { path: filePath } = parsedArgs;
+                    if (!filePath)
+                        throw new Error('path is required');
+                    const content = fs.readFileSync(filePath, 'utf8');
+                    result = content;
+                    break;
+                }
+                case 'read_files': {
+                    const { paths } = parsedArgs;
+                    if (!Array.isArray(paths))
+                        throw new Error('paths array is required');
+                    const results = [];
+                    for (const p of paths) {
+                        try {
+                            const content = fs.readFileSync(p, 'utf8');
+                            results.push(`--- ${p} ---\n${content}`);
+                        }
+                        catch (e) {
+                            results.push(`--- ${p} ---\nError reading file: ${e instanceof Error ? e.message : String(e)}`);
+                        }
+                    }
+                    result = { combined: results.join('\n\n') };
+                    break;
+                }
+                case 'create_file': {
+                    const { path: filePath, content } = parsedArgs;
+                    if (!filePath)
+                        throw new Error('path is required');
+                    const dir = path.dirname(filePath);
+                    if (!fs.existsSync(dir))
+                        fs.mkdirSync(dir, { recursive: true });
+                    fs.writeFileSync(filePath, content || '', 'utf8');
+                    result = `File created at ${filePath}`;
+                    break;
+                }
+                case 'edit_file': {
+                    const { path: filePath, operation, searchPattern, replacement, content } = parsedArgs;
+                    if (!filePath)
+                        throw new Error('path is required');
+                    if (!fs.existsSync(filePath))
+                        throw new Error(`File not found: ${filePath}`);
+                    let fileContent = fs.readFileSync(filePath, 'utf8');
+                    if (operation === 'append') {
+                        fileContent += (content || '');
+                    }
+                    else if (operation === 'replace' || operation === 'replace_first') {
+                        if (!searchPattern)
+                            throw new Error('searchPattern is required for replace');
+                        const regex = new RegExp(searchPattern, operation === 'replace' ? 'g' : '');
+                        fileContent = fileContent.replace(regex, replacement || '');
+                    }
+                    fs.writeFileSync(filePath, fileContent, 'utf8');
+                    result = `File edited: ${filePath}`;
+                    break;
+                }
+                case 'delete_file': {
+                    const { path: filePath } = parsedArgs;
+                    if (!filePath)
+                        throw new Error('path is required');
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        result = `File deleted: ${filePath}`;
+                    }
+                    else {
+                        result = `File not found: ${filePath}`;
+                    }
+                    break;
+                }
+                case 'directory': {
+                    const { path: dirPath } = parsedArgs;
+                    const targetPath = dirPath || process.cwd();
+                    if (!fs.existsSync(targetPath))
+                        throw new Error(`Directory not found: ${targetPath}`);
+                    const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+                    const structure = entries.map(ent => ({
+                        name: ent.name,
+                        type: ent.isDirectory() ? 'directory' : 'file'
+                    }));
+                    result = JSON.stringify(structure, null, 2);
+                    break;
+                }
+                case 'glob': {
+                    // Minimal glob implementation using readdir (recursive)
+                    // For now, just return "Not implemented" or use a library if available
+                    // Since we don't have 'glob' package, we'll skip or implement simple recursion
+                    result = "Glob tool not fully implemented on local server yet (requires 'glob' package)";
+                    break;
+                }
+                default:
+                    // Pass through to allow client to handle unknown tools or error
+                    console.warn(`[LocalServer] Unknown tool: ${toolName}`);
+            }
+            res.json({ result });
+        }
+        catch (error) {
+            console.error('[LocalServer] Tool execution error:', error);
+            const msg = error instanceof Error ? error.message : String(error);
+            res.json({ result: `Error executing tool: ${msg}` }); // Return error as result string
         }
     });
     // Stats endpoint

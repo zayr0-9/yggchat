@@ -157,7 +157,7 @@ function startServer() {
             return;
         }
         // Production: Start the bundled server
-        const serverPath = path.join(process.resourcesPath, 'server', 'dist', 'index.js');
+        const serverPath = path.join(process.resourcesPath, 'server', 'dist', 'server', 'src', 'index.js');
         console.log('[Electron] Starting embedded server from:', serverPath);
         serverProcess = spawn(process.execPath, [serverPath], {
             env: {
