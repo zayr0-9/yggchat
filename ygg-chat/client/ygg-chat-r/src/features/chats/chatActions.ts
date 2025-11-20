@@ -1,6 +1,7 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import type { QueryClient } from '@tanstack/react-query'
 import { ConversationId, MessageId } from '../../../../../shared/types'
+import { dualSync } from '../../lib/sync/dualSyncManager'
 import type { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
 import { API_BASE, apiCall, createStreamingRequest } from '../../utils/api'
@@ -14,12 +15,11 @@ import {
   EditMessagePayload,
   Message,
   Model,
-  SendMessagePayload,
   SendCCBranchPayload,
   SendCCMessagePayload,
+  SendMessagePayload,
   tools,
 } from './chatTypes'
-import { dualSync } from '../../lib/sync/dualSyncManager'
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
 
@@ -276,9 +276,7 @@ const updateMessageArtifactsInCache = (
   if (existingData) {
     // Update the message artifacts in the messages array
     const updatedMessages = existingData.messages.map(msg =>
-      msg.id === messageId
-        ? { ...msg, artifacts: [...(msg.artifacts || []), ...newArtifacts] }
-        : msg
+      msg.id === messageId ? { ...msg, artifacts: [...(msg.artifacts || []), ...newArtifacts] } : msg
     )
 
     queryClient.setQueryData(cacheKey, {
@@ -348,23 +346,23 @@ const parseContentBlocks = (blocks: string | any[] | undefined): any[] => {
 }
 
 const executeLocalTool = async (toolCall: any, rootPath: string | null) => {
+  console.log(`🔧 Executing local tool: ${toolCall.name}`)
+  console.log(`[chatActions] rootPath passed to tool: ${rootPath}`)
   try {
-    console.log(`🔧 Executing local tool: ${toolCall.name}`)
-    console.log(`[chatActions] rootPath passed to tool: ${rootPath}`)
     const response = await fetch(`${LOCAL_API_BASE}/tools/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        toolName: toolCall.name, 
+      body: JSON.stringify({
+        toolName: toolCall.name,
         args: toolCall.arguments,
-        rootPath // Pass rootPath to help server determine execution context (WSL vs Local)
-      })
+        rootPath, // Pass rootPath to help server determine execution context (WSL vs Local)
+      }),
     })
-    
+
     if (!response.ok) {
       throw new Error(`Tool execution failed: ${response.statusText}`)
     }
-    
+
     const data = await response.json()
     return data.result
   } catch (error) {
@@ -406,8 +404,8 @@ export const sendMessage = createAsyncThunk<
       // Read selected model from React Query cache
       const provider = state.chat.providerState.currentProvider
       const modelsData = extra.queryClient?.getQueryData<{
-        models: Model[],
-        default: Model,
+        models: Model[]
+        default: Model
         selected: Model
       }>(['models', provider])
       const selectedName = modelsData?.selected?.name || modelsData?.default?.name
@@ -440,19 +438,19 @@ export const sendMessage = createAsyncThunk<
 
       // Get selected files for chat from IDE context
       const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
-      
+
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       // For local tool execution support (GemTools), we prefer client mode even in web environment
       // This allows the client to intercept tool calls and execute them via the local server (3002)
       const executionMode = 'client'
-      
+
       let currentTurnHistory = [...currentPathMessages]
       let currentTurnContent = input.content.trim()
       let continueTurn = true
       let turnCount = 0
       const MAX_TURNS = 10
-      
+
       let messageId: MessageId | null = null
       let userMessage: any = null
 
@@ -467,43 +465,47 @@ export const sendMessage = createAsyncThunk<
         }
 
         if (repeatNum > 1 && turnCount === 1) {
-          response = await createStreamingRequest(`/conversations/${conversationId}/messages/repeat`, auth.accessToken, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: currentTurnHistory.map(m => ({
-                id: m.id,
-                conversation_id: m.conversation_id,
-                parent_id: m.parent_id,
-                children_ids: m.children_ids,
-                role: m.role,
-                thinking_block: m.thinking_block,
-                tool_calls: m.tool_calls,
-                content_blocks: m.content_blocks,
-                content: m.content,
-                content_plain_text: m.content_plain_text,
-                created_at: m.created_at,
-                model_name: m.model_name,
-                partial: m.partial,
-                artifacts: m.artifacts,
-              })),
-              content: currentTurnContent,
-              modelName: modelName,
-              // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
-              parentId: parent,
-              systemPrompt: systemPrompt,
-              conversationContext: combinedContext,
-              projectContext,
-              provider: serverProvider,
-              repeatNum: repeatNum,
-              attachmentsBase64,
-              selectedFiles: selectedFilesForChat,
-              think,
-              retrigger,
-              executionMode,
-            }),
-            signal: controller.signal,
-          })
+          response = await createStreamingRequest(
+            `/conversations/${conversationId}/messages/repeat`,
+            auth.accessToken,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                messages: currentTurnHistory.map(m => ({
+                  id: m.id,
+                  conversation_id: m.conversation_id,
+                  parent_id: m.parent_id,
+                  children_ids: m.children_ids,
+                  role: m.role,
+                  thinking_block: m.thinking_block,
+                  tool_calls: m.tool_calls,
+                  content_blocks: m.content_blocks,
+                  content: m.content,
+                  content_plain_text: m.content_plain_text,
+                  created_at: m.created_at,
+                  model_name: m.model_name,
+                  partial: m.partial,
+                  artifacts: m.artifacts,
+                })),
+                content: currentTurnContent,
+                modelName: modelName,
+                // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
+                parentId: parent,
+                systemPrompt: systemPrompt,
+                conversationContext: combinedContext,
+                projectContext,
+                provider: serverProvider,
+                repeatNum: repeatNum,
+                attachmentsBase64,
+                selectedFiles: selectedFilesForChat,
+                think,
+                retrigger,
+                executionMode,
+              }),
+              signal: controller.signal,
+            }
+          )
         } else {
           response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
             method: 'POST',
@@ -556,7 +558,7 @@ export const sendMessage = createAsyncThunk<
         let titleUpdated = false
         // Buffer for incomplete lines across chunks
         let buffer = ''
-        
+
         // State for this turn
         let assistantMessageContent = ''
         let assistantThinking = ''
@@ -599,10 +601,10 @@ export const sendMessage = createAsyncThunk<
                     user_id: auth.userId,
                     project_id: selectedProject?.id || null,
                   })
-                  
+
                   // Add to local history tracking for next turn
                   currentTurnHistory.push(chunk.message)
-                  
+
                   // Clear optimistic message immediately when real user message confirmed (web mode only)
                   if (isWebMode) {
                     dispatch(chatSliceActions.optimisticMessageCleared())
@@ -635,11 +637,13 @@ export const sendMessage = createAsyncThunk<
                 if (chunk.part === 'tool_result' && chunk.toolResult) {
                   console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
                   // Dispatch structured tool result data for proper rendering in streaming events
-                  dispatch(chatSliceActions.streamChunkReceived({
-                    type: 'chunk',
-                    part: 'tool_result',
-                    toolResult: chunk.toolResult,
-                  }))
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({
+                      type: 'chunk',
+                      part: 'tool_result',
+                      toolResult: chunk.toolResult,
+                    })
+                  )
                   // Skip generic chunk handler to prevent duplicate dispatch
                 } else if (chunk.part === 'tool_call' && chunk.toolCall) {
                   // Accumulate tool calls locally
@@ -649,12 +653,14 @@ export const sendMessage = createAsyncThunk<
                   if (!exists) {
                     assistantToolCalls.push(chunk.toolCall)
                   }
-                  
-                  dispatch(chatSliceActions.streamChunkReceived({
-                    type: 'chunk',
-                    part: 'tool_call',
-                    toolCall: chunk.toolCall,
-                  }))
+
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({
+                      type: 'chunk',
+                      part: 'tool_call',
+                      toolCall: chunk.toolCall,
+                    })
+                  )
                 } else if (chunk.type === 'generation_started') {
                   dispatch(chatSliceActions.streamChunkReceived(chunk))
                   if (chunk.messageId) {
@@ -685,10 +691,10 @@ export const sendMessage = createAsyncThunk<
                     user_id: auth.userId,
                     project_id: selectedProject?.id || null,
                   })
-                  
+
                   // Add to local history
                   currentTurnHistory.push(chunk.message)
-                  
+
                   // Sync provider cost if available
                   if (chunk.cost) {
                     dualSync.syncProviderCost({
@@ -718,53 +724,53 @@ export const sendMessage = createAsyncThunk<
         } finally {
           reader.releaseLock()
         }
-        
+
         // End of stream for this turn. Check if we have pending tool calls to execute locally.
         if (assistantToolCalls.length > 0 && executionMode === 'client') {
           console.log(`🛠️ [chatActions] Executing ${assistantToolCalls.length} tool calls locally...`)
-          
+
           // 1. Synthesize Assistant Message if we didn't get a 'complete' event
           // (In client mode, server aborts before sending 'complete')
           if (!messageId && turnAssistantMessageId) {
-             // Create ephemeral assistant message
-             const assistantMsg: any = {
-               id: turnAssistantMessageId,
-               conversation_id: conversationId,
-               role: 'assistant',
-               content: assistantMessageContent,
-               thinking_block: assistantThinking,
-               tool_calls: assistantToolCalls, // Store as array (or string if needed by backend, but we are client side now)
-               content_blocks: assistantToolCalls.map(tc => ({
-                 type: 'tool_use',
-                 id: tc.id,
-                 name: tc.name,
-                 input: tc.input
-               })),
-               created_at: new Date().toISOString(),
-               model_name: modelName,
-               parent_id: userMessage?.id || parent // Link to parent
-             }
-             
-             // Dispatch to Redux
-             dispatch(chatSliceActions.messageAdded(assistantMsg))
-             dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
-             updateMessageCache(extra.queryClient, conversationId, assistantMsg)
-             
-             // Sync to DB (so it persists)
-             dualSync.syncMessage({
-               ...assistantMsg,
-               user_id: auth.userId,
-               project_id: selectedProject?.id || null,
-             })
-             
-             // Update history
-             currentTurnHistory.push(assistantMsg)
-             messageId = assistantMsg.id
+            // Create ephemeral assistant message
+            const assistantMsg: any = {
+              id: turnAssistantMessageId,
+              conversation_id: conversationId,
+              role: 'assistant',
+              content: assistantMessageContent,
+              thinking_block: assistantThinking,
+              tool_calls: assistantToolCalls, // Store as array (or string if needed by backend, but we are client side now)
+              content_blocks: assistantToolCalls.map(tc => ({
+                type: 'tool_use',
+                id: tc.id,
+                name: tc.name,
+                input: tc.input,
+              })),
+              created_at: new Date().toISOString(),
+              model_name: modelName,
+              parent_id: userMessage?.id || parent, // Link to parent
+            }
+
+            // Dispatch to Redux
+            dispatch(chatSliceActions.messageAdded(assistantMsg))
+            dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+            updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+
+            // Sync to DB (so it persists)
+            dualSync.syncMessage({
+              ...assistantMsg,
+              user_id: auth.userId,
+              project_id: selectedProject?.id || null,
+            })
+
+            // Update history
+            currentTurnHistory.push(assistantMsg)
+            messageId = assistantMsg.id
           }
-          
+
           // 2. Execute tools and append tool_result blocks to assistant message
           const toolResultBlocks: any[] = []
-          
+
           // Get rootPath from IDE context to help determine if we're in WSL
           const rootPath = state.ideContext.workspace?.rootPath || null
 
@@ -777,21 +783,23 @@ export const sendMessage = createAsyncThunk<
               type: 'tool_result',
               tool_use_id: toolCall.id,
               content: typeof result === 'string' ? result : JSON.stringify(result),
-              is_error: false // We handle errors in executeLocalTool returns
+              is_error: false, // We handle errors in executeLocalTool returns
             }
 
             toolResultBlocks.push(toolResultBlock)
 
             // Inform UI of tool result for real-time display
-            dispatch(chatSliceActions.streamChunkReceived({
-              type: 'chunk',
-              part: 'tool_result',
-              toolResult: {
-                tool_use_id: toolCall.id,
-                content: toolResultBlock.content,
-                is_error: false
-              },
-            }))
+            dispatch(
+              chatSliceActions.streamChunkReceived({
+                type: 'chunk',
+                part: 'tool_result',
+                toolResult: {
+                  tool_use_id: toolCall.id,
+                  content: toolResultBlock.content,
+                  is_error: false,
+                },
+              })
+            )
           }
 
           // 3. Update assistant message with tool results
@@ -804,18 +812,20 @@ export const sendMessage = createAsyncThunk<
               const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
 
               // Update message via updateMessage thunk (syncs to both local and cloud)
-              await dispatch(updateMessage({
-                id: assistantMessage.id,
-                content: assistantMessage.content,
-                content_blocks: updatedContentBlocks
-              }))
+              await dispatch(
+                updateMessage({
+                  id: assistantMessage.id,
+                  content: assistantMessage.content,
+                  content_blocks: updatedContentBlocks,
+                })
+              )
 
               // Update the assistant message in currentTurnHistory
               const historyIndex = currentTurnHistory.findIndex(msg => msg.id === assistantMessage.id)
               if (historyIndex !== -1) {
                 currentTurnHistory[historyIndex] = {
                   ...currentTurnHistory[historyIndex],
-                  content_blocks: updatedContentBlocks
+                  content_blocks: updatedContentBlocks,
                 }
               }
             }
@@ -825,12 +835,11 @@ export const sendMessage = createAsyncThunk<
           currentTurnContent = '' // No new user input
           parent = messageId // Parent is the assistant message (not tool message)
           continueTurn = true // Loop again to send tool results to LLM
-          
+
           // Reset buffers
           assistantMessageContent = ''
           assistantThinking = ''
           assistantToolCalls = []
-          
         } else {
           // No tool calls or server handled it -> finish
           continueTurn = false
@@ -863,44 +872,47 @@ export const updateMessage = createAsyncThunk<
   Message,
   { id: MessageId; content: string; note?: string; content_blocks?: any },
   { state: RootState; extra: ThunkExtraArgument }
->('chat/updateMessage', async ({ id, content, note, content_blocks }, { dispatch, getState, extra, rejectWithValue }) => {
-  const { auth } = extra
-  try {
-    const body: any = { content, note }
-    if (content_blocks) {
-      body.content_blocks = content_blocks
+>(
+  'chat/updateMessage',
+  async ({ id, content, note, content_blocks }, { dispatch, getState, extra, rejectWithValue }) => {
+    const { auth } = extra
+    try {
+      const body: any = { content, note }
+      if (content_blocks) {
+        body.content_blocks = content_blocks
+      }
+
+      const updated = await apiCall<Message>(`/messages/${id}`, auth.accessToken, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+      dispatch(chatSliceActions.messageUpdated({ id, content, note, content_blocks }))
+
+      // Sync to React Query cache immediately
+      const state = getState()
+      const conversationId = state.chat.conversation.currentConversationId
+      if (conversationId) {
+        updateMessageInCache(extra.queryClient, conversationId, id, content, note, content_blocks)
+      }
+
+      // Sync message update to local SQLite (fire-and-forget)
+      const selectedProject = selectSelectedProject(state)
+      dualSync.syncMessage(
+        {
+          ...updated,
+          content_blocks: content_blocks, // Explicitly include from request to ensure local sync
+          user_id: auth.userId,
+          project_id: selectedProject?.id || null,
+        },
+        'update'
+      )
+
+      return updated
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Update failed')
     }
-
-    const updated = await apiCall<Message>(`/messages/${id}`, auth.accessToken, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    })
-    dispatch(chatSliceActions.messageUpdated({ id, content, note, content_blocks }))
-
-    // Sync to React Query cache immediately
-    const state = getState()
-    const conversationId = state.chat.conversation.currentConversationId
-    if (conversationId) {
-      updateMessageInCache(extra.queryClient, conversationId, id, content, note, content_blocks)
-    }
-
-    // Sync message update to local SQLite (fire-and-forget)
-    const selectedProject = selectSelectedProject(state)
-    dualSync.syncMessage(
-      {
-        ...updated,
-        content_blocks: content_blocks, // Explicitly include from request to ensure local sync
-        user_id: auth.userId,
-        project_id: selectedProject?.id || null,
-      },
-      'update'
-    )
-
-    return updated
-  } catch (error) {
-    return rejectWithValue(error instanceof Error ? error.message : 'Update failed')
   }
-})
+)
 
 // Fetch conversation messages from server
 export const fetchConversationMessages = createAsyncThunk<
@@ -994,12 +1006,12 @@ export const editMessageWithBranching = createAsyncThunk<
       const currentPathMessages = truncatedPathIds
         .map(id => currentMessages.find(m => m.id === id))
         .filter(Boolean) as Message[]
-      
+
       // Read selected model from React Query cache
       const provider = state.chat.providerState.currentProvider
       const modelsData = extra.queryClient?.getQueryData<{
-        models: Model[],
-        default: Model,
+        models: Model[]
+        default: Model
         selected: Model
       }>(['models', provider])
       const selectedName = modelsData?.selected?.name || modelsData?.default?.name
@@ -1154,9 +1166,7 @@ export const editMessageWithBranching = createAsyncThunk<
                   const existingData = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>(cacheKey)
                   if (existingData) {
                     const updatedMessages = existingData.messages.map(msg =>
-                      msg.id === chunk.message.id
-                        ? { ...msg, artifacts: combinedArtifacts }
-                        : msg
+                      msg.id === chunk.message.id ? { ...msg, artifacts: combinedArtifacts } : msg
                     )
                     extra.queryClient?.setQueryData(cacheKey, {
                       messages: updatedMessages,
@@ -1174,13 +1184,17 @@ export const editMessageWithBranching = createAsyncThunk<
 
               // Handle tool results (accumulated server-side into content_blocks)
               if (chunk.part === 'tool_result' && chunk.toolResult) {
-                console.log(`✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
+                console.log(
+                  `✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
+                )
                 // Dispatch structured tool result data for proper rendering in streaming events
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'chunk',
-                  part: 'tool_result',
-                  toolResult: chunk.toolResult,
-                }))
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    type: 'chunk',
+                    part: 'tool_result',
+                    toolResult: chunk.toolResult,
+                  })
+                )
                 // Skip generic chunk handler to prevent duplicate dispatch
               } else if (chunk.type === 'generation_started') {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
@@ -1271,12 +1285,12 @@ export const sendMessageToBranch = createAsyncThunk<
       signal.addEventListener('abort', () => controller?.abort())
 
       const state = getState() as RootState
-      
+
       // Read selected model from React Query cache
       const provider = state.chat.providerState.currentProvider
       const modelsData = extra.queryClient?.getQueryData<{
-        models: Model[],
-        default: Model,
+        models: Model[]
+        default: Model
         selected: Model
       }>(['models', provider])
       const selectedName = modelsData?.selected?.name || modelsData?.default?.name
@@ -1370,13 +1384,17 @@ export const sendMessageToBranch = createAsyncThunk<
 
               // Handle tool results (accumulated server-side into content_blocks)
               if (chunk.part === 'tool_result' && chunk.toolResult) {
-                console.log(`✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
+                console.log(
+                  `✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
+                )
                 // Dispatch structured tool result data for proper rendering in streaming events
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'chunk',
-                  part: 'tool_result',
-                  toolResult: chunk.toolResult,
-                }))
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    type: 'chunk',
+                    part: 'tool_result',
+                    toolResult: chunk.toolResult,
+                  })
+                )
                 // Skip generic chunk handler to prevent duplicate dispatch
               } else if (chunk.type === 'generation_started') {
                 dispatch(chatSliceActions.streamChunkReceived(chunk))
@@ -1465,9 +1483,9 @@ export const syncConversationToLocal = createAsyncThunk<
       try {
         const res = await fetch(`${REMOTE_API_BASE}/conversations/${conversationId}`, {
           headers: {
-            'Authorization': `Bearer ${auth.accessToken}`,
-            'Content-Type': 'application/json'
-          }
+            Authorization: `Bearer ${auth.accessToken}`,
+            'Content-Type': 'application/json',
+          },
         })
         if (res.ok) {
           conversation = await res.json()
@@ -1492,9 +1510,9 @@ export const syncConversationToLocal = createAsyncThunk<
               try {
                 const projRes = await fetch(`${REMOTE_API_BASE}/projects/${projectId}`, {
                   headers: {
-                    'Authorization': `Bearer ${auth.accessToken}`,
-                    'Content-Type': 'application/json'
-                  }
+                    Authorization: `Bearer ${auth.accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
                 })
                 if (projRes.ok) {
                   project = await projRes.json()
@@ -1592,12 +1610,19 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
           // Check if attachments are included in the response (optimized path)
           const includedAttachments = (msg as any).attachments
 
-          if (!alreadyFetched && includedAttachments && Array.isArray(includedAttachments) && includedAttachments.length > 0) {
+          if (
+            !alreadyFetched &&
+            includedAttachments &&
+            Array.isArray(includedAttachments) &&
+            includedAttachments.length > 0
+          ) {
             // Process included attachments - dispatch metadata immediately
-            dispatch(chatSliceActions.attachmentsSetForMessage({
-              messageId: msg.id,
-              attachments: includedAttachments
-            }))
+            dispatch(
+              chatSliceActions.attachmentsSetForMessage({
+                messageId: msg.id,
+                attachments: includedAttachments,
+              })
+            )
 
             // Fetch and convert binaries to base64 (async operation)
             Promise.all(
@@ -2083,26 +2108,23 @@ export const getCCSessionInfo = createAsyncThunk<
   { hasSession: boolean; sessionId?: string; lastMessageAt?: string; messageCount?: number; cwd?: string },
   ConversationId,
   { state: RootState; extra: ThunkExtraArgument }
->(
-  'chat/getCCSessionInfo',
-  async (conversationId, { extra, rejectWithValue }) => {
-    const { auth } = extra
-    try {
-      const response = await apiCall<{
-        hasSession: boolean
-        sessionId?: string
-        lastMessageAt?: string
-        messageCount?: number
-        cwd?: string
-      }>(`/agents/cc-session/${conversationId}`, auth.accessToken)
+>('chat/getCCSessionInfo', async (conversationId, { extra, rejectWithValue }) => {
+  const { auth } = extra
+  try {
+    const response = await apiCall<{
+      hasSession: boolean
+      sessionId?: string
+      lastMessageAt?: string
+      messageCount?: number
+      cwd?: string
+    }>(`/agents/cc-session/${conversationId}`, auth.accessToken)
 
-      return response
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to get CC session info'
-      return rejectWithValue(message)
-    }
+    return response
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to get CC session info'
+    return rejectWithValue(message)
   }
-)
+})
 
 /**
  * Send message to Claude Code agent with SSE streaming
@@ -2184,12 +2206,14 @@ export const sendCCMessage = createAsyncThunk<
               if (chunk.type === 'chunk') {
                 // Real-time streaming chunk (delta) - display incrementally
                 // This comes from the onStreamingChunk callback for live streaming
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'chunk',
-                  content: chunk.delta || chunk.content || '',
-                  part: chunk.part || 'text',
-                  chunkType: chunk.chunkType,
-                }))
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    type: 'chunk',
+                    content: chunk.delta || chunk.content || '',
+                    part: chunk.part || 'text',
+                    chunkType: chunk.chunkType,
+                  })
+                )
               } else if (chunk.type === 'message' && chunk.message) {
                 // CC assistant message with ex_agent role (complete message for persistence)
                 // This comes after streaming completes for final database save
@@ -2202,11 +2226,13 @@ export const sendCCMessage = createAsyncThunk<
                 updateMessageCache(extra.queryClient, conversationId, ccMessage)
               } else if (chunk.type === 'progress') {
                 // Tool execution progress - show in streaming buffer
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'chunk',
-                  content: chunk.toolName ? `Executing: ${chunk.toolName}` : 'Processing...',
-                  part: 'text',
-                }))
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    type: 'chunk',
+                    content: chunk.toolName ? `Executing: ${chunk.toolName}` : 'Processing...',
+                    part: 'text',
+                  })
+                )
               } else if (chunk.type === 'system') {
                 // System events (init, auth, etc.) - log silently for now
                 console.log('[CC System]', chunk.message)
@@ -2215,10 +2241,12 @@ export const sendCCMessage = createAsyncThunk<
                 messageCount = chunk.messageCount
                 shouldInvalidateMessages = true
               } else if (chunk.type === 'error') {
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'error',
-                  error: chunk.error || 'CC error',
-                }))
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    type: 'error',
+                    error: chunk.error || 'CC error',
+                  })
+                )
                 throw new Error(chunk.error || 'CC stream error')
               }
             } catch (parseError) {
@@ -2266,7 +2294,16 @@ export const sendCCBranch = createAsyncThunk<
 >(
   'chat/sendCCBranch',
   async (
-    { conversationId, message, cwd, permissionMode = 'default', resume, parentId, sessionId: resumeSessionId, forkSession },
+    {
+      conversationId,
+      message,
+      cwd,
+      permissionMode = 'default',
+      resume,
+      parentId,
+      sessionId: resumeSessionId,
+      forkSession,
+    },
     { dispatch, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
@@ -2336,12 +2373,14 @@ export const sendCCBranch = createAsyncThunk<
               // Handle CC-specific event types
               if (chunk.type === 'chunk') {
                 // Real-time streaming chunk (delta) - display incrementally
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'chunk',
-                  content: chunk.delta || chunk.content || '',
-                  part: chunk.part || 'text',
-                  chunkType: chunk.chunkType,
-                }))
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    type: 'chunk',
+                    content: chunk.delta || chunk.content || '',
+                    part: chunk.part || 'text',
+                    chunkType: chunk.chunkType,
+                  })
+                )
               } else if (chunk.type === 'message' && chunk.message) {
                 // CC assistant message with ex_agent role (complete message for persistence)
                 const ccMessage: Message = {
@@ -2353,11 +2392,13 @@ export const sendCCBranch = createAsyncThunk<
                 updateMessageCache(extra.queryClient, conversationId, ccMessage)
               } else if (chunk.type === 'progress') {
                 // Tool execution progress - show in streaming buffer
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'chunk',
-                  content: chunk.toolName ? `Executing: ${chunk.toolName}` : 'Processing...',
-                  part: 'text',
-                }))
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    type: 'chunk',
+                    content: chunk.toolName ? `Executing: ${chunk.toolName}` : 'Processing...',
+                    part: 'text',
+                  })
+                )
               } else if (chunk.type === 'system') {
                 // System events (init, auth, etc.)
                 console.log('[CC System]', chunk.message)
@@ -2366,10 +2407,12 @@ export const sendCCBranch = createAsyncThunk<
                 messageCount = chunk.messageCount
                 shouldInvalidateMessages = true
               } else if (chunk.type === 'error') {
-                dispatch(chatSliceActions.streamChunkReceived({
-                  type: 'error',
-                  error: chunk.error || 'CC error',
-                }))
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    type: 'error',
+                    error: chunk.error || 'CC error',
+                  })
+                )
                 throw new Error(chunk.error || 'CC branch stream error')
               }
             } catch (parseError) {
