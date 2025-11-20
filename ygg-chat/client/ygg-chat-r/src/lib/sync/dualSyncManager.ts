@@ -7,7 +7,15 @@ import { environment } from '../../utils/api'
 // Types for sync operations
 export interface SyncOperation {
   id: string
-  type: 'user' | 'project' | 'conversation' | 'message' | 'attachment' | 'provider_cost'
+  type:
+    | 'user'
+    | 'project'
+    | 'conversation'
+    | 'message'
+    | 'attachment'
+    | 'provider_cost'
+    | 'research_note_update'
+    | 'cwd_update'
   action: 'create' | 'update' | 'delete'
   data: any
   retryCount: number
@@ -177,7 +185,7 @@ class DualSyncManager {
 
   private async executeOperation(operation: SyncOperation): Promise<void> {
     let endpoint: string
-    let method: 'POST' | 'DELETE' = 'POST'
+    let method: 'POST' | 'DELETE' | 'PATCH' = 'POST'
 
     switch (operation.type) {
       case 'user':
@@ -213,6 +221,14 @@ class DualSyncManager {
         break
       case 'provider_cost':
         endpoint = '/sync/provider-cost'
+        break
+      case 'research_note_update':
+        endpoint = `/conversations/${operation.data.id}/research-note`
+        method = 'PATCH'
+        break
+      case 'cwd_update':
+        endpoint = `/conversations/${operation.data.id}/cwd`
+        method = 'PATCH'
         break
       default:
         throw new Error(`Unknown operation type: ${operation.type}`)
@@ -284,6 +300,22 @@ class DualSyncManager {
       type: 'provider_cost',
       action: 'create',
       data: costData,
+    })
+  }
+
+  syncResearchNote(data: { id: string; researchNote: string | null }): void {
+    this.enqueue({
+      type: 'research_note_update',
+      action: 'update',
+      data,
+    })
+  }
+
+  syncCwd(data: { id: string; cwd: string | null }): void {
+    this.enqueue({
+      type: 'cwd_update',
+      action: 'update',
+      data,
     })
   }
 
@@ -421,6 +453,8 @@ export const dualSync = {
   syncMessage: (data: any, action?: 'create' | 'update' | 'delete') => getDualSyncManager().syncMessage(data, action),
   syncAttachment: (data: any) => getDualSyncManager().syncAttachment(data),
   syncProviderCost: (data: any) => getDualSyncManager().syncProviderCost(data),
+  syncResearchNote: (data: { id: string; researchNote: string | null }) => getDualSyncManager().syncResearchNote(data),
+  syncCwd: (data: { id: string; cwd: string | null }) => getDualSyncManager().syncCwd(data),
   syncBatch: (operations: Array<{ type: string; action: string; data: any }>) =>
     getDualSyncManager().syncBatch(operations),
   checkConversationExists: (id: string) => getDualSyncManager().checkConversationExists(id),

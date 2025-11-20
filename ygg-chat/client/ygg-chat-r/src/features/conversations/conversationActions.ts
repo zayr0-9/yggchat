@@ -233,8 +233,8 @@ export const updateResearchNote = createAsyncThunk<
     const { auth } = extra
     const updated = await patchConversationResearchNote(id, researchNote, auth.accessToken)
     
-    // Sync to local SQLite (fire-and-forget)
-    dualSync.syncConversation(updated as any, 'update')
+    // Sync to local SQLite using specific method
+    dualSync.syncResearchNote({ id, researchNote })
     
     return updated as Conversation
   } catch (error) {
@@ -252,8 +252,8 @@ export const updateCwd = createAsyncThunk<
     const { auth } = extra
     const updated = await patchConversationCwd(id, cwd, auth.accessToken)
     
-    // Sync to local SQLite (fire-and-forget)
-    dualSync.syncConversation(updated as any, 'update')
+    // Sync to local SQLite using specific method
+    dualSync.syncCwd({ id, cwd })
     
     return updated as Conversation
   } catch (error) {

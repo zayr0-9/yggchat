@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { ConversationId } from '../../../../../shared/types'
-import { updateResearchNote, updateCwd } from '../../features/conversations/conversationActions'
+import { updateResearchNote } from '../../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../../features/conversations/conversationSelectors'
 import { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
@@ -64,11 +64,6 @@ export const LowBar: React.FC<LowBarProps> = ({
         dispatch(updateResearchNote({ id: conversationId, researchNote: note }) as any)
           .unwrap()
           .then(() => {
-            // Also update CWD if present in conversation state
-            if (conversation?.cwd) {
-               dispatch(updateCwd({ id: conversationId, cwd: conversation.cwd }) as any)
-            }
-
             // Update React Query caches to reflect the new research note
             const projectId = conversation?.project_id
 
