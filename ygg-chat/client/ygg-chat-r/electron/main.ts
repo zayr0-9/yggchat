@@ -196,13 +196,14 @@ function startServer(): Promise<void> {
   })
 }
 
-function applyTitleBarTheme(win: BrowserWindow) {
+function applyTitleBarTheme(win: BrowserWindow, isDark?: boolean) {
   // Only apply overlay on Windows where it's supported and requested
   if (process.platform === 'win32') {
-    const isDark = nativeTheme.shouldUseDarkColors
+    // Use provided isDark value, or fall back to system preference
+    const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
     win.setTitleBarOverlay({
-      color: isDark ? '#101828' : '#f2f4f7',
-      symbolColor: isDark ? '#f2f4f7' : '#0f172a',
+      color: useDark ? '#101828' : '#f2f4f7',
+      symbolColor: useDark ? '#f2f4f7' : '#0f172a',
       height: 35, // Ensure there is a grippable area
     })
   }
@@ -594,5 +595,12 @@ ipcMain.handle('window:maximize', async () => {
 ipcMain.handle('window:close', async () => {
   if (mainWindow) {
     mainWindow.close()
+  }
+})
+
+// Theme synchronization - update title bar when app theme changes
+ipcMain.handle('theme:update', async (_event, isDark: boolean) => {
+  if (mainWindow) {
+    applyTitleBarTheme(mainWindow, isDark)
   }
 })

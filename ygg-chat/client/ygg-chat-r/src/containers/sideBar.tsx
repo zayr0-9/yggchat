@@ -68,6 +68,11 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const isDark = themeMode === 'Dark' || (themeMode === 'System' && media.matches)
     document.documentElement.classList.toggle('dark', isDark)
+    
+    // Notify Electron to update title bar colors
+    if (window.electronAPI?.theme?.update) {
+      window.electronAPI.theme.update(isDark)
+    }
   }, [themeMode])
 
   // Persist theme preference

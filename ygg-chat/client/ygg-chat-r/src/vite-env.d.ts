@@ -40,6 +40,9 @@ interface ElectronAPI {
     maximize: () => Promise<void>
     close: () => Promise<void>
   }
+  theme: {
+    update: (isDark: boolean) => Promise<void>
+  }
   platform: 'electron'
 }
 

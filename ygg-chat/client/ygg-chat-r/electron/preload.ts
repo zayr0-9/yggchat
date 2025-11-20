@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     maximize: () => ipcRenderer.invoke('window:maximize'),
     close: () => ipcRenderer.invoke('window:close'),
   },
+  theme: {
+    update: (isDark: boolean) => ipcRenderer.invoke('theme:update', isDark),
+  },
   platform: 'electron',
 })
 

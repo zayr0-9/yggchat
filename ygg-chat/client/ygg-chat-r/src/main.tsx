@@ -82,9 +82,20 @@ const persister = createSyncStoragePersister({
       const pref = localStorage.getItem('theme') // 'light' | 'dark' | null (null => system)
       const isDark = pref === 'dark' || (pref !== 'light' && media.matches)
       document.documentElement.classList.toggle('dark', isDark)
+      
+      // Notify Electron to update title bar colors
+      if (window.electronAPI?.theme?.update) {
+        window.electronAPI.theme.update(isDark)
+      }
     } catch {
       // If localStorage is blocked, fall back to system
-      document.documentElement.classList.toggle('dark', media.matches)
+      const isDark = media.matches
+      document.documentElement.classList.toggle('dark', isDark)
+      
+      // Notify Electron to update title bar colors
+      if (window.electronAPI?.theme?.update) {
+        window.electronAPI.theme.update(isDark)
+      }
     }
   }
 
