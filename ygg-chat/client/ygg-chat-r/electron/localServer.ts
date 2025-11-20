@@ -2,14 +2,14 @@
 // Embedded local SQLite server for dual-sync in Electron mode
 // This server runs on port 3002 and handles sync operations from Railway to local SQLite
 
-import express from 'express'
-import cors from 'cors'
-import path from 'path'
-import fs from 'fs'
 import Database from 'better-sqlite3'
+import cors from 'cors'
+import express from 'express'
+import fs from 'fs'
+import { glob } from 'glob'
+import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
-import { glob } from 'glob'
 
 const app = express()
 let server: any = null
@@ -195,9 +195,7 @@ function initializeLocalDatabase(dbPath: string) {
     updateConversationResearchNote: db.prepare(
       'UPDATE conversations SET research_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ),
-    updateConversationCwd: db.prepare(
-      'UPDATE conversations SET cwd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-    ),
+    updateConversationCwd: db.prepare('UPDATE conversations SET cwd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'),
 
     // Messages
     upsertMessage: db.prepare(`
@@ -297,7 +295,7 @@ const clients = new Set<ConnectedClient>()
 
 function initializeWebSocketServer(serverInstance: any) {
   console.log('[LocalServer] Initializing WebSocket Server on /ide-context')
-  
+
   wss = new WebSocketServer({ server: serverInstance, path: '/ide-context' })
 
   wss.on('connection', (ws, request) => {
@@ -357,7 +355,7 @@ function initializeWebSocketServer(serverInstance: any) {
             })
 
             if (extensionClients.length === 0) {
-              console.warn('[LocalServer] ⚠️ No extensions available to handle context request')
+              console.warn('[LocalServer] No extensions available to handle context request')
               // Send back an empty response so frontend stops waiting
               client.ws.send(
                 JSON.stringify({
@@ -666,8 +664,20 @@ function setupServer() {
   // Sync Attachment
   app.post('/api/sync/attachment', (req, res) => {
     try {
-      const { id, message_id, kind, mime_type, storage, url, file_path, width, height, size_bytes, sha256, created_at } =
-        req.body
+      const {
+        id,
+        message_id,
+        kind,
+        mime_type,
+        storage,
+        url,
+        file_path,
+        width,
+        height,
+        size_bytes,
+        sha256,
+        created_at,
+      } = req.body
 
       statements.upsertAttachment.run(
         id,
@@ -840,7 +850,9 @@ function setupServer() {
 
     try {
       transaction()
-      console.log(`[LocalServer] Batch sync completed: ${results.filter(r => r.success).length}/${operations.length} succeeded`)
+      console.log(
+        `[LocalServer] Batch sync completed: ${results.filter(r => r.success).length}/${operations.length} succeeded`
+      )
       res.json({ success: true, results })
     } catch (error) {
       console.error('[LocalServer] Batch sync failed:', error)
@@ -869,7 +881,7 @@ function setupServer() {
         case 'read_files': {
           const { paths } = parsedArgs
           if (!Array.isArray(paths)) throw new Error('paths array is required')
-          
+
           const results = []
           for (const p of paths) {
             try {
@@ -895,20 +907,20 @@ function setupServer() {
           const { path: filePath, operation, searchPattern, replacement, content } = parsedArgs
           if (!filePath) throw new Error('path is required')
           if (!fs.existsSync(filePath)) throw new Error(`File not found: ${filePath}`)
-          
+
           let fileContent = fs.readFileSync(filePath, 'utf8')
-          
+
           if (operation === 'append') {
-             fileContent += (content || '')
+            fileContent += content || ''
           } else if (operation === 'replace' || operation === 'replace_first') {
-             if (!searchPattern) throw new Error('searchPattern is required for replace')
-             
-             // Handle escaped regex patterns if needed, but usually we just use the string
-             // Assuming searchPattern is a regex string
-             const regex = new RegExp(searchPattern, operation === 'replace' ? 'g' : '')
-             fileContent = fileContent.replace(regex, replacement || '')
+            if (!searchPattern) throw new Error('searchPattern is required for replace')
+
+            // Handle escaped regex patterns if needed, but usually we just use the string
+            // Assuming searchPattern is a regex string
+            const regex = new RegExp(searchPattern, operation === 'replace' ? 'g' : '')
+            fileContent = fileContent.replace(regex, replacement || '')
           }
-          
+
           fs.writeFileSync(filePath, fileContent, 'utf8')
           result = `File edited: ${filePath}`
           break
@@ -925,25 +937,25 @@ function setupServer() {
           break
         }
         case 'directory': {
-           const { path: dirPath } = parsedArgs
-           const targetPath = dirPath || process.cwd()
-           if (!fs.existsSync(targetPath)) throw new Error(`Directory not found: ${targetPath}`)
-           
-           const entries = fs.readdirSync(targetPath, { withFileTypes: true })
-           const structure = entries.map(ent => ({
-             name: ent.name,
-             type: ent.isDirectory() ? 'directory' : 'file'
-           }))
-           result = JSON.stringify(structure, null, 2)
-           break
+          const { path: dirPath } = parsedArgs
+          const targetPath = dirPath || process.cwd()
+          if (!fs.existsSync(targetPath)) throw new Error(`Directory not found: ${targetPath}`)
+
+          const entries = fs.readdirSync(targetPath, { withFileTypes: true })
+          const structure = entries.map(ent => ({
+            name: ent.name,
+            type: ent.isDirectory() ? 'directory' : 'file',
+          }))
+          result = JSON.stringify(structure, null, 2)
+          break
         }
         case 'glob': {
-           const { pattern, cwd } = parsedArgs
-           if (!pattern) throw new Error('pattern is required')
-           // Use glob.sync from the 'glob' package
-           const files = glob.sync(pattern, { cwd: cwd || process.cwd(), absolute: true })
-           result = files
-           break
+          const { pattern, cwd } = parsedArgs
+          if (!pattern) throw new Error('pattern is required')
+          // Use glob.sync from the 'glob' package
+          const files = glob.sync(pattern, { cwd: cwd || process.cwd(), absolute: true })
+          result = files
+          break
         }
         default:
           // Pass through to allow client to handle unknown tools or error
@@ -985,7 +997,7 @@ function setupServer() {
 
       statements.updateConversationResearchNote.run(normalizedResearchNote, id)
       const updated = statements.getConversationById.get(id)
-      
+
       if (updated) {
         res.json(updated)
       } else {
@@ -1007,7 +1019,7 @@ function setupServer() {
 
       statements.updateConversationCwd.run(normalizedCwd, id)
       const updated = statements.getConversationById.get(id)
-      
+
       if (updated) {
         res.json(updated)
       } else {
@@ -1028,13 +1040,13 @@ export function startLocalServer(port: number = 3002, dbPath?: string): Promise<
       initializeLocalDatabase(actualDbPath)
       setupServer()
 
-      server = app.listen(port, '127.0.0.1', () => {
-        console.log(`[LocalServer] Local sync server running on http://127.0.0.1:${port}`)
+      server = app.listen(port, '0.0.0.0', () => {
+        console.log(`[LocalServer] Local sync server running on http://0.0.0.0:${port}`)
         console.log(`[LocalServer] Database path: ${actualDbPath}`)
-        
+
         // Initialize WebSocket Server after HTTP server is running
         initializeWebSocketServer(server)
-        
+
         resolve()
       })
 
