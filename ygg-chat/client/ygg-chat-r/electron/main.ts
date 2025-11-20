@@ -197,11 +197,15 @@ function startServer(): Promise<void> {
 }
 
 function applyTitleBarTheme(win: BrowserWindow) {
-  const isDark = nativeTheme.shouldUseDarkColors
-  win.setTitleBarOverlay({
-    color: isDark ? '#101828' : '#f2f4f7',
-    symbolColor: isDark ? '#f2f4f7' : '#0f172a',
-  })
+  // Only apply overlay on Windows where it's supported and requested
+  if (process.platform === 'win32') {
+    const isDark = nativeTheme.shouldUseDarkColors
+    win.setTitleBarOverlay({
+      color: isDark ? '#101828' : '#f2f4f7',
+      symbolColor: isDark ? '#f2f4f7' : '#0f172a',
+      height: 35, // Ensure there is a grippable area
+    })
+  }
 }
 
 nativeTheme.on('updated', () => {
@@ -220,8 +224,23 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
     },
-    titleBarStyle: 'hidden',
-    titleBarOverlay: true,
+    // Platform-specific title bar settings
+    ...(process.platform === 'win32'
+      ? {
+          titleBarStyle: 'hidden',
+          titleBarOverlay: {
+            color: '#f2f4f7', // Initial light theme color
+            symbolColor: '#0f172a',
+            height: 35, // Ensure height is set for draggable region
+          },
+        }
+      : process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hidden', // Standard for macOS
+        }
+      : {
+          titleBarStyle: 'default', // Native title bar for Linux (safest)
+        }),
     show: false, // Don't show until ready
   })
 
