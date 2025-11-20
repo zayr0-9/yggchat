@@ -16,7 +16,7 @@ import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
 import { editFile } from './tools/editFile.js'
 import { globSearch } from './tools/glob.js'
-import { readTextFile } from './tools/readFile.js'
+import { readTextFile, readFileContinuation } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 
@@ -884,6 +884,16 @@ function setupServer() {
           if (!filePath) throw new Error('path is required')
           
           const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges })
+          result = { success: true, ...fileRes }
+          break
+        }
+        case 'read_file_continuation': {
+          const { path: filePath, afterLine, numLines, maxBytes } = parsedArgs
+          if (!filePath) throw new Error('path is required')
+          if (afterLine === undefined) throw new Error('afterLine is required')
+          if (!numLines) throw new Error('numLines is required')
+          
+          const fileRes = await readFileContinuation(filePath, afterLine, numLines, { maxBytes })
           result = { success: true, ...fileRes }
           break
         }
