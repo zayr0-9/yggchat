@@ -14,10 +14,10 @@ import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { useProjects, useResearchNotes } from '../hooks/useQueries'
+import { getAssetPath } from '../utils/assetPath'
 import { sortProjects } from '../utils/sortProjects'
 import EditProject from './EditProject'
 import SideBar from './sideBar'
-import { getAssetPath } from '../utils/assetPath'
 
 const Homepage: React.FC = () => {
   const dispatch = useAppDispatch()
@@ -69,7 +69,7 @@ const Homepage: React.FC = () => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const isDark = themeMode === 'Dark' || (themeMode === 'System' && media.matches)
     document.documentElement.classList.toggle('dark', isDark)
-    
+
     // Notify Electron to update title bar colors
     if (window.electronAPI?.theme?.update) {
       window.electronAPI.theme.update(isDark)
@@ -184,7 +184,7 @@ const Homepage: React.FC = () => {
   }
 
   return (
-    <div className='relative h-full flex'>
+    <div className='relative h-full dark:bg-titlebar-500 flex'>
       {/* Dark Overlay */}
       <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/30 z-0' />
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
