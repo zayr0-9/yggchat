@@ -13,7 +13,13 @@ build/
 
 # Compiled electron files
 electron/*.cjs
+electron/*.js
+electron/*.mjs
 electron/*.js.map
+electron/tools/*.js
+electron/tools/*.js.map
+electron/utils/*.js
+electron/utils/*.js.map
 
 # Environment variables
 .env
