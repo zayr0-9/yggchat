@@ -199,6 +199,7 @@ class DualSyncManager {
           endpoint = '/sync/conversation'
         }
         break
+      // Add specific handling for research notes if needed, though currently syncConversation handles full object update
       case 'message':
         if (operation.action === 'delete') {
           endpoint = `/sync/message/${operation.data.id}`

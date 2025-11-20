@@ -8,6 +8,7 @@ import {
   getConversationSystemPrompt,
   patchConversationContext,
   patchConversationResearchNote,
+  patchConversationCwd,
   patchConversationSystemPrompt,
   type SystemPromptPatchResponse,
 } from '../../utils/api'
@@ -231,9 +232,32 @@ export const updateResearchNote = createAsyncThunk<
   try {
     const { auth } = extra
     const updated = await patchConversationResearchNote(id, researchNote, auth.accessToken)
+    
+    // Sync to local SQLite (fire-and-forget)
+    dualSync.syncConversation(updated as any, 'update')
+    
     return updated as Conversation
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update research note'
+    return rejectWithValue(message) as any
+  }
+})
+
+export const updateCwd = createAsyncThunk<
+  Conversation, // return type - full conversation object for cache update
+  { id: ConversationId; cwd: string | null }, // argument type
+  { extra: ThunkExtraArgument }
+>('conversations/updateCwd', async ({ id, cwd }, { extra, rejectWithValue }) => {
+  try {
+    const { auth } = extra
+    const updated = await patchConversationCwd(id, cwd, auth.accessToken)
+    
+    // Sync to local SQLite (fire-and-forget)
+    dualSync.syncConversation(updated as any, 'update')
+    
+    return updated as Conversation
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update cwd'
     return rejectWithValue(message) as any
   }
 })
