@@ -39,7 +39,9 @@ async function getWslDistro(): Promise<string> {
 
   try {
     // Try verbose list to find the default (marked with *)
-    const { stdout } = await execAsync('wsl.exe --list --verbose')
+    // wsl.exe outputs UTF-16LE, so we must read as buffer and decode explicitly
+    const { stdout: buffer } = await execAsync('wsl.exe --list --verbose', { encoding: 'buffer' })
+    const stdout = buffer.toString('utf16le').replace(/^\uFEFF/, '') // Remove BOM if present
     const lines = stdout.split('\n')
 
     for (const line of lines) {
@@ -54,7 +56,8 @@ async function getWslDistro(): Promise<string> {
     }
 
     // Fallback to simple list if verbose parsing fails
-    const { stdout: simpleOut } = await execAsync('wsl.exe --list --quiet')
+    const { stdout: simpleBuffer } = await execAsync('wsl.exe --list --quiet', { encoding: 'buffer' })
+    const simpleOut = simpleBuffer.toString('utf16le').replace(/^\uFEFF/, '')
     const firstDistro = simpleOut.split(/\s+/)[0]
     if (firstDistro) {
       defaultDistro = firstDistro
