@@ -366,6 +366,26 @@ class DualSyncManager {
     return false
   }
 
+  // Check if a project exists locally
+  async checkProjectExists(projectId: string): Promise<boolean> {
+    if (!this.enabled) return false
+
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}/sync/project/${projectId}`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        return !!data.exists
+      }
+    } catch (error) {
+      console.warn('[DualSync] Failed to check project existence:', error)
+    }
+    return false
+  }
+
   // Clear error log
   clearErrors(): void {
     this.errors = []
@@ -403,6 +423,7 @@ export const dualSync = {
   syncBatch: (operations: Array<{ type: string; action: string; data: any }>) =>
     getDualSyncManager().syncBatch(operations),
   checkConversationExists: (id: string) => getDualSyncManager().checkConversationExists(id),
+  checkProjectExists: (id: string) => getDualSyncManager().checkProjectExists(id),
   getStatus: () => getDualSyncManager().getStatus(),
   setEnabled: (enabled: boolean) => getDualSyncManager().setEnabled(enabled),
   refresh: () => getDualSyncManager().refresh(),

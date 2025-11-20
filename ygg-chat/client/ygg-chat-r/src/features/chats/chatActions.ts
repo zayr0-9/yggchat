@@ -1543,6 +1543,32 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
               auth.accessToken
             )
             if (conversation) {
+              // Ensure project exists locally before syncing conversation
+              if (conversation.project_id) {
+                const projectExists = await dualSync.checkProjectExists(conversation.project_id)
+                if (!projectExists) {
+                  // Get project data from React Query cache instead of fetching from server
+                  // This data is already available from useProjects/useConversations hooks
+                  const projectsCache = extra.queryClient?.getQueryData<any[]>(['projects', auth.userId])
+                  const project = projectsCache?.find(p => String(p.id) === String(conversation.project_id))
+                  
+                  if (project) {
+                    dualSync.syncProject({
+                      id: project.id,
+                      name: project.name,
+                      user_id: auth.userId,
+                      context: project.context,
+                      system_prompt: project.system_prompt,
+                      created_at: project.created_at,
+                      updated_at: project.updated_at
+                    })
+                  } else {
+                    // Fallback: if not in cache, just sync conversation (local server handles stub project creation)
+                    console.warn('Project not found in cache for sync:', conversation.project_id)
+                  }
+                }
+              }
+              
               dualSync.syncConversation(conversation)
             }
           } catch (e) {

@@ -302,6 +302,23 @@ function setupServer() {
             res.status(500).json({ error: 'Failed to delete project' });
         }
     });
+    // Get Project (for checking existence)
+    app.get('/api/sync/project/:id', (req, res) => {
+        try {
+            const { id } = req.params;
+            const project = statements.getProjectById.get(id);
+            if (project) {
+                res.json({ exists: true, project });
+            }
+            else {
+                res.json({ exists: false });
+            }
+        }
+        catch (error) {
+            console.error('[LocalServer] Error getting project:', error);
+            res.status(500).json({ error: 'Failed to get project' });
+        }
+    });
     // Sync Conversation
     app.post('/api/sync/conversation', (req, res) => {
         try {
