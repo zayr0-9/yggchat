@@ -45,6 +45,7 @@
     "dexie": "^4.0.11",
     "express": "^4.21.2",
     "framer-motion": "^12.23.12",
+    "glob": "^13.0.0",
     "highlight.js": "^11.11.1",
     "lucide-react": "^0.516.0",
     "react": "^19.1.0",
@@ -58,7 +59,8 @@
     "remark-stringify": "^11.0.0",
     "strip-markdown": "^6.0.0",
     "unified": "^11.0.5",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.1",

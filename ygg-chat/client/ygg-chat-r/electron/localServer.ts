@@ -8,9 +8,12 @@ import path from 'path'
 import fs from 'fs'
 import Database from 'better-sqlite3'
 import { v4 as uuidv4 } from 'uuid'
+import { WebSocket, WebSocketServer } from 'ws'
+import { glob } from 'glob'
 
 const app = express()
 let server: any = null
+let wss: WebSocketServer | null = null
 let db: Database.Database | null = null
 let statements: any = {}
 
@@ -284,6 +287,125 @@ function ensureConversationExists(conversationId: string, userId: string, projec
   }
 }
 
+interface ConnectedClient {
+  ws: WebSocket
+  type: 'extension' | 'frontend'
+  id: string
+}
+
+const clients = new Set<ConnectedClient>()
+
+function initializeWebSocketServer(serverInstance: any) {
+  console.log('[LocalServer] Initializing WebSocket Server on /ide-context')
+  
+  wss = new WebSocketServer({ server: serverInstance, path: '/ide-context' })
+
+  wss.on('connection', (ws, request) => {
+    const url = new URL(request.url!, `http://${request.headers.host}`)
+    const clientType = url.searchParams.get('type') as 'extension' | 'frontend'
+    const clientId = url.searchParams.get('id') || 'anonymous'
+
+    const client: ConnectedClient = {
+      ws,
+      type: clientType || 'frontend',
+      id: clientId,
+    }
+
+    clients.add(client)
+    console.log(`[LocalServer] Client connected: ${client.type} (${client.id})`)
+
+    ws.on('message', data => {
+      try {
+        const message = JSON.parse(data.toString())
+
+        if (message.type === 'ping') {
+          client.ws.send(JSON.stringify({ type: 'pong', timestamp: new Date().toISOString() }))
+          return // don’t broadcast heartbeat traffic
+        }
+
+        // Relay messages from extension to all frontend clients
+        if (client.type === 'extension') {
+          const outgoing = {
+            ...message,
+            // Normalize requestId to be present at the top-level if available in data
+            requestId: message.requestId ?? message.data?.requestId,
+          }
+
+          clients.forEach(c => {
+            if (c.type === 'frontend' && c.ws.readyState === WebSocket.OPEN) {
+              c.ws.send(JSON.stringify(outgoing))
+            }
+          })
+        }
+
+        // Handle frontend requests to extension
+        if (client.type === 'frontend') {
+          if (message.type === 'request_context') {
+            const extensionClients = Array.from(clients).filter(
+              c => c.type === 'extension' && c.ws.readyState === WebSocket.OPEN
+            )
+
+            clients.forEach(c => {
+              if (c.type === 'extension' && c.ws.readyState === WebSocket.OPEN) {
+                c.ws.send(
+                  JSON.stringify({
+                    type: 'request_context',
+                    requestId: message.requestId,
+                  })
+                )
+              }
+            })
+
+            if (extensionClients.length === 0) {
+              console.warn('[LocalServer] ⚠️ No extensions available to handle context request')
+              // Send back an empty response so frontend stops waiting
+              client.ws.send(
+                JSON.stringify({
+                  type: 'context_response',
+                  requestId: message.requestId,
+                  data: {
+                    workspace: null,
+                    openFiles: [],
+                    allFiles: [],
+                    activeFile: null,
+                    currentSelection: null,
+                  },
+                })
+              )
+            }
+          } else if (message.type === 'request_file_content') {
+            clients.forEach(c => {
+              if (c.type === 'extension' && c.ws.readyState === WebSocket.OPEN) {
+                c.ws.send(
+                  JSON.stringify({
+                    type: 'request_file_content',
+                    requestId: message.requestId,
+                    data: {
+                      path: message.data.path,
+                    },
+                  })
+                )
+              }
+            })
+          }
+        }
+      } catch (error) {
+        console.error('[LocalServer] Failed to parse WebSocket message:', error)
+      }
+    })
+
+    ws.on('close', () => {
+      clients.delete(client)
+      console.log(`[LocalServer] Client disconnected: ${client.type} (${client.id})`)
+    })
+
+    ws.on('error', error => {
+      console.error(`[LocalServer] WebSocket error for ${client.type}:`, error)
+      clients.delete(client)
+    })
+  })
+}
+
 // Setup Express app
 function setupServer() {
   app.use(cors())
@@ -428,22 +550,6 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Error deleting conversation:', error)
       res.status(500).json({ error: 'Failed to delete conversation' })
-    }
-  })
-
-  // Get Conversation (for checking existence)
-  app.get('/api/sync/conversation/:id', (req, res) => {
-    try {
-      const { id } = req.params
-      const conversation = statements.getConversationById.get(id)
-      if (conversation) {
-        res.json({ exists: true, conversation })
-      } else {
-        res.json({ exists: false })
-      }
-    } catch (error) {
-      console.error('[LocalServer] Error getting conversation:', error)
-      res.status(500).json({ error: 'Failed to get conversation' })
     }
   })
 
@@ -796,6 +902,9 @@ function setupServer() {
              fileContent += (content || '')
           } else if (operation === 'replace' || operation === 'replace_first') {
              if (!searchPattern) throw new Error('searchPattern is required for replace')
+             
+             // Handle escaped regex patterns if needed, but usually we just use the string
+             // Assuming searchPattern is a regex string
              const regex = new RegExp(searchPattern, operation === 'replace' ? 'g' : '')
              fileContent = fileContent.replace(regex, replacement || '')
           }
@@ -829,10 +938,11 @@ function setupServer() {
            break
         }
         case 'glob': {
-           // Minimal glob implementation using readdir (recursive)
-           // For now, just return "Not implemented" or use a library if available
-           // Since we don't have 'glob' package, we'll skip or implement simple recursion
-           result = "Glob tool not fully implemented on local server yet (requires 'glob' package)"
+           const { pattern, cwd } = parsedArgs
+           if (!pattern) throw new Error('pattern is required')
+           // Use glob.sync from the 'glob' package
+           const files = glob.sync(pattern, { cwd: cwd || process.cwd(), absolute: true })
+           result = files
            break
         }
         default:
@@ -921,6 +1031,10 @@ export function startLocalServer(port: number = 3002, dbPath?: string): Promise<
       server = app.listen(port, '127.0.0.1', () => {
         console.log(`[LocalServer] Local sync server running on http://127.0.0.1:${port}`)
         console.log(`[LocalServer] Database path: ${actualDbPath}`)
+        
+        // Initialize WebSocket Server after HTTP server is running
+        initializeWebSocketServer(server)
+        
         resolve()
       })
 
@@ -944,6 +1058,20 @@ export function startLocalServer(port: number = 3002, dbPath?: string): Promise<
 export function stopLocalServer(): Promise<void> {
   return new Promise(resolve => {
     if (server) {
+      // Close WebSocket server first
+      if (wss) {
+        wss.close(() => {
+          console.log('[LocalServer] WebSocket server closed')
+        })
+        // Also close all client connections
+        clients.forEach(client => {
+          if (client.ws.readyState === WebSocket.OPEN) {
+            client.ws.close()
+          }
+        })
+        clients.clear()
+      }
+
       server.close(() => {
         console.log('[LocalServer] Server stopped')
         if (db) {

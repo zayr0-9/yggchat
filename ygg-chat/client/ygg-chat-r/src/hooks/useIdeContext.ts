@@ -145,7 +145,14 @@ export function useIdeContext(): UseIdeContextReturn {
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
       const wsProtocol = apiBase.startsWith('https') ? 'wss' : 'ws'
       const wsHost = apiBase.replace(/^https?:\/\//, '').replace(/\/api$/, '')
-      const websocketUrl = `${wsProtocol}://${wsHost}/ide-context?type=frontend&id=ygg-chat`
+      let websocketUrl = `${wsProtocol}://${wsHost}/ide-context?type=frontend&id=ygg-chat`
+
+      // In Electron, use the local sync server (port 3002) which handles IDE context
+      if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
+        websocketUrl = 'ws://localhost:3002/ide-context?type=frontend&id=ygg-chat'
+        console.log('[useIdeContext] Electron mode detected, using local server:', websocketUrl)
+      }
+
       globalWebSocket = new WebSocket(websocketUrl)
 
       // Add a connection timeout
