@@ -11,7 +11,7 @@ export const TitleBar = () => {
         const info = await window.electronAPI.platformInfo.get()
         setPlatform(info.platform)
         setIsElectron(info.isElectron)
-        
+
         // Add padding to app content on Windows
         if (info.isElectron && info.platform === 'win32') {
           document.body.classList.add('has-titlebar')
@@ -19,7 +19,7 @@ export const TitleBar = () => {
       }
     }
     detectPlatform()
-    
+
     // Cleanup
     return () => {
       document.body.classList.remove('has-titlebar')
@@ -44,7 +44,7 @@ export const TitleBar = () => {
   }
 
   return (
-    <div className='titlebar'>
+    <div className='titlebar mica'>
       <div className='titlebar-drag-region'>
         <div className='titlebar-title'>
           <span>Yggdrasil</span>
@@ -68,18 +68,10 @@ export const TitleBar = () => {
           title='Maximize'
         >
           <svg width='10' height='10' viewBox='0 0 10 10'>
-            <path
-              fill='currentColor'
-              d='M0 0v10h10V0H0zm1 1h8v8H1V1z'
-            />
+            <path fill='currentColor' d='M0 0v10h10V0H0zm1 1h8v8H1V1z' />
           </svg>
         </button>
-        <button
-          className='titlebar-button titlebar-close'
-          onClick={handleClose}
-          aria-label='Close'
-          title='Close'
-        >
+        <button className='titlebar-button titlebar-close' onClick={handleClose} aria-label='Close' title='Close'>
           <svg width='10' height='10' viewBox='0 0 10 10'>
             <path
               fill='currentColor'
