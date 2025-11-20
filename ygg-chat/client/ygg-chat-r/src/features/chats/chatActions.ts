@@ -1435,6 +1435,80 @@ export const sendMessageToBranch = createAsyncThunk<
   }
 )
 
+// Sync a conversation and its messages to local SQLite (Electron only)
+export const syncConversationToLocal = createAsyncThunk<
+  void,
+  { conversationId: ConversationId; messages: Message[] },
+  { state: RootState; extra: ThunkExtraArgument }
+>('chat/syncConversationToLocal', async ({ conversationId, messages }, { extra, getState }) => {
+  // Only run in Electron mode
+  if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+
+  const { auth } = extra
+  const state = getState() as RootState
+
+  try {
+    const exists = await dualSync.checkConversationExists(conversationId)
+    // Determine project ID from state or conversation data
+    let projectId: string | null = selectSelectedProject(state)?.id || null
+
+    if (!exists) {
+      const conversation = await apiCall<Conversation>(`/conversations/${conversationId}`, auth.accessToken)
+      if (conversation) {
+        projectId = conversation.project_id || projectId
+
+        // Ensure project exists locally before syncing conversation
+        if (projectId) {
+          const projectExists = await dualSync.checkProjectExists(projectId)
+          if (!projectExists) {
+            // Try cache first
+            const projectsCache = extra.queryClient?.getQueryData<any[]>(['projects', auth.userId])
+            let project = projectsCache?.find(p => String(p.id) === String(projectId))
+
+            // If not in cache, fetch from API
+            if (!project) {
+              try {
+                project = await apiCall<any>(`/projects/${projectId}`, auth.accessToken)
+              } catch (e) {
+                console.warn(`Failed to fetch project ${projectId} for sync`, e)
+              }
+            }
+
+            if (project) {
+              dualSync.syncProject({
+                id: project.id,
+                name: project.name,
+                user_id: auth.userId,
+                context: project.context,
+                system_prompt: project.system_prompt,
+                created_at: project.created_at,
+                updated_at: project.updated_at,
+              })
+            }
+          }
+        }
+
+        dualSync.syncConversation(conversation)
+      }
+    }
+
+    if (messages && messages.length > 0) {
+      const operations = messages.map(msg => ({
+        type: 'message',
+        action: 'create',
+        data: {
+          ...msg,
+          user_id: auth.userId,
+          project_id: projectId, // Pass project_id context for potential stub creation
+        },
+      }))
+      dualSync.syncBatch(operations)
+    }
+  } catch (error) {
+    console.warn('Failed to sync conversation to local', error)
+  }
+})
+
 // Fetch Heimdall message tree and messages combined (optimization: single endpoint)
 export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: RootState; extra: ThunkExtraArgument }>(
   'chat/fetchMessageTree',
@@ -1530,65 +1604,6 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
 
       // console.log('treeData', treeData)
       dispatch(chatSliceActions.heimdallDataLoaded({ treeData }))
-
-      // Sync messages to local SQLite if in Electron mode
-      if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
-        const exists = await dualSync.checkConversationExists(conversationId)
-        const selectedProject = selectSelectedProject(state)
-
-        if (!exists) {
-          try {
-            const conversation = await apiCall<Conversation>(
-              `/conversations/${conversationId}`,
-              auth.accessToken
-            )
-            if (conversation) {
-              // Ensure project exists locally before syncing conversation
-              if (conversation.project_id) {
-                const projectExists = await dualSync.checkProjectExists(conversation.project_id)
-                if (!projectExists) {
-                  // Get project data from React Query cache instead of fetching from server
-                  // This data is already available from useProjects/useConversations hooks
-                  const projectsCache = extra.queryClient?.getQueryData<any[]>(['projects', auth.userId])
-                  const project = projectsCache?.find(p => String(p.id) === String(conversation.project_id))
-                  
-                  if (project) {
-                    dualSync.syncProject({
-                      id: project.id,
-                      name: project.name,
-                      user_id: auth.userId,
-                      context: project.context,
-                      system_prompt: project.system_prompt,
-                      created_at: project.created_at,
-                      updated_at: project.updated_at
-                    })
-                  } else {
-                    // Fallback: if not in cache, just sync conversation (local server handles stub project creation)
-                    console.warn('Project not found in cache for sync:', conversation.project_id)
-                  }
-                }
-              }
-              
-              dualSync.syncConversation(conversation)
-            }
-          } catch (e) {
-            console.warn('Failed to fetch/sync conversation for local sync', e)
-          }
-        }
-
-        if (messages && messages.length > 0) {
-          const operations = messages.map(msg => ({
-            type: 'message',
-            action: 'create',
-            data: {
-              ...msg,
-              user_id: auth.userId,
-              project_id: selectedProject?.id || null,
-            },
-          }))
-          dualSync.syncBatch(operations)
-        }
-      }
 
       return response
     } catch (error) {

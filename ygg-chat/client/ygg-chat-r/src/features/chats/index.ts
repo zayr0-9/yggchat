@@ -30,6 +30,7 @@ export {
   sendCCMessage,
   sendMessage,
   sendMessageToBranch,
+  syncConversationToLocal,
   updateMessage,
 } from './chatActions'
 

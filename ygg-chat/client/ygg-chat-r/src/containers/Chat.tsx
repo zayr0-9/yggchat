@@ -35,6 +35,7 @@ import {
   sendCCBranch,
   sendCCMessage,
   sendMessage,
+  syncConversationToLocal,
   updateConversationTitle,
   updateMessage,
 } from '../features/chats'
@@ -430,6 +431,19 @@ function Chat() {
   useEffect(() => {
     if (reactQueryMessages && reactQueryMessages.length > 0) {
       dispatch(chatSliceActions.messagesLoaded(reactQueryMessages))
+
+      // Sync to local database in Electron mode
+      // This handles syncing messages fetched from the server to the local SQLite DB
+      if (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl) {
+        // Use type assertion or cast if the action is not properly typed in the dispatch
+        // but since it's a thunk, dispatch handles it fine.
+        ;(dispatch as any)(
+          syncConversationToLocal({
+            conversationId: String(conversationIdFromUrl),
+            messages: reactQueryMessages,
+          })
+        )
+      }
 
       // Process attachments from React Query response
       // This converts attachment URLs to base64 artifacts for display in ChatMessage
