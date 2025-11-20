@@ -2,6 +2,7 @@ import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router
 import './App.css'
 import { LiquidGlassSVG } from './components/LiquidGlassSVG'
 import ProtectedRoute from './components/ProtectedRoute'
+import { TitleBar } from './components/TitleBar/TitleBar'
 import VideoBackground from './components/VideoBackground'
 import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, PaymentPlans, Settings } from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
@@ -17,6 +18,8 @@ const Router = isElectron ? HashRouter : BrowserRouter
 function App() {
   return (
     <Router>
+      {/* Custom title bar for Windows Electron */}
+      <TitleBar />
       {/* Persistent video background across all routes */}
       <VideoBackground />
       {/* SVG filters for liquid glass effect */}

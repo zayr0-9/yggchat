@@ -1,0 +1,84 @@
+.titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 35px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f2f4f7;
+  color: #0f172a;
+  z-index: 9999;
+  user-select: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.dark .titlebar {
+  background-color: #101828;
+  color: #f2f4f7;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.titlebar-drag-region {
+  -webkit-app-region: drag;
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+}
+
+.titlebar-title {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.titlebar-controls {
+  -webkit-app-region: no-drag;
+  display: flex;
+  height: 100%;
+}
+
+.titlebar-button {
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: currentColor;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  padding: 0;
+  margin: 0;
+}
+
+.titlebar-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.dark .titlebar-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.titlebar-close:hover {
+  background-color: #e81123;
+  color: white;
+}
+
+.titlebar-button:active {
+  opacity: 0.7;
+}
+
+.titlebar-button svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Add padding to app content to account for title bar */
+body.has-titlebar #root {
+  padding-top: 35px;
+}

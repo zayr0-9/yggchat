@@ -35,6 +35,11 @@ interface ElectronAPI {
   platformInfo: {
     get: () => Promise<{ platform: string; version: string; isElectron: boolean }>
   }
+  window: {
+    minimize: () => Promise<void>
+    maximize: () => Promise<void>
+    close: () => Promise<void>
+  }
   platform: 'electron'
 }
 

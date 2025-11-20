@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   platformInfo: {
     get: () => ipcRenderer.invoke('platform:info'),
   },
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    maximize: () => ipcRenderer.invoke('window:maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+  },
   platform: 'electron',
 })
 

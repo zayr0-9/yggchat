@@ -573,3 +573,26 @@ ipcMain.handle('sync:status', async () => {
     localServerUrl: 'http://127.0.0.1:3002',
   }
 })
+
+// Window controls for custom title bar
+ipcMain.handle('window:minimize', async () => {
+  if (mainWindow) {
+    mainWindow.minimize()
+  }
+})
+
+ipcMain.handle('window:maximize', async () => {
+  if (mainWindow) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize()
+    } else {
+      mainWindow.maximize()
+    }
+  }
+})
+
+ipcMain.handle('window:close', async () => {
+  if (mainWindow) {
+    mainWindow.close()
+  }
+})
