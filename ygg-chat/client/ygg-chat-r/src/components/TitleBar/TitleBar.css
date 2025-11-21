@@ -24,6 +24,19 @@
   background-color: #171717;
 }
 
+.dark .titlebar.titlebar-chat .titlebar-button {
+  background-color: #171717;
+}
+
+.dark .titlebar.titlebar-chat .titlebar-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .titlebar.titlebar-chat .titlebar-close:hover {
+  background-color: #e81123;
+  color: white;
+}
+
 .titlebar-drag-region {
   -webkit-app-region: drag;
   flex: 1;
