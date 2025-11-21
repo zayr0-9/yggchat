@@ -215,6 +215,7 @@ nativeTheme.on('updated', () => {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    title: 'Yggdrasil',
     width: 1400,
     height: 900,
     minWidth: 800,
