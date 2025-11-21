@@ -148,11 +148,32 @@ const allowedOrigins = [
   env.FRONTEND_URL, // Production frontend URL (set in environment variables)
 ].filter(Boolean) // Remove undefined values
 
+// ============================================================================
+// REQUEST FLOW LOGGING - Complete trace of every request through the pipeline
+// ============================================================================
+// Flow: Entry → CORS Check → After CORS → Body Parsing → Rate Limiter →
+//       API Routes → Web Routes → Handler → Response/Error
+// ============================================================================
+
 // Log CORS configuration on startup
 console.log('🔧 CORS Configuration:')
 console.log('  NODE_ENV:', env.NODE_ENV)
 console.log('  FRONTEND_URL:', env.FRONTEND_URL)
 console.log('  Allowed origins:', allowedOrigins)
+
+// 1. REQUEST ENTRY LOGGING - Log every incoming request BEFORE CORS
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString()
+  console.log('\n' + '='.repeat(80))
+  console.log(`🔵 [${timestamp}] INCOMING REQUEST`)
+  console.log(`   Method: ${req.method}`)
+  console.log(`   URL: ${req.url}`)
+  console.log(`   Origin Header: ${req.headers.origin || 'NO ORIGIN'}`)
+  console.log(`   Host: ${req.headers.host}`)
+  console.log(`   User-Agent: ${req.headers['user-agent']?.substring(0, 50) || 'none'}...`)
+  console.log(`   All Headers:`, JSON.stringify(req.headers, null, 2))
+  next()
+})
 
 app.use(
   cors({
@@ -188,6 +209,15 @@ app.use(
   })
 )
 
+// 2. AFTER CORS LOGGING - Confirm CORS passed
+app.use((req, res, next) => {
+  console.log('✅ [AFTER CORS] Request passed CORS middleware')
+  console.log('   CORS Headers Set:')
+  console.log('     Access-Control-Allow-Origin:', res.getHeader('Access-Control-Allow-Origin') || 'NOT SET')
+  console.log('     Access-Control-Allow-Credentials:', res.getHeader('Access-Control-Allow-Credentials') || 'NOT SET')
+  next()
+})
+
 // IMPORTANT: Register Stripe webhook BEFORE express.json() middleware
 // Webhook signature verification requires raw body, but express.json() parses it
 // Only load in web mode (not local or electron)
@@ -199,15 +229,58 @@ if (env.VITE_ENVIRONMENT === 'web') {
 app.use(express.json({ limit: '25mb' }))
 app.use(express.urlencoded({ extended: true, limit: '25mb' }))
 
+// 3. RESPONSE LOGGING - Track response details
+app.use((req, res, next) => {
+  const startTime = Date.now()
+
+  // Capture the original send function
+  const originalSend = res.send
+  const originalJson = res.json
+
+  res.send = function (data) {
+    const duration = Date.now() - startTime
+    console.log(`🟢 [RESPONSE] ${req.method} ${req.url}`)
+    console.log(`   Status: ${res.statusCode}`)
+    console.log(`   Duration: ${duration}ms`)
+    console.log(`   Response Headers:`, JSON.stringify(res.getHeaders(), null, 2))
+    return originalSend.call(this, data)
+  }
+
+  res.json = function (data) {
+    const duration = Date.now() - startTime
+    console.log(`🟢 [RESPONSE] ${req.method} ${req.url}`)
+    console.log(`   Status: ${res.statusCode}`)
+    console.log(`   Duration: ${duration}ms`)
+    console.log(`   Response Headers:`, JSON.stringify(res.getHeaders(), null, 2))
+    return originalJson.call(this, data)
+  }
+
+  next()
+})
+
 // Apply global rate limiter to all routes (only in web mode)
 if (env.VITE_ENVIRONMENT === 'web') {
-  app.use(globalRateLimiter)
+  console.log('🔒 [RATE LIMITER] Applying global rate limiter')
+  app.use((req, res, next) => {
+    console.log('🔒 [RATE LIMITER] Checking rate limit for:', req.ip)
+    globalRateLimiter(req, res, (err) => {
+      if (err) {
+        console.log('❌ [RATE LIMITER] Rate limit exceeded for:', req.ip)
+      } else {
+        console.log('✅ [RATE LIMITER] Rate limit check passed for:', req.ip)
+      }
+      next(err)
+    })
+  })
 }
 
-// Debug middleware to log all requests
+// Debug middleware to log all API requests
 app.use('/api', (req, res, next) => {
-  console.error('[Debug Middleware] Method:', req.method)
-  console.error('[Debug Middleware] URL:', req.url)
+  console.log('🔷 [API ROUTE] Entering /api routes')
+  console.log('   Method:', req.method)
+  console.log('   URL:', req.url)
+  console.log('   Full Path:', req.path)
+  console.log('   Base URL:', req.baseUrl)
   next()
 })
 
@@ -228,7 +301,7 @@ if (env.VITE_ENVIRONMENT === 'web') {
 
     // Debug middleware specifically for web routes
     app.use('/api', (req, res, next) => {
-      console.error('[Web Middleware] Checking web route:', req.url)
+      console.log('🌐 [WEB MODE] Processing web route:', req.url)
       next()
     })
 
@@ -392,4 +465,24 @@ app.get('/api/debug/routes', (req, res) => {
     }
   })
   res.json(routes)
+})
+
+// 4. GLOBAL ERROR HANDLER - Catch all unhandled errors
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('❌❌❌ [ERROR HANDLER] Unhandled Error ❌❌❌')
+  console.error('   Method:', req.method)
+  console.error('   URL:', req.url)
+  console.error('   Origin:', req.headers.origin)
+  console.error('   Error Message:', err.message)
+  console.error('   Error Stack:', err.stack)
+  console.error('   Error Object:', JSON.stringify(err, null, 2))
+  console.error('=' + '='.repeat(80))
+
+  // Send error response if headers not sent
+  if (!res.headersSent) {
+    res.status(err.status || 500).json({
+      error: err.message || 'Internal Server Error',
+      details: process.env.NODE_ENV === 'production' ? undefined : err.stack,
+    })
+  }
 })
