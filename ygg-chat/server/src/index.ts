@@ -44,6 +44,16 @@ process.on('SIGTERM', () => {
 const app = express()
 const server = createServer(app)
 
+// Fix for 502 Bad Gateway errors behind Load Balancers (e.g. Railway, AWS ALB)
+// Ensure Node's keep-alive timeout is longer than the LB's timeout (usually 60s)
+server.keepAliveTimeout = 120 * 1000
+server.headersTimeout = 120 * 1000
+
+// Low-level connection logging to verify if traffic reaches the node process
+server.on('connection', (socket) => {
+  console.log(`🔌 [TCP] New connection from ${socket.remoteAddress}:${socket.remotePort}`)
+})
+
 interface ConnectedClient {
   ws: WebSocket
   type: 'extension' | 'frontend'
@@ -459,6 +469,7 @@ if (env.VITE_ENVIRONMENT === 'web') {
 
 // Startup migration: ensure plain_text_content is populated and FTS index built from it
 async function migratePlainTextAndFTS() {
+  console.log('🔄 [Migration] Starting plain_text_content migration check...')
   try {
     // Verify plain_text_content column exists (initializeDatabase attempted to add it)
     const hasPlainTextColumn = db
