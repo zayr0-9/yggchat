@@ -1590,7 +1590,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             )}
           </>
         )}
-        {modelName && (
+        {hasContent && modelName && (
           <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
         )}
         {role === 'user' && (
