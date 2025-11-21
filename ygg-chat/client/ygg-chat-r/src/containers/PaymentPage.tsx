@@ -83,11 +83,9 @@ const PaymentPage: React.FC = () => {
 
   const fetchData = async () => {
     setLoading(true)
-    console.log('[PaymentPage] Fetching data...', { userId, isElectronOrLocal })
-
+    
     try {
       const provider = await getPaymentProvider()
-      console.log('[PaymentPage] Provider loaded:', provider.constructor.name)
 
       // In Electron/Local, provider.isSupported() returns false,
       // but we still want to show the pricing UI (just with external links).
@@ -111,7 +109,6 @@ const PaymentPage: React.FC = () => {
 
       // If no tiers returned (e.g. Electron no-op provider), use defaults
       if (!tiersData || tiersData.length === 0) {
-        console.log('[PaymentPage] Using default pricing tiers')
         tiersData = DEFAULT_TIERS
       }
 
@@ -339,7 +336,7 @@ const PaymentPage: React.FC = () => {
             <>
               <h2 className='text-3xl font-bold mb-6 dark:text-neutral-100'>Choose Your Plan</h2>
 
-              <div className='grid grid-cols-1 md:grid-cols-3 gap-6'>
+              <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
                 {pricingInfo &&
                   Object.entries(pricingInfo.tiers).map(([key, tier]) => {
                     const tierKey = key as 'high' | 'mid' | 'low'
