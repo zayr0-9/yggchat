@@ -344,7 +344,7 @@ const PaymentPage: React.FC = () => {
                     return (
                       <div
                         key={key}
-                        className='relative p-6 rounded-lg shadow-lg border-2 border-gray-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900 hover:shadow-xl transition-shadow'
+                        className='relative p-6 rounded-lg shadow-lg border-2 border-gray-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900 hover:shadow-xl transition-shadow flex flex-col'
                       >
                         <div
                           className={`w-16 h-16 rounded-full bg-gradient-to-br ${getTierColor(tierKey)} mb-4 flex items-center justify-center`}
@@ -363,7 +363,7 @@ const PaymentPage: React.FC = () => {
                           <p className='text-xl font-semibold dark:text-neutral-100'>{tier.credits.toLocaleString()}</p>
                         </div>
 
-                        <ul className='space-y-2 mb-6'>
+                        <ul className='space-y-2 mb-6 flex-grow'>
                           {tier.features.map((feature, idx) => (
                             <li key={idx} className='flex items-start text-sm dark:text-neutral-200'>
                               <i className='bx bx-check text-green-500 mr-2 mt-0.5'></i>
