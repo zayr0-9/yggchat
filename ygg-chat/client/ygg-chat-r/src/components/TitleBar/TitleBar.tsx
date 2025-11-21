@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import './TitleBar.css'
 
 export const TitleBar = () => {
+  const location = useLocation()
   const [platform, setPlatform] = useState<string>('')
   const [isElectron, setIsElectron] = useState(false)
 
@@ -43,8 +45,10 @@ export const TitleBar = () => {
     window.electronAPI?.window?.close()
   }
 
+  const isChatPage = location.pathname.startsWith('/chat/')
+
   return (
-    <div className='titlebar'>
+    <div className={`titlebar ${isChatPage ? 'titlebar-chat' : ''}`}>
       <div className='titlebar-drag-region'>
         <div className='titlebar-title'>
           <span>Yggdrasil</span>

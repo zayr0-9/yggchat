@@ -2042,7 +2042,7 @@ function Chat() {
 
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col pt-20 gap-4 px-0 pt-4 ease-in-out  dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
+            className={`flex flex-col pt-20 gap-4 px-0 ease-in-out  dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
             style={{
               ['overflowAnchor' as any]: 'none',
               // transform: 'translateZ(0)',
@@ -2206,7 +2206,7 @@ function Chat() {
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   <div
-                    className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-28 max-w-1/3 dark:text-neutral-200 break-words line-clamp-2 text-right'
+                    className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-28 dark:text-neutral-200 break-words line-clamp-2 text-right'
                     title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                   >
                     {ideContext?.extensionConnected ? '' : ''}
