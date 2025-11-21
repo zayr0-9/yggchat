@@ -58,6 +58,33 @@ export class SupabaseAuthProvider implements AuthProvider {
 
     this.unsubscribe = () => subscription.unsubscribe()
 
+    // Check for OAuth code in URL (needed because autoRefreshToken is false)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get('code')
+
+      if (code) {
+        console.log('[SupabaseAuth] Detected OAuth code in URL, exchanging for session...')
+        try {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+
+          if (error) {
+            console.error('[SupabaseAuth] Failed to exchange code for session:', error)
+          } else if (data.session) {
+            console.log('[SupabaseAuth] Successfully exchanged code for session')
+            // The onAuthStateChange listener will handle the session update
+
+            // Clean up URL
+            const url = new URL(window.location.href)
+            url.searchParams.delete('code')
+            window.history.replaceState({}, document.title, url.toString())
+          }
+        } catch (err) {
+          console.error('[SupabaseAuth] Error exchanging code for session:', err)
+        }
+      }
+    }
+
     // Set up multi-tab sync
     window.addEventListener('storage', this.handleStorageChange)
 
