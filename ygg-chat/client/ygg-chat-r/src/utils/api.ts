@@ -42,6 +42,18 @@ async function ensureValidToken(): Promise<string | null> {
   return session.access_token
 }
 
+// Helper function to handle login redirection based on environment
+const redirectToLogin = () => {
+  console.log('[api] Redirecting to login...')
+  if (environment === 'electron') {
+    // In Electron with HashRouter, we need to update the hash
+    window.location.hash = '/login'
+  } else {
+    // In Web with BrowserRouter, we can use href (or assign to origin + /login)
+    window.location.href = '/login'
+  }
+}
+
 // Core API utility function - now accepts accessToken as parameter
 export const apiCall = async <T>(endpoint: string, accessToken: string | null, options?: RequestInit): Promise<T> => {
   // Ensure token is valid before making the request
@@ -87,22 +99,22 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
           if (response.status === 401) {
             // Still unauthorized after refresh - redirect to login
             console.error('[api] Still unauthorized after token refresh, redirecting to login...')
-            window.location.href = '/login'
+            redirectToLogin()
             throw new Error('Session expired. Please log in again.')
           }
         } else {
           console.error('[api] Token refresh succeeded but no token found')
-          window.location.href = '/login'
+          redirectToLogin()
           throw new Error('Session expired. Please log in again.')
         }
       } else {
         console.error('[api] Token refresh failed, redirecting to login...')
-        window.location.href = '/login'
+        redirectToLogin()
         throw new Error('Session expired. Please log in again.')
       }
     } catch (error) {
       console.error('[api] Error during token refresh:', error)
-      window.location.href = '/login'
+      redirectToLogin()
       throw new Error('Session expired. Please log in again.')
     }
   }
@@ -200,22 +212,22 @@ export const createStreamingRequest = async (
           if (response.status === 401) {
             // Still unauthorized after refresh - redirect to login
             console.error('[api] Streaming request still unauthorized after token refresh')
-            window.location.href = '/login'
+            redirectToLogin()
             throw new Error('Session expired. Please log in again.')
           }
         } else {
           console.error('[api] Token refresh succeeded but no token found')
-          window.location.href = '/login'
+          redirectToLogin()
           throw new Error('Session expired. Please log in again.')
         }
       } else {
         console.error('[api] Token refresh failed, redirecting to login...')
-        window.location.href = '/login'
+        redirectToLogin()
         throw new Error('Session expired. Please log in again.')
       }
     } catch (error) {
       console.error('[api] Error during streaming request token refresh:', error)
-      window.location.href = '/login'
+      redirectToLogin()
       throw new Error('Session expired. Please log in again.')
     }
   }

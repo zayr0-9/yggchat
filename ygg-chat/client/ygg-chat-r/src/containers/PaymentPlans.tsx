@@ -125,7 +125,7 @@ const PaymentPlans: React.FC = () => {
                     ? 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100 '
                     : 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100'
                 }`}
-                onClick={() => handleNavigation('/loginPage')}
+                onClick={() => handleNavigation('/login')}
               >
                 {plan.cta}
               </button>
