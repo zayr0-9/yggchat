@@ -2,7 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { BaseModel } from '../../../../../shared/types'
 import { useIsMobile } from '../../hooks/useMediaQuery'
-import { getFavoritedModels, setFavoritedModels as saveFavoritedModels, toggleModelFavorite } from '../../utils/favorites'
+import {
+  getFavoritedModels,
+  setFavoritedModels as saveFavoritedModels,
+  toggleModelFavorite,
+} from '../../utils/favorites'
 import { Button } from '../Button/button'
 import { ModelInfoModal } from '../ModelInfoModal/ModelInfoModal'
 
@@ -146,8 +150,8 @@ export const Select: React.FC<SelectProps> = ({
       // Calculate fixed position based on button rect
       setDropdownPosition({
         top: shouldOpenUp ? rect.top - (maxH + 4) : rect.bottom + 4,
-        left: rect.left,
-        width: rect.width,
+        left: rect.left - 50,
+        width: rect.width + 80,
       })
     }
     // Always compute once on mount and whenever `open` changes

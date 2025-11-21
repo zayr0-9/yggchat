@@ -186,8 +186,8 @@ export const LowBar: React.FC<LowBarProps> = ({
             ? 'w-[95%] h-[75%]'
             : 'w-[55%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[55%] 2xl:w-[35%]'
           : isMobile
-            ? 'w-[40%] h-[35px]'
-            : 'w-[23%] h-[48px]'
+            ? 'w-[40%] h-[48px]'
+            : 'w-[23%] h-[48px] lg:w-[15%] xl:w-[15%] 2xl:w-[15%]'
       }`}
     >
       {/* Container with shadow and border */}
