@@ -18,6 +18,29 @@ import { stripMarkdownToText } from './utils/markdownStripper'
 import { preloadModelPricing } from './utils/openrouter'
 import tools from './utils/tools/index'
 
+// =============================================================================
+// PROCESS ERROR HANDLERS - Prevent crashes from unhandled errors
+// =============================================================================
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Rejection at:', promise)
+  console.error('🚨 Reason:', reason)
+  // Don't exit - keep the server running
+})
+
+process.on('uncaughtException', (error) => {
+  console.error('🚨 Uncaught Exception:', error)
+  console.error('🚨 Stack:', error.stack)
+  // Don't exit immediately - give time to log and potentially recover
+})
+
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully...')
+  server.close(() => {
+    console.log('✅ Server closed')
+    process.exit(0)
+  })
+})
+
 const app = express()
 const server = createServer(app)
 
@@ -218,6 +241,25 @@ app.use((req, res, next) => {
   next()
 })
 
+// =============================================================================
+// HEALTH CHECK ENDPOINTS - Railway needs these to verify service is alive
+// =============================================================================
+// Root health check for Railway's default health check path
+app.get('/', (req, res) => {
+  console.log('💚 [HEALTH CHECK] Root health check accessed')
+  res.send('OK')
+})
+
+// Explicit health check endpoint
+app.get('/health', (req, res) => {
+  console.log('💚 [HEALTH CHECK] /health endpoint accessed')
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  })
+})
+
 // IMPORTANT: Register Stripe webhook BEFORE express.json() middleware
 // Webhook signature verification requires raw body, but express.json() parses it
 // Only load in web mode (not local or electron)
@@ -379,18 +421,34 @@ preloadModelPricing().catch(error => {
 
 // Start OpenRouter reconciliation worker (only in web mode where Supabase is available)
 if (env.VITE_ENVIRONMENT === 'web') {
-  const { startReconciliationWorker } = require('./workers/openrouter-reconciliation')
-  startReconciliationWorker()
-  console.log('✅ OpenRouter reconciliation worker started')
+  try {
+    const { startReconciliationWorker } = require('./workers/openrouter-reconciliation')
+    startReconciliationWorker()
+    console.log('✅ OpenRouter reconciliation worker started')
+  } catch (error) {
+    console.error('⚠️  Failed to start reconciliation worker:', error)
+    // Don't crash - continue without it
+  }
 } else {
   console.log('⏭️  Skipping reconciliation worker (not in web mode)')
 }
 
 ;(async () => {
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3001
+
+  server.on('error', (error: any) => {
+    console.error('❌ Server error:', error)
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${port} is already in use`)
+      process.exit(1)
+    }
+  })
+
   server.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 Server on :${port}`)
+    console.log(`🚀 Server listening on 0.0.0.0:${port}`)
     console.log(`🔌 WebSocket IDE Context on ws://localhost:${port}/ide-context`)
+    console.log(`✅ Server is ready to accept connections`)
+    console.log(`💚 Health checks available at: / and /health`)
 
     // Log rate limiter configuration (only in web mode)
     if (env.VITE_ENVIRONMENT === 'web') {
@@ -443,7 +501,10 @@ async function migratePlainTextAndFTS() {
 }
 
 // Run migration in background after DB init
-void migratePlainTextAndFTS()
+migratePlainTextAndFTS().catch((err) => {
+  console.error('❌ Fatal error in migratePlainTextAndFTS:', err)
+  // Don't crash - log and continue
+})
 
 app.get('/api/debug/routes', (req, res) => {
   const routes: any[] = []
