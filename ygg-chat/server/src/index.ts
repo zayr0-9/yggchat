@@ -148,21 +148,36 @@ const allowedOrigins = [
   env.FRONTEND_URL, // Production frontend URL (set in environment variables)
 ].filter(Boolean) // Remove undefined values
 
+// Log CORS configuration on startup
+console.log('🔧 CORS Configuration:')
+console.log('  NODE_ENV:', env.NODE_ENV)
+console.log('  FRONTEND_URL:', env.FRONTEND_URL)
+console.log('  Allowed origins:', allowedOrigins)
+
 app.use(
   cors({
     origin: (origin, callback) => {
+      console.log('📡 CORS Request - Origin:', origin)
+
       // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
-      if (!origin) return callback(null, true)
+      if (!origin) {
+        console.log('✅ CORS: No origin (allowed)')
+        return callback(null, true)
+      }
 
       // In development, allow all origins for flexibility
       if (env.NODE_ENV !== 'production') {
+        console.log('✅ CORS: Development mode (allowed)')
         return callback(null, true)
       }
 
       // In production, check against whitelist
       if (allowedOrigins.includes(origin)) {
+        console.log('✅ CORS: Origin in whitelist (allowed)')
         callback(null, true)
       } else {
+        console.log('❌ CORS: Origin NOT in whitelist (blocked)')
+        console.log('   Checked against:', allowedOrigins)
         console.warn(`⚠️ CORS blocked origin: ${origin}`)
         callback(new Error('Not allowed by CORS'))
       }
