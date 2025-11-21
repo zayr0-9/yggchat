@@ -15,13 +15,13 @@
 }
 
 .dark .titlebar {
-  background-color: #070b1c;
+  background-color: #111829;
   color: #f2f4f7;
   /* border-bottom: 1px solid rgba(255, 255, 255, 0.1); */
 }
 
 .dark .titlebar.titlebar-chat {
-  background-color: #080f23;
+  background-color: #171717;
 }
 
 .titlebar-drag-region {
@@ -50,8 +50,7 @@
   height: 100%;
   border: none;
   background: transparent;
-  color: #070b1c;
-  background-color: #070b1c;
+  color: currentColor;
   display: flex;
   align-items: center;
   justify-content: center;
