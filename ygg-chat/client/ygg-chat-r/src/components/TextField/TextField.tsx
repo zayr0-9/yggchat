@@ -60,7 +60,7 @@ export const TextField: React.FC<TextFieldProps> = ({
   // Size variants control padding and text size
   const sizeStyles = {
     small:
-      'px-3 md:px-2.5 lg:px-2 xl:px-1.5 py-1.5 md:py-1 lg:py-2 xl:py-0.5 text-sm md:text-xs lg:text-xs xl:text-[10px] 2xl:text-[12px]',
+      'px-3 md:px-2.5 lg:px-2 xl:px-1.5 py-1.5 md:py-1 lg:py-2 xl:py-0.5 text-[14px] md:text-[14px] lg:text-[14px] xl:text-[14px] 2xl:text-[14px]',
     medium:
       'px-4 sm:py-3 md:px-3.5 lg:px-4 xl:px-2.5 py-2 md:py-3 lg:py-1 xl:py-3 text-[14px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[18px] ',
     large:
