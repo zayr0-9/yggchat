@@ -148,31 +148,41 @@ const allowedOrigins = [
   env.FRONTEND_URL, // Production frontend URL (set in environment variables)
 ].filter(Boolean) // Remove undefined values
 
+// Shared CORS origin handler
+const corsOriginHandler = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+  // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+  if (!origin) return callback(null, true)
+
+  // In development, allow all origins for flexibility
+  if (env.NODE_ENV !== 'production') {
+    return callback(null, true)
+  }
+
+  // Check against whitelist
+  if (allowedOrigins.includes(origin)) {
+    return callback(null, true)
+  }
+
+  // Allow any localhost origin (http/https, any port)
+  // This is crucial for Electron apps or local development tools connecting to prod
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+    return callback(null, true)
+  }
+
+  console.warn(`⚠️ CORS blocked origin: ${origin}`)
+  callback(new Error('Not allowed by CORS'))
+}
+
+// Explicitly handle OPTIONS requests for all routes to ensure preflight works
+app.options('*', cors({
+  origin: corsOriginHandler,
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}))
+
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
-      if (!origin) return callback(null, true)
-
-      // In development, allow all origins for flexibility
-      if (env.NODE_ENV !== 'production') {
-        return callback(null, true)
-      }
-
-      // Check against whitelist
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true)
-      }
-
-      // Allow any localhost origin (http/https, any port)
-      // This is crucial for Electron apps or local development tools connecting to prod
-      if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-        return callback(null, true)
-      }
-
-      console.warn(`⚠️ CORS blocked origin: ${origin}`)
-      callback(new Error('Not allowed by CORS'))
-    },
+    origin: corsOriginHandler,
     credentials: true, // Allow credentials (cookies, authorization headers)
     exposedHeaders: ['Authorization'], // Expose JWT headers to client
     allowedHeaders: ['Content-Type', 'Authorization'], // Accept JWT Authorization header from client
