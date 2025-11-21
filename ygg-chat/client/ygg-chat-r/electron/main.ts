@@ -197,8 +197,8 @@ function startServer(): Promise<void> {
 }
 
 function applyTitleBarTheme(win: BrowserWindow, isDark?: boolean) {
-  // Only apply overlay on Windows where it's supported and requested
-  if (process.platform === 'win32') {
+  // Only apply overlay on Windows where it's supported and requested, AND ONLY IN PRODUCTION
+  if (process.platform === 'win32' && app.isPackaged) {
     // Use provided isDark value, or fall back to system preference
     const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
     win.setTitleBarOverlay({
@@ -227,7 +227,7 @@ function createWindow() {
       sandbox: false,
     },
     // Platform-specific title bar settings
-    ...(process.platform === 'win32'
+    ...(process.platform === 'win32' && app.isPackaged
       ? {
           titleBarStyle: 'hidden',
           titleBarOverlay: {
