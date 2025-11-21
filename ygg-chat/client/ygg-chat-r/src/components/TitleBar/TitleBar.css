@@ -7,9 +7,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: rgba(242, 244, 247, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background-color: #f2f4f7;
   color: #0f172a;
   z-index: 9999;
   user-select: none;
@@ -17,7 +15,7 @@
 }
 
 .dark .titlebar {
-  background-color: rgba(16, 24, 40, 0.8);
+  background-color: #101828;
   color: #f2f4f7;
   /* border-bottom: 1px solid rgba(255, 255, 255, 0.1); */
 }
@@ -86,7 +84,7 @@ body.has-titlebar {
 }
 
 body.has-titlebar #root {
-  padding-top: 0;
-  height: 100vh;
-  max-height: 100vh;
+  padding-top: var(--titlebar-height);
+  height: calc(100vh - var(--titlebar-height));
+  max-height: calc(100vh - var(--titlebar-height));
 }

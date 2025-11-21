@@ -5,7 +5,16 @@ import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { MessageId } from '../../../../shared/types'
-import { Button, ChatMessage, Heimdall, InputTextArea, Select, SettingsPane, TextField, ToolPermissionDialog } from '../components'
+import {
+  Button,
+  ChatMessage,
+  Heimdall,
+  InputTextArea,
+  Select,
+  SettingsPane,
+  TextField,
+  ToolPermissionDialog,
+} from '../components'
 import { ModelFilterUI } from '../components/ModelFilterUI/ModelFilterUI'
 import {
   abortStreaming,
@@ -1899,7 +1908,7 @@ function Chat() {
           {/* Conversation Title Editor */}
           {currentConversationId && (
             <div
-              className={`absolute z-500 mb-2 top-10 left-0 px-2 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+              className={`absolute z-500 mb-2 top-0 left-0 px-2 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
             >
               <div className=' rounded-2xl flex items-center gap-2 py-1 xl:py-1 2xl:p-2 mt-1 bg-transparent acrylic shadow-[0_2px_5px_1px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65)]  '>
                 <Button
@@ -2033,7 +2042,7 @@ function Chat() {
 
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col pt-32 gap-4 px-0 pt-4 ease-in-out  dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
+            className={`flex flex-col pt-20 gap-4 px-0 pt-4 ease-in-out  dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
             style={{
               ['overflowAnchor' as any]: 'none',
               // transform: 'translateZ(0)',

@@ -44,7 +44,7 @@ export const TitleBar = () => {
   }
 
   return (
-    <div className='titlebar mica'>
+    <div className='titlebar'>
       <div className='titlebar-drag-region'>
         <div className='titlebar-title'>
           <span>Yggdrasil</span>
