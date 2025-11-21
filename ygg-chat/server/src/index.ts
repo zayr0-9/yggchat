@@ -159,13 +159,19 @@ app.use(
         return callback(null, true)
       }
 
-      // In production, check against whitelist
+      // Check against whitelist
       if (allowedOrigins.includes(origin)) {
-        callback(null, true)
-      } else {
-        console.warn(`⚠️ CORS blocked origin: ${origin}`)
-        callback(new Error('Not allowed by CORS'))
+        return callback(null, true)
       }
+
+      // Allow any localhost origin (http/https, any port)
+      // This is crucial for Electron apps or local development tools connecting to prod
+      if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+        return callback(null, true)
+      }
+
+      console.warn(`⚠️ CORS blocked origin: ${origin}`)
+      callback(new Error('Not allowed by CORS'))
     },
     credentials: true, // Allow credentials (cookies, authorization headers)
     exposedHeaders: ['Authorization'], // Expose JWT headers to client
