@@ -144,7 +144,7 @@ export const globalRateLimiter = rateLimit({
     return `ip:${ipKeyGenerator(ip)}`
   },
   handler: rateLimitHandler,
-  skip: (req) => req.method === 'OPTIONS' || skipForWhitelist(req),
+  skip: skipForWhitelist,
 })
 
 /**
@@ -167,7 +167,7 @@ export const authenticatedRateLimiter = rateLimit({
   }),
   keyGenerator: generateRateLimitKey('auth'),
   handler: rateLimitHandler,
-  skip: (req) => req.method === 'OPTIONS' || skipForWhitelist(req),
+  skip: skipForWhitelist,
 })
 
 /**
@@ -193,7 +193,7 @@ export const expensiveOperationsRateLimiter = rateLimit({
   }),
   keyGenerator: generateRateLimitKey('expensive'),
   handler: rateLimitHandler,
-  skip: (req) => req.method === 'OPTIONS' || skipForWhitelist(req),
+  skip: skipForWhitelist,
 })
 
 /**
@@ -223,7 +223,7 @@ export const authEndpointsRateLimiter = rateLimit({
     return `ip:${ipKeyGenerator(ip)}`
   },
   handler: rateLimitHandler,
-  skip: (req) => req.method === 'OPTIONS' || skipForWhitelist(req),
+  skip: skipForWhitelist,
 })
 
 // ============================================================================

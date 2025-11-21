@@ -145,63 +145,28 @@ if (env.VITE_ENVIRONMENT !== 'web') {
 const allowedOrigins = [
   'http://localhost:5173', // Local development
   'http://localhost:3000', // Alternative local port
-  env.FRONTEND_URL || 'https://yggchat.com', // Production frontend URL (fallback if env not set)
+  env.FRONTEND_URL, // Production frontend URL (set in environment variables)
 ].filter(Boolean) // Remove undefined values
-
-console.log('[CORS] Configuration loaded:')
-console.log('  FRONTEND_URL:', env.FRONTEND_URL)
-console.log('  allowedOrigins:', allowedOrigins)
-console.log('  NODE_ENV:', env.NODE_ENV)
-
-// Shared CORS origin handler
-const corsOriginHandler = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-  console.log('[CORS] Request origin:', origin)
-
-  // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
-  if (!origin) {
-    console.log('[CORS] ✓ Allowed: no origin (server-to-server)')
-    return callback(null, true)
-  }
-
-  // Allow Electron apps using file:// protocol (sends "null" as origin string)
-  if (origin === 'null') {
-    console.log('[CORS] ✓ Allowed: null origin (Electron file:// protocol)')
-    return callback(null, true)
-  }
-
-  // In development, allow all origins for flexibility
-  if (env.NODE_ENV !== 'production') {
-    console.log('[CORS] ✓ Allowed: development mode')
-    return callback(null, true)
-  }
-
-  // Check against whitelist
-  if (allowedOrigins.includes(origin)) {
-    console.log('[CORS] ✓ Allowed: in whitelist')
-    return callback(null, true)
-  }
-
-  // Allow any localhost origin (http/https, any port)
-  // This is crucial for Electron apps or local development tools connecting to prod
-  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) {
-    console.log('[CORS] ✓ Allowed: localhost origin')
-    return callback(null, true)
-  }
-
-  console.warn(`[CORS] ✗ BLOCKED origin: ${origin}`)
-  callback(new Error('Not allowed by CORS'))
-}
-
-// Explicitly handle OPTIONS requests for all routes to ensure preflight works
-app.options('*', cors({
-  origin: corsOriginHandler,
-  credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}))
 
 app.use(
   cors({
-    origin: corsOriginHandler,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
+      if (!origin) return callback(null, true)
+
+      // In development, allow all origins for flexibility
+      if (env.NODE_ENV !== 'production') {
+        return callback(null, true)
+      }
+
+      // In production, check against whitelist
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        console.warn(`⚠️ CORS blocked origin: ${origin}`)
+        callback(new Error('Not allowed by CORS'))
+      }
+    },
     credentials: true, // Allow credentials (cookies, authorization headers)
     exposedHeaders: ['Authorization'], // Expose JWT headers to client
     allowedHeaders: ['Content-Type', 'Authorization'], // Accept JWT Authorization header from client
@@ -245,13 +210,13 @@ if (env.VITE_ENVIRONMENT === 'web') {
   try {
     const supaChat = require('./routes/supaChat').default
     console.error('[Startup] supaChat router loaded. Stack length:', supaChat?.stack?.length)
-    
+
     // Debug middleware specifically for web routes
     app.use('/api', (req, res, next) => {
       console.error('[Web Middleware] Checking web route:', req.url)
       next()
     })
-    
+
     app.use('/api', supaChat)
 
     // Agent routes: Claude Code and other external agents
