@@ -184,10 +184,10 @@ export const LowBar: React.FC<LowBarProps> = ({
         isExpanded
           ? isMobile
             ? 'w-[95%] h-[75%]'
-            : 'w-[30%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[55%] 2xl:w-[35%]'
+            : 'w-[55%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[55%] 2xl:w-[35%]'
           : isMobile
             ? 'w-[40%] h-[35px]'
-            : 'w-[15%] h-[48px]'
+            : 'w-[23%] h-[48px]'
       }`}
     >
       {/* Container with shadow and border */}
@@ -195,7 +195,7 @@ export const LowBar: React.FC<LowBarProps> = ({
         {/* Header bar (always visible) */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`flex items-center rounded-full justify-between px-4  ${isExpanded ? 'mt-3 mx-2 py-2' : 'py-3 no-scrollbar'} bg-neutral-50 dark:bg-neutral-900 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200 `}
+          className={`flex items-center rounded-full justify-between px-4  ${isExpanded ? 'mt-3 mx-2 py-2' : 'py-3 no-scrollbar'} bg-neutral-50 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200 `}
         >
           <div className='text-sm 2xl:text-[14px] 3xl:text-[16px] font-medium text-stone-800 dark:text-stone-200 '>
             Notes

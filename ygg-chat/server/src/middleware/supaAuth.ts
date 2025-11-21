@@ -11,6 +11,13 @@ import type { Request } from 'express'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAuthenticatedClient } from '../database/supamodels'
 
+// Helper to throw errors with status codes
+function throwAuthError(message: string, status: number = 401): never {
+  const error = new Error(message);
+  (error as any).status = status;
+  throw error;
+}
+
 /**
  * Extract JWT token from Authorization header
  *
@@ -22,10 +29,10 @@ export function getAuthToken(req: Request): string {
   const authHeader = req.headers.authorization
 
   if (!authHeader?.startsWith('Bearer ')) {
-    throw new Error('Missing or invalid Authorization header. Expected format: Bearer <jwt>')
+    throwAuthError('Missing or invalid Authorization header. Expected format: Bearer <jwt>', 401)
   }
 
-  return authHeader.substring(7) // Remove 'Bearer ' prefix
+  return authHeader!.substring(7) // Remove 'Bearer ' prefix
 }
 
 /**
@@ -81,25 +88,25 @@ export async function verifyAuth(req: Request): Promise<{ userId: string; client
   const claims = decodeJWT(jwt)
 
   if (!claims) {
-    throw new Error('Authentication failed: Invalid JWT format')
+    throwAuthError('Authentication failed: Invalid JWT format', 401)
   }
 
   // Check expiry locally
   const exp = claims.exp as number
   if (!exp) {
-    throw new Error('Authentication failed: Missing exp claim in JWT')
+    throwAuthError('Authentication failed: Missing exp claim in JWT', 401)
   }
 
   const now = Math.floor(Date.now() / 1000)
   if (exp < now) {
-    throw new Error('Authentication failed: JWT has expired')
+    throwAuthError('Authentication failed: JWT has expired', 401)
   }
 
   // Extract user ID from JWT claims (sub = subject = user ID)
   const userId = claims.sub as string
 
   if (!userId) {
-    throw new Error('Authentication failed: Missing user ID in token claims')
+    throwAuthError('Authentication failed: Missing user ID in token claims', 401)
   }
 
   // console.log('[supaAuth] ✅ JWT decoded locally (ZERO network calls) for user:', userId)
