@@ -399,6 +399,13 @@ const PaymentPage: React.FC = () => {
                   )
                 })}
             </div>
+
+            <div className='mt-8 flex justify-center'>
+              <Button variant='outline' size='large' onClick={() => navigate('/')}>
+                <i className='bx bx-home-alt mr-2'></i>
+                No thanks, take me Home
+              </Button>
+            </div>
           </>
         ) : (
           /* Already subscribed message */
