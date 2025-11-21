@@ -253,7 +253,7 @@ const PaymentPage: React.FC = () => {
               <i className='bx bx-arrow-back mr-2'></i>
               Home
             </Button>
-            <h1 className='text-4xl font-bold dark:text-neutral-100'>Subscription & Credits</h1>
+            <h1 className='relative z-10 text-4xl font-bold text-neutral-900 dark:text-neutral-100'>Subscription & Credits</h1>
           </div>
           <div className='flex gap-2'>
             {isElectronOrLocal && (
@@ -335,7 +335,9 @@ const PaymentPage: React.FC = () => {
         {/* Pricing Tiers - Only show if user doesn't have active subscription */}
         {!hasActiveAccess() ? (
           <>
-            <h2 className='text-3xl font-bold mb-6 dark:text-neutral-100'>Choose Your Plan</h2>
+            <h2 className='relative z-10 text-3xl font-bold mb-6 text-neutral-900 dark:text-neutral-100'>
+              Choose Your Plan
+            </h2>
 
             <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
               {pricingInfo &&
@@ -400,7 +402,7 @@ const PaymentPage: React.FC = () => {
                 })}
             </div>
 
-            <div className='mt-8 flex justify-center'>
+            <div className='relative z-10 mt-8 flex justify-center'>
               <Button variant='outline' size='large' onClick={() => navigate('/')}>
                 <i className='bx bx-home-alt mr-2'></i>
                 No thanks, take me Home
