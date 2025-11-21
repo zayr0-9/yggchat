@@ -97,11 +97,11 @@
 
 /* Add padding to app content to account for title bar */
 body.has-titlebar {
-  --titlebar-height: 30px;
+  --titlebar-height: 35px;
 }
 
 body.has-titlebar #root {
   padding-top: var(--titlebar-height);
-  height: calc(100vh - var(--titlebar-height));
-  max-height: calc(100vh - var(--titlebar-height));
+  height: 100vh;
+  max-height: 100vh;
 }
