@@ -53,7 +53,7 @@ const PaymentPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [paymentsSupported, setPaymentsSupported] = useState(true)
+  // const [paymentsSupported, setPaymentsSupported] = useState(true)
 
   // Check for success/cancel query params from Stripe redirect
   const success = searchParams.get('success')
@@ -83,15 +83,15 @@ const PaymentPage: React.FC = () => {
 
   const fetchData = async () => {
     setLoading(true)
-    
+
     try {
       const provider = await getPaymentProvider()
 
       // In Electron/Local, provider.isSupported() returns false,
       // but we still want to show the pricing UI (just with external links).
       // So we only check this for setting the state variable which might be used elsewhere.
-      const supported = provider.isSupported()
-      setPaymentsSupported(supported)
+      // const supported = provider.isSupported()
+      // setPaymentsSupported(supported)
 
       if (userId) {
         // Fetch subscription status only if user is logged in
