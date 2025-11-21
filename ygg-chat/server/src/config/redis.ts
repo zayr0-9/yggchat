@@ -80,17 +80,9 @@ redisClient.on('reconnecting', () => {
   console.log('🔄 Redis client reconnecting...')
 })
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Closing Redis connection...')
-  await redisClient.quit()
-  process.exit(0)
-})
-
-process.on('SIGTERM', async () => {
-  console.log('Closing Redis connection...')
-  await redisClient.quit()
-  process.exit(0)
-})
+// NOTE: Signal handlers (SIGINT/SIGTERM) removed to prevent conflicts
+// Graceful shutdown is handled by the main server in index.ts
+// Redis connection will be closed when the process exits naturally
+// If explicit cleanup is needed, export a shutdown function instead
 
 export default redisClient

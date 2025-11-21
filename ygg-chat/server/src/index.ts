@@ -300,23 +300,21 @@ app.use((req, res, next) => {
   next()
 })
 
-// TEMPORARILY DISABLED - Testing if Redis is causing crash loop
 // Apply global rate limiter to all routes (only in web mode)
-// if (env.VITE_ENVIRONMENT === 'web') {
-//   console.log('🔒 [RATE LIMITER] Applying global rate limiter')
-//   app.use((req, res, next) => {
-//     console.log('🔒 [RATE LIMITER] Checking rate limit for:', req.ip)
-//     globalRateLimiter(req, res, (err) => {
-//       if (err) {
-//         console.log('❌ [RATE LIMITER] Rate limit exceeded for:', req.ip)
-//       } else {
-//         console.log('✅ [RATE LIMITER] Rate limit check passed for:', req.ip)
-//       }
-//       next(err)
-//     })
-//   })
-// }
-console.log('⚠️  RATE LIMITER DISABLED FOR TESTING - Investigating crash loop')
+if (env.VITE_ENVIRONMENT === 'web') {
+  console.log('🔒 [RATE LIMITER] Applying global rate limiter')
+  app.use((req, res, next) => {
+    console.log('🔒 [RATE LIMITER] Checking rate limit for:', req.ip)
+    globalRateLimiter(req, res, (err) => {
+      if (err) {
+        console.log('❌ [RATE LIMITER] Rate limit exceeded for:', req.ip)
+      } else {
+        console.log('✅ [RATE LIMITER] Rate limit check passed for:', req.ip)
+      }
+      next(err)
+    })
+  })
+}
 
 // Debug middleware to log all API requests
 app.use('/api', (req, res, next) => {
