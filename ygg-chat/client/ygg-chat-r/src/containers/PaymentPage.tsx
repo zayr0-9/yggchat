@@ -248,7 +248,6 @@ const PaymentPage: React.FC = () => {
       <div className='max-w-7xl mx-auto px-4 py-8'>
         {/* Header */}
         <div className='flex items-center justify-between mb-8'>
-          <div className='flex items-center justify-between mb-8'>
             <h1 className='text-4xl font-bold dark:text-neutral-100'>Subscription & Credits</h1>
             <div className='flex gap-2'>
               {isElectronOrLocal && (
@@ -450,7 +449,6 @@ const PaymentPage: React.FC = () => {
               </li>
             </ul>
           </div>
-        </div>
       </div>
     </div>
   )
