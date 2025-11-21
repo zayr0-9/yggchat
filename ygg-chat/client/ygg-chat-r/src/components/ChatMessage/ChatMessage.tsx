@@ -604,6 +604,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       state.chat.conversation.messages.find(m => String(m.id) === String(id))
     )
 
+    const hasContent = useMemo(() => {
+      const hasSimpleContent = content && content.trim().length > 0
+      const hasBlockContent =
+        contentBlocks &&
+        contentBlocks.some(b => b.type === 'text' && b.content && b.content.trim().length > 0)
+
+      return hasSimpleContent || hasBlockContent
+    }, [content, contentBlocks])
+
     const handleEdit = () => {
       dispatch(chatSliceActions.editingBranchSet(false))
       setEditingState(true)
@@ -1588,80 +1597,82 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           <div className='w-full border-t border-neutral-200 dark:border-neutral-800 my-4 mb-8'></div>
         )}
         {/* Actions row (at bottom) */}
-        <div className='flex items-center justify-end mt-3 mb-2'>
-          <div ref={moreButtonRef} className='relative'>
-            <MessageActions
-              onEdit={role === 'user' ? handleEdit : handleEdit}
-              onBranch={role === 'user' ? handleBranch : undefined}
-              onDelete={handleDelete}
-              onCopy={handleCopy}
-              onResend={role === 'assistant' ? handleResend : undefined}
-              onSave={handleSave}
-              onSaveBranch={handleSaveBranch}
-              onCancel={handleCancel}
-              onMore={handleMoreClick}
-              isEditing={editingState}
-              editMode={editMode}
-              copied={copied}
-            />
-            {/* More menu dropdown */}
-            {showMoreMenu && (
-              <div
-                ref={moreMenuRef}
-                className={`absolute right-0 ${menuOpenUp ? 'bottom-full mb-1' : 'top-8'} z-20 w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
-              >
-                {!showMoreInfo ? (
-                  <div className='py-1 rounded-4xl'>
-                    <button
-                      onClick={handleMoreInfoClick}
-                      className='w-full text-left rounded-4xl px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 active:scale-95 transition-all duration-150'
-                    >
-                      More Info
-                    </button>
-                  </div>
-                ) : (
-                  <div className='p-2 sm:p-3'>
-                    <div className='flex items-center justify-between mb-1'>
-                      <h3 className='text-xs sm:text-sm 3xl:text-base font-semibold text-gray-700 dark:text-gray-300'>
-                        Message Info
-                      </h3>
+        {hasContent && (
+          <div className='flex items-center justify-end mt-3 mb-2'>
+            <div ref={moreButtonRef} className='relative'>
+              <MessageActions
+                onEdit={role === 'user' ? handleEdit : handleEdit}
+                onBranch={role === 'user' ? handleBranch : undefined}
+                onDelete={handleDelete}
+                onCopy={handleCopy}
+                onResend={role === 'assistant' ? handleResend : undefined}
+                onSave={handleSave}
+                onSaveBranch={handleSaveBranch}
+                onCancel={handleCancel}
+                onMore={handleMoreClick}
+                isEditing={editingState}
+                editMode={editMode}
+                copied={copied}
+              />
+              {/* More menu dropdown */}
+              {showMoreMenu && (
+                <div
+                  ref={moreMenuRef}
+                  className={`absolute right-0 ${menuOpenUp ? 'bottom-full mb-1' : 'top-8'} z-20 w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
+                >
+                  {!showMoreInfo ? (
+                    <div className='py-1 rounded-4xl'>
                       <button
-                        onClick={handleBackToMenu}
-                        className='text-xs sm:text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 active:scale-95 transition-all duration-150'
+                        onClick={handleMoreInfoClick}
+                        className='w-full text-left rounded-4xl px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 active:scale-95 transition-all duration-150'
                       >
-                        Back
+                        More Info
                       </button>
                     </div>
-                    <div className='max-h-64 sm:max-h-80 md:max-h-96 overflow-y-auto text-xs sm:text-sm space-y-1.5 pt-2'>
-                      {messageData ? (
-                        <>
-                          {Object.entries(messageData)
-                            .filter(
-                              ([key]) =>
-                                key !== 'content' &&
-                                key !== 'plain_text_content' &&
-                                key !== 'artifacts' &&
-                                key !== 'content_plain_text'
-                            )
-                            .map(([key, value]) => (
-                              <div key={key} className='flex gap-2'>
-                                <span className='font-medium text-gray-600 dark:text-gray-400 shrink-0'>{key}:</span>
-                                <span className='text-gray-800 dark:text-gray-200 break-all'>
-                                  {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-                                </span>
-                              </div>
-                            ))}
-                        </>
-                      ) : (
-                        <p className='text-gray-500 dark:text-gray-400'>No message data found</p>
-                      )}
+                  ) : (
+                    <div className='p-2 sm:p-3'>
+                      <div className='flex items-center justify-between mb-1'>
+                        <h3 className='text-xs sm:text-sm 3xl:text-base font-semibold text-gray-700 dark:text-gray-300'>
+                          Message Info
+                        </h3>
+                        <button
+                          onClick={handleBackToMenu}
+                          className='text-xs sm:text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 active:scale-95 transition-all duration-150'
+                        >
+                          Back
+                        </button>
+                      </div>
+                      <div className='max-h-64 sm:max-h-80 md:max-h-96 overflow-y-auto text-xs sm:text-sm space-y-1.5 pt-2'>
+                        {messageData ? (
+                          <>
+                            {Object.entries(messageData)
+                              .filter(
+                                ([key]) =>
+                                  key !== 'content' &&
+                                  key !== 'plain_text_content' &&
+                                  key !== 'artifacts' &&
+                                  key !== 'content_plain_text'
+                              )
+                              .map(([key, value]) => (
+                                <div key={key} className='flex gap-2'>
+                                  <span className='font-medium text-gray-600 dark:text-gray-400 shrink-0'>{key}:</span>
+                                  <span className='text-gray-800 dark:text-gray-200 break-all'>
+                                    {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                                  </span>
+                                </div>
+                              ))}
+                          </>
+                        ) : (
+                          <p className='text-gray-500 dark:text-gray-400'>No message data found</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Artifacts (images) */}
         {Array.isArray(artifacts) && artifacts.length > 0 && (
