@@ -56,7 +56,7 @@ export const TitleBar = () => {
       </div>
       <div className='titlebar-controls'>
         <button
-          className='titlebar-button titlebar-chat titlebar-minimize'
+          className='titlebar-button  titlebar-minimize'
           onClick={handleMinimize}
           aria-label='Minimize'
           title='Minimize'
@@ -66,7 +66,7 @@ export const TitleBar = () => {
           </svg>
         </button>
         <button
-          className='titlebar-button titlebar-chat titlebar-maximize'
+          className='titlebar-button titlebar-maximize'
           onClick={handleMaximize}
           aria-label='Maximize'
           title='Maximize'
@@ -75,12 +75,7 @@ export const TitleBar = () => {
             <path fill='currentColor' d='M0 0v10h10V0H0zm1 1h8v8H1V1z' />
           </svg>
         </button>
-        <button
-          className='titlebar-button titlebar-chat titlebar-close'
-          onClick={handleClose}
-          aria-label='Close'
-          title='Close'
-        >
+        <button className='titlebar-button titlebar-close' onClick={handleClose} aria-label='Close' title='Close'>
           <svg width='10' height='10' viewBox='0 0 10 10'>
             <path
               fill='currentColor'

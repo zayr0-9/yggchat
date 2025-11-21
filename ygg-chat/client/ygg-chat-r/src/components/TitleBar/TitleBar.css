@@ -25,7 +25,7 @@
 }
 
 .dark .titlebar.titlebar-chat .titlebar-button {
-  background-color: #171717;
+  background-color: transparent;
 }
 
 .dark .titlebar.titlebar-chat .titlebar-button:hover {
