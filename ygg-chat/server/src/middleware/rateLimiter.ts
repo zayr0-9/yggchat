@@ -1,6 +1,6 @@
+import type { Request, Response } from 'express'
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import RedisStore, { type RedisReply } from 'rate-limit-redis'
-import type { Request, Response } from 'express'
 import { redisClient } from '../config/redis'
 
 /**
@@ -24,7 +24,7 @@ import { redisClient } from '../config/redis'
  * Example: RATE_LIMIT_WHITELIST_IPS=127.0.0.1,192.168.1.100
  */
 const whitelistIPs: string[] = process.env.RATE_LIMIT_WHITELIST_IPS
-  ? process.env.RATE_LIMIT_WHITELIST_IPS.split(',').map((ip) => ip.trim())
+  ? process.env.RATE_LIMIT_WHITELIST_IPS.split(',').map(ip => ip.trim())
   : []
 
 /**
@@ -144,7 +144,7 @@ export const globalRateLimiter = rateLimit({
     return `ip:${ipKeyGenerator(ip)}`
   },
   handler: rateLimitHandler,
-  skip: (req) => req.method === 'OPTIONS' || skipForWhitelist(req),
+  skip: skipForWhitelist,
 })
 
 /**
@@ -167,7 +167,7 @@ export const authenticatedRateLimiter = rateLimit({
   }),
   keyGenerator: generateRateLimitKey('auth'),
   handler: rateLimitHandler,
-  skip: (req) => req.method === 'OPTIONS' || skipForWhitelist(req),
+  skip: skipForWhitelist,
 })
 
 /**
@@ -193,7 +193,7 @@ export const expensiveOperationsRateLimiter = rateLimit({
   }),
   keyGenerator: generateRateLimitKey('expensive'),
   handler: rateLimitHandler,
-  skip: (req) => req.method === 'OPTIONS' || skipForWhitelist(req),
+  skip: skipForWhitelist,
 })
 
 /**
@@ -223,7 +223,7 @@ export const authEndpointsRateLimiter = rateLimit({
     return `ip:${ipKeyGenerator(ip)}`
   },
   handler: rateLimitHandler,
-  skip: (req) => req.method === 'OPTIONS' || skipForWhitelist(req),
+  skip: skipForWhitelist,
 })
 
 // ============================================================================

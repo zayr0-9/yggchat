@@ -145,31 +145,50 @@ if (env.VITE_ENVIRONMENT !== 'web') {
 const allowedOrigins = [
   'http://localhost:5173', // Local development
   'http://localhost:3000', // Alternative local port
-  env.FRONTEND_URL, // Production frontend URL (set in environment variables)
+  env.FRONTEND_URL || 'https://yggchat.com', // Production frontend URL (fallback if env not set)
 ].filter(Boolean) // Remove undefined values
+
+console.log('[CORS] Configuration loaded:')
+console.log('  FRONTEND_URL:', env.FRONTEND_URL)
+console.log('  allowedOrigins:', allowedOrigins)
+console.log('  NODE_ENV:', env.NODE_ENV)
 
 // Shared CORS origin handler
 const corsOriginHandler = (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+  console.log('[CORS] Request origin:', origin)
+
   // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
-  if (!origin) return callback(null, true)
+  if (!origin) {
+    console.log('[CORS] ✓ Allowed: no origin (server-to-server)')
+    return callback(null, true)
+  }
+
+  // Allow Electron apps using file:// protocol (sends "null" as origin string)
+  if (origin === 'null') {
+    console.log('[CORS] ✓ Allowed: null origin (Electron file:// protocol)')
+    return callback(null, true)
+  }
 
   // In development, allow all origins for flexibility
   if (env.NODE_ENV !== 'production') {
+    console.log('[CORS] ✓ Allowed: development mode')
     return callback(null, true)
   }
 
   // Check against whitelist
   if (allowedOrigins.includes(origin)) {
+    console.log('[CORS] ✓ Allowed: in whitelist')
     return callback(null, true)
   }
 
   // Allow any localhost origin (http/https, any port)
   // This is crucial for Electron apps or local development tools connecting to prod
   if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+    console.log('[CORS] ✓ Allowed: localhost origin')
     return callback(null, true)
   }
 
-  console.warn(`⚠️ CORS blocked origin: ${origin}`)
+  console.warn(`[CORS] ✗ BLOCKED origin: ${origin}`)
   callback(new Error('Not allowed by CORS'))
 }
 
