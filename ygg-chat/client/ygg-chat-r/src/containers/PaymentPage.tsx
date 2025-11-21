@@ -12,6 +12,37 @@ interface PricingInfo {
   }
 }
 
+// Default tiers for display when API is not available (e.g. in Electron)
+const DEFAULT_TIERS: TierInfo[] = [
+  {
+    name: 'Low',
+    price: 9,
+    priceId: 'price_low',
+    credits: 1000000,
+    features: ['Access to basic models', 'Standard response speed', '1,000,000 credits/mo'],
+  },
+  {
+    name: 'Mid',
+    price: 19,
+    priceId: 'price_mid',
+    credits: 2500000,
+    features: ['Access to advanced models', 'Fast response speed', '2,500,000 credits/mo', 'Priority support'],
+  },
+  {
+    name: 'High',
+    price: 49,
+    priceId: 'price_high',
+    credits: 7500000,
+    features: [
+      'Access to all models',
+      'Fastest response speed',
+      '7,500,000 credits/mo',
+      'Priority support',
+      'Early access to features',
+    ],
+  },
+]
+
 const PaymentPage: React.FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -28,7 +59,7 @@ const PaymentPage: React.FC = () => {
   const success = searchParams.get('success')
   const canceled = searchParams.get('canceled')
 
-  // Check if we're in Electron or local mode (payments not supported)
+  // Check if we're in Electron or local mode (payments not supported directly)
   const isElectronOrLocal =
     (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
     (typeof __IS_LOCAL__ !== 'undefined' && __IS_LOCAL__) ||
@@ -57,19 +88,23 @@ const PaymentPage: React.FC = () => {
     try {
       const provider = await getPaymentProvider()
 
-      // Check if payments are supported
-      if (!provider.isSupported()) {
-        setPaymentsSupported(false)
-        setLoading(false)
-        return
-      }
+      // In Electron/Local, provider.isSupported() returns false,
+      // but we still want to show the pricing UI (just with external links).
+      // So we only check this for setting the state variable which might be used elsewhere.
+      const supported = provider.isSupported()
+      setPaymentsSupported(supported)
 
       // Fetch subscription status
       const statusData = await provider.getSubscriptionStatus(userId)
       setSubscriptionStatus(statusData)
 
       // Fetch pricing info
-      const tiersData = await provider.getPricingInfo()
+      let tiersData = await provider.getPricingInfo()
+
+      // If no tiers returned (e.g. Electron no-op provider), use defaults
+      if (!tiersData || tiersData.length === 0) {
+        tiersData = DEFAULT_TIERS
+      }
 
       // Convert array to object format for backward compatibility
       const pricingData: PricingInfo = {
@@ -88,7 +123,22 @@ const PaymentPage: React.FC = () => {
     }
   }
 
+  const openPaymentUrl = async () => {
+    const url = 'https://yggchat.com/payment'
+    if (window.electronAPI?.auth?.openExternal) {
+      await window.electronAPI.auth.openExternal(url)
+    } else {
+      window.open(url, '_blank')
+    }
+  }
+
   const handleSubscribe = async (tier: 'high' | 'mid' | 'low') => {
+    // If in Electron/Local mode, open external payment page
+    if (isElectronOrLocal) {
+      await openPaymentUrl()
+      return
+    }
+
     if (!userId) {
       setError('You must be logged in to subscribe')
       return
@@ -180,89 +230,33 @@ const PaymentPage: React.FC = () => {
     )
   }
 
-  // Show alternative UI for Electron/local modes (no payments)
+  // Show alternative UI for Electron/local modes (no payments) -> REMOVED to show pricing
+  /* 
   if (!paymentsSupported || isElectronOrLocal) {
-    return (
-      <div className='min-h-full bg-zinc-50 dark:bg-yBlack-500'>
-        <div className='max-w-4xl mx-auto px-4 py-8'>
-          {/* Header */}
-          <div className='flex items-center justify-between mb-8'>
-            <h1 className='text-4xl font-bold dark:text-neutral-100'>API Keys</h1>
-            <Button variant='outline2' onClick={() => navigate('/')}>
-              <i className='bx bx-arrow-back mr-2'></i>
-              Back to Home
-            </Button>
-          </div>
-
-          {/* Info card */}
-          <div className='p-8 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border border-gray-200 dark:border-neutral-700'>
-            <div className='flex items-center mb-6'>
-              <div className='w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mr-4'>
-                <i className='bx bx-key text-white text-3xl'></i>
-              </div>
-              <div>
-                <h2 className='text-2xl font-bold dark:text-neutral-100'>Use Your Own API Keys</h2>
-                <p className='text-gray-600 dark:text-gray-400'>No subscriptions needed - connect your own API keys</p>
-              </div>
-            </div>
-
-            <p className='text-gray-700 dark:text-neutral-300 mb-6'>
-              In this version, you have full control over your API usage. Simply provide your own API keys from
-              providers like OpenRouter, OpenAI, Anthropic, or Google Gemini.
-            </p>
-
-            <div className='bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6'>
-              <p className='text-sm text-blue-800 dark:text-blue-200'>
-                <i className='bx bx-info-circle mr-2'></i>
-                Go to <strong>Settings → API Keys</strong> to configure your providers
-              </p>
-            </div>
-
-            <div className='space-y-4'>
-              <h3 className='text-lg font-semibold dark:text-neutral-100 mb-3'>Supported Providers:</h3>
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                {[
-                  { name: 'OpenRouter', icon: 'bx-diamond', desc: 'Access 100+ models' },
-                  { name: 'OpenAI', icon: 'bx-brain', desc: 'GPT-4, GPT-3.5' },
-                  { name: 'Anthropic', icon: 'bx-chat', desc: 'Claude models' },
-                  { name: 'Google Gemini', icon: 'bx-star', desc: 'Gemini Pro' },
-                  { name: 'Ollama', icon: 'bx-home', desc: 'Local models' },
-                  { name: 'LM Studio', icon: 'bx-desktop', desc: 'Local models' },
-                ].map(provider => (
-                  <div key={provider.name} className='flex items-center p-3 bg-gray-50 dark:bg-yBlack-800 rounded-lg'>
-                    <i className={`bx ${provider.icon} text-2xl text-indigo-600 dark:text-indigo-400 mr-3`}></i>
-                    <div>
-                      <p className='font-medium dark:text-neutral-100'>{provider.name}</p>
-                      <p className='text-sm text-gray-600 dark:text-gray-400'>{provider.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className='mt-6'>
-              <Button variant='primary' size='large' onClick={() => navigate('/settings')}>
-                <i className='bx bx-cog mr-2'></i>
-                Configure API Keys
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
+    return (...)
   }
+  */
 
   return (
     <div className='min-h-full bg-zinc-50 dark:bg-yBlack-500'>
       <div className='max-w-7xl mx-auto px-4 py-8'>
         {/* Header */}
         <div className='flex items-center justify-between mb-8'>
-          <h1 className='text-4xl font-bold dark:text-neutral-100'>Subscription & Credits</h1>
-          <Button variant='outline2' onClick={() => navigate('/')}>
-            <i className='bx bx-arrow-back mr-2'></i>
-            Back to Home
-          </Button>
-        </div>
+          <div className='flex items-center justify-between mb-8'>
+            <h1 className='text-4xl font-bold dark:text-neutral-100'>Subscription & Credits</h1>
+            <div className='flex gap-2'>
+              {isElectronOrLocal && (
+                <Button variant='outline' onClick={openPaymentUrl}>
+                  <i className='bx bx-link-external mr-2'></i>
+                  Manage Subscription on Web
+                </Button>
+              )}
+              <Button variant='outline2' onClick={() => navigate('/')}>
+                <i className='bx bx-arrow-back mr-2'></i>
+                Back to Home
+              </Button>
+            </div>
+          </div>
 
         {/* Success/Cancel Messages */}
         {success && (
@@ -384,6 +378,11 @@ const PaymentPage: React.FC = () => {
                           <>
                             <i className='bx bx-loader-alt animate-spin mr-2'></i>
                             Processing...
+                          </>
+                        ) : isElectronOrLocal ? (
+                          <>
+                            <i className='bx bx-link-external mr-2'></i>
+                            Subscribe on Website
                           </>
                         ) : (
                           'Subscribe Now'
