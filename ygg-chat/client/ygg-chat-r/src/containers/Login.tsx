@@ -214,7 +214,7 @@ const Login: React.FC = () => {
           // On Linux (WSL), use OAuth window to avoid blank browser issues
           // On Windows/Mac, use external browser for better UX
           // const useOAuthWindow = platform === 'linux' && window.electronAPI.auth.openOAuthWindow
-          const useOAuthWindow = true
+          const useOAuthWindow = false
           if (useOAuthWindow) {
             console.log('[Login] Linux/WSL detected - opening OAuth in Electron window')
             const result = await window.electronAPI.auth.openOAuthWindow(data.url)

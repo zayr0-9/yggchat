@@ -194,20 +194,6 @@ console.log('  NODE_ENV:', env.NODE_ENV)
 console.log('  FRONTEND_URL:', env.FRONTEND_URL)
 console.log('  Allowed origins:', allowedOrigins)
 
-// 1. REQUEST ENTRY LOGGING - Log every incoming request BEFORE CORS
-app.use((req, res, next) => {
-  const timestamp = new Date().toISOString()
-  console.log('\n' + '='.repeat(80))
-  console.log(`🔵 [${timestamp}] INCOMING REQUEST`)
-  console.log(`   Method: ${req.method}`)
-  console.log(`   URL: ${req.url}`)
-  console.log(`   Origin Header: ${req.headers.origin || 'NO ORIGIN'}`)
-  console.log(`   Host: ${req.headers.host}`)
-  console.log(`   User-Agent: ${req.headers['user-agent']?.substring(0, 50) || 'none'}...`)
-  console.log(`   All Headers:`, JSON.stringify(req.headers, null, 2))
-  next()
-})
-
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -242,15 +228,6 @@ app.use(
   })
 )
 
-// 2. AFTER CORS LOGGING - Confirm CORS passed
-app.use((req, res, next) => {
-  console.log('✅ [AFTER CORS] Request passed CORS middleware')
-  console.log('   CORS Headers Set:')
-  console.log('     Access-Control-Allow-Origin:', res.getHeader('Access-Control-Allow-Origin') || 'NOT SET')
-  console.log('     Access-Control-Allow-Credentials:', res.getHeader('Access-Control-Allow-Credentials') || 'NOT SET')
-  next()
-})
-
 // =============================================================================
 // HEALTH CHECK ENDPOINTS - Railway needs these to verify service is alive
 // =============================================================================
@@ -281,35 +258,6 @@ if (env.VITE_ENVIRONMENT === 'web') {
 app.use(express.json({ limit: '25mb' }))
 app.use(express.urlencoded({ extended: true, limit: '25mb' }))
 
-// 3. RESPONSE LOGGING - Track response details
-app.use((req, res, next) => {
-  const startTime = Date.now()
-
-  // Capture the original send function
-  const originalSend = res.send
-  const originalJson = res.json
-
-  res.send = function (data) {
-    const duration = Date.now() - startTime
-    console.log(`🟢 [RESPONSE] ${req.method} ${req.url}`)
-    console.log(`   Status: ${res.statusCode}`)
-    console.log(`   Duration: ${duration}ms`)
-    console.log(`   Response Headers:`, JSON.stringify(res.getHeaders(), null, 2))
-    return originalSend.call(this, data)
-  }
-
-  res.json = function (data) {
-    const duration = Date.now() - startTime
-    console.log(`🟢 [RESPONSE] ${req.method} ${req.url}`)
-    console.log(`   Status: ${res.statusCode}`)
-    console.log(`   Duration: ${duration}ms`)
-    console.log(`   Response Headers:`, JSON.stringify(res.getHeaders(), null, 2))
-    return originalJson.call(this, data)
-  }
-
-  next()
-})
-
 // Apply global rate limiter to all routes (only in web mode)
 if (env.VITE_ENVIRONMENT === 'web') {
   console.log('🔒 [RATE LIMITER] Applying global rate limiter')
@@ -326,16 +274,6 @@ if (env.VITE_ENVIRONMENT === 'web') {
   })
 }
 
-// Debug middleware to log all API requests
-app.use('/api', (req, res, next) => {
-  console.log('🔷 [API ROUTE] Entering /api routes')
-  console.log('   Method:', req.method)
-  console.log('   URL:', req.url)
-  console.log('   Full Path:', req.path)
-  console.log('   Base URL:', req.baseUrl)
-  next()
-})
-
 // Simple health check route to verify API is reachable
 app.get('/api/ping', (req, res) => {
   console.error('[Ping] Ping received on port ' + (process.env.PORT || 3001))
@@ -350,12 +288,6 @@ if (env.VITE_ENVIRONMENT === 'web') {
   try {
     const supaChat = require('./routes/supaChat').default
     console.error('[Startup] supaChat router loaded. Stack length:', supaChat?.stack?.length)
-
-    // Debug middleware specifically for web routes
-    app.use('/api', (req, res, next) => {
-      console.log('🌐 [WEB MODE] Processing web route:', req.url)
-      next()
-    })
 
     app.use('/api', supaChat)
 
@@ -454,8 +386,13 @@ if (env.VITE_ENVIRONMENT === 'web') {
     }
   })
 
-  server.listen(port, '0.0.0.0', () => {
-    console.log(`🚀 Server listening on 0.0.0.0:${port}`)
+  server.listen(port, () => {
+    const addr = server.address()
+    const bindHost = typeof addr === 'string' ? addr : addr?.address
+    const bindFamily = typeof addr === 'string' ? 'pipe' : addr?.family
+    
+    console.log(`🚀 Server listening on port ${port}`)
+    console.log(`   Bound to: ${bindHost} (${bindFamily})`)
     console.log(`🔌 WebSocket IDE Context on ws://localhost:${port}/ide-context`)
     console.log(`✅ Server is ready to accept connections`)
     console.log(`💚 Health checks available at: / and /health`)
