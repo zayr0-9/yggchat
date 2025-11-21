@@ -1,10 +1,10 @@
 import { spawn } from 'child_process';
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import Conf from 'conf';
+import { app, BrowserWindow, ipcMain, shell, nativeTheme } from 'electron';
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Conf from 'conf';
-import os from 'os';
-import fs from 'fs';
 import { startLocalServer, stopLocalServer } from './localServer.js';
 // ESM: Get __dirname from import.meta.url
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -182,8 +182,25 @@ function startServer() {
         }, 2000);
     });
 }
+function applyTitleBarTheme(win, isDark) {
+    // Only apply overlay on Windows where it's supported and requested, AND ONLY IN PRODUCTION
+    if (process.platform === 'win32' && app.isPackaged) {
+        // Use provided isDark value, or fall back to system preference
+        const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors;
+        win.setTitleBarOverlay({
+            color: useDark ? '#101828' : '#f2f4f7',
+            symbolColor: useDark ? '#f2f4f7' : '#0f172a',
+            height: 35, // Ensure there is a grippable area
+        });
+    }
+}
+nativeTheme.on('updated', () => {
+    if (mainWindow)
+        applyTitleBarTheme(mainWindow);
+});
 function createWindow() {
     mainWindow = new BrowserWindow({
+        title: 'Yggdrasil',
         width: 1400,
         height: 900,
         minWidth: 800,
@@ -194,9 +211,26 @@ function createWindow() {
             nodeIntegration: false,
             sandbox: false,
         },
-        titleBarStyle: 'default',
+        // Platform-specific title bar settings
+        ...(process.platform === 'win32' && app.isPackaged
+            ? {
+                titleBarStyle: 'hidden',
+                titleBarOverlay: {
+                    color: '#f2f4f7', // Initial light theme color
+                    symbolColor: '#0f172a',
+                    height: 35, // Ensure height is set for draggable region
+                },
+            }
+            : process.platform === 'darwin'
+                ? {
+                    titleBarStyle: 'hidden', // Standard for macOS
+                }
+                : {
+                    titleBarStyle: 'default', // Native title bar for Linux (safest)
+                }),
         show: false, // Don't show until ready
     });
+    applyTitleBarTheme(mainWindow);
     // Show window when ready to avoid flicker
     mainWindow.once('ready-to-show', () => {
         mainWindow?.show();
@@ -204,6 +238,10 @@ function createWindow() {
     // Load the app
     // Use app.isPackaged for reliable detection (true when running from installer)
     const isDev = !app.isPackaged;
+    if (!isDev) {
+        mainWindow.setMenu(null); // removes File/Edit/View in production
+        mainWindow.removeMenu(); // defensive (older Electron versions)
+    }
     if (isDev) {
         // Development: Load from Vite dev server
         mainWindow.loadURL('http://localhost:5173');
@@ -419,7 +457,7 @@ ipcMain.handle('auth:openExternal', async (_event, url) => {
 // Open OAuth URL in a new BrowserWindow (for WSL/Linux compatibility)
 ipcMain.handle('auth:openOAuthWindow', async (_event, url) => {
     console.log('[Electron IPC] Opening OAuth window:', url);
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
         // Create a modal window for OAuth
         const oauthWindow = new BrowserWindow({
             width: 500,
@@ -483,5 +521,32 @@ ipcMain.handle('sync:status', async () => {
         localServerPort: 3002,
         localServerUrl: 'http://127.0.0.1:3002',
     };
+});
+// Window controls for custom title bar
+ipcMain.handle('window:minimize', async () => {
+    if (mainWindow) {
+        mainWindow.minimize();
+    }
+});
+ipcMain.handle('window:maximize', async () => {
+    if (mainWindow) {
+        if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+        }
+        else {
+            mainWindow.maximize();
+        }
+    }
+});
+ipcMain.handle('window:close', async () => {
+    if (mainWindow) {
+        mainWindow.close();
+    }
+});
+// Theme synchronization - update title bar when app theme changes
+ipcMain.handle('theme:update', async (_event, isDark) => {
+    if (mainWindow) {
+        applyTitleBarTheme(mainWindow, isDark);
+    }
 });
 //# sourceMappingURL=main.js.map

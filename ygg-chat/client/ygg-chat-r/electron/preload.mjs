@@ -24,6 +24,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     platformInfo: {
         get: () => ipcRenderer.invoke('platform:info'),
     },
+    window: {
+        minimize: () => ipcRenderer.invoke('window:minimize'),
+        maximize: () => ipcRenderer.invoke('window:maximize'),
+        close: () => ipcRenderer.invoke('window:close'),
+    },
+    theme: {
+        update: (isDark) => ipcRenderer.invoke('theme:update', isDark),
+    },
     platform: 'electron',
 });
 // Log that preload script has loaded
