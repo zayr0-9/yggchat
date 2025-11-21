@@ -82,11 +82,12 @@ const PaymentPage: React.FC = () => {
   }, [success, userId])
 
   const fetchData = async () => {
-    if (!userId) return
-
     setLoading(true)
+    console.log('[PaymentPage] Fetching data...', { userId, isElectronOrLocal })
+    
     try {
       const provider = await getPaymentProvider()
+      console.log('[PaymentPage] Provider loaded:', provider.constructor.name)
 
       // In Electron/Local, provider.isSupported() returns false,
       // but we still want to show the pricing UI (just with external links).
@@ -94,15 +95,23 @@ const PaymentPage: React.FC = () => {
       const supported = provider.isSupported()
       setPaymentsSupported(supported)
 
-      // Fetch subscription status
-      const statusData = await provider.getSubscriptionStatus(userId)
-      setSubscriptionStatus(statusData)
+      if (userId) {
+        // Fetch subscription status only if user is logged in
+        try {
+          const statusData = await provider.getSubscriptionStatus(userId)
+          setSubscriptionStatus(statusData)
+        } catch (err) {
+          console.warn('[PaymentPage] Failed to fetch subscription status:', err)
+          // Don't block UI rendering if status fetch fails
+        }
+      }
 
       // Fetch pricing info
       let tiersData = await provider.getPricingInfo()
 
       // If no tiers returned (e.g. Electron no-op provider), use defaults
       if (!tiersData || tiersData.length === 0) {
+        console.log('[PaymentPage] Using default pricing tiers')
         tiersData = DEFAULT_TIERS
       }
 
@@ -116,7 +125,7 @@ const PaymentPage: React.FC = () => {
       }
       setPricingInfo(pricingData)
     } catch (err: any) {
-      console.error('Error fetching payment data:', err)
+      console.error('[PaymentPage] Error fetching payment data:', err)
       setError(err.message)
     } finally {
       setLoading(false)
