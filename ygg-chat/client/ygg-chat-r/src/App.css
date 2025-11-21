@@ -3,12 +3,12 @@
 /* Reset any conflicting styles */
 #root {
   width: 100%;
-  min-height: 100vh;
+  min-height: 100%;
 }
 
 .App {
   width: 100%;
-  min-height: 100vh;
+  min-height: 100%;
 }
 
 /* Optional: Keep some of your original styles if needed */
