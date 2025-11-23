@@ -1938,10 +1938,15 @@ function Chat() {
                   }}
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
-                  <i
+                  <img
+                    src='/img/branch.svg'
+                    alt='Thinking'
+                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[18px] md:h-[18px] lg:w-[20px] lg:h-[20px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[24px] 3xl:h-[24px] 4xl:w-[24px] 4xl:h-[24px]'
+                  />
+                  {/* <i
                     className={`bx ${heimdallVisible ? 'bx-sidebar' : 'bx-layout'} text-2xl transition-transform duration-200`}
                     aria-hidden='true'
-                  ></i>
+                  ></i> */}
                 </Button>
 
                 <Button
