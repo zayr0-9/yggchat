@@ -4,9 +4,9 @@ import { CreditsService } from '../database/supamodels'
 // Credit allocation per tier (legacy - kept for backward compatibility)
 // These values are now stored in Supabase plans table
 export const TIER_CREDITS: Record<string, number> = {
-  high: 100000, // High Tier God - $20/month
-  mid: 60000, // Mid Tier God - $12/month
-  low: 25000, // Low Tier God - $5/month
+  high: 2200, // High Tier God - $20/month
+  mid: 1200, // Mid Tier God - $12/month
+  low: 400, // Low Tier God - $5/month
 }
 
 export interface CreditCheckResult {

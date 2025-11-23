@@ -15,22 +15,22 @@ interface PricingInfo {
 // Default tiers for display when API is not available (e.g. in Electron)
 const DEFAULT_TIERS: TierInfo[] = [
   {
-    name: 'Low',
+    name: 'Basic',
     price: 9.99,
     priceId: 'price_low',
     credits: 400,
     features: ['Limited conversations', 'Database', '300 credits/mo'],
   },
   {
-    name: 'Mid',
+    name: 'Pro',
     price: 19.99,
     priceId: 'price_mid',
-    credits: 1200,
-    features: ['Access to advanced models', 'Fast response speed', '1,200 credits/mo', 'Priority support'],
+    credits: 800,
+    features: ['Access to advanced models', 'Fast response speed', '800 credits/mo', 'Priority support'],
   },
   {
-    name: 'High',
-    price: 29.99,
+    name: 'Ultra',
+    price: 49.99,
     priceId: 'price_high',
     credits: 2200,
     features: [

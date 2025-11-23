@@ -129,7 +129,7 @@ router.get(
       tiers: {
         high: {
           name: 'High Tier',
-          price: 29.99, // Update with actual prices from Stripe
+          price: 49.99, // Update with actual prices from Stripe
           priceId: STRIPE_PRICE_IDS.high,
           credits: TIER_CREDITS.high,
           features: ['Unlimited conversations', 'Priority support', 'Advanced features'],
