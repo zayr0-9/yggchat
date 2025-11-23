@@ -843,7 +843,7 @@ export async function generateResponse(
           },
           messages: formattedMessages,
           stream: true,
-          max_tokens: 100000,
+          max_tokens: 10000,
           tools: openaiTools.length > 0 ? openaiTools : undefined,
           usage: { include: true },
           ...(think && { reasoning: { max_tokens: 30000 } }),
@@ -1524,20 +1524,6 @@ async function handleImageAttachments(
   const imageAtts = (attachments || []).filter(a => a.filePath || a.sha256)
   if (imageAtts.length === 0) return formattedMessages
 
-  // Convert user/assistant to structured parts; keep system as plain string
-  // IMPORTANT: Preserve existing structured content (e.g., messages that already have image_url parts)
-  formattedMessages = formattedMessages.map((m: any) => {
-    if (m.role === 'system') {
-      return { role: m.role, content: String(m.content || '') }
-    }
-    // If content is already an array (structured), preserve it
-    if (Array.isArray(m.content)) {
-      return { ...m }
-    }
-    // Convert string content to structured format
-    return { role: m.role, content: [{ type: 'text', text: String(m.content || '') }] }
-  })
-
   // Find last user message index
   let lastUserIdx = -1
   for (let i = formattedMessages.length - 1; i >= 0; i--) {
@@ -1549,7 +1535,7 @@ async function handleImageAttachments(
 
   // If none, append a new user message for attachments
   if (lastUserIdx === -1) {
-    formattedMessages.push({ role: 'user', content: [{ type: 'text', text: '' }] })
+    formattedMessages.push({ role: 'user', content: '' })
     lastUserIdx = formattedMessages.length - 1
   }
 
@@ -1658,13 +1644,16 @@ async function handleImageAttachments(
   }
 
   // Add images to the last user message
-  const existing = Array.isArray(formattedMessages[lastUserIdx].content)
-    ? formattedMessages[lastUserIdx].content
-    : [{ type: 'text', text: String(formattedMessages[lastUserIdx].content || '') }]
+  if (parts.length > 0) {
+    const targetMsg = formattedMessages[lastUserIdx]
+    const existing = Array.isArray(targetMsg.content)
+      ? targetMsg.content
+      : [{ type: 'text', text: String(targetMsg.content || '') }]
 
-  formattedMessages[lastUserIdx] = {
-    role: 'user',
-    content: [...existing, ...parts],
+    formattedMessages[lastUserIdx] = {
+      ...targetMsg,
+      content: [...existing, ...parts],
+    }
   }
 
   return formattedMessages

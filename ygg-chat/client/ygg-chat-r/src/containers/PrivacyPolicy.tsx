@@ -1,16 +1,19 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 const PrivacyPolicy: React.FC = () => {
   const navigate = useNavigate()
   return (
-    <div className='h-screen overflow-hidden flex flex-col dark:bg-blue-900 bg-blue-200 text-neutral-900 dark:text-neutral-100'>
+    <div className='h-screen overflow-hidden flex flex-col text-neutral-900 dark:text-neutral-100'>
       <div className='flex-1 overflow-y-auto py-12 px-6'>
         <div className='max-w-4xl mx-auto'>
+          <button onClick={() => navigate('/')} className='mb-6 px-4 py-2 mica text-white rounded-lg transition-colors'>
+            ← Back to Home
+          </button>
           {/* Header */}
           <div className='text-left p-8 mb-12 mica rounded-2xl'>
             <h1 className='text-4xl md:text-5xl font-bold text-stone-800 dark:text-neutral-100 mb-4'>
-              Privacy Policy — Yggchat.com
+              Privacy Policy — Yggchat
             </h1>
             <div className='text-lg text-neutral-900 px-2 dark:text-neutral-100 mx-auto space-y-2'>
               <p>
@@ -20,8 +23,8 @@ const PrivacyPolicy: React.FC = () => {
                 <strong>Last Updated:</strong> 12 November 2025
               </p>
               <p>
-                <strong>Operator/Data Controller:</strong> Independent UK-based developer operating as Yggchat.com
-                (“we”, “our”, or “us”)
+                <strong>Operator/Data Controller:</strong> An independent UK-based developer operating as Yggchat (“we”,
+                “our”, or “us”)
               </p>
               <p>
                 <strong>Contact:</strong> support@yggchat.com
@@ -35,10 +38,10 @@ const PrivacyPolicy: React.FC = () => {
 
           <div className='bg-transparent mica rounded-2xl p-8 md:p-12'>
             <p className='mb-8 text-lg'>
-              This Privacy Policy explains how independent UK-based developers operating Yggchat.com (“we”, “Service”,
-              or the “Platform”), collects, uses, stores, and protects your personal data when you use our online chat
-              and AI messaging service. We are committed to protecting your privacy and complying with the UK General
-              Data Protection Regulation (UK GDPR) and other applicable data protection laws. By using the Service, you
+              This Privacy Policy explains how an independent UK-based developer operating Yggchat (“we”, “Service”, or
+              the “Platform”) collects, uses, stores, and protects your personal data when you use our online chat and
+              AI messaging service. We are committed to protecting your privacy and complying with the UK General Data
+              Protection Regulation (UK GDPR) and other applicable data protection laws. By using the Service, you
               consent to the practices described here.
             </p>
             <p className='mb-8 text-lg'>
@@ -75,14 +78,15 @@ const PrivacyPolicy: React.FC = () => {
                   session times), and analytics data to improve performance.
                 </li>
                 <li>
-                  <strong>Local Mode Data (Pro Feature)</strong>: In "Local Pro Mode" (a paid feature), enabling
-                  "Privacy Mode" allows chats and AI data to be collected and processed only on your device (locally
-                  stored). No data is sent to our servers in this mode, enhancing privacy.
+                  <strong>PC app Data (Desktop Feature)</strong>: In the <strong>PC app</strong>, enabling{' '}
+                  <strong>Privacy Mode</strong> allows chats and AI data to be collected and processed only on your
+                  device (locally stored). No data from the PC app in Privacy Mode is sent to our servers, which
+                  enhances privacy.
                 </li>
               </ul>
               <p className='mb-4 text-lg'>
-                We do <strong>not</strong> collect sensitive personal data (e.g., health, political views) unless you
-                voluntarily share it in chats (which we advise against).
+                We do <strong>not</strong> intentionally collect sensitive personal data (e.g., health, political views)
+                unless you voluntarily share it in chats (which we advise against).
               </p>
             </section>
 
@@ -102,8 +106,8 @@ const PrivacyPolicy: React.FC = () => {
                 </li>
               </ul>
               <p className='mb-4 text-lg'>
-                In Local Pro Mode with Privacy Mode enabled, data collection is device-local only—no server transmission
-                occurs unless you explicitly sync or share.
+                In the PC app with Privacy Mode enabled, data collection is device-local only—no server transmission
+                occurs unless you explicitly sync or export it.
               </p>
             </section>
 
@@ -113,15 +117,15 @@ const PrivacyPolicy: React.FC = () => {
               <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
                 <li>Provide and maintain the Service (e.g., hosting chats, AI responses).</li>
                 <li>Process payments and subscriptions (via Stripe).</li>
-                <li>Improve the platform (e.g., anonymized analytics for bug fixes).</li>
-                <li>Communicate with you (e.g., support emails, billing notices).</li>
+                <li>Improve the platform (e.g., anonymized analytics for bug fixes and performance).</li>
+                <li>Communicate with you (e.g., support emails, billing notices, important service updates).</li>
                 <li>Ensure compliance (e.g., age checks, fraud detection).</li>
                 <li>Enforce our Terms (e.g., moderating prohibited content).</li>
               </ul>
               <p className='mb-4 text-lg'>
                 Data is retained only as long as necessary for these purposes or until you delete your account (see
-                Section 5). In Local Pro Mode, local data is managed by you and not retained by us beyond active
-                sessions unless synced.
+                Section 5). In the PC app with Privacy Mode, local data is managed by you and is not retained by us
+                beyond what is necessary for any optional sync features you enable.
               </p>
             </section>
 
@@ -135,19 +139,21 @@ const PrivacyPolicy: React.FC = () => {
                   for anonymized aggregates.
                 </li>
                 <li>
-                  <strong>Local Storage</strong>: In Local Pro Mode with Privacy Mode, data is stored encrypted on your
-                  device only. You control deletion—e.g., via app settings or device wipe.
+                  <strong>Local Storage (PC app)</strong>: In the PC app with Privacy Mode, data is stored on your
+                  device only. You control deletion—for example, via app settings or by removing the app or data from
+                  your device.
                 </li>
                 <li>
-                  <strong>Security Measures</strong>: Data is encrypted in transit (HTTPS/TLS) and at rest (e.g.,
-                  AES-256). We use access controls, regular audits, and comply with PCI DSS via Stripe. As a small
-                  developer, we limit access to essential personnel. However, no system is 100% secure—we cannot
-                  guarantee against breaches but will notify you if one occurs (per GDPR).
+                  <strong>Security Measures</strong>: Data is encrypted in transit (HTTPS/TLS) and at rest where
+                  applicable (e.g., encrypted storage). We use access controls, regular checks, and rely on Stripe for
+                  PCI DSS-compliant payment processing. As a small developer, we limit access to essential personnel
+                  only.
                 </li>
               </ul>
               <p className='mb-4 text-lg'>
                 We store data primarily in the UK/EU (e.g., secure cloud providers compliant with GDPR adequacy).
-                Transfers outside (e.g., to US-based Stripe) use Standard Contractual Clauses for protection.
+                Transfers outside (e.g., to US-based Stripe) rely on appropriate safeguards such as Standard Contractual
+                Clauses.
               </p>
             </section>
 
@@ -155,138 +161,168 @@ const PrivacyPolicy: React.FC = () => {
               <h2 className='text-2xl font-bold mb-4'>5. Your Data Rights (GDPR)</h2>
               <p className='mb-4 text-lg'>
                 Under UK GDPR, you have rights regarding your data. Email support@yggchat.com to exercise them—we
-                respond within 1 month (free, unless excessive):
+                respond within 1 month (free, unless requests are excessive or repetitive):
               </p>
               <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
                 <li>
                   <strong>Access</strong>: Request a copy of your data.
                 </li>
                 <li>
-                  <strong>Rectification</strong>: Correct inaccurate data.
+                  <strong>Rectification</strong>: Correct inaccurate or incomplete data.
                 </li>
                 <li>
-                  <strong>Erasure ("Right to be Forgotten")</strong>: Delete your data/account. In Local Pro Mode,
-                  delete via device settings.
+                  <strong>Erasure ("Right to be Forgotten")</strong>: Delete your data/account. For PC app data, you
+                  must delete it directly from your device.
                 </li>
                 <li>
-                  <strong>Restriction/Objection</strong>: Limit processing (e.g., for marketing— we don't do targeted
-                  ads).
+                  <strong>Restriction/Objection</strong>: Limit or object to certain processing (e.g., analytics,
+                  marketing—note that we do not run targeted third-party ads).
                 </li>
                 <li>
-                  <strong>Portability</strong>: Receive data in a machine-readable format.
+                  <strong>Portability</strong>: Receive data in a machine-readable format, where technically feasible.
                 </li>
                 <li>
-                  <strong>Withdraw Consent</strong>: If consent-based (e.g., non-essential cookies).
+                  <strong>Withdraw Consent</strong>: Where processing relies on consent (e.g., certain cookies), you can
+                  withdraw it at any time.
                 </li>
               </ul>
               <p className='mb-4 text-lg'>
-                For account deletion: Log in &gt; Settings &gt; Delete Account. This revokes access and erases server
-                data. Local data in Pro Mode requires manual device deletion. Appeals or complaints can be filed with
-                the UK Information Commissioner's Office (ico.org.uk).
+                For account deletion: Log in &gt; Settings &gt; Delete Account (where available) or contact support.
+                This revokes access and erases server-side data. PC app data must be removed by you locally.
+              </p>
+              <p className='mb-4 text-lg'>
+                If you are unhappy with our handling of your data, you can complain to the UK Information Commissioner's
+                Office (ICO) at ico.org.uk.
               </p>
             </section>
 
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>6. Sharing Your Data</h2>
               <p className='mb-4 text-lg'>
-                We do <strong>not</strong> sell your data. Sharing is limited to:
+                We do <strong>not</strong> sell your data. We share it only with:
               </p>
               <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
                 <li>
-                  <strong>Service Providers</strong>: Stripe (payments), cloud hosts (storage), and analytics tools
-                  (e.g., for aggregated insights—data is anonymized). All are GDPR-compliant.
+                  <strong>Service Providers</strong>: Stripe (for payments), cloud hosting providers, and analytics or
+                  error-reporting services (for aggregated or pseudonymised insights). All are required to follow data
+                  protection laws and act only on our instructions.
                 </li>
                 <li>
-                  <strong>Legal Requirements</strong>: If required by law (e.g., court order) or to protect
-                  rights/safety.
+                  <strong>Legal and Safety</strong>: Authorities or third parties where required by law, court order, or
+                  to protect rights, property, or safety.
                 </li>
                 <li>
-                  <strong>Business Transfers</strong>: In a merger/acquisition, data may transfer with notice.
+                  <strong>Business Transfers</strong>: In the event of a sale, merger, or similar transaction, user data
+                  may transfer to a successor entity, with notice given.
                 </li>
               </ul>
               <p className='mb-4 text-lg'>
-                No sharing with third parties for marketing. In Local Pro Mode, no data is shared with us or others
-                unless you choose to (e.g., export chats).
+                In the PC app with Privacy Mode, data is not shared with us or third parties unless you choose to sync
+                or export it.
               </p>
             </section>
 
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>7. Cookies and Tracking</h2>
+              <p className='mb-4 text-lg'>We use:</p>
+              <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
+                <li>
+                  <strong>Essential Cookies</strong>: Needed for login, security, and core functionality.
+                </li>
+                <li>
+                  <strong>Optional Analytics</strong>: To understand usage and improve the Service (only where legally
+                  permitted and, if needed, with your consent).
+                </li>
+              </ul>
               <p className='mb-4 text-lg'>
-                We use essential cookies for functionality (e.g., session management) and optional analytics cookies
-                (e.g., to track usage trends). You can manage them via browser settings or our app preferences. In Local
-                Pro Mode, cookies are minimal/local. We comply with ePrivacy rules—no tracking without consent. For
-                details, see our Cookie Policy (if separate) or contact support.
+                You can manage cookies in your browser or device settings. For more details, contact
+                support@yggchat.com.
               </p>
             </section>
 
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>8. Children's Privacy</h2>
               <p className='mb-4 text-lg'>
-                The Service is for users 18+. We do not knowingly collect data from children under 18. If we discover
-                such data, we delete it immediately.
+                The Service is intended for users <strong>18+</strong>. We do not knowingly collect data from anyone
+                under 18. If we learn that we have collected such data, we will delete it as soon as reasonably
+                possible.
               </p>
             </section>
 
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>9. International Users</h2>
               <p className='mb-4 text-lg'>
-                As a global service under UK jurisdiction, your data is processed per UK GDPR. Non-UK users may have
-                additional rights under local laws (e.g., CCPA in California)—we honor verifiable requests where
-                possible.
+                Your data may be processed in the UK or other countries with adequate protections (e.g., EU/EEA) or
+                under appropriate safeguards (e.g., Standard Contractual Clauses for transfers to the US).
+              </p>
+              <p className='mb-4 text-lg'>
+                We apply UK GDPR standards regardless of where you are located and will try to respect additional local
+                rights where relevant.
               </p>
             </section>
 
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>10. Changes to This Policy</h2>
+              <p className='mb-4 text-lg'>We may update this Privacy Policy from time to time.</p>
               <p className='mb-4 text-lg'>
-                We may update this Privacy Policy periodically. The current version is at{' '}
+                The current version is always available at:{' '}
                 <a href='https://yggchat.com/privacy' className='text-blue-600 dark:text-blue-400 hover:underline'>
                   https://yggchat.com/privacy
                 </a>
-                . We'll notify you of material changes via email or in-app notice. Continued use after changes means
-                acceptance.
+              </p>
+              <p className='mb-4 text-lg'>
+                If we make material changes, we will notify you by email or via prominent notice in the Service.
+                Continued use after changes means you accept the updated Policy.
               </p>
             </section>
 
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>11. Contact</h2>
               <p className='mb-4 text-lg'>
-                For privacy questions, data requests, or concerns:
+                For privacy questions, data requests, or concerns, contact:
                 <br />
                 <strong>Email:</strong> support@yggchat.com
-                <br />
-                We aim to respond within 5 business days. For UK GDPR complaints, contact the ICO first.
+              </p>
+              <p className='mb-4 text-lg'>
+                We aim to respond within <strong>5 business days</strong>. For unresolved issues relating to UK GDPR,
+                you may contact the ICO.
               </p>
             </section>
           </div>
         </div>
       </div>
-      <footer className='relative z-10 py-4 px-6 text-center border-t border-white/10 bg-neutral-900/30 backdrop-blur-md'>
-        <div className='max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4'>
-          <div className='text-sm text-neutral-200'>
-            © {new Date().getFullYear()} Yggchat.com. All rights reserved.
+      <footer className='relative z-10 w-full border-t border-white/10 bg-neutral-900/30 backdrop-blur-md font-sans'>
+        <div className='max-w-[1400px] mx-auto px-6 py-4 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs'>
+          {/* LEFT SIDE: Copyright + Business Info (Merged perfectly) */}
+          <div className='flex flex-col md:flex-row items-center gap-2 md:gap-4 text-center md:text-left'>
+            {/* Copyright */}
+            <span className='text-neutral-300 font-medium'>© {new Date().getFullYear()} Yggchat</span>
+            {/* Desktop Divider */}
+            <span className='hidden md:block text-white/10 h-3 border-l border-white/10'></span>
+
+            {/* Business Details - Subtle & Horizontal */}
+            <div className='flex flex-wrap justify-center md:justify-start gap-x-3 text-neutral-500'>
+              <span>[Karanraj Singh] t/a Yggchat.com</span>
+              <span className='hidden sm:inline'>•</span>
+              <span>[225, Whittock Road, Bristol, BS14 8DB]</span>
+              <span className='hidden sm:inline'>•</span>
+              <a href='mailto:support@yggchat.com' className='hover:text-neutral-300 transition-colors'>
+                support@yggchat.com
+              </a>
+            </div>
           </div>
 
-          <div className='flex items-center gap-6'>
-            <button
-              onClick={() => navigate('/terms')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Terms of Service
-            </button>
-            <button
-              onClick={() => navigate('/privacy')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Privacy Policy
-            </button>
-            <button
-              onClick={() => navigate('/refund-policy')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Refund Policy
-            </button>
+          {/* RIGHT SIDE: Legal Links (Using proper Link tags for Stripe bots) */}
+          <div className='flex items-center gap-6 text-neutral-400'>
+            <Link to='/terms' className='hover:text-white transition-colors'>
+              Terms
+            </Link>
+            <Link to='/privacy' className='hover:text-white transition-colors'>
+              Privacy
+            </Link>
+            <Link to='/refund-policy' className='hover:text-white transition-colors'>
+              Refunds
+            </Link>
           </div>
         </div>
       </footer>

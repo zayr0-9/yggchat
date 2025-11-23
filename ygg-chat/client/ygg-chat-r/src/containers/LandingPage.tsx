@@ -1,7 +1,7 @@
 import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/Button/button'
 import { getAssetPath } from '../utils/assetPath'
 
@@ -364,29 +364,38 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
       </section>
 
       {/* Footer */}
-      <footer className='relative z-10 py-4 px-6 text-center border-t border-white/10 bg-neutral-900/30 backdrop-blur-md'>
-        <div className='max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4'>
-          <div className='text-sm text-neutral-200'>© {new Date().getFullYear()} Yggdrasil. All rights reserved.</div>
+      <footer className='relative z-10 w-full border-t border-white/10 bg-neutral-900/30 backdrop-blur-md font-sans'>
+        <div className='max-w-[1400px] mx-auto px-6 py-4 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs'>
+          {/* LEFT SIDE: Copyright + Business Info (Merged perfectly) */}
+          <div className='flex flex-col md:flex-row items-center gap-2 md:gap-4 text-center md:text-left'>
+            {/* Copyright */}
+            <span className='text-neutral-300 font-medium'>© {new Date().getFullYear()} Yggchat</span>
+            {/* Desktop Divider */}
+            <span className='hidden md:block text-white/10 h-3 border-l border-white/10'></span>
 
-          <div className='flex items-center gap-6'>
-            <button
-              onClick={() => navigate('/terms')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Terms of Service
-            </button>
-            <button
-              onClick={() => navigate('/privacy')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Privacy Policy
-            </button>
-            <button
-              onClick={() => navigate('/refund-policy')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Refund Policy
-            </button>
+            {/* Business Details - Subtle & Horizontal */}
+            <div className='flex flex-wrap justify-center md:justify-start gap-x-3 text-neutral-500'>
+              <span>[Karanraj Singh] t/a Yggchat.com</span>
+              <span className='hidden sm:inline'>•</span>
+              <span>[225, Whittock Road, Bristol, BS14 8DB]</span>
+              <span className='hidden sm:inline'>•</span>
+              <a href='mailto:support@yggchat.com' className='hover:text-neutral-300 transition-colors'>
+                support@yggchat.com
+              </a>
+            </div>
+          </div>
+
+          {/* RIGHT SIDE: Legal Links (Using proper Link tags for Stripe bots) */}
+          <div className='flex items-center gap-6 text-neutral-400'>
+            <Link to='/terms' className='hover:text-white transition-colors'>
+              Terms
+            </Link>
+            <Link to='/privacy' className='hover:text-white transition-colors'>
+              Privacy
+            </Link>
+            <Link to='/refund-policy' className='hover:text-white transition-colors'>
+              Refunds
+            </Link>
           </div>
         </div>
       </footer>

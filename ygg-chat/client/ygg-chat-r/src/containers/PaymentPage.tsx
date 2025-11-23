@@ -346,7 +346,18 @@ const PaymentPage: React.FC = () => {
             <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
               {pricingInfo &&
                 Object.entries(pricingInfo.tiers).map(([key, tier]) => {
-                  const tierKey = key as 'high' | 'mid' | 'low'
+                  const getTierKey = (k: string): 'high' | 'mid' | 'low' => {
+                    switch (k) {
+                      case 'Ultra':
+                        return 'high'
+                      case 'Pro':
+                        return 'mid'
+                      case 'Basic':
+                      default:
+                        return 'low'
+                    }
+                  }
+                  const tierKey = getTierKey(key)
                   const isLoading = checkoutLoading === tierKey
 
                   return (

@@ -1,30 +1,26 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 const TermsOfService: React.FC = () => {
   const navigate = useNavigate()
   return (
-    <div className='h-screen overflow-hidden flex flex-col dark:bg-blue-900 bg-blue-200 text-neutral-900 dark:text-neutral-100'>
+    <div className='h-screen overflow-hidden flex flex-col text-neutral-900 dark:text-neutral-100'>
       <div className='flex-1 overflow-y-auto py-12 px-6'>
         <div className='max-w-4xl mx-auto'>
+          <button onClick={() => navigate('/')} className='mb-6 px-4 py-2 mica text-white rounded-lg transition-colors'>
+            ← Back to Home
+          </button>
           {/* Header */}
           <div className='text-left mb-12 rounded-2xl p-8 mica'>
             <h1 className='text-4xl md:text-5xl font-bold text-stone-800 dark:text-neutral-100 mb-4'>
-              Terms of Service — Yggchat.com
+              Terms of Service — Yggchat
             </h1>
             <div className='text-lg text-neutral-900 text-left px-2 dark:text-neutral-100 mx-auto space-y-3'>
               <p>
-                <strong>Effective Date:</strong> 12 November 2025
-              </p>
-              <p>
-                <strong>Operator:</strong> Independent UK-based developer operating as Yggchat.com (“we”, “our”, or
-                “us”)
+                <strong>Operator:</strong> An independent UK-based developer operating as Yggchat (“we”, “our”, or “us”)
               </p>
               <p>
                 <strong>Contact:</strong> support@yggchat.com
-              </p>
-              <p>
-                <strong>Jurisdiction:</strong> United Kingdom (serving users worldwide)
               </p>
             </div>
           </div>
@@ -33,18 +29,17 @@ const TermsOfService: React.FC = () => {
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>1. Acceptance of Terms</h2>
               <p className='mb-4 text-lg'>
-                By creating an account or using Yggchat.com (the “Service”), you agree to these Terms of Service
-                (“Terms”).
+                By creating an account or using Yggchat (the “Service”), you agree to these Terms of Service (“Terms”).
                 <br />
                 If you do not agree, do not use the Service.
               </p>
             </section>
 
             <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>2. About Yggchat.com</h2>
+              <h2 className='text-2xl font-bold mb-4'>2. About Yggchat</h2>
               <p className='mb-4 text-lg'>
-                Yggchat.com is an online chat and AI messaging platform operated by an independent UK-based developer.
-                Full legal details are provided on invoices and available on request.
+                Yggchat is an online chat and AI messaging platform operated by an independent UK-based developer. Full
+                legal details are provided on invoices and available on request.
                 <br />
                 The Service is available globally and may include free and paid features.
               </p>
@@ -69,7 +64,7 @@ const TermsOfService: React.FC = () => {
                 </li>
                 <li>
                   By providing payment information, you agree to Stripe's Services Agreement and Privacy Policy,
-                  available at stripe.com/legal. All payments are processed securely by Stripe, and Yggchat.com does not
+                  available at stripe.com/legal. All payments are processed securely by Stripe, and Yggchat does not
                   store full card details.
                 </li>
                 <li>Subscriptions automatically renew unless cancelled before the next billing date.</li>
@@ -86,15 +81,21 @@ const TermsOfService: React.FC = () => {
                 <br />
                 Access continues until the end of your current billing period.
                 <br />
-                Refund terms are detailed in our <strong>Refund Policy</strong> below. All refunds are processed and
-                handled entirely by Stripe, our third-party payment processor.
+                Refund terms are detailed in our{' '}
+                <a
+                  href='https://yggchat.com/refund-policy'
+                  className='underline hover:text-blue-600 dark:hover:text-blue-400'
+                >
+                  Refund Policy
+                </a>
+                . All refunds are processed by Stripe on our behalf after we manually approve them.
               </p>
             </section>
 
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>6. User Content & Conduct</h2>
               <p className='mb-4 text-lg'>
-                You own the content you create on Yggchat.com.
+                You own the content you create on Yggchat.
                 <br />
                 By using the Service, you grant us a limited, worldwide licence to host and process your content solely
                 to operate the platform.
@@ -121,14 +122,15 @@ const TermsOfService: React.FC = () => {
             <section className='mb-8'>
               <h2 className='text-2xl font-bold mb-4'>7. Privacy & Data</h2>
               <p className='mb-4 text-lg'>
-                Your use of Yggchat.com is subject to our{' '}
+                Your use of Yggchat is subject to our{' '}
                 <a
                   href='https://yggchat.com/privacy'
                   className='underline hover:text-blue-600 dark:hover:text-blue-400'
                 >
                   Privacy Policy
                 </a>
-                .<br />
+                .
+                <br />
                 We comply with the UK GDPR and use trusted third-party processors such as Stripe for payments and
                 analytics services to improve the platform.
                 <br />
@@ -208,31 +210,38 @@ const TermsOfService: React.FC = () => {
           </div>
         </div>
       </div>
-      <footer className='relative z-10 py-4 px-6 text-center border-t border-white/10 bg-neutral-900/30 backdrop-blur-md'>
-        <div className='max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4'>
-          <div className='text-sm text-neutral-200'>
-            © {new Date().getFullYear()} Yggchat.com. All rights reserved.
+      <footer className='relative z-10 w-full border-t border-white/10 bg-neutral-900/30 backdrop-blur-md font-sans'>
+        <div className='max-w-[1400px] mx-auto px-6 py-4 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs'>
+          {/* LEFT SIDE: Copyright + Business Info (Merged perfectly) */}
+          <div className='flex flex-col md:flex-row items-center gap-2 md:gap-4 text-center md:text-left'>
+            {/* Copyright */}
+            <span className='text-neutral-300 font-medium'>© {new Date().getFullYear()} Yggchat</span>
+            {/* Desktop Divider */}
+            <span className='hidden md:block text-white/10 h-3 border-l border-white/10'></span>
+
+            {/* Business Details - Subtle & Horizontal */}
+            <div className='flex flex-wrap justify-center md:justify-start gap-x-3 text-neutral-500'>
+              <span>[Karanraj Singh] t/a Yggchat.com</span>
+              <span className='hidden sm:inline'>•</span>
+              <span>[225, Whittock Road, Bristol, BS14 8DB]</span>
+              <span className='hidden sm:inline'>•</span>
+              <a href='mailto:support@yggchat.com' className='hover:text-neutral-300 transition-colors'>
+                support@yggchat.com
+              </a>
+            </div>
           </div>
 
-          <div className='flex items-center gap-6'>
-            <button
-              onClick={() => navigate('/terms')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Terms of Service
-            </button>
-            <button
-              onClick={() => navigate('/privacy')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Privacy Policy
-            </button>
-            <button
-              onClick={() => navigate('/refund-policy')}
-              className='text-sm text-neutral-200 hover:text-white transition-colors'
-            >
-              Refund Policy
-            </button>
+          {/* RIGHT SIDE: Legal Links (Using proper Link tags for Stripe bots) */}
+          <div className='flex items-center gap-6 text-neutral-400'>
+            <Link to='/terms' className='hover:text-white transition-colors'>
+              Terms
+            </Link>
+            <Link to='/privacy' className='hover:text-white transition-colors'>
+              Privacy
+            </Link>
+            <Link to='/refund-policy' className='hover:text-white transition-colors'>
+              Refunds
+            </Link>
           </div>
         </div>
       </footer>
