@@ -92,6 +92,7 @@
   },
   "build": {
     "appId": "com.yggdrasil.chat",
+    "icon": "public/img/logo-l-thick.png",
     "productName": "Yggdrasil",
     "directories": {
       "output": "release"

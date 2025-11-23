@@ -4,7 +4,7 @@ import { LiquidGlassSVG } from './components/LiquidGlassSVG'
 import ProtectedRoute from './components/ProtectedRoute'
 import { TitleBar } from './components/TitleBar/TitleBar'
 import VideoBackground from './components/VideoBackground'
-import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, PaymentPlans, Settings } from './containers'
+import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, PaymentPlans, PrivacyPolicy, RefundPolicy, Settings, TermsOfService } from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
@@ -32,6 +32,12 @@ function App() {
         <Route path='/login' element={<Login />} />
         {/* Public route */}
         <Route path='/paymentplan' element={<PaymentPlans />} />
+        {/* Public route */}
+        <Route path='/terms' element={<TermsOfService />} />
+        {/* Public route */}
+        <Route path='/refund-policy' element={<RefundPolicy />} />
+        {/* Public route */}
+        <Route path='/privacy' element={<PrivacyPolicy />} />
         {/* Protected routes */}
         <Route
           path='/conversationPage'

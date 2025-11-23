@@ -362,6 +362,34 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
           </div>
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className='relative z-10 py-4 px-6 text-center border-t border-white/10 bg-neutral-900/30 backdrop-blur-md'>
+        <div className='max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4'>
+          <div className='text-sm text-neutral-200'>© {new Date().getFullYear()} Yggdrasil. All rights reserved.</div>
+
+          <div className='flex items-center gap-6'>
+            <button
+              onClick={() => navigate('/terms')}
+              className='text-sm text-neutral-200 hover:text-white transition-colors'
+            >
+              Terms of Service
+            </button>
+            <button
+              onClick={() => navigate('/privacy')}
+              className='text-sm text-neutral-200 hover:text-white transition-colors'
+            >
+              Privacy Policy
+            </button>
+            <button
+              onClick={() => navigate('/refund-policy')}
+              className='text-sm text-neutral-200 hover:text-white transition-colors'
+            >
+              Refund Policy
+            </button>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
