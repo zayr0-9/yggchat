@@ -298,13 +298,13 @@ const PaymentPage: React.FC = () => {
 
         {/* Current Subscription Status */}
         {subscriptionStatus && subscriptionStatus.tier && (
-          <div className='mb-8 p-6 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border border-indigo-100 dark:border-neutral-700'>
+          <div className='mb-8 p-6 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border mica border-indigo-100 dark:border-neutral-700'>
             <h2 className='text-2xl font-bold mb-4 dark:text-neutral-100'>Current Subscription</h2>
             <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
               <div>
                 <p className='text-sm text-gray-600 dark:text-gray-400'>Tier</p>
                 <p className='text-lg font-semibold dark:text-neutral-100 capitalize'>
-                  {subscriptionStatus.tier} Tier God
+                  {subscriptionStatus.tier === 'high' ? 'Ultra' : subscriptionStatus.tier === 'mid' ? 'Pro' : 'Basic'}
                 </p>
               </div>
               <div>
@@ -426,7 +426,7 @@ const PaymentPage: React.FC = () => {
           </>
         ) : (
           /* Already subscribed message */
-          <div className='mb-8 p-6 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border border-gray-200 dark:border-neutral-700'>
+          <div className='mb-8 p-6 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border mica border-gray-200 dark:border-neutral-700'>
             <h2 className='text-2xl font-bold mb-4 dark:text-neutral-100'>You&apos;re All Set! 🎉</h2>
             <p className='text-gray-700 dark:text-neutral-300 mb-4'>
               You currently have an active subscription. Your credits will automatically replenish each month on your
@@ -454,7 +454,7 @@ const PaymentPage: React.FC = () => {
         )}
 
         {/* How Credits Work */}
-        <div className='mt-12 p-6 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border border-gray-200 dark:border-neutral-700'>
+        <div className='mt-12 p-6 bg-white dark:bg-yBlack-900 rounded-lg shadow-md border mica border-gray-200 dark:border-neutral-700'>
           <h2 className='text-2xl font-bold mb-4 dark:text-neutral-100'>How Credits Work</h2>
           <ul className='space-y-2 dark:text-neutral-200'>
             <li className='flex items-start'>
@@ -471,7 +471,7 @@ const PaymentPage: React.FC = () => {
             </li>
             <li className='flex items-start'>
               <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600'></i>
-              More expensive models (like GPT-4, Claude Opus) use more credits per generation
+              More expensive models (like GPT-5, Claude Sonnet 4.5) use more credits per generation
             </li>
           </ul>
         </div>

@@ -161,7 +161,7 @@ router.get(
  * IMPORTANT: This route is mounted separately with express.raw() middleware in index.ts
  */
 router.post(
-  '/webhook',
+  '/',
   asyncHandler(async (req, res) => {
     const signature = req.headers['stripe-signature']
 

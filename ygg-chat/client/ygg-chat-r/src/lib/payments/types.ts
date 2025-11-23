@@ -41,7 +41,11 @@ export interface PaymentProvider {
   /**
    * Create a checkout session for purchasing a subscription
    */
-  createCheckoutSession(userId: string, tier: 'high' | 'mid' | 'low', email?: string): Promise<{
+  createCheckoutSession(
+    userId: string,
+    tier: 'high' | 'mid' | 'low',
+    email?: string
+  ): Promise<{
     sessionId: string
     url: string
   }>
