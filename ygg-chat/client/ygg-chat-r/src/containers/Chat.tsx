@@ -76,6 +76,7 @@ import {
   useSelectModel,
 } from '../hooks/useQueries'
 import { cloneConversation } from '../utils/api'
+import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
 
 function Chat() {
@@ -1939,7 +1940,7 @@ function Chat() {
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
                   <img
-                    src='/img/branch.svg'
+                    src={getAssetPath('img/branch.svg')}
                     alt='Thinking'
                     className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[18px] md:h-[18px] lg:w-[20px] lg:h-[20px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[24px] 3xl:h-[24px] 4xl:w-[24px] 4xl:h-[24px]'
                   />
@@ -2294,13 +2295,13 @@ function Chat() {
                     >
                       {think ? (
                         <img
-                          src='/img/thinking active.svg'
+                          src={getAssetPath('img/thinking active.svg')}
                           alt='Thinking active'
                           className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
                         />
                       ) : (
                         <img
-                          src='/img/thinking.svg'
+                          src={getAssetPath('img/thinking.svg')}
                           alt='Thinking'
                           className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
                         />
