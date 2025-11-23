@@ -15,7 +15,7 @@
  */
 
 import { supabaseAdmin } from '../database/supamodels'
-import { moneySubtract, moneyIsZero, moneyFormat } from '../utils/money'
+import { moneyFormat, moneyIsZero, moneySubtract } from '../utils/money'
 
 // Configuration
 const RECONCILE_BATCH_SIZE = 10 // Process 10 runs at a time
@@ -81,7 +81,7 @@ async function fetchGenerationDetails(generationId: string): Promise<OpenRouterG
       headers: {
         Authorization: `Bearer ${openrouterApiKey}`,
         'HTTP-Referer': process.env.OPENROUTER_REFERER || process.env.SITE_URL || '',
-        'X-Title': process.env.OPENROUTER_TITLE || 'Yggdrasil Chat',
+        'X-Title': process.env.OPENROUTER_TITLE || 'Yggdrasil',
       },
     })
 
@@ -440,7 +440,10 @@ async function runReconciliationBatch(): Promise<void> {
           // Schedule next retry
           const nextRetryAt = calculateNextRetryTime(estimatedAttempts)
           console.log(`⏰ Scheduling retry for ${run.generation_id} at ${nextRetryAt.toISOString()}`)
-          await supabaseAdmin.from('provider_runs').update({ next_reconcile_at: nextRetryAt.toISOString() }).eq('id', run.id)
+          await supabaseAdmin
+            .from('provider_runs')
+            .update({ next_reconcile_at: nextRetryAt.toISOString() })
+            .eq('id', run.id)
         }
       }
     }
@@ -463,7 +466,9 @@ export function startReconciliationWorker(): void {
   }
 
   console.log('🚀 Starting OpenRouter reconciliation worker')
-  console.log(`🔄 Polling every ${RECONCILE_INTERVAL_MS / 1000}s for pending reconciliations (batch size: ${RECONCILE_BATCH_SIZE})`)
+  console.log(
+    `🔄 Polling every ${RECONCILE_INTERVAL_MS / 1000}s for pending reconciliations (batch size: ${RECONCILE_BATCH_SIZE})`
+  )
 
   // Run initial batch immediately
   runReconciliationBatch()

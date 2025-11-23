@@ -1,8 +1,0 @@
-{
-  "name": "@ygg-chat/local-sync-server-bundle",
-  "version": "1.0.0",
-  "type": "module",
-  "dependencies": {
-    "better-sqlite3": "^11.8.1"
-  }
-}

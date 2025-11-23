@@ -92,7 +92,7 @@
   },
   "build": {
     "appId": "com.yggdrasil.chat",
-    "productName": "Yggdrasil Chat",
+    "productName": "Yggdrasil",
     "directories": {
       "output": "release"
     },

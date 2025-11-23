@@ -205,7 +205,7 @@ async function fetchAllModelsPricing(): Promise<void> {
       headers: {
         Authorization: `Bearer ${client.apiKey}`,
         'HTTP-Referer': process.env.OPENROUTER_REFERER || process.env.SITE_URL || '',
-        'X-Title': process.env.OPENROUTER_TITLE || 'Yggdrasil Chat',
+        'X-Title': process.env.OPENROUTER_TITLE || 'Yggdrasil',
       },
     })
 
@@ -1070,10 +1070,10 @@ export async function generateResponse(
 
           if (!shouldRunOnServer) {
             console.log('🛑 [openrouter] Client-side execution mode: halting generation for tool execution')
-            
+
             // Stream a special halt event if needed, or rely on the pending tool_calls sent earlier
             // We've already sent tool_call events with status='pending'
-            
+
             // We still need to log cost for this partial run
             if (!finalUsage) {
               finalUsage = createEstimatedUsage(formattedMessages, assistantContent)
@@ -1082,7 +1082,7 @@ export async function generateResponse(
             if (currentProviderRunId) {
               await finishProviderRun(currentProviderRunId, 'succeeded', finalUsage)
             }
-            
+
             // Log generation cost
             try {
               const totals = {
@@ -1093,7 +1093,7 @@ export async function generateResponse(
                 totalOpenRouterCredits,
               }
               await logGenerationCost(model, stepCount, finalUsage, totals)
-              
+
               // Update totals
               totalPromptTokens = totals.totalPromptTokens
               totalCompletionTokens = totals.totalCompletionTokens
@@ -1107,7 +1107,10 @@ export async function generateResponse(
             // Stop the loop and return - client will resume with tool results
             return
           }
-          console.log('⚡ [openrouter] Executing server-side tools despite client mode:', uniqueToolCalls.map(t => t.name))
+          console.log(
+            '⚡ [openrouter] Executing server-side tools despite client mode:',
+            uniqueToolCalls.map(t => t.name)
+          )
         }
 
         // Execute tools and add their results
