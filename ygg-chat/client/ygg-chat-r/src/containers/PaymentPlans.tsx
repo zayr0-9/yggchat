@@ -60,6 +60,7 @@ const PaymentPlans: React.FC = () => {
   // Data for 6 features across plans with descriptive text
   const features: Feature[] = [
     { name: 'Multiple Models', plans: { basic: '400+', pro: '400+', ultra: '400+' } },
+    { name: 'Credits', plans: { basic: '400', pro: '800', ultra: '2200' } },
     { name: 'Cloud Sync', plans: { basic: 'Limited Cloud', pro: 'Unlimited', ultra: 'Unlimited' } },
     { name: 'Database', plans: { basic: 'Cloud', pro: 'Cloud + Local', ultra: 'Cloud + Local' } },
     { name: 'Agents', plans: { basic: 'Not included', pro: 'Yes', ultra: 'Yes' } },
