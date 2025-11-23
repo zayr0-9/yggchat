@@ -188,7 +188,21 @@ const PaymentPage: React.FC = () => {
       fetchData() // Refresh data
     } catch (err: any) {
       console.error('Error canceling subscription:', err)
-      setError(err.message)
+
+      // Show user-friendly error messages
+      let errorMessage = 'Failed to cancel subscription. Please try again or contact support.'
+
+      if (err.message?.includes('already canceled')) {
+        errorMessage = 'Your subscription is already canceled.'
+      } else if (err.message?.includes('already scheduled to cancel')) {
+        errorMessage = 'Your subscription is already scheduled to cancel at the end of the billing period.'
+      } else if (err.message?.includes('No active subscription')) {
+        errorMessage = 'No active subscription found.'
+      } else if (err.message) {
+        errorMessage = err.message
+      }
+
+      setError(errorMessage)
     }
   }
 
@@ -321,12 +335,22 @@ const PaymentPage: React.FC = () => {
             {subscriptionStatus.currentPeriodEnd && (
               <div className='mt-4'>
                 <p className='text-sm text-gray-600 dark:text-gray-400'>
-                  {subscriptionStatus.status === 'canceled' ? 'Access until' : 'Renews on'}:{' '}
-                  {formatDate(subscriptionStatus.currentPeriodEnd)}
+                  {subscriptionStatus.status === 'canceled'
+                    ? 'Access until'
+                    : subscriptionStatus.cancelAtPeriodEnd
+                      ? 'Cancels on'
+                      : 'Renews on'}
+                  : {formatDate(subscriptionStatus.currentPeriodEnd)}
                 </p>
+                {subscriptionStatus.cancelAtPeriodEnd && subscriptionStatus.status === 'active' && (
+                  <p className='text-sm text-yellow-600 dark:text-yellow-400 mt-2'>
+                    <i className='bx bx-info-circle mr-1'></i>
+                    Your subscription is scheduled to cancel at the end of the billing period.
+                  </p>
+                )}
               </div>
             )}
-            {subscriptionStatus.status === 'active' && (
+            {subscriptionStatus.status === 'active' && !subscriptionStatus.cancelAtPeriodEnd && (
               <div className='mt-4'>
                 <Button variant='outline2' size='medium' onClick={handleCancelSubscription}>
                   Cancel Subscription

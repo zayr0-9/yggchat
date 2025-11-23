@@ -592,6 +592,28 @@ export async function cancelSubscription(userId: string): Promise<void> {
       throw new Error(`No active subscription found for user ${userId}`)
     }
 
+    // Retrieve current subscription from Stripe to check actual status
+    const stripeSubscription = (await stripe.subscriptions.retrieve(
+      subscription.stripe_subscription_id
+    )) as StripeSubscription
+
+    // Check if subscription is already canceled
+    if (stripeSubscription.status === 'canceled') {
+      throw new Error('Subscription is already canceled')
+    }
+
+    // Check if subscription is already set to cancel at period end
+    if (stripeSubscription.cancel_at_period_end) {
+      throw new Error('Subscription is already scheduled to cancel at the end of the billing period')
+    }
+
+    // Check if subscription is in a state that can be canceled
+    if (!['active', 'trialing', 'past_due'].includes(stripeSubscription.status)) {
+      throw new Error(
+        `Cannot cancel subscription with status: ${stripeSubscription.status}. Only active, trialing, or past_due subscriptions can be canceled.`
+      )
+    }
+
     // Cancel subscription at period end in Stripe
     await stripe.subscriptions.update(subscription.stripe_subscription_id, {
       cancel_at_period_end: true,

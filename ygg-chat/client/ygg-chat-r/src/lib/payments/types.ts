@@ -7,6 +7,10 @@ export interface SubscriptionStatus {
   creditsBalance: number
   stripeCustomerId: string | null
   stripeSubscriptionId: string | null
+  planCode: string | null
+  planName: string | null
+  monthlyCredits: number
+  cancelAtPeriodEnd: boolean
 }
 
 export interface TierInfo {
