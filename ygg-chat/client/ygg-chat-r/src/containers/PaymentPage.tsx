@@ -6,9 +6,9 @@ import { getPaymentProvider, type SubscriptionStatus, type TierInfo } from '../l
 
 interface PricingInfo {
   tiers: {
-    high: TierInfo
-    mid: TierInfo
-    low: TierInfo
+    Ultra: TierInfo
+    Pro: TierInfo
+    Basic: TierInfo
   }
 }
 
@@ -115,9 +115,9 @@ const PaymentPage: React.FC = () => {
       // Convert array to object format for backward compatibility
       const pricingData: PricingInfo = {
         tiers: {
-          low: tiersData.find(t => t.name === 'Low') || tiersData[0],
-          mid: tiersData.find(t => t.name === 'Mid') || tiersData[1],
-          high: tiersData.find(t => t.name === 'High') || tiersData[2],
+          Basic: tiersData.find(t => t.name === 'Basic') || tiersData[0],
+          Pro: tiersData.find(t => t.name === 'Pro') || tiersData[1],
+          Ultra: tiersData.find(t => t.name === 'Ultra') || tiersData[2],
         },
       }
       setPricingInfo(pricingData)
