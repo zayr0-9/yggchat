@@ -9,6 +9,7 @@ import { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { ResearchNoteItem } from '../../hooks/useQueries'
+import { Button } from '../Button/button'
 import { QuickInput } from '../QuickInput/QuickInput'
 import { TextArea } from '../TextArea/TextArea'
 import { ResearchNotesList } from './ResearchNotesList'
@@ -191,11 +192,15 @@ export const LowBar: React.FC<LowBarProps> = ({
       }`}
     >
       {/* Container with shadow and border */}
-      <div className='h-full flex flex-col acrylic-light dark:bg-transparent border border-transparent dark:border-neutral-900 rounded-3xl overflow-hidden shadow-[0px_0px_3px_-2px_rgba(0,0,0,0)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700'>
+      <div
+        className={`h-full flex flex-col ${isExpanded ? 'bg-neutral-50/30 dark:bg-neutral-900' : 'bg-transparent dark:bg-transparent'} rounded-3xl overflow-hidden shadow-[0px_0px_3px_-2px_rgba(0,0,0,0)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700`}
+      >
         {/* Header bar (always visible) */}
-        <button
+        <Button
           onClick={() => setIsExpanded(!isExpanded)}
-          className={`flex items-center rounded-full justify-between px-4  ${isExpanded ? 'mt-3 mx-2 py-2' : 'py-3 no-scrollbar'} bg-neutral-50 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200 `}
+          variant='acrylic'
+          rounded='full'
+          className={`w-full flex  px-4 ${isExpanded ? 'mt-3 mx-2 py-2' : 'py-3 no-scrollbar'} bg-neutral-50 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200`}
         >
           <div className='text-sm 2xl:text-[14px] 3xl:text-[16px] font-medium text-stone-800 dark:text-stone-200 '>
             Notes
@@ -205,7 +210,7 @@ export const LowBar: React.FC<LowBarProps> = ({
           ) : (
             <ChevronUp className='w-4 h-4 text-stone-600 dark:text-stone-300' />
           )}
-        </button>
+        </Button>
 
         {/* Expanded content */}
         {isExpanded && (

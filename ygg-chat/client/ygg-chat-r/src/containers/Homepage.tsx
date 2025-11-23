@@ -3,7 +3,7 @@ import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Project, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
+import { Project, ProjectWithLatestConversation } from '../../../../shared/types'
 import { Button } from '../components'
 import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
@@ -49,6 +49,10 @@ const Homepage: React.FC = () => {
   // Search dropdown is handled inside SearchList component
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+
+  // Delete confirmation dialog state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<ProjectWithLatestConversation | null>(null)
 
   // Mobile options menu state
   const [showMobileOptionsMenu, setShowMobileOptionsMenu] = useState(false)
@@ -143,7 +147,15 @@ const Homepage: React.FC = () => {
     handleSelectProject(projectWithLatest)
   }
 
-  const handleDeleteProject = async (id: ProjectId) => {
+  const handleDeleteProject = (project: ProjectWithLatestConversation) => {
+    setProjectToDelete(project)
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return
+
+    const id = projectToDelete.id
     // Delete via Redux thunk (handles API call)
     await dispatch(deleteProject(id))
 
@@ -151,6 +163,14 @@ const Homepage: React.FC = () => {
     queryClient.setQueryData(['projects', userId], (old: ProjectWithLatestConversation[] | undefined) => {
       return old ? old.filter(project => project.id !== id) : []
     })
+
+    setShowDeleteConfirm(false)
+    setProjectToDelete(null)
+  }
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false)
+    setProjectToDelete(null)
   }
 
   const handleCloseModal = () => {
@@ -374,7 +394,7 @@ const Homepage: React.FC = () => {
                             onClick={
                               (e => {
                                 ;(e as unknown as React.MouseEvent).stopPropagation()
-                                handleDeleteProject(project.id)
+                                handleDeleteProject(project)
                               }) as unknown as () => void
                             }
                           >
@@ -408,6 +428,33 @@ const Homepage: React.FC = () => {
         editingProject={editingProject}
         onProjectCreated={handleProjectCreated}
       />
+
+      {/* Delete Project Confirmation Dialog */}
+      {showDeleteConfirm && projectToDelete && (
+        <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
+          <div className='bg-neutral-100 text-neutral-900 mica-medium dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'>
+            <h3 className='text-xl font-semibold mb-2 dark:text-neutral-100'>Delete Project?</h3>
+            <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-4'>
+              Are you sure you want to delete "<span className='font-medium'>{projectToDelete.name}</span>
+              "? This action cannot be undone.
+            </p>
+            <div className='flex gap-3 justify-end'>
+              <Button variant='acrylic' size='circle' rounded='full' className='group' onClick={handleCancelDelete}>
+                <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
+              </Button>
+              <Button
+                variant='acrylic'
+                size='circle'
+                rounded='full'
+                className='group bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-black dark:text-white border-red-600 dark:border-red-700'
+                onClick={confirmDeleteProject}
+              >
+                <p className='transition-transform duration-100 group-active:scale-95'>Delete</p>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Options Context Menu */}
       {showMobileOptionsMenu && menuPosition && (

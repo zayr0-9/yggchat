@@ -25,6 +25,7 @@ interface SelectProps {
   filterUI?: React.ReactNode
   modelData?: Record<string, BaseModel>
   onFavoritesChange?: () => void
+  modelSelect?: boolean
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -40,6 +41,7 @@ export const Select: React.FC<SelectProps> = ({
   filterUI,
   modelData,
   onFavoritesChange,
+  modelSelect = false,
 }) => {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number>(-1)
@@ -150,8 +152,8 @@ export const Select: React.FC<SelectProps> = ({
       // Calculate fixed position based on button rect
       setDropdownPosition({
         top: shouldOpenUp ? rect.top - (maxH + 4) : rect.bottom + 4,
-        left: rect.left - 50,
-        width: rect.width + 80,
+        left: modelSelect ? rect.left - 5 : rect.left,
+        width: modelSelect ? rect.width + 80 : rect.width,
       })
     }
     // Always compute once on mount and whenever `open` changes

@@ -156,6 +156,7 @@ export const QuickInput: React.FC = () => {
               disabled={models.length === 0}
               className='flex-1 ml-2 max-w-28 sm:max-w-28 md:max-w-28 lg:max-w-40 transition-transform duration-60 active:scale-99'
               searchBarVisible={true}
+              modelSelect={true}
             />
             {/* <Button
               variant='outline2'
@@ -173,17 +174,25 @@ export const QuickInput: React.FC = () => {
               ></i>
             </Button> */}
             {selectedModel?.thinking && (
-              <Button variant='outline2' className='rounded-full' size='medium' onClick={() => setThink(t => !t)}>
+              <Button
+                variant='outline2'
+                className='rounded-full'
+                size='medium'
+                onClick={() => setThink(t => !t)}
+                title='Enable thinking'
+              >
                 {think ? (
-                  <i
-                    className='bx bxs-bulb text-yellow-400 text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px]'
-                    aria-hidden='true'
-                  ></i>
+                  <img
+                    src='/img/thinking active.svg'
+                    alt='Thinking active'
+                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[16px] lg:h-[16px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
+                  />
                 ) : (
-                  <i
-                    className='bx bx-bulb text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px]'
-                    aria-hidden='true'
-                  ></i>
+                  <img
+                    src='/img/thinking.svg'
+                    alt='Thinking'
+                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[16px] lg:h-[16px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
+                  />
                 )}
               </Button>
             )}

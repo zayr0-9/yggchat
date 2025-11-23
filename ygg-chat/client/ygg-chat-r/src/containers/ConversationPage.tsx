@@ -441,7 +441,7 @@ const ConversationPage: React.FC = () => {
                 variant='acrylic'
                 size='circle'
                 rounded='full'
-                className='group bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white border-red-600 dark:border-red-700'
+                className='group bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-black dark:text-white border-red-600 dark:border-red-700'
                 onClick={confirmDelete}
               >
                 <p className='transition-transform duration-100 group-active:scale-95'>Delete</p>

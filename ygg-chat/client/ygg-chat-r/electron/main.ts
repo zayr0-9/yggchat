@@ -214,8 +214,13 @@ nativeTheme.on('updated', () => {
 })
 
 function createWindow() {
+  const iconPath = app.isPackaged
+    ? path.join(__dirname, '../dist-electron/img/logo-l-thick.svg')
+    : path.join(__dirname, '../public/img/logo-l-thick.svg')
+
   mainWindow = new BrowserWindow({
     title: 'Yggdrasil',
+    icon: iconPath,
     width: 1400,
     height: 900,
     minWidth: 800,

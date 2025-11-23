@@ -2221,6 +2221,7 @@ function Chat() {
                       setSpinSettings(true)
                       setSettingsOpen(true)
                     }}
+                    title='Chat Settings'
                   >
                     <i
                       className={`bx bx-cog text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
@@ -2261,6 +2262,7 @@ function Chat() {
                         onClearFilters={clearFilters}
                       />
                     }
+                    modelSelect={true}
                   />
                   {/* <Button
                     variant='outline2'
@@ -2278,17 +2280,25 @@ function Chat() {
                     ></i>
                   </Button> */}
                   {selectedModel?.thinking && (
-                    <Button variant='outline2' className='rounded-full' size='medium' onClick={() => setThink(t => !t)}>
+                    <Button
+                      variant='outline2'
+                      className='rounded-full'
+                      size='large'
+                      onClick={() => setThink(t => !t)}
+                      title='Enable thinking'
+                    >
                       {think ? (
-                        <i
-                          className='bx bxs-bulb text-yellow-400 text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px]'
-                          aria-hidden='true'
-                        ></i>
+                        <img
+                          src='/img/thinking active.svg'
+                          alt='Thinking active'
+                          className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
+                        />
                       ) : (
-                        <i
-                          className='bx bx-bulb text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] '
-                          aria-hidden='true'
-                        ></i>
+                        <img
+                          src='/img/thinking.svg'
+                          alt='Thinking'
+                          className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
+                        />
                       )}
                     </Button>
                   )}
@@ -2327,6 +2337,7 @@ function Chat() {
                       variant='outline2'
                       onClick={handleStopGeneration}
                       disabled={!streamState.streamingMessageId}
+                      title='Stop generation'
                     >
                       <i className='bx bx-stop-circle text-[18px]' aria-hidden='true'></i>
                     </Button>
@@ -2337,6 +2348,7 @@ function Chat() {
                       variant={canSendLocal && currentConversationId ? 'outline2' : 'outline2'}
                       size='medium'
                       disabled={!canSendLocal || !currentConversationId}
+                      title='Send message'
                       onClick={() => {
                         if (ccMode && ccModeAvailable && localInput.trim()) {
                           // Send to Claude Code agent (disabled in web mode)

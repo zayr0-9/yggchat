@@ -19,7 +19,7 @@ const Login: React.FC = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
-      navigate('/')
+      navigate('/homepage')
     }
   }, [user, navigate])
 
@@ -255,7 +255,7 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div className=' relative z-10 min-h-screen flex items-center justify-center bg-black/10 dark:bg-black/10 py-12 px-4 sm:px-6 lg:px-8'>
+    <div className=' relative z-10 min-h-screen flex items-center justify-center bg-black/40 dark:bg-black/40 py-12 px-4 sm:px-6 lg:px-8'>
       <div className='max-w-md w-full space-y-8'>
         <div className='py-10'>
           <h2 className='mt-6 text-center text-3xl font-extrabold text-neutral-100 dark:text-white'>

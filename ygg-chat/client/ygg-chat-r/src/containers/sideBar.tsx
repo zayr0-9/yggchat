@@ -177,7 +177,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           const projectName = conv.project_id ? projects.find(p => p.id === conv.project_id)?.name : undefined
 
           return (
-            <div key={conv.id} className='lg:mb-1.5 2xl:mb-2 group relative'>
+            <div key={conv.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
               <div
                 role='button'
                 tabIndex={0}
@@ -191,7 +191,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                 className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
                   isCollapsed
                     ? 'py-2 flex items-center hover:scale-90 justify-center'
-                    : 'hover:bg-stone-100 hover:ring-neutral-100 hover:ring-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
+                    : 'hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
                 } ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
                 title={isCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
               >

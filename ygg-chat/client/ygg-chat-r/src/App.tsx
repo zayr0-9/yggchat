@@ -10,8 +10,7 @@ import IdeContextBootstrap from './IdeContextBootstrap'
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
 // Use BrowserRouter for web (standard HTML5 history API)
 const isElectron =
-  (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
-  import.meta.env.VITE_ENVIRONMENT === 'electron'
+  (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
 
 const Router = isElectron ? HashRouter : BrowserRouter
 
@@ -42,14 +41,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path='/'
-          element={
-            <ProtectedRoute>
-              <Homepage />
-            </ProtectedRoute>
-          }
-        />
+        <Route path='/' element={<LandingPage />} />
         <Route
           path='/homepage'
           element={

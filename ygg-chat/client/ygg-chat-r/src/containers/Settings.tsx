@@ -118,7 +118,7 @@ const Settings: React.FC = () => {
         {/* Header */}
         <div className='flex items-center justify-between mb-6 py-4'>
           <h1 className='text-2xl font-semibold text-stone-800 dark:text-stone-200'>Environment Variables</h1>
-          <Button variant='secondary' onClick={() => navigate('/')} className='group'>
+          <Button variant='secondary' onClick={() => navigate('/homepage')} className='group'>
             <p className='transition-transform duration-100 group-active:scale-95'>Back to Home</p>
           </Button>
         </div>

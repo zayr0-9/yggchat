@@ -250,7 +250,7 @@ const PaymentPage: React.FC = () => {
         <div className='flex items-center justify-between mb-8'>
           <div className='flex items-center gap-4'>
             {hasActiveAccess() && (
-              <Button variant='acrylic' onClick={() => navigate('/')}>
+              <Button variant='acrylic' onClick={() => navigate('/homepage')}>
                 <i className='bx bx-arrow-back mr-2'></i>
                 Home
               </Button>
@@ -407,7 +407,7 @@ const PaymentPage: React.FC = () => {
             </div>
 
             <div className='relative z-10 mt-8 flex justify-center'>
-              <Button variant='acrylic' size='large' onClick={() => navigate('/')}>
+              <Button variant='acrylic' size='large' onClick={() => navigate('/homepage')}>
                 <i className='bx bx-home-alt mr-2'></i>
                 No thanks, take me Home
               </Button>
