@@ -71,38 +71,6 @@ function extractionFunction(options: any) {
     return (element as any).textContent?.trim().replace(/\s+/g, ' ') || ''
   }
 
-  // Helper function to determine if element is likely to be main content
-  function getContentScore(element: any): number {
-    let score = 0
-    const tagName = (element as any).tagName.toLowerCase()
-    const className = (element as any).className.toLowerCase ? (element as any).className.toLowerCase() : ''
-    const id = (element as any).id.toLowerCase ? (element as any).id.toLowerCase() : ''
-
-    // Tag-based scoring
-    if (['article', 'main', 'section'].includes(tagName)) score += 5
-    if (['div', 'p'].includes(tagName)) score += 1
-    if (['nav', 'header', 'footer', 'aside'].includes(tagName)) score -= 3
-    if (['script', 'style', 'noscript'].includes(tagName)) score -= 5
-
-    // Class/ID-based scoring
-    if (/content|article|post|main|body|tweet|status/.test(className + id)) score += 3
-    if (/nav|menu|sidebar|comment|ad|advertisement|footer|header/.test(className + id)) score -= 2
-
-    // Twitter/X specific scoring
-    if (/tweet|status|primaryColumn/.test(className + id)) score += 5
-    if ((element as any).getAttribute && (element as any).getAttribute('data-testid') === 'tweetText') score += 10
-
-    // Text length scoring
-    const textLength = getCleanText(element).length
-    if (textLength > 100) score += Math.min(textLength / 100, 3)
-
-    // Paragraph count scoring
-    const paragraphs = (element as any).querySelectorAll('p')
-    score += Math.min(paragraphs.length, 5)
-
-    return score
-  }
-
   // Extract all text content from the page
   function extractAllTextContent() {
     const textElements = [

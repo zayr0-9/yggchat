@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import Conf from 'conf';
-import { app, BrowserWindow, ipcMain, shell, nativeTheme } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -182,6 +182,13 @@ function startServer() {
         }, 2000);
     });
 }
+// Helper to get icon path based on theme
+function getIconPath(isDark) {
+    const logoFile = isDark ? 'logo-l-thick.png' : 'logo-d-thick.png';
+    return app.isPackaged
+        ? path.join(__dirname, '../dist-electron/img', logoFile)
+        : path.join(__dirname, '../public/img', logoFile);
+}
 function applyTitleBarTheme(win, isDark) {
     // Only apply overlay on Windows where it's supported and requested, AND ONLY IN PRODUCTION
     if (process.platform === 'win32' && app.isPackaged) {
@@ -193,14 +200,19 @@ function applyTitleBarTheme(win, isDark) {
             height: 35, // Ensure there is a grippable area
         });
     }
+    // Update Window Icon
+    const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors;
+    win.setIcon(getIconPath(useDark));
 }
 nativeTheme.on('updated', () => {
     if (mainWindow)
         applyTitleBarTheme(mainWindow);
 });
 function createWindow() {
+    const iconPath = getIconPath(nativeTheme.shouldUseDarkColors);
     mainWindow = new BrowserWindow({
         title: 'Yggdrasil',
+        icon: iconPath,
         width: 1400,
         height: 900,
         minWidth: 800,
