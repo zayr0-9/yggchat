@@ -18,7 +18,7 @@ const DEFAULT_TIERS: TierInfo[] = [
     name: 'Low',
     price: 9.99,
     priceId: 'price_low',
-    credits: 300,
+    credits: 400,
     features: ['Limited conversations', 'Database', '300 credits/mo'],
   },
   {

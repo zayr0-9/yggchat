@@ -22,7 +22,7 @@ const PaymentPlans: React.FC = () => {
     {
       id: 'basic',
       name: 'Basic',
-      price: 9,
+      price: 9.99,
       billingCycle: '/month',
       description: 'Perfect for individuals getting started',
       cta: 'Subscribe',
@@ -30,7 +30,7 @@ const PaymentPlans: React.FC = () => {
     {
       id: 'pro',
       name: 'Pro',
-      price: 29,
+      price: 19.99,
       billingCycle: '/month',
       description: 'Best for growing businesses',
       featured: true,
@@ -39,7 +39,7 @@ const PaymentPlans: React.FC = () => {
     {
       id: 'ultra',
       name: 'Ultra',
-      price: 99,
+      price: 49.99,
       billingCycle: '/month',
       description: 'For large teams and organizations',
       cta: 'Subscribe',
@@ -60,7 +60,7 @@ const PaymentPlans: React.FC = () => {
   // Data for 6 features across plans with descriptive text
   const features: Feature[] = [
     { name: 'Multiple Models', plans: { basic: '400+', pro: '400+', ultra: '400+' } },
-    { name: 'Chats', plans: { basic: '500 chats', pro: 'Unlimited', ultra: 'Unlimited' } },
+    { name: 'Cloud Sync', plans: { basic: 'Limited Cloud', pro: 'Unlimited', ultra: 'Unlimited' } },
     { name: 'Database', plans: { basic: 'Cloud', pro: 'Cloud + Local', ultra: 'Cloud + Local' } },
     { name: 'Agents', plans: { basic: 'Not included', pro: 'Yes', ultra: 'Yes' } },
     { name: 'Claude Code support', plans: { basic: 'Not included', pro: 'Yes', ultra: 'Yes' } },

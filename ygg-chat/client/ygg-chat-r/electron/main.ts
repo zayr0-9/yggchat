@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'child_process'
 import Conf from 'conf'
-import { app, BrowserWindow, ipcMain, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -198,7 +198,7 @@ function startServer(): Promise<void> {
 
 // Helper to get icon path based on theme
 function getIconPath(isDark: boolean) {
-  const logoFile = isDark ? 'logo-l-thick.svg' : 'logo-d-thick.svg'
+  const logoFile = isDark ? 'logo-l-thick.png' : 'logo-d-thick.png'
   return app.isPackaged
     ? path.join(__dirname, '../dist-electron/img', logoFile)
     : path.join(__dirname, '../public/img', logoFile)
@@ -252,12 +252,12 @@ function createWindow() {
           },
         }
       : process.platform === 'darwin'
-      ? {
-          titleBarStyle: 'hidden', // Standard for macOS
-        }
-      : {
-          titleBarStyle: 'default', // Native title bar for Linux (safest)
-        }),
+        ? {
+            titleBarStyle: 'hidden', // Standard for macOS
+          }
+        : {
+            titleBarStyle: 'default', // Native title bar for Linux (safest)
+          }),
     show: false, // Don't show until ready
   })
 
