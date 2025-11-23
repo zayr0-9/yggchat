@@ -19,6 +19,7 @@ import { globSearch } from './tools/glob.js'
 import { readTextFile, readFileContinuation } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
+import { browseWeb } from './tools/browseWeb.js'
 
 const app = express()
 let server: any = null
@@ -981,6 +982,12 @@ function setupServer() {
             noIgnore,
             contextLines
           })
+          break
+        }
+        case 'browse_web': {
+          const { url, ...options } = parsedArgs
+          if (!url) throw new Error('url is required')
+          result = await browseWeb(url, options)
           break
         }
         default:
