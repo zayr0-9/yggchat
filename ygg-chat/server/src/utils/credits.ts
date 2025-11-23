@@ -5,7 +5,7 @@ import { CreditsService } from '../database/supamodels'
 // These values are now stored in Supabase plans table
 export const TIER_CREDITS: Record<string, number> = {
   high: 2200, // High Tier God - $20/month
-  mid: 1200, // Mid Tier God - $12/month
+  mid: 800, // Mid Tier God - $12/month
   low: 400, // Low Tier God - $5/month
 }
 
