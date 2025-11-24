@@ -13,6 +13,10 @@ let serverProcess = null;
 let localServerStarted = false;
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat';
+// Set App User Model ID for Windows taskbar icon
+if (process.platform === 'win32') {
+    app.setAppUserModelId('com.yggdrasil.chat');
+}
 // Persistent storage for session data (initialized async)
 let store = null;
 let storeInitialized = false;

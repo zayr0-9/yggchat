@@ -1,6 +1,6 @@
 // server/src/utils/stripe.ts
 import Stripe from 'stripe'
-import { CreditsService, SubscriptionService, UserService, supabaseAdmin } from '../database/supamodels'
+import { SubscriptionService, UserService, supabaseAdmin } from '../database/supamodels'
 
 // Type helper for Stripe objects that may have additional properties in newer API versions
 type StripeSubscription = Stripe.Subscription & {
@@ -103,7 +103,67 @@ export async function createCheckoutSession(params: CheckoutSessionParams): Prom
       throw new Error(`User ${userId} not found`)
     }
 
+    // PREVENT DUPLICATE SUBSCRIPTIONS: Check if user already has an active subscription
+    const existingSubscription = await SubscriptionService.getActiveSubscription(userId)
+    if (existingSubscription) {
+      const status = existingSubscription.status
+
+      // Block if subscription is active, trialing, or past_due (user still has access)
+      if (status === 'active' || status === 'trialing' || status === 'past_due') {
+        const errorMsg = status === 'past_due'
+          ? 'You already have a subscription (payment past due). Please update your payment method or cancel your current subscription before changing plans.'
+          : 'You already have an active subscription. Please cancel it first to change your plan.'
+
+        console.log(`[Stripe] Blocked duplicate subscription attempt for user ${userId}. Current status: ${status}`)
+        throw new Error(errorMsg)
+      }
+
+      // If subscription is scheduled to cancel but still active
+      if (existingSubscription.cancel_at_period_end && status === 'active') {
+        throw new Error('You have a subscription scheduled to cancel. Please wait until it expires or contact support to reactivate it.')
+      }
+    }
+
     let customerId = user.stripe_customer_id
+
+    // Additional check: If user has a Stripe customer ID, verify no orphaned subscriptions exist in Stripe
+    if (customerId && stripe) {
+      try {
+        const stripeSubscriptions = await stripe.subscriptions.list({
+          customer: customerId,
+          status: 'all',
+          limit: 10,
+        })
+
+        // Check for any active/trialing subscriptions in Stripe that we might have missed
+        const activeStripeSubscriptions = stripeSubscriptions.data.filter(
+          sub => sub.status === 'active' || sub.status === 'trialing' || sub.status === 'past_due'
+        )
+
+        if (activeStripeSubscriptions.length > 0) {
+          // If we found active subscriptions in Stripe but not in our DB, log warning
+          if (!existingSubscription) {
+            console.warn(
+              `[Stripe] Found ${activeStripeSubscriptions.length} active subscription(s) in Stripe for customer ${customerId} ` +
+              `but none in database. Possible orphaned subscription. User: ${userId}`
+            )
+          }
+
+          // Still block the checkout to prevent double charging
+          throw new Error(
+            'You already have an active subscription in our payment system. Please cancel it first to change your plan. ' +
+            'If you believe this is an error, please contact support.'
+          )
+        }
+      } catch (stripeError: any) {
+        // If it's our error message, re-throw it
+        if (stripeError.message?.includes('already have an active subscription')) {
+          throw stripeError
+        }
+        // Otherwise log but don't block (Stripe API might be temporarily unavailable)
+        console.warn('[Stripe] Could not verify customer subscriptions in Stripe:', stripeError.message)
+      }
+    }
 
     // Create Stripe customer if doesn't exist
     if (!customerId) {
@@ -633,10 +693,9 @@ export async function cancelSubscription(userId: string): Promise<void> {
  */
 export async function getUserSubscriptionStatus(userId: string): Promise<any> {
   try {
-    // Get subscription and credits from Supabase
-    const [subscription, creditsBalance, user] = await Promise.all([
+    // Get subscription and user from Supabase
+    const [subscription, user] = await Promise.all([
       SubscriptionService.getActiveSubscription(userId),
-      CreditsService.getUserCredits(userId),
       UserService.getById(userId),
     ])
 
@@ -645,7 +704,8 @@ export async function getUserSubscriptionStatus(userId: string): Promise<any> {
       tier: subscription?.plan_code || null,
       status: subscription?.status || null,
       currentPeriodEnd: subscription?.current_period_end || null,
-      creditsBalance: creditsBalance || 0,
+      // Use cached_current_credits - this is the live value used for OpenRouter API authorization
+      creditsBalance: user?.cached_current_credits || 0,
       stripeCustomerId: user?.stripe_customer_id || null,
       stripeSubscriptionId: subscription?.stripe_subscription_id || null,
       // Additional subscription details

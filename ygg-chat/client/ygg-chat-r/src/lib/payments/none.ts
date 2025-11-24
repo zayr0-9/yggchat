@@ -1,9 +1,4 @@
-import type {
-  PaymentProvider,
-  SubscriptionStatus,
-  TierInfo,
-  CreditHistoryEntry,
-} from './types'
+import type { CreditHistoryEntry, PaymentProvider, SubscriptionStatus, TierInfo } from './types'
 
 /**
  * No-Op Payment Provider
@@ -19,7 +14,7 @@ export class NoOpPaymentProvider implements PaymentProvider {
   async createCheckoutSession(
     _userId: string,
     _tier: 'high' | 'mid' | 'low',
-    _email?: string,
+    _email?: string
   ): Promise<{ sessionId: string; url: string }> {
     throw new Error('Payments are not supported in this version. Please use your own API keys.')
   }
@@ -32,6 +27,10 @@ export class NoOpPaymentProvider implements PaymentProvider {
       creditsBalance: 0,
       stripeCustomerId: null,
       stripeSubscriptionId: null,
+      planCode: null,
+      planName: null,
+      monthlyCredits: 0,
+      cancelAtPeriodEnd: false,
     }
   }
 

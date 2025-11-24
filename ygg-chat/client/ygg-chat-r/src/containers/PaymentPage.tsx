@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
+import { getSessionFromStorage } from '../lib/jwtUtils'
 import { getPaymentProvider, type SubscriptionStatus, type TierInfo } from '../lib/payments'
+import { apiCall } from '../utils/api'
 
 interface PricingInfo {
   tiers: {
@@ -53,6 +55,9 @@ const PaymentPage: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
   // const [paymentsSupported, setPaymentsSupported] = useState(true)
 
   // Check for success/cancel query params from Stripe redirect
@@ -206,6 +211,41 @@ const PaymentPage: React.FC = () => {
     }
   }
 
+  const handleDeleteAccount = async () => {
+    if (!userId || deleteConfirmText !== 'DELETE') {
+      return
+    }
+
+    setDeleting(true)
+    setError(null)
+
+    try {
+      const session = getSessionFromStorage()
+      const accessToken = session?.access_token || null
+
+      const response = await apiCall<{ success: boolean; message: string }>('/user/account', accessToken, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirmDeletion: true }),
+      })
+
+      if (response.success) {
+        // Clear local storage
+        localStorage.clear()
+        sessionStorage.clear()
+
+        // Show success message and redirect to landing page
+        alert('Your account has been successfully deleted. You will be redirected to the home page.')
+        window.location.href = '/'
+      } else {
+        throw new Error('Account deletion failed')
+      }
+    } catch (err: any) {
+      console.error('Error deleting account:', err)
+      setError(err.message || 'Failed to delete account. Please try again or contact support.')
+      setDeleting(false)
+    }
+  }
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString()
@@ -328,7 +368,7 @@ const PaymentPage: React.FC = () => {
               <div>
                 <p className='text-sm text-gray-600 dark:text-gray-400'>Credits Balance</p>
                 <p className='text-lg font-semibold dark:text-neutral-100'>
-                  {(subscriptionStatus.creditsBalance * 10).toLocaleString()}
+                  {(subscriptionStatus.creditsBalance * 100).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -499,6 +539,114 @@ const PaymentPage: React.FC = () => {
             </li>
           </ul>
         </div>
+
+        {/* Delete Account Section - Only show in web mode */}
+        {!isElectronOrLocal && userId && (
+          <div className='mt-12 p-6 mica bg-red-50 dark:bg-red-950 rounded-lg shadow-md border border-red-200 dark:border-red-800'>
+            <h2 className='text-2xl font-bold mb-4 text-red-800 dark:text-red-200'>Delete Account</h2>
+            <p className='text-red-700 dark:text-red-300 mb-4'>
+              <i className='bx bx-error-circle mr-2'></i>
+              <strong>Warning:</strong> This action is permanent and cannot be undone. All your conversations, messages,
+              and files will be permanently deleted.
+            </p>
+            <div className='mb-4'>
+              <p className='text-sm text-red-700 dark:text-red-300 mb-2'>
+                The following data will be <strong>deleted</strong>:
+              </p>
+              <ul className='text-sm text-red-700 dark:text-red-300 ml-6 list-disc space-y-1'>
+                <li>All conversations and messages</li>
+                <li>All projects and workspaces</li>
+                <li>All file attachments</li>
+                <li>Your profile and preferences</li>
+              </ul>
+            </div>
+            <div className='mb-4'>
+              <p className='text-sm text-red-700 dark:text-red-300 mb-2'>
+                The following data will be <strong>preserved</strong> for legal/accounting purposes:
+              </p>
+              <ul className='text-sm text-red-700 dark:text-red-300 ml-6 list-disc space-y-1'>
+                <li>Billing history and credit transactions</li>
+                <li>Subscription records</li>
+              </ul>
+            </div>
+            <Button
+              variant='outline2'
+              size='medium'
+              onClick={() => setShowDeleteModal(true)}
+              className='bg-red-600 hover:bg-red-700 text-white border-red-600'
+            >
+              <i className='bx bx-trash mr-2'></i>
+              Delete My Account
+            </Button>
+          </div>
+        )}
+
+        {/* Delete Account Confirmation Modal */}
+        {showDeleteModal && (
+          <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50'>
+            <div className='bg-white dark:bg-yBlack-900 rounded-lg shadow-xl p-6 max-w-md w-full mx-4 border border-red-200 dark:border-red-800'>
+              <h3 className='text-2xl font-bold mb-4 text-red-800 dark:text-red-200'>
+                <i className='bx bx-error-circle mr-2'></i>
+                Confirm Account Deletion
+              </h3>
+              <p className='text-gray-700 dark:text-neutral-300 mb-4'>
+                This action is <strong>permanent and irreversible</strong>. All your data will be deleted immediately.
+              </p>
+              {subscriptionStatus?.status === 'active' && (
+                <p className='text-yellow-700 dark:text-yellow-400 mb-4 p-3 bg-yellow-50 dark:bg-yellow-950 rounded border border-yellow-200 dark:border-yellow-800'>
+                  <i className='bx bx-info-circle mr-2'></i>
+                  You have an active subscription. It will be canceled immediately.
+                </p>
+              )}
+              <div className='mb-4'>
+                <label className='block text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2'>
+                  Type <strong>DELETE</strong> to confirm:
+                </label>
+                <input
+                  type='text'
+                  value={deleteConfirmText}
+                  onChange={e => setDeleteConfirmText(e.target.value)}
+                  className='w-full px-3 py-2 border border-gray-300 dark:border-neutral-600 rounded-md bg-white dark:bg-yBlack-800 text-gray-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-red-500'
+                  placeholder='Type DELETE'
+                  disabled={deleting}
+                />
+              </div>
+              <div className='flex gap-3'>
+                <Button
+                  variant='outline2'
+                  size='medium'
+                  onClick={() => {
+                    setShowDeleteModal(false)
+                    setDeleteConfirmText('')
+                  }}
+                  disabled={deleting}
+                  className='flex-1'
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant='outline2'
+                  size='medium'
+                  onClick={handleDeleteAccount}
+                  disabled={deleteConfirmText !== 'DELETE' || deleting}
+                  className='flex-1 bg-red-600 hover:bg-red-700 text-white border-red-600 disabled:opacity-50 disabled:cursor-not-allowed'
+                >
+                  {deleting ? (
+                    <>
+                      <i className='bx bx-loader-alt animate-spin mr-2'></i>
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <i className='bx bx-trash mr-2'></i>
+                      Delete Forever
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

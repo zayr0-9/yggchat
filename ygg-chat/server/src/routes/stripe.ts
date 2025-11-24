@@ -41,8 +41,8 @@ router.post(
       userId,
       tier,
       userEmail: email,
-      successUrl: `${baseUrl}/subscription/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${baseUrl}/subscription/cancel`,
+      successUrl: `${baseUrl}/payment?success=true`,
+      cancelUrl: `${baseUrl}/payment?canceled=true`,
     })
 
     if (!session) {

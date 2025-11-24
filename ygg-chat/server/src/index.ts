@@ -307,6 +307,10 @@ app.use('/api/settings', settingsRoutes)
 if (env.VITE_ENVIRONMENT === 'web') {
   const stripeRoutes = require('./routes/stripe').default
   app.use('/api/stripe', stripeRoutes)
+
+  // User account management routes (includes account deletion)
+  const userRoutes = require('./routes/user').default
+  app.use('/api/user', userRoutes)
 }
 app.use('/uploads', express.static(path.join(__dirname, 'data', 'uploads')))
 
