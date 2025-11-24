@@ -247,12 +247,10 @@ app.get('/health', (req, res) => {
   })
 })
 
-// IMPORTANT: Register Stripe webhook BEFORE express.json() middleware
-// Webhook signature verification requires raw body, but express.json() parses it
-// Only load in web mode (not local or electron)
+// IMPORTANT: Stripe webhook requires raw body for signature verification
+// Apply raw body parsing ONLY for webhook endpoint, before express.json()
 if (env.VITE_ENVIRONMENT === 'web') {
-  const stripeRoutes = require('./routes/stripe').default
-  app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }), stripeRoutes)
+  app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }))
 }
 
 app.use(express.json({ limit: '25mb' }))

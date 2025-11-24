@@ -158,10 +158,10 @@ router.get(
 /**
  * POST /api/stripe/webhook
  * Stripe webhook handler
- * IMPORTANT: This route is mounted separately with express.raw() middleware in index.ts
+ * IMPORTANT: Requires express.raw() middleware to preserve raw body for signature verification
  */
 router.post(
-  '/',
+  '/webhook',
   asyncHandler(async (req, res) => {
     const signature = req.headers['stripe-signature']
 
