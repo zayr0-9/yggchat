@@ -122,11 +122,11 @@ const MessageActions: React.FC<MessageActionsProps> = ({
               title={copied ? 'Copied' : 'Copy message'}
             >
               {copied ? (
-                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
                 </svg>
               ) : (
-                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path
                     strokeLinecap='round'
                     strokeLinejoin='round'
@@ -142,7 +142,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
                 className='p-1.5 rounded-2xl text-stone-700 hover:text-yellow-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900 hover:scale-105 transition-colors duration-150 active:scale-90'
                 title='Edit message'
               >
-                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path
                     strokeLinecap='round'
                     strokeLinejoin='round'
@@ -158,7 +158,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
                 className='p-1.5 pt-2 rounded-2xl text-stone-700 hover:text-green-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900 hover:scale-109 transition-colors duration-150 active:scale-90'
                 title='Branch message'
               >
-                <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <svg className='w-6 h-6 mt-0.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path
                     strokeLinecap='round'
                     strokeLinejoin='round'
@@ -185,7 +185,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
                 className='p-1.5 rounded-2xl text-stone-700 hover:text-red-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-colors duration-150 active:scale-90 hover:scale-105'
                 title='Delete message'
               >
-                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path
                     strokeLinecap='round'
                     strokeLinejoin='round'
@@ -198,7 +198,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
             {onMore && (
               <div className='rounded-full pt-1 px-1 text-stone-700 hover:text-purple-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-colors duration-150 active:scale-90 hover:scale-106'>
                 <button onClick={onMore} className='' title='More options'>
-                  <i className='bx bx-dots-vertical-rounded text-base'></i>
+                  <i className='bx bx-dots-vertical-rounded text-xl'></i>
                 </button>
               </div>
             )}
@@ -607,8 +607,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const hasContent = useMemo(() => {
       const hasSimpleContent = content && content.trim().length > 0
       const hasBlockContent =
-        contentBlocks &&
-        contentBlocks.some(b => b.type === 'text' && b.content && b.content.trim().length > 0)
+        contentBlocks && contentBlocks.some(b => b.type === 'text' && b.content && b.content.trim().length > 0)
 
       return hasSimpleContent || hasBlockContent
     }, [content, contentBlocks])
