@@ -198,7 +198,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
             {onMore && (
               <div className='rounded-full pt-1 px-1 text-stone-700 hover:text-purple-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-colors duration-150 active:scale-90 hover:scale-106'>
                 <button onClick={onMore} className='' title='More options'>
-                  <i className='bx bx-dots-vertical-rounded text-xl'></i>
+                  <i className='bx bx-dots-vertical-rounded text-2xl mt-0.5'></i>
                 </button>
               </div>
             )}
