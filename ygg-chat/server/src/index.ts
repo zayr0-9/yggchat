@@ -334,20 +334,24 @@ app.get('/api/debug/ide-clients', (req, res) => {
   res.json(clientList)
 })
 
-// Initialize database
-// NOTE: If migrating from INTEGER PKs to UUID PKs, run `npm run migrate` first!
-// The migration script (src/database/runMigration.ts) will handle the migration automatically.
-const dbPath = path.join(__dirname, 'data', 'yggdrasil.db')
-if (!fs.existsSync(dbPath)) {
-  console.log('📝 Database file not found, creating new UUID-based database...')
-}
+// Initialize database (only for local/electron modes, not web mode which uses Supabase)
+if (env.VITE_ENVIRONMENT !== 'web') {
+  // NOTE: If migrating from INTEGER PKs to UUID PKs, run `npm run migrate` first!
+  // The migration script (src/database/runMigration.ts) will handle the migration automatically.
+  const dbPath = path.join(__dirname, 'data', 'yggdrasil.db')
+  if (!fs.existsSync(dbPath)) {
+    console.log('📝 Database file not found, creating new UUID-based database...')
+  }
 
-console.log('🔧 Initializing database...')
-initializeDatabase()
-console.log('📊 Rebuilding FTS index on startup...')
-// rebuildFTSIndex()
-console.log('✅ FTS index rebuilt.')
-initializeStatements()
+  console.log('🔧 Initializing database...')
+  initializeDatabase()
+  console.log('📊 Rebuilding FTS index on startup...')
+  // rebuildFTSIndex()
+  console.log('✅ FTS index rebuilt.')
+  initializeStatements()
+} else {
+  console.log('🌐 Web mode detected - skipping SQLite initialization (using Supabase)')
+}
 
 // No default user creation - users are created after OAuth authentication
 // Only web and electron modes exist
