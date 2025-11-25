@@ -91,11 +91,11 @@ const MessageActions: React.FC<MessageActionsProps> = ({
               title={editMode === 'branch' ? 'Create branch' : 'Save changes'}
             >
               {editMode === 'branch' ? (
-                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
                 </svg>
               ) : (
-                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
                 </svg>
               )}
@@ -105,7 +105,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
               className='p-1.5 rounded-2xl text-stone-700 hover:text-red-400 hover:bg-neutral-100 dark:text-stone-300 hover:scale-105 dark:hover:bg-yBlack-900 transition-colors duration-150 active:scale-90'
               title='Cancel editing'
             >
-              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+              <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                 <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
               </svg>
             </button>
