@@ -12,6 +12,7 @@ import { chatSliceActions } from '../../features/chats/chatSlice'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
 import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
+import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { TextArea } from '../TextArea/TextArea'
 type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
 // Updated to use valid Tailwind classes
@@ -1226,7 +1227,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                        components={{ pre: PreRenderer }}
+                        components={{ pre: PreRenderer, a: MarkdownLink }}
                       >
                         {accumulatedText}
                       </ReactMarkdown>
@@ -1278,7 +1279,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                            components={{ pre: PreRenderer }}
+                            components={{ pre: PreRenderer, a: MarkdownLink }}
                           >
                             {accumulatedReasoning}
                           </ReactMarkdown>
@@ -1377,7 +1378,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                      components={{ pre: PreRenderer }}
+                      components={{ pre: PreRenderer, a: MarkdownLink }}
                     >
                       {block.content}
                     </ReactMarkdown>
@@ -1416,7 +1417,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                          components={{ pre: PreRenderer }}
+                          components={{ pre: PreRenderer, a: MarkdownLink }}
                         >
                           {block.content}
                         </ReactMarkdown>
@@ -1487,7 +1488,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                      components={{ pre: PreRenderer }}
+                      components={{ pre: PreRenderer, a: MarkdownLink }}
                     >
                       {thinking}
                     </ReactMarkdown>
@@ -1539,7 +1540,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                  components={{ pre: PreRenderer }}
+                  components={{ pre: PreRenderer, a: MarkdownLink }}
                 >
                   {content}
                 </ReactMarkdown>

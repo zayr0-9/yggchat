@@ -10,10 +10,10 @@ interface ToolPermissionDialogProps {
 
 export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({ toolCall, onGrant, onDeny }) => {
   return (
-    <div className='absolute bottom-[100%] left-0 right-0 mx-4 mb-2 z-30'>
-      <div className='bg-white dark:bg-neutral-800 rounded-xl shadow-lg border border-neutral-200 dark:border-neutral-700 p-4 animate-in slide-in-from-bottom-2 fade-in duration-200'>
+    <div className='absolute bottom-[100%] left-0 right-0 mx-4 mt-1 mb-2 z-30'>
+      <div className='bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-neutral-200 dark:border-neutral-700 p-4 animate-in slide-in-from-bottom-2 fade-in duration-200'>
         <div className='flex items-start gap-4'>
-          <div className='flex-shrink-0 p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'>
+          <div className='flex-shrink-0 p-2 rounded-lg bg-amber-100 thin-scrollbar dark:bg-neutral-900/30 text-amber-600 dark:text-amber-400 shadow-[0px_2px_7px_2.5px_rgba(0,0,0,0.10)] dark:shadow-[0px_0px_16px_-2px_rgba(0,0,0,0.45)]'>
             <i className='bx bx-shield-quarter text-xl'></i>
           </div>
 
@@ -21,11 +21,11 @@ export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({ tool
             <h3 className='font-medium text-neutral-900 dark:text-neutral-100'>Permission Required</h3>
             <p className='text-sm text-neutral-600 dark:text-neutral-400 mt-1'>
               Claude wants to execute
-              <span className='font-mono text-amber-600 dark:text-amber-400 mx-1'>{toolCall.name}</span>
+              <span className='font-mono text-amber-600 dark:text-blue-500 mx-1'>{toolCall.name}</span>
             </p>
 
             {/* Arguments Preview */}
-            <div className='mt-3 bg-neutral-50 dark:bg-neutral-900/50 rounded border border-neutral-100 dark:border-neutral-700/50 p-2 max-h-32 overflow-y-auto custom-scrollbar'>
+            <div className='mt-3 bg-neutral-50 dark:bg-neutral-900/50 rounded-2xl border border-neutral-100 dark:border-neutral-700/50 p-2 max-h-32 overflow-y-auto thin-scrollbar'>
               <pre className='text-xs font-mono text-neutral-600 dark:text-neutral-400 whitespace-pre-wrap break-all'>
                 {JSON.stringify(toolCall.arguments, null, 2)}
               </pre>
@@ -41,10 +41,10 @@ export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({ tool
                 Deny
               </Button>
               <Button
-                variant='primary'
+                variant='outline'
                 size='small'
                 onClick={onGrant}
-                className='bg-blue-600 hover:bg-blue-700 text-white'
+                className='text-neutral-600 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 border-neutral-200 dark:border-neutral-700/50'
               >
                 Allow Execution
               </Button>
