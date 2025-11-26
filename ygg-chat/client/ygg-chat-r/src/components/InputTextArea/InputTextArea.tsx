@@ -495,11 +495,11 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
                 onClick={() => handleFileSelection(file)}
                 onMouseEnter={() => setSelectedFileIndex(index)}
               >
-                <div className='flex justify-between'>
-                  <div className='pl-2 font-medium sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg truncate'>
+                <div className='flex justify-between gap-2'>
+                  <div className='pl-2 font-medium sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg truncate basis-2/5'>
                     {file.name}
                   </div>
-                  <div className='pl-2 overflow-left text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate'>
+                  <div className='pl-2 overflow-left text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate rtl text-left basis-3/5'>
                     {file.path}
                   </div>
                 </div>
