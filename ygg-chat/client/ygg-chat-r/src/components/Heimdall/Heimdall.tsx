@@ -2502,19 +2502,20 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
       {selectedNode && (
         <div
-          className={`absolute max-w-md bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 ${compactMode ? 'border-2 border-gray-600' : ''}`}
+          className={`absolute bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 ${compactMode ? 'border-2 border-gray-600' : ''}`}
           style={{
             left: Math.min(mousePosition.x + 10, dimensions.width - 400),
             top: Math.max(mousePosition.y + 10, 10),
             maxWidth: '300px',
             maxHeight: '400px',
+            overflow: 'hidden',
           }}
         >
           <div className='text-sm text-stone-800 bg-neutral-50 dark:bg-neutral-800 dark:text-stone-200 mb-1'>
             {selectedNode.sender === 'user' ? 'User' : 'Assistant'}
           </div>
           <div
-            className={`prose prose-sm dark:prose-invert max-w-none text-sm ${isMobile ? 'max-h-80 overflow-y-auto thin-scrollbar' : 'overflow-hidden ygg-line-clamp-15'}`}
+            className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${isMobile ? 'max-h-80 overflow-y-auto overflow-x-hidden thin-scrollbar' : 'overflow-hidden overflow-x-hidden ygg-line-clamp-15'}`}
           >
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
               {selectedNode.message}

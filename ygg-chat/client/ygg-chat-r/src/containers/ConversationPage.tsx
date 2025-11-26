@@ -249,6 +249,7 @@ const ConversationPage: React.FC = () => {
     // Also invalidate and refetch related caches for a complete refresh
     queryClient.invalidateQueries({ queryKey: ['conversations', 'recent'] })
     queryClient.invalidateQueries({ queryKey: ['projects'] })
+    queryClient.invalidateQueries({ queryKey: ['research-notes'] })
   }
 
   return (

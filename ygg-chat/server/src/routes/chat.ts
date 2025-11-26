@@ -157,8 +157,8 @@ router.get(
         })
         .filter(Boolean) as any[]
 
-      const preferredDefault = 'gpt-4o'
-      const defaultModel = models.find((m: any) => m.name === preferredDefault) || models[0] || null
+      const preferredDefault = 'openai/gpt-5-mini'
+      const defaultModel = models.find((m: any) => m.id === preferredDefault) || null
 
       res.json({ models, default: defaultModel })
     } catch (error) {
@@ -424,17 +424,17 @@ router.post(
       // Parse args if it's a string
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args || {}
       console.log(`🔧 Executing tool: ${toolName}`, parsedArgs)
-      
+
       const result = await tool.tool.execute(parsedArgs)
-      
+
       // Return result as string to be consistent with LLM expectation
       const stringResult = typeof result === 'string' ? result : JSON.stringify(result)
       res.json({ result: stringResult })
     } catch (error) {
       console.error(`Error executing tool ${toolName}:`, error)
-      res.status(500).json({ 
+      res.status(500).json({
         error: error instanceof Error ? error.message : 'Unknown error executing tool',
-        is_error: true 
+        is_error: true,
       })
     }
   })
@@ -637,11 +637,11 @@ router.get(
   asyncHandler(async (req, res) => {
     const conversationId = req.params.id
     const conversation = ConversationService.getById(conversationId)
-    
+
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' })
     }
-    
+
     res.json(conversation)
   })
 )
@@ -1058,11 +1058,15 @@ router.post(
                   assistantToolCalls = JSON.stringify(currentToolCalls)
                   console.log(`✅ [chat/repeat] Accumulated tool call: ${obj.toolCall.name}`)
                   // Forward to client with structured data
-                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, iteration: i })}\n\n`)
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, iteration: i })}\n\n`
+                  )
                 } else {
                   // Fallback: treat as content if no structured toolCall
                   assistantContent += delta
-                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta, iteration: i })}\n\n`)
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta, iteration: i })}\n\n`
+                  )
                 }
               } else {
                 // Check if this delta contains tool calls and handle them
@@ -1496,7 +1500,9 @@ router.post(
                   assistantToolCalls = JSON.stringify(currentToolCalls)
                   console.log(`✅ [chat] Accumulated tool call: ${obj.toolCall.name}`)
                   // Forward to client with structured data
-                  res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, content: '' })}\n\n`)
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, content: '' })}\n\n`
+                  )
                 } else {
                   // Fallback: treat as content if no structured toolCall
                   assistantContent += delta
@@ -1539,7 +1545,9 @@ router.post(
                   currentToolCalls.push(...jsonObjects)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
 
-                  res.write(`data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '' })}\n\n`)
+                  res.write(
+                    `data: ${JSON.stringify({ type: 'tool_call', delta: JSON.stringify(jsonObjects), content: '' })}\n\n`
+                  )
                 }
 
                 if (cleanedText) {

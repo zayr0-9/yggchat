@@ -346,8 +346,16 @@ export function useModels(provider: string | null) {
       const isStringArray = Array.isArray(response.models) && typeof response.models[0] === 'string'
 
       const models = isStringArray ? (response.models as string[]).map(stringToModel) : (response.models as Model[])
-      const defaultModel =
+      let defaultModel =
         typeof response.default === 'string' ? stringToModel(response.default as string) : (response.default as Model)
+
+      // For OpenRouter, prefer openai/gpt-5-mini if it exists
+      if (normalizedProvider === 'openrouter') {
+        const gpt5Mini = models.find(m => m.name === 'openai/gpt-5-mini')
+        if (gpt5Mini) {
+          defaultModel = gpt5Mini
+        }
+      }
 
       // Determine selected model: use localStorage if valid, otherwise use server default
       const storedSelection = getStoredSelectedModel()

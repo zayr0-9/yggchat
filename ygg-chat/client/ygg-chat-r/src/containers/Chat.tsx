@@ -1941,7 +1941,7 @@ function Chat() {
                 >
                   <img
                     src={getAssetPath('img/branch.svg')}
-                    alt='Thinking'
+                    alt='tree view'
                     className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[18px] md:h-[18px] lg:w-[20px] lg:h-[20px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[24px] 3xl:h-[24px] 4xl:w-[24px] 4xl:h-[24px]'
                   />
                   {/* <i

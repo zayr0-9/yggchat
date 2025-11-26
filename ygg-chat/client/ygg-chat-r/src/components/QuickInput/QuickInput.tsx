@@ -185,13 +185,13 @@ export const QuickInput: React.FC = () => {
                   <img
                     src='/img/thinking active.svg'
                     alt='Thinking active'
-                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[16px] lg:h-[16px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
+                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
                   />
                 ) : (
                   <img
                     src='/img/thinking.svg'
-                    alt='Thinking'
-                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[16px] lg:h-[16px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
+                    alt='Show Thinking'
+                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
                   />
                 )}
               </Button>
