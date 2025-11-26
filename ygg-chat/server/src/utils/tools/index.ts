@@ -8,6 +8,8 @@ import { deleteFile, safeDeleteFile } from './core/deleteFile'
 import { editFile } from './core/editFile'
 import { extractDirectoryStructure } from './core/getDirectoryTree'
 import { globSearch } from './core/glob'
+import { exaCodeContext } from './core/exaCodeContext'
+import { exaSearch } from './core/exaSearch'
 import { readFileContinuation, readTextFile } from './core/readFile'
 import { readMultipleTextFiles } from './core/readFiles'
 import { ripgrepSearch } from './core/ripgrep'
@@ -430,6 +432,130 @@ const tools: tools[] = [
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error occurred during search',
             query,
+          }
+        }
+      },
+    },
+  },
+  {
+    name: 'exa_search',
+    enabled: true,
+    tool: {
+      description: 'Search the web using Exa API. Provides neural, fast, deep search modes with rich metadata.',
+      inputSchema: z.object({
+        query: z.string().describe('The search query to execute'),
+        numResults: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe('Number of results to return (default 10, max 100). Exa may enforce stricter plan-based limits.'),
+        type: z
+          .enum(['auto', 'neural', 'fast', 'deep'])
+          .optional()
+          .describe('Search type/mode. Auto lets Exa decide; neural/fast/deep follow Exa API semantics.'),
+        additionalQueries: z
+          .array(z.string())
+          .optional()
+          .describe('Optional follow-up queries to blend into search results.'),
+        category: z
+          .enum([
+            'company',
+            'research paper',
+            'news',
+            'pdf',
+            'github',
+            'tweet',
+            'personal site',
+            'linkedin profile',
+            'financial report',
+          ])
+          .optional()
+          .describe('Content category filter if supported by Exa.'),
+        userLocation: z.string().optional().describe('User location hint (e.g., "San Francisco, CA").'),
+        includeDomains: z.array(z.string()).optional().describe('Only include results from these domains.'),
+        excludeDomains: z.array(z.string()).optional().describe('Exclude results from these domains.'),
+        startCrawlDate: z.string().optional().describe('ISO date; only include pages crawled after this date.'),
+        endCrawlDate: z.string().optional().describe('ISO date; only include pages crawled before this date.'),
+        startPublishedDate: z.string().optional().describe('ISO date; only include pages published after this date.'),
+        endPublishedDate: z.string().optional().describe('ISO date; only include pages published before this date.'),
+        includeText: z.array(z.string()).optional().describe('Require these terms/snippets to appear in documents.'),
+        excludeText: z.array(z.string()).optional().describe('Exclude documents containing these terms/snippets.'),
+        context: z.boolean().optional().describe('Request Exa-provided context string when supported.'),
+        moderation: z.boolean().optional().describe('Enable Exa moderation filtering.'),
+      }),
+      execute: async ({
+        query,
+        numResults,
+        type,
+        additionalQueries,
+        category,
+        userLocation,
+        includeDomains,
+        excludeDomains,
+        startCrawlDate,
+        endCrawlDate,
+        startPublishedDate,
+        endPublishedDate,
+        includeText,
+        excludeText,
+        context,
+        moderation,
+      }: any) => {
+        try {
+          const res = await exaSearch(query, {
+            numResults,
+            type,
+            additionalQueries,
+            category,
+            userLocation,
+            includeDomains,
+            excludeDomains,
+            startCrawlDate,
+            endCrawlDate,
+            startPublishedDate,
+            endPublishedDate,
+            includeText,
+            excludeText,
+            context,
+            moderation,
+          })
+          return res
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred during Exa search',
+            query,
+          }
+        }
+      },
+    },
+  },
+  {
+    name: 'exa_code_context',
+    enabled: true,
+    tool: {
+      description:
+        'Exa Code: Get formatted code snippets/examples from GitHub/StackOverflow (anti-hallucination for coding agents). Returns LLM-ready MD string.',
+      inputSchema: z.object({
+        query: z
+          .string()
+          .describe('Code query (e.g., "React hooks state management examples", "pandas dataframe groupby examples")'),
+        tokensNum: z
+          .union([z.string(), z.number()])
+          .optional()
+          .describe('Tokens limit ("dynamic" | 50-100000; default "dynamic")'),
+      }),
+      execute: async ({ query, tokensNum }: { query: string; tokensNum?: string | number }) => {
+        try {
+          const res = await exaCodeContext(query, { tokensNum })
+          return res
+        } catch (error) {
+          return {
+            success: false,
+            query,
+            error: error instanceof Error ? error.message : 'Exa Code error',
           }
         }
       },

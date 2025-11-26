@@ -612,7 +612,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const explainInputPosition = useRef<{ x: number; y: number } | null>(null)
     const explainInputRef = useRef<HTMLDivElement | null>(null)
     // Advanced mode state - controls visibility of advanced menu items
-    const [advancedMode, setAdvancedMode] = useState(() => {
+    const [advancedMode] = useState(() => {
       try {
         const stored = localStorage.getItem('advanced_mode')
         return stored === 'true'
