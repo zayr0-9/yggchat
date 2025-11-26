@@ -611,6 +611,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [explainInputValue, setExplainInputValue] = useState('')
     const explainInputPosition = useRef<{ x: number; y: number } | null>(null)
     const explainInputRef = useRef<HTMLDivElement | null>(null)
+    // Advanced mode state - controls visibility of advanced menu items
+    const [advancedMode, setAdvancedMode] = useState(() => {
+      try {
+        const stored = localStorage.getItem('advanced_mode')
+        return stored === 'true'
+      } catch {
+        return false // Default to false
+      }
+    })
 
     // Get message data from Redux store
     const messageData = useSelector((state: RootState) =>
@@ -715,19 +724,16 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }
 
     const handleContextMenu = (e: React.MouseEvent) => {
+      e.preventDefault() // Always prevent default
+
       // Get selected text
       const selection = window.getSelection()
       const text = selection?.toString().trim() || ''
 
-      // Only prevent default and show custom menu if text is selected
-      if (text) {
-        e.preventDefault()
-        setSelectedText(text)
-        setContextMenuPosition({ x: e.clientX, y: e.clientY })
-        console.log(e.clientX, e.clientY)
-        setContextMenuOpen(true)
-      }
-      // If no text selected, allow browser's default context menu to appear
+      // Always show custom context menu
+      setSelectedText(text)
+      setContextMenuPosition({ x: e.clientX, y: e.clientY })
+      setContextMenuOpen(true)
     }
 
     const handleAddToNoteClick = () => {
@@ -806,27 +812,98 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return { x: Math.max(10, x), y: Math.max(10, y) }
     }
 
-    // Context menu items
-    const contextMenuItems: ContextMenuItem[] = [
-      {
-        label: 'Add to note',
-        icon: <i className='bx bx-note' />,
-        onClick: handleAddToNoteClick,
-        disabled: !onAddToNote || !selectedText,
-      },
-      {
-        label: 'Explain',
-        icon: <i className='bx bx-git-branch' />,
-        onClick: handleCreateBranchFromSelection,
-        disabled: !onExplainFromSelection || !selectedText,
-      },
-      {
-        label: 'Copy',
-        icon: <i className='bx bx-copy' />,
-        onClick: handleCopySelectedText,
-        disabled: !selectedText,
-      },
-    ]
+    // Generate context menu items dynamically based on state
+    const getContextMenuItems = (): ContextMenuItem[] => {
+      const items: ContextMenuItem[] = []
+
+      // If text is selected, show selection-specific actions first
+      if (selectedText) {
+        items.push({
+          label: 'Add to note',
+          icon: <i className='bx bx-note' />,
+          onClick: handleAddToNoteClick,
+          disabled: !onAddToNote,
+        })
+        items.push({
+          label: 'Explain',
+          icon: <i className='bx bx-git-branch' />,
+          onClick: handleCreateBranchFromSelection,
+          disabled: !onExplainFromSelection,
+        })
+        items.push({
+          label: 'Copy selection',
+          icon: <i className='bx bx-copy' />,
+          onClick: handleCopySelectedText,
+          disabled: false,
+        })
+
+        // Add separator between selection actions and message actions
+        items.push({
+          label: '',
+          icon: undefined,
+          onClick: () => {},
+          separator: true,
+        })
+      }
+
+      // Message actions - always shown
+      items.push({
+        label: copied ? 'Copied!' : 'Copy message',
+        icon: copied ? <i className='bx bx-check' /> : <i className='bx bx-copy' />,
+        onClick: handleCopy,
+        disabled: false,
+      })
+
+      // Advanced mode only - Edit action
+      if (advancedMode && onEdit) {
+        items.push({
+          label: 'Edit message',
+          icon: <i className='bx bx-edit' />,
+          onClick: handleEdit,
+          disabled: editingState, // Disable if already editing
+        })
+      }
+
+      // Advanced mode only - Branch action (user messages)
+      if (advancedMode && role === 'user' && onBranch) {
+        items.push({
+          label: 'Branch message',
+          icon: <i className='bx bx-git-branch' />,
+          onClick: handleBranch,
+          disabled: editingState, // Disable if already editing
+        })
+      }
+
+      // Advanced mode only - Resend action (assistant messages)
+      if (advancedMode && role === 'assistant' && onResend) {
+        items.push({
+          label: 'Resend message',
+          icon: <i className='bx bx-refresh' />,
+          onClick: handleResend,
+          disabled: false,
+        })
+      }
+
+      // Always shown - Delete action
+      if (onDelete) {
+        items.push({
+          label: 'Delete message',
+          icon: <i className='bx bx-trash' />,
+          onClick: handleDelete,
+          disabled: false,
+        })
+      }
+
+      // Always shown - More Info option
+      items.push({
+        label: 'More info',
+        icon: <i className='bx bx-info-circle' />,
+        onClick: handleMoreClick,
+        disabled: false,
+      })
+
+      return items
+    }
 
     const handleMoreClick = () => {
       setShowMoreMenu(!showMoreMenu)
@@ -875,6 +952,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         document.removeEventListener('mousedown', handleClickOutside)
       }
     }, [showExplainInput])
+
+    // Close More menu when context menu opens to avoid conflicts
+    useEffect(() => {
+      if (contextMenuOpen) {
+        setShowMoreMenu(false)
+        setShowMoreInfo(false)
+      }
+    }, [contextMenuOpen])
 
     // Compute dropdown placement - runs on mount and when menu state changes
     useEffect(() => {
@@ -1551,9 +1636,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         {hasContent && modelName && (
           <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
         )}
-        {role === 'user' && (
-          <div className='w-full border-t border-neutral-200 dark:border-neutral-800 my-4 mb-8'></div>
-        )}
+
         {/* Actions row (at bottom) */}
         {hasContent && (
           <div className='flex items-center justify-end mt-3 mb-2'>
@@ -1631,6 +1714,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             </div>
           </div>
         )}
+        {role === 'user' && (
+          <div className='w-full border-t border-neutral-200 dark:border-neutral-800 my-4 mb-8'></div>
+        )}
 
         {/* Artifacts (images) */}
         {Array.isArray(artifacts) && artifacts.length > 0 && (
@@ -1681,7 +1767,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         <ContextMenu
           isOpen={contextMenuOpen}
           position={contextMenuPosition}
-          items={contextMenuItems}
+          items={getContextMenuItems()}
           onClose={() => setContextMenuOpen(false)}
         />
 

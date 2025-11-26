@@ -749,7 +749,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   }, [chatData])
 
   // Helper to recursively filter and flatten the tree
-  const filterEmptyNodes = (node: ChatNode): ChatNode[] => {
+  const filterEmptyNodes = (node: ChatNode, hasSiblings = false): ChatNode[] => {
     // Look up full message to check for structured content (blocks, tools, etc.)
     const fullMsg = allMessages.find(m => String(m.id) === String(node.id))
 
@@ -763,11 +763,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     // 1. Process children first using flatMap to flatten the results
     let filteredChildren: ChatNode[] = []
     if (node.children && node.children.length > 0) {
-      filteredChildren = node.children.flatMap(filterEmptyNodes)
+      const childrenHaveSiblings = node.children.length > 1
+      filteredChildren = node.children.flatMap(child => filterEmptyNodes(child, childrenHaveSiblings))
     }
 
     // 2. If node is empty, skip it and return its children (promotion)
-    if (!hasContent) {
+    // Exception: Keep nodes that have siblings (parallel branches)
+    if (!hasContent && !hasSiblings) {
       return filteredChildren
     }
 
@@ -781,7 +783,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     if (!rawData) return null
 
     if (filterEmptyMessages) {
-      const result = filterEmptyNodes(rawData)
+      const result = filterEmptyNodes(rawData, false) // Root node has no siblings
 
       if (result.length === 0) return null
 

@@ -6,6 +6,7 @@ export interface ContextMenuItem {
   icon?: React.ReactNode
   onClick: () => void
   disabled?: boolean
+  separator?: boolean
 }
 
 interface ContextMenuProps {
@@ -93,21 +94,25 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ isOpen, position, item
           }}
         >
           <div className='py-1'>
-            {items.map((item, index) => (
-              <button
-                key={index}
-                onClick={() => handleItemClick(item)}
-                disabled={item.disabled}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
-                  item.disabled
-                    ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
-                    : 'text-gray-700 dark:text-gray-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-[0.98]'
-                }`}
-              >
-                {item.icon && <span className='text-base'>{item.icon}</span>}
-                <span>{item.label}</span>
-              </button>
-            ))}
+            {items.map((item, index) =>
+              item.separator ? (
+                <hr key={index} className='my-1 border-t border-neutral-200 dark:border-neutral-700' />
+              ) : (
+                <button
+                  key={index}
+                  onClick={() => handleItemClick(item)}
+                  disabled={item.disabled}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
+                    item.disabled
+                      ? 'text-gray-400 dark:text-gray-600 cursor-not-allowed'
+                      : 'text-gray-700 dark:text-gray-200 hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-[0.98]'
+                  }`}
+                >
+                  {item.icon && <span className='text-base'>{item.icon}</span>}
+                  <span>{item.label}</span>
+                </button>
+              )
+            )}
           </div>
         </motion.div>
       )}
