@@ -436,6 +436,7 @@ const buildToolCallGroupsFromStream = (events?: StreamEvent[]) => {
     if (event.type === 'tool_call' && event.toolCall) {
       const id = event.toolCall.id
       if (!groupsById.has(id)) {
+        // New tool_call - create fresh group
         groupsById.set(id, {
           id,
           name: event.toolCall.name,
@@ -443,25 +444,36 @@ const buildToolCallGroupsFromStream = (events?: StreamEvent[]) => {
           results: [],
           anchorIndex: idx,
         })
+      } else {
+        // Group already exists (created by orphaned result arriving first)
+        // Update it with the tool_call metadata
+        const existingGroup = groupsById.get(id)!
+        existingGroup.name = event.toolCall.name
+        existingGroup.args = event.toolCall.arguments
+        existingGroup.anchorIndex = idx // Set anchor to tool_call position
       }
-      // Map ALL tool_call events with same ID to their group (prevents duplicates during streaming)
+      // Map this index to the group (for deduplication)
       mapByIndex.set(idx, groupsById.get(id)!)
     } else if (event.type === 'tool_result' && event.toolResult) {
       const target = groupsById.get(event.toolResult.tool_use_id)
       if (target) {
+        // Normal case: tool_call already exists
         target.results.push({ content: event.toolResult.content, is_error: event.toolResult.is_error })
-        if (!mapByIndex.has(idx)) {
-          mapByIndex.set(idx, target)
-        }
+        // Always map result index to group (for skip logic in render)
+        mapByIndex.set(idx, target)
       } else {
-        const fallback: ToolCallRenderGroup = {
+        // Orphaned result (arrives before its tool_call)
+        // Create temporary group with special anchor marker
+        const orphanedGroup: ToolCallRenderGroup = {
           id: event.toolResult.tool_use_id,
-          name: 'Tool result',
-          args: null,
+          name: undefined, // Will be set when tool_call arrives
+          args: null, // Will be set when tool_call arrives
           results: [{ content: event.toolResult.content, is_error: event.toolResult.is_error }],
-          anchorIndex: idx,
+          anchorIndex: -1, // -1 = "don't render yet"
         }
-        mapByIndex.set(idx, fallback)
+        groupsById.set(event.toolResult.tool_use_id, orphanedGroup)
+        // Map result index to orphaned group (so it gets skipped in render loop)
+        mapByIndex.set(idx, orphanedGroup)
       }
     }
   })
@@ -1064,6 +1076,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }
 
     const renderToolCallGroupCard = (group: ToolCallRenderGroup, key: string) => {
+      // Don't render orphaned groups (results waiting for their tool_call)
+      if (group.anchorIndex === -1) {
+        return null
+      }
+
       const toggleKey = `tool-group-${key}`
       const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
       const pathParam = extractPathParam(group.args)
@@ -1333,65 +1350,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                         ) : (
                           <span className='text-gray-600 dark:text-gray-400'>View details</span>
                         )}
-                      </div>
-                    )}
-                  </div>
-                )
-              } else if (event.type === 'tool_result' && event.toolResult) {
-                // Render streamed tool results with same formatting as completed tool_result blocks
-                const toolResult = event.toolResult
-                const isError = toolResult.is_error
-                const isExpanded = expandedBlocks.toolResults.has(`tool-result-${toolResult.tool_use_id}-${idx}`)
-                return (
-                  <div
-                    key={`tool-result-${toolResult.tool_use_id}-${idx}`}
-                    className={`relative mb-5 mx-3 p-2 rounded-xl border my-2 text-xs shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)] ${
-                      isError
-                        ? 'border-red-200 bg-red-50 dark:border-red-900/30 dark:bg-neutral-900'
-                        : 'border-green-200 bg-neutral-50 dark:border-green-900/30 dark:bg-neutral-900'
-                    }`}
-                  >
-                    <div className='flex items-center justify-between mb-2'>
-                      <div
-                        className={`font-semibold text-[16px] ${
-                          isError ? 'text-red-700 dark:text-red-300' : 'text-stone-700 dark:text-green-800'
-                        }`}
-                      >
-                        {isError ? 'Tool Error' : 'Tool Result'}
-                      </div>
-                      <Button
-                        variant='outline2'
-                        size='small'
-                        onClick={() => toggleBlock('toolResults', `tool-result-${toolResult.tool_use_id}-${idx}`)}
-                        title={isExpanded ? 'Hide details' : 'Show details'}
-                      >
-                        {isExpanded ? (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                          </svg>
-                        ) : (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                          </svg>
-                        )}
-                      </Button>
-                    </div>
-                    {isExpanded ? (
-                      <>
-                        <div className='text-xs text-stone-600 dark:text-stone-300 mb-2'>
-                          <span className='font-medium'>tool_use_id:</span> {toolResult.tool_use_id}
-                        </div>
-                        <div className='text-xs text-stone-600 dark:text-stone-300 break-all whitespace-pre-wrap'>
-                          {typeof toolResult.content === 'object'
-                            ? JSON.stringify(toolResult.content, null, 2)
-                            : String(toolResult.content)}
-                        </div>
-                      </>
-                    ) : (
-                      <div
-                        className={`text-xs ${isError ? 'text-red-600 dark:text-red-400' : 'text-stone-600 dark:text-stone-300'}`}
-                      >
-                        {truncateChars(toolResult.content)}
                       </div>
                     )}
                   </div>
