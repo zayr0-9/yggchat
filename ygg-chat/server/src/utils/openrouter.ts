@@ -1062,17 +1062,68 @@ export async function generateResponse(
           })),
         } as any)
 
-        // Check execution mode - if 'client', abort here and let client handle execution
+        // Check execution mode - if 'client', handle tool routing intelligently
         if (executionMode === 'client') {
-          // Exception for cloud-only tools that should run on server
-          const SERVER_SIDE_TOOLS = ['brave_search']
-          const shouldRunOnServer = uniqueToolCalls.every(tc => SERVER_SIDE_TOOLS.includes(tc.name))
+          // Tools that require server-side API keys or resources
+          // These should NEVER be sent to client for execution
+          const SERVER_ONLY_TOOLS = ['brave_search', 'exa_search']
 
-          if (!shouldRunOnServer) {
-            console.log('🛑 [openrouter] Client-side execution mode: halting generation for tool execution')
+          // Split tools into server-only and client-capable
+          const serverOnlyToolCalls = uniqueToolCalls.filter(tc => SERVER_ONLY_TOOLS.includes(tc.name))
+          const clientToolCalls = uniqueToolCalls.filter(tc => !SERVER_ONLY_TOOLS.includes(tc.name))
 
-            // Stream a special halt event if needed, or rely on the pending tool_calls sent earlier
-            // We've already sent tool_call events with status='pending'
+          // Execute server-only tools immediately on the server
+          if (serverOnlyToolCalls.length > 0) {
+            console.log(
+              '⚡ [openrouter] Executing server-only tools in client mode:',
+              serverOnlyToolCalls.map(t => t.name)
+            )
+
+            for (const toolCall of serverOnlyToolCalls) {
+              const result = await executeToolCall(toolCall.name, toolCall.arguments)
+              const isError = result.startsWith('Error')
+
+              // Stream tool_result event to client
+              onChunk(
+                JSON.stringify({
+                  part: 'tool_result',
+                  toolResult: {
+                    tool_use_id: toolCall.id,
+                    content: result,
+                    is_error: isError,
+                  },
+                })
+              )
+
+              // Add tool result to conversation for next iteration
+              conversationMessages.push({
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                content: result,
+              } as any)
+            }
+          }
+
+          // If there are client tools, halt and return for client execution
+          if (clientToolCalls.length > 0) {
+            console.log('🛑 [openrouter] Client-side execution mode: halting for client tools:', clientToolCalls.map(t => t.name))
+
+            // Remove the assistant message we just added (contains ALL tools)
+            conversationMessages.pop()
+
+            // Add new assistant message with ONLY client tools
+            conversationMessages.push({
+              role: 'assistant',
+              content: assistantContent || null,
+              tool_calls: clientToolCalls.map(tc => ({
+                id: tc.id,
+                type: 'function' as const,
+                function: {
+                  name: tc.name,
+                  arguments: tc.arguments,
+                },
+              })),
+            } as any)
 
             // We still need to log cost for this partial run
             if (!finalUsage) {
@@ -1107,13 +1158,17 @@ export async function generateResponse(
             // Stop the loop and return - client will resume with tool results
             return
           }
-          console.log(
-            '⚡ [openrouter] Executing server-side tools despite client mode:',
-            uniqueToolCalls.map(t => t.name)
-          )
+
+          // If ONLY server-only tools, continue the loop to process results
+          if (serverOnlyToolCalls.length > 0 && clientToolCalls.length === 0) {
+            console.log('✅ [openrouter] All server-only tools executed, continuing loop')
+            // Continue to next step to process tool results
+            continue
+          }
         }
 
-        // Execute tools and add their results
+        // Server execution mode OR no special handling needed
+        // Execute all tools and add their results
         for (const toolCall of uniqueToolCalls) {
           const result = await executeToolCall(toolCall.name, toolCall.arguments)
           // console.log(`Tool ${toolCall.name} result:`, result.substring(0, 200) + (result.length > 200 ? '...' : ''))
