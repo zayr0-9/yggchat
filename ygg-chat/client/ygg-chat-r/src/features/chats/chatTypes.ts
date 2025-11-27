@@ -205,6 +205,7 @@ export interface ChatState {
   attachments: AttachmentsState
   tools: tools[]
   toolCallPermissionRequest: ToolCallPermissionRequest | null
+  toolAutoApprove: boolean
 }
 
 // Action payloads

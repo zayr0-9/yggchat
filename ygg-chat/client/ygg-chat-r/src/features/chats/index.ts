@@ -27,6 +27,7 @@ export {
   getCCSessionInfo,
   refreshCurrentPathAfterDelete,
   respondToToolPermission,
+  respondToToolPermissionAndEnableAll,
   sendCCBranch,
   sendCCMessage,
   sendMessage,

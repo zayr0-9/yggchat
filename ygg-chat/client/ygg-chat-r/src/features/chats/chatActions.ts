@@ -375,10 +375,20 @@ let pendingPermissionResolve: ((allowed: boolean) => void) | null = null
 
 const executeToolWithPermissionCheck = async (
   dispatch: any,
+  getState: any,
   toolCall: any,
   rootPath: string | null
 ) => {
-  // Dispatch request to show dialog
+  // Check if auto-approve is enabled
+  const state = getState() as RootState
+  const autoApprove = state.chat.toolAutoApprove
+
+  if (autoApprove) {
+    // Auto-approve enabled: execute immediately without showing dialog
+    return await executeLocalTool(toolCall, rootPath)
+  }
+
+  // Auto-approve disabled: show dialog and wait for user response
   dispatch(chatSliceActions.toolPermissionRequested({ toolCall }))
 
   // Wait for user response
@@ -813,7 +823,7 @@ export const sendMessage = createAsyncThunk<
             console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
             for (const toolCall of pendingToolCalls) {
               // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, toolCall, rootPath)
+              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath)
 
               // Create tool_result block (NOT a separate message)
               const toolResultBlock = {
@@ -1406,7 +1416,7 @@ export const editMessageWithBranching = createAsyncThunk<
 
             for (const toolCall of pendingToolCalls) {
               // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, toolCall, rootPath)
+              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath)
 
               // Create tool_result block
               const toolResultBlock = {
@@ -1788,7 +1798,7 @@ export const sendMessageToBranch = createAsyncThunk<
 
             for (const toolCall of pendingToolCalls) {
               // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, toolCall, rootPath)
+              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath)
 
               // Create tool_result block
               const toolResultBlock = {
@@ -2902,6 +2912,24 @@ export const respondToToolPermission = createAsyncThunk<
     pendingPermissionResolve(allowed)
     pendingPermissionResolve = null
   }
+  dispatch(chatSliceActions.toolPermissionResponded())
+})
+
+export const respondToToolPermissionAndEnableAll = createAsyncThunk<
+  void,
+  void,
+  { state: RootState; extra: ThunkExtraArgument }
+>('chat/respondToToolPermissionAndEnableAll', async (_, { dispatch }) => {
+  // Enable auto-approve mode for all future tools
+  dispatch(chatSliceActions.toolAutoApproveEnabled())
+
+  // Approve the current pending tool call
+  if (pendingPermissionResolve) {
+    pendingPermissionResolve(true)
+    pendingPermissionResolve = null
+  }
+
+  // Clear the permission dialog
   dispatch(chatSliceActions.toolPermissionResponded())
 })
 

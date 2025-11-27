@@ -78,6 +78,7 @@ const makeInitialState = (): ChatState => ({
   },
   tools: [],
   toolCallPermissionRequest: null,
+  toolAutoApprove: false,
 })
 
 const initialState: ChatState = makeInitialState()
@@ -557,6 +558,18 @@ export const chatSlice = createSlice({
 
     toolPermissionResponded: state => {
       state.toolCallPermissionRequest = null
+    },
+
+    toolAutoApproveEnabled: state => {
+      state.toolAutoApprove = true
+    },
+
+    toolAutoApproveDisabled: state => {
+      state.toolAutoApprove = false
+    },
+
+    toolAutoApproveToggled: state => {
+      state.toolAutoApprove = !state.toolAutoApprove
     },
 
     stateReset: () => makeInitialState(),

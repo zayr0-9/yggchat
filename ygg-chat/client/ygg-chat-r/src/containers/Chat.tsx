@@ -13,6 +13,7 @@ import {
   Select,
   SettingsPane,
   TextField,
+  ToolAutoApproveIndicator,
   ToolPermissionDialog,
 } from '../components'
 import { ModelFilterUI } from '../components/ModelFilterUI/ModelFilterUI'
@@ -27,6 +28,7 @@ import {
   refreshCurrentPathAfterDelete,
   resolveAttachmentUrl,
   respondToToolPermission,
+  respondToToolPermissionAndEnableAll,
   selectConversationMessages,
   selectCurrentConversationId,
   selectCurrentPath,
@@ -113,6 +115,7 @@ function Chat() {
   const displayMessages = useAppSelector(selectDisplayMessages)
   const currentConversationId = useAppSelector(selectCurrentConversationId)
   const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
+  const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
 
   // React Query for message fetching (automatic deduplication and caching)
   // Use URL-derived ID to ensure correct fetching even on page refresh
@@ -2134,7 +2137,13 @@ function Chat() {
                 toolCall={toolCallPermissionRequest.toolCall}
                 onGrant={() => dispatch(respondToToolPermission(true))}
                 onDeny={() => dispatch(respondToToolPermission(false))}
+                onAllowAll={() => dispatch(respondToToolPermissionAndEnableAll())}
               />
+            )}
+            {toolAutoApprove && (
+              <div className='mx-4 mt-2 mb-2'>
+                <ToolAutoApproveIndicator onDisable={() => dispatch(chatSliceActions.toolAutoApproveDisabled())} />
+              </div>
             )}
             <InputTextArea
               value={localInput}

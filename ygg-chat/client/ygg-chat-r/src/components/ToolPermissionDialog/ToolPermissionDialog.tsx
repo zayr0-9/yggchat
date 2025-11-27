@@ -6,9 +6,10 @@ interface ToolPermissionDialogProps {
   toolCall: ToolCall
   onGrant: () => void
   onDeny: () => void
+  onAllowAll: () => void
 }
 
-export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({ toolCall, onGrant, onDeny }) => {
+export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({ toolCall, onGrant, onDeny, onAllowAll }) => {
   return (
     <div className='absolute bottom-[100%] left-0 right-0 mx-4 mt-1 mb-2 z-30'>
       <div className='bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-neutral-200 dark:border-neutral-700 p-4 animate-in slide-in-from-bottom-2 fade-in duration-200'>
@@ -47,6 +48,15 @@ export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({ tool
                 className='text-neutral-600 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 border-neutral-200 dark:border-neutral-700/50'
               >
                 Allow Execution
+              </Button>
+              <Button
+                variant='outline2'
+                size='small'
+                onClick={onAllowAll}
+                className='text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 border-amber-300 dark:border-amber-900/50'
+              >
+                <i className='bx bx-shield-quarter mr-1'></i>
+                Allow All
               </Button>
             </div>
           </div>
