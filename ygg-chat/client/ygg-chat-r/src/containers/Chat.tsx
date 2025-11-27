@@ -13,7 +13,6 @@ import {
   Select,
   SettingsPane,
   TextField,
-  ToolAutoApproveIndicator,
   ToolPermissionDialog,
 } from '../components'
 import { ModelFilterUI } from '../components/ModelFilterUI/ModelFilterUI'
@@ -2125,13 +2124,19 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute mb-2 bottom-0 left-0 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+          className={`absolute bg-red mb-2 bottom-0 left-0 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
           style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {/* Controls row (above) */}
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
-          <div className='acrylic-subtle pb-1 outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300 rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
+          <div
+            className={`acrylic-subtle pb-1 ${
+              toolAutoApprove
+                ? 'outline-3 dark:outline-3 dark:outline-orange-700/70 outline-orange-700/70'
+                : 'outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300'
+            } rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900`}
+          >
             {toolCallPermissionRequest && (
               <ToolPermissionDialog
                 toolCall={toolCallPermissionRequest.toolCall}
@@ -2139,11 +2144,6 @@ function Chat() {
                 onDeny={() => dispatch(respondToToolPermission(false))}
                 onAllowAll={() => dispatch(respondToToolPermissionAndEnableAll())}
               />
-            )}
-            {toolAutoApprove && (
-              <div className='mx-4 mt-2 mb-2'>
-                <ToolAutoApproveIndicator onDisable={() => dispatch(chatSliceActions.toolAutoApproveDisabled())} />
-              </div>
             )}
             <InputTextArea
               value={localInput}
@@ -2279,6 +2279,21 @@ function Chat() {
                     }
                     modelSelect={true}
                   />
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
+                    className={
+                      toolAutoApprove
+                        ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50'
+                        : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                    }
+                    title={toolAutoApprove ? 'Auto-approving tools (click to disable)' : 'Asking for permission (click to auto-approve)'}
+                    aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
+                  >
+                    <i className='bx bx-shield-quarter mr-1'></i>
+                    {toolAutoApprove ? 'Allow all' : 'Ask'}
+                  </Button>
                   {/* <Button
                     variant='outline2'
                     className='rounded-full'
