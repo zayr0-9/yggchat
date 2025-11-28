@@ -2133,7 +2133,7 @@ function Chat() {
           <div
             className={`acrylic-subtle pb-1 ${
               toolAutoApprove
-                ? 'outline-3 dark:outline-3 dark:outline-orange-700/70 outline-orange-700/70'
+                ? 'outline-1 dark:outline-1 dark:outline-orange-700/70 outline-orange-700/70'
                 : 'outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300'
             } rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900`}
           >
@@ -2281,14 +2281,18 @@ function Chat() {
                   />
                   <Button
                     variant='outline2'
-                    size='small'
+                    size='large'
                     onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
                     className={
                       toolAutoApprove
                         ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50'
                         : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
                     }
-                    title={toolAutoApprove ? 'Auto-approving tools (click to disable)' : 'Asking for permission (click to auto-approve)'}
+                    title={
+                      toolAutoApprove
+                        ? 'Auto-approving tools (click to disable)'
+                        : 'Asking for permission (click to auto-approve)'
+                    }
                     aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
                   >
                     <i className='bx bx-shield-quarter mr-1'></i>
