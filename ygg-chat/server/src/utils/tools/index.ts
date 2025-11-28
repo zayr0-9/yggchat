@@ -6,10 +6,10 @@ import { browseWeb } from './core/browseWeb'
 import { createTextFile } from './core/createFile'
 import { deleteFile, safeDeleteFile } from './core/deleteFile'
 import { editFile } from './core/editFile'
-import { extractDirectoryStructure } from './core/getDirectoryTree'
-import { globSearch } from './core/glob'
 import { exaCodeContext } from './core/exaCodeContext'
 import { exaSearch } from './core/exaSearch'
+import { extractDirectoryStructure } from './core/getDirectoryTree'
+import { globSearch } from './core/glob'
 import { readFileContinuation, readTextFile } from './core/readFile'
 import { readMultipleTextFiles } from './core/readFiles'
 import { ripgrepSearch } from './core/ripgrep'
@@ -441,7 +441,7 @@ const tools: tools[] = [
     name: 'exa_search',
     enabled: true,
     tool: {
-      description: 'Search the web using Exa API. Provides neural, fast, deep search modes with rich metadata.',
+      description: 'Search the web using Exa API. Provides neural, fast, deep search modes with rich metadata. ',
       inputSchema: z.object({
         query: z.string().describe('The search query to execute'),
         numResults: z
@@ -480,7 +480,12 @@ const tools: tools[] = [
         endCrawlDate: z.string().optional().describe('ISO date; only include pages crawled before this date.'),
         startPublishedDate: z.string().optional().describe('ISO date; only include pages published after this date.'),
         endPublishedDate: z.string().optional().describe('ISO date; only include pages published before this date.'),
-        includeText: z.array(z.string()).optional().describe('Require these terms/snippets to appear in documents.'),
+        includeText: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Require these terms/snippets to appear in documents. includeText currently only supports one phrase of up to 5 words.'
+          ),
         excludeText: z.array(z.string()).optional().describe('Exclude documents containing these terms/snippets.'),
         context: z.boolean().optional().describe('Request Exa-provided context string when supported.'),
         moderation: z.boolean().optional().describe('Enable Exa moderation filtering.'),

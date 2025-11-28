@@ -538,7 +538,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
         )}
         {/* Help text indicator */}
         {showHelp && value.length <= 0 && (
-          <div className='absolute top-4 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[12px] 3xl:text-[14px] 4xl:text-[16px] text-stone-800 dark:text-stone-200'>
+          <div className='absolute top-4 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[10px] 3xl:text-[12px] 4xl:text-[14px] text-stone-800 dark:text-stone-200'>
             {/* {value.length}/{maxLength} */}
             Shift+Enter
             <br />

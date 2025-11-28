@@ -1066,7 +1066,7 @@ export async function generateResponse(
         if (executionMode === 'client') {
           // Tools that require server-side API keys or resources
           // These should NEVER be sent to client for execution
-          const SERVER_ONLY_TOOLS = ['brave_search', 'exa_search']
+          const SERVER_ONLY_TOOLS = ['brave_search', 'exa_search', 'exa_code_context']
 
           // Split tools into server-only and client-capable
           const serverOnlyToolCalls = uniqueToolCalls.filter(tc => SERVER_ONLY_TOOLS.includes(tc.name))
