@@ -843,7 +843,7 @@ export async function generateResponse(
           },
           messages: formattedMessages,
           stream: true,
-          max_tokens: 10000,
+          max_tokens: 50000,
           tools: openaiTools.length > 0 ? openaiTools : undefined,
           usage: { include: true },
           ...(think && { reasoning: { max_tokens: 30000 } }),
@@ -1106,7 +1106,10 @@ export async function generateResponse(
 
           // If there are client tools, halt and return for client execution
           if (clientToolCalls.length > 0) {
-            console.log('🛑 [openrouter] Client-side execution mode: halting for client tools:', clientToolCalls.map(t => t.name))
+            console.log(
+              '🛑 [openrouter] Client-side execution mode: halting for client tools:',
+              clientToolCalls.map(t => t.name)
+            )
 
             // Remove the assistant message we just added (contains ALL tools)
             conversationMessages.pop()

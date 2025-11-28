@@ -2370,6 +2370,7 @@ function Chat() {
                     <Button
                       variant='outline2'
                       onClick={handleStopGeneration}
+                      size='large'
                       disabled={!streamState.streamingMessageId}
                       title='Stop generation'
                     >
@@ -2381,6 +2382,8 @@ function Chat() {
                     <Button
                       variant={canSendLocal && currentConversationId ? 'outline2' : 'outline2'}
                       size='medium'
+                      rounded='lg'
+                      className='mr-2'
                       disabled={!canSendLocal || !currentConversationId}
                       title='Send message'
                       onClick={() => {
@@ -2416,7 +2419,7 @@ function Chat() {
                         }
                       }}
                     >
-                      <i className='bx bx-send text-[22px]' aria-hidden='true'></i>
+                      <i className='bx bx-send text-[24px] p-0 ' aria-hidden='true'></i>
                     </Button>
                   )}
                 </div>
