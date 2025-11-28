@@ -798,78 +798,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     return rawData
   }, [chatData, allMessages, filterEmptyMessages])
 
-  // Calculate path from root to a specific node
-  const getPathToNode = (targetNodeId: string, node?: ChatNode | null, path: string[] = []): string[] | null => {
-    const startNode = node ?? currentChatData
-    if (!startNode) return null
-    const currentPath = [...path, startNode.id]
-
-    if (startNode.id === targetNodeId) {
-      return currentPath
-    }
-
-    if (startNode.children) {
-      for (const child of startNode.children) {
-        const result = getPathToNode(targetNodeId, child, currentPath)
-        if (result) return result
-      }
-    }
-
-    return null
-  }
-
   // Get the complete branch path for a selected node
+  // Uses unfiltered flatMessages to ensure filtered nodes are included in the path
   const getPathWithDescendants = (targetNodeId: string): string[] => {
-    const pathToNode = getPathToNode(targetNodeId)
-    if (!pathToNode) return []
+    const nodeIdParsed = parseId(targetNodeId)
+    if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) return []
 
-    // Find the target node in the tree
-    const findNode = (nodeId: string, node?: ChatNode | null): ChatNode | null => {
-      const start = node ?? currentChatData
-      if (!start) return null
-      if (start.id === nodeId) return start
-      if (start.children) {
-        for (const child of start.children) {
-          const found = findNode(nodeId, child)
-          if (found) return found
-        }
-      }
-      return null
-    }
-
-    const targetNode = findNode(targetNodeId)
-    if (!targetNode) return pathToNode
-
-    // Find the end of the branch by following the path to the deepest leaf
-    const findBranchEnd = (node: ChatNode): ChatNode => {
-      // If no children, this is the end
-      if (!node.children || node.children.length === 0) {
-        return node
-      }
-      // If single child, continue down the branch
-      if (node.children.length === 1) {
-        return findBranchEnd(node.children[0])
-      }
-      // If multiple children, choose the child with the lowest id and continue down
-      const sortedChildren = node.children.slice().sort((a, b) => {
-        const na = Number(a.id)
-        const nb = Number(b.id)
-        const aNum = !Number.isNaN(na)
-        const bNum = !Number.isNaN(nb)
-        if (aNum && bNum) return na - nb
-        if (aNum && !bNum) return -1
-        if (!aNum && bNum) return 1
-        return a.id.localeCompare(b.id)
-      })
-      return findBranchEnd(sortedChildren[0])
-    }
-
-    // Get the end of the current branch
-    const branchEnd = findBranchEnd(targetNode)
-
-    // Return the complete path from root to the end of this branch
-    const fullBranchPath = getPathToNode(branchEnd.id)
-    return fullBranchPath || pathToNode
+    // Build path from unfiltered message list (not filtered tree)
+    // This ensures all messages on the branch are included, even if filtered from tree view
+    const path = buildBranchPathForMessage(flatMessages as any, nodeIdParsed)
+    return path.map(id => String(id))
   }
 
   // Reset view when data changes
