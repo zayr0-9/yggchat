@@ -1112,6 +1112,7 @@ router.post(
       projectContext: clientProjectContext,
       think,
       retrigger = false,
+      isBranch = false,
     } = req.body
 
     if (!content && !retrigger) {
@@ -1378,7 +1379,7 @@ router.post(
       clearGeneration(messageId)
 
       // const messages = await MessageService.getByConversation(client, conversationId)
-      if (userMessage.parent_id === null) {
+      if (userMessage.parent_id === null && !isBranch) {
         const title = content.slice(0, 100) + (content.length > 100 ? '...' : '')
         await ConversationService.updateTitle(client, conversationId, title)
       }
@@ -1423,6 +1424,7 @@ router.post(
       selectedFiles,
       retrigger = false,
       executionMode = 'server',
+      isBranch = false,
     } = req.body as {
       content: string
       messages?: any[]
@@ -1436,6 +1438,7 @@ router.post(
       selectedFiles?: SelectedFileContent[]
       retrigger?: boolean
       executionMode?: 'server' | 'client'
+      isBranch?: boolean
     }
 
     const isContinuation = !content && Array.isArray(messages) && messages.length > 0

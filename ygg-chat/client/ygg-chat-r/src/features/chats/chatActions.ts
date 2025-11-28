@@ -1177,6 +1177,7 @@ export const editMessageWithBranching = createAsyncThunk<
             selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
             think,
             executionMode,
+            isBranch: true,
           }),
           signal: controller.signal,
         })
@@ -1593,6 +1594,7 @@ export const sendMessageToBranch = createAsyncThunk<
             selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
             think,
             executionMode,
+            isBranch: true,
           }),
           signal: controller.signal,
         })
