@@ -39,10 +39,10 @@ function initializeLocalDatabase(dbPath: string) {
 
   // DEV MODE: Delete old database if it exists to force schema recreation
   // Remove this in production and add proper migrations
-  if (fs.existsSync(dbPath)) {
-    console.log('[LocalServer] DEV MODE: Deleting old database to recreate with new schema')
-    fs.unlinkSync(dbPath)
-  }
+  // if (fs.existsSync(dbPath)) {
+  //   console.log('[LocalServer] DEV MODE: Deleting old database to recreate with new schema')
+  //   fs.unlinkSync(dbPath)
+  // }
 
   db = new Database(dbPath)
   db.pragma('foreign_keys = ON')
@@ -597,7 +597,14 @@ function setupServer() {
         updated_at,
       } = req.body
 
-      console.log('[LocalServer] 🔄 POST /api/sync/conversation - conversationId:', id, 'title:', title, 'storage_mode:', storage_mode)
+      console.log(
+        '[LocalServer] 🔄 POST /api/sync/conversation - conversationId:',
+        id,
+        'title:',
+        title,
+        'storage_mode:',
+        storage_mode
+      )
 
       // Handle owner_id -> user_id mapping (Railway sends owner_id)
       const effectiveUserId = user_id || owner_id
@@ -634,7 +641,12 @@ function setupServer() {
       // Verify the conversation was saved
       const saved = statements.getConversationById.get(id)
       if (saved) {
-        console.log('[LocalServer] ✅ Verified conversation exists in DB:', id, '- storage_mode:', (saved as any).storage_mode)
+        console.log(
+          '[LocalServer] ✅ Verified conversation exists in DB:',
+          id,
+          '- storage_mode:',
+          (saved as any).storage_mode
+        )
       } else {
         console.log('[LocalServer] ⚠️  Warning: Conversation not found after save:', id)
       }
@@ -700,7 +712,14 @@ function setupServer() {
         project_id,
       } = req.body
 
-      console.log('[LocalServer] 💾 POST /api/sync/message - messageId:', id, 'conversationId:', conversation_id, 'role:', role)
+      console.log(
+        '[LocalServer] 💾 POST /api/sync/message - messageId:',
+        id,
+        'conversationId:',
+        conversation_id,
+        'role:',
+        role
+      )
       console.log('[LocalServer] 📝 Message content preview:', content?.substring(0, 50))
 
       if (!conversation_id) {
@@ -752,7 +771,14 @@ function setupServer() {
         typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null),
         created_at || new Date().toISOString()
       )
-      console.log('[LocalServer] ✅ Synced message successfully:', id, '- role:', role, 'conversation:', conversation_id)
+      console.log(
+        '[LocalServer] ✅ Synced message successfully:',
+        id,
+        '- role:',
+        role,
+        'conversation:',
+        conversation_id
+      )
 
       // Verify the message was saved
       const saved = statements.getMessageById.get(id)
@@ -1403,7 +1429,10 @@ function setupServer() {
       const treeData = buildMessageTree(normalizedMessages)
       console.log('[LocalServer] 🌳 Tree built successfully:', treeData ? 'Has tree' : 'No tree')
       if (treeData) {
-        console.log('[LocalServer] 🌳 Tree root:', JSON.stringify({ id: treeData.id, childCount: treeData.children.length }, null, 2))
+        console.log(
+          '[LocalServer] 🌳 Tree root:',
+          JSON.stringify({ id: treeData.id, childCount: treeData.children.length }, null, 2)
+        )
       }
 
       res.json({ messages: normalizedMessages, tree: treeData })
