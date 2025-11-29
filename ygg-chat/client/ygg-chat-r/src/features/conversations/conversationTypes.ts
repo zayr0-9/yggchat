@@ -1,4 +1,4 @@
-import { ConversationId, ProjectId } from '../../../../../shared/types'
+import { ConversationId, ProjectId, StorageMode } from '../../../../../shared/types'
 
 export interface Conversation {
   id: ConversationId
@@ -10,6 +10,7 @@ export interface Conversation {
   system_prompt: string | null
   conversation_context: string | null
   research_note: string | null
+  storage_mode?: StorageMode
 }
 
 export interface ConversationsState {

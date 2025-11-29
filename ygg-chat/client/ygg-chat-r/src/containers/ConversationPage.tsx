@@ -16,6 +16,7 @@ import {
   selectConvError,
 } from '../features/conversations'
 import { clearSelectedProject, projectsLoaded, selectSelectedProject, setSelectedProject } from '../features/projects'
+import type { StorageMode } from '../../../../shared/types'
 
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useIsMobile } from '../hooks/useMediaQuery'
@@ -38,6 +39,11 @@ const ConversationPage: React.FC = () => {
   const [searchParams] = useSearchParams()
   const projectIdParam = searchParams.get('projectId')
   const projectId = projectIdParam ? parseId(projectIdParam) : null
+
+  // Check if running in Electron
+  const isElectronMode =
+    import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+    (typeof process !== 'undefined' && process.env?.VITE_ENVIRONMENT === 'electron')
 
   // Use React Query for data fetching
   // Fetch project-specific conversations OR all conversations (not both)
@@ -104,6 +110,10 @@ const ConversationPage: React.FC = () => {
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [showNewConversationModal, setShowNewConversationModal] = useState(false)
+  const [newConvTitle, setNewConvTitle] = useState('')
+  const [storageMode, setStorageMode] = useState<StorageMode>('cloud')
+  const [storageFilter, setStorageFilter] = useState<'all' | 'cloud' | 'local'>('all')
   // Sorting function for conversations
   const sortConversations = (
     convs: Conversation[],
@@ -138,8 +148,13 @@ const ConversationPage: React.FC = () => {
     return invert ? sorted.reverse() : sorted
   }
 
+  // Filter conversations by storage mode
+  const filteredConversations = storageFilter === 'all'
+    ? conversations
+    : conversations.filter(c => c.storage_mode === storageFilter)
+
   // Sort conversations
-  const sortedConversations = sortConversations(conversations, sortBy, sortOrder === 'asc')
+  const sortedConversations = sortConversations(filteredConversations, sortBy, sortOrder === 'asc')
 
   // Search dropdown is handled inside SearchList component
 
@@ -205,13 +220,29 @@ const ConversationPage: React.FC = () => {
   }
 
   const handleNewConversation = async () => {
-    const payload = selectedProject
-      ? {
-          title: `${selectedProject.name} Conversation`,
-        }
-      : {}
+    // In Electron mode, show modal to select storage mode
+    if (isElectronMode) {
+      // Set default title and storage mode
+      const defaultTitle = selectedProject ? `${selectedProject.name} Conversation` : 'New Conversation'
+      setNewConvTitle(defaultTitle)
+
+      // Inherit storage mode from project if available
+      const defaultStorageMode = selectedProject?.storage_mode || 'cloud'
+      setStorageMode(defaultStorageMode)
+
+      setShowNewConversationModal(true)
+    } else {
+      // Web mode: create directly without modal
+      await createNewConversation('cloud')
+    }
+  }
+
+  const createNewConversation = async (mode: StorageMode, title?: string) => {
+    const payload = {
+      title: title || (selectedProject ? `${selectedProject.name} Conversation` : undefined),
+      storageMode: mode,
+    }
     const result = await dispatch(createConversation(payload)).unwrap()
-    // dispatch(fetchProjectById(result.project_id))
 
     // Optimistically update React Query cache to avoid refetch (scales better)
     // Update all conversations cache - prepend new conversation (newest first)
@@ -232,6 +263,12 @@ const ConversationPage: React.FC = () => {
     })
 
     handleSelect(result)
+  }
+
+  const handleConfirmNewConversation = async () => {
+    await createNewConversation(storageMode, newConvTitle)
+    setShowNewConversationModal(false)
+    setNewConvTitle('')
   }
 
   const handleEditProject = () => {
@@ -327,6 +364,50 @@ const ConversationPage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-1'>
+              {/* Storage Filter (only show in Electron mode) */}
+              {isElectronMode && (
+                <div className='flex items-center gap-1 mr-2'>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('all')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'all'
+                        ? 'bg-blue-500 text-white dark:bg-blue-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>All</p>
+                  </Button>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('cloud')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'cloud'
+                        ? 'bg-blue-500 text-white dark:bg-blue-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>Cloud</p>
+                  </Button>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('local')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'local'
+                        ? 'bg-green-500 text-white dark:bg-green-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>Local</p>
+                  </Button>
+                </div>
+              )}
               {/* <span className='text-sm text-neutral-50 dark:text-neutral-300'>Filter</span> */}
               <Select
                 value={sortBy}
@@ -382,14 +463,26 @@ const ConversationPage: React.FC = () => {
                     onClick={() => handleSelect(conv)}
                   >
                     <div className='flex items-center justify-between'>
-                      <span className='font-semibold mr-2  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
-                        {conv.title || `Conversation ${conv.id}`}
-                      </span>
+                      <div className='flex items-center gap-2 flex-1 min-w-0'>
+                        <span className='font-semibold dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] truncate'>
+                          {conv.title || `Conversation ${conv.id}`}
+                        </span>
+                        {conv.storage_mode === 'local' && (
+                          <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 shrink-0'>
+                            Local
+                          </span>
+                        )}
+                        {conv.storage_mode === 'cloud' && (
+                          <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 shrink-0'>
+                            Cloud
+                          </span>
+                        )}
+                      </div>
                       <Button
                         variant='outline2'
                         size='circle'
                         rounded='full'
-                        className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95'
+                        className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0 ml-2'
                         onClick={
                           (e => {
                             ;(e as unknown as React.MouseEvent).stopPropagation()
@@ -421,6 +514,73 @@ const ConversationPage: React.FC = () => {
         onClose={handleCloseEditProjectModal}
         editingProject={selectedProject}
       />
+
+      {/* New Conversation Modal */}
+      {showNewConversationModal && (
+        <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
+          <div className='bg-neutral-100 text-neutral-900 mica-medium dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'>
+            <h3 className='text-xl font-semibold mb-4 dark:text-neutral-100'>Create New Conversation</h3>
+
+            <div className='mb-4'>
+              <label className='block text-sm font-medium mb-2 dark:text-neutral-300'>Title (optional)</label>
+              <input
+                type='text'
+                value={newConvTitle}
+                onChange={(e) => setNewConvTitle(e.target.value)}
+                placeholder='Enter conversation title...'
+                className='w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+              />
+            </div>
+
+            <div className='mb-6'>
+              <label className='block text-sm font-medium mb-2 dark:text-neutral-300'>Storage Location</label>
+              <div className='space-y-2'>
+                <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                  <input
+                    type='radio'
+                    value='cloud'
+                    checked={storageMode === 'cloud'}
+                    onChange={(e) => setStorageMode(e.target.value as StorageMode)}
+                    className='mr-3'
+                  />
+                  <div>
+                    <div className='font-medium dark:text-neutral-100'>Cloud</div>
+                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>Synced to Supabase (accessible anywhere)</div>
+                  </div>
+                </label>
+                <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                  <input
+                    type='radio'
+                    value='local'
+                    checked={storageMode === 'local'}
+                    onChange={(e) => setStorageMode(e.target.value as StorageMode)}
+                    className='mr-3'
+                  />
+                  <div>
+                    <div className='font-medium dark:text-neutral-100'>Local Only</div>
+                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>Stored on this device only (not synced)</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className='flex gap-3 justify-end'>
+              <Button variant='acrylic' size='circle' rounded='full' className='group' onClick={() => setShowNewConversationModal(false)}>
+                <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
+              </Button>
+              <Button
+                variant='acrylic'
+                size='circle'
+                rounded='full'
+                className='group bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white border-blue-600 dark:border-blue-700'
+                onClick={handleConfirmNewConversation}
+              >
+                <p className='transition-transform duration-100 group-active:scale-95'>Create</p>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && conversationToDelete && (

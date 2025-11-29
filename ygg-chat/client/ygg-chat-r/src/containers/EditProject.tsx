@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useState } from 'react'
-import { Project, ProjectWithLatestConversation } from '../../../../shared/types'
+import { Project, ProjectWithLatestConversation, StorageMode } from '../../../../shared/types'
 import { Button, TextField } from '../components'
 import { InputTextArea } from '../components/InputTextArea/InputTextArea'
 import { createProject, CreateProjectPayload, updateProject, UpdateProjectPayload } from '../features/projects'
@@ -22,6 +22,12 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectContext, setNewProjectContext] = useState('')
   const [newProjectSystemPrompt, setNewProjectSystemPrompt] = useState('')
+  const [storageMode, setStorageMode] = useState<StorageMode>('cloud')
+
+  // Check if running in Electron
+  const isElectronMode =
+    import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+    (typeof process !== 'undefined' && process.env?.VITE_ENVIRONMENT === 'electron')
 
   const isEditing = editingProject !== null
 
@@ -30,6 +36,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
       setNewProjectName(editingProject.name)
       setNewProjectContext(editingProject.context || '')
       setNewProjectSystemPrompt(editingProject.system_prompt || '')
+      setStorageMode(editingProject.storage_mode || 'cloud')
     } else if (isOpen) {
       // Only reset form when opening modal for creating new project
       resetForm()
@@ -43,6 +50,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
       name: newProjectName.trim(),
       context: newProjectContext.trim() || undefined,
       system_prompt: newProjectSystemPrompt.trim() || undefined,
+      storageMode: storageMode,
     }
 
     try {
@@ -65,6 +73,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
       name: newProjectName.trim(),
       context: newProjectContext.trim() || undefined,
       system_prompt: newProjectSystemPrompt.trim() || undefined,
+      storage_mode: storageMode,
     }
 
     try {
@@ -113,6 +122,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
     setNewProjectName('')
     setNewProjectContext('')
     setNewProjectSystemPrompt('')
+    setStorageMode('cloud')
   }
 
   const handleCancel = () => {
@@ -178,6 +188,48 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                 className='drop-shadow-xl shadow-[0_0px_8px_3px_rgba(0,0,0,0.03),0_0px_2px_0px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0.1)]'
               />
             </div>
+
+            {/* Storage Mode Selection (only in Electron) */}
+            {isElectronMode && (
+              <div>
+                <label className='block text-[12px] sm:text-[12px] md:text-[14px] lg:text-[14px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px] text-neutral-900 font-medium mb-2 dark:text-neutral-200'>
+                  Storage Location
+                </label>
+                <div className='space-y-2'>
+                  <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                    <input
+                      type='radio'
+                      value='cloud'
+                      checked={storageMode === 'cloud'}
+                      onChange={e => setStorageMode(e.target.value as StorageMode)}
+                      className='mr-3'
+                    />
+                    <div>
+                      <div className='font-medium dark:text-neutral-100'>Cloud</div>
+                      <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                        Synced to Supabase (accessible anywhere)
+                      </div>
+                    </div>
+                  </label>
+                  <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                    <input
+                      type='radio'
+                      value='local'
+                      checked={storageMode === 'local'}
+                      onChange={e => setStorageMode(e.target.value as StorageMode)}
+                      className='mr-3'
+                    />
+                    <div>
+                      <div className='font-medium dark:text-neutral-100'>Local Only</div>
+                      <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                        Stored on this device only (not synced)
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+
             <div className='flex gap-2 justify-end pt-4'>
               <Button
                 variant='outline'

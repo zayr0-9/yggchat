@@ -110,8 +110,9 @@ const projectSlice = createSlice({
       })
       .addCase(deleteProject.fulfilled, (state, action) => {
         state.loading = false
-        state.projects = state.projects.filter(p => p.id !== action.meta.arg)
-        if (state.selectedProject?.id === action.meta.arg) {
+        // action.payload is the returned projectId
+        state.projects = state.projects.filter(p => p.id !== action.payload)
+        if (state.selectedProject?.id === action.payload) {
           state.selectedProject = null
         }
       })

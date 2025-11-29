@@ -5,6 +5,8 @@ export type MessageId = string
 export type ConversationId = string
 export type ProjectId = string
 
+export type StorageMode = 'cloud' | 'local'
+
 export interface BaseMessage {
   id: MessageId
   conversation_id: ConversationId
@@ -80,10 +82,26 @@ export interface Project {
   updated_at: string
   context: string
   system_prompt: string
+  storage_mode?: StorageMode
 }
 
 export interface ProjectWithLatestConversation extends Project {
   latest_conversation_updated_at: string | null
+}
+
+export interface ConversationRecord {
+  id: ConversationId
+  user_id: string
+  project_id?: ProjectId | null
+  title: string | null
+  model_name: string
+  system_prompt: string | null
+  conversation_context: string | null
+  research_note: string | null
+  cwd?: string | null
+  created_at: string
+  updated_at: string
+  storage_mode?: StorageMode
 }
 
 export interface ChatSession {

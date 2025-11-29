@@ -675,8 +675,16 @@ router.post(
   '/conversations',
   authenticatedRateLimiter, // Apply authenticated user rate limiter
   asyncHandler(async (req, res) => {
-    const { title, modelName, projectId, systemPrompt, conversationContext } = req.body
+    const { title, modelName, projectId, systemPrompt, conversationContext, storageMode } = req.body
     const { client, userId } = await verifyAuth(req)
+
+    // Validate storage mode: Reject local-only records from hitting Supabase
+    if (storageMode === 'local') {
+      return res.status(400).json({
+        error: 'Local-only conversations should use /local/conversations endpoint',
+        details: 'Storage mode "local" is not allowed for cloud conversations'
+      })
+    }
 
     const conversation = await ConversationService.create(
       client,
