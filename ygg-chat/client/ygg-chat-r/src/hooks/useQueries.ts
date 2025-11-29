@@ -308,14 +308,34 @@ export function useConversationData(conversationId: ConversationId | null) {
  *
  * Returns: { messages: Message[], tree: ChatNode }
  */
-export function useConversationMessages(conversationId: ConversationId | null) {
+export function useConversationMessages(conversationId: ConversationId | null, storageMode?: 'local' | 'cloud') {
   const { accessToken } = useAuth()
+  const queryClient = useQueryClient()
 
   return useQuery({
     queryKey: ['conversations', conversationId, 'messages'],
     queryFn: async () => {
       if (!conversationId) throw new Error('Conversation ID is required')
-      // Use /messages/tree endpoint to get both messages AND tree in one request
+
+      // Determine storage mode: use parameter if provided, otherwise check cached conversations
+      let effectiveStorageMode = storageMode
+      if (!effectiveStorageMode) {
+        // Try to get storage_mode from cached conversations
+        const conversations = queryClient.getQueryData<Conversation[]>(['conversations'])
+        const conversation = conversations?.find(c => c.id === conversationId)
+        effectiveStorageMode = conversation?.storage_mode || 'cloud'
+      }
+
+      console.log('[useConversationMessages] Fetching messages for conversation:', conversationId, 'storage_mode:', effectiveStorageMode)
+
+      // Route to appropriate API based on storage mode
+      if (effectiveStorageMode === 'local' && environment === 'electron') {
+        console.log('[useConversationMessages] Using local API for conversation:', conversationId)
+        return localApi.get<{ messages: Message[]; tree: any }>(`/local/conversations/${conversationId}/messages/tree`)
+      }
+
+      // Default to cloud API
+      console.log('[useConversationMessages] Using cloud API for conversation:', conversationId)
       return api.get<{ messages: Message[]; tree: any }>(`/conversations/${conversationId}/messages/tree`, accessToken)
     },
     enabled: !!conversationId && !!accessToken,
