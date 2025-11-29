@@ -166,6 +166,23 @@ function initializeLocalDatabase(dbPath: string) {
     CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
   `)
 
+  // Triggers to maintain children_ids integrity
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS messages_children_insert AFTER INSERT ON messages
+    WHEN NEW.parent_id IS NOT NULL
+    BEGIN
+      UPDATE messages
+      SET children_ids = (
+        SELECT CASE
+          WHEN children_ids = '[]' OR children_ids = '' THEN '["' || NEW.id || '"]'
+          ELSE SUBSTR(children_ids, 1, LENGTH(children_ids)-1) || ',"' || NEW.id || '"]'
+        END
+        FROM messages WHERE id = NEW.parent_id
+      )
+      WHERE id = NEW.parent_id;
+    END;
+  `)
+
   // Update statements
   statements = {
     // Users
