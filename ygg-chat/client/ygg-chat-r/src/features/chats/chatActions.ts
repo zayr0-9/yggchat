@@ -434,10 +434,6 @@ export const sendMessage = createAsyncThunk<
       const currentPathMessages = currentPathIds.map(id => currentMessages.find(m => m.id === id))
       const isFirstMessage = (currentMessages?.length || 0) === 0
 
-      // Check conversation's storage mode for routing
-      const conversation = state.conversations.items.find(c => c.id === conversationId)
-      const isLocalConversation = conversation?.storage_mode === 'local'
-
       // Read selected model from React Query cache
       const provider = state.chat.providerState.currentProvider
       const modelsData = extra.queryClient?.getQueryData<{
@@ -502,9 +498,8 @@ export const sendMessage = createAsyncThunk<
         }
 
         if (repeatNum > 1 && turnCount === 1) {
-          const endpoint = isLocalConversation
-            ? `/local/chat/conversations/${conversationId}/messages/repeat`
-            : `/conversations/${conversationId}/messages/repeat`
+          // Always use cloud endpoint - server handles local/cloud logic
+          const endpoint = `/conversations/${conversationId}/messages/repeat`
 
           response = await createStreamingRequest(
             endpoint,
@@ -548,9 +543,8 @@ export const sendMessage = createAsyncThunk<
             }
           )
         } else {
-          const endpoint = isLocalConversation
-            ? `/local/chat/conversations/${conversationId}/messages`
-            : `/conversations/${conversationId}/messages`
+          // Always use cloud endpoint - server handles local/cloud logic
+          const endpoint = `/conversations/${conversationId}/messages`
 
           response = await createStreamingRequest(endpoint, auth.accessToken, {
             method: 'POST',
@@ -1543,10 +1537,6 @@ export const sendMessageToBranch = createAsyncThunk<
 
       const state = getState() as RootState
 
-      // Check conversation's storage mode for routing
-      const conversation = state.conversations.items.find(c => c.id === conversationId)
-      const isLocalConversation = conversation?.storage_mode === 'local'
-
       // Read selected model from React Query cache
       const provider = state.chat.providerState.currentProvider
       const modelsData = extra.queryClient?.getQueryData<{
@@ -1595,9 +1585,8 @@ export const sendMessageToBranch = createAsyncThunk<
         turnCount++
         continueTurn = false
 
-        const endpoint = isLocalConversation
-          ? `/local/chat/conversations/${conversationId}/messages`
-          : `/conversations/${conversationId}/messages`
+        // Always use cloud endpoint - server handles local/cloud logic
+        const endpoint = `/conversations/${conversationId}/messages`
 
         const response = await createStreamingRequest(endpoint, auth.accessToken, {
           method: 'POST',

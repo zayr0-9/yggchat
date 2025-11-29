@@ -678,14 +678,6 @@ router.post(
     const { title, modelName, projectId, systemPrompt, conversationContext, storageMode } = req.body
     const { client, userId } = await verifyAuth(req)
 
-    // Validate storage mode: Reject local-only records from hitting Supabase
-    if (storageMode === 'local') {
-      return res.status(400).json({
-        error: 'Local-only conversations should use /local/conversations endpoint',
-        details: 'Storage mode "local" is not allowed for cloud conversations',
-      })
-    }
-
     const conversation = await ConversationService.create(
       client,
       userId,
@@ -1449,6 +1441,11 @@ router.post(
       isBranch?: boolean
     }
 
+    console.log(`[supaChat] Processing message request for conversation ${conversationId}`)
+    console.log(`[supaChat] Execution Mode: ${executionMode}`)
+    console.log(`[supaChat] Model: ${modelName}`)
+    console.log(`[supaChat] Provider: ${provider}`)
+
     const isContinuation = !content && Array.isArray(messages) && messages.length > 0
 
     if (!content && !retrigger && !isContinuation) {
@@ -1531,6 +1528,10 @@ router.post(
 
     const selectedModel = modelName || (await modelService.getDefaultModel())
 
+    // Get conversation to check storage mode
+    const conversation = await ConversationService.getById(client, conversationId)
+    const isLocalMode = conversation?.storage_mode === 'local'
+
     // Use client-provided parentId directly - RLS will enforce FK constraints
     let parentId: string | null = null
     if (requestedParentId !== undefined) {
@@ -1556,7 +1557,21 @@ router.post(
       const lastMsg = messages![messages!.length - 1]
       userMessage = { ...lastMsg, id: lastMsg.id || 'temp-continuation-id' }
     } else {
-      if (executionMode !== 'client') {
+      // Check if local mode or if execution mode is client - skip Supabase saves
+      if (isLocalMode || executionMode === 'client') {
+        // Create ephemeral user message object without saving to DB
+        console.log('[supaChat] Local mode or client execution - skipping Supabase save for user message')
+        userMessage = {
+          id: crypto.randomUUID(),
+          conversation_id: conversationId,
+          parent_id: parentId,
+          role: 'user',
+          content,
+          model_name: selectedModel,
+          created_at: new Date().toISOString(),
+        }
+      } else {
+        // Save to Supabase
         userMessage = await MessageService.create(
           client,
           userId,
@@ -1567,34 +1582,24 @@ router.post(
           '',
           selectedModel
         )
-      } else {
-        // Client mode: Create ephemeral user message object without saving to DB
-        userMessage = {
-          id: crypto.randomUUID(),
-          conversation_id: conversationId,
-          parent_id: parentId,
-          role: 'user',
-          content,
-          model_name: selectedModel,
-          created_at: new Date().toISOString(),
-        }
       }
-      // console.log('server | user message', messages)
+    }
+    // console.log('server | user message', messages)
 
-      if (selectedFiles && selectedFiles.length > 0 && executionMode !== 'client') {
-        for (const file of selectedFiles) {
-          try {
-            const fileContent = await FileContentService.create(client, userId, {
-              fileName: file.name || file.relativePath.split('/').pop() || 'unknown',
-              relativePath: file.relativePath,
-              fileContent: file.contents,
-              sizeBytes: file.contentLength,
-              messageId: userMessage.id,
-            })
-            console.log('Stored file content:', fileContent.file_name)
-          } catch (error) {
-            console.error('Error storing file content:', error)
-          }
+    // Only save files to Supabase if NOT in local mode and NOT in client mode
+    if (selectedFiles && selectedFiles.length > 0 && !isLocalMode && executionMode !== 'client') {
+      for (const file of selectedFiles) {
+        try {
+          const fileContent = await FileContentService.create(client, userId, {
+            fileName: file.name || file.relativePath.split('/').pop() || 'unknown',
+            relativePath: file.relativePath,
+            fileContent: file.contents,
+            sizeBytes: file.contentLength,
+            messageId: userMessage.id,
+          })
+          console.log('Stored file content:', fileContent.file_name)
+        } catch (error) {
+          console.error('Error storing file content:', error)
         }
       }
     }
@@ -1614,8 +1619,9 @@ router.post(
 
     try {
       const attachmentsBase64 = Array.isArray(req.body?.attachmentsBase64) ? req.body.attachmentsBase64 : null
+      // Only save attachments to Supabase if NOT in local mode and NOT in client mode
       const createdAttachments: Awaited<ReturnType<typeof AttachmentService.getById>>[] =
-        attachmentsBase64 && executionMode !== 'client'
+        attachmentsBase64 && !isLocalMode && executionMode !== 'client'
           ? await saveBase64ImageAttachmentsForMessage(client, userMessage.id, attachmentsBase64, userId)
           : []
 
@@ -1642,6 +1648,8 @@ router.post(
         await generateResponse(
           combinedMessages,
           chunk => {
+            // console.log('[supaChat] Received chunk length:', chunk.length)
+            console.log('[supaChat] Received chunk:', chunk.substring(0, 50) + '...')
             try {
               const obj = JSON.parse(chunk)
               const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | undefined
@@ -1820,7 +1828,22 @@ router.post(
           console.log('📤 [supaChat] Accumulated into', accumulatedBlocks.length, 'blocks')
 
           let assistantMessage
-          if (executionMode !== 'client') {
+          // Check if local mode or if execution mode is client - skip Supabase saves
+          if (isLocalMode || executionMode === 'client') {
+            // Create ephemeral assistant message object without saving to DB
+            console.log('[supaChat] Local mode or client execution - skipping Supabase save for assistant message')
+            assistantMessage = {
+              id: crypto.randomUUID(),
+              conversation_id: conversationId,
+              parent_id: userMessage.id,
+              role: 'assistant',
+              content: cleanedContent,
+              model_name: selectedModel,
+              content_blocks: accumulatedBlocks,
+              created_at: new Date().toISOString(),
+            }
+          } else {
+            // Save to Supabase
             assistantMessage = await MessageService.create(
               client,
               userId,
@@ -1834,18 +1857,6 @@ router.post(
               undefined,
               accumulatedBlocks
             )
-          } else {
-            // Client mode: Create ephemeral assistant message object
-            assistantMessage = {
-              id: crypto.randomUUID(),
-              conversation_id: conversationId,
-              parent_id: userMessage.id,
-              role: 'assistant',
-              content: cleanedContent,
-              model_name: selectedModel,
-              content_blocks: accumulatedBlocks,
-              created_at: new Date().toISOString(),
-            }
           }
           // console.log(assistantMessage)
           const cleanedMessage = { ...assistantMessage, content: cleanedContent }
@@ -1857,7 +1868,8 @@ router.post(
           )
 
           // Auto-generate title if this is the first message (no parent ID)
-          if (userMessage.parent_id === null && executionMode !== 'client') {
+          // Skip for local mode - client will handle title updates
+          if (userMessage.parent_id === null && !isLocalMode && executionMode !== 'client') {
             console.log('Auto-generating title for new conversation', conversationId)
             const title = content.slice(0, 100) + (content.length > 100 ? '...' : '')
             await ConversationService.updateTitle(client, conversationId, title)
@@ -1900,7 +1912,20 @@ router.post(
             try {
               const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
               let assistantMessage
-              if (executionMode !== 'client') {
+              if (isLocalMode || executionMode === 'client') {
+                // Create ephemeral message - don't save to Supabase
+                assistantMessage = {
+                  id: crypto.randomUUID(),
+                  conversation_id: conversationId,
+                  parent_id: userMessage.id,
+                  role: 'assistant',
+                  content: cleanedContent,
+                  model_name: selectedModel,
+                  content_blocks: accumulatedBlocks,
+                  created_at: new Date().toISOString(),
+                }
+              } else {
+                // Save to Supabase
                 assistantMessage = await MessageService.create(
                   client,
                   userId,
@@ -1914,17 +1939,6 @@ router.post(
                   undefined,
                   accumulatedBlocks
                 )
-              } else {
-                assistantMessage = {
-                  id: crypto.randomUUID(),
-                  conversation_id: conversationId,
-                  parent_id: userMessage.id,
-                  role: 'assistant',
-                  content: cleanedContent,
-                  model_name: selectedModel,
-                  content_blocks: accumulatedBlocks,
-                  created_at: new Date().toISOString(),
-                }
               }
               const cleanedMessage = { ...assistantMessage, content: cleanedContent }
               res.write(`data: ${JSON.stringify({ type: 'complete', message: cleanedMessage, aborted: true })}\n\n`)
@@ -1952,7 +1966,20 @@ router.post(
               console.log('🔧 [supaChat/error] Saving partial content before error, toolCalls:', assistantToolCalls)
 
               let assistantMessage
-              if (executionMode !== 'client') {
+              if (isLocalMode || executionMode === 'client') {
+                // Create ephemeral message - don't save to Supabase
+                assistantMessage = {
+                  id: crypto.randomUUID(),
+                  conversation_id: conversationId,
+                  parent_id: userMessage.id,
+                  role: 'assistant',
+                  content: cleanedContent,
+                  model_name: selectedModel,
+                  content_blocks: accumulatedBlocks,
+                  created_at: new Date().toISOString(),
+                }
+              } else {
+                // Save to Supabase
                 assistantMessage = await MessageService.create(
                   client,
                   userId,
@@ -1966,17 +1993,6 @@ router.post(
                   undefined,
                   accumulatedBlocks
                 )
-              } else {
-                assistantMessage = {
-                  id: crypto.randomUUID(),
-                  conversation_id: conversationId,
-                  parent_id: userMessage.id,
-                  role: 'assistant',
-                  content: cleanedContent,
-                  model_name: selectedModel,
-                  content_blocks: accumulatedBlocks,
-                  created_at: new Date().toISOString(),
-                }
               }
               // Send completion with accumulated content - treat as successful partial generation
               // The error is logged on server but client sees it as a complete message
@@ -2012,6 +2028,7 @@ router.post(
 
       res.end()
     } catch (error) {
+      console.error('[supaChat] Error in message handler:', error)
       res.write(
         `data: ${JSON.stringify({
           type: 'error',

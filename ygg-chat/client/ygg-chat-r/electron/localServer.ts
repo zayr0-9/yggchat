@@ -11,7 +11,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
 
 // Tool imports
-import electronChatRouter, { setDatabaseDependencies } from './electronChat.js'
 import { browseWeb } from './tools/browseWeb.js'
 import { createTextFile } from './tools/createFile.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
@@ -270,9 +269,6 @@ function initializeLocalDatabase(dbPath: string) {
     updateMessage: db.prepare('UPDATE messages SET content = ?, note = ?, content_blocks = ? WHERE id = ?'),
   }
 
-  // Inject database dependencies into electronChat router
-  setDatabaseDependencies(db, statements)
-
   console.log('[LocalServer] Database initialized successfully')
 }
 
@@ -447,10 +443,6 @@ function setupServer() {
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', mode: 'local-sync' })
   })
-
-  // Mount local chat routes (after database is initialized)
-  // Database dependencies will be injected after initializeLocalDatabase is called
-  app.use('/api/local/chat', electronChatRouter)
 
   // Sync User
   app.post('/api/sync/user', (req, res) => {
