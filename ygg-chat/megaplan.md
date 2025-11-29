@@ -1,189 +1,444 @@
-Below is a structured overview of the current dual-sync architecture and a high-level plan for making message storage location optional, so the Electron client can keep certain conversations purely in the local SQLite replica while still being able to merge data from both Supabase (cloud) and local DBs on demand.
+# Implementation Plan: Local-Only Storage Mode for Ygg-Chat
 
-1. Current State (from repo review)
-   Client (ygg-chat-r)
-   Dual Sync Manager (src/lib/sync/dualSyncManager.ts):
+## Overview
 
-Runs only in Electron mode (environment === 'electron').
-Maintains a queue of sync operations and posts them to the embedded local server (http://127.0.0.1:3002/api/sync/...).
-Handles projects, conversations, messages, attachments, provider costs, etc.
-Assumes Supabase (Railway) is the source of truth; local writes are fire-and-forget.
-Local Server (electron/localServer.ts):
+This plan implements optional local-only storage mode, allowing users to choose whether conversations and projects are stored in the cloud (Supabase) or only locally (SQLite in Electron mode). AI inference continues to use cloud providers - only metadata storage is local.
 
-Embedded Express + better-sqlite3 instance started by the Electron main process.
-Defines tables similar to server schema (users, projects, conversations, messages, attachments, provider_cost).
-Provides /api/sync/... endpoints to upsert/delete rows.
-Includes helper endpoints (health, stats, research-note patch, cwd patch, tool execution, websocket).
-Redux Thunks (src/features/chats/conversations/projects/...Actions.ts):
+**Key Architecture:** Hybrid approach where local storage applies to conversations/messages/projects, while AI generation proxies through cloud APIs.
 
-After a successful remote API call, they call dualSync.sync\* methods to mirror data locally.
-syncConversationToLocal can backfill an entire conversation and all messages when needed.
-Sync Provider (placeholder) (src/lib/sync/index.ts, local.ts, supabase.ts):
+---
 
-Currently only differentiates between local-only vs Supabase sync (not yet tied to dualSync).
-No UI to toggle where a conversation is stored; everything still tries to sync to both.
-Server (Rails/Supabase)
-Uses SQLite (via better-sqlite3) when running locally, Supabase in production.
-Standard models/services defined in server/src/database/models.ts.
-Supabase remains authoritative.
-Documentation
-ygg-chat/dualsyncplan.md describes the envisioned dual-sync architecture already implemented: local server, dualSyncManager, API wrappers, streaming hooks, etc. 2. New Requirement
-“Make backing to Supabase optional so some conversations are saved only in the local SQLite table, while still allowing the Electron client to pull and combine projects/conversations/messages from both data stores.”
+## Implementation Phases
 
-Key implications:
+### PHASE 1: Local Chat Routes (2-3 hours)
 
-Need a metadata flag (per conversation/project?) indicating storage location: cloud, local-only, or hybrid.
-Local-only conversations shouldn’t be sent to Supabase at all (privacy/offline use case).
-UI must allow users to choose storage backend at creation time and possibly migrate later.
-Electron client should display a merged list of projects/conversations/messages coming from:
-Supabase API (remote)
-Local server DB (only local-only items + cached copies)
-For local-only conversations, everything (creation, update, streaming messages) must call the local server API instead of Supabase.
-Need reconciliation logic (dedupe, consistent IDs, filtering) when combining records. 3. Proposed Architecture Adjustments
-3.1 Data Model Changes
-Introduce a storage_mode (enum/string) at the conversation (and possibly project) level:
-cloud (current default) – lives in Supabase; mirrored locally via dual sync.
-local – exists only in local SQLite; never sent to Supabase.
-Optional hybrid if future use cases appear (cloud + local extra fields).
-Store this flag in both Supabase and local DB so the client can tell where records belong.
-3.2 Local API Expansion
-Add endpoints on electron/localServer.ts to support fully local CRUD:
-/api/local/projects, /api/local/conversations, /api/local/messages, etc.
-These should behave similarly to Supabase endpoints but operate on the local DB only.
-Ensure these endpoints enforce storage_mode = 'local' and never sync outwards.
-Add query endpoints to retrieve local-only data for merge:
-/api/local/projects?storage_mode=local
-/api/local/conversations?storage_mode=local
-/api/local/messages/:conversationId
-3.3 Client-Side Data Fetch
-Create a “dual data source” aggregator layer (e.g., src/lib/dataSourceManager.ts):
-Fetch remote projects/conversations via existing api.\* calls.
-Fetch local-only counterparts via new local endpoints.
-Merge, dedupe (by ID), and annotate each record with storage_mode.
-Provide selectors/hooks so UI can filter (e.g., show only local, only cloud, or both).
-For message fetching within a conversation:
-If storage_mode === 'cloud': keep current behavior (fetch from Supabase, optionally sync down).
-If storage_mode === 'local': call local server endpoints only.
-3.4 Conversation Lifecycle
-Creation UI: Add a toggle (“Store locally only”) in conversation/project creation modal.
+**Objective:** Replicate server chat logic in electronChat.ts for local message generation.
 
-If “local-only” selected:
-Generate ID on client (UUID).
-Call local server endpoint to create conversation/project directly.
-Do not call Supabase api.\* at all.
-If “cloud”, use existing flow (Supabase API call + dualSync mirror).
-Messaging:
+**Files to Modify:**
+- [client/ygg-chat-r/electron/electronChat.ts](client/ygg-chat-r/electron/electronChat.ts) - NEW implementation
+- [client/ygg-chat-r/electron/localServer.ts](client/ygg-chat-r/electron/localServer.ts) - Mount routes
 
-When sending messages, determine target backend from conversation metadata:
-Cloud conversation: unchanged.
-Local conversation: streaming endpoint should point to local server (requires replicating subset of server chat logic locally, or at least a simplified offline LLM path if available).
-If AI generation needs Supabase resources, decide if local-only is offline (no generation) or still uses remote inference but stores transcripts locally only. Clarify requirement.
-Updates/deletes follow same routing logic.
-3.5 Sync Manager Enhancements
-DualSync currently assumes everything originates from Supabase and replicates locally.
-Need to guard sync operations:
-Skip enqueuing local-only records (to avoid trying to push them to local server redundantly).
-Possibly extend manager to handle “pull” operations when remote updates should merge into local caches (already partly done with syncConversationToLocal).
-3.6 Metadata Storage & State
-Update Redux slices (conversationSlice, chatSlice, projectSlice) to store storage_mode.
-Update React Query caches similarly.
-Provide selectors: selectLocalConversations, selectCloudConversations, etc.
-3.7 Electron-Specific UX
-Settings page showing:
-Local DB stats (already exists).
-Toggle default storage mode for new conversations.
-Option to migrate a conversation from local → cloud (requires uploading entire history).
-Possibly show indicator/badge in conversation list for storage location. 4. Implementation Plan
-Phase A – Discovery & Schema Prep
-Confirm server schema: ensure Supabase can store a storage_mode flag (default cloud). Add migrations if needed (Supabase + local DB).
-Extend local SQLite schema: add storage_mode column to projects/conversations.
-Update TypeScript types in shared/types.ts to include storage metadata.
-Phase B – Local API CRUD
-Implement /api/local/... endpoints in electron/localServer.ts:
-GET/POST/PATCH/DELETE for projects, conversations, messages.
-Filtered queries returning only storage_mode='local'.
-Possibly reuse existing prepared statements with slight branching.
-Phase C – Client Data Aggregation
-Build a dualDataSource module:
-fetchProjectsMerged(): remote via api.get, local via fetch('http://127.0.0.1:3002/api/local/projects').
-Similar functions for conversations and messages.
-Provide caching/invalidation strategy (React Query or Redux thunk wrappers).
-Update thunks (fetchProjects, fetchConversations, etc.) to call new aggregator instead of direct remote endpoints for Electron builds.
-On web builds, keep existing Supabase-only behavior.
-Phase D – Creation & UI Flow
-Update conversation/project creation dialogs/components to include storage option.
-When local selected, dispatch new thunks hitting local endpoints.
-When cloud selected, keep original path.
-Ensure chatActions.sendMessage (and related branch/edit flows) route messages to the correct backend.
-Phase E – Sync Guardrails
-Adjust dualSyncManager to:
-Skip syncing records already marked as local.
-Possibly maintain separate queue for future local→cloud migrations.
-Phase F – Display & Filtering
-Update conversation/project lists to show merged data with badges/icons.
-Add filters (All / Cloud / Local).
-Phase G – Testing & Edge Cases
-Validate flows:
-Local-only conversation offline usage.
-Switching between storage modes.
-Data merging when both local+cloud exist.
-Streaming and attachments for local conversations. 5. Open Questions / Risks
-AI Generation for Local-Only: Are we still hitting remote inference endpoints? If yes, storing transcripts locally only might still leak content via inference request. Need clarification.
-ID Generation: For local-only records, ensure UUIDs don’t collide with Supabase IDs if later migrated.
-Migration Workflow: If user later wants to “promote” a local conversation to cloud, we’ll need a bulk upload path (not covered yet).
-Offline-first: Do we need local-only mode to work without any network? If so, server-like logic (LLM, embeddings) must run locally or be gracefully degraded.
-Security: Local server is trusted; still ensure no remote endpoint can toggle storage mode maliciously.
-Performance: Merging two data sources might double queries; caching and dedupe logic must be efficient. 6. Next Steps
-Decide on storage_mode semantics and confirm schema/migration requirements.
-Draft detailed API contracts for new local endpoints.
-Sketch UI wireframes for creation toggle and list badges.
-Sequence implementation phases (likely start with schema + local APIs, then data aggregation, then UI).
-Let me know if you’d like me to dive into any specific file (e.g., chatActions streaming changes for local routing) or draft the migrations/interfaces.
+**Key Implementation:**
 
-Yes data sent for inference to server is fine. We just dont store it. 2.Strategy : Keep Using UUIDv4 Everywhere (Status Quo + Collision Guard) How it works: Both Supabase and local-only entities continue generating random UUIDv4 (node crypto or uuid library). Collision risk: 2¹²² space makes collisions astronomically unlikely, but not impossible. We add guard logic when promoting a local conversation: Try inserting into Supabase with the existing ID. If Supabase rejects due to duplicate key, generate a fresh UUID, rewrite IDs (conversation, messages, attachments), and retry.
-Leave promoting to cloud for now. We can tackle this later
-No offline first, app is always online as AI inference cannot happen without it.
-Storage mode sounds good, only for project and conversation. All messages in a conversation belong to one mode, user cannot switch on a per message level. you can replicate /home/karn/webbdrasil/Webdrasil/ygg-chat/server/src/routes/chat.ts routes in electron app in a new file called electronChat.ts then use it in /home/karn/webbdrasil/Webdrasil/ygg-chat/client/ygg-chat-r/electron/localServer.ts create a final implementation plan
+1. **Create POST /conversations/:id/messages route** in electronChat.ts:
+   - Parse request (content, messages, modelName, provider, systemPrompt, think, selectedFiles)
+   - Validate conversation exists in local DB
+   - Setup SSE streaming response
+   - Create user message in local DB (unless retrigger)
+   - **Proxy AI generation to Railway server** (keeps inference on cloud)
+   - Stream SSE events to client while accumulating content
+   - Save final assistant message to local DB
+   - Return complete message
 
-Implementation Plan (Storage Mode + Local Chat Routing)
+2. **Mount routes** in localServer.ts:
+   ```typescript
+   import electronChatRouter from './electronChat.js'
+   app.use('/api/local/chat', electronChatRouter)
+   ```
 
-Schema & Shared Types
-• Add storage_mode column to projects and conversations in local SQLite schema (update electron/localServer.ts initialization).
-• Create matching Supabase migration (or server-side schema update) so cloud API returns/accepts storage_mode.
-• Extend shared TS types (shared/types.ts) plus Redux slices to carry storage_mode.
+**Dependencies:**
+- `uuid` - Message ID generation
+- `node-fetch` or built-in fetch - Proxy requests to Railway
 
-Local Chat Routes
-• Create client/ygg-chat-r/electron/electronChat.ts by adapting server/src/routes/chat.ts:
-– Reuse server utilities (message creation, branching, streaming) but pointing to the embedded DB.
-– Export functions for sending/streaming messages, handling tool calls, etc.
-• In electron/localServer.ts, import electronChat and mount equivalent endpoints under /api/local/chat/... (mirroring /api/chat paths).
-• Ensure these endpoints enforce storage_mode === 'local' and never hit Supabase.
+**Critical Pattern:**
+The local server acts as a **proxy + persistence layer**:
+- Forwards AI generation requests to Railway API
+- Intercepts SSE stream responses
+- Saves messages to local SQLite
+- Re-emits events to client
 
-Local CRUD Endpoints
-• Add /api/local/projects, /api/local/conversations, /api/local/messages endpoints to localServer.ts for full CRUD on local-only entities (list/create/update/delete, filtered by storage mode).
-• Ensure conversation creation validates reference project/storage mode consistency.
+**Validation:**
+- Send message in local conversation → verify SSE streaming works
+- Check local DB → verify messages saved
+- Network tab → confirm no direct Supabase writes
 
-Client Data Layer
-• Build a dual-source fetch layer (e.g., src/lib/dataSources/dualFetcher.ts):
-– For Electron: fetch cloud data via existing api.\* calls, and in parallel fetch local-only data via new local endpoints.
-– Merge results (dedupe by UUID), annotating each entry with storage_mode.
-• Update project/conversation/message thunks (fetch, create, update, delete) to route to local endpoints when storage_mode === 'local'.
-• When creating new conversations/projects, add a “Storage: Cloud vs Local” toggle in the UI; dispatch appropriate thunk based on selection.
+---
 
-Messaging Flow
-• For each conversation, store storage_mode in Redux/React Query state.
-• Update chatActions (send, edit, branch, etc.) so:
-– Cloud conversations keep existing Supabase streaming path.
-– Local conversations call electron chat endpoints (using the replicated routes).
-• dualSyncManager should skip syncing records marked storage_mode === 'local'.
+### PHASE 2: Local CRUD Endpoints (1-2 hours)
 
-UI Enhancements
-• Add storage indicator (icon/badge) in project & conversation lists.
-• Provide filters (All / Cloud / Local).
-• In creation dialogs, include storage toggle defaulting to Cloud.
-• Possibly expose a setting for preferred default storage (persisted locally).
+**Objective:** Add full CRUD for local-only projects, conversations, and messages.
 
-Testing & Validation
-• Verify local-only creation, messaging, deletion flows.
-• Ensure merged lists show both storage modes without duplicates.
-• Confirm Supabase API remains untouched for local-only conversations.
+**Files to Modify:**
+- [client/ygg-chat-r/electron/localServer.ts](client/ygg-chat-r/electron/localServer.ts)
+
+**Endpoints to Add:**
+
+**Conversations:**
+- `GET /api/local/conversations?userId=xxx` - Fetch local conversations
+- `POST /api/local/conversations` - Create (auto-set storage_mode='local')
+- `PATCH /api/local/conversations/:id` - Update title
+- `DELETE /api/local/conversations/:id` - Delete
+
+**Messages:**
+- `GET /api/local/conversations/:id/messages` - Fetch messages
+- `PUT /api/local/messages/:id` - Update message content
+- `DELETE /api/local/messages/:id` - Delete message
+
+**Projects:** (Already has POST /api/local/projects)
+- Verify existing endpoint sets storage_mode='local'
+
+**Database Statements to Add:**
+```typescript
+updateMessage: db.prepare(`UPDATE messages SET content = ?, note = ?, content_blocks = ? WHERE id = ?`)
+updateConversationTitle: db.prepare(`UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?`)
+getLocalConversations: db.prepare(`SELECT * FROM conversations WHERE user_id = ? AND storage_mode = 'local' ORDER BY updated_at DESC`)
+```
+
+**Validation:**
+- Test CRUD via Postman or curl
+- Verify storage_mode='local' enforced
+- Confirm cloud API never called
+
+---
+
+### PHASE 3: Client Routing Logic (2-3 hours)
+
+**Objective:** Route operations to local or cloud API based on storage_mode.
+
+**Files to Modify:**
+- [client/ygg-chat-r/src/utils/api.ts](client/ygg-chat-r/src/utils/api.ts) - Add local API helpers
+- [client/ygg-chat-r/src/features/conversations/conversationActions.ts](client/ygg-chat-r/src/features/conversations/conversationActions.ts) - Update thunks
+- [client/ygg-chat-r/src/features/projects/projectActions.ts](client/ygg-chat-r/src/features/projects/projectActions.ts) - Update thunks
+
+**Key Changes:**
+
+1. **Add Local API Client** (api.ts):
+   ```typescript
+   export const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
+
+   export function shouldUseLocalApi(storageMode?: StorageMode, environment?: string): boolean {
+     return storageMode === 'local' && environment === 'electron'
+   }
+
+   export const localApi = {
+     get: <T>(endpoint: string) => fetch(`${LOCAL_API_BASE}${endpoint}`).then(r => r.json()),
+     post: <T>(endpoint: string, data?: any) => ...,
+     patch: <T>(endpoint: string, data?: any) => ...,
+     delete: <T>(endpoint: string) => ...
+   }
+   ```
+
+2. **Update fetchConversations** thunk:
+   - In Electron mode: Fetch both cloud and local in parallel
+   - Merge arrays and sort by updated_at
+   - In web mode: Cloud only
+
+3. **Update createConversation** thunk:
+   - Add `storageMode` parameter
+   - Infer from project if not provided
+   - Route to `localApi.post('/local/conversations', ...)` or cloud API
+   - **Only sync to dualSync for cloud mode**
+
+4. **Update deleteConversation** thunk:
+   - Infer storage_mode from Redux state
+   - Route to appropriate API
+   - Only sync deletion for cloud mode
+
+5. **Update updateConversation, updateSystemPrompt, updateContext** similarly
+
+6. **Repeat pattern for projectActions.ts**
+
+**Validation:**
+- Create local conversation → verify calls 127.0.0.1:3002
+- Create cloud conversation → verify calls Railway
+- Fetch conversations → verify merged list in Electron
+- Delete operations → verify correct API called
+
+---
+
+### PHASE 4: DualSync Skip Logic (30 minutes)
+
+**Objective:** Prevent local-only records from syncing backward to cloud.
+
+**Files to Modify:**
+- [client/ygg-chat-r/src/lib/sync/dualSyncManager.ts](client/ygg-chat-r/src/lib/sync/dualSyncManager.ts)
+
+**Changes:**
+
+1. **Add storage_mode check in enqueue()** (line ~112):
+   ```typescript
+   enqueue(operation: Omit<SyncOperation, 'id' | 'retryCount' | 'timestamp'>): void {
+     if (!this.enabled) return
+
+     // Skip local-only records
+     if (operation.data?.storage_mode === 'local') {
+       console.log('[DualSync] Skipping local-only record:', operation.type, operation.data.id)
+       return
+     }
+
+     // ... existing queue logic
+   }
+   ```
+
+2. **Add checks in convenience methods**:
+   ```typescript
+   syncProject(projectData: any, action: 'create' | 'update' | 'delete' = 'create'): void {
+     if (projectData?.storage_mode === 'local') return
+     this.enqueue({ type: 'project', action, data: projectData })
+   }
+
+   syncConversation(conversationData: any, action: 'create' | 'update' | 'delete' = 'create'): void {
+     if (conversationData?.storage_mode === 'local') return
+     this.enqueue({ type: 'conversation', action, data: conversationData })
+   }
+   ```
+
+**Validation:**
+- Create local project → check dualSync.getStatus() queue is empty
+- Create cloud project → verify queue processes
+- Monitor console logs → "Skipping local-only record" appears
+
+---
+
+### PHASE 5: UI Components (2-3 hours)
+
+**Objective:** Add storage mode selection toggles and visual indicators.
+
+**Files to Modify:**
+- [client/ygg-chat-r/src/containers/ConversationPage.tsx](client/ygg-chat-r/src/containers/ConversationPage.tsx) - Conversation creation
+- [client/ygg-chat-r/src/containers/sideBar.tsx](client/ygg-chat-r/src/containers/sideBar.tsx) - List badges
+- [client/ygg-chat-r/src/containers/EditProject.tsx](client/ygg-chat-r/src/containers/EditProject.tsx) - Project form
+
+**UI Elements to Add:**
+
+1. **Storage Mode Toggle** (conversation/project creation dialogs):
+   ```tsx
+   {environment === 'electron' && (
+     <div className="storage-mode-selector">
+       <label>Storage Location:</label>
+       <label>
+         <input type="radio" value="cloud" checked={storageMode === 'cloud'}
+                onChange={e => setStorageMode(e.target.value)} />
+         Cloud (synced to Supabase)
+       </label>
+       <label>
+         <input type="radio" value="local" checked={storageMode === 'local'}
+                onChange={e => setStorageMode(e.target.value)} />
+         Local Only (device storage)
+       </label>
+     </div>
+   )}
+   ```
+
+2. **Badges in Conversation List**:
+   ```tsx
+   {conversation.storage_mode === 'local' && (
+     <span className="badge badge-local">Local</span>
+   )}
+   ```
+
+3. **Filter Buttons** (sidebar):
+   ```tsx
+   const [filter, setFilter] = useState<'all' | 'cloud' | 'local'>('all')
+   const filtered = conversations.filter(c =>
+     filter === 'all' || c.storage_mode === filter
+   )
+   ```
+
+**Styling:**
+```css
+.badge-local { background: #4caf50; color: white; }
+.badge-cloud { background: #2196f3; color: white; }
+```
+
+**Validation:**
+- Toggle appears in Electron mode only
+- Badges display correctly
+- Filters work as expected
+- Default to cloud mode
+
+---
+
+### PHASE 6: Message Streaming (1 hour)
+
+**Objective:** Wire up client chat interface to use local endpoint for local conversations.
+
+**Files to Modify:**
+- [client/ygg-chat-r/src/features/chats/chatActions.ts](client/ygg-chat-r/src/features/chats/chatActions.ts) - sendMessage thunk
+
+**Changes:**
+
+1. **Route streaming endpoint** based on storage_mode:
+   ```typescript
+   const conversation = getState().conversations.items.find(c => c.id === conversationId)
+   const isLocal = conversation?.storage_mode === 'local'
+
+   const endpoint = isLocal
+     ? `/local/chat/conversations/${conversationId}/messages`
+     : `/conversations/${conversationId}/messages`
+
+   const baseUrl = isLocal ? LOCAL_API_BASE : API_BASE
+
+   const response = await fetch(`${baseUrl}${endpoint}`, {
+     method: 'POST',
+     headers: {
+       'Content-Type': 'application/json',
+       ...(isLocal ? {} : { Authorization: `Bearer ${auth.accessToken}` })
+     },
+     body: JSON.stringify({ content, messages, modelName, ... })
+   })
+   ```
+
+2. **SSE parsing remains the same** (both endpoints return identical format)
+
+3. **Message updates route appropriately**:
+   - Local: `localApi.put('/local/messages/:id', ...)`
+   - Cloud: `api.put('/messages/:id', ...)` + dualSync
+
+**Validation:**
+- Send message in local conversation → Network tab shows 127.0.0.1:3002
+- Send message in cloud conversation → Network tab shows Railway URL
+- Streaming works identically for both modes
+
+---
+
+### PHASE 7: Edge Cases & Validation (1-2 hours)
+
+**Edge Cases to Handle:**
+
+1. **Local conversation without project** - Already supported (projectId can be null)
+
+2. **Mixing storage modes** - Add validation:
+   ```typescript
+   // In createConversation
+   if (projectId && storageMode) {
+     const project = getState().projects.projects.find(p => p.id === projectId)
+     if (project && project.storage_mode !== storageMode) {
+       return rejectWithValue('Storage mode must match project')
+     }
+   }
+   ```
+
+3. **Server-side validation** - Add to server routes:
+   ```typescript
+   // server/src/routes/conversations.ts
+   if (storageMode === 'local') {
+     return res.status(400).json({
+       error: 'Local-only records should use /local/ endpoints'
+     })
+   }
+   ```
+
+4. **Attachments in local mode** - Handle in electronChat.ts:
+   - Decode base64 attachments
+   - Save to `/data/uploads` folder
+   - Insert into local attachments table
+   - Link to message
+
+5. **Tool calls** - No changes needed (already works via `/api/tools/execute`)
+
+6. **Error handling**:
+   - "Local server unavailable" when 127.0.0.1:3002 unreachable
+   - "Storage mode mismatch" validation errors
+   - "Web mode doesn't support local storage" message
+
+**Testing Checklist:**
+- [ ] Create local project/conversation in Electron
+- [ ] Create cloud project/conversation in Electron
+- [ ] Send messages in both modes
+- [ ] Edit/delete operations work correctly
+- [ ] Attachments work in local mode
+- [ ] Tool calls work in local mode
+- [ ] Filter and badges display properly
+- [ ] Web mode doesn't show local toggles
+- [ ] No Supabase calls for local-only records (Network tab)
+- [ ] DualSync queue empty for local operations
+- [ ] Local data persists after app restart
+
+---
+
+## Critical Files Reference
+
+### Phase 1-2 (Backend):
+- [client/ygg-chat-r/electron/electronChat.ts](client/ygg-chat-r/electron/electronChat.ts) - **Main implementation**
+- [client/ygg-chat-r/electron/localServer.ts](client/ygg-chat-r/electron/localServer.ts) - Routes and endpoints
+- [server/src/routes/chat.ts](server/src/routes/chat.ts) - **Reference implementation**
+
+### Phase 3-4 (Client Logic):
+- [client/ygg-chat-r/src/utils/api.ts](client/ygg-chat-r/src/utils/api.ts) - API routing
+- [client/ygg-chat-r/src/features/conversations/conversationActions.ts](client/ygg-chat-r/src/features/conversations/conversationActions.ts) - **Main routing logic**
+- [client/ygg-chat-r/src/features/projects/projectActions.ts](client/ygg-chat-r/src/features/projects/projectActions.ts) - Project routing
+- [client/ygg-chat-r/src/lib/sync/dualSyncManager.ts](client/ygg-chat-r/src/lib/sync/dualSyncManager.ts) - Skip logic
+
+### Phase 5-6 (Frontend):
+- [client/ygg-chat-r/src/containers/ConversationPage.tsx](client/ygg-chat-r/src/containers/ConversationPage.tsx) - Creation UI
+- [client/ygg-chat-r/src/containers/sideBar.tsx](client/ygg-chat-r/src/containers/sideBar.tsx) - List UI
+- [client/ygg-chat-r/src/containers/EditProject.tsx](client/ygg-chat-r/src/containers/EditProject.tsx) - Project UI
+- [client/ygg-chat-r/src/features/chats/chatActions.ts](client/ygg-chat-r/src/features/chats/chatActions.ts) - Streaming
+
+### Type Definitions:
+- [shared/types.ts](shared/types.ts) - StorageMode type
+
+---
+
+## Key Design Decisions
+
+1. **Hybrid Architecture**: Local storage for metadata, cloud for AI inference
+   - Rationale: Keeps AI logic centralized while giving data storage control
+   - Implementation: electronChat.ts proxies to Railway for generation
+
+2. **Dual-Source Fetching**: Merge cloud + local data in Electron mode
+   - Rationale: Seamless UX regardless of storage mode
+   - Implementation: Parallel fetch in thunks, merge and sort by timestamp
+
+3. **Storage Mode Inheritance**: Conversations inherit from project
+   - Rationale: Prevents mixed-mode confusion
+   - Implementation: Validation in createConversation thunk
+
+4. **No Backwards Sync**: Local-only records never touch Supabase
+   - Rationale: Privacy and offline capability
+   - Implementation: Early return in dualSync.enqueue()
+
+5. **Web Mode Restrictions**: Local storage only in Electron
+   - Rationale: SQLite not available in browser
+   - Implementation: Conditional UI rendering based on environment
+
+---
+
+## Implementation Order
+
+Follow phases **sequentially** as each builds on the previous:
+
+1. Phase 1 (2-3h) → Local chat routes enable message generation
+2. Phase 2 (1-2h) → CRUD endpoints enable full data management
+3. Phase 3 (2-3h) → Client routing wires everything together
+4. Phase 4 (30m) → Skip logic prevents cloud pollution
+5. Phase 5 (2-3h) → UI makes feature accessible
+6. Phase 6 (1h) → Streaming completes the flow
+7. Phase 7 (1-2h) → Edge cases and polish
+
+**Total: 10-16 hours**
+
+---
+
+## Success Criteria
+
+✅ **Local Mode Works:**
+- Create local conversation → no Supabase writes
+- Send messages → streams from local endpoint
+- Data persists in local SQLite only
+
+✅ **Cloud Mode Unchanged:**
+- Existing behavior preserved
+- DualSync continues working
+- No breaking changes
+
+✅ **Hybrid Mode:**
+- Electron shows merged conversation list
+- Filters work correctly
+- Storage mode clear from UI badges
+
+✅ **Quality:**
+- No errors in console
+- Network tab confirms routing
+- All tests pass
+
+---
+
+## Future Enhancements (Out of Scope)
+
+- Promote local → cloud migration
+- Offline queue with retry
+- Local AI providers (Ollama direct integration)
+- Encryption at rest (SQLCipher)
+- Export/import backup functionality

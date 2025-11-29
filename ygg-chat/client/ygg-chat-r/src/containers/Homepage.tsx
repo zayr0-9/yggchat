@@ -334,9 +334,8 @@ const Homepage: React.FC = () => {
                 title='Refresh projects from server'
               >
                 <i
-                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
-                    isRefetching ? 'animate-spin' : ''
-                  }`}
+                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${isRefetching ? 'animate-spin' : ''
+                    }`}
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -357,10 +356,15 @@ const Homepage: React.FC = () => {
                   >
                     <div className='flex place-items-start justify-between'>
                       <div className='flex-1'>
-                        <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99'>
+                        <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99 flex items-center gap-2'>
                           <p className='transition-transform duration-100 group-active:scale-99 text-[16px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
                             {project.name}
                           </p>
+                          {project.storage_mode === 'local' && (
+                            <span className='text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-800 font-medium'>
+                              Local
+                            </span>
+                          )}
                         </span>
                         {project.context && (
                           <p className='text-sm text-stone-900 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
@@ -376,7 +380,7 @@ const Homepage: React.FC = () => {
                           className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
                           onClick={
                             (e => {
-                              ;(e as unknown as React.MouseEvent).stopPropagation()
+                              ; (e as unknown as React.MouseEvent).stopPropagation()
                               handleEditProject(project)
                             }) as unknown as () => void
                           }
@@ -394,7 +398,7 @@ const Homepage: React.FC = () => {
                             className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
                             onClick={
                               (e => {
-                                ;(e as unknown as React.MouseEvent).stopPropagation()
+                                ; (e as unknown as React.MouseEvent).stopPropagation()
                                 handleDeleteProject(project)
                               }) as unknown as () => void
                             }

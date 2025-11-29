@@ -6,7 +6,7 @@ import type { BaseModel, Project } from '../../../../shared/types'
 import { ConversationId, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
 import type { Message, Model } from '../features/chats/chatTypes'
 import type { Conversation } from '../features/conversations/conversationTypes'
-import { api } from '../utils/api'
+import { api, environment, localApi } from '../utils/api'
 import { getFavoritedModels } from '../utils/favorites'
 import { useAuth } from './useAuth'
 
@@ -32,6 +32,35 @@ export function useProjects() {
   const query = useQuery({
     queryKey: ['projects', userId],
     queryFn: async () => {
+      // In Electron mode, fetch both cloud and local projects
+      if (environment === 'electron') {
+        const [cloudProjects, localProjects] = await Promise.all([
+          api.get<ProjectWithLatestConversation[]>(
+            `/projects/sorted/latest-conversation?userId=${userId}`,
+            accessToken
+          ).catch(err => {
+            console.error('Failed to fetch cloud projects:', err)
+            return []
+          }),
+          localApi.get<ProjectWithLatestConversation[]>(`/local/projects?userId=${userId}`)
+            .catch(err => {
+              console.error('Failed to fetch local projects:', err)
+              return []
+            })
+        ])
+
+        // Merge and sort by latest_conversation_updated_at or updated_at
+        const merged = [...cloudProjects, ...localProjects]
+          .sort((a, b) => {
+            const dateA = new Date(a.latest_conversation_updated_at || a.updated_at).getTime()
+            const dateB = new Date(b.latest_conversation_updated_at || b.updated_at).getTime()
+            return dateB - dateA
+          })
+
+        return merged
+      }
+
+      // Web mode: cloud only
       return api.get<ProjectWithLatestConversation[]>(
         `/projects/sorted/latest-conversation?userId=${userId}`,
         accessToken
@@ -95,6 +124,29 @@ export function useConversations(enabled: boolean = true) {
     queryKey: ['conversations'],
     queryFn: async () => {
       if (!userId) throw new Error('User not authenticated')
+
+      // In Electron mode, fetch both cloud and local conversations
+      if (environment === 'electron') {
+        const [cloudConversations, localConversations] = await Promise.all([
+          api.get<Conversation[]>(`/users/${userId}/conversations`, accessToken)
+            .catch(err => {
+              console.error('Failed to fetch cloud conversations:', err)
+              return []
+            }),
+          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+            .catch(err => {
+              console.error('Failed to fetch local conversations:', err)
+              return []
+            })
+        ])
+
+        // Merge and sort by updated_at
+        const merged = [...cloudConversations, ...localConversations]
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+
+        return merged
+      }
+
       return api.get<Conversation[]>(`/users/${userId}/conversations`, accessToken)
     },
     enabled: enabled && !!userId && !!accessToken,
@@ -360,7 +412,7 @@ export function useModels(provider: string | null) {
       // Determine selected model: use localStorage if valid, otherwise use server default
       const storedSelection = getStoredSelectedModel()
       let selectedModel = defaultModel
-      
+
       // If stored selection exists and matches a model in the list, use the full model data from the list
       if (storedSelection) {
         const matchedModel = models.find(m => m.name === storedSelection.name)
