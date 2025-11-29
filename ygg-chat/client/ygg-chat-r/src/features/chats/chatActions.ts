@@ -4,7 +4,7 @@ import { ConversationId, MessageId } from '../../../../../shared/types'
 import { dualSync } from '../../lib/sync/dualSyncManager'
 import type { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
-import { API_BASE, apiCall, createStreamingRequest } from '../../utils/api'
+import { API_BASE, apiCall, createStreamingRequest, localApi, environment, shouldUseLocalApi } from '../../utils/api'
 import { convContextSet, systemPromptSet } from '../conversations/conversationSlice'
 import type { Conversation } from '../conversations/conversationTypes'
 import { selectSelectedProject } from '../projects/projectSelectors'
@@ -2293,11 +2293,24 @@ export const deleteSelectedNodes = createAsyncThunk<
 // Update a conversation title (Chat feature convenience)
 export const updateConversationTitle = createAsyncThunk<
   Conversation,
-  { id: ConversationId; title: string },
-  { extra: ThunkExtraArgument }
->('chat/updateConversationTitle', async ({ id, title }, { extra, rejectWithValue }) => {
+  { id: ConversationId; title: string; storageMode?: 'cloud' | 'local' },
+  { extra: ThunkExtraArgument; state: RootState }
+>('chat/updateConversationTitle', async ({ id, title, storageMode }, { extra, getState, rejectWithValue }) => {
   const { auth } = extra
   try {
+    // Infer storage mode from state if not provided
+    let effectiveMode = storageMode
+    if (!effectiveMode) {
+      const conversation = getState().conversations.items.find(c => c.id === id)
+      effectiveMode = conversation?.storage_mode || 'cloud'
+    }
+
+    // Route to appropriate API based on storage mode
+    if (shouldUseLocalApi(effectiveMode, environment)) {
+      return await localApi.patch<Conversation>(`/local/conversations/${id}`, { title })
+    }
+
+    // Default to cloud API
     return await apiCall<Conversation>(`/conversations/${id}/`, auth.accessToken, {
       method: 'PATCH',
       body: JSON.stringify({ title }),
