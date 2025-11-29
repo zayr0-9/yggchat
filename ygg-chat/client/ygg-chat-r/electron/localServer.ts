@@ -591,16 +591,22 @@ function setupServer() {
         conversation_context,
         research_note,
         cwd,
+        storage_mode,
         created_at,
         updated_at,
       } = req.body
 
+      console.log('[LocalServer] 🔄 POST /api/sync/conversation - conversationId:', id, 'title:', title, 'storage_mode:', storage_mode)
+
       // Handle owner_id -> user_id mapping (Railway sends owner_id)
       const effectiveUserId = user_id || owner_id
       if (!effectiveUserId) {
+        console.log('[LocalServer] ❌ Missing user_id or owner_id')
         res.status(400).json({ error: 'Missing user_id or owner_id' })
         return
       }
+
+      console.log('[LocalServer] 👤 Effective userId:', effectiveUserId, 'projectId:', project_id)
 
       // Ensure dependencies exist before upserting conversation
       ensureUserExists(effectiveUserId)
@@ -618,13 +624,23 @@ function setupServer() {
         conversation_context || null,
         research_note || null,
         cwd || null,
+        storage_mode || 'cloud',
         created_at || new Date().toISOString(),
         updated_at || new Date().toISOString()
       )
-      console.log('[LocalServer] Synced conversation:', id)
+      console.log('[LocalServer] ✅ Synced conversation successfully:', id, '- title:', title)
+
+      // Verify the conversation was saved
+      const saved = statements.getConversationById.get(id)
+      if (saved) {
+        console.log('[LocalServer] ✅ Verified conversation exists in DB:', id, '- storage_mode:', (saved as any).storage_mode)
+      } else {
+        console.log('[LocalServer] ⚠️  Warning: Conversation not found after save:', id)
+      }
+
       res.json({ success: true, id })
     } catch (error) {
-      console.error('[LocalServer] Error syncing conversation:', error)
+      console.error('[LocalServer] ❌ Error syncing conversation:', error)
       res.status(500).json({ error: 'Failed to sync conversation' })
     }
   })
@@ -683,7 +699,11 @@ function setupServer() {
         project_id,
       } = req.body
 
+      console.log('[LocalServer] 💾 POST /api/sync/message - messageId:', id, 'conversationId:', conversation_id, 'role:', role)
+      console.log('[LocalServer] 📝 Message content preview:', content?.substring(0, 50))
+
       if (!conversation_id) {
+        console.log('[LocalServer] ❌ Missing conversation_id')
         res.status(400).json({ error: 'Missing conversation_id' })
         return
       }
@@ -731,10 +751,19 @@ function setupServer() {
         typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null),
         created_at || new Date().toISOString()
       )
-      console.log('[LocalServer] Synced message:', id)
+      console.log('[LocalServer] ✅ Synced message successfully:', id, '- role:', role, 'conversation:', conversation_id)
+
+      // Verify the message was saved
+      const saved = statements.getMessageById.get(id)
+      if (saved) {
+        console.log('[LocalServer] ✅ Verified message exists in DB:', id)
+      } else {
+        console.log('[LocalServer] ⚠️  Warning: Message not found after save:', id)
+      }
+
       res.json({ success: true, id })
     } catch (error) {
-      console.error('[LocalServer] Error syncing message:', error)
+      console.error('[LocalServer] ❌ Error syncing message:', error)
       res.status(500).json({ error: 'Failed to sync message' })
     }
   })
@@ -1218,14 +1247,18 @@ function setupServer() {
   app.get('/api/local/conversations', (req, res) => {
     try {
       const userId = req.query.userId as string
+      console.log('[LocalServer] 📋 GET /api/local/conversations - userId:', userId)
       if (!userId) {
+        console.log('[LocalServer] ❌ Missing userId parameter')
         res.status(400).json({ error: 'userId required' })
         return
       }
       const conversations = statements.getLocalConversations.all(userId)
+      console.log('[LocalServer] ✅ Found', conversations.length, 'local conversations for user:', userId)
+      console.log('[LocalServer] 📊 Conversations:', JSON.stringify(conversations, null, 2))
       res.json(conversations)
     } catch (error) {
-      console.error('[LocalServer] Error fetching local conversations:', error)
+      console.error('[LocalServer] ❌ Error fetching local conversations:', error)
       res.status(500).json({ error: 'Failed to fetch conversations' })
     }
   })
@@ -1291,14 +1324,37 @@ function setupServer() {
     }
   })
 
+  // GET /api/local/conversations/:id
+  app.get('/api/local/conversations/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      console.log('[LocalServer] 🔍 GET /api/local/conversations/:id - conversationId:', id)
+      const conversation = statements.getConversationById.get(id)
+
+      if (!conversation) {
+        console.log('[LocalServer] ❌ Conversation not found:', id)
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+
+      console.log('[LocalServer] ✅ Found conversation:', JSON.stringify(conversation, null, 2))
+      res.json(conversation)
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error fetching conversation:', error)
+      res.status(500).json({ error: 'Failed to fetch conversation' })
+    }
+  })
+
   // DELETE /api/local/conversations/:id
   app.delete('/api/local/conversations/:id', (req, res) => {
     try {
       const { id } = req.params
+      console.log('[LocalServer] 🗑️ DELETE /api/local/conversations/:id - conversationId:', id)
       statements.deleteConversation.run(id)
+      console.log('[LocalServer] ✅ Conversation deleted:', id)
       res.json({ success: true })
     } catch (error) {
-      console.error('[LocalServer] Error deleting conversation:', error)
+      console.error('[LocalServer] ❌ Error deleting conversation:', error)
       res.status(500).json({ error: 'Failed to delete conversation' })
     }
   })
@@ -1307,10 +1363,16 @@ function setupServer() {
   app.get('/api/local/conversations/:id/messages', (req, res) => {
     try {
       const { id } = req.params
+      console.log('[LocalServer] 💬 GET /api/local/conversations/:id/messages - conversationId:', id)
       const messages = statements.getMessagesByConversationId.all(id)
+      console.log('[LocalServer] ✅ Found', messages.length, 'messages for conversation:', id)
+      if (messages.length > 0) {
+        console.log('[LocalServer] 📊 First message:', JSON.stringify(messages[0], null, 2))
+        console.log('[LocalServer] 📊 Last message:', JSON.stringify(messages[messages.length - 1], null, 2))
+      }
       res.json(messages)
     } catch (error) {
-      console.error('[LocalServer] Error fetching messages:', error)
+      console.error('[LocalServer] ❌ Error fetching messages:', error)
       res.status(500).json({ error: 'Failed to fetch messages' })
     }
   })
@@ -1319,7 +1381,9 @@ function setupServer() {
   app.get('/api/local/conversations/:id/messages/tree', (req, res) => {
     try {
       const { id } = req.params
+      console.log('[LocalServer] 🌲 GET /api/local/conversations/:id/messages/tree - conversationId:', id)
       const messages = statements.getMessagesByConversationId.all(id)
+      console.log('[LocalServer] 📦 Raw messages fetched:', messages.length)
 
       // Parse JSON fields (children_ids, tool_calls, content_blocks)
       const normalizedMessages = messages.map((msg: any) => ({
@@ -1329,10 +1393,20 @@ function setupServer() {
         content_blocks: msg.content_blocks ? JSON.parse(msg.content_blocks) : null,
       }))
 
+      console.log('[LocalServer] ✨ Normalized messages:', normalizedMessages.length)
+      if (normalizedMessages.length > 0) {
+        console.log('[LocalServer] 📊 Sample normalized message:', JSON.stringify(normalizedMessages[0], null, 2))
+      }
+
       const treeData = buildMessageTree(normalizedMessages)
+      console.log('[LocalServer] 🌳 Tree built successfully:', treeData ? 'Has tree' : 'No tree')
+      if (treeData) {
+        console.log('[LocalServer] 🌳 Tree root:', JSON.stringify({ id: treeData.id, childCount: treeData.children.length }, null, 2))
+      }
+
       res.json({ messages: normalizedMessages, tree: treeData })
     } catch (error) {
-      console.error('[LocalServer] Error fetching message tree:', error)
+      console.error('[LocalServer] ❌ Error fetching message tree:', error)
       res.status(500).json({ error: 'Failed to fetch message tree' })
     }
   })
