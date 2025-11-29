@@ -1119,6 +1119,199 @@ function setupServer() {
       res.status(500).json({ error: 'Failed to update cwd' })
     }
   })
+
+  // Local-only API endpoints
+  app.get('/api/local/projects', (req, res) => {
+    try {
+      const userId = (req.query.userId as string) || ''
+      if (!userId) {
+        res.status(400).json({ error: 'userId query param required' })
+        return
+      }
+      const projects = statements.getLocalProjects.all(userId)
+      res.json(projects)
+    } catch (error) {
+      console.error('[LocalServer] Error fetching local projects:', error)
+      res.status(500).json({ error: 'Failed to fetch local projects' })
+    }
+  })
+
+  app.post('/api/local/projects', (req, res) => {
+    try {
+      const { id, name, user_id, context, system_prompt } = req.body
+      if (!user_id) {
+        res.status(400).json({ error: 'user_id required' })
+        return
+      }
+      const projectId = id || uuidv4()
+      const now = new Date().toISOString()
+      statements.upsertProject.run(
+        projectId,
+        name || 'Untitled Project',
+        user_id,
+        context || null,
+        system_prompt || null,
+        'local',
+        now,
+        now
+      )
+      res.status(201).json(statements.getProjectById.get(projectId))
+    } catch (error) {
+      console.error('[LocalServer] Error creating local project:', error)
+      res.status(500).json({ error: 'Failed to create local project' })
+    }
+  })
+
+  // GET /api/local/conversations?userId=xxx
+  app.get('/api/local/conversations', (req, res) => {
+    try {
+      const userId = req.query.userId as string
+      if (!userId) {
+        res.status(400).json({ error: 'userId required' })
+        return
+      }
+      const conversations = statements.getLocalConversations.all(userId)
+      res.json(conversations)
+    } catch (error) {
+      console.error('[LocalServer] Error fetching local conversations:', error)
+      res.status(500).json({ error: 'Failed to fetch conversations' })
+    }
+  })
+
+  // POST /api/local/conversations
+  app.post('/api/local/conversations', (req, res) => {
+    try {
+      const { id, user_id, project_id, title, system_prompt, conversation_context } = req.body
+      if (!user_id) {
+        res.status(400).json({ error: 'user_id required' })
+        return
+      }
+
+      const conversationId = id || uuidv4()
+      const now = new Date().toISOString()
+
+      statements.upsertConversation.run(
+        conversationId,
+        project_id || null,
+        user_id,
+        title || null,
+        'unknown', // model_name
+        system_prompt || null,
+        conversation_context || null,
+        null, // research_note
+        null, // cwd
+        'local', // storage_mode
+        now,
+        now
+      )
+
+      const created = statements.getConversationById.get(conversationId)
+      res.status(201).json(created)
+    } catch (error) {
+      console.error('[LocalServer] Error creating local conversation:', error)
+      res.status(500).json({ error: 'Failed to create conversation' })
+    }
+  })
+
+  // PATCH /api/local/conversations/:id
+  app.patch('/api/local/conversations/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { title } = req.body
+
+      if (!title) {
+        res.status(400).json({ error: 'title required' })
+        return
+      }
+
+      statements.updateConversationTitle.run(title, id)
+      const updated = statements.getConversationById.get(id)
+
+      if (!updated) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+
+      res.json(updated)
+    } catch (error) {
+      console.error('[LocalServer] Error updating conversation:', error)
+      res.status(500).json({ error: 'Failed to update conversation' })
+    }
+  })
+
+  // DELETE /api/local/conversations/:id
+  app.delete('/api/local/conversations/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      statements.deleteConversation.run(id)
+      res.json({ success: true })
+    } catch (error) {
+      console.error('[LocalServer] Error deleting conversation:', error)
+      res.status(500).json({ error: 'Failed to delete conversation' })
+    }
+  })
+
+  // GET /api/local/conversations/:id/messages
+  app.get('/api/local/conversations/:id/messages', (req, res) => {
+    try {
+      const { id } = req.params
+      const messages = statements.getMessagesByConversationId.all(id)
+      res.json(messages)
+    } catch (error) {
+      console.error('[LocalServer] Error fetching messages:', error)
+      res.status(500).json({ error: 'Failed to fetch messages' })
+    }
+  })
+
+  // PUT /api/local/messages/:id
+  app.put('/api/local/messages/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { content, note, content_blocks } = req.body
+
+      // Same logic as server route
+      let finalContent = content
+      if (!content && content_blocks) {
+        const textBlocks = Array.isArray(content_blocks) ? content_blocks.filter((b: any) => b.type === 'text') : []
+        finalContent = textBlocks.map((b: any) => b.text || '').join('\n')
+      }
+
+      const contentBlocksJson = content_blocks ? JSON.stringify(content_blocks) : null
+
+      // Check if message exists
+      const existing = statements.getMessageById.get(id)
+      if (!existing) {
+        res.status(404).json({ error: 'Message not found' })
+        return
+      }
+
+      // Update message
+      statements.updateMessage.run(
+        finalContent || existing.content,
+        note || existing.note,
+        contentBlocksJson || existing.content_blocks,
+        id
+      )
+
+      const updated = statements.getMessageById.get(id)
+      res.json(updated)
+    } catch (error) {
+      console.error('[LocalServer] Error updating message:', error)
+      res.status(500).json({ error: 'Failed to update message' })
+    }
+  })
+
+  // DELETE /api/local/messages/:id
+  app.delete('/api/local/messages/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      statements.deleteMessage.run(id)
+      res.json({ success: true })
+    } catch (error) {
+      console.error('[LocalServer] Error deleting message:', error)
+      res.status(500).json({ error: 'Failed to delete message' })
+    }
+  })
 }
 
 // Start the server
@@ -1190,195 +1383,3 @@ export function stopLocalServer(): Promise<void> {
 
 // Export for direct usage
 export { app, db }
-
-// Local-only API endpoints
-app.get('/api/local/projects', (req, res) => {
-  try {
-    const userId = (req.query.userId as string) || ''
-    if (!userId) {
-      res.status(400).json({ error: 'userId query param required' })
-      return
-    }
-    const projects = statements.getLocalProjects.all(userId)
-    res.json(projects)
-  } catch (error) {
-    console.error('[LocalServer] Error fetching local projects:', error)
-    res.status(500).json({ error: 'Failed to fetch local projects' })
-  }
-})
-app.post('/api/local/projects', (req, res) => {
-  try {
-    const { id, name, user_id, context, system_prompt } = req.body
-    if (!user_id) {
-      res.status(400).json({ error: 'user_id required' })
-      return
-    }
-    const projectId = id || uuidv4()
-    const now = new Date().toISOString()
-    statements.upsertProject.run(
-      projectId,
-      name || 'Untitled Project',
-      user_id,
-      context || null,
-      system_prompt || null,
-      'local',
-      now,
-      now
-    )
-    res.status(201).json(statements.getProjectById.get(projectId))
-  } catch (error) {
-    console.error('[LocalServer] Error creating local project:', error)
-    res.status(500).json({ error: 'Failed to create local project' })
-  }
-})
-
-// GET /api/local/conversations?userId=xxx
-app.get('/api/local/conversations', (req, res) => {
-  try {
-    const userId = req.query.userId as string
-    if (!userId) {
-      res.status(400).json({ error: 'userId required' })
-      return
-    }
-    const conversations = statements.getLocalConversations.all(userId)
-    res.json(conversations)
-  } catch (error) {
-    console.error('[LocalServer] Error fetching local conversations:', error)
-    res.status(500).json({ error: 'Failed to fetch conversations' })
-  }
-})
-
-// POST /api/local/conversations
-app.post('/api/local/conversations', (req, res) => {
-  try {
-    const { id, user_id, project_id, title, system_prompt, conversation_context } = req.body
-    if (!user_id) {
-      res.status(400).json({ error: 'user_id required' })
-      return
-    }
-
-    const conversationId = id || uuidv4()
-    const now = new Date().toISOString()
-
-    statements.upsertConversation.run(
-      conversationId,
-      project_id || null,
-      user_id,
-      title || null,
-      'unknown', // model_name
-      system_prompt || null,
-      conversation_context || null,
-      null, // research_note
-      null, // cwd
-      'local', // storage_mode
-      now,
-      now
-    )
-
-    const created = statements.getConversationById.get(conversationId)
-    res.status(201).json(created)
-  } catch (error) {
-    console.error('[LocalServer] Error creating local conversation:', error)
-    res.status(500).json({ error: 'Failed to create conversation' })
-  }
-})
-
-// PATCH /api/local/conversations/:id
-app.patch('/api/local/conversations/:id', (req, res) => {
-  try {
-    const { id } = req.params
-    const { title } = req.body
-
-    if (!title) {
-      res.status(400).json({ error: 'title required' })
-      return
-    }
-
-    statements.updateConversationTitle.run(title, id)
-    const updated = statements.getConversationById.get(id)
-
-    if (!updated) {
-      res.status(404).json({ error: 'Conversation not found' })
-      return
-    }
-
-    res.json(updated)
-  } catch (error) {
-    console.error('[LocalServer] Error updating conversation:', error)
-    res.status(500).json({ error: 'Failed to update conversation' })
-  }
-})
-
-// DELETE /api/local/conversations/:id
-app.delete('/api/local/conversations/:id', (req, res) => {
-  try {
-    const { id } = req.params
-    statements.deleteConversation.run(id)
-    res.json({ success: true })
-  } catch (error) {
-    console.error('[LocalServer] Error deleting conversation:', error)
-    res.status(500).json({ error: 'Failed to delete conversation' })
-  }
-})
-
-// GET /api/local/conversations/:id/messages
-app.get('/api/local/conversations/:id/messages', (req, res) => {
-  try {
-    const { id } = req.params
-    const messages = statements.getMessagesByConversationId.all(id)
-    res.json(messages)
-  } catch (error) {
-    console.error('[LocalServer] Error fetching messages:', error)
-    res.status(500).json({ error: 'Failed to fetch messages' })
-  }
-})
-
-// PUT /api/local/messages/:id
-app.put('/api/local/messages/:id', (req, res) => {
-  try {
-    const { id } = req.params
-    const { content, note, content_blocks } = req.body
-
-    // Same logic as server route
-    let finalContent = content
-    if (!content && content_blocks) {
-      const textBlocks = Array.isArray(content_blocks) ? content_blocks.filter((b: any) => b.type === 'text') : []
-      finalContent = textBlocks.map((b: any) => b.text || '').join('\n')
-    }
-
-    const contentBlocksJson = content_blocks ? JSON.stringify(content_blocks) : null
-
-    // Check if message exists
-    const existing = statements.getMessageById.get(id)
-    if (!existing) {
-      res.status(404).json({ error: 'Message not found' })
-      return
-    }
-
-    // Update message
-    statements.updateMessage.run(
-      finalContent || existing.content,
-      note || existing.note,
-      contentBlocksJson || existing.content_blocks,
-      id
-    )
-
-    const updated = statements.getMessageById.get(id)
-    res.json(updated)
-  } catch (error) {
-    console.error('[LocalServer] Error updating message:', error)
-    res.status(500).json({ error: 'Failed to update message' })
-  }
-})
-
-// DELETE /api/local/messages/:id
-app.delete('/api/local/messages/:id', (req, res) => {
-  try {
-    const { id } = req.params
-    statements.deleteMessage.run(id)
-    res.json({ success: true })
-  } catch (error) {
-    console.error('[LocalServer] Error deleting message:', error)
-    res.status(500).json({ error: 'Failed to delete message' })
-  }
-})
