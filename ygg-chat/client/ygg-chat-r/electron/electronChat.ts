@@ -181,6 +181,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: req.headers.authorization || '',
       },
       body: JSON.stringify({
         content,
@@ -192,6 +193,7 @@ router.post('/conversations/:id/messages', async (req, res) => {
         think,
         selectedFiles,
         attachmentsBase64,
+        executionMode: 'client',
       }),
     })
 

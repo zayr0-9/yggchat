@@ -682,7 +682,7 @@ router.post(
     if (storageMode === 'local') {
       return res.status(400).json({
         error: 'Local-only conversations should use /local/conversations endpoint',
-        details: 'Storage mode "local" is not allowed for cloud conversations'
+        details: 'Storage mode "local" is not allowed for cloud conversations',
       })
     }
 
@@ -728,13 +728,13 @@ router.get(
   asyncHandler(async (req, res) => {
     const conversationId = req.params.id
     const { client } = await verifyAuth(req)
-    
+
     const conversation = await ConversationService.getById(client, conversationId)
-    
+
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' })
     }
-    
+
     res.json(conversation)
   })
 )
@@ -1556,19 +1556,32 @@ router.post(
       const lastMsg = messages![messages!.length - 1]
       userMessage = { ...lastMsg, id: lastMsg.id || 'temp-continuation-id' }
     } else {
-      userMessage = await MessageService.create(
-        client,
-        userId,
-        conversationId,
-        parentId,
-        'user',
-        content,
-        '',
-        selectedModel
-      )
+      if (executionMode !== 'client') {
+        userMessage = await MessageService.create(
+          client,
+          userId,
+          conversationId,
+          parentId,
+          'user',
+          content,
+          '',
+          selectedModel
+        )
+      } else {
+        // Client mode: Create ephemeral user message object without saving to DB
+        userMessage = {
+          id: crypto.randomUUID(),
+          conversation_id: conversationId,
+          parent_id: parentId,
+          role: 'user',
+          content,
+          model_name: selectedModel,
+          created_at: new Date().toISOString(),
+        }
+      }
       // console.log('server | user message', messages)
 
-      if (selectedFiles && selectedFiles.length > 0) {
+      if (selectedFiles && selectedFiles.length > 0 && executionMode !== 'client') {
         for (const file of selectedFiles) {
           try {
             const fileContent = await FileContentService.create(client, userId, {
@@ -1601,12 +1614,13 @@ router.post(
 
     try {
       const attachmentsBase64 = Array.isArray(req.body?.attachmentsBase64) ? req.body.attachmentsBase64 : null
-      const createdAttachments: Awaited<ReturnType<typeof AttachmentService.getById>>[] = attachmentsBase64
-        ? await saveBase64ImageAttachmentsForMessage(client, userMessage.id, attachmentsBase64, userId)
-        : []
+      const createdAttachments: Awaited<ReturnType<typeof AttachmentService.getById>>[] =
+        attachmentsBase64 && executionMode !== 'client'
+          ? await saveBase64ImageAttachmentsForMessage(client, userMessage.id, attachmentsBase64, userId)
+          : []
 
       const userMessageForAI = { ...userMessage, content: processedContent }
-      
+
       let combinedMessages: any[] = []
       if (isContinuation) {
         combinedMessages = messages || []
@@ -1804,19 +1818,35 @@ router.post(
           console.log('📤 [supaChat] Saving content_blocks with', contentBlocksEvents.length, 'events')
           const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
           console.log('📤 [supaChat] Accumulated into', accumulatedBlocks.length, 'blocks')
-          const assistantMessage = await MessageService.create(
-            client,
-            userId,
-            conversationId,
-            userMessage.id,
-            'assistant',
-            cleanedContent,
-            '',
-            selectedModel,
-            undefined,
-            undefined,
-            accumulatedBlocks
-          )
+
+          let assistantMessage
+          if (executionMode !== 'client') {
+            assistantMessage = await MessageService.create(
+              client,
+              userId,
+              conversationId,
+              userMessage.id,
+              'assistant',
+              cleanedContent,
+              '',
+              selectedModel,
+              undefined,
+              undefined,
+              accumulatedBlocks
+            )
+          } else {
+            // Client mode: Create ephemeral assistant message object
+            assistantMessage = {
+              id: crypto.randomUUID(),
+              conversation_id: conversationId,
+              parent_id: userMessage.id,
+              role: 'assistant',
+              content: cleanedContent,
+              model_name: selectedModel,
+              content_blocks: accumulatedBlocks,
+              created_at: new Date().toISOString(),
+            }
+          }
           // console.log(assistantMessage)
           const cleanedMessage = { ...assistantMessage, content: cleanedContent }
           res.write(
@@ -1827,7 +1857,7 @@ router.post(
           )
 
           // Auto-generate title if this is the first message (no parent ID)
-          if (userMessage.parent_id === null) {
+          if (userMessage.parent_id === null && executionMode !== 'client') {
             console.log('Auto-generating title for new conversation', conversationId)
             const title = content.slice(0, 100) + (content.length > 100 ? '...' : '')
             await ConversationService.updateTitle(client, conversationId, title)
@@ -1869,19 +1899,33 @@ router.post(
             console.log('🔧 [supaChat/abort] Saving partial content, toolCalls:', assistantToolCalls)
             try {
               const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
-              const assistantMessage = await MessageService.create(
-                client,
-                userId,
-                conversationId,
-                userMessage.id,
-                'assistant',
-                cleanedContent,
-                '',
-                selectedModel,
-                undefined,
-                undefined,
-                accumulatedBlocks
-              )
+              let assistantMessage
+              if (executionMode !== 'client') {
+                assistantMessage = await MessageService.create(
+                  client,
+                  userId,
+                  conversationId,
+                  userMessage.id,
+                  'assistant',
+                  cleanedContent,
+                  '',
+                  selectedModel,
+                  undefined,
+                  undefined,
+                  accumulatedBlocks
+                )
+              } else {
+                assistantMessage = {
+                  id: crypto.randomUUID(),
+                  conversation_id: conversationId,
+                  parent_id: userMessage.id,
+                  role: 'assistant',
+                  content: cleanedContent,
+                  model_name: selectedModel,
+                  content_blocks: accumulatedBlocks,
+                  created_at: new Date().toISOString(),
+                }
+              }
               const cleanedMessage = { ...assistantMessage, content: cleanedContent }
               res.write(`data: ${JSON.stringify({ type: 'complete', message: cleanedMessage, aborted: true })}\n\n`)
             } catch (createError) {
@@ -1906,19 +1950,34 @@ router.post(
             try {
               const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
               console.log('🔧 [supaChat/error] Saving partial content before error, toolCalls:', assistantToolCalls)
-              const assistantMessage = await MessageService.create(
-                client,
-                userId,
-                conversationId,
-                userMessage.id,
-                'assistant',
-                cleanedContent,
-                '',
-                selectedModel,
-                undefined,
-                undefined,
-                accumulatedBlocks
-              )
+
+              let assistantMessage
+              if (executionMode !== 'client') {
+                assistantMessage = await MessageService.create(
+                  client,
+                  userId,
+                  conversationId,
+                  userMessage.id,
+                  'assistant',
+                  cleanedContent,
+                  '',
+                  selectedModel,
+                  undefined,
+                  undefined,
+                  accumulatedBlocks
+                )
+              } else {
+                assistantMessage = {
+                  id: crypto.randomUUID(),
+                  conversation_id: conversationId,
+                  parent_id: userMessage.id,
+                  role: 'assistant',
+                  content: cleanedContent,
+                  model_name: selectedModel,
+                  content_blocks: accumulatedBlocks,
+                  created_at: new Date().toISOString(),
+                }
+              }
               // Send completion with accumulated content - treat as successful partial generation
               // The error is logged on server but client sees it as a complete message
               const cleanedMessage = { ...assistantMessage, content: cleanedContent }
