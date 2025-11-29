@@ -220,19 +220,21 @@ const ConversationPage: React.FC = () => {
   }
 
   const handleNewConversation = async () => {
-    // In Electron mode, show modal to select storage mode
+    // If a project is selected, skip modal and use project's storage mode
+    if (selectedProject) {
+      const projectStorageMode = selectedProject.storage_mode || 'cloud'
+      const defaultTitle = `${selectedProject.name} Conversation`
+      await createNewConversation(projectStorageMode, defaultTitle)
+      return
+    }
+
+    // No project selected: in Electron mode, show modal to choose storage
     if (isElectronMode) {
-      // Set default title and storage mode
-      const defaultTitle = selectedProject ? `${selectedProject.name} Conversation` : 'New Conversation'
-      setNewConvTitle(defaultTitle)
-
-      // Inherit storage mode from project if available
-      const defaultStorageMode = selectedProject?.storage_mode || 'cloud'
-      setStorageMode(defaultStorageMode)
-
+      setNewConvTitle('New Conversation')
+      setStorageMode('cloud') // Default to cloud
       setShowNewConversationModal(true)
     } else {
-      // Web mode: create directly without modal
+      // Web mode: create cloud conversation directly
       await createNewConversation('cloud')
     }
   }
