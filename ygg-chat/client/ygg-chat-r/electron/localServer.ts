@@ -315,6 +315,66 @@ function ensureConversationExists(conversationId: string, userId: string, projec
   }
 }
 
+// ChatNode interface for message tree structure
+interface ChatNode {
+  id: string
+  message: string
+  sender: 'user' | 'assistant'
+  children: ChatNode[]
+}
+
+// Build tree structure from flat message array with children_ids
+function buildMessageTree(messages: any[]): ChatNode | null {
+  if (!messages || messages.length === 0) return null
+
+  const messageMap = new Map<string, ChatNode>()
+  const rootNodes: ChatNode[] = []
+
+  // Create nodes
+  messages.forEach(msg => {
+    messageMap.set(msg.id, {
+      id: msg.id.toString(),
+      message: msg.content,
+      sender: msg.role as 'user' | 'assistant',
+      children: [],
+    })
+  })
+
+  // Build tree using children_ids and collect all root nodes
+  messages.forEach(msg => {
+    const node = messageMap.get(msg.id)!
+
+    if (msg.parent_id === null) {
+      rootNodes.push(node)
+    }
+
+    // Add children using children_ids array
+    const childIds = msg.children_ids || []
+    childIds.forEach((childId: string) => {
+      const childNode = messageMap.get(childId)
+      if (childNode) {
+        node.children.push(childNode)
+      }
+    })
+  })
+
+  if (rootNodes.length === 0) return null
+
+  // If only one root message, return it directly
+  if (rootNodes.length === 1) {
+    return rootNodes[0]
+  }
+
+  // Multiple roots → create a synthetic root node containing all root branches
+  // This preserves all independent conversation trees
+  return {
+    id: 'root',
+    message: 'Conversation',
+    sender: 'assistant',
+    children: rootNodes,
+  }
+}
+
 interface ConnectedClient {
   ws: WebSocket
   type: 'extension' | 'frontend'
@@ -1252,6 +1312,28 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Error fetching messages:', error)
       res.status(500).json({ error: 'Failed to fetch messages' })
+    }
+  })
+
+  // GET /api/local/conversations/:id/messages/tree
+  app.get('/api/local/conversations/:id/messages/tree', (req, res) => {
+    try {
+      const { id } = req.params
+      const messages = statements.getMessagesByConversationId.all(id)
+
+      // Parse JSON fields (children_ids, tool_calls, content_blocks)
+      const normalizedMessages = messages.map((msg: any) => ({
+        ...msg,
+        children_ids: msg.children_ids ? JSON.parse(msg.children_ids) : [],
+        tool_calls: msg.tool_calls ? JSON.parse(msg.tool_calls) : null,
+        content_blocks: msg.content_blocks ? JSON.parse(msg.content_blocks) : null,
+      }))
+
+      const treeData = buildMessageTree(normalizedMessages)
+      res.json({ messages: normalizedMessages, tree: treeData })
+    } catch (error) {
+      console.error('[LocalServer] Error fetching message tree:', error)
+      res.status(500).json({ error: 'Failed to fetch message tree' })
     }
   })
 
