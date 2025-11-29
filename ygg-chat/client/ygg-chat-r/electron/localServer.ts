@@ -1271,6 +1271,34 @@ function setupServer() {
     }
   })
 
+  // GET /api/local/projects/:id
+  app.get('/api/local/projects/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      console.log('[LocalServer] GET /api/local/projects/:id - projectId:', id)
+      const project = statements.getProjectById.get(id)
+
+      if (!project) {
+        console.log('[LocalServer] Project not found:', id)
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      // Verify it's actually a local project
+      if (project.storage_mode !== 'local') {
+        console.log('[LocalServer] Project is not local storage:', id)
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      console.log('[LocalServer] Found local project:', id)
+      res.json(project)
+    } catch (error) {
+      console.error('[LocalServer] Error fetching local project:', error)
+      res.status(500).json({ error: 'Failed to fetch project' })
+    }
+  })
+
   // GET /api/local/conversations?userId=xxx
   app.get('/api/local/conversations', (req, res) => {
     try {

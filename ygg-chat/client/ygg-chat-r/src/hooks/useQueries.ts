@@ -85,13 +85,34 @@ export function useProjects() {
  * Fetch a single project by ID
  * Cache key: ['projects', projectId]
  */
-export function useProject(projectId: ProjectId | null) {
-  const { accessToken } = useAuth()
+export function useProject(projectId: ProjectId | null, storageMode?: 'local' | 'cloud') {
+  const { accessToken, userId } = useAuth()
+  const queryClient = useQueryClient()
 
   return useQuery({
     queryKey: ['projects', projectId],
     queryFn: async () => {
       if (!projectId) throw new Error('Project ID is required')
+
+      // Determine storage mode: use parameter if provided, otherwise check cached projects
+      let effectiveStorageMode = storageMode
+      if (!effectiveStorageMode) {
+        // Try to get storage_mode from cached projects
+        const projects = queryClient.getQueryData<ProjectWithLatestConversation[]>(['projects', userId])
+        const project = projects?.find(p => p.id === projectId)
+        effectiveStorageMode = project?.storage_mode || 'cloud'
+      }
+
+      console.log('[useProject] Fetching project:', projectId, 'storage_mode:', effectiveStorageMode)
+
+      // Route to appropriate API based on storage mode
+      if (effectiveStorageMode === 'local' && environment === 'electron') {
+        console.log('[useProject] Using local API for project:', projectId)
+        return localApi.get<Project>(`/local/projects/${projectId}`)
+      }
+
+      // Default to cloud API
+      console.log('[useProject] Using cloud API for project:', projectId)
       return api.get<Project>(`/projects/${projectId}`, accessToken)
     },
     enabled: !!projectId && !!accessToken,
