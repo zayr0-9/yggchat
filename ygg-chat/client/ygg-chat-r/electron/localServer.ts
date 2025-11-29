@@ -520,7 +520,7 @@ function setupServer() {
   // Sync Project
   app.post('/api/sync/project', (req, res) => {
     try {
-      const { id, name, user_id, owner_id, context, system_prompt, created_at, updated_at } = req.body
+      const { id, name, user_id, owner_id, context, system_prompt, storage_mode, created_at, updated_at } = req.body
 
       // Handle owner_id -> user_id mapping (Railway sends owner_id)
       const effectiveUserId = user_id || owner_id
@@ -538,10 +538,11 @@ function setupServer() {
         effectiveUserId,
         context || null,
         system_prompt || null,
+        storage_mode || 'cloud',
         created_at || new Date().toISOString(),
         updated_at || new Date().toISOString()
       )
-      console.log('[LocalServer] Synced project:', id)
+      console.log('[LocalServer] Synced project:', id, '- storage_mode:', storage_mode || 'cloud')
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error syncing project:', error)
@@ -892,6 +893,7 @@ function setupServer() {
                   op.data.user_id,
                   op.data.context || null,
                   op.data.system_prompt || null,
+                  op.data.storage_mode || 'cloud',
                   op.data.created_at || new Date().toISOString(),
                   op.data.updated_at || new Date().toISOString()
                 )
