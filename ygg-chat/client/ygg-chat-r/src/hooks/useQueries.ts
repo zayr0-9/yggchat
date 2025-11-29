@@ -176,7 +176,7 @@ export function useConversations(enabled: boolean = true) {
  * @returns Query result with data, isLoading, isRefetching, and refetch function for manual refresh
  */
 export function useConversationsByProject(projectId: ProjectId | null) {
-  const { accessToken } = useAuth()
+  const { accessToken, userId } = useAuth()
   // const location = useLocation()
 
   // Always refetch on ConversationPage
@@ -186,6 +186,30 @@ export function useConversationsByProject(projectId: ProjectId | null) {
     queryKey: ['conversations', 'project', projectId],
     queryFn: async () => {
       if (!projectId) throw new Error('Project ID is required')
+
+      // In Electron mode, fetch both cloud and local conversations
+      if (environment === 'electron') {
+        const [cloudConversations, localConversations] = await Promise.all([
+          api.get<Conversation[]>(`/conversations/project/${projectId}`, accessToken)
+            .catch(err => {
+              console.error('Failed to fetch cloud project conversations:', err)
+              return []
+            }),
+          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+            .then(convs => convs.filter(c => c.project_id === projectId))
+            .catch(err => {
+              console.error('Failed to fetch local project conversations:', err)
+              return []
+            })
+        ])
+
+        // Merge and sort by updated_at
+        const merged = [...cloudConversations, ...localConversations]
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+
+        return merged
+      }
+
       return api.get<Conversation[]>(`/conversations/project/${projectId}`, accessToken)
     },
     enabled: !!projectId && !!accessToken,
