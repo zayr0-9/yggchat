@@ -215,12 +215,12 @@ const updateMessageInCache = (
     const updatedMessages = existingData.messages.map(msg =>
       msg.id === messageId
         ? {
-            ...msg,
-            content: updatedContent,
-            content_plain_text: updatedContent,
-            ...(updatedNote !== undefined && { note: updatedNote }),
-            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
-          }
+          ...msg,
+          content: updatedContent,
+          content_plain_text: updatedContent,
+          ...(updatedNote !== undefined && { note: updatedNote }),
+          ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
+        }
         : msg
     )
 
@@ -668,7 +668,7 @@ export const sendMessage = createAsyncThunk<
                     const baseTitle = contentForTitle.slice(0, 50)
                     const title = baseTitle ? `${baseTitle}...` : ''
                     if (title) {
-                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      ; (dispatch as any)(updateConversationTitle({ id: conversationId, title }))
                       titleUpdated = true
                     }
                   }
@@ -677,7 +677,7 @@ export const sendMessage = createAsyncThunk<
                 // Handle tool results (accumulated server-side into content_blocks)
                 if (chunk.part === 'tool_result' && chunk.toolResult) {
                   console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
-                  
+
                   // Mark this tool call as processed by server
                   processedToolCallIds.add(chunk.toolResult.tool_use_id)
 
@@ -774,10 +774,10 @@ export const sendMessage = createAsyncThunk<
         if (assistantToolCalls.length > 0 && executionMode === 'client') {
           // Filter out tool calls that were already processed by server
           const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
-          
+
           if (pendingToolCalls.length > 0) {
             console.log(`🛠️ [chatActions] Executing ${pendingToolCalls.length} tool calls locally...`)
-            
+
             if (processedToolCallIds.size > 0) {
               console.log(`⏩ [chatActions] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
             }
@@ -902,7 +902,7 @@ export const sendMessage = createAsyncThunk<
                 // This might be redundant if server sent 'complete', but ensures safety
               }
             }
-            
+
             // If no pending calls, we're done with this turn
             continueTurn = false
           }
@@ -943,15 +943,37 @@ export const updateMessage = createAsyncThunk<
   async ({ id, content, note, content_blocks }, { dispatch, getState, extra, rejectWithValue }) => {
     const { auth } = extra
     try {
-      const body: any = { content, note }
-      if (content_blocks) {
-        body.content_blocks = content_blocks
-      }
+      const currentState = getState() as RootState
+      const currentConversationId = currentState.chat.conversation.currentConversationId
+      const conversation = currentState.conversations.items.find(c => c.id === currentConversationId)
+      const isLocalMode = conversation?.storage_mode === 'local'
 
-      const updated = await apiCall<Message>(`/messages/${id}`, auth.accessToken, {
-        method: 'PUT',
-        body: JSON.stringify(body),
-      })
+      let updated: Message
+
+      if (isLocalMode) {
+        // In local mode, the message doesn't exist on server, so we construct the update locally
+        const existingMessage = currentState.chat.conversation.messages.find(m => m.id === id)
+        if (!existingMessage) {
+          throw new Error('Message not found locally')
+        }
+
+        updated = {
+          ...existingMessage,
+          content,
+          note: note !== undefined ? note : existingMessage.note,
+          content_blocks: content_blocks !== undefined ? content_blocks : existingMessage.content_blocks,
+        }
+      } else {
+        const body: any = { content, note }
+        if (content_blocks) {
+          body.content_blocks = content_blocks
+        }
+
+        updated = await apiCall<Message>(`/messages/${id}`, auth.accessToken, {
+          method: 'PUT',
+          body: JSON.stringify(body),
+        })
+      }
       dispatch(chatSliceActions.messageUpdated({ id, content, note, content_blocks }))
 
       // Sync to React Query cache immediately
@@ -1133,7 +1155,7 @@ export const editMessageWithBranching = createAsyncThunk<
         throw new Error('No model selected')
       }
       const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
-      
+
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       const executionMode = 'client' // Prefer client execution for tools
@@ -1146,7 +1168,7 @@ export const editMessageWithBranching = createAsyncThunk<
 
       let messageId: MessageId | null = null
       let userMessage: any = null
-      
+
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false
@@ -1199,7 +1221,7 @@ export const editMessageWithBranching = createAsyncThunk<
         const decoder = new TextDecoder()
         // Buffer for incomplete lines across chunks
         let buffer = ''
-        
+
         // State for this turn
         let assistantMessageContent = ''
         let assistantThinking = ''
@@ -1243,10 +1265,10 @@ export const editMessageWithBranching = createAsyncThunk<
                     user_id: auth.userId,
                     project_id: selectedProject?.id || null,
                   })
-                  
+
                   // Add to local history for next turn
                   currentTurnHistory.push(chunk.message)
-                  
+
                   // Live-update: ensure the new branched user message shows all intended artifacts immediately
                   // Use the combined list (existing - deleted + drafts) we computed prior to the request
                   if (combinedArtifacts.length > 0) {
@@ -1281,10 +1303,10 @@ export const editMessageWithBranching = createAsyncThunk<
                   console.log(
                     `✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
                   )
-                  
+
                   // Mark this tool call as processed by server
                   processedToolCallIds.add(chunk.toolResult.tool_use_id)
-                  
+
                   // Dispatch structured tool result data for proper rendering in streaming events
                   dispatch(
                     chatSliceActions.streamChunkReceived({
@@ -1335,7 +1357,7 @@ export const editMessageWithBranching = createAsyncThunk<
                     user_id: auth.userId,
                     project_id: selectedProject?.id || null,
                   })
-                  
+
                   // Add to local history
                   currentTurnHistory.push(chunk.message)
 
@@ -1371,10 +1393,10 @@ export const editMessageWithBranching = createAsyncThunk<
         if (assistantToolCalls.length > 0 && executionMode === 'client') {
           // Filter out tool calls that were already processed by server
           const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
-          
+
           if (pendingToolCalls.length > 0) {
             console.log(`🛠️ [editMessageWithBranching] Executing ${pendingToolCalls.length} tool calls locally...`)
-            
+
             if (processedToolCallIds.size > 0) {
               console.log(`⏩ [editMessageWithBranching] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
             }
@@ -1476,15 +1498,15 @@ export const editMessageWithBranching = createAsyncThunk<
             }
 
             // 4. Prepare for next turn
-            currentTurnContent = '' 
+            currentTurnContent = ''
             activeParentId = messageId // Parent is the assistant message (not tool message)
-            continueTurn = true 
+            continueTurn = true
             assistantMessageContent = ''
             assistantThinking = ''
             assistantToolCalls = []
           } else {
             if (assistantToolCalls.length > 0 && processedToolCallIds.size > 0) {
-               console.log('✅ [editMessageWithBranching] All tool calls handled by server')
+              console.log('✅ [editMessageWithBranching] All tool calls handled by server')
             }
             continueTurn = false
           }
@@ -1619,7 +1641,7 @@ export const sendMessageToBranch = createAsyncThunk<
         const decoder = new TextDecoder()
         // Buffer for incomplete lines across chunks
         let buffer = ''
-        
+
         // State for this turn
         let assistantMessageContent = ''
         let assistantThinking = ''
@@ -1664,10 +1686,10 @@ export const sendMessageToBranch = createAsyncThunk<
                   console.log(
                     `✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
                   )
-                  
+
                   // Mark this tool call as processed by server
                   processedToolCallIds.add(chunk.toolResult.tool_use_id)
-                  
+
                   // Dispatch structured tool result data for proper rendering in streaming events
                   dispatch(
                     chatSliceActions.streamChunkReceived({
@@ -1747,10 +1769,10 @@ export const sendMessageToBranch = createAsyncThunk<
         if (assistantToolCalls.length > 0 && executionMode === 'client') {
           // Filter out tool calls that were already processed by server
           const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
-          
+
           if (pendingToolCalls.length > 0) {
             console.log(`🛠️ [sendMessageToBranch] Executing ${pendingToolCalls.length} tool calls locally...`)
-            
+
             if (processedToolCallIds.size > 0) {
               console.log(`⏩ [sendMessageToBranch] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
             }
@@ -1784,13 +1806,13 @@ export const sendMessageToBranch = createAsyncThunk<
               // 'messageBranchCreated' in chatSlice handles adding to messages array?
               // Let's check 'messageAdded' usage in previous thunk. 
               // It calls 'messageAdded' THEN 'messageBranchCreated'.
-              
+
               dispatch(chatSliceActions.messageAdded(assistantMsg))
               // Re-dispatch branch created to ensure path is correct?
               // Actually if we just do messageAdded, it might not update path.
               // messageBranchCreated logic usually takes the message and updates path.
               // Let's call both to be safe and consistent with loop above.
-              
+
               updateMessageCache(extra.queryClient, conversationId, assistantMsg)
 
               // Sync to DB
@@ -1841,19 +1863,19 @@ export const sendMessageToBranch = createAsyncThunk<
               // Ideally we have it in `assistantMessageContent` + `assistantToolCalls`
               // But we better use `updateMessage` thunk which handles state update.
               // However, `updateMessage` takes `content`.
-              
+
               // We need to construct the `content_blocks` array.
               // Existing blocks are `assistantToolCalls` (converted to blocks).
               // Plus `toolResultBlocks`.
-              
+
               // Wait, if we synthesized the message, `content_blocks` is set.
               // If server sent it, we might not have local `content_blocks` in `assistantMsg` variable if we relied on server 'complete'.
               // But `messageId` is set.
-              
+
               // Let's get the message from state to be sure.
               const currentMessages = getState().chat.conversation.messages
               const assistantMessage = currentMessages.find(m => m.id === messageId)
-              
+
               if (assistantMessage) {
                 const existingBlocks = parseContentBlocks(assistantMessage.content_blocks)
                 const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
@@ -1869,7 +1891,7 @@ export const sendMessageToBranch = createAsyncThunk<
             }
 
             // 4. Prepare for next turn
-            currentTurnContent = '' 
+            currentTurnContent = ''
             currentParentId = messageId // Parent is the assistant message
             continueTurn = true
             assistantMessageContent = ''
@@ -1879,7 +1901,7 @@ export const sendMessageToBranch = createAsyncThunk<
             continueTurn = false
           }
         } else {
-           continueTurn = false
+          continueTurn = false
         }
       } // end while loop
 
