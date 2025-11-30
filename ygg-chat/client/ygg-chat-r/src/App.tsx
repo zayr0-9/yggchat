@@ -47,7 +47,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path='/' element={<LandingPage />} />
+        <Route path='/' element={isElectron ? <Navigate to='/login' replace /> : <LandingPage />} />
         <Route
           path='/homepage'
           element={
