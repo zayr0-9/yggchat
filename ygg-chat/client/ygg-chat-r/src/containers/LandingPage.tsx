@@ -66,6 +66,7 @@ const LandingPage: React.FC = () => {
   const videoElementsRef = useRef<(HTMLVideoElement | null)[]>([])
   const prevLoadedVideosRef = useRef<boolean[]>(new Array(features.length).fill(false))
   const observerRef = useRef<IntersectionObserver | null>(null)
+  const [expandedVideoSrc, setExpandedVideoSrc] = useState<string | null>(null)
 
   // Initialize theme
   useEffect(() => {
@@ -169,6 +170,24 @@ const LandingPage: React.FC = () => {
     prevLoadedVideosRef.current = nextPrev
   }, [loadedVideos])
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setExpandedVideoSrc(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  useEffect(() => {
+    document.body.style.overflow = expandedVideoSrc ? 'hidden' : ''
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [expandedVideoSrc])
+
   const handleFeatureClick = (index: number) => {
     const targetElement = featureRefs.current[index]
     if (targetElement) {
@@ -182,6 +201,10 @@ const LandingPage: React.FC = () => {
     const newIsDarkMode = !isDarkMode
     setIsDarkMode(newIsDarkMode)
     localStorage.setItem('theme', newIsDarkMode ? 'dark' : 'light')
+  }
+
+  const handleExpandedVideoClose = () => {
+    setExpandedVideoSrc(null)
   }
 
   const handleNavigation = (path: string) => {
@@ -402,6 +425,11 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                   >
                     <video
                       autoPlay
+                      onClick={() => {
+                        if (loadedVideos[index] && feature.videoSrc) {
+                          setExpandedVideoSrc(feature.videoSrc)
+                        }
+                      }}
                       loop
                       muted
                       playsInline
@@ -437,6 +465,32 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
           </div>
         </div>
       </section>
+
+      {expandedVideoSrc && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4'>
+          <div
+            className='absolute inset-0 cursor-pointer'
+            onClick={handleExpandedVideoClose}
+          />
+          <div className='relative w-full max-w-5xl rounded-3xl overflow-hidden bg-black shadow-2xl'>
+            <video
+              controls
+              autoPlay
+              muted
+              loop
+              className='w-full h-full object-cover'
+              src={expandedVideoSrc}
+            />
+            <button
+              className='absolute top-4 right-4 bg-black/60 text-white rounded-full p-2 hover:bg-black/80 transition'
+              onClick={handleExpandedVideoClose}
+              aria-label='Close fullscreen video'
+            >
+              <i className='bx bx-x text-2xl'></i>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className='relative z-10 w-full border-t border-white/10 bg-neutral-900/30 backdrop-blur-md font-sans'>
