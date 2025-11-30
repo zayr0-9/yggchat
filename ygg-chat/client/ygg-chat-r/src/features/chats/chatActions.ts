@@ -215,12 +215,12 @@ const updateMessageInCache = (
     const updatedMessages = existingData.messages.map(msg =>
       msg.id === messageId
         ? {
-            ...msg,
-            content: updatedContent,
-            content_plain_text: updatedContent,
-            ...(updatedNote !== undefined && { note: updatedNote }),
-            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
-          }
+          ...msg,
+          content: updatedContent,
+          content_plain_text: updatedContent,
+          ...(updatedNote !== undefined && { note: updatedNote }),
+          ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
+        }
         : msg
     )
 
@@ -664,7 +664,7 @@ export const sendMessage = createAsyncThunk<
                     const baseTitle = contentForTitle.slice(0, 50)
                     const title = baseTitle ? `${baseTitle}...` : ''
                     if (title) {
-                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      ; (dispatch as any)(updateConversationTitle({ id: conversationId, title }))
                       titleUpdated = true
                     }
                   }
@@ -2056,10 +2056,22 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
 
     dispatch(chatSliceActions.heimdallLoadingStarted())
     try {
-      const response = await apiCall<{ messages: Message[]; tree: any }>(
-        `/conversations/${conversationId}/messages/tree`,
-        auth.accessToken
-      )
+      let response: { messages: Message[]; tree: any }
+
+      // Check storage mode to determine routing
+      const conversation = state.conversations.items.find(c => c.id === conversationId)
+      const storageMode = conversation?.storage_mode || 'cloud'
+
+      if (shouldUseLocalApi(storageMode, environment)) {
+        response = await localApi.get<{ messages: Message[]; tree: any }>(
+          `/local/conversations/${conversationId}/messages/tree`
+        )
+      } else {
+        response = await apiCall<{ messages: Message[]; tree: any }>(
+          `/conversations/${conversationId}/messages/tree`,
+          auth.accessToken
+        )
+      }
 
       // Handle both old and new response formats for backward compatibility
       const treeData = response.tree || response
