@@ -1342,7 +1342,9 @@ router.post(
           think,
           undefined, // No assistant message ID yet (will create after streaming)
           userId,
-          conversationId
+          conversationId,
+          undefined, // executionMode defaults to 'server'
+          storageMode
         )
 
         if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
@@ -1799,7 +1801,8 @@ router.post(
           undefined, // No assistant message ID yet (will create after streaming)
           userId,
           conversationId,
-          executionMode
+          executionMode,
+          storageMode
         )
 
         // Clean up content and extract tool calls after streaming completes
