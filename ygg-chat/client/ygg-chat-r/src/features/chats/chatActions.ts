@@ -1068,14 +1068,14 @@ export const fetchConversationMessages = createAsyncThunk<
 
 export const deleteMessage = createAsyncThunk<
   MessageId,
-  { id: MessageId; conversationId: ConversationId },
+  { id: MessageId; conversationId: ConversationId; storageMode?: 'local' | 'cloud' },
   { extra: ThunkExtraArgument }
->('chat/deleteMessage', async ({ id, conversationId }, { dispatch, extra, rejectWithValue }) => {
+>('chat/deleteMessage', async ({ id, conversationId, storageMode }, { dispatch, extra, rejectWithValue }) => {
   const { auth } = extra
   try {
-    // Get storage_mode from React Query cache (more reliable than Redux state)
-    const storageMode = getStorageModeFromCache(extra.queryClient, conversationId)
-    const isLocalMode = shouldUseLocalApi(storageMode)
+    // Use storageMode passed from caller (most reliable) or fallback to cache lookup
+    const effectiveStorageMode = storageMode ?? getStorageModeFromCache(extra.queryClient, conversationId)
+    const isLocalMode = shouldUseLocalApi(effectiveStorageMode)
 
     if (isLocalMode) {
       await localApi.delete(`/local/messages/${id}`)

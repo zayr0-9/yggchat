@@ -1619,11 +1619,11 @@ function Chat() {
       const messageId = parseId(id)
       dispatch(chatSliceActions.messageDeleted(messageId))
       if (currentConversationId) {
-        dispatch(deleteMessage({ id: messageId, conversationId: currentConversationId }))
+        dispatch(deleteMessage({ id: messageId, conversationId: currentConversationId, storageMode: conversationStorageMode }))
         dispatch(refreshCurrentPathAfterDelete({ conversationId: currentConversationId, messageId }))
       }
     },
-    [dispatch, currentConversationId]
+    [dispatch, currentConversationId, conversationStorageMode]
   )
 
   const handleRequestDelete = useCallback(
