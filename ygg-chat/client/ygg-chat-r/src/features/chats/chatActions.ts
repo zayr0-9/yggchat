@@ -46,6 +46,32 @@ typescriptconst myAsyncThunk = createAsyncThunk(
 // const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 /**
+ * Get storage_mode from React Query cache for a conversation
+ * Searches all cached conversation queries (main list, project lists, etc.)
+ * This is more reliable than Redux state which may not have storage_mode populated
+ */
+const getStorageModeFromCache = (
+  queryClient: QueryClient | null,
+  conversationId: ConversationId
+): 'local' | 'cloud' => {
+  if (!queryClient) return 'cloud'
+
+  // Search ALL cached conversation lists
+  const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
+
+  for (const [, data] of allConversationQueries) {
+    if (Array.isArray(data)) {
+      const match = data.find(c => String(c.id) === String(conversationId))
+      if (match?.storage_mode) {
+        return match.storage_mode
+      }
+    }
+  }
+
+  return 'cloud' // Default to cloud if not found
+}
+
+/**
  * Builds a ChatNode tree structure from a flat array of messages
  * Mimics server-side convertMessagesToHeimdall logic
  */
@@ -1043,13 +1069,13 @@ export const fetchConversationMessages = createAsyncThunk<
 export const deleteMessage = createAsyncThunk<
   MessageId,
   { id: MessageId; conversationId: ConversationId },
-  { state: RootState; extra: ThunkExtraArgument }
->('chat/deleteMessage', async ({ id, conversationId }, { dispatch, getState, extra, rejectWithValue }) => {
+  { extra: ThunkExtraArgument }
+>('chat/deleteMessage', async ({ id, conversationId }, { dispatch, extra, rejectWithValue }) => {
   const { auth } = extra
   try {
-    const state = getState() as RootState
-    const conversation = state.conversations.items.find(c => c.id === conversationId)
-    const isLocalMode = shouldUseLocalApi(conversation?.storage_mode)
+    // Get storage_mode from React Query cache (more reliable than Redux state)
+    const storageMode = getStorageModeFromCache(extra.queryClient, conversationId)
+    const isLocalMode = shouldUseLocalApi(storageMode)
 
     if (isLocalMode) {
       await localApi.delete(`/local/messages/${id}`)
