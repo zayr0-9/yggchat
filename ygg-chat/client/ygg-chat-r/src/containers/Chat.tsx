@@ -116,12 +116,8 @@ function Chat() {
   const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
 
-  // React Query for message fetching (automatic deduplication and caching)
-  // Use URL-derived ID to ensure correct fetching even on page refresh
-  // Single request fetches both messages AND tree data to eliminate duplicate requests
-  const { data: conversationData } = useConversationMessages(conversationIdFromUrl)
-  const reactQueryMessages = conversationData?.messages || []
-  const treeData = conversationData?.tree
+  // React Query for message fetching - MOVED BELOW after projectConversations is available
+  // to enable passing storage_mode from cached conversations
   const selectedPath = useAppSelector(selectCurrentPath)
   const multiReplyCount = useAppSelector(selectMultiReplyCount)
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
@@ -360,6 +356,23 @@ function Chat() {
   const { data: projectConversations = [] } = useConversationsByProject(
     projectIdFromUrl || selectedProject?.id || currentConversation?.project_id || null
   )
+
+  // Compute storage_mode from projectConversations (already loaded from ConversationPage)
+  // This avoids unreliable cache lookups inside queryFn
+  const conversationStorageMode = useMemo(() => {
+    if (!conversationIdFromUrl) return undefined
+    const conv = projectConversations.find(c => String(c.id) === String(conversationIdFromUrl))
+    return conv?.storage_mode
+  }, [conversationIdFromUrl, projectConversations])
+
+  // React Query for message fetching (automatic deduplication and caching)
+  // Use URL-derived ID to ensure correct fetching even on page refresh
+  // Single request fetches both messages AND tree data to eliminate duplicate requests
+  // Pass storage_mode from projectConversations to correctly route to local/cloud API
+  const { data: conversationData } = useConversationMessages(conversationIdFromUrl, conversationStorageMode)
+  const reactQueryMessages = conversationData?.messages || []
+  const treeData = conversationData?.tree
+
   const [titleInput, setTitleInput] = useState(currentConversation?.title ?? '')
   const [editingTitle, setEditingTitle] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
