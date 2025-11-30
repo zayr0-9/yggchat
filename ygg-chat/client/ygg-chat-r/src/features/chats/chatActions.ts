@@ -1077,9 +1077,20 @@ export const deleteMessage = createAsyncThunk<
     const effectiveStorageMode = storageMode ?? getStorageModeFromCache(extra.queryClient, conversationId)
     const isLocalMode = shouldUseLocalApi(effectiveStorageMode)
 
+    console.log('[deleteMessage] Routing decision:', {
+      passedStorageMode: storageMode,
+      effectiveStorageMode,
+      isLocalMode,
+      environment,
+      conversationId,
+      messageId: id
+    })
+
     if (isLocalMode) {
+      console.log('[deleteMessage] -> Routing to LOCAL API: /local/messages/' + id)
       await localApi.delete(`/local/messages/${id}`)
     } else {
+      console.log('[deleteMessage] -> Routing to CLOUD API: /messages/' + id)
       await apiCall(`/messages/${id}`, auth.accessToken, { method: 'DELETE' })
     }
     // Sync React Query cache immediately
@@ -1092,6 +1103,7 @@ export const deleteMessage = createAsyncThunk<
     }
     return id
   } catch (error) {
+    console.error('[deleteMessage] Error:', error)
     return rejectWithValue(error instanceof Error ? error.message : 'Delete failed')
   }
 })
@@ -2336,19 +2348,40 @@ export const initializeUserAndConversation = createAsyncThunk<
 // Delete multiple messages by their IDs
 export const deleteSelectedNodes = createAsyncThunk<
   { deleted: number },
-  { ids: MessageId[]; conversationId: ConversationId },
+  { ids: MessageId[]; conversationId: ConversationId; storageMode?: 'local' | 'cloud' },
   { extra: ThunkExtraArgument }
->('chat/deleteSelectedNodes', async ({ ids, conversationId }, { extra, rejectWithValue }) => {
+>('chat/deleteSelectedNodes', async ({ ids, conversationId, storageMode }, { extra, rejectWithValue }) => {
   const { auth } = extra
   try {
-    const response = await apiCall<{ deleted: number }>('/messages/deleteMany', auth.accessToken, {
-      method: 'POST',
-      body: JSON.stringify({ ids }),
+    // Use storageMode passed from caller (most reliable) or fallback to cache lookup
+    const effectiveStorageMode = storageMode ?? getStorageModeFromCache(extra.queryClient, conversationId)
+    const isLocalMode = shouldUseLocalApi(effectiveStorageMode)
+    
+    console.log('[deleteSelectedNodes] Routing decision:', {
+      passedStorageMode: storageMode,
+      effectiveStorageMode,
+      isLocalMode,
+      environment,
+      conversationId,
+      messageCount: ids.length
     })
+
+    let response: { deleted: number }
+    if (isLocalMode) {
+      console.log('[deleteSelectedNodes] -> Routing to LOCAL API: /local/messages/deleteMany')
+      response = await localApi.post<{ deleted: number }>('/local/messages/deleteMany', { ids })
+    } else {
+      console.log('[deleteSelectedNodes] -> Routing to CLOUD API: /messages/deleteMany')
+      response = await apiCall<{ deleted: number }>('/messages/deleteMany', auth.accessToken, {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      })
+    }
     // Sync React Query cache immediately
     removeMessagesFromCache(extra.queryClient, conversationId, ids)
     return response
   } catch (error) {
+    console.error('[deleteSelectedNodes] Error:', error)
     const message = error instanceof Error ? error.message : 'Failed to delete messages'
     return rejectWithValue(message)
   }

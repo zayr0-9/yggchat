@@ -1613,11 +1613,44 @@ function setupServer() {
   app.delete('/api/local/messages/:id', (req, res) => {
     try {
       const { id } = req.params
+      console.log('[LocalServer] 🗑️ DELETE /api/local/messages/:id - messageId:', id)
       statements.deleteMessage.run(id)
+      console.log('[LocalServer] ✅ Message deleted:', id)
       res.json({ success: true })
     } catch (error) {
-      console.error('[LocalServer] Error deleting message:', error)
+      console.error('[LocalServer] ❌ Error deleting message:', error)
       res.status(500).json({ error: 'Failed to delete message' })
+    }
+  })
+
+  // POST /api/local/messages/deleteMany - Bulk delete messages
+  app.post('/api/local/messages/deleteMany', (req, res) => {
+    try {
+      const { ids } = req.body
+      console.log('[LocalServer] 🗑️ POST /api/local/messages/deleteMany - ids:', ids)
+      
+      if (!Array.isArray(ids) || ids.length === 0) {
+        res.status(400).json({ error: 'ids must be a non-empty array' })
+        return
+      }
+
+      // Delete each message in a transaction
+      if (!db) {
+        res.status(500).json({ error: 'Database not initialized' })
+        return
+      }
+      const deleteTransaction = db.transaction((messageIds: string[]) => {
+        for (const id of messageIds) {
+          statements.deleteMessage.run(id)
+        }
+      })
+      
+      deleteTransaction(ids)
+      console.log('[LocalServer] ✅ Bulk deleted', ids.length, 'messages')
+      res.json({ deleted: ids.length })
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error bulk deleting messages:', error)
+      res.status(500).json({ error: 'Failed to bulk delete messages' })
     }
   })
 }

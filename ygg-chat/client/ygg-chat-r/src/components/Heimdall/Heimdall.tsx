@@ -68,6 +68,7 @@ interface HeimdallProps {
   onNodeSelect?: (nodeId: string, path: string[]) => void
   conversationId?: ConversationId | null
   visibleMessageId?: MessageId | null
+  storageMode?: 'local' | 'cloud'
 }
 
 export const Heimdall: React.FC<HeimdallProps> = ({
@@ -78,6 +79,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   onNodeSelect,
   conversationId,
   visibleMessageId = null,
+  storageMode,
 }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
@@ -1200,8 +1202,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         return
       }
 
-      // Dispatch the delete action with conversationId
-      await (dispatch as any)(deleteSelectedNodes({ ids, conversationId })).unwrap()
+      // Dispatch the delete action with conversationId and storageMode
+      console.log('[Heimdall] handleDeleteNodes - storageMode:', storageMode, 'conversationId:', conversationId)
+      await (dispatch as any)(deleteSelectedNodes({ ids, conversationId, storageMode })).unwrap()
 
       // Clear selection after successful delete
       dispatch(chatSliceActions.nodesSelected([]))

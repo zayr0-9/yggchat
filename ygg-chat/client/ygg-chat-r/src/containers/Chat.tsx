@@ -360,9 +360,19 @@ function Chat() {
   // Compute storage_mode from projectConversations (already loaded from ConversationPage)
   // This avoids unreliable cache lookups inside queryFn
   const conversationStorageMode = useMemo(() => {
-    if (!conversationIdFromUrl) return undefined
+    if (!conversationIdFromUrl) {
+      console.log('[Chat] conversationStorageMode: No conversationIdFromUrl')
+      return undefined
+    }
     const conv = projectConversations.find(c => String(c.id) === String(conversationIdFromUrl))
-    return conv?.storage_mode
+    const mode = conv?.storage_mode
+    console.log('[Chat] conversationStorageMode computed:', {
+      conversationIdFromUrl,
+      projectConversationsCount: projectConversations.length,
+      foundConversation: !!conv,
+      storage_mode: mode
+    })
+    return mode
   }, [conversationIdFromUrl, projectConversations])
 
   // React Query for message fetching (automatic deduplication and caching)
@@ -1617,6 +1627,11 @@ function Chat() {
   const performDelete = useCallback(
     (id: string) => {
       const messageId = parseId(id)
+      console.log('[Chat] performDelete called:', {
+        messageId,
+        currentConversationId,
+        conversationStorageMode
+      })
       dispatch(chatSliceActions.messageDeleted(messageId))
       if (currentConversationId) {
         dispatch(deleteMessage({ id: messageId, conversationId: currentConversationId, storageMode: conversationStorageMode }))
@@ -2502,6 +2517,7 @@ function Chat() {
             conversationId={currentConversationId}
             onNodeSelect={handleNodeSelect}
             visibleMessageId={visibleMessageId}
+            storageMode={conversationStorageMode}
           />
         </div>
       )}
@@ -2554,6 +2570,7 @@ function Chat() {
                     conversationId={currentConversationId}
                     onNodeSelect={handleNodeSelect}
                     visibleMessageId={visibleMessageId}
+                    storageMode={conversationStorageMode}
                   />
                 </div>
 
