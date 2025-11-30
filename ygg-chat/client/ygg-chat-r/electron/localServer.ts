@@ -1316,6 +1316,48 @@ function setupServer() {
     }
   })
 
+  // PATCH /api/local/projects/:id
+  app.patch('/api/local/projects/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { name, context, system_prompt } = req.body
+
+      const existing = statements.getProjectById.get(id) as any
+      if (!existing) {
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      // Verify it's actually a local project
+      if (existing.storage_mode !== 'local') {
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      // Update only provided fields
+      db!.prepare(`
+        UPDATE projects SET 
+          name = COALESCE(?, name),
+          context = ?,
+          system_prompt = ?,
+          updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `).run(
+        name || existing.name,
+        context !== undefined ? context : existing.context,
+        system_prompt !== undefined ? system_prompt : existing.system_prompt,
+        id
+      )
+
+      const updated = statements.getProjectById.get(id)
+      console.log('[LocalServer] Updated local project:', id)
+      res.json(updated)
+    } catch (error) {
+      console.error('[LocalServer] Error updating local project:', error)
+      res.status(500).json({ error: 'Failed to update project' })
+    }
+  })
+
   // GET /api/local/conversations?userId=xxx
   app.get('/api/local/conversations', (req, res) => {
     try {
@@ -1372,24 +1414,58 @@ function setupServer() {
   })
 
   // PATCH /api/local/conversations/:id
+  // Handles: title, system_prompt, conversation_context, research_note, cwd
   app.patch('/api/local/conversations/:id', (req, res) => {
     try {
       const { id } = req.params
-      const { title } = req.body
+      const { title, system_prompt, conversation_context, research_note, cwd } = req.body
 
-      if (!title) {
-        res.status(400).json({ error: 'title required' })
-        return
-      }
-
-      statements.updateConversationTitle.run(title, id)
-      const updated = statements.getConversationById.get(id)
-
-      if (!updated) {
+      const existing = statements.getConversationById.get(id) as any
+      if (!existing) {
         res.status(404).json({ error: 'Conversation not found' })
         return
       }
 
+      // Build dynamic update - only update fields that are provided (not undefined)
+      const updates: string[] = []
+      const values: any[] = []
+
+      if (title !== undefined) {
+        updates.push('title = ?')
+        values.push(title)
+      }
+      if (system_prompt !== undefined) {
+        updates.push('system_prompt = ?')
+        values.push(system_prompt)
+      }
+      if (conversation_context !== undefined) {
+        updates.push('conversation_context = ?')
+        values.push(conversation_context)
+      }
+      if (research_note !== undefined) {
+        updates.push('research_note = ?')
+        values.push(research_note)
+      }
+      if (cwd !== undefined) {
+        updates.push('cwd = ?')
+        values.push(cwd)
+      }
+
+      if (updates.length === 0) {
+        // Nothing to update, just return existing
+        res.json(existing)
+        return
+      }
+
+      // Always update updated_at
+      updates.push('updated_at = CURRENT_TIMESTAMP')
+      values.push(id) // for WHERE clause
+
+      const sql = `UPDATE conversations SET ${updates.join(', ')} WHERE id = ?`
+      db!.prepare(sql).run(...values)
+
+      const updated = statements.getConversationById.get(id)
+      console.log('[LocalServer] Updated local conversation:', id, '- fields:', Object.keys(req.body).join(', '))
       res.json(updated)
     } catch (error) {
       console.error('[LocalServer] Error updating conversation:', error)
