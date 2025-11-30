@@ -1573,10 +1573,10 @@ router.post(
       const lastMsg = messages![messages!.length - 1]
       userMessage = { ...lastMsg, id: lastMsg.id || 'temp-continuation-id' }
     } else {
-      // Check if local mode or if execution mode is client - skip Supabase saves
-      if (isLocalMode || executionMode === 'client') {
+      // Check if local mode - skip Supabase saves
+      if (isLocalMode) {
         // Create ephemeral user message object without saving to DB
-        console.log('[supaChat] Local mode or client execution - skipping Supabase save for user message')
+        console.log('[supaChat] Local mode - skipping Supabase save for user message')
         userMessage = {
           id: crypto.randomUUID(),
           conversation_id: conversationId,
@@ -1602,8 +1602,8 @@ router.post(
     }
     // console.log('server | user message', messages)
 
-    // Only save files to Supabase if NOT in local mode and NOT in client mode
-    if (selectedFiles && selectedFiles.length > 0 && !isLocalMode && executionMode !== 'client') {
+    // Only save files to Supabase if NOT in local mode
+    if (selectedFiles && selectedFiles.length > 0 && !isLocalMode) {
       for (const file of selectedFiles) {
         try {
           const fileContent = await FileContentService.create(client, userId, {
@@ -1635,9 +1635,9 @@ router.post(
 
     try {
       const attachmentsBase64 = Array.isArray(req.body?.attachmentsBase64) ? req.body.attachmentsBase64 : null
-      // Only save attachments to Supabase if NOT in local mode and NOT in client mode
+      // Only save attachments to Supabase if NOT in local mode
       const createdAttachments: Awaited<ReturnType<typeof AttachmentService.getById>>[] =
-        attachmentsBase64 && !isLocalMode && executionMode !== 'client'
+        attachmentsBase64 && !isLocalMode
           ? await saveBase64ImageAttachmentsForMessage(client, userMessage.id, attachmentsBase64, userId)
           : []
 
@@ -1844,10 +1844,10 @@ router.post(
           console.log('📤 [supaChat] Accumulated into', accumulatedBlocks.length, 'blocks')
 
           let assistantMessage
-          // Check if local mode or if execution mode is client - skip Supabase saves
-          if (isLocalMode || executionMode === 'client') {
+          // Check if local mode - skip Supabase saves
+          if (isLocalMode) {
             // Create ephemeral assistant message object without saving to DB
-            console.log('[supaChat] Local mode or client execution - skipping Supabase save for assistant message')
+            console.log('[supaChat] Local mode - skipping Supabase save for assistant message')
             assistantMessage = {
               id: crypto.randomUUID(),
               conversation_id: conversationId,
@@ -1885,7 +1885,7 @@ router.post(
 
           // Auto-generate title if this is the first message (no parent ID)
           // Skip for local mode - client will handle title updates
-          if (userMessage.parent_id === null && !isLocalMode && executionMode !== 'client') {
+          if (userMessage.parent_id === null && !isLocalMode) {
             console.log('Auto-generating title for new conversation', conversationId)
             const title = content.slice(0, 100) + (content.length > 100 ? '...' : '')
             await ConversationService.updateTitle(client, conversationId, title)
@@ -1928,7 +1928,7 @@ router.post(
             try {
               const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
               let assistantMessage
-              if (isLocalMode || executionMode === 'client') {
+              if (isLocalMode) {
                 // Create ephemeral message - don't save to Supabase
                 assistantMessage = {
                   id: crypto.randomUUID(),
@@ -1982,7 +1982,7 @@ router.post(
               console.log('🔧 [supaChat/error] Saving partial content before error, toolCalls:', assistantToolCalls)
 
               let assistantMessage
-              if (isLocalMode || executionMode === 'client') {
+              if (isLocalMode) {
                 // Create ephemeral message - don't save to Supabase
                 assistantMessage = {
                   id: crypto.randomUUID(),
