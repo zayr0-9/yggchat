@@ -1,13 +1,13 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
-import { isWSLPath, getWSLCommandArgs } from '../utils/wslBridge.js'
+import { getWSLCommandArgs, isWSLPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_OUTPUT_CHARS = (() => {
   const envValue = Number(process.env.RIPGREP_MAX_OUTPUT_CHARS ?? process.env.RIPGREP_OUTPUT_LIMIT)
   if (Number.isFinite(envValue) && envValue > 0) {
     return Math.floor(envValue)
   }
-  return 1000
+  return 5000
 })()
 
 // Multi-layered limits to prevent overwhelming responses

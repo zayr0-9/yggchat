@@ -115,6 +115,12 @@ class DualSyncManager {
       return
     }
 
+    // NEW: Skip local-only records
+    if (operation.data?.storage_mode === 'local') {
+      console.log('[DualSync] Skipping local-only record:', operation.type, operation.data.id)
+      return
+    }
+
     const op: SyncOperation = {
       ...operation,
       id: uuidv4(),
@@ -264,6 +270,12 @@ class DualSyncManager {
   }
 
   syncProject(projectData: any, action: 'create' | 'update' | 'delete' = 'create'): void {
+    // Skip local-only projects
+    if (projectData?.storage_mode === 'local') {
+      console.log('[DualSync] Skipping local-only project:', projectData.id)
+      return
+    }
+
     this.enqueue({
       type: 'project',
       action,
@@ -272,6 +284,12 @@ class DualSyncManager {
   }
 
   syncConversation(conversationData: any, action: 'create' | 'update' | 'delete' = 'create'): void {
+    // Skip local-only conversations
+    if (conversationData?.storage_mode === 'local') {
+      console.log('[DualSync] Skipping local-only conversation:', conversationData.id)
+      return
+    }
+
     this.enqueue({
       type: 'conversation',
       action,

@@ -640,7 +640,8 @@ export async function generateResponse(
   userId?: string,
   tool_detail: boolean = true,
   conversationId?: string,
-  executionMode: 'server' | 'client' = 'server'
+  executionMode: 'server' | 'client' = 'server',
+  storageMode: 'cloud' | 'local' = 'cloud'
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
   let stepCount = 0
@@ -664,9 +665,14 @@ export async function generateResponse(
   let currentReservationRefId: string | null = null
   let generationIdCaptured = false
 
+  // Server-only tools that are allowed in cloud mode (require API keys on server)
+  const CLOUD_ALLOWED_TOOLS = ['brave_search', 'exa_search', 'exa_code_context']
+
   // Convert tools to OpenAI format
+  // In cloud mode, only allow server-side search tools (no agentic/local tools)
   const openaiTools = tools
     .filter(tool => tool.enabled)
+    .filter(tool => storageMode === 'local' || CLOUD_ALLOWED_TOOLS.includes(tool.name))
     .map(tool => {
       // Convert Zod schema to JSON schema
       let parameters: any
@@ -1066,7 +1072,7 @@ export async function generateResponse(
         if (executionMode === 'client') {
           // Tools that require server-side API keys or resources
           // These should NEVER be sent to client for execution
-          const SERVER_ONLY_TOOLS = ['brave_search', 'exa_search']
+          const SERVER_ONLY_TOOLS = ['brave_search', 'exa_search', 'exa_code_context']
 
           // Split tools into server-only and client-capable
           const serverOnlyToolCalls = uniqueToolCalls.filter(tc => SERVER_ONLY_TOOLS.includes(tc.name))

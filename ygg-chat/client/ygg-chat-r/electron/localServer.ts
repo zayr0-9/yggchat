@@ -11,15 +11,15 @@ import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
 
 // Tool imports
+import { browseWeb } from './tools/browseWeb.js'
 import { createTextFile } from './tools/createFile.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
 import { editFile } from './tools/editFile.js'
 import { globSearch } from './tools/glob.js'
-import { readTextFile, readFileContinuation } from './tools/readFile.js'
+import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
-import { browseWeb } from './tools/browseWeb.js'
 
 const app = express()
 let server: any = null
@@ -39,10 +39,10 @@ function initializeLocalDatabase(dbPath: string) {
 
   // DEV MODE: Delete old database if it exists to force schema recreation
   // Remove this in production and add proper migrations
-  if (fs.existsSync(dbPath)) {
-    console.log('[LocalServer] DEV MODE: Deleting old database to recreate with new schema')
-    fs.unlinkSync(dbPath)
-  }
+  // if (fs.existsSync(dbPath)) {
+  //   console.log('[LocalServer] DEV MODE: Deleting old database to recreate with new schema')
+  //   fs.unlinkSync(dbPath)
+  // }
 
   db = new Database(dbPath)
   db.pragma('foreign_keys = ON')
@@ -63,6 +63,7 @@ function initializeLocalDatabase(dbPath: string) {
       user_id TEXT,
       context TEXT,
       system_prompt TEXT,
+      storage_mode TEXT NOT NULL CHECK (storage_mode IN ('cloud','local')) DEFAULT 'cloud',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -80,6 +81,7 @@ function initializeLocalDatabase(dbPath: string) {
       conversation_context TEXT,
       research_note TEXT,
       cwd TEXT,
+      storage_mode TEXT NOT NULL CHECK (storage_mode IN ('cloud','local')) DEFAULT 'cloud',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
@@ -164,89 +166,124 @@ function initializeLocalDatabase(dbPath: string) {
     CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
   `)
 
-  // Prepare statements
+  // Triggers to maintain children_ids integrity
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS messages_children_insert AFTER INSERT ON messages
+    WHEN NEW.parent_id IS NOT NULL
+    BEGIN
+      UPDATE messages
+      SET children_ids = (
+        SELECT CASE
+          WHEN children_ids = '[]' OR children_ids = '' THEN '["' || NEW.id || '"]'
+          ELSE SUBSTR(children_ids, 1, LENGTH(children_ids)-1) || ',"' || NEW.id || '"]'
+        END
+        FROM messages WHERE id = NEW.parent_id
+      )
+      WHERE id = NEW.parent_id;
+    END;
+  `)
+
+  // Update statements
   statements = {
     // Users
     upsertUser: db.prepare(`
-      INSERT INTO users (id, username, created_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET username = excluded.username
-    `),
+        INSERT INTO users (id, username, created_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET username = excluded.username
+      `),
 
     // Projects
     upsertProject: db.prepare(`
-      INSERT INTO projects (id, name, user_id, context, system_prompt, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        name = excluded.name,
-        context = excluded.context,
-        system_prompt = excluded.system_prompt,
-        updated_at = excluded.updated_at
-    `),
+        INSERT INTO projects (id, name, user_id, context, system_prompt, storage_mode, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          context = excluded.context,
+          system_prompt = excluded.system_prompt,
+          storage_mode = excluded.storage_mode,
+          updated_at = excluded.updated_at
+      `),
     deleteProject: db.prepare('DELETE FROM projects WHERE id = ?'),
     getProjectById: db.prepare('SELECT * FROM projects WHERE id = ?'),
+    getLocalProjects: db.prepare(
+      "SELECT * FROM projects WHERE user_id = ? AND storage_mode = 'local' ORDER BY updated_at DESC"
+    ),
 
     // Conversations
     upsertConversation: db.prepare(`
-      INSERT INTO conversations (id, project_id, user_id, title, model_name, system_prompt, conversation_context, research_note, cwd, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        project_id = excluded.project_id,
-        title = excluded.title,
-        model_name = excluded.model_name,
-        system_prompt = excluded.system_prompt,
-        conversation_context = excluded.conversation_context,
-        research_note = excluded.research_note,
-        cwd = excluded.cwd,
-        updated_at = excluded.updated_at
-    `),
+        INSERT INTO conversations (id, project_id, user_id, title, model_name, system_prompt, conversation_context, research_note, cwd, storage_mode, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          project_id = excluded.project_id,
+          title = excluded.title,
+          model_name = excluded.model_name,
+          system_prompt = excluded.system_prompt,
+          conversation_context = excluded.conversation_context,
+          research_note = excluded.research_note,
+          cwd = excluded.cwd,
+          storage_mode = excluded.storage_mode,
+          updated_at = excluded.updated_at
+      `),
     deleteConversation: db.prepare('DELETE FROM conversations WHERE id = ?'),
     getConversationById: db.prepare('SELECT * FROM conversations WHERE id = ?'),
+    getLocalConversations: db.prepare(
+      "SELECT * FROM conversations WHERE user_id = ? AND storage_mode = 'local' ORDER BY updated_at DESC"
+    ),
     updateConversationResearchNote: db.prepare(
       'UPDATE conversations SET research_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ),
     updateConversationCwd: db.prepare('UPDATE conversations SET cwd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'),
+    updateConversationTitle: db.prepare(
+      'UPDATE conversations SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ),
 
     // Messages
     upsertMessage: db.prepare(`
-      INSERT INTO messages (id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, tool_call_id, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        content = excluded.content,
-        plain_text_content = excluded.plain_text_content,
-        thinking_block = excluded.thinking_block,
-        tool_calls = excluded.tool_calls,
-        tool_call_id = excluded.tool_call_id,
-        note = excluded.note,
-        content_blocks = excluded.content_blocks
-    `),
+        INSERT INTO messages (id, conversation_id, parent_id, children_ids, role, content, plain_text_content, thinking_block, tool_calls, tool_call_id, model_name, note, ex_agent_session_id, ex_agent_type, content_blocks, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          content = excluded.content,
+          plain_text_content = excluded.plain_text_content,
+          thinking_block = excluded.thinking_block,
+          tool_calls = excluded.tool_calls,
+          tool_call_id = excluded.tool_call_id,
+          note = excluded.note,
+          content_blocks = excluded.content_blocks
+      `),
     deleteMessage: db.prepare('DELETE FROM messages WHERE id = ?'),
     getMessageById: db.prepare('SELECT * FROM messages WHERE id = ?'),
+    getMessagesByConversationId: db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'),
+    getLastMessageByConversationId: db.prepare(
+      'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1'
+    ),
 
     // Attachments
     upsertAttachment: db.prepare(`
-      INSERT INTO message_attachments (id, message_id, kind, mime_type, storage, url, file_path, width, height, size_bytes, sha256, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        url = excluded.url,
-        file_path = excluded.file_path
-    `),
+        INSERT INTO message_attachments (id, message_id, kind, mime_type, storage, url, file_path, width, height, size_bytes, sha256, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          url = excluded.url,
+          file_path = excluded.file_path
+      `),
     linkAttachment: db.prepare(`
-      INSERT OR IGNORE INTO message_attachment_links (id, message_id, attachment_id, created_at)
-      VALUES (?, ?, ?, ?)
-    `),
+        INSERT OR IGNORE INTO message_attachment_links (id, message_id, attachment_id, created_at)
+        VALUES (?, ?, ?, ?)
+      `),
 
     // Provider Cost
     upsertProviderCost: db.prepare(`
-      INSERT INTO provider_cost (id, user_id, message_id, prompt_tokens, completion_tokens, reasoning_tokens, approx_cost, api_credit_cost, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        prompt_tokens = excluded.prompt_tokens,
-        completion_tokens = excluded.completion_tokens,
-        reasoning_tokens = excluded.reasoning_tokens,
-        approx_cost = excluded.approx_cost,
-        api_credit_cost = excluded.api_credit_cost
-    `),
+        INSERT INTO provider_cost (id, user_id, message_id, prompt_tokens, completion_tokens, reasoning_tokens, approx_cost, api_credit_cost, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          prompt_tokens = excluded.prompt_tokens,
+          completion_tokens = excluded.completion_tokens,
+          reasoning_tokens = excluded.reasoning_tokens,
+          approx_cost = excluded.approx_cost,
+          api_credit_cost = excluded.api_credit_cost
+      `),
+
+    // Message updates (for local editing)
+    updateMessage: db.prepare('UPDATE messages SET content = ?, note = ?, content_blocks = ? WHERE id = ?'),
   }
 
   console.log('[LocalServer] Database initialized successfully')
@@ -292,6 +329,66 @@ function ensureConversationExists(conversationId: string, userId: string, projec
     db.prepare(
       'INSERT INTO conversations (id, project_id, user_id, title, model_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).run(conversationId, projectId || null, userId, 'Synced Conversation', 'unknown', now, now)
+  }
+}
+
+// ChatNode interface for message tree structure
+interface ChatNode {
+  id: string
+  message: string
+  sender: 'user' | 'assistant'
+  children: ChatNode[]
+}
+
+// Build tree structure from flat message array with children_ids
+function buildMessageTree(messages: any[]): ChatNode | null {
+  if (!messages || messages.length === 0) return null
+
+  const messageMap = new Map<string, ChatNode>()
+  const rootNodes: ChatNode[] = []
+
+  // Create nodes
+  messages.forEach(msg => {
+    messageMap.set(msg.id, {
+      id: msg.id.toString(),
+      message: msg.content,
+      sender: msg.role as 'user' | 'assistant',
+      children: [],
+    })
+  })
+
+  // Build tree using children_ids and collect all root nodes
+  messages.forEach(msg => {
+    const node = messageMap.get(msg.id)!
+
+    if (msg.parent_id === null) {
+      rootNodes.push(node)
+    }
+
+    // Add children using children_ids array
+    const childIds = msg.children_ids || []
+    childIds.forEach((childId: string) => {
+      const childNode = messageMap.get(childId)
+      if (childNode) {
+        node.children.push(childNode)
+      }
+    })
+  })
+
+  if (rootNodes.length === 0) return null
+
+  // If only one root message, return it directly
+  if (rootNodes.length === 1) {
+    return rootNodes[0]
+  }
+
+  // Multiple roots → create a synthetic root node containing all root branches
+  // This preserves all independent conversation trees
+  return {
+    id: 'root',
+    message: 'Conversation',
+    sender: 'assistant',
+    children: rootNodes,
   }
 }
 
@@ -440,7 +537,7 @@ function setupServer() {
   // Sync Project
   app.post('/api/sync/project', (req, res) => {
     try {
-      const { id, name, user_id, owner_id, context, system_prompt, created_at, updated_at } = req.body
+      const { id, name, user_id, owner_id, context, system_prompt, storage_mode, created_at, updated_at } = req.body
 
       // Handle owner_id -> user_id mapping (Railway sends owner_id)
       const effectiveUserId = user_id || owner_id
@@ -458,10 +555,11 @@ function setupServer() {
         effectiveUserId,
         context || null,
         system_prompt || null,
+        storage_mode || 'cloud',
         created_at || new Date().toISOString(),
         updated_at || new Date().toISOString()
       )
-      console.log('[LocalServer] Synced project:', id)
+      console.log('[LocalServer] Synced project:', id, '- storage_mode:', storage_mode || 'cloud')
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error syncing project:', error)
@@ -511,16 +609,29 @@ function setupServer() {
         conversation_context,
         research_note,
         cwd,
+        storage_mode,
         created_at,
         updated_at,
       } = req.body
 
+      console.log(
+        '[LocalServer] 🔄 POST /api/sync/conversation - conversationId:',
+        id,
+        'title:',
+        title,
+        'storage_mode:',
+        storage_mode
+      )
+
       // Handle owner_id -> user_id mapping (Railway sends owner_id)
       const effectiveUserId = user_id || owner_id
       if (!effectiveUserId) {
+        console.log('[LocalServer] ❌ Missing user_id or owner_id')
         res.status(400).json({ error: 'Missing user_id or owner_id' })
         return
       }
+
+      console.log('[LocalServer] 👤 Effective userId:', effectiveUserId, 'projectId:', project_id)
 
       // Ensure dependencies exist before upserting conversation
       ensureUserExists(effectiveUserId)
@@ -538,13 +649,28 @@ function setupServer() {
         conversation_context || null,
         research_note || null,
         cwd || null,
+        storage_mode || 'cloud',
         created_at || new Date().toISOString(),
         updated_at || new Date().toISOString()
       )
-      console.log('[LocalServer] Synced conversation:', id)
+      console.log('[LocalServer] ✅ Synced conversation successfully:', id, '- title:', title)
+
+      // Verify the conversation was saved
+      const saved = statements.getConversationById.get(id)
+      if (saved) {
+        console.log(
+          '[LocalServer] ✅ Verified conversation exists in DB:',
+          id,
+          '- storage_mode:',
+          (saved as any).storage_mode
+        )
+      } else {
+        console.log('[LocalServer] ⚠️  Warning: Conversation not found after save:', id)
+      }
+
       res.json({ success: true, id })
     } catch (error) {
-      console.error('[LocalServer] Error syncing conversation:', error)
+      console.error('[LocalServer] ❌ Error syncing conversation:', error)
       res.status(500).json({ error: 'Failed to sync conversation' })
     }
   })
@@ -603,7 +729,18 @@ function setupServer() {
         project_id,
       } = req.body
 
+      console.log(
+        '[LocalServer] 💾 POST /api/sync/message - messageId:',
+        id,
+        'conversationId:',
+        conversation_id,
+        'role:',
+        role
+      )
+      console.log('[LocalServer] 📝 Message content preview:', content?.substring(0, 50))
+
       if (!conversation_id) {
+        console.log('[LocalServer] ❌ Missing conversation_id')
         res.status(400).json({ error: 'Missing conversation_id' })
         return
       }
@@ -651,10 +788,26 @@ function setupServer() {
         typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null),
         created_at || new Date().toISOString()
       )
-      console.log('[LocalServer] Synced message:', id)
+      console.log(
+        '[LocalServer] ✅ Synced message successfully:',
+        id,
+        '- role:',
+        role,
+        'conversation:',
+        conversation_id
+      )
+
+      // Verify the message was saved
+      const saved = statements.getMessageById.get(id)
+      if (saved) {
+        console.log('[LocalServer] ✅ Verified message exists in DB:', id)
+      } else {
+        console.log('[LocalServer] ⚠️  Warning: Message not found after save:', id)
+      }
+
       res.json({ success: true, id })
     } catch (error) {
-      console.error('[LocalServer] Error syncing message:', error)
+      console.error('[LocalServer] ❌ Error syncing message:', error)
       res.status(500).json({ error: 'Failed to sync message' })
     }
   })
@@ -783,6 +936,7 @@ function setupServer() {
                   op.data.user_id,
                   op.data.context || null,
                   op.data.system_prompt || null,
+                  op.data.storage_mode || 'cloud',
                   op.data.created_at || new Date().toISOString(),
                   op.data.updated_at || new Date().toISOString()
                 )
@@ -878,12 +1032,12 @@ function setupServer() {
 
       let result: any = `Tool ${toolName} not implemented on local server`
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
-      
+
       switch (toolName) {
         case 'read_file': {
           const { path: filePath, maxBytes, startLine, endLine, ranges } = parsedArgs
           if (!filePath) throw new Error('path is required')
-          
+
           const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges })
           result = { success: true, ...fileRes }
           break
@@ -893,7 +1047,7 @@ function setupServer() {
           if (!filePath) throw new Error('path is required')
           if (afterLine === undefined) throw new Error('afterLine is required')
           if (!numLines) throw new Error('numLines is required')
-          
+
           const fileRes = await readFileContinuation(filePath, afterLine, numLines, { maxBytes })
           result = { success: true, ...fileRes }
           break
@@ -901,7 +1055,7 @@ function setupServer() {
         case 'read_files': {
           const { paths, baseDir, maxBytes, startLine, endLine } = parsedArgs
           if (!paths) throw new Error('paths are required')
-          
+
           const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine })
           result = { success: true, ...filesRes }
           break
@@ -909,14 +1063,25 @@ function setupServer() {
         case 'create_file': {
           const { path: filePath, content, directory, createParentDirs, overwrite, executable } = parsedArgs
           if (!filePath) throw new Error('path is required')
-          
+
           result = await createTextFile(filePath, content, { directory, createParentDirs, overwrite, executable })
           break
         }
         case 'edit_file': {
-          const { path: filePath, operation, searchPattern, replacement, content, createBackup, encoding, enableFuzzyMatching, fuzzyThreshold, preserveIndentation } = parsedArgs
+          const {
+            path: filePath,
+            operation,
+            searchPattern,
+            replacement,
+            content,
+            createBackup,
+            encoding,
+            enableFuzzyMatching,
+            fuzzyThreshold,
+            preserveIndentation,
+          } = parsedArgs
           if (!filePath) throw new Error('path is required')
-          
+
           result = await editFile(filePath, operation, {
             searchPattern,
             replacement,
@@ -925,14 +1090,14 @@ function setupServer() {
             encoding,
             enableFuzzyMatching,
             fuzzyThreshold,
-            preserveIndentation
+            preserveIndentation,
           })
           break
         }
         case 'delete_file': {
           const { path: filePath, allowedExtensions } = parsedArgs
           if (!filePath) throw new Error('path is required')
-          
+
           if (allowedExtensions) {
             await safeDeleteFile(filePath, allowedExtensions)
           } else {
@@ -947,30 +1112,47 @@ function setupServer() {
           // The directory tool logic resolves against process.cwd() if relative.
           // If rootPath is sent by client, maybe we should change CWD?
           // But let's just pass the path.
-          
-          const structure = await extractDirectoryStructure(dirPath || rootPath || '.', { maxDepth, includeHidden, includeSizes })
+
+          const structure = await extractDirectoryStructure(dirPath || rootPath || '.', {
+            maxDepth,
+            includeHidden,
+            includeSizes,
+          })
           result = { success: true, structure, path: dirPath }
           break
         }
         case 'glob': {
           const { pattern, cwd, ignore, dot, absolute } = parsedArgs
           if (!pattern) throw new Error('pattern is required')
-          
+
           const actualCwd = cwd || rootPath // Prefer explicit cwd, fallback to rootPath
           result = await globSearch(pattern, { cwd: actualCwd, ignore, dot, absolute })
           break
         }
         case 'ripgrep': {
-          const { regex, pattern, path: dirPath, glob: globPattern, case_insensitive, lineNumbers, count, filesWithMatches, maxCount, hidden, noIgnore, contextLines } = parsedArgs
+          const {
+            regex,
+            pattern,
+            path: dirPath,
+            glob: globPattern,
+            case_insensitive,
+            lineNumbers,
+            count,
+            filesWithMatches,
+            maxCount,
+            hidden,
+            noIgnore,
+            contextLines,
+          } = parsedArgs
           const query = regex || pattern
           if (!query) throw new Error('pattern or regex is required')
-          
+
           const searchPath = dirPath || rootPath || '.'
-          
+
           // Map parameters to new tool options (snake_case from some clients to camelCase)
           // Client seems to send 'case_insensitive' (snake), but new tool uses 'caseSensitive' (camel, boolean inverted)
           // Check old localServer impl: it used `caseSensitive: !case_insensitive`
-          
+
           result = await ripgrepSearch(query, searchPath, {
             caseSensitive: !case_insensitive,
             glob: globPattern,
@@ -980,7 +1162,7 @@ function setupServer() {
             maxCount,
             hidden,
             noIgnore,
-            contextLines
+            contextLines,
           })
           break
         }
@@ -1061,6 +1243,381 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Error updating cwd:', error)
       res.status(500).json({ error: 'Failed to update cwd' })
+    }
+  })
+
+  // Local-only API endpoints
+  app.get('/api/local/projects', (req, res) => {
+    try {
+      const userId = (req.query.userId as string) || ''
+      if (!userId) {
+        res.status(400).json({ error: 'userId query param required' })
+        return
+      }
+      const projects = statements.getLocalProjects.all(userId)
+      res.json(projects)
+    } catch (error) {
+      console.error('[LocalServer] Error fetching local projects:', error)
+      res.status(500).json({ error: 'Failed to fetch local projects' })
+    }
+  })
+
+  app.post('/api/local/projects', (req, res) => {
+    try {
+      const { id, name, user_id, context, system_prompt } = req.body
+      if (!user_id) {
+        res.status(400).json({ error: 'user_id required' })
+        return
+      }
+      const projectId = id || uuidv4()
+      const now = new Date().toISOString()
+      statements.upsertProject.run(
+        projectId,
+        name || 'Untitled Project',
+        user_id,
+        context || null,
+        system_prompt || null,
+        'local',
+        now,
+        now
+      )
+      res.status(201).json(statements.getProjectById.get(projectId))
+    } catch (error) {
+      console.error('[LocalServer] Error creating local project:', error)
+      res.status(500).json({ error: 'Failed to create local project' })
+    }
+  })
+
+  // GET /api/local/projects/:id
+  app.get('/api/local/projects/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      console.log('[LocalServer] GET /api/local/projects/:id - projectId:', id)
+      const project = statements.getProjectById.get(id)
+
+      if (!project) {
+        console.log('[LocalServer] Project not found:', id)
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      // Verify it's actually a local project
+      if (project.storage_mode !== 'local') {
+        console.log('[LocalServer] Project is not local storage:', id)
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      console.log('[LocalServer] Found local project:', id)
+      res.json(project)
+    } catch (error) {
+      console.error('[LocalServer] Error fetching local project:', error)
+      res.status(500).json({ error: 'Failed to fetch project' })
+    }
+  })
+
+  // PATCH /api/local/projects/:id
+  app.patch('/api/local/projects/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { name, context, system_prompt } = req.body
+
+      const existing = statements.getProjectById.get(id) as any
+      if (!existing) {
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      // Verify it's actually a local project
+      if (existing.storage_mode !== 'local') {
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      // Update only provided fields
+      db!
+        .prepare(
+          `
+        UPDATE projects SET 
+          name = COALESCE(?, name),
+          context = ?,
+          system_prompt = ?,
+          updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ?
+      `
+        )
+        .run(
+          name || existing.name,
+          context !== undefined ? context : existing.context,
+          system_prompt !== undefined ? system_prompt : existing.system_prompt,
+          id
+        )
+
+      const updated = statements.getProjectById.get(id)
+      console.log('[LocalServer] Updated local project:', id)
+      res.json(updated)
+    } catch (error) {
+      console.error('[LocalServer] Error updating local project:', error)
+      res.status(500).json({ error: 'Failed to update project' })
+    }
+  })
+
+  // GET /api/local/conversations?userId=xxx
+  app.get('/api/local/conversations', (req, res) => {
+    try {
+      const userId = req.query.userId as string
+      console.log('[LocalServer] 📋 GET /api/local/conversations - userId:', userId)
+      if (!userId) {
+        console.log('[LocalServer] ❌ Missing userId parameter')
+        res.status(400).json({ error: 'userId required' })
+        return
+      }
+      const conversations = statements.getLocalConversations.all(userId)
+      console.log('[LocalServer] ✅ Found', conversations.length, 'local conversations for user:', userId)
+      console.log('[LocalServer] 📊 Conversations:', JSON.stringify(conversations, null, 2))
+      res.json(conversations)
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error fetching local conversations:', error)
+      res.status(500).json({ error: 'Failed to fetch conversations' })
+    }
+  })
+
+  // POST /api/local/conversations
+  app.post('/api/local/conversations', (req, res) => {
+    try {
+      const { id, user_id, project_id, title, system_prompt, conversation_context } = req.body
+      if (!user_id) {
+        res.status(400).json({ error: 'user_id required' })
+        return
+      }
+
+      const conversationId = id || uuidv4()
+      const now = new Date().toISOString()
+
+      statements.upsertConversation.run(
+        conversationId,
+        project_id || null,
+        user_id,
+        title || null,
+        'unknown', // model_name
+        system_prompt || null,
+        conversation_context || null,
+        null, // research_note
+        null, // cwd
+        'local', // storage_mode
+        now,
+        now
+      )
+
+      const created = statements.getConversationById.get(conversationId)
+      res.status(201).json(created)
+    } catch (error) {
+      console.error('[LocalServer] Error creating local conversation:', error)
+      res.status(500).json({ error: 'Failed to create conversation' })
+    }
+  })
+
+  // PATCH /api/local/conversations/:id
+  // Handles: title, system_prompt, conversation_context, research_note, cwd
+  app.patch('/api/local/conversations/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { title, system_prompt, conversation_context, research_note, cwd } = req.body
+
+      const existing = statements.getConversationById.get(id) as any
+      if (!existing) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+
+      // Build dynamic update - only update fields that are provided (not undefined)
+      const updates: string[] = []
+      const values: any[] = []
+
+      if (title !== undefined) {
+        updates.push('title = ?')
+        values.push(title)
+      }
+      if (system_prompt !== undefined) {
+        updates.push('system_prompt = ?')
+        values.push(system_prompt)
+      }
+      if (conversation_context !== undefined) {
+        updates.push('conversation_context = ?')
+        values.push(conversation_context)
+      }
+      if (research_note !== undefined) {
+        updates.push('research_note = ?')
+        values.push(research_note)
+      }
+      if (cwd !== undefined) {
+        updates.push('cwd = ?')
+        values.push(cwd)
+      }
+
+      if (updates.length === 0) {
+        // Nothing to update, just return existing
+        res.json(existing)
+        return
+      }
+
+      // Always update updated_at
+      updates.push('updated_at = CURRENT_TIMESTAMP')
+      values.push(id) // for WHERE clause
+
+      const sql = `UPDATE conversations SET ${updates.join(', ')} WHERE id = ?`
+      db!.prepare(sql).run(...values)
+
+      const updated = statements.getConversationById.get(id)
+      console.log('[LocalServer] Updated local conversation:', id, '- fields:', Object.keys(req.body).join(', '))
+      res.json(updated)
+    } catch (error) {
+      console.error('[LocalServer] Error updating conversation:', error)
+      res.status(500).json({ error: 'Failed to update conversation' })
+    }
+  })
+
+  // GET /api/local/conversations/:id
+  app.get('/api/local/conversations/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      console.log('[LocalServer] 🔍 GET /api/local/conversations/:id - conversationId:', id)
+      const conversation = statements.getConversationById.get(id)
+
+      if (!conversation) {
+        console.log('[LocalServer] ❌ Conversation not found:', id)
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+
+      console.log('[LocalServer] ✅ Found conversation:', JSON.stringify(conversation, null, 2))
+      res.json(conversation)
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error fetching conversation:', error)
+      res.status(500).json({ error: 'Failed to fetch conversation' })
+    }
+  })
+
+  // DELETE /api/local/conversations/:id
+  app.delete('/api/local/conversations/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      console.log('[LocalServer] 🗑️ DELETE /api/local/conversations/:id - conversationId:', id)
+      statements.deleteConversation.run(id)
+      console.log('[LocalServer] ✅ Conversation deleted:', id)
+      res.json({ success: true })
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error deleting conversation:', error)
+      res.status(500).json({ error: 'Failed to delete conversation' })
+    }
+  })
+
+  // GET /api/local/conversations/:id/messages
+  app.get('/api/local/conversations/:id/messages', (req, res) => {
+    try {
+      const { id } = req.params
+      console.log('[LocalServer] 💬 GET /api/local/conversations/:id/messages - conversationId:', id)
+      const messages = statements.getMessagesByConversationId.all(id)
+      console.log('[LocalServer] ✅ Found', messages.length, 'messages for conversation:', id)
+      if (messages.length > 0) {
+        console.log('[LocalServer] 📊 First message:', JSON.stringify(messages[0], null, 2))
+        console.log('[LocalServer] 📊 Last message:', JSON.stringify(messages[messages.length - 1], null, 2))
+      }
+      res.json(messages)
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error fetching messages:', error)
+      res.status(500).json({ error: 'Failed to fetch messages' })
+    }
+  })
+
+  // GET /api/local/conversations/:id/messages/tree
+  app.get('/api/local/conversations/:id/messages/tree', (req, res) => {
+    try {
+      const { id } = req.params
+      console.log('[LocalServer] 🌲 GET /api/local/conversations/:id/messages/tree - conversationId:', id)
+      const messages = statements.getMessagesByConversationId.all(id)
+      console.log('[LocalServer] 📦 Raw messages fetched:', messages.length)
+
+      // Parse JSON fields (children_ids, tool_calls, content_blocks)
+      const normalizedMessages = messages.map((msg: any) => ({
+        ...msg,
+        children_ids: msg.children_ids ? JSON.parse(msg.children_ids) : [],
+        tool_calls: msg.tool_calls ? JSON.parse(msg.tool_calls) : null,
+        content_blocks: msg.content_blocks ? JSON.parse(msg.content_blocks) : null,
+      }))
+
+      // console.log('[LocalServer] ✨ Normalized messages:', normalizedMessages.length)
+      // if (normalizedMessages.length > 0) {
+      //   console.log('[LocalServer] 📊 Sample normalized message:', JSON.stringify(normalizedMessages[0], null, 2))
+      // }
+
+      const treeData = buildMessageTree(normalizedMessages)
+      // console.log('[LocalServer] 🌳 Tree built successfully:', treeData ? 'Has tree' : 'No tree')
+      // if (treeData) {
+      //   console.log(
+      //     '[LocalServer] 🌳 Tree root:',
+      //     JSON.stringify({ id: treeData.id, childCount: treeData.children.length }, null, 2)
+      //   )
+      // }
+
+      // Get storage_mode from conversation
+      const conversation = statements.getConversationById.get(id) as { storage_mode: string } | undefined
+      const storage_mode = conversation?.storage_mode || 'local'
+
+      res.json({ messages: normalizedMessages, tree: treeData, meta: { storage_mode } })
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error fetching message tree:', error)
+      res.status(500).json({ error: 'Failed to fetch message tree' })
+    }
+  })
+
+  // PUT /api/local/messages/:id
+  app.put('/api/local/messages/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { content, note, content_blocks } = req.body
+
+      // Same logic as server route
+      let finalContent = content
+      if (!content && content_blocks) {
+        const textBlocks = Array.isArray(content_blocks) ? content_blocks.filter((b: any) => b.type === 'text') : []
+        finalContent = textBlocks.map((b: any) => b.text || '').join('\n')
+      }
+
+      const contentBlocksJson = content_blocks ? JSON.stringify(content_blocks) : null
+
+      // Check if message exists
+      const existing = statements.getMessageById.get(id)
+      if (!existing) {
+        res.status(404).json({ error: 'Message not found' })
+        return
+      }
+
+      // Update message
+      statements.updateMessage.run(
+        finalContent || existing.content,
+        note || existing.note,
+        contentBlocksJson || existing.content_blocks,
+        id
+      )
+
+      const updated = statements.getMessageById.get(id)
+      res.json(updated)
+    } catch (error) {
+      console.error('[LocalServer] Error updating message:', error)
+      res.status(500).json({ error: 'Failed to update message' })
+    }
+  })
+
+  // DELETE /api/local/messages/:id
+  app.delete('/api/local/messages/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      statements.deleteMessage.run(id)
+      res.json({ success: true })
+    } catch (error) {
+      console.error('[LocalServer] Error deleting message:', error)
+      res.status(500).json({ error: 'Failed to delete message' })
     }
   })
 }

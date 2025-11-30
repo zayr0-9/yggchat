@@ -4,6 +4,9 @@ import { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
 import {
   api,
+  localApi,
+  environment,
+  shouldUseLocalApi,
   getConversationContext,
   getConversationSystemPrompt,
   patchConversationContext,
@@ -31,6 +34,21 @@ export const fetchConversations = createAsyncThunk<
       throw new Error('User not authenticated')
     }
 
+    // In Electron mode, fetch both cloud and local conversations
+    if (environment === 'electron') {
+      const [cloudConversations, localConversations] = await Promise.all([
+        api.get<Conversation[]>(`/users/${auth.userId}/conversations`, auth.accessToken),
+        localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+      ])
+
+      // Merge and sort by updated_at
+      const merged = [...cloudConversations, ...localConversations]
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+
+      return merged
+    }
+
+    // Web mode: cloud only
     return await api.get<Conversation[]>(`/users/${auth.userId}/conversations`, auth.accessToken)
   } catch (err) {
     return rejectWithValue(err instanceof Error ? err.message : 'Failed to fetch conversations')
@@ -73,12 +91,18 @@ export const fetchConversationsByProjectId = createAsyncThunk<Conversation[], Pr
 // Create new conversation for current user
 export const createConversation = createAsyncThunk<
   Conversation,
-  { title?: string; projectId?: string | null; systemPrompt?: string | null; conversationContext?: string | null },
+  {
+    title?: string
+    projectId?: string | null
+    systemPrompt?: string | null
+    conversationContext?: string | null
+    storageMode?: 'cloud' | 'local' // NEW PARAMETER
+  },
   { state: RootState; extra: ThunkExtraArgument }
 >(
   'conversations/create',
   async (
-    { title, projectId: providedProjectId, systemPrompt, conversationContext },
+    { title, projectId: providedProjectId, systemPrompt, conversationContext, storageMode },
     { getState, extra, rejectWithValue }
   ) => {
     try {
@@ -92,6 +116,40 @@ export const createConversation = createAsyncThunk<
       const selectedProject = getState().projects.selectedProject
       const projectId = providedProjectId !== undefined ? providedProjectId : selectedProject?.id || null
 
+      // Determine storage mode from project if not explicitly provided
+      let effectiveStorageMode = storageMode
+      if (!effectiveStorageMode && projectId) {
+        const project = getState().projects.projects.find(p => p.id === projectId)
+        effectiveStorageMode = project?.storage_mode || 'cloud'
+      }
+      effectiveStorageMode = effectiveStorageMode || 'cloud'
+
+      // VALIDATION: If project is provided and storage mode is explicitly set,
+      // ensure they match to prevent mixing cloud projects with local conversations
+      if (projectId && storageMode) {
+        const project = getState().projects.projects.find(p => p.id === projectId)
+        if (project && project.storage_mode !== storageMode) {
+          throw new Error(
+            `Storage mode mismatch: Cannot create ${storageMode} conversation in ${project.storage_mode} project. ` +
+            `Conversations must use the same storage location as their project.`
+          )
+        }
+      }
+
+      // Route to local or cloud API
+      if (shouldUseLocalApi(effectiveStorageMode, environment)) {
+        const conversation = await localApi.post<Conversation>('/local/conversations', {
+          user_id: auth.userId,
+          title: title || null,
+          project_id: projectId,
+          system_prompt: systemPrompt,
+          conversation_context: conversationContext,
+          storage_mode: 'local'
+        })
+        return conversation
+      }
+
+      // Cloud mode: existing behavior
       const conversation = await api.post<Conversation>('/conversations', auth.accessToken, {
         userId: auth.userId,
         title: title || null,
@@ -100,7 +158,7 @@ export const createConversation = createAsyncThunk<
         conversationContext,
       })
 
-      // Sync to local SQLite (fire-and-forget)
+      // Sync to local SQLite (fire-and-forget) - only for cloud mode
       dualSync.syncConversation({
         ...conversation,
         user_id: auth.userId,
@@ -119,11 +177,24 @@ export const createConversation = createAsyncThunk<
 // Update conversation title by id
 export const updateConversation = createAsyncThunk<
   Conversation,
-  { id: number; title: string },
-  { extra: ThunkExtraArgument }
->('conversations/update', async ({ id, title }, { extra, rejectWithValue }) => {
+  { id: number | string; title: string; storageMode?: 'cloud' | 'local' },
+  { extra: ThunkExtraArgument; state: RootState }
+>('conversations/update', async ({ id, title, storageMode }, { extra, getState, rejectWithValue }) => {
   try {
     const { auth } = extra
+
+    // Infer storage mode from state if not provided
+    let effectiveMode = storageMode
+    if (!effectiveMode) {
+      const conversation = getState().conversations.items.find(c => c.id === id)
+      effectiveMode = conversation?.storage_mode || 'cloud'
+    }
+
+    if (shouldUseLocalApi(effectiveMode, environment)) {
+      const conversation = await localApi.patch<Conversation>(`/local/conversations/${id}`, { title })
+      return conversation
+    }
+
     const conversation = await api.patch<Conversation>(`/conversations/${id}/`, auth.accessToken, { title })
 
     // Sync to local SQLite (fire-and-forget)
@@ -138,15 +209,26 @@ export const updateConversation = createAsyncThunk<
 // Delete conversation by id
 export const deleteConversation = createAsyncThunk<
   ConversationId,
-  { id: ConversationId },
-  { extra: ThunkExtraArgument }
->('conversations/delete', async ({ id }, { extra, rejectWithValue }) => {
+  { id: ConversationId; storageMode?: 'cloud' | 'local' }, // Add storageMode param
+  { extra: ThunkExtraArgument; state: RootState }
+>('conversations/delete', async ({ id, storageMode }, { extra, getState, rejectWithValue }) => {
   try {
     const { auth } = extra
-    await api.delete(`/conversations/${id}/`, auth.accessToken)
 
-    // Sync deletion to local SQLite (fire-and-forget)
-    dualSync.syncConversation({ id }, 'delete')
+    // Infer storage mode from state if not provided
+    let effectiveMode = storageMode
+    if (!effectiveMode) {
+      const conversation = getState().conversations.items.find(c => c.id === id)
+      effectiveMode = conversation?.storage_mode || 'cloud'
+    }
+
+    if (shouldUseLocalApi(effectiveMode, environment)) {
+      await localApi.delete(`/local/conversations/${id}`)
+    } else {
+      await api.delete(`/conversations/${id}/`, auth.accessToken)
+      // Sync deletion to local SQLite
+      dualSync.syncConversation({ id }, 'delete')
+    }
 
     return id
   } catch (err) {
@@ -191,11 +273,26 @@ export const fetchContext = createAsyncThunk<string | null, ConversationId, { ex
 // Update the conversation system prompt on the server and reflect in state
 export const updateSystemPrompt = createAsyncThunk<
   SystemPromptPatchResponse,
-  { id: ConversationId; systemPrompt: string | null },
-  { extra: ThunkExtraArgument }
->('chat/updateSystemPrompt', async ({ id, systemPrompt }, { dispatch, extra, rejectWithValue }) => {
+  { id: ConversationId; systemPrompt: string | null; storageMode?: 'cloud' | 'local' },
+  { extra: ThunkExtraArgument; state: RootState }
+>('chat/updateSystemPrompt', async ({ id, systemPrompt, storageMode }, { dispatch, extra, getState, rejectWithValue }) => {
   try {
     const { auth } = extra
+
+    // Infer storage mode from state if not provided
+    let effectiveMode = storageMode
+    if (!effectiveMode) {
+      const conversation = getState().conversations.items.find(c => c.id === id)
+      effectiveMode = conversation?.storage_mode || 'cloud'
+    }
+
+    if (shouldUseLocalApi(effectiveMode, environment)) {
+      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { system_prompt: systemPrompt })
+      // Mirror to client state
+      dispatch(systemPromptSet(updated.system_prompt ?? null))
+      return { id: updated.id, system_prompt: updated.system_prompt } as SystemPromptPatchResponse
+    }
+
     const updated = await patchConversationSystemPrompt(id, systemPrompt, auth.accessToken)
     // Server returns updated Conversation with snake_case system_prompt
     // Mirror to client state
@@ -209,11 +306,26 @@ export const updateSystemPrompt = createAsyncThunk<
 
 export const updateContext = createAsyncThunk<
   { id: ConversationId; context: string | null }, // return type
-  { id: ConversationId; context: string | null }, // argument type
-  { extra: ThunkExtraArgument }
->('chat/updateContext', async ({ id, context }, { dispatch, extra, rejectWithValue }) => {
+  { id: ConversationId; context: string | null; storageMode?: 'cloud' | 'local' }, // argument type
+  { extra: ThunkExtraArgument; state: RootState }
+>('chat/updateContext', async ({ id, context, storageMode }, { dispatch, extra, getState, rejectWithValue }) => {
   try {
     const { auth } = extra
+
+    // Infer storage mode from state if not provided
+    let effectiveMode = storageMode
+    if (!effectiveMode) {
+      const conversation = getState().conversations.items.find(c => c.id === id)
+      effectiveMode = conversation?.storage_mode || 'cloud'
+    }
+
+    if (shouldUseLocalApi(effectiveMode, environment)) {
+      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { conversation_context: context })
+      const next = { id: updated.id, context: updated.conversation_context ?? null }
+      dispatch(convContextSet(next.context))
+      return next
+    }
+
     const updated = await patchConversationContext(id, context, auth.accessToken) // ConversationPatchResponse
     const next = { id: updated.id, context: updated.conversation_context ?? null }
     dispatch(convContextSet(next.context))
@@ -226,16 +338,29 @@ export const updateContext = createAsyncThunk<
 
 export const updateResearchNote = createAsyncThunk<
   Conversation, // return type - full conversation object for cache update
-  { id: ConversationId; researchNote: string | null }, // argument type
-  { extra: ThunkExtraArgument }
->('conversations/updateResearchNote', async ({ id, researchNote }, { extra, rejectWithValue }) => {
+  { id: ConversationId; researchNote: string | null; storageMode?: 'cloud' | 'local' }, // argument type
+  { extra: ThunkExtraArgument; state: RootState }
+>('conversations/updateResearchNote', async ({ id, researchNote, storageMode }, { extra, getState, rejectWithValue }) => {
   try {
     const { auth } = extra
+
+    // Infer storage mode from state if not provided
+    let effectiveMode = storageMode
+    if (!effectiveMode) {
+      const conversation = getState().conversations.items.find(c => c.id === id)
+      effectiveMode = conversation?.storage_mode || 'cloud'
+    }
+
+    if (shouldUseLocalApi(effectiveMode, environment)) {
+      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { research_note: researchNote })
+      return updated
+    }
+
     const updated = await patchConversationResearchNote(id, researchNote, auth.accessToken)
-    
+
     // Sync to local SQLite using specific method
     dualSync.syncResearchNote({ id, researchNote })
-    
+
     return updated as Conversation
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update research note'
@@ -245,16 +370,29 @@ export const updateResearchNote = createAsyncThunk<
 
 export const updateCwd = createAsyncThunk<
   Conversation, // return type - full conversation object for cache update
-  { id: ConversationId; cwd: string | null }, // argument type
-  { extra: ThunkExtraArgument }
->('conversations/updateCwd', async ({ id, cwd }, { extra, rejectWithValue }) => {
+  { id: ConversationId; cwd: string | null; storageMode?: 'cloud' | 'local' }, // argument type
+  { extra: ThunkExtraArgument; state: RootState }
+>('conversations/updateCwd', async ({ id, cwd, storageMode }, { extra, getState, rejectWithValue }) => {
   try {
     const { auth } = extra
+
+    // Infer storage mode from state if not provided
+    let effectiveMode = storageMode
+    if (!effectiveMode) {
+      const conversation = getState().conversations.items.find(c => c.id === id)
+      effectiveMode = conversation?.storage_mode || 'cloud'
+    }
+
+    if (shouldUseLocalApi(effectiveMode, environment)) {
+      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { cwd })
+      return updated
+    }
+
     const updated = await patchConversationCwd(id, cwd, auth.accessToken)
-    
+
     // Sync to local SQLite using specific method
     dualSync.syncCwd({ id, cwd })
-    
+
     return updated as Conversation
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update cwd'

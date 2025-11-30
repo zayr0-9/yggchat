@@ -116,12 +116,8 @@ function Chat() {
   const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
 
-  // React Query for message fetching (automatic deduplication and caching)
-  // Use URL-derived ID to ensure correct fetching even on page refresh
-  // Single request fetches both messages AND tree data to eliminate duplicate requests
-  const { data: conversationData } = useConversationMessages(conversationIdFromUrl)
-  const reactQueryMessages = conversationData?.messages || []
-  const treeData = conversationData?.tree
+  // React Query for message fetching - MOVED BELOW after projectConversations is available
+  // to enable passing storage_mode from cached conversations
   const selectedPath = useAppSelector(selectCurrentPath)
   const multiReplyCount = useAppSelector(selectMultiReplyCount)
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
@@ -360,6 +356,23 @@ function Chat() {
   const { data: projectConversations = [] } = useConversationsByProject(
     projectIdFromUrl || selectedProject?.id || currentConversation?.project_id || null
   )
+
+  // Compute storage_mode from projectConversations (already loaded from ConversationPage)
+  // This avoids unreliable cache lookups inside queryFn
+  const conversationStorageMode = useMemo(() => {
+    if (!conversationIdFromUrl) return undefined
+    const conv = projectConversations.find(c => String(c.id) === String(conversationIdFromUrl))
+    return conv?.storage_mode
+  }, [conversationIdFromUrl, projectConversations])
+
+  // React Query for message fetching (automatic deduplication and caching)
+  // Use URL-derived ID to ensure correct fetching even on page refresh
+  // Single request fetches both messages AND tree data to eliminate duplicate requests
+  // Pass storage_mode from projectConversations to correctly route to local/cloud API
+  const { data: conversationData } = useConversationMessages(conversationIdFromUrl, conversationStorageMode)
+  const reactQueryMessages = conversationData?.messages || []
+  const treeData = conversationData?.tree
+
   const [titleInput, setTitleInput] = useState(currentConversation?.title ?? '')
   const [editingTitle, setEditingTitle] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
@@ -1942,9 +1955,14 @@ function Chat() {
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
                   <img
-                    src={getAssetPath('img/branch.svg')}
+                    src={getAssetPath('img/branchlighmode.svg')}
                     alt='tree view'
-                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[18px] md:h-[18px] lg:w-[20px] lg:h-[20px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[24px] 3xl:h-[24px] 4xl:w-[24px] 4xl:h-[24px]'
+                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[18px] md:h-[18px] lg:w-[20px] lg:h-[20px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[24px] 3xl:h-[24px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                  />
+                  <img
+                    src={getAssetPath('img/branchdarkmode.svg')}
+                    alt='tree view'
+                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[18px] md:h-[18px] lg:w-[20px] lg:h-[20px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[24px] 3xl:h-[24px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
                   />
                   {/* <i
                     className={`bx ${heimdallVisible ? 'bx-sidebar' : 'bx-layout'} text-2xl transition-transform duration-200`}
@@ -2322,17 +2340,31 @@ function Chat() {
                       title='Enable thinking'
                     >
                       {think ? (
-                        <img
-                          src={getAssetPath('img/thinking active.svg')}
-                          alt='Thinking active'
-                          className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
-                        />
+                        <>
+                          <img
+                            src={getAssetPath('img/thinkingonlightmode.svg')}
+                            alt='Thinking active'
+                            className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                          />
+                          <img
+                            src={getAssetPath('img/thinkingondarkmode.svg')}
+                            alt='Thinking active'
+                            className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                          />
+                        </>
                       ) : (
-                        <img
-                          src={getAssetPath('img/thinking.svg')}
-                          alt='Thinking'
-                          className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
-                        />
+                        <>
+                          <img
+                            src={getAssetPath('img/thinkingofflightmode.svg')}
+                            alt='Thinking'
+                            className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                          />
+                          <img
+                            src={getAssetPath('img/thinkingoffdarkmode.svg')}
+                            alt='Thinking'
+                            className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                          />
+                        </>
                       )}
                     </Button>
                   )}

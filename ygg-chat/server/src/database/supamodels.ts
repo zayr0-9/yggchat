@@ -74,6 +74,7 @@ export interface Conversation {
   conversation_context?: string | null
   research_note?: string | null
   cwd?: string | null // Working directory for Claude Code sessions
+  storage_mode?: 'cloud' | 'local' // Storage location: cloud (Supabase) or local (SQLite)
   created_at: string
   updated_at: string
 }

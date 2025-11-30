@@ -268,7 +268,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
         </Button>
         {!isCollapsed && (
           <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] pl-2 dark:text-stone-300'>
-            <h3> Get user name </h3>
+            <h3> Profile </h3>
           </div>
         )}
       </div>

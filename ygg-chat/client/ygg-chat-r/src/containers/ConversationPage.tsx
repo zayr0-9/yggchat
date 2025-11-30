@@ -3,6 +3,7 @@ import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import type { StorageMode } from '../../../../shared/types'
 import { Button } from '../components'
 import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
@@ -38,6 +39,11 @@ const ConversationPage: React.FC = () => {
   const [searchParams] = useSearchParams()
   const projectIdParam = searchParams.get('projectId')
   const projectId = projectIdParam ? parseId(projectIdParam) : null
+
+  // Check if running in Electron
+  const isElectronMode =
+    import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+    (typeof process !== 'undefined' && process.env?.VITE_ENVIRONMENT === 'electron')
 
   // Use React Query for data fetching
   // Fetch project-specific conversations OR all conversations (not both)
@@ -104,6 +110,9 @@ const ConversationPage: React.FC = () => {
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [showNewConversationModal, setShowNewConversationModal] = useState(false)
+  const [newConvTitle, setNewConvTitle] = useState('')
+  const [storageMode, setStorageMode] = useState<StorageMode>('cloud')
   // Sorting function for conversations
   const sortConversations = (
     convs: Conversation[],
@@ -205,13 +214,31 @@ const ConversationPage: React.FC = () => {
   }
 
   const handleNewConversation = async () => {
-    const payload = selectedProject
-      ? {
-          title: `${selectedProject.name} Conversation`,
-        }
-      : {}
+    // If a project is selected, skip modal and use project's storage mode
+    if (selectedProject) {
+      const projectStorageMode = selectedProject.storage_mode || 'cloud'
+      const defaultTitle = `${selectedProject.name} Conversation`
+      await createNewConversation(projectStorageMode, defaultTitle)
+      return
+    }
+
+    // No project selected: in Electron mode, show modal to choose storage
+    if (isElectronMode) {
+      setNewConvTitle('New Conversation')
+      setStorageMode('cloud') // Default to cloud
+      setShowNewConversationModal(true)
+    } else {
+      // Web mode: create cloud conversation directly
+      await createNewConversation('cloud')
+    }
+  }
+
+  const createNewConversation = async (mode: StorageMode, title?: string) => {
+    const payload = {
+      title: title || (selectedProject ? `${selectedProject.name} Conversation` : undefined),
+      storageMode: mode,
+    }
     const result = await dispatch(createConversation(payload)).unwrap()
-    // dispatch(fetchProjectById(result.project_id))
 
     // Optimistically update React Query cache to avoid refetch (scales better)
     // Update all conversations cache - prepend new conversation (newest first)
@@ -232,6 +259,12 @@ const ConversationPage: React.FC = () => {
     })
 
     handleSelect(result)
+  }
+
+  const handleConfirmNewConversation = async () => {
+    await createNewConversation(storageMode, newConvTitle)
+    setShowNewConversationModal(false)
+    setNewConvTitle('')
   }
 
   const handleEditProject = () => {
@@ -327,7 +360,6 @@ const ConversationPage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-1'>
-              {/* <span className='text-sm text-neutral-50 dark:text-neutral-300'>Filter</span> */}
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}
@@ -375,21 +407,33 @@ const ConversationPage: React.FC = () => {
           <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
               <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
-                {sortedConversations.map(conv => (
+                {sortedConversations.map((conv, index) => (
                   <li
                     key={conv.id}
                     className='rounded-4xl px-3 py-3 sm:p-2 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-700 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
                     onClick={() => handleSelect(conv)}
                   >
                     <div className='flex items-center justify-between'>
-                      <span className='font-semibold mr-2  dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
-                        {conv.title || `Conversation ${conv.id}`}
-                      </span>
+                      <div className='flex items-center gap-2 flex-1 min-w-0'>
+                        <span className='font-semibold dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] truncate'>
+                          {String(index + 1).padStart(2, '0')}. {conv.title || `Conversation ${conv.id}`}
+                        </span>
+                        {conv.storage_mode === 'local' && (
+                          <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 shrink-0'>
+                            Local
+                          </span>
+                        )}
+                        {isElectronMode && conv.storage_mode === 'cloud' && (
+                          <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 shrink-0'>
+                            Cloud
+                          </span>
+                        )}
+                      </div>
                       <Button
                         variant='outline2'
                         size='circle'
                         rounded='full'
-                        className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95'
+                        className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0 ml-2'
                         onClick={
                           (e => {
                             ;(e as unknown as React.MouseEvent).stopPropagation()
@@ -421,6 +465,83 @@ const ConversationPage: React.FC = () => {
         onClose={handleCloseEditProjectModal}
         editingProject={selectedProject}
       />
+
+      {/* New Conversation Modal */}
+      {showNewConversationModal && (
+        <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4'>
+          <div className='bg-neutral-100 text-neutral-900 mica-medium dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'>
+            <h3 className='text-xl font-semibold mb-4 dark:text-neutral-100'>Create New Conversation</h3>
+
+            <div className='mb-4'>
+              <label className='block text-sm font-medium mb-2 dark:text-neutral-300'>Title (optional)</label>
+              <input
+                type='text'
+                value={newConvTitle}
+                onChange={e => setNewConvTitle(e.target.value)}
+                placeholder='Enter conversation title...'
+                className='w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+              />
+            </div>
+
+            <div className='mb-6'>
+              <label className='block text-sm font-medium mb-2 dark:text-neutral-300'>Storage Location</label>
+              <div className='space-y-2'>
+                <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                  <input
+                    type='radio'
+                    value='cloud'
+                    checked={storageMode === 'cloud'}
+                    onChange={e => setStorageMode(e.target.value as StorageMode)}
+                    className='mr-3'
+                  />
+                  <div>
+                    <div className='font-medium dark:text-neutral-100'>Cloud</div>
+                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                      Synced to Supabase (accessible anywhere)
+                    </div>
+                  </div>
+                </label>
+                <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                  <input
+                    type='radio'
+                    value='local'
+                    checked={storageMode === 'local'}
+                    onChange={e => setStorageMode(e.target.value as StorageMode)}
+                    className='mr-3'
+                  />
+                  <div>
+                    <div className='font-medium dark:text-neutral-100'>Local Only</div>
+                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                      Stored on this device only (not synced)
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className='flex gap-3 justify-end'>
+              <Button
+                variant='acrylic'
+                size='circle'
+                rounded='full'
+                className='group'
+                onClick={() => setShowNewConversationModal(false)}
+              >
+                <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
+              </Button>
+              <Button
+                variant='acrylic'
+                size='circle'
+                rounded='full'
+                className='group bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white border-blue-600 dark:border-blue-700'
+                onClick={handleConfirmNewConversation}
+              >
+                <p className='transition-transform duration-100 group-active:scale-95'>Create</p>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && conversationToDelete && (

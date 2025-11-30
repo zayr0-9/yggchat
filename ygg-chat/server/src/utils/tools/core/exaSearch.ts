@@ -112,30 +112,59 @@ export async function exaSearch(
   }
 
   try {
+    const payload: Record<string, unknown> = {
+      query: query.trim(),
+      numResults: Math.min(Math.max(options.numResults ?? 10, 1), 100),
+      type: options.type ?? 'auto',
+    }
+
+    const assignStringField = (key: string, value?: string) => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim()
+        if (trimmed.length > 0) {
+          payload[key] = trimmed
+        }
+      }
+    }
+
+    const assignArrayField = (key: string, value?: string[]) => {
+      if (Array.isArray(value)) {
+        const cleaned = value
+          .map(item => (typeof item === 'string' ? item.trim() : ''))
+          .filter((item): item is string => item.length > 0)
+        if (cleaned.length > 0) {
+          payload[key] = cleaned
+        }
+      }
+    }
+
+    const assignBooleanField = (key: string, value?: boolean) => {
+      if (typeof value === 'boolean') {
+        payload[key] = value
+      }
+    }
+
+    assignArrayField('additionalQueries', options.additionalQueries)
+    assignStringField('category', options.category)
+    assignStringField('userLocation', options.userLocation)
+    assignArrayField('includeDomains', options.includeDomains)
+    assignArrayField('excludeDomains', options.excludeDomains)
+    assignStringField('startCrawlDate', options.startCrawlDate)
+    assignStringField('endCrawlDate', options.endCrawlDate)
+    assignStringField('startPublishedDate', options.startPublishedDate)
+    assignStringField('endPublishedDate', options.endPublishedDate)
+    assignArrayField('includeText', options.includeText)
+    assignArrayField('excludeText', options.excludeText)
+    assignBooleanField('context', options.context)
+    assignBooleanField('moderation', options.moderation)
+
     const response = await fetchFn('https://api.exa.ai/search', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
       },
-      body: JSON.stringify({
-        query: query.trim(),
-        numResults: Math.min(Math.max(options.numResults ?? 10, 1), 100),
-        type: options.type ?? 'auto',
-        additionalQueries: options.additionalQueries,
-        category: options.category,
-        userLocation: options.userLocation,
-        includeDomains: options.includeDomains,
-        excludeDomains: options.excludeDomains,
-        startCrawlDate: options.startCrawlDate,
-        endCrawlDate: options.endCrawlDate,
-        startPublishedDate: options.startPublishedDate,
-        endPublishedDate: options.endPublishedDate,
-        includeText: options.includeText,
-        excludeText: options.excludeText,
-        context: options.context,
-        moderation: options.moderation,
-      }),
+      body: JSON.stringify(payload),
     })
 
     if (!response.ok) {

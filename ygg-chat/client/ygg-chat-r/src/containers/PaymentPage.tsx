@@ -302,22 +302,25 @@ const PaymentPage: React.FC = () => {
       <div className='max-w-7xl mx-auto px-4 py-8'>
         {/* Header */}
         <div className='flex items-center justify-between mb-8'>
+          <h1 className='relative z-10 text-4xl font-bold text-neutral-900 dark:text-neutral-100'>
+            Subscription & Credits
+          </h1>
           <div className='flex items-center gap-4'>
-            {hasActiveAccess() && (
-              <Button variant='acrylic' onClick={() => navigate('/homepage')}>
-                <i className='bx bx-arrow-back mr-2'></i>
-                Home
-              </Button>
-            )}
-            <h1 className='relative z-10 text-4xl font-bold text-neutral-900 dark:text-neutral-100'>
-              Subscription & Credits
-            </h1>
-          </div>
-          <div className='flex gap-2'>
             {isElectronOrLocal && (
               <Button variant='outline' onClick={openPaymentUrl}>
                 <i className='bx bx-link-external mr-2'></i>
                 Manage Subscription on Web
+              </Button>
+            )}
+            {hasActiveAccess() ? (
+              <Button variant='acrylic' onClick={() => navigate('/homepage')}>
+                <i className='bx bx-arrow-back mr-2'></i>
+                Home
+              </Button>
+            ) : (
+              <Button variant='acrylic' onClick={() => navigate('/homepage')}>
+                <i className='bx bx-home-alt mr-2'></i>
+                Home
               </Button>
             )}
           </div>
@@ -479,13 +482,6 @@ const PaymentPage: React.FC = () => {
                     </div>
                   )
                 })}
-            </div>
-
-            <div className='relative z-10 mt-8 flex justify-center'>
-              <Button variant='acrylic' size='large' onClick={() => navigate('/homepage')}>
-                <i className='bx bx-home-alt mr-2'></i>
-                No thanks, take me Home
-              </Button>
             </div>
           </>
         ) : (

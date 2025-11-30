@@ -28,6 +28,11 @@ const Homepage: React.FC = () => {
   const currentUser = useAppSelector(selectCurrentUser)
   const quickChatProjectId = currentUser?.quick_chat_project_id || null
 
+  // Check if running in Electron
+  const isElectronMode =
+    import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+    (typeof process !== 'undefined' && process.env?.VITE_ENVIRONMENT === 'electron')
+
   // Use React Query for data fetching (with automatic caching and deduplication)
   // Projects now include latest_conversation_updated_at, eliminating need to fetch all conversations
   const { data: allProjects = [], isLoading: loading, isRefetching, refetch: refetchProjects } = useProjects()
@@ -49,6 +54,7 @@ const Homepage: React.FC = () => {
   // Search dropdown is handled inside SearchList component
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [storageFilter, setStorageFilter] = useState<'all' | 'cloud' | 'local'>('all')
 
   // Delete confirmation dialog state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -65,7 +71,11 @@ const Homepage: React.FC = () => {
     return saved === 'dark' ? 'Dark' : saved === 'light' ? 'Light' : saved === 'system' ? 'System' : 'System'
   })
 
-  const projects = sortProjects(allProjects, sortBy, sortOrder === 'asc')
+  // Filter projects by storage mode
+  const filteredProjects = storageFilter === 'all'
+    ? allProjects
+    : allProjects.filter(p => p.storage_mode === storageFilter)
+  const projects = sortProjects(filteredProjects, sortBy, sortOrder === 'asc')
 
   // Apply theme immediately when user toggles preference
   useEffect(() => {
@@ -157,7 +167,7 @@ const Homepage: React.FC = () => {
 
     const id = projectToDelete.id
     // Delete via Redux thunk (handles API call)
-    await dispatch(deleteProject(id))
+    await dispatch(deleteProject({ id }))
 
     // Update React Query cache to remove the deleted project
     queryClient.setQueryData(['projects', userId], (old: ProjectWithLatestConversation[] | undefined) => {
@@ -301,7 +311,50 @@ const Homepage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-2'>
-              {/* <span className='text-md text-neutral-900 acrylic-subtle rounded-lg p-2 dark:text-gray-300'>Filter</span> */}
+              {/* Storage Filter (only show in Electron mode) */}
+              {isElectronMode && (
+                <div className='flex items-center gap-1 mr-2'>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('all')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'all'
+                        ? 'bg-blue-500 text-white dark:bg-blue-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>All</p>
+                  </Button>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('cloud')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'cloud'
+                        ? 'bg-blue-500 text-white dark:bg-blue-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>Cloud</p>
+                  </Button>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('local')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'local'
+                        ? 'bg-green-500 text-white dark:bg-green-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>Local</p>
+                  </Button>
+                </div>
+              )}
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}
@@ -334,9 +387,8 @@ const Homepage: React.FC = () => {
                 title='Refresh projects from server'
               >
                 <i
-                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
-                    isRefetching ? 'animate-spin' : ''
-                  }`}
+                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${isRefetching ? 'animate-spin' : ''
+                    }`}
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -349,7 +401,7 @@ const Homepage: React.FC = () => {
           <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
               <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
-                {projects.map(project => (
+                {projects.map((project, index) => (
                   <li
                     key={project.id}
                     className='rounded-4xl acrylic-light px-3 py-3 sm:px-4 md:px-4 md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 bg-neutral-50 dark:bg-yBlack-900 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-transparent hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-700/50 dark:hover:bg-transparent dark:hover:outline-neutral-600 group '
@@ -357,10 +409,15 @@ const Homepage: React.FC = () => {
                   >
                     <div className='flex place-items-start justify-between'>
                       <div className='flex-1'>
-                        <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99'>
+                        <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99 flex items-center gap-2'>
                           <p className='transition-transform duration-100 group-active:scale-99 text-[16px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
-                            {project.name}
+                            {String(index + 1).padStart(2, '0')}. {project.name}
                           </p>
+                          {project.storage_mode === 'local' && (
+                            <span className='text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-800 font-medium'>
+                              Local
+                            </span>
+                          )}
                         </span>
                         {project.context && (
                           <p className='text-sm text-stone-900 ygg-line-clamp-6 dark:text-gray-300 mt-2 mr-2 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
@@ -376,7 +433,7 @@ const Homepage: React.FC = () => {
                           className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
                           onClick={
                             (e => {
-                              ;(e as unknown as React.MouseEvent).stopPropagation()
+                              ; (e as unknown as React.MouseEvent).stopPropagation()
                               handleEditProject(project)
                             }) as unknown as () => void
                           }
@@ -394,7 +451,7 @@ const Homepage: React.FC = () => {
                             className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
                             onClick={
                               (e => {
-                                ;(e as unknown as React.MouseEvent).stopPropagation()
+                                ; (e as unknown as React.MouseEvent).stopPropagation()
                                 handleDeleteProject(project)
                               }) as unknown as () => void
                             }

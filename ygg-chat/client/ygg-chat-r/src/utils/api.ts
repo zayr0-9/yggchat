@@ -1,10 +1,89 @@
 // utils/api.ts
-import { ConversationId } from '../../../../shared/types'
+import { ConversationId, StorageMode } from '../../../../shared/types'
 import { getSessionFromStorage, refreshTokenIfNeeded, getTokenExpirationTime } from '../lib/jwtUtils'
 
 // Base configuration
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 export const environment = import.meta.env.VITE_ENVIRONMENT || 'local'
+export const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
+
+// Helper to determine if we should use local API
+export function shouldUseLocalApi(storageMode?: StorageMode, env?: string): boolean {
+  return storageMode === 'local' && (env || environment) === 'electron'
+}
+
+// Local API client (mirrors cloud api object) with error handling
+const handleLocalApiError = (error: any, endpoint: string): never => {
+  // Check if it's a network error (server unavailable)
+  if (error instanceof TypeError && error.message.includes('fetch')) {
+    throw new Error(
+      `Local server not available at ${LOCAL_API_BASE}. ` +
+      `Please ensure the Electron app is running with the local server enabled.`
+    )
+  }
+  // Re-throw other errors
+  throw new Error(`Local API error (${endpoint}): ${error.message || 'Unknown error'}`)
+}
+
+export const localApi = {
+  get: async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, { ...options, method: 'GET' })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      return await response.json() as T
+    } catch (error) {
+      return handleLocalApiError(error, endpoint)
+    }
+  },
+
+  post: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, {
+        ...options,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: data ? JSON.stringify(data) : undefined
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      return await response.json() as T
+    } catch (error) {
+      return handleLocalApiError(error, endpoint)
+    }
+  },
+
+  patch: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, {
+        ...options,
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: data ? JSON.stringify(data) : undefined
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      return await response.json() as T
+    } catch (error) {
+      return handleLocalApiError(error, endpoint)
+    }
+  },
+
+  delete: async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, { ...options, method: 'DELETE' })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      return await response.json() as T
+    } catch (error) {
+      return handleLocalApiError(error, endpoint)
+    }
+  }
+}
 
 /**
  * Ensures the access token is valid before making a request.

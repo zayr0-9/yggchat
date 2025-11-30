@@ -5,6 +5,17 @@ export type MessageId = string
 export type ConversationId = string
 export type ProjectId = string
 
+export type StorageMode = 'cloud' | 'local'
+
+export interface SelectedFileContent {
+  path: string
+  relativePath: string
+  name?: string
+  contents: string
+  contentLength: number
+  requestId?: number
+}
+
 export interface BaseMessage {
   id: MessageId
   conversation_id: ConversationId
@@ -35,7 +46,26 @@ export interface BaseMessage {
   ex_agent_type?: string | null
 }
 
+export interface SendMessageRequest {
+  content: string
+  messages?: any[]
+  modelName?: string
+  parentId?: string
+  provider?: string
+  systemPrompt?: string
+  conversationContext?: string | null
+  projectContext?: string | null
+  think?: boolean
+  selectedFiles?: any[]
+  retrigger?: boolean
+  executionMode?: 'server' | 'client'
+  isBranch?: boolean
+  attachmentsBase64?: any[]
+  storageMode?: StorageMode
+}
+
 export interface BaseModel {
+
   // Basic identification
   id: string
   name: string
@@ -80,10 +110,26 @@ export interface Project {
   updated_at: string
   context: string
   system_prompt: string
+  storage_mode?: StorageMode
 }
 
 export interface ProjectWithLatestConversation extends Project {
   latest_conversation_updated_at: string | null
+}
+
+export interface ConversationRecord {
+  id: ConversationId
+  user_id: string
+  project_id?: ProjectId | null
+  title: string | null
+  model_name: string
+  system_prompt: string | null
+  conversation_context: string | null
+  research_note: string | null
+  cwd?: string | null
+  created_at: string
+  updated_at: string
+  storage_mode?: StorageMode
 }
 
 export interface ChatSession {

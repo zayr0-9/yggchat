@@ -6,7 +6,7 @@ import type { BaseModel, Project } from '../../../../shared/types'
 import { ConversationId, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
 import type { Message, Model } from '../features/chats/chatTypes'
 import type { Conversation } from '../features/conversations/conversationTypes'
-import { api } from '../utils/api'
+import { api, environment, localApi } from '../utils/api'
 import { getFavoritedModels } from '../utils/favorites'
 import { useAuth } from './useAuth'
 
@@ -32,6 +32,35 @@ export function useProjects() {
   const query = useQuery({
     queryKey: ['projects', userId],
     queryFn: async () => {
+      // In Electron mode, fetch both cloud and local projects
+      if (environment === 'electron') {
+        const [cloudProjects, localProjects] = await Promise.all([
+          api.get<ProjectWithLatestConversation[]>(
+            `/projects/sorted/latest-conversation?userId=${userId}`,
+            accessToken
+          ).catch(err => {
+            console.error('Failed to fetch cloud projects:', err)
+            return []
+          }),
+          localApi.get<ProjectWithLatestConversation[]>(`/local/projects?userId=${userId}`)
+            .catch(err => {
+              console.error('Failed to fetch local projects:', err)
+              return []
+            })
+        ])
+
+        // Merge and sort by latest_conversation_updated_at or updated_at
+        const merged = [...cloudProjects, ...localProjects]
+          .sort((a, b) => {
+            const dateA = new Date(a.latest_conversation_updated_at || a.updated_at).getTime()
+            const dateB = new Date(b.latest_conversation_updated_at || b.updated_at).getTime()
+            return dateB - dateA
+          })
+
+        return merged
+      }
+
+      // Web mode: cloud only
       return api.get<ProjectWithLatestConversation[]>(
         `/projects/sorted/latest-conversation?userId=${userId}`,
         accessToken
@@ -56,13 +85,34 @@ export function useProjects() {
  * Fetch a single project by ID
  * Cache key: ['projects', projectId]
  */
-export function useProject(projectId: ProjectId | null) {
-  const { accessToken } = useAuth()
+export function useProject(projectId: ProjectId | null, storageMode?: 'local' | 'cloud') {
+  const { accessToken, userId } = useAuth()
+  const queryClient = useQueryClient()
 
   return useQuery({
     queryKey: ['projects', projectId],
     queryFn: async () => {
       if (!projectId) throw new Error('Project ID is required')
+
+      // Determine storage mode: use parameter if provided, otherwise check cached projects
+      let effectiveStorageMode = storageMode
+      if (!effectiveStorageMode) {
+        // Try to get storage_mode from cached projects
+        const projects = queryClient.getQueryData<ProjectWithLatestConversation[]>(['projects', userId])
+        const project = projects?.find(p => p.id === projectId)
+        effectiveStorageMode = project?.storage_mode || 'cloud'
+      }
+
+      console.log('[useProject] Fetching project:', projectId, 'storage_mode:', effectiveStorageMode)
+
+      // Route to appropriate API based on storage mode
+      if (effectiveStorageMode === 'local' && environment === 'electron') {
+        console.log('[useProject] Using local API for project:', projectId)
+        return localApi.get<Project>(`/local/projects/${projectId}`)
+      }
+
+      // Default to cloud API
+      console.log('[useProject] Using cloud API for project:', projectId)
       return api.get<Project>(`/projects/${projectId}`, accessToken)
     },
     enabled: !!projectId && !!accessToken,
@@ -95,6 +145,29 @@ export function useConversations(enabled: boolean = true) {
     queryKey: ['conversations'],
     queryFn: async () => {
       if (!userId) throw new Error('User not authenticated')
+
+      // In Electron mode, fetch both cloud and local conversations
+      if (environment === 'electron') {
+        const [cloudConversations, localConversations] = await Promise.all([
+          api.get<Conversation[]>(`/users/${userId}/conversations`, accessToken)
+            .catch(err => {
+              console.error('Failed to fetch cloud conversations:', err)
+              return []
+            }),
+          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+            .catch(err => {
+              console.error('Failed to fetch local conversations:', err)
+              return []
+            })
+        ])
+
+        // Merge and sort by updated_at
+        const merged = [...cloudConversations, ...localConversations]
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+
+        return merged
+      }
+
       return api.get<Conversation[]>(`/users/${userId}/conversations`, accessToken)
     },
     enabled: enabled && !!userId && !!accessToken,
@@ -124,7 +197,7 @@ export function useConversations(enabled: boolean = true) {
  * @returns Query result with data, isLoading, isRefetching, and refetch function for manual refresh
  */
 export function useConversationsByProject(projectId: ProjectId | null) {
-  const { accessToken } = useAuth()
+  const { accessToken, userId } = useAuth()
   // const location = useLocation()
 
   // Always refetch on ConversationPage
@@ -134,6 +207,30 @@ export function useConversationsByProject(projectId: ProjectId | null) {
     queryKey: ['conversations', 'project', projectId],
     queryFn: async () => {
       if (!projectId) throw new Error('Project ID is required')
+
+      // In Electron mode, fetch both cloud and local conversations
+      if (environment === 'electron') {
+        const [cloudConversations, localConversations] = await Promise.all([
+          api.get<Conversation[]>(`/conversations/project/${projectId}`, accessToken)
+            .catch(err => {
+              console.error('Failed to fetch cloud project conversations:', err)
+              return []
+            }),
+          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+            .then(convs => convs.filter(c => c.project_id === projectId))
+            .catch(err => {
+              console.error('Failed to fetch local project conversations:', err)
+              return []
+            })
+        ])
+
+        // Merge and sort by updated_at
+        const merged = [...cloudConversations, ...localConversations]
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+
+        return merged
+      }
+
       return api.get<Conversation[]>(`/conversations/project/${projectId}`, accessToken)
     },
     enabled: !!projectId && !!accessToken,
@@ -232,15 +329,68 @@ export function useConversationData(conversationId: ConversationId | null) {
  *
  * Returns: { messages: Message[], tree: ChatNode }
  */
-export function useConversationMessages(conversationId: ConversationId | null) {
+export function useConversationMessages(conversationId: ConversationId | null, storageMode?: 'local' | 'cloud') {
   const { accessToken } = useAuth()
+  const queryClient = useQueryClient()
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['conversations', conversationId, 'messages'],
     queryFn: async () => {
       if (!conversationId) throw new Error('Conversation ID is required')
-      // Use /messages/tree endpoint to get both messages AND tree in one request
-      return api.get<{ messages: Message[]; tree: any }>(`/conversations/${conversationId}/messages/tree`, accessToken)
+
+      // Determine storage mode: use parameter if provided, otherwise check cached conversations
+      let effectiveStorageMode = storageMode
+      if (!effectiveStorageMode) {
+        // Search ALL cached conversation lists (main list, project lists, recent lists)
+        // This finds the conversation even if it's only loaded in a specific project view
+        const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
+
+        for (const [queryKey, data] of allConversationQueries) {
+          if (Array.isArray(data)) {
+            // Robust comparison handling both string/number IDs
+            const match = data.find(c => String(c.id) === String(conversationId))
+            if (match) {
+              if (match.storage_mode) {
+                effectiveStorageMode = match.storage_mode
+                console.log('[useConversationMessages] Found storage_mode in cache:', effectiveStorageMode, 'from query:', queryKey)
+                break
+              }
+
+              // Fallback: Try to get storage_mode from project if conversation lacks it
+              if (match.project_id && accessToken) {
+                // Need to find project in cache - usually ['projects', userId]
+                // Note: userId is inside useAuth closure
+                const projectsQuery = queryClient.getQueriesData<ProjectWithLatestConversation[]>({ queryKey: ['projects'] })
+                for (const [_, projects] of projectsQuery) {
+                  if (Array.isArray(projects)) {
+                    const project = projects.find(p => p.id === match.project_id)
+                    if (project?.storage_mode) {
+                      effectiveStorageMode = project.storage_mode
+                      console.log('[useConversationMessages] Found storage_mode via project cache:', effectiveStorageMode)
+                      break
+                    }
+                  }
+                }
+                if (effectiveStorageMode) break
+              }
+            }
+          }
+        }
+
+        if (!effectiveStorageMode) effectiveStorageMode = 'cloud'
+      }
+
+      console.log('[useConversationMessages] Fetching messages for conversation:', conversationId, 'storage_mode:', effectiveStorageMode)
+
+      // Route to appropriate API based on storage mode
+      if (effectiveStorageMode === 'local' && environment === 'electron') {
+        console.log('[useConversationMessages] Using local API for conversation:', conversationId)
+        return localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(`/local/conversations/${conversationId}/messages/tree`)
+      }
+
+      // Default to cloud API
+      console.log('[useConversationMessages] Using cloud API for conversation:', conversationId)
+      return api.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(`/conversations/${conversationId}/messages/tree`, accessToken)
     },
     enabled: !!conversationId && !!accessToken,
     staleTime: 30000, // 30 seconds - messages only change on user actions (send/edit/branch)
@@ -249,6 +399,25 @@ export function useConversationMessages(conversationId: ConversationId | null) {
     refetchOnReconnect: false, // Don't refetch on network reconnect
     refetchOnWindowFocus: false, // Don't refetch when user switches tabs
   })
+
+  // Sync storage_mode to cache when data is fetched
+  useEffect(() => {
+    if (query.data?.meta?.storage_mode && conversationId) {
+      console.log('[useConversationMessages] Updating storage_mode in cache:', query.data.meta.storage_mode)
+
+      // Update the conversation in the list cache
+      queryClient.setQueryData<Conversation[]>(['conversations'], (old) => {
+        if (!old) return old
+        return old.map(c =>
+          c.id === conversationId
+            ? { ...c, storage_mode: query.data.meta.storage_mode! }
+            : c
+        )
+      })
+    }
+  }, [query.data, conversationId, queryClient])
+
+  return query
 }
 
 /**
@@ -360,7 +529,7 @@ export function useModels(provider: string | null) {
       // Determine selected model: use localStorage if valid, otherwise use server default
       const storedSelection = getStoredSelectedModel()
       let selectedModel = defaultModel
-      
+
       // If stored selection exists and matches a model in the list, use the full model data from the list
       if (storedSelection) {
         const matchedModel = models.find(m => m.name === storedSelection.name)

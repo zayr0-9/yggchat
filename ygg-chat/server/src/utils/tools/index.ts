@@ -6,10 +6,10 @@ import { browseWeb } from './core/browseWeb'
 import { createTextFile } from './core/createFile'
 import { deleteFile, safeDeleteFile } from './core/deleteFile'
 import { editFile } from './core/editFile'
-import { extractDirectoryStructure } from './core/getDirectoryTree'
-import { globSearch } from './core/glob'
 import { exaCodeContext } from './core/exaCodeContext'
 import { exaSearch } from './core/exaSearch'
+import { extractDirectoryStructure } from './core/getDirectoryTree'
+import { globSearch } from './core/glob'
 import { readFileContinuation, readTextFile } from './core/readFile'
 import { readMultipleTextFiles } from './core/readFiles'
 import { ripgrepSearch } from './core/ripgrep'
@@ -441,7 +441,8 @@ const tools: tools[] = [
     name: 'exa_search',
     enabled: true,
     tool: {
-      description: 'Search the web using Exa API. Provides neural, fast, deep search modes with rich metadata.',
+      description:
+        'Search the web via Exa API (auto/neural/fast/deep). Only provide optional filters when truly needed—omit empty strings, empty arrays, or placeholder dates so Exa can default to its recency-ranked results.',
       inputSchema: z.object({
         query: z.string().describe('The search query to execute'),
         numResults: z
@@ -458,7 +459,7 @@ const tools: tools[] = [
         additionalQueries: z
           .array(z.string())
           .optional()
-          .describe('Optional follow-up queries to blend into search results.'),
+          .describe('Optional query variations (only used when type="deep"). Provide at least one meaningful string or omit.'),
         category: z
           .enum([
             'company',
@@ -473,14 +474,34 @@ const tools: tools[] = [
           ])
           .optional()
           .describe('Content category filter if supported by Exa.'),
-        userLocation: z.string().optional().describe('User location hint (e.g., "San Francisco, CA").'),
+        userLocation: z
+          .string()
+          .optional()
+          .describe('Two-letter ISO country code (e.g., "US"). Omit if unspecified.'),
         includeDomains: z.array(z.string()).optional().describe('Only include results from these domains.'),
         excludeDomains: z.array(z.string()).optional().describe('Exclude results from these domains.'),
-        startCrawlDate: z.string().optional().describe('ISO date; only include pages crawled after this date.'),
-        endCrawlDate: z.string().optional().describe('ISO date; only include pages crawled before this date.'),
-        startPublishedDate: z.string().optional().describe('ISO date; only include pages published after this date.'),
-        endPublishedDate: z.string().optional().describe('ISO date; only include pages published before this date.'),
-        includeText: z.array(z.string()).optional().describe('Require these terms/snippets to appear in documents.'),
+        startCrawlDate: z
+          .string()
+          .optional()
+          .describe('ISO 8601 date/time. Only include pages crawled after this moment (omit to search entire index).'),
+        endCrawlDate: z
+          .string()
+          .optional()
+          .describe('ISO 8601 date/time. Only include pages crawled before this moment (omit if not needed).'),
+        startPublishedDate: z
+          .string()
+          .optional()
+          .describe('ISO 8601 date/time. Only include pages published after this moment (omit for no filter).'),
+        endPublishedDate: z
+          .string()
+          .optional()
+          .describe('ISO 8601 date/time. Only include pages published before this moment (omit for no filter).'),
+        includeText: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Require these terms/snippets to appear in documents. includeText currently only supports one phrase of up to 5 words.'
+          ),
         excludeText: z.array(z.string()).optional().describe('Exclude documents containing these terms/snippets.'),
         context: z.boolean().optional().describe('Request Exa-provided context string when supported.'),
         moderation: z.boolean().optional().describe('Enable Exa moderation filtering.'),
