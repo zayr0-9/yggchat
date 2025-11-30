@@ -347,11 +347,32 @@ export function useConversationMessages(conversationId: ConversationId | null, s
 
         for (const [queryKey, data] of allConversationQueries) {
           if (Array.isArray(data)) {
-            const match = data.find(c => c.id === conversationId)
-            if (match?.storage_mode) {
-              effectiveStorageMode = match.storage_mode
-              console.log('[useConversationMessages] Found storage_mode in cache:', effectiveStorageMode, 'from query:', queryKey)
-              break
+            // Robust comparison handling both string/number IDs
+            const match = data.find(c => String(c.id) === String(conversationId))
+            if (match) {
+              if (match.storage_mode) {
+                effectiveStorageMode = match.storage_mode
+                console.log('[useConversationMessages] Found storage_mode in cache:', effectiveStorageMode, 'from query:', queryKey)
+                break
+              }
+
+              // Fallback: Try to get storage_mode from project if conversation lacks it
+              if (match.project_id && accessToken) {
+                // Need to find project in cache - usually ['projects', userId]
+                // Note: userId is inside useAuth closure
+                const projectsQuery = queryClient.getQueriesData<ProjectWithLatestConversation[]>({ queryKey: ['projects'] })
+                for (const [_, projects] of projectsQuery) {
+                  if (Array.isArray(projects)) {
+                    const project = projects.find(p => p.id === match.project_id)
+                    if (project?.storage_mode) {
+                      effectiveStorageMode = project.storage_mode
+                      console.log('[useConversationMessages] Found storage_mode via project cache:', effectiveStorageMode)
+                      break
+                    }
+                  }
+                }
+                if (effectiveStorageMode) break
+              }
             }
           }
         }
