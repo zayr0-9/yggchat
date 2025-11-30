@@ -1,6 +1,6 @@
 import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/Button/button'
 import { getAssetPath } from '../utils/assetPath'
@@ -15,53 +15,69 @@ interface Feature {
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate()
+
+  const features = useMemo<Feature[]>(
+    () => [
+      {
+        id: 1,
+        title: 'Branch',
+        superscript: '01',
+        description:
+          "As conversations naturally branch into tangents and follow-up questions, Yggdrasil's intelligent navigation system visualizes and manages the full structure of your dialogue. Every edit spawns a new branch, ensuring an immutable, accurate log of every message. Nothing is ever lost, delivering complete transparency into the evolution of your thought.",
+        videoSrc: getAssetPath('video/branching.webm'),
+      },
+      {
+        id: 2,
+        title: 'Context Management',
+        superscript: '02',
+        description:
+          'Intelligent context management ensures your AI always remembers what matters. Track, organize, and maintain conversation state across branches with precision. Never lose important details in long conversations.',
+        videoSrc: getAssetPath('video/branchactions.webm'),
+      },
+      {
+        id: 3,
+        title: 'Agentic Capabilities',
+        superscript: '03',
+        description:
+          'Empower your AI with autonomous capabilities. Create agents that can act independently, make decisions, and accomplish complex tasks. Perfect for automation and advanced workflows.',
+        videoSrc: getAssetPath('video/agent.webm'),
+      },
+      {
+        id: 4,
+        title: 'Multiple Models',
+        superscript: '04',
+        description:
+          'Switch between different AI models seamlessly. Leverage the best model for each task—whether you need speed, creativity, or specialized expertise. Compare outputs across models in real-time.',
+        videoSrc: getAssetPath('video/models.webm'),
+      },
+    ],
+    [],
+  )
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0)
   const [isInFeaturesSection, setIsInFeaturesSection] = useState(false)
   const featureRefs = useRef<(HTMLDivElement | null)[]>([])
   // const featuresContainerRef = useRef<HTMLDivElement>(null)
   const featuresSectionRef = useRef<HTMLElement>(null)
-
-  const features: Feature[] = [
-    {
-      id: 1,
-      title: 'Branch',
-      superscript: '01',
-      description:
-        "As conversations naturally branch into tangents and follow-up questions, Yggdrasil's intelligent navigation system visualizes and manages the full structure of your dialogue. Every edit spawns a new branch, ensuring an immutable, accurate log of every message. Nothing is ever lost, delivering complete transparency into the evolution of your thought.",
-      videoSrc: getAssetPath('video/d2.webm'),
-    },
-    {
-      id: 2,
-      title: 'Context Management',
-      superscript: '02',
-      description:
-        'Intelligent context management ensures your AI always remembers what matters. Track, organize, and maintain conversation state across branches with precision. Never lose important details in long conversations.',
-      videoSrc: getAssetPath('video/l3.webm'),
-    },
-    {
-      id: 3,
-      title: 'Agentic Capabilities',
-      superscript: '03',
-      description:
-        'Empower your AI with autonomous capabilities. Create agents that can act independently, make decisions, and accomplish complex tasks. Perfect for automation and advanced workflows.',
-      videoSrc: getAssetPath('video/d2.webm'),
-    },
-    {
-      id: 4,
-      title: 'Multiple Models',
-      superscript: '04',
-      description:
-        'Switch between different AI models seamlessly. Leverage the best model for each task—whether you need speed, creativity, or specialized expertise. Compare outputs across models in real-time.',
-      videoSrc: getAssetPath('video/l3.webm'),
-    },
-  ]
+  const [loadedVideos, setLoadedVideos] = useState<boolean[]>(() =>
+    new Array(features.length).fill(false),
+  )
+  const videoWrappersRef = useRef<(HTMLDivElement | null)[]>([])
+  const videoElementsRef = useRef<(HTMLVideoElement | null)[]>([])
+  const prevLoadedVideosRef = useRef<boolean[]>(new Array(features.length).fill(false))
+  const observerRef = useRef<IntersectionObserver | null>(null)
 
   // Initialize theme
   useEffect(() => {
     const isDark = document.documentElement.classList.contains('dark')
     setIsDarkMode(isDark)
   }, [])
+
+  useEffect(() => {
+    const initialState = features.map(feature => !feature.videoSrc)
+    setLoadedVideos(initialState)
+    prevLoadedVideosRef.current = initialState
+  }, [features])
 
   // Monitor scroll position for features section and active feature
   useEffect(() => {
@@ -98,6 +114,60 @@ const LandingPage: React.FC = () => {
 
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    if (!('IntersectionObserver' in window)) {
+      setLoadedVideos(features.map(feature => !feature.videoSrc))
+      return
+    }
+
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+    }
+
+    const observer = new IntersectionObserver(
+      entries => {
+        entries.forEach(entry => {
+          if (!entry.isIntersecting) return
+          const index = videoWrappersRef.current.findIndex(ref => ref === entry.target)
+          if (index === -1) return
+
+          setLoadedVideos(prev => {
+            if (prev[index]) return prev
+            const next = [...prev]
+            next[index] = true
+            return next
+          })
+
+          observer.unobserve(entry.target)
+        })
+      },
+      { rootMargin: '200px 0px', threshold: 0.35 },
+    )
+
+    observerRef.current = observer
+    videoWrappersRef.current.forEach(ref => {
+      if (ref) observer.observe(ref)
+    })
+
+    return () => observer.disconnect()
+  }, [features.length])
+
+  useEffect(() => {
+    const nextPrev = [...prevLoadedVideosRef.current]
+    loadedVideos.forEach((isLoaded, index) => {
+      if (!isLoaded || nextPrev[index]) return
+      const videoEl = videoElementsRef.current[index]
+      if (videoEl) {
+        videoEl.load()
+        videoEl.play().catch(() => {})
+      }
+      nextPrev[index] = true
+    })
+    prevLoadedVideosRef.current = nextPrev
+  }, [loadedVideos])
 
   const handleFeatureClick = (index: number) => {
     const targetElement = featureRefs.current[index]
@@ -324,32 +394,37 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                     </div>
 
                     {/* Video/Image Placeholder */}
-                    <div className='w-full aspect-video rounded-2xl bg-gray-100 dark:bg-yBlack-600 overflow-hidden mb-8 shadow-lg group'>
-                      {feature.videoSrc ? (
-                        <video
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          className='w-full h-full object-cover transition-transform duration-300 group-hover:scale-105'
-                        >
-                          <source src={feature.videoSrc} type='video/webm' />
-                          <div className='w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-200 dark:from-yBlack-600 dark:to-yBlack-700'>
-                            <div className='text-center'>
-                              <i className='bx bx-video text-4xl text-gray-400 mb-2'></i>
-                              <p className='text-gray-500'>Video preview</p>
-                            </div>
-                          </div>
-                        </video>
-                      ) : (
-                        <div className='w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-200 dark:from-yBlack-600 dark:to-yBlack-700'>
-                          <div className='text-center'>
-                            <i className='bx bx-image text-4xl text-gray-400 mb-2'></i>
-                            <p className='text-gray-500'>Feature preview</p>
-                          </div>
+                    <div
+                    className='relative w-full aspect-video rounded-2xl bg-gray-100 dark:bg-yBlack-600 overflow-hidden mb-8 shadow-lg group'
+                    ref={el => {
+                      videoWrappersRef.current[index] = el
+                    }}
+                  >
+                    <video
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      preload='none'
+                      ref={el => {
+                        videoElementsRef.current[index] = el
+                      }}
+                      className='w-full h-full object-cover transition-transform duration-300 group-hover:scale-105'
+                    >
+                      {loadedVideos[index] && feature.videoSrc ? (
+                        <source src={feature.videoSrc} type='video/webm' />
+                      ) : null}
+                    </video>
+
+                    {!loadedVideos[index] && (
+                      <div className='absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-200 dark:from-yBlack-600 dark:to-yBlack-700'>
+                        <div className='text-center'>
+                          <i className='bx bx-video text-4xl text-gray-400 mb-2'></i>
+                          <p className='text-gray-500'>Video preview</p>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
+                  </div>
 
                     {/* Description */}
                     <p className='text-xl pl-2 text-gray-900 dark:text-gray-300 leading-relaxed'>
