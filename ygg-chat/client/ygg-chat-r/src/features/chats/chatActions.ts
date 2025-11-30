@@ -2062,11 +2062,18 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
       const conversation = state.conversations.items.find(c => c.id === conversationId)
       const storageMode = conversation?.storage_mode || 'cloud'
 
+      console.log(`[fetchMessageTree] ConversationId: ${conversationId}`)
+      console.log(`[fetchMessageTree] Found in state: ${!!conversation}`)
+      console.log(`[fetchMessageTree] Storage Mode: ${storageMode}`)
+      console.log(`[fetchMessageTree] Environment: ${environment}`)
+
       if (shouldUseLocalApi(storageMode, environment)) {
+        console.log('[fetchMessageTree] Routing to LOCAL API')
         response = await localApi.get<{ messages: Message[]; tree: any }>(
           `/local/conversations/${conversationId}/messages/tree`
         )
       } else {
+        console.log('[fetchMessageTree] Routing to CLOUD API')
         response = await apiCall<{ messages: Message[]; tree: any }>(
           `/conversations/${conversationId}/messages/tree`,
           auth.accessToken

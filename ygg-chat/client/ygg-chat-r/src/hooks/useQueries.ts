@@ -333,7 +333,7 @@ export function useConversationMessages(conversationId: ConversationId | null, s
   const { accessToken } = useAuth()
   const queryClient = useQueryClient()
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['conversations', conversationId, 'messages'],
     queryFn: async () => {
       if (!conversationId) throw new Error('Conversation ID is required')
@@ -352,12 +352,12 @@ export function useConversationMessages(conversationId: ConversationId | null, s
       // Route to appropriate API based on storage mode
       if (effectiveStorageMode === 'local' && environment === 'electron') {
         console.log('[useConversationMessages] Using local API for conversation:', conversationId)
-        return localApi.get<{ messages: Message[]; tree: any }>(`/local/conversations/${conversationId}/messages/tree`)
+        return localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(`/local/conversations/${conversationId}/messages/tree`)
       }
 
       // Default to cloud API
       console.log('[useConversationMessages] Using cloud API for conversation:', conversationId)
-      return api.get<{ messages: Message[]; tree: any }>(`/conversations/${conversationId}/messages/tree`, accessToken)
+      return api.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(`/conversations/${conversationId}/messages/tree`, accessToken)
     },
     enabled: !!conversationId && !!accessToken,
     staleTime: 30000, // 30 seconds - messages only change on user actions (send/edit/branch)
@@ -366,6 +366,25 @@ export function useConversationMessages(conversationId: ConversationId | null, s
     refetchOnReconnect: false, // Don't refetch on network reconnect
     refetchOnWindowFocus: false, // Don't refetch when user switches tabs
   })
+
+  // Sync storage_mode to cache when data is fetched
+  useEffect(() => {
+    if (query.data?.meta?.storage_mode && conversationId) {
+      console.log('[useConversationMessages] Updating storage_mode in cache:', query.data.meta.storage_mode)
+
+      // Update the conversation in the list cache
+      queryClient.setQueryData<Conversation[]>(['conversations'], (old) => {
+        if (!old) return old
+        return old.map(c =>
+          c.id === conversationId
+            ? { ...c, storage_mode: query.data.meta.storage_mode! }
+            : c
+        )
+      })
+    }
+  }, [query.data, conversationId, queryClient])
+
+  return query
 }
 
 /**
