@@ -113,7 +113,6 @@ const ConversationPage: React.FC = () => {
   const [showNewConversationModal, setShowNewConversationModal] = useState(false)
   const [newConvTitle, setNewConvTitle] = useState('')
   const [storageMode, setStorageMode] = useState<StorageMode>('cloud')
-  const [storageFilter, setStorageFilter] = useState<'all' | 'cloud' | 'local'>('all')
   // Sorting function for conversations
   const sortConversations = (
     convs: Conversation[],
@@ -148,13 +147,8 @@ const ConversationPage: React.FC = () => {
     return invert ? sorted.reverse() : sorted
   }
 
-  // Filter conversations by storage mode
-  const filteredConversations = storageFilter === 'all'
-    ? conversations
-    : conversations.filter(c => c.storage_mode === storageFilter)
-
   // Sort conversations
-  const sortedConversations = sortConversations(filteredConversations, sortBy, sortOrder === 'asc')
+  const sortedConversations = sortConversations(conversations, sortBy, sortOrder === 'asc')
 
   // Search dropdown is handled inside SearchList component
 
@@ -366,51 +360,6 @@ const ConversationPage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-1'>
-              {/* Storage Filter (only show in Electron mode) */}
-              {isElectronMode && (
-                <div className='flex items-center gap-1 mr-2'>
-                  <Button
-                    variant='acrylic'
-                    size='small'
-                    rounded='full'
-                    onClick={() => setStorageFilter('all')}
-                    className={`transition-all duration-200 ${
-                      storageFilter === 'all'
-                        ? 'bg-blue-500 text-white dark:bg-blue-600'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                    }`}
-                  >
-                    <p className='text-xs px-1'>All</p>
-                  </Button>
-                  <Button
-                    variant='acrylic'
-                    size='small'
-                    rounded='full'
-                    onClick={() => setStorageFilter('cloud')}
-                    className={`transition-all duration-200 ${
-                      storageFilter === 'cloud'
-                        ? 'bg-blue-500 text-white dark:bg-blue-600'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                    }`}
-                  >
-                    <p className='text-xs px-1'>Cloud</p>
-                  </Button>
-                  <Button
-                    variant='acrylic'
-                    size='small'
-                    rounded='full'
-                    onClick={() => setStorageFilter('local')}
-                    className={`transition-all duration-200 ${
-                      storageFilter === 'local'
-                        ? 'bg-green-500 text-white dark:bg-green-600'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                    }`}
-                  >
-                    <p className='text-xs px-1'>Local</p>
-                  </Button>
-                </div>
-              )}
-              {/* <span className='text-sm text-neutral-50 dark:text-neutral-300'>Filter</span> */}
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}

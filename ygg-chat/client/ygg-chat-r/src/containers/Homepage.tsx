@@ -28,6 +28,11 @@ const Homepage: React.FC = () => {
   const currentUser = useAppSelector(selectCurrentUser)
   const quickChatProjectId = currentUser?.quick_chat_project_id || null
 
+  // Check if running in Electron
+  const isElectronMode =
+    import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+    (typeof process !== 'undefined' && process.env?.VITE_ENVIRONMENT === 'electron')
+
   // Use React Query for data fetching (with automatic caching and deduplication)
   // Projects now include latest_conversation_updated_at, eliminating need to fetch all conversations
   const { data: allProjects = [], isLoading: loading, isRefetching, refetch: refetchProjects } = useProjects()
@@ -49,6 +54,7 @@ const Homepage: React.FC = () => {
   // Search dropdown is handled inside SearchList component
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [storageFilter, setStorageFilter] = useState<'all' | 'cloud' | 'local'>('all')
 
   // Delete confirmation dialog state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -65,7 +71,11 @@ const Homepage: React.FC = () => {
     return saved === 'dark' ? 'Dark' : saved === 'light' ? 'Light' : saved === 'system' ? 'System' : 'System'
   })
 
-  const projects = sortProjects(allProjects, sortBy, sortOrder === 'asc')
+  // Filter projects by storage mode
+  const filteredProjects = storageFilter === 'all'
+    ? allProjects
+    : allProjects.filter(p => p.storage_mode === storageFilter)
+  const projects = sortProjects(filteredProjects, sortBy, sortOrder === 'asc')
 
   // Apply theme immediately when user toggles preference
   useEffect(() => {
@@ -301,7 +311,50 @@ const Homepage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-2'>
-              {/* <span className='text-md text-neutral-900 acrylic-subtle rounded-lg p-2 dark:text-gray-300'>Filter</span> */}
+              {/* Storage Filter (only show in Electron mode) */}
+              {isElectronMode && (
+                <div className='flex items-center gap-1 mr-2'>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('all')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'all'
+                        ? 'bg-blue-500 text-white dark:bg-blue-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>All</p>
+                  </Button>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('cloud')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'cloud'
+                        ? 'bg-blue-500 text-white dark:bg-blue-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>Cloud</p>
+                  </Button>
+                  <Button
+                    variant='acrylic'
+                    size='small'
+                    rounded='full'
+                    onClick={() => setStorageFilter('local')}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'local'
+                        ? 'bg-green-500 text-white dark:bg-green-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    <p className='text-xs px-1'>Local</p>
+                  </Button>
+                </div>
+              )}
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}

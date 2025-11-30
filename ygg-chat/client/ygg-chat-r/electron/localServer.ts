@@ -1335,19 +1335,23 @@ function setupServer() {
       }
 
       // Update only provided fields
-      db!.prepare(`
+      db!
+        .prepare(
+          `
         UPDATE projects SET 
           name = COALESCE(?, name),
           context = ?,
           system_prompt = ?,
           updated_at = CURRENT_TIMESTAMP 
         WHERE id = ?
-      `).run(
-        name || existing.name,
-        context !== undefined ? context : existing.context,
-        system_prompt !== undefined ? system_prompt : existing.system_prompt,
-        id
-      )
+      `
+        )
+        .run(
+          name || existing.name,
+          context !== undefined ? context : existing.context,
+          system_prompt !== undefined ? system_prompt : existing.system_prompt,
+          id
+        )
 
       const updated = statements.getProjectById.get(id)
       console.log('[LocalServer] Updated local project:', id)
@@ -1542,19 +1546,19 @@ function setupServer() {
         content_blocks: msg.content_blocks ? JSON.parse(msg.content_blocks) : null,
       }))
 
-      console.log('[LocalServer] ✨ Normalized messages:', normalizedMessages.length)
-      if (normalizedMessages.length > 0) {
-        console.log('[LocalServer] 📊 Sample normalized message:', JSON.stringify(normalizedMessages[0], null, 2))
-      }
+      // console.log('[LocalServer] ✨ Normalized messages:', normalizedMessages.length)
+      // if (normalizedMessages.length > 0) {
+      //   console.log('[LocalServer] 📊 Sample normalized message:', JSON.stringify(normalizedMessages[0], null, 2))
+      // }
 
       const treeData = buildMessageTree(normalizedMessages)
-      console.log('[LocalServer] 🌳 Tree built successfully:', treeData ? 'Has tree' : 'No tree')
-      if (treeData) {
-        console.log(
-          '[LocalServer] 🌳 Tree root:',
-          JSON.stringify({ id: treeData.id, childCount: treeData.children.length }, null, 2)
-        )
-      }
+      // console.log('[LocalServer] 🌳 Tree built successfully:', treeData ? 'Has tree' : 'No tree')
+      // if (treeData) {
+      //   console.log(
+      //     '[LocalServer] 🌳 Tree root:',
+      //     JSON.stringify({ id: treeData.id, childCount: treeData.children.length }, null, 2)
+      //   )
+      // }
 
       // Get storage_mode from conversation
       const conversation = statements.getConversationById.get(id) as { storage_mode: string } | undefined
