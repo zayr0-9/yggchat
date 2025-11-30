@@ -1043,17 +1043,27 @@ export const fetchConversationMessages = createAsyncThunk<
 export const deleteMessage = createAsyncThunk<
   MessageId,
   { id: MessageId; conversationId: ConversationId },
-  { extra: ThunkExtraArgument }
->('chat/deleteMessage', async ({ id, conversationId }, { dispatch, extra, rejectWithValue }) => {
+  { state: RootState; extra: ThunkExtraArgument }
+>('chat/deleteMessage', async ({ id, conversationId }, { dispatch, getState, extra, rejectWithValue }) => {
   const { auth } = extra
   try {
-    await apiCall(`/messages/${id}`, auth.accessToken, { method: 'DELETE' })
+    const state = getState() as RootState
+    const conversation = state.conversations.items.find(c => c.id === conversationId)
+    const isLocalMode = shouldUseLocalApi(conversation?.storage_mode)
+
+    if (isLocalMode) {
+      await localApi.delete(`/local/messages/${id}`)
+    } else {
+      await apiCall(`/messages/${id}`, auth.accessToken, { method: 'DELETE' })
+    }
     // Sync React Query cache immediately
     removeMessagesFromCache(extra.queryClient, conversationId, [id])
     // Sync message deletion to local SQLite (fire-and-forget)
     dualSync.syncMessage({ id }, 'delete')
-    // Refetch conversation messages to ensure sync with server
-    await dispatch(fetchConversationMessages(conversationId))
+    // Refetch conversation messages to ensure sync with server (cloud only)
+    if (!isLocalMode) {
+      await dispatch(fetchConversationMessages(conversationId))
+    }
     return id
   } catch (error) {
     return rejectWithValue(error instanceof Error ? error.message : 'Delete failed')
