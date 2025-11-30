@@ -7,6 +7,15 @@ export type ProjectId = string
 
 export type StorageMode = 'cloud' | 'local'
 
+export interface SelectedFileContent {
+  path: string
+  relativePath: string
+  name?: string
+  contents: string
+  contentLength: number
+  requestId?: number
+}
+
 export interface BaseMessage {
   id: MessageId
   conversation_id: ConversationId
@@ -37,7 +46,26 @@ export interface BaseMessage {
   ex_agent_type?: string | null
 }
 
+export interface SendMessageRequest {
+  content: string
+  messages?: any[]
+  modelName?: string
+  parentId?: string
+  provider?: string
+  systemPrompt?: string
+  conversationContext?: string | null
+  projectContext?: string | null
+  think?: boolean
+  selectedFiles?: any[]
+  retrigger?: boolean
+  executionMode?: 'server' | 'client'
+  isBranch?: boolean
+  attachmentsBase64?: any[]
+  storageMode?: StorageMode
+}
+
 export interface BaseModel {
+
   // Basic identification
   id: string
   name: string

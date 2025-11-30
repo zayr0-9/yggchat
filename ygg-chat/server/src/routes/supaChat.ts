@@ -4,6 +4,7 @@ import express from 'express'
 import fs from 'fs'
 import multer from 'multer'
 import path from 'path'
+import { SendMessageRequest } from '../../../shared/types'
 import {
   AttachmentService,
   buildMessageTree,
@@ -20,7 +21,6 @@ import {
 } from '../middleware/rateLimiter'
 import { verifyAuth } from '../middleware/supaAuth'
 import { asyncHandler } from '../utils/asyncHandler'
-import { SelectedFileContent } from '../utils/fileMentionProcessor'
 import { abortGeneration, clearGeneration, createGeneration } from '../utils/generationManager'
 import { extractJsonObjects } from '../utils/jsonExtractor'
 import { modelService } from '../utils/modelService'
@@ -1113,7 +1113,8 @@ router.post(
       think,
       retrigger = false,
       isBranch = false,
-    } = req.body
+      storageMode = 'cloud',
+    } = req.body as SendMessageRequest & { repeatNum?: number }
 
     if (!content && !retrigger) {
       return res.status(400).json({ error: 'Message content required' })
@@ -1142,6 +1143,21 @@ router.post(
     } else {
       const lastMessage = await MessageService.getLastMessage(client, conversationId)
       parentId = lastMessage?.id || null
+    }
+
+    // Determine local/cloud mode for repeat endpoint
+    let isLocalMode = storageMode === 'local'
+
+    if (storageMode === 'cloud') {
+      const conversation = await ConversationService.getById(client, conversationId)
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' })
+      }
+      if (conversation.storage_mode === 'local') {
+        console.warn('[supaChat/repeat] Client declared cloud but Supabase reports local:', conversationId)
+        return res.status(400).json({ error: 'Storage mode mismatch' })
+      }
+      isLocalMode = false
     }
 
     const userMessage = await MessageService.create(
@@ -1173,7 +1189,7 @@ router.post(
       : []
 
     try {
-      const repeats = Math.max(1, parseInt(repeatNum as string, 10) || 1)
+      const repeats = Math.max(1, typeof repeatNum === 'number' ? repeatNum : parseInt(String(repeatNum), 10) || 1)
       const { id: messageId, controller } = createGeneration(userMessage.id)
       res.write(`data: ${JSON.stringify({ type: 'generation_started', messageId: userMessage.id })}\n\n`)
 
@@ -1312,7 +1328,7 @@ router.post(
               }
             }
           },
-          provider,
+          provider as 'ollama' | 'gemini' | 'anthropic' | 'openai' | 'openrouter' | 'lmstudio',
           selectedModel,
           createdAttachments.map(a => ({
             url: a?.url || undefined,
@@ -1425,21 +1441,8 @@ router.post(
       retrigger = false,
       executionMode = 'server',
       isBranch = false,
-    } = req.body as {
-      content: string
-      messages?: any[]
-      modelName?: string
-      parentId?: string
-      provider?: string
-      systemPrompt?: string
-      conversationContext?: string | null
-      projectContext?: string | null
-      think?: boolean
-      selectedFiles?: SelectedFileContent[]
-      retrigger?: boolean
-      executionMode?: 'server' | 'client'
-      isBranch?: boolean
-    }
+      storageMode = 'cloud',
+    } = req.body as SendMessageRequest
 
     console.log(`[supaChat] Processing message request for conversation ${conversationId}`)
     console.log(`[supaChat] Execution Mode: ${executionMode}`)
@@ -1529,8 +1532,21 @@ router.post(
     const selectedModel = modelName || (await modelService.getDefaultModel())
 
     // Get conversation to check storage mode
-    const conversation = await ConversationService.getById(client, conversationId)
-    const isLocalMode = conversation?.storage_mode === 'local'
+    let isLocalMode = storageMode === 'local'
+
+    if (storageMode === 'cloud') {
+      const conversation = await ConversationService.getById(client, conversationId)
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found' })
+      }
+
+      if (conversation.storage_mode === 'local') {
+        console.warn('[supaChat] Client declared cloud but Supabase reports local:', conversationId)
+        return res.status(400).json({ error: 'Storage mode mismatch' })
+      }
+
+      isLocalMode = false
+    }
 
     // Use client-provided parentId directly - RLS will enforce FK constraints
     let parentId: string | null = null

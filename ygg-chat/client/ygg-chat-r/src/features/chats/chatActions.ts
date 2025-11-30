@@ -4,7 +4,7 @@ import { ConversationId, MessageId } from '../../../../../shared/types'
 import { dualSync } from '../../lib/sync/dualSyncManager'
 import type { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
-import { API_BASE, apiCall, createStreamingRequest, localApi, environment, shouldUseLocalApi } from '../../utils/api'
+import { API_BASE, apiCall, createStreamingRequest, environment, localApi, shouldUseLocalApi } from '../../utils/api'
 import { convContextSet, systemPromptSet } from '../conversations/conversationSlice'
 import type { Conversation } from '../conversations/conversationTypes'
 import { selectSelectedProject } from '../projects/projectSelectors'
@@ -215,12 +215,12 @@ const updateMessageInCache = (
     const updatedMessages = existingData.messages.map(msg =>
       msg.id === messageId
         ? {
-          ...msg,
-          content: updatedContent,
-          content_plain_text: updatedContent,
-          ...(updatedNote !== undefined && { note: updatedNote }),
-          ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
-        }
+            ...msg,
+            content: updatedContent,
+            content_plain_text: updatedContent,
+            ...(updatedNote !== undefined && { note: updatedNote }),
+            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
+          }
         : msg
     )
 
@@ -373,12 +373,7 @@ const executeLocalTool = async (toolCall: any, rootPath: string | null) => {
 
 let pendingPermissionResolve: ((allowed: boolean) => void) | null = null
 
-const executeToolWithPermissionCheck = async (
-  dispatch: any,
-  getState: any,
-  toolCall: any,
-  rootPath: string | null
-) => {
+const executeToolWithPermissionCheck = async (dispatch: any, getState: any, toolCall: any, rootPath: string | null) => {
   // Check if auto-approve is enabled
   const state = getState() as RootState
   const autoApprove = state.chat.toolAutoApprove
@@ -472,6 +467,9 @@ export const sendMessage = createAsyncThunk<
       // Get selected files for chat from IDE context
       const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
+      const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
+      const storageMode = conversationMeta?.storage_mode || 'cloud'
+
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       // For local tool execution support (GemTools), we prefer client mode even in web environment
@@ -501,47 +499,44 @@ export const sendMessage = createAsyncThunk<
           // Always use cloud endpoint - server handles local/cloud logic
           const endpoint = `/conversations/${conversationId}/messages/repeat`
 
-          response = await createStreamingRequest(
-            endpoint,
-            auth.accessToken,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                messages: currentTurnHistory.map(m => ({
-                  id: m.id,
-                  conversation_id: m.conversation_id,
-                  parent_id: m.parent_id,
-                  children_ids: m.children_ids,
-                  role: m.role,
-                  thinking_block: m.thinking_block,
-                  tool_calls: m.tool_calls,
-                  content_blocks: m.content_blocks,
-                  content: m.content,
-                  content_plain_text: m.content_plain_text,
-                  created_at: m.created_at,
-                  model_name: m.model_name,
-                  partial: m.partial,
-                  artifacts: m.artifacts,
-                })),
-                content: currentTurnContent,
-                modelName: modelName,
-                // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
-                parentId: parent,
-                systemPrompt: systemPrompt,
-                conversationContext: combinedContext,
-                projectContext,
-                provider: serverProvider,
-                repeatNum: repeatNum,
-                attachmentsBase64,
-                selectedFiles: selectedFilesForChat,
-                think,
-                retrigger,
-                executionMode,
-              }),
-              signal: controller.signal,
-            }
-          )
+          response = await createStreamingRequest(endpoint, auth.accessToken, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: currentTurnHistory.map(m => ({
+                id: m.id,
+                conversation_id: m.conversation_id,
+                parent_id: m.parent_id,
+                children_ids: m.children_ids,
+                role: m.role,
+                thinking_block: m.thinking_block,
+                tool_calls: m.tool_calls,
+                content_blocks: m.content_blocks,
+                content: m.content,
+                content_plain_text: m.content_plain_text,
+                created_at: m.created_at,
+                model_name: m.model_name,
+                partial: m.partial,
+                artifacts: m.artifacts,
+              })),
+              content: currentTurnContent,
+              modelName: modelName,
+              // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
+              parentId: parent,
+              systemPrompt: systemPrompt,
+              conversationContext: combinedContext,
+              projectContext,
+              provider: serverProvider,
+              repeatNum: repeatNum,
+              attachmentsBase64,
+              selectedFiles: selectedFilesForChat,
+              think,
+              retrigger,
+              executionMode,
+              storageMode,
+            }),
+            signal: controller.signal,
+          })
         } else {
           // Always use cloud endpoint - server handles local/cloud logic
           const endpoint = `/conversations/${conversationId}/messages`
@@ -579,6 +574,7 @@ export const sendMessage = createAsyncThunk<
               think,
               retrigger: turnCount === 1 ? retrigger : false,
               executionMode,
+              storageMode,
             }),
             signal: controller.signal,
           })
@@ -668,7 +664,7 @@ export const sendMessage = createAsyncThunk<
                     const baseTitle = contentForTitle.slice(0, 50)
                     const title = baseTitle ? `${baseTitle}...` : ''
                     if (title) {
-                      ; (dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
                       titleUpdated = true
                     }
                   }
@@ -1154,7 +1150,11 @@ export const editMessageWithBranching = createAsyncThunk<
       if (!modelName) {
         throw new Error('No model selected')
       }
+
       const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
+
+      const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
+      const storageMode = conversationMeta?.storage_mode || 'cloud'
 
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
@@ -1206,6 +1206,7 @@ export const editMessageWithBranching = createAsyncThunk<
             think,
             executionMode,
             isBranch: true,
+            storageMode,
           }),
           signal: controller.signal,
         })
@@ -1398,7 +1399,9 @@ export const editMessageWithBranching = createAsyncThunk<
             console.log(`🛠️ [editMessageWithBranching] Executing ${pendingToolCalls.length} tool calls locally...`)
 
             if (processedToolCallIds.size > 0) {
-              console.log(`⏩ [editMessageWithBranching] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
+              console.log(
+                `⏩ [editMessageWithBranching] Skipped ${processedToolCallIds.size} tool calls already handled by server`
+              )
             }
 
             // 1. Synthesize Assistant Message if we didn't get a 'complete' event
@@ -1588,6 +1591,9 @@ export const sendMessageToBranch = createAsyncThunk<
       // Get selected files for chat from IDE context
       const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
+      const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
+      const storageMode = conversationMeta?.storage_mode || 'cloud'
+
       if (!modelName) {
         throw new Error('No model selected')
       }
@@ -1626,6 +1632,7 @@ export const sendMessageToBranch = createAsyncThunk<
             think,
             executionMode,
             isBranch: true,
+            storageMode,
           }),
           signal: controller.signal,
         })
@@ -1774,7 +1781,9 @@ export const sendMessageToBranch = createAsyncThunk<
             console.log(`🛠️ [sendMessageToBranch] Executing ${pendingToolCalls.length} tool calls locally...`)
 
             if (processedToolCallIds.size > 0) {
-              console.log(`⏩ [sendMessageToBranch] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
+              console.log(
+                `⏩ [sendMessageToBranch] Skipped ${processedToolCallIds.size} tool calls already handled by server`
+              )
             }
 
             // 1. Synthesize Assistant Message if we didn't get a 'complete' event
@@ -1804,7 +1813,7 @@ export const sendMessageToBranch = createAsyncThunk<
               // Actually messageBranchCreated usually updates path.
               // We should also add message to store if not there?
               // 'messageBranchCreated' in chatSlice handles adding to messages array?
-              // Let's check 'messageAdded' usage in previous thunk. 
+              // Let's check 'messageAdded' usage in previous thunk.
               // It calls 'messageAdded' THEN 'messageBranchCreated'.
 
               dispatch(chatSliceActions.messageAdded(assistantMsg))
@@ -2949,17 +2958,16 @@ export const sendCCBranch = createAsyncThunk<
 //   }
 // )
 
-export const respondToToolPermission = createAsyncThunk<
-  void,
-  boolean,
-  { state: RootState; extra: ThunkExtraArgument }
->('chat/respondToToolPermission', async (allowed, { dispatch }) => {
-  if (pendingPermissionResolve) {
-    pendingPermissionResolve(allowed)
-    pendingPermissionResolve = null
+export const respondToToolPermission = createAsyncThunk<void, boolean, { state: RootState; extra: ThunkExtraArgument }>(
+  'chat/respondToToolPermission',
+  async (allowed, { dispatch }) => {
+    if (pendingPermissionResolve) {
+      pendingPermissionResolve(allowed)
+      pendingPermissionResolve = null
+    }
+    dispatch(chatSliceActions.toolPermissionResponded())
   }
-  dispatch(chatSliceActions.toolPermissionResponded())
-})
+)
 
 export const respondToToolPermissionAndEnableAll = createAsyncThunk<
   void,
@@ -2978,4 +2986,3 @@ export const respondToToolPermissionAndEnableAll = createAsyncThunk<
   // Clear the permission dialog
   dispatch(chatSliceActions.toolPermissionResponded())
 })
-
