@@ -241,12 +241,12 @@ const updateMessageInCache = (
     const updatedMessages = existingData.messages.map(msg =>
       msg.id === messageId
         ? {
-          ...msg,
-          content: updatedContent,
-          content_plain_text: updatedContent,
-          ...(updatedNote !== undefined && { note: updatedNote }),
-          ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
-        }
+            ...msg,
+            content: updatedContent,
+            content_plain_text: updatedContent,
+            ...(updatedNote !== undefined && { note: updatedNote }),
+            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
+          }
         : msg
     )
 
@@ -506,7 +506,7 @@ export const sendMessage = createAsyncThunk<
       let currentTurnContent = input.content.trim()
       let continueTurn = true
       let turnCount = 0
-      const MAX_TURNS = 10
+      const MAX_TURNS = 100
 
       let messageId: MessageId | null = null
       let userMessage: any = null
@@ -690,7 +690,7 @@ export const sendMessage = createAsyncThunk<
                     const baseTitle = contentForTitle.slice(0, 50)
                     const title = baseTitle ? `${baseTitle}...` : ''
                     if (title) {
-                      ; (dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
                       titleUpdated = true
                     }
                   }
@@ -1083,7 +1083,7 @@ export const deleteMessage = createAsyncThunk<
       isLocalMode,
       environment,
       conversationId,
-      messageId: id
+      messageId: id,
     })
 
     if (isLocalMode) {
@@ -1212,7 +1212,7 @@ export const editMessageWithBranching = createAsyncThunk<
       let currentTurnContent = newContent
       let continueTurn = true
       let turnCount = 0
-      const MAX_TURNS = 10
+      const MAX_TURNS = 100
 
       let messageId: MessageId | null = null
       let userMessage: any = null
@@ -1653,7 +1653,7 @@ export const sendMessageToBranch = createAsyncThunk<
       let currentParentId = parentId
       let continueTurn = true
       let turnCount = 0
-      const MAX_TURNS = 10
+      const MAX_TURNS = 100
       let messageId: MessageId | null = null
       let userMessage: any = null
 
@@ -2356,14 +2356,14 @@ export const deleteSelectedNodes = createAsyncThunk<
     // Use storageMode passed from caller (most reliable) or fallback to cache lookup
     const effectiveStorageMode = storageMode ?? getStorageModeFromCache(extra.queryClient, conversationId)
     const isLocalMode = shouldUseLocalApi(effectiveStorageMode)
-    
+
     console.log('[deleteSelectedNodes] Routing decision:', {
       passedStorageMode: storageMode,
       effectiveStorageMode,
       isLocalMode,
       environment,
       conversationId,
-      messageCount: ids.length
+      messageCount: ids.length,
     })
 
     let response: { deleted: number }

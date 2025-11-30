@@ -1,9 +1,9 @@
-import * as path from 'path'
 import { glob } from 'glob'
 import os from 'os'
-import { resolveToWindowsPath, isWSLPath } from '../utils/wslBridge.js'
+import * as path from 'path'
+import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
 
-const DEFAULT_MAX_MATCHES = 1000
+const DEFAULT_MAX_MATCHES = 3000
 const DEFAULT_TIMEOUT_MS = 5000
 const DIRECTORY_DEPTH_LIMIT = 6
 const DEFAULT_IGNORE_PATTERNS = [
@@ -28,19 +28,19 @@ const HOMEDIR = os.homedir()
 
 async function ensureWithinWorkspace(cwd: string): Promise<string> {
   if (isWSLPath(cwd)) {
-     return await resolveToWindowsPath(cwd)
+    return await resolveToWindowsPath(cwd)
   }
 
   const resolved = path.resolve(cwd)
-  
+
   // Basic safety check: don't allow root or home dir as cwd to prevent scanning whole system
   if (resolved === '/' || resolved === path.parse(resolved).root || resolved === HOMEDIR) {
-     // If explicit request, maybe allow? But safer to restrict.
-     // However, in local mode, user might want to scan arbitrary dirs.
-     // Let's just warn or allow if it's intentional.
-     // For now, we'll allow it if it's not the fs root.
+    // If explicit request, maybe allow? But safer to restrict.
+    // However, in local mode, user might want to scan arbitrary dirs.
+    // Let's just warn or allow if it's intentional.
+    // For now, we'll allow it if it's not the fs root.
   }
-  
+
   return resolved
 }
 
@@ -84,10 +84,7 @@ export interface GlobResult {
   totalMatches?: number
 }
 
-export async function globSearch(
-  pattern: string,
-  options: GlobOptions = {}
-): Promise<GlobResult> {
+export async function globSearch(pattern: string, options: GlobOptions = {}): Promise<GlobResult> {
   if (!pattern || pattern.trim() === '') {
     return {
       success: false,
@@ -139,12 +136,15 @@ export async function globSearch(
     let results: any[]
     try {
       // glob v10+ returns a promise directly
-      results = await Promise.race([
+      results = (await Promise.race([
         glob(sanitizedPattern, globOptions),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Glob search timed out. Narrow the pattern or specify a smaller cwd.')), timeoutMs)
+          setTimeout(
+            () => reject(new Error('Glob search timed out. Narrow the pattern or specify a smaller cwd.')),
+            timeoutMs
+          )
         ),
-      ]) as any[]
+      ])) as any[]
     } catch (error: any) {
       throw new Error(error?.message || 'Glob search failed')
     }
@@ -188,6 +188,5 @@ export async function globSearch(
     }
   }
 }
-
 
 export default globSearch

@@ -11,8 +11,8 @@ const DEFAULT_MAX_OUTPUT_CHARS = (() => {
 })()
 
 // Multi-layered limits to prevent overwhelming responses
-const MAX_RESULT_LINES = 500 // Maximum number of match objects
-const MAX_LINE_LENGTH = 500 // Maximum characters per individual line (will truncate)
+const MAX_RESULT_LINES = 1000 // Maximum number of match objects
+const MAX_LINE_LENGTH = 1000 // Maximum characters per individual line (will truncate)
 // const MAX_TOTAL_CHARS = 5000 // Maximum total characters across all match content
 
 export interface RipgrepOptions {
