@@ -341,10 +341,22 @@ export function useConversationMessages(conversationId: ConversationId | null, s
       // Determine storage mode: use parameter if provided, otherwise check cached conversations
       let effectiveStorageMode = storageMode
       if (!effectiveStorageMode) {
-        // Try to get storage_mode from cached conversations
-        const conversations = queryClient.getQueryData<Conversation[]>(['conversations'])
-        const conversation = conversations?.find(c => c.id === conversationId)
-        effectiveStorageMode = conversation?.storage_mode || 'cloud'
+        // Search ALL cached conversation lists (main list, project lists, recent lists)
+        // This finds the conversation even if it's only loaded in a specific project view
+        const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
+
+        for (const [queryKey, data] of allConversationQueries) {
+          if (Array.isArray(data)) {
+            const match = data.find(c => c.id === conversationId)
+            if (match?.storage_mode) {
+              effectiveStorageMode = match.storage_mode
+              console.log('[useConversationMessages] Found storage_mode in cache:', effectiveStorageMode, 'from query:', queryKey)
+              break
+            }
+          }
+        }
+
+        if (!effectiveStorageMode) effectiveStorageMode = 'cloud'
       }
 
       console.log('[useConversationMessages] Fetching messages for conversation:', conversationId, 'storage_mode:', effectiveStorageMode)
