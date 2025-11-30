@@ -207,7 +207,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                     <div>
                       <div className='font-medium dark:text-neutral-100'>Cloud</div>
                       <div className='text-xs text-neutral-600 dark:text-neutral-400'>
-                        Synced to Supabase (accessible anywhere)
+                        Synced to Supabase (accessible anywhere) No Agent Support
                       </div>
                     </div>
                   </label>
@@ -222,7 +222,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                     <div>
                       <div className='font-medium dark:text-neutral-100'>Local Only</div>
                       <div className='text-xs text-neutral-600 dark:text-neutral-400'>
-                        Stored on this device only (not synced)
+                        Stored on this device only (not synced) Supports Agent
                       </div>
                     </div>
                   </label>

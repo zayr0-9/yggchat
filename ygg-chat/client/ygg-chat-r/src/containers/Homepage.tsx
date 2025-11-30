@@ -401,7 +401,7 @@ const Homepage: React.FC = () => {
           <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
               <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
-                {projects.map(project => (
+                {projects.map((project, index) => (
                   <li
                     key={project.id}
                     className='rounded-4xl acrylic-light px-3 py-3 sm:px-4 md:px-4 md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 bg-neutral-50 dark:bg-yBlack-900 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-transparent hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-700/50 dark:hover:bg-transparent dark:hover:outline-neutral-600 group '
@@ -411,7 +411,7 @@ const Homepage: React.FC = () => {
                       <div className='flex-1'>
                         <span className='font-semibold text-xl dark:text-neutral-100 transition-transform duration-100 group-active:scale-99 flex items-center gap-2'>
                           <p className='transition-transform duration-100 group-active:scale-99 text-[16px] sm:text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px]'>
-                            {project.name}
+                            {String(index + 1).padStart(2, '0')}. {project.name}
                           </p>
                           {project.storage_mode === 'local' && (
                             <span className='text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-800 font-medium'>

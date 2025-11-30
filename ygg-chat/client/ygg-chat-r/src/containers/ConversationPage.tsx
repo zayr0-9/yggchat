@@ -3,6 +3,7 @@ import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import type { StorageMode } from '../../../../shared/types'
 import { Button } from '../components'
 import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
@@ -16,7 +17,6 @@ import {
   selectConvError,
 } from '../features/conversations'
 import { clearSelectedProject, projectsLoaded, selectSelectedProject, setSelectedProject } from '../features/projects'
-import type { StorageMode } from '../../../../shared/types'
 
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useIsMobile } from '../hooks/useMediaQuery'
@@ -407,7 +407,7 @@ const ConversationPage: React.FC = () => {
           <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
               <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
-                {sortedConversations.map(conv => (
+                {sortedConversations.map((conv, index) => (
                   <li
                     key={conv.id}
                     className='rounded-4xl px-3 py-3 sm:p-2 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-700 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
@@ -416,14 +416,14 @@ const ConversationPage: React.FC = () => {
                     <div className='flex items-center justify-between'>
                       <div className='flex items-center gap-2 flex-1 min-w-0'>
                         <span className='font-semibold dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] truncate'>
-                          {conv.title || `Conversation ${conv.id}`}
+                          {String(index + 1).padStart(2, '0')}. {conv.title || `Conversation ${conv.id}`}
                         </span>
                         {conv.storage_mode === 'local' && (
                           <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 shrink-0'>
                             Local
                           </span>
                         )}
-                        {conv.storage_mode === 'cloud' && (
+                        {isElectronMode && conv.storage_mode === 'cloud' && (
                           <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 shrink-0'>
                             Cloud
                           </span>
@@ -477,7 +477,7 @@ const ConversationPage: React.FC = () => {
               <input
                 type='text'
                 value={newConvTitle}
-                onChange={(e) => setNewConvTitle(e.target.value)}
+                onChange={e => setNewConvTitle(e.target.value)}
                 placeholder='Enter conversation title...'
                 className='w-full px-3 py-2 rounded-xl border border-gray-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
               />
@@ -491,12 +491,14 @@ const ConversationPage: React.FC = () => {
                     type='radio'
                     value='cloud'
                     checked={storageMode === 'cloud'}
-                    onChange={(e) => setStorageMode(e.target.value as StorageMode)}
+                    onChange={e => setStorageMode(e.target.value as StorageMode)}
                     className='mr-3'
                   />
                   <div>
                     <div className='font-medium dark:text-neutral-100'>Cloud</div>
-                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>Synced to Supabase (accessible anywhere)</div>
+                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                      Synced to Supabase (accessible anywhere)
+                    </div>
                   </div>
                 </label>
                 <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
@@ -504,19 +506,27 @@ const ConversationPage: React.FC = () => {
                     type='radio'
                     value='local'
                     checked={storageMode === 'local'}
-                    onChange={(e) => setStorageMode(e.target.value as StorageMode)}
+                    onChange={e => setStorageMode(e.target.value as StorageMode)}
                     className='mr-3'
                   />
                   <div>
                     <div className='font-medium dark:text-neutral-100'>Local Only</div>
-                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>Stored on this device only (not synced)</div>
+                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                      Stored on this device only (not synced)
+                    </div>
                   </div>
                 </label>
               </div>
             </div>
 
             <div className='flex gap-3 justify-end'>
-              <Button variant='acrylic' size='circle' rounded='full' className='group' onClick={() => setShowNewConversationModal(false)}>
+              <Button
+                variant='acrylic'
+                size='circle'
+                rounded='full'
+                className='group'
+                onClick={() => setShowNewConversationModal(false)}
+              >
                 <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
               </Button>
               <Button
