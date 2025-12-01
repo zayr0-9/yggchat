@@ -88,7 +88,6 @@ function Chat() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-
   // Local state for input to completely avoid Redux dispatches during typing
   const [localInput, setLocalInput] = useState('')
 
@@ -118,6 +117,10 @@ function Chat() {
   const currentConversationId = useAppSelector(selectCurrentConversationId)
   const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
+  const inputAreaBorderClasses =
+    operationMode === 'plan'
+      ? 'outline-1 outline-blue-500 dark:outline-blue-500 border border-blue-500 dark:border-blue-500'
+      : 'outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300'
 
 
   // React Query for message fetching - MOVED BELOW after projectConversations is available
@@ -374,7 +377,7 @@ function Chat() {
       conversationIdFromUrl,
       projectConversationsCount: projectConversations.length,
       foundConversation: !!conv,
-      storage_mode: mode
+      storage_mode: mode,
     })
     return mode
   }, [conversationIdFromUrl, projectConversations])
@@ -1634,11 +1637,13 @@ function Chat() {
       console.log('[Chat] performDelete called:', {
         messageId,
         currentConversationId,
-        conversationStorageMode
+        conversationStorageMode,
       })
       dispatch(chatSliceActions.messageDeleted(messageId))
       if (currentConversationId) {
-        dispatch(deleteMessage({ id: messageId, conversationId: currentConversationId, storageMode: conversationStorageMode }))
+        dispatch(
+          deleteMessage({ id: messageId, conversationId: currentConversationId, storageMode: conversationStorageMode })
+        )
         dispatch(refreshCurrentPathAfterDelete({ conversationId: currentConversationId, messageId }))
       }
     },
@@ -2168,11 +2173,7 @@ function Chat() {
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
           <div
-            className={`acrylic-subtle pb-1 ${
-              toolAutoApprove
-                ? 'outline-1 dark:outline-1 dark:outline-orange-700/70 outline-orange-700/70'
-                : 'outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300'
-            } rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900`}
+            className={`acrylic-subtle pb-1 ${inputAreaBorderClasses} rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900`}
           >
             {toolCallPermissionRequest && (
               <ToolPermissionDialog
@@ -2349,12 +2350,10 @@ function Chat() {
                         ? 'Plan mode enabled (tools will be blocked)'
                         : 'Execution mode enabled (tools may modify files)'
                     }
-                    aria-label={
-                      operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'
-                    }
+                    aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
                   >
                     <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
-                    {operationMode === 'plan' ? 'Plan mode' : 'Execution mode'}
+                    {operationMode === 'plan' ? 'Plan mode' : 'Edit Mode'}
                   </Button>
                   {/* <Button
                     variant='outline2'

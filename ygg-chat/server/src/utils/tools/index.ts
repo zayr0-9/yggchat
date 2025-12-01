@@ -121,7 +121,7 @@ const tools: tools[] = [
           )
           .optional()
           .describe(
-            'Optional array of multiple line ranges to read. Each range will be separated with a "// Lines X-Y" comment. Use this to read disjoint sections in a single call, avoiding overlaps and duplicate context.'
+            'Array of line range objects to read multiple disjoint sections. Format: [{"startLine": 10, "endLine": 50}, {"startLine": 100, "endLine": 150}]. Each range outputs with a "// Lines X-Y" header. Takes precedence over startLine/endLine params.'
           ),
       }),
       execute: async ({
@@ -171,7 +171,7 @@ const tools: tools[] = [
         paths: z
           .array(z.string())
           .nonempty()
-          .describe('Array of file paths to read (absolute or relative), e.g. ["path1", "path2"]'),
+          .describe('Array of file paths to read. Example: ["src/index.ts", "src/utils.ts", "/absolute/path/file.js"]'),
         baseDir: z.string().optional().describe('Optional base directory used to compute the relative path header.'),
         maxBytes: z
           .number()
@@ -320,7 +320,7 @@ const tools: tools[] = [
         allowedExtensions: z
           .array(z.string())
           .optional()
-          .describe('Optional array of allowed file extensions (e.g., .txt, .json).'),
+          .describe('Restrict deletions to specific extensions. Example: [".txt", ".json", ".log"]. Include the dot prefix.'),
       }),
       execute: async ({ path, allowedExtensions }: any) => {
         try {
@@ -349,7 +349,7 @@ const tools: tools[] = [
     enabled: false,
     tool: {
       description:
-        'Edit a file using search and replace operations or append content. Supports replacing all occurrences, first occurrence only, or appending.',
+        'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy.',
       inputSchema: z.object({
         path: z.string().describe('The path to the file to edit'),
         operation: z.enum(['replace', 'replace_first', 'append']).describe('Type of edit operation'),
@@ -377,9 +377,9 @@ const tools: tools[] = [
       description: 'Search chat history across user, project, or conversation using the DB FTS utilities.',
       inputSchema: z.object({
         query: z.string().describe('The search query to run'),
-        userId: z.number().int().optional().nullable().describe('Optional user id to scope search'),
-        projectId: z.number().int().optional().nullable().describe('Optional project id to scope search'),
-        conversationId: z.number().int().optional().nullable().describe('Optional conversation id to scope search'),
+        userId: z.number().int().optional().nullable().describe('User ID to scope search. Pass null or omit to search all users.'),
+        projectId: z.number().int().optional().nullable().describe('Project ID to scope search. Pass null or omit to search all projects.'),
+        conversationId: z.number().int().optional().nullable().describe('Conversation ID to scope search. Pass null or omit to search all conversations.'),
         limit: z.number().int().optional().describe('Optional result limit (default 10)'),
       }),
       execute: async ({ query, userId, projectId, conversationId, limit }: any) => {
@@ -479,24 +479,24 @@ const tools: tools[] = [
           .string()
           .optional()
           .describe('Two-letter ISO country code (e.g., "US"). Omit if unspecified.'),
-        includeDomains: z.array(z.string()).optional().describe('Only include results from these domains.'),
-        excludeDomains: z.array(z.string()).optional().describe('Exclude results from these domains.'),
+        includeDomains: z.array(z.string()).optional().describe('Only search these domains. Example: ["github.com", "stackoverflow.com"]'),
+        excludeDomains: z.array(z.string()).optional().describe('Exclude these domains. Example: ["pinterest.com", "quora.com"]'),
         startCrawlDate: z
           .string()
           .optional()
-          .describe('ISO 8601 date/time. Only include pages crawled after this moment (omit to search entire index).'),
+          .describe('ISO 8601 datetime. Example: "2024-01-01T00:00:00Z". Pages crawled after this date.'),
         endCrawlDate: z
           .string()
           .optional()
-          .describe('ISO 8601 date/time. Only include pages crawled before this moment (omit if not needed).'),
+          .describe('ISO 8601 datetime. Example: "2024-12-31T23:59:59Z". Pages crawled before this date.'),
         startPublishedDate: z
           .string()
           .optional()
-          .describe('ISO 8601 date/time. Only include pages published after this moment (omit for no filter).'),
+          .describe('ISO 8601 datetime. Example: "2024-01-01" or "2024-06-15T00:00:00Z". Pages published after this date.'),
         endPublishedDate: z
           .string()
           .optional()
-          .describe('ISO 8601 date/time. Only include pages published before this moment (omit for no filter).'),
+          .describe('ISO 8601 datetime. Example: "2024-12-31". Pages published before this date.'),
         includeText: z
           .array(z.string())
           .optional()
@@ -588,7 +588,7 @@ const tools: tools[] = [
     enabled: false,
     tool: {
       description:
-        'Search code, files, and directories using ripgrep (rg), a powerful line-oriented search tool. Supports regex patterns, file filtering, and various output formats. IMPORTANT: Results have multiple limits to prevent overwhelming output: (1) max 500 match results, (2) max 50,000 total characters across all matches, (3) individual lines truncated at 500 characters. If any limit is exceeded, you will receive an error asking you to narrow your search using more specific patterns, glob filters, reduced search paths, or maxCount parameter.',
+        'Search files using ripgrep (rg). Supports regex, file filtering, context lines. Limits: max 500 matches, 5000 total chars, 500 chars/line. Use glob filter (e.g., "*.ts"), maxCount, or narrower patterns if limits exceeded.',
       inputSchema: z.object({
         pattern: z.string().describe('Search pattern (regex or literal string)'),
         searchPath: z
@@ -666,7 +666,7 @@ const tools: tools[] = [
       inputSchema: z.object({
         command: z.string().describe('Shell command to execute'),
         cwd: z.string().optional().describe('Working directory for the command'),
-        env: z.record(z.string(), z.string()).optional().describe('Optional environment variables'),
+        env: z.record(z.string(), z.string()).optional().describe('Environment variables as key-value object. Example: {"NODE_ENV": "production", "DEBUG": "true"}'),
         timeoutMs: z
           .number()
           .int()
@@ -703,7 +703,7 @@ const tools: tools[] = [
       inputSchema: z.object({
         pattern: z.string().describe('Glob pattern to match files (e.g., "*.ts", "src/**/*.js")'),
         cwd: z.string().optional().describe('Current working directory to search from'),
-        ignore: z.string().or(z.array(z.string())).optional().describe('Patterns to ignore'),
+        ignore: z.string().or(z.array(z.string())).optional().describe('Patterns to exclude. String or array. Example: ["node_modules/**", "*.test.ts"] or "dist/**"'),
         dot: z.boolean().optional().describe('Include dotfiles (default: false)'),
         absolute: z.boolean().optional().describe('Return absolute paths (default: false)'),
         mark: z.boolean().optional().describe('Add / suffix to directories (default: false)'),
@@ -788,7 +788,7 @@ const tools: tools[] = [
           .string()
           .optional()
           .describe(
-            'Path to browser user data directory. Required when useUserProfile=true. Example: ~/.config/google-chrome or %LOCALAPPDATA%\\Google\\Chrome\\User Data'
+            'Browser profile path for useUserProfile=true. Linux: "~/.config/google-chrome", Windows: "%LOCALAPPDATA%\\\\Google\\\\Chrome\\\\User Data", macOS: "~/Library/Application Support/Google/Chrome"'
           ),
         retries: z
           .number()
