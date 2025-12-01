@@ -31,6 +31,30 @@ interface TextAreaProps {
   variant?: 'primary' | 'outline'
 }
 
+const allowedMentionChar = /[A-Za-z0-9._\/\-]/
+
+function findActiveMention(value: string, cursorPos: number) {
+  let idx = Math.max(0, cursorPos - 1)
+  while (idx >= 0) {
+    const char = value[idx]
+    if (char === '@') {
+      const prev = idx > 0 ? value[idx - 1] : ''
+      if (prev && allowedMentionChar.test(prev)) {
+        // This @ is part of another word (like an email) – keep looking
+        idx -= 1
+        continue
+      }
+      const term = value.slice(idx + 1, cursorPos)
+      return { start: idx, term }
+    }
+    if (!allowedMentionChar.test(char)) {
+      break
+    }
+    idx -= 1
+  }
+  return null
+}
+
 export const InputTextArea: React.FC<TextAreaProps> = ({
   label,
   placeholder = 'Type your message...',
@@ -78,40 +102,30 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   const [showFileList, setShowFileList] = useState(false)
   const [selectedFileIndex, setSelectedFileIndex] = useState(0)
   const [filteredFiles, setFilteredFiles] = useState<Array<{ path: string; name: string; mention: string }>>([])
+  const [activeMention, setActiveMention] = useState<{ start: number; term: string } | null>(null)
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (state !== 'disabled') {
-      const newValue = e.target.value
-      onChange?.(newValue)
+    if (state === 'disabled') return
+    const newValue = e.target.value
+    onChange?.(newValue)
 
-      // Check if last character is '@' to show file list
-      const lastChar = newValue.slice(-1)
-      if (lastChar === '@') {
-        // console.log('showing file list')
-        setFilteredFiles(localMentionableFiles)
-        // console.log(mentionableFiles)
-        setSelectedFileIndex(0)
-        setShowFileList(true)
-      } else if (showFileList && newValue.endsWith(' ')) {
-        // Hide list when space is typed after @
-        setShowFileList(false)
-      } else if (showFileList) {
-        // Filter files based on text after @
-        const atIndex = newValue.lastIndexOf('@')
-        if (atIndex !== -1) {
-          const searchTerm = newValue.slice(atIndex + 1).toLowerCase()
-          const filtered = localMentionableFiles.filter(
-            file => file.name.toLowerCase().includes(searchTerm) || file.path.toLowerCase().includes(searchTerm)
-          )
-          setFilteredFiles(filtered)
-          setSelectedFileIndex(0)
-          if (filtered.length === 0) {
-            setShowFileList(false)
-          }
-        } else {
-          setShowFileList(false)
-        }
-      }
+    const cursorPos = e.target.selectionStart ?? newValue.length
+    const activeMention = findActiveMention(newValue, cursorPos)
+
+    if (activeMention) {
+      setActiveMention(activeMention)
+      const filtered = localMentionableFiles.filter(
+        file =>
+          file.name.toLowerCase().includes(activeMention.term.toLowerCase()) ||
+          file.path.toLowerCase().includes(activeMention.term.toLowerCase())
+      )
+      setFilteredFiles(filtered)
+      setSelectedFileIndex(0)
+      setShowFileList(filtered.length > 0)
+    } else {
+      setActiveMention(null)
+      setFilteredFiles([])
+      setShowFileList(false)
     }
   }
 
@@ -263,37 +277,39 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
       })
       .catch(err => console.error('Failed to read pasted images', err))
   }
-
-  const handleFileSelection = async (file: { path: string; name: string; mention: string }) => {
-    try {
-      await requestFileContent(file.path)
-      // Do not mutate local lists here; rely on ideContext.selectedFilesForChat
-      // to exclude selected files (handled by the effect above).
-
-      // Replace the @ mention with just the filename
-      if (textareaRef.current) {
-        const currentValue = textareaRef.current.value
-        const atIndex = currentValue.lastIndexOf('@')
-        if (atIndex !== -1) {
-          const beforeAt = currentValue.slice(0, atIndex)
-          const newValue = beforeAt + `@${file.name} `
-          onChange?.(newValue)
-
-          // Focus back to textarea and position cursor after the mention
-          setTimeout(() => {
-            if (textareaRef.current) {
-              textareaRef.current.focus()
-              textareaRef.current.setSelectionRange(newValue.length, newValue.length)
-            }
-          }, 0)
-        }
-      }
-    } catch (error) {
-      console.error('Failed to request file content:', error)
-    } finally {
-      setShowFileList(false)
-    }
+const handleFileSelection = async (file: { path: string; name: string; mention: string }) => {
+  if (!activeMention) {
+    setShowFileList(false)
+    return
   }
+
+  try {
+    await requestFileContent(file.path)
+    setLocalMentionableFiles(prev => prev.filter(f => f.path !== file.path))
+    setFilteredFiles(prev => prev.filter(f => f.path !== file.path))
+
+    if (textareaRef.current) {
+      const currentValue = textareaRef.current.value
+      const before = currentValue.slice(0, activeMention.start)
+      const after = currentValue.slice(activeMention.start + 1 + activeMention.term.length)
+      const newValue = `${before}@${file.name} ${after}`
+      onChange?.(newValue)
+
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const cursorPos = before.length + file.name.length + 2 // include @ and trailing space
+          textareaRef.current.focus()
+          textareaRef.current.setSelectionRange(cursorPos, cursorPos)
+        }
+      }, 0)
+    }
+  } catch (error) {
+    console.error('Failed to request file content:', error)
+  } finally {
+    setActiveMention(null)
+    setShowFileList(false)
+  }
+}
 
   // Auto-resize functionality with debounced execution to prevent forced reflows
   const adjustHeightTimeoutRef = useRef<NodeJS.Timeout | null>(null)
