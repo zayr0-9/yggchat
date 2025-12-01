@@ -7,6 +7,100 @@ const readdir = promisify(fs.readdir)
 const stat = promisify(fs.stat)
 const readFile = promisify(fs.readFile)
 
+function normalizeForComparison(inputPath: string): string {
+  const resolved = path.resolve(inputPath)
+  const normalized = resolved.replace(/\\/g, '/')
+
+  if (normalized === '/') {
+    return '/'
+  }
+
+  return normalized.replace(/\/+$, '')
+}
+
+function isFsRootPath(inputPath: string): boolean {
+  if (!inputPath) {
+    return false
+  }
+
+  const parsedRoot = path.parse(inputPath).root
+  if (!parsedRoot) {
+    return false
+  }
+
+  return normalizeForComparison(inputPath) === normalizeForComparison(parsedRoot)
+}
+
+function detectWorkspaceRoot(): string {
+  const candidates = [
+    process.env.WORKSPACE_ROOT?.trim(),
+    path.resolve(__dirname, '../..'),
+    path.resolve(process.cwd()),
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    try {
+      const resolved = path.resolve(candidate)
+      const stats = fs.statSync(resolved)
+      if (stats.isDirectory()) {
+        return resolved
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return path.resolve(process.cwd())
+}
+
+const WORKSPACE_ROOT = detectWorkspaceRoot()
+const NORMALIZED_WORKSPACE_ROOT = normalizeForComparison(WORKSPACE_ROOT)
+
+function isSameOrSubPath(candidate: string, root: string): boolean {
+  if (candidate === root) return true
+  if (!candidate.startsWith(root)) return false
+  const nextChar = candidate[root.length]
+  return nextChar === '/' || nextChar === undefined
+}
+
+function ensurePathWithinWorkspace(candidatePath: string): string {
+  const resolved = path.resolve(candidatePath)
+  const normalized = normalizeForComparison(resolved)
+
+  if (isSameOrSubPath(normalized, NORMALIZED_WORKSPACE_ROOT)) {
+    return resolved
+  }
+
+  throw new Error(
+    `Access to '${candidatePath}' is blocked. Directory paths must stay within '${WORKSPACE_ROOT}'.`
+  )
+}
+
+async function resolveRequestedDirectory(rawRootDir: string): Promise<string> {
+  const trimmed = (rawRootDir ?? '').trim()
+  const sanitized = trimmed.length === 0 ? '.' : trimmed
+
+  if (sanitized === '.' || sanitized === './') {
+    return WORKSPACE_ROOT
+  }
+
+  if (isFsRootPath(sanitized)) {
+    throw new Error('Access to the filesystem root is not allowed.')
+  }
+
+  let candidateInput = sanitized
+  if (isWSLPath(candidateInput)) {
+    candidateInput = await resolveToWindowsPath(candidateInput)
+  }
+
+  const resolved = path.isAbsolute(candidateInput)
+    ? candidateInput
+    : path.resolve(WORKSPACE_ROOT, candidateInput)
+
+  return ensurePathWithinWorkspace(resolved)
+}
+
 export interface DirectoryOptions {
   maxDepth?: number
   includeHidden?: boolean
@@ -148,17 +242,9 @@ function limitDepth(maxDepth?: number): number | undefined {
 export async function extractDirectoryStructure(rawRootDir: string, options: DirectoryOptions = {}): Promise<string> {
   const { maxDepth, includeHidden = false, includeSizes = false } = options
 
-  // Resolve path using wslBridge logic
-  let resolvedRootDir = rawRootDir
-  if (isWSLPath(rawRootDir)) {
-    resolvedRootDir = await resolveToWindowsPath(rawRootDir)
-  } else if (!path.isAbsolute(rawRootDir)) {
-    resolvedRootDir = path.resolve(process.cwd(), rawRootDir)
-  }
-
+  const resolvedRootDir = await resolveRequestedDirectory(rawRootDir)
   const maxDepthLimit = limitDepth(maxDepth)
 
-  // Check if directory exists
   try {
     const rootStat = await stat(resolvedRootDir)
     if (!rootStat.isDirectory()) {
@@ -168,7 +254,6 @@ export async function extractDirectoryStructure(rawRootDir: string, options: Dir
     throw new Error(`Directory '${rawRootDir}' does not exist or is not accessible`)
   }
 
-  // Load ignore patterns
   const gitignorePatterns = await loadGitignorePatterns(resolvedRootDir)
   const result: string[] = []
 

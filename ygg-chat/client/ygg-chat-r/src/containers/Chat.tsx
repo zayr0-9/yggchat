@@ -2352,7 +2352,7 @@ function Chat() {
                     aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
                   >
                     <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
-                    {operationMode === 'plan' ? 'Plan mode' : 'Edit Mode'}
+                    {operationMode === 'plan' ? 'Chat' : 'Agent'}
                   </Button>
                   {/* <Button
                     variant='outline2'

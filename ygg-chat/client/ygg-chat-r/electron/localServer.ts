@@ -20,6 +20,7 @@ import { globSearch } from './tools/glob.js'
 import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
+import { runBashCommand } from './tools/bash.js'
 
 const app = express()
 let server: any = null
@@ -1171,6 +1172,17 @@ function setupServer() {
           const { url, ...options } = parsedArgs
           if (!url) throw new Error('url is required')
           result = await browseWeb(url, options)
+          break
+        }
+        case 'bash': {
+          const { command, cwd, env, timeoutMs, maxOutputChars } = parsedArgs
+          if (!command) throw new Error('command is required')
+          result = await runBashCommand(command, {
+            cwd: cwd || rootPath || undefined,
+            env,
+            timeoutMs,
+            maxOutputChars,
+          })
           break
         }
         default:

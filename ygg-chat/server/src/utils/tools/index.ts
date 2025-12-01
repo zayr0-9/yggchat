@@ -1,6 +1,7 @@
 import { z } from 'zod/v4'
 // src/utils/tools/toolRegistry.ts
 // import { z } from 'zod/v4'
+import { runBashCommand } from './core/bash'
 import { braveSearch } from './core/braveSearch'
 import { browseWeb } from './core/browseWeb'
 import { createTextFile } from './core/createFile'
@@ -13,7 +14,6 @@ import { globSearch } from './core/glob'
 import { readFileContinuation, readTextFile } from './core/readFile'
 import { readMultipleTextFiles } from './core/readFiles'
 import { ripgrepSearch } from './core/ripgrep'
-import { runBashCommand } from './core/bash'
 import searchHistory from './core/searchHistory'
 // export const directoryTool = tool({
 //   description:
@@ -83,7 +83,7 @@ const tools: tools[] = [
   },
   {
     name: 'read_file',
-    enabled: false,
+    enabled: true,
     tool: {
       description:
         'Read the contents of a text file (code, config, docs). Supports reading full files, single ranges, or multiple disjoint ranges. Rejects likely-binary files and truncates large files for safety.',
@@ -224,7 +224,7 @@ const tools: tools[] = [
   },
   {
     name: 'read_file_continuation',
-    enabled: false,
+    enabled: true,
     tool: {
       description:
         'Read the next chunk of a file after a specific line number. Designed for pagination to avoid duplicate reads. Use this when you previously read a file up to line N and want to continue reading from line N+1.',
@@ -280,7 +280,7 @@ const tools: tools[] = [
   },
   {
     name: 'create_file',
-    enabled: false,
+    enabled: true,
     tool: {
       description: 'Create a new text file with optional parent directory creation and overwrite support.',
       inputSchema: z.object({
@@ -312,7 +312,7 @@ const tools: tools[] = [
   },
   {
     name: 'delete_file',
-    enabled: false,
+    enabled: true,
     tool: {
       description: 'Delete a file at the specified path. Optionally restrict deletions to specific file extensions.',
       inputSchema: z.object({
@@ -320,7 +320,9 @@ const tools: tools[] = [
         allowedExtensions: z
           .array(z.string())
           .optional()
-          .describe('Restrict deletions to specific extensions. Example: [".txt", ".json", ".log"]. Include the dot prefix.'),
+          .describe(
+            'Restrict deletions to specific extensions. Example: [".txt", ".json", ".log"]. Include the dot prefix.'
+          ),
       }),
       execute: async ({ path, allowedExtensions }: any) => {
         try {
@@ -346,7 +348,7 @@ const tools: tools[] = [
   },
   {
     name: 'edit_file',
-    enabled: false,
+    enabled: true,
     tool: {
       description:
         'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy.',
@@ -377,9 +379,24 @@ const tools: tools[] = [
       description: 'Search chat history across user, project, or conversation using the DB FTS utilities.',
       inputSchema: z.object({
         query: z.string().describe('The search query to run'),
-        userId: z.number().int().optional().nullable().describe('User ID to scope search. Pass null or omit to search all users.'),
-        projectId: z.number().int().optional().nullable().describe('Project ID to scope search. Pass null or omit to search all projects.'),
-        conversationId: z.number().int().optional().nullable().describe('Conversation ID to scope search. Pass null or omit to search all conversations.'),
+        userId: z
+          .number()
+          .int()
+          .optional()
+          .nullable()
+          .describe('User ID to scope search. Pass null or omit to search all users.'),
+        projectId: z
+          .number()
+          .int()
+          .optional()
+          .nullable()
+          .describe('Project ID to scope search. Pass null or omit to search all projects.'),
+        conversationId: z
+          .number()
+          .int()
+          .optional()
+          .nullable()
+          .describe('Conversation ID to scope search. Pass null or omit to search all conversations.'),
         limit: z.number().int().optional().describe('Optional result limit (default 10)'),
       }),
       execute: async ({ query, userId, projectId, conversationId, limit }: any) => {
@@ -440,7 +457,7 @@ const tools: tools[] = [
   },
   {
     name: 'exa_search',
-    enabled: true,
+    enabled: false,
     tool: {
       description:
         'Search the web via Exa API (auto/neural/fast/deep). Only provide optional filters when truly needed—omit empty strings, empty arrays, or placeholder dates so Exa can default to its recency-ranked results.',
@@ -460,7 +477,9 @@ const tools: tools[] = [
         additionalQueries: z
           .array(z.string())
           .optional()
-          .describe('Optional query variations (only used when type="deep"). Provide at least one meaningful string or omit.'),
+          .describe(
+            'Optional query variations (only used when type="deep"). Provide at least one meaningful string or omit.'
+          ),
         category: z
           .enum([
             'company',
@@ -475,12 +494,15 @@ const tools: tools[] = [
           ])
           .optional()
           .describe('Content category filter if supported by Exa.'),
-        userLocation: z
-          .string()
+        userLocation: z.string().optional().describe('Two-letter ISO country code (e.g., "US"). Omit if unspecified.'),
+        includeDomains: z
+          .array(z.string())
           .optional()
-          .describe('Two-letter ISO country code (e.g., "US"). Omit if unspecified.'),
-        includeDomains: z.array(z.string()).optional().describe('Only search these domains. Example: ["github.com", "stackoverflow.com"]'),
-        excludeDomains: z.array(z.string()).optional().describe('Exclude these domains. Example: ["pinterest.com", "quora.com"]'),
+          .describe('Only search these domains. Example: ["github.com", "stackoverflow.com"]'),
+        excludeDomains: z
+          .array(z.string())
+          .optional()
+          .describe('Exclude these domains. Example: ["pinterest.com", "quora.com"]'),
         startCrawlDate: z
           .string()
           .optional()
@@ -492,7 +514,9 @@ const tools: tools[] = [
         startPublishedDate: z
           .string()
           .optional()
-          .describe('ISO 8601 datetime. Example: "2024-01-01" or "2024-06-15T00:00:00Z". Pages published after this date.'),
+          .describe(
+            'ISO 8601 datetime. Example: "2024-01-01" or "2024-06-15T00:00:00Z". Pages published after this date.'
+          ),
         endPublishedDate: z
           .string()
           .optional()
@@ -585,7 +609,7 @@ const tools: tools[] = [
   },
   {
     name: 'ripgrep',
-    enabled: false,
+    enabled: true,
     tool: {
       description:
         'Search files using ripgrep (rg). Supports regex, file filtering, context lines. Limits: max 500 matches, 5000 total chars, 500 chars/line. Use glob filter (e.g., "*.ts"), maxCount, or narrower patterns if limits exceeded.',
@@ -659,14 +683,17 @@ const tools: tools[] = [
   },
   {
     name: 'bash',
-    enabled: false,
+    enabled: true,
     tool: {
       description:
         'Run bash commands inside the workspace. On Windows/Electron, paths are automatically converted to the default WSL distribution for compatibility.',
       inputSchema: z.object({
         command: z.string().describe('Shell command to execute'),
         cwd: z.string().optional().describe('Working directory for the command'),
-        env: z.record(z.string(), z.string()).optional().describe('Environment variables as key-value object. Example: {"NODE_ENV": "production", "DEBUG": "true"}'),
+        env: z
+          .record(z.string(), z.string())
+          .optional()
+          .describe('Environment variables as key-value object. Example: {"NODE_ENV": "production", "DEBUG": "true"}'),
         timeoutMs: z
           .number()
           .int()
@@ -697,13 +724,17 @@ const tools: tools[] = [
   },
   {
     name: 'glob',
-    enabled: false,
+    enabled: true,
     tool: {
       description: 'Search for files using glob patterns with flexible matching and filtering options',
       inputSchema: z.object({
         pattern: z.string().describe('Glob pattern to match files (e.g., "*.ts", "src/**/*.js")'),
         cwd: z.string().optional().describe('Current working directory to search from'),
-        ignore: z.string().or(z.array(z.string())).optional().describe('Patterns to exclude. String or array. Example: ["node_modules/**", "*.test.ts"] or "dist/**"'),
+        ignore: z
+          .string()
+          .or(z.array(z.string()))
+          .optional()
+          .describe('Patterns to exclude. String or array. Example: ["node_modules/**", "*.test.ts"] or "dist/**"'),
         dot: z.boolean().optional().describe('Include dotfiles (default: false)'),
         absolute: z.boolean().optional().describe('Return absolute paths (default: false)'),
         mark: z.boolean().optional().describe('Add / suffix to directories (default: false)'),
@@ -759,7 +790,7 @@ const tools: tools[] = [
   },
   {
     name: 'browse_web',
-    enabled: false,
+    enabled: true,
     tool: {
       description:
         'Browse a web page and extract its content, including text, headings, links, images, and metadata. Uses Playwright to handle JavaScript-rendered content. Supports both headless and non-headless modes for bot detection avoidance. Use headless mode as default unless specified by user.',

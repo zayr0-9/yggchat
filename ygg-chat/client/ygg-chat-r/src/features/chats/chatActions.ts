@@ -2669,6 +2669,15 @@ export const insertBulkMessages = createAsyncThunk<
 >('chat/insertBulkMessages', async ({ conversationId, messages }, { extra, rejectWithValue }) => {
   const { auth } = extra
   try {
+    const effectiveStorageMode = getStorageModeFromCache(extra.queryClient, conversationId)
+    if (shouldUseLocalApi(effectiveStorageMode, environment)) {
+      const response = await localApi.post<{ messages: Message[] }>(
+        `/local/conversations/${conversationId}/messages/bulk`,
+        { messages }
+      )
+      return response.messages
+    }
+
     const response = await apiCall<{ messages: Message[] }>(
       `/conversations/${conversationId}/messages/bulk`,
       auth.accessToken,
@@ -2683,6 +2692,7 @@ export const insertBulkMessages = createAsyncThunk<
     return rejectWithValue(message)
   }
 })
+
 
 // ============================================================================
 // CLAUDE CODE AGENT ENDPOINTS
