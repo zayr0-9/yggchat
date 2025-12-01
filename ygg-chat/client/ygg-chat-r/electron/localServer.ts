@@ -21,6 +21,13 @@ import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { runBashCommand } from './tools/bash.js'
+import {
+  generateTodoId,
+  getTodoStorageDirectory,
+  listTodoIds,
+  readTodoList,
+  writeTodoList,
+} from './tools/todoMd.js'
 
 const app = express()
 let server: any = null
@@ -1183,6 +1190,42 @@ function setupServer() {
             timeoutMs,
             maxOutputChars,
           })
+          break
+        }
+        case 'todo_list': {
+          const { action, id, content } = parsedArgs
+          switch (action) {
+            case 'list': {
+              const ids = await listTodoIds()
+              result = { success: true, ids }
+              break
+            }
+            case 'read': {
+              if (!id) throw new Error('id is required for todo_list read')
+              const data = await readTodoList(id)
+              result = { success: true, ...data }
+              break
+            }
+            case 'write': {
+              if (!id) throw new Error('id is required for todo_list write')
+              if (content === undefined) throw new Error('content is required for todo_list write')
+              const written = await writeTodoList(id, content)
+              result = { success: true, ...written }
+              break
+            }
+            case 'generate_id': {
+              const newId = await generateTodoId()
+              result = { success: true, id: newId }
+              break
+            }
+            case 'directory': {
+              const dir = getTodoStorageDirectory()
+              result = { success: true, directory: dir }
+              break
+            }
+            default:
+              throw new Error(`Unsupported todo_list action: ${action}`)
+          }
           break
         }
         default:
