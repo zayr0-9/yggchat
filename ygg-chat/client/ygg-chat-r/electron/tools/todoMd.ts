@@ -34,6 +34,11 @@ const ID_DICTIONARY = [
   'bulma',
   'trunks',
   'broly',
+  'gurren',
+  'lagann',
+  'drill',
+  'gigantic',
+  'bleach',
 ]
 const MAX_ID_ATTEMPTS = 12
 
@@ -133,11 +138,12 @@ export async function writeTodoList(content: string): Promise<WriteTodoResult> {
   return { id: generatedId, path: filePath }
 }
 
+const TODO_ID_PARTS = 3
 const uniqueIdConfig: Config = {
-  dictionaries: [ID_DICTIONARY],
+  dictionaries: Array.from({ length: TODO_ID_PARTS }, () => ID_DICTIONARY),
   separator: '-',
   style: 'lowerCase',
-  length: 3,
+  length: TODO_ID_PARTS,
 }
 
 export async function generateTodoId(): Promise<string> {
