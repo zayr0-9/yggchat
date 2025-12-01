@@ -1,6 +1,5 @@
 import { z } from 'zod/v4'
 // src/utils/tools/toolRegistry.ts
-// import { z } from 'zod/v4'
 import { runBashCommand } from './core/bash'
 import { braveSearch } from './core/braveSearch'
 import { browseWeb } from './core/browseWeb'
@@ -79,6 +78,33 @@ const tools: tools[] = [
           }
         }
       },
+    },
+  },
+  {
+    name: 'todo_list',
+    enabled: true,
+    tool: {
+      description:
+        'Manage disk-backed Markdown todo lists stored per user. Each list is a human-readable `.md` file (id = noun-noun-noun) and can be read or overwritten directly.',
+      inputSchema: z.object({
+        action: z
+          .enum(['list', 'read', 'write', 'generate_id', 'directory'])
+          .describe(
+            'Requested todo list operation. list -> return ids; read/write -> require id; generate_id -> no id needed; directory -> returns storage folder.'
+          ),
+        id: z
+          .string()
+          .optional()
+          .describe('Hyphenated noun id (required for read/write actions). Example: ember-aurora-sage.'),
+        content: z
+          .string()
+          .optional()
+          .describe('Markdown payload to write for the given todo id (required for write action).'),
+      }),
+      execute: async () => ({
+        success: false,
+        error: 'todo_list tool is defined for client-side execution only.',
+      }),
     },
   },
   {
