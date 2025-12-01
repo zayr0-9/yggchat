@@ -120,8 +120,7 @@ function Chat() {
   const inputAreaBorderClasses =
     operationMode === 'plan'
       ? 'outline-1 outline-blue-500 dark:outline-blue-500 border border-blue-500 dark:border-blue-500'
-      : 'outline-1 dark:outline-1 dark:outline-neutral-600 outline-indigo-300'
-
+      : 'outline-1 dark:outline-1 dark:outline-orange-700/70 outline-orange-700/70'
 
   // React Query for message fetching - MOVED BELOW after projectConversations is available
   // to enable passing storage_mode from cached conversations

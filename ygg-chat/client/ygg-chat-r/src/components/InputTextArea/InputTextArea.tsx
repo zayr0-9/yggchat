@@ -129,6 +129,12 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault()
+      dispatch(chatSliceActions.operationModeToggled())
+      return
+    }
+
     if (showFileList && filteredFiles.length > 0) {
       switch (e.key) {
         case 'ArrowDown':
