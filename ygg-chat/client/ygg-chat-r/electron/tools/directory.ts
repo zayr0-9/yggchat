@@ -6,19 +6,19 @@ import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
 const readdir = promisify(fs.readdir)
 const stat = promisify(fs.stat)
 const readFile = promisify(fs.readFile)
-
 function normalizeForComparison(inputPath: string): string {
   const resolved = path.resolve(inputPath)
-  return normalized.replace(/\\/g, '/')
+  const normalized = resolved.replace(/\\/g, '/')
 
   if (normalized === '/') {
     return '/'
   }
 
   return normalized.replace(/\/+$/, '')
-
+}
 
 function isFsRootPath(inputPath: string): boolean {
+
   if (!inputPath) {
     return false
   }
