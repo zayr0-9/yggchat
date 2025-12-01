@@ -94,6 +94,21 @@ export interface WriteTodoResult {
   path: string
 }
 
+export async function listTodoIds(): Promise<string[]> {
+  const dir = getTodoDirectory()
+  try {
+    const entries = await fs.readdir(dir)
+    return entries
+      .filter(entry => entry.endsWith(TODO_FILE_EXTENSION))
+      .map(entry => entry.slice(0, -TODO_FILE_EXTENSION.length))
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return []
+    }
+    throw error
+  }
+}
+
 export async function readTodoList(id: string): Promise<ReadTodoResult> {
   const sanitized = normalizeId(id)
   const filePath = path.join(getTodoDirectory(), `${sanitized}${TODO_FILE_EXTENSION}`)
@@ -109,28 +124,13 @@ export async function readTodoList(id: string): Promise<ReadTodoResult> {
   }
 }
 
-export async function writeTodoList(id: string, content: string): Promise<WriteTodoResult> {
-  const sanitized = normalizeId(id)
+export async function writeTodoList(content: string): Promise<WriteTodoResult> {
+  const generatedId = await generateTodoId()
   const dir = await ensureStorageDirectory()
-  const filePath = path.join(dir, `${sanitized}${TODO_FILE_EXTENSION}`)
+  const filePath = path.join(dir, `${generatedId}${TODO_FILE_EXTENSION}`)
 
   await fs.writeFile(filePath, content, 'utf8')
-  return { id: sanitized, path: filePath }
-}
-
-export async function listTodoIds(): Promise<string[]> {
-  const dir = getTodoDirectory()
-  try {
-    const entries = await fs.readdir(dir)
-    return entries
-      .filter(entry => entry.endsWith(TODO_FILE_EXTENSION))
-      .map(entry => entry.slice(0, -TODO_FILE_EXTENSION.length))
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return []
-    }
-    throw error
-  }
+  return { id: generatedId, path: filePath }
 }
 
 const uniqueIdConfig: Config = {

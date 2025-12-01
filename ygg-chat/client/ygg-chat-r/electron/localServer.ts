@@ -1207,9 +1207,8 @@ function setupServer() {
               break
             }
             case 'write': {
-              if (!id) throw new Error('id is required for todo_list write')
               if (content === undefined) throw new Error('content is required for todo_list write')
-              const written = await writeTodoList(id, content)
+              const written = await writeTodoList(content)
               result = { success: true, ...written }
               break
             }

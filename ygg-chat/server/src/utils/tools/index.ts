@@ -85,21 +85,21 @@ const tools: tools[] = [
     enabled: true,
     tool: {
       description:
-        'Manage disk-backed Markdown todo lists stored per user. Each list is a human-readable `.md` file (id = noun-noun-noun) and can be read or overwritten directly.',
+        'Manage disk-backed Markdown todo lists stored per user. Each list is a human-readable `.md` file (id = noun-noun-noun). When creating a new todo, the tool automatically generates the file name/id and returns it.',
       inputSchema: z.object({
         action: z
           .enum(['list', 'read', 'write', 'generate_id', 'directory'])
           .describe(
-            'Requested todo list operation. list -> return ids; read/write -> require id; generate_id -> no id needed; directory -> returns storage folder.'
+            'Requested todo list operation. list -> return ids; read -> require id; write -> accepts content and auto-generates a file; generate_id -> no id needed; directory -> returns storage folder.'
           ),
         id: z
           .string()
           .optional()
-          .describe('Hyphenated noun id (required for read/write actions). Example: ember-aurora-sage.'),
+          .describe('Hyphenated noun id used when reading an existing todo. Example: ember-aurora-sage.'),
         content: z
           .string()
           .optional()
-          .describe('Markdown payload to write for the given todo id (required for write action).'),
+          .describe('Markdown payload to write for the todo list (required for write action). The tool ignores any provided id and generates the filename itself.'),
       }),
       execute: async () => ({
         success: false,
