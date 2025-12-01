@@ -9,14 +9,14 @@ const readFile = promisify(fs.readFile)
 
 function normalizeForComparison(inputPath: string): string {
   const resolved = path.resolve(inputPath)
-  const normalized = resolved.replace(/\\/g, '/')
+  return normalized.replace(/\\/g, '/')
 
   if (normalized === '/') {
     return '/'
   }
 
-  return normalized.replace(/\/+$, '')
-}
+  return normalized.replace(/\/+$/, '')
+
 
 function isFsRootPath(inputPath: string): boolean {
   if (!inputPath) {
