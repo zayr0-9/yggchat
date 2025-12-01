@@ -9,9 +9,11 @@ import {
   ImageDraft,
   Message,
   MessageInput,
+  OperationMode,
   StreamChunk,
   ToolCallPermissionRequest,
 } from './chatTypes'
+
 
 const makeInitialState = (): ChatState => ({
   providerState: {
@@ -79,6 +81,7 @@ const makeInitialState = (): ChatState => ({
   tools: [],
   toolCallPermissionRequest: null,
   toolAutoApprove: false,
+  operationMode: 'execute',
 })
 
 const initialState: ChatState = makeInitialState()
@@ -570,6 +573,14 @@ export const chatSlice = createSlice({
 
     toolAutoApproveToggled: state => {
       state.toolAutoApprove = !state.toolAutoApprove
+    },
+
+    operationModeSet: (state, action: PayloadAction<OperationMode>) => {
+      state.operationMode = action.payload
+    },
+
+    operationModeToggled: state => {
+      state.operationMode = state.operationMode === 'plan' ? 'execute' : 'plan'
     },
 
     stateReset: () => makeInitialState(),

@@ -9,6 +9,7 @@ export interface EditFileOptions {
   enableFuzzyMatching?: boolean // Enable layered matching strategies (default: true)
   fuzzyThreshold?: number // Similarity threshold for fuzzy matching (default: 0.8)
   preserveIndentation?: boolean // Preserve original indentation style (default: true)
+  operationMode?: 'plan' | 'execute'
 }
 
 export type EditOperation = 'replace' | 'replace_first' | 'append'
@@ -333,6 +334,17 @@ export async function editFile(
     content?: string
   } = {}
 ): Promise<EditFileResult> {
+  // Block file editing in plan mode
+  if (options.operationMode === 'plan') {
+    return {
+      success: false,
+      absolutePath: filePath,
+      sizeBytes: 0,
+      replacements: 0,
+      message: 'You are in planning mode. File modification is not allowed. Please describe your implementation plan instead.',
+    }
+  }
+
   const { searchPattern, replacement, content } = options
 
   switch (operation) {

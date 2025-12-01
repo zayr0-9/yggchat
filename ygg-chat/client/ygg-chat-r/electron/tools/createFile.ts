@@ -7,6 +7,7 @@ export interface CreateFileOptions {
   createParentDirs?: boolean
   overwrite?: boolean
   executable?: boolean
+  operationMode?: 'plan' | 'execute'
 }
 
 export interface CreateFileResult {
@@ -36,7 +37,19 @@ export async function createTextFile(
     createParentDirs = true,
     overwrite = false,
     executable = false,
+    operationMode,
   } = options
+
+  // Block file creation in plan mode
+  if (operationMode === 'plan') {
+    return {
+      success: false,
+      absolutePath: filePath,
+      created: false,
+      sizeBytes: 0,
+      message: 'You are in planning mode. File creation is not allowed. Please describe your implementation plan instead.',
+    }
+  }
 
   try {
     // Determine the target path

@@ -18,6 +18,7 @@ export type {
 export { default as chatReducer, chatSliceActions } from './chatSlice'
 
 // Async actions
+
 // Note: Model selection (selectModel) has been migrated to React Query. See hooks/useQueries.ts for useSelectModel
 // Model fetching thunks (fetchModels, fetchModelsForCurrentProvider, etc.) have been migrated to React Query
 export {
@@ -55,15 +56,13 @@ export {
   selectInputValid,
   selectIsModelAvailable,
   selectIsStreaming,
-  // Composition selectors
   selectMessageInput,
-  // UI selectors
   selectModelSelectorOpen,
+  selectOperationMode,
   selectProviderState,
   selectSendingState,
   selectStreamBuffer,
   selectStreamError,
-  // Streaming selectors
   selectStreamState,
   selectValidationError,
 } from './chatSelectors'

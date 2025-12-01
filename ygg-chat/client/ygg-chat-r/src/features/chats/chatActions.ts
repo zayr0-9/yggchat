@@ -15,11 +15,13 @@ import {
   EditMessagePayload,
   Message,
   Model,
+  OperationMode,
   SendCCBranchPayload,
   SendCCMessagePayload,
   SendMessagePayload,
   tools,
 } from './chatTypes'
+
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
 
@@ -371,7 +373,7 @@ const parseContentBlocks = (blocks: string | any[] | undefined): any[] => {
   return []
 }
 
-const executeLocalTool = async (toolCall: any, rootPath: string | null) => {
+const executeLocalTool = async (toolCall: any, rootPath: string | null, operationMode: OperationMode) => {
   console.log(`🔧 Executing local tool: ${toolCall.name}`)
   console.log(`[chatActions] rootPath passed to tool: ${rootPath}`)
   try {
@@ -381,7 +383,8 @@ const executeLocalTool = async (toolCall: any, rootPath: string | null) => {
       body: JSON.stringify({
         toolName: toolCall.name,
         args: toolCall.arguments,
-        rootPath, // Pass rootPath to help server determine execution context (WSL vs Local)
+        rootPath,
+        operationMode,
       }),
     })
 
@@ -399,14 +402,20 @@ const executeLocalTool = async (toolCall: any, rootPath: string | null) => {
 
 let pendingPermissionResolve: ((allowed: boolean) => void) | null = null
 
-const executeToolWithPermissionCheck = async (dispatch: any, getState: any, toolCall: any, rootPath: string | null) => {
+const executeToolWithPermissionCheck = async (
+  dispatch: any,
+  getState: any,
+  toolCall: any,
+  rootPath: string | null,
+  operationMode: OperationMode
+) => {
   // Check if auto-approve is enabled
   const state = getState() as RootState
   const autoApprove = state.chat.toolAutoApprove
 
   if (autoApprove) {
     // Auto-approve enabled: execute immediately without showing dialog
-    return await executeLocalTool(toolCall, rootPath)
+    return await executeLocalTool(toolCall, rootPath, operationMode)
   }
 
   // Auto-approve disabled: show dialog and wait for user response
@@ -419,7 +428,7 @@ const executeToolWithPermissionCheck = async (dispatch: any, getState: any, tool
 
   // Execute or Fake response
   if (allowed) {
-    return await executeLocalTool(toolCall, rootPath)
+    return await executeLocalTool(toolCall, rootPath, operationMode)
   } else {
     return 'User cancelled tool call'
   }
@@ -819,7 +828,7 @@ export const sendMessage = createAsyncThunk<
                   type: 'tool_use',
                   id: tc.id,
                   name: tc.name,
-                  input: tc.input,
+                  input: tc.arguments,
                 })),
                 created_at: new Date().toISOString(),
                 model_name: modelName,
@@ -848,10 +857,11 @@ export const sendMessage = createAsyncThunk<
 
             // Get rootPath from IDE context to help determine if we're in WSL
             const rootPath = state.ideContext.workspace?.rootPath || null
+            const operationMode = state.chat.operationMode
             console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
             for (const toolCall of pendingToolCalls) {
               // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath)
+              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode)
 
               // Create tool_result block (NOT a separate message)
               const toolResultBlock = {
@@ -1466,7 +1476,7 @@ export const editMessageWithBranching = createAsyncThunk<
                   type: 'tool_use',
                   id: tc.id,
                   name: tc.name,
-                  input: tc.input,
+                  input: tc.arguments,
                 })),
                 created_at: new Date().toISOString(),
                 model_name: modelName,
@@ -1493,10 +1503,11 @@ export const editMessageWithBranching = createAsyncThunk<
             // 2. Execute tools and append tool_result blocks to assistant message
             const toolResultBlocks: any[] = []
             const rootPath = state.ideContext.workspace?.rootPath || null
+            const operationMode = state.chat.operationMode
 
             for (const toolCall of pendingToolCalls) {
               // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath)
+              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode)
 
               // Create tool_result block
               const toolResultBlock = {
@@ -1848,7 +1859,7 @@ export const sendMessageToBranch = createAsyncThunk<
                   type: 'tool_use',
                   id: tc.id,
                   name: tc.name,
-                  input: tc.input,
+                  input: tc.arguments,
                 })),
                 created_at: new Date().toISOString(),
                 model_name: modelName,
@@ -1885,10 +1896,11 @@ export const sendMessageToBranch = createAsyncThunk<
             // 2. Execute tools and append tool_result blocks to assistant message
             const toolResultBlocks: any[] = []
             const rootPath = state.ideContext.workspace?.rootPath || null
+            const operationMode = state.chat.operationMode
 
             for (const toolCall of pendingToolCalls) {
               // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath)
+              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode)
 
               // Create tool_result block
               const toolResultBlock = {

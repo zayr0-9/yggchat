@@ -191,6 +191,9 @@ export interface ToolCallPermissionRequest {
   toolCall: ToolCall
 }
 
+
+export type OperationMode = 'plan' | 'execute'
+
 export interface ChatState {
   providerState: ProviderState
   composition: CompositionState
@@ -206,6 +209,7 @@ export interface ChatState {
   tools: tools[]
   toolCallPermissionRequest: ToolCallPermissionRequest | null
   toolAutoApprove: boolean
+  operationMode: OperationMode
 }
 
 // Action payloads

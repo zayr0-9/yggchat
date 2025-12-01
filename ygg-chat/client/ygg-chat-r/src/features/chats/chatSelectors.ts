@@ -5,45 +5,32 @@ import { RootState } from '../../store/store'
 // Base selector
 const selectChatState = (state: RootState) => state.chat
 
-// Model selectors - Model selection is now managed by React Query (useSelectedModel hook)
-export const selectProviderState = createSelector([selectChatState], chat => chat.providerState)
-
+// Top-level selectors
 export const conversationContext = createSelector([selectChatState], chat => chat.conversation.context)
-
+export const selectProviderState = createSelector([selectChatState], chat => chat.providerState)
 export const selectMultiReplyCount = createSelector([selectChatState], chat => chat.composition.multiReplyCount)
-
 export const getSelectedNodes = createSelector([selectChatState], chat => chat.selectedNodes)
+export const selectOperationMode = createSelector([selectChatState], chat => chat.operationMode)
 
-// Note: Model availability check should now be done using useModels React Query hook
-// This selector is kept for backward compatibility but will always return false
+// Deprecated model availability selector (kept for backward compatibility)
 export const selectIsModelAvailable = () => false
 
 // Composition selectors
 export const selectMessageInput = createSelector([selectChatState], chat => chat.composition.input)
-
 export const selectInputContent = createSelector([selectMessageInput], input => input.content)
-
 export const selectInputValid = createSelector(
   [selectChatState],
   chat => !chat.composition.validationError && chat.composition.input.content.trim().length > 0
 )
-
 export const selectValidationError = createSelector([selectChatState], chat => chat.composition.validationError)
 
 // Streaming selectors
 export const selectStreamState = createSelector([selectChatState], chat => chat.streaming)
-
 export const selectStreamBuffer = createSelector([selectStreamState], stream => stream.buffer)
-
 export const selectThinkingBuffer = createSelector([selectStreamState], stream => stream.thinkingBuffer)
-
 export const selectStreamError = createSelector([selectStreamState], stream => stream.error)
-
 export const selectStreamEvents = createSelector([selectStreamState], stream => stream.events)
-
 export const selectIsStreaming = createSelector([selectStreamState], stream => stream.active)
-
-// Note: selectCanSend is deprecated - use local canSendLocal in Chat.tsx component which checks selectedModel from React Query
 
 export const selectSendingState = createSelector([selectChatState], chat => ({
   sending: chat.composition.sending,
@@ -65,50 +52,36 @@ export const selectInitializationError = createSelector([selectInitializationSta
 
 // UI selectors
 export const selectModelSelectorOpen = createSelector([selectChatState], chat => chat.ui.modelSelectorOpen)
-
 export const HeimdallDataReset = createSelector([selectHeimdallState], h => {
   h.treeData = null
   h.loading = false
   h.error = null
 })
 
-// Note: selectModelState is deprecated - use useSelectedModel and useModels from useQueries.ts
-
 // Conversation selectors
 export const selectConversationState = createSelector([selectChatState], chat => chat.conversation)
-
 export const selectCurrentConversationId = createSelector(
   [selectConversationState],
   conversation => conversation.currentConversationId
 )
-
 export const selectConversationMessages = createSelector(
   [selectConversationState],
   conversation => conversation.messages
 )
-
 export const selectCurrentPath = createSelector([selectConversationState], conversation => conversation.currentPath)
-
 export const selectBookmarkedMessages = createSelector(
   [selectConversationState],
   conversation => conversation.bookmarked
 )
-
 export const selectExcludedMessages = createSelector(
   [selectConversationState],
   conversation => conversation.excludedMessages
 )
 
-// Filter messages based on selected path (for branch navigation)
 export const selectFilteredMessages = createSelector(
   [selectConversationMessages, selectCurrentPath],
   (messages, currentPath) => {
-    // If no path is selected, show all messages (default behavior)
-    if (!currentPath || currentPath.length === 0) {
-      return messages
-    }
-
-    // Filter messages to only include those in the selected path
+    if (!currentPath || currentPath.length === 0) return messages
     const pathSet = new Set(currentPath)
     return messages.filter(message => pathSet.has(message.id))
   }
@@ -119,18 +92,14 @@ export const selectFocusedChatMessageId = createSelector(
   conversation => conversation.focusedChatMessageId
 )
 
-// Get messages for display (either filtered by path or all messages)
 export const selectDisplayMessages = createSelector(
   [selectConversationMessages, selectCurrentPath],
   (messages, currentPath) => {
-    // Primary: use currentPath (array of selected IDs) to pick messages in the same order
     if (Array.isArray(currentPath) && currentPath.length > 0) {
       const byId = new Map(messages.map(m => [m.id, m]))
       const selected = currentPath.map(id => byId.get(id)).filter((m): m is (typeof messages)[number] => Boolean(m))
-
       if (selected.length > 0) return selected
 
-      // Fallback 1: filter by IDs (order chronologically)
       const pathSet = new Set(currentPath)
       const filtered = messages.filter(m => pathSet.has(m.id))
       if (filtered.length > 0) {
@@ -138,7 +107,6 @@ export const selectDisplayMessages = createSelector(
       }
     }
 
-    // Fallback 2: show all messages chronologically (deduped)
     const unique = new Map<MessageId, (typeof messages)[number]>()
     for (const m of messages) if (!unique.has(m.id)) unique.set(m.id, m)
     return [...unique.values()].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
@@ -147,9 +115,7 @@ export const selectDisplayMessages = createSelector(
 
 // Tools selectors
 export const selectTools = createSelector([selectChatState], chat => chat.tools)
-
 export const selectEnabledTools = createSelector([selectTools], tools => tools.filter(tool => tool.enabled))
-
 export const selectToolByName = createSelector(
   [selectTools, (_state: RootState, toolName: string) => toolName],
   (tools, toolName) => tools.find(tool => tool.name === toolName)

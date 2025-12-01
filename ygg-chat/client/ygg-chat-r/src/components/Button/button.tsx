@@ -21,7 +21,7 @@ type ButtonProps = Omit<
     | 'acrylicul'
   size?: 'smaller' | 'small' | 'medium' | 'large' | 'extraLarge' | 'circle'
   disabled?: boolean
-  onClick?: () => void
+  onClick?: React.ButtonHTMLAttributes<HTMLButtonElement>['onClick']
   type?: 'button' | 'submit' | 'reset'
   rounded?: 'full' | 'lg' | 'none'
 }
@@ -91,7 +91,14 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     `.trim()
 
     return (
-      <button ref={ref} type={type} className={`${buttonClasses}`} onClick={onClick} disabled={disabled} {...rest}>
+      <button
+        ref={ref}
+        type={type}
+        className={`${buttonClasses}`}
+        onClick={onClick}
+        disabled={disabled}
+        {...rest}
+      >
         {children}
       </button>
     )

@@ -40,6 +40,7 @@ import {
   selectMessageInput,
   // Chat selectors
   selectMultiReplyCount,
+  selectOperationMode,
   selectProviderState,
   selectSendingState,
   selectStreamState,
@@ -87,6 +88,7 @@ function Chat() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
+
   // Local state for input to completely avoid Redux dispatches during typing
   const [localInput, setLocalInput] = useState('')
 
@@ -107,6 +109,7 @@ function Chat() {
   // Redux selectors
   const providers = useAppSelector(selectProviderState)
   const messageInput = useAppSelector(selectMessageInput)
+  const operationMode = useAppSelector(selectOperationMode)
   // const canSendFromRedux = useAppSelector(selectCanSend)
   const sendingState = useAppSelector(selectSendingState)
   const streamState = useAppSelector(selectStreamState)
@@ -115,6 +118,7 @@ function Chat() {
   const currentConversationId = useAppSelector(selectCurrentConversationId)
   const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
+
 
   // React Query for message fetching - MOVED BELOW after projectConversations is available
   // to enable passing storage_mode from cached conversations
@@ -2330,6 +2334,27 @@ function Chat() {
                   >
                     <i className='bx bx-shield-quarter mr-1'></i>
                     {toolAutoApprove ? 'Allow all' : 'Ask'}
+                  </Button>
+                  <Button
+                    variant='outline2'
+                    size='large'
+                    onClick={() => dispatch(chatSliceActions.operationModeToggled())}
+                    className={
+                      operationMode === 'plan'
+                        ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-900/30 border-fuchsia-200 dark:border-fuchsia-700/60'
+                        : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                    }
+                    title={
+                      operationMode === 'plan'
+                        ? 'Plan mode enabled (tools will be blocked)'
+                        : 'Execution mode enabled (tools may modify files)'
+                    }
+                    aria-label={
+                      operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'
+                    }
+                  >
+                    <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
+                    {operationMode === 'plan' ? 'Plan mode' : 'Execution mode'}
                   </Button>
                   {/* <Button
                     variant='outline2'

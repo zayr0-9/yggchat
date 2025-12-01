@@ -5,10 +5,16 @@ import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js';
 /**
  * Deletes a file at the specified path
  * @param filePath - Absolute or relative path to the file to delete
+ * @param operationMode - Optional operation mode ('plan' | 'execute')
  * @returns Promise<void>
  * @throws Error if file doesn't exist or deletion fails
  */
-export async function deleteFile(filePath: string): Promise<void> {
+export async function deleteFile(filePath: string, operationMode?: 'plan' | 'execute'): Promise<void> {
+  // Block file deletion in plan mode
+  if (operationMode === 'plan') {
+    throw new Error('You are in planning mode. File deletion is not allowed. Please describe your implementation plan instead.')
+  }
+
   try {
     // Resolve the path to handle relative paths
     let resolvedPath = filePath;
@@ -40,13 +46,20 @@ export async function deleteFile(filePath: string): Promise<void> {
  * Safely deletes a file with additional validation
  * @param filePath - Path to the file to delete
  * @param allowedExtensions - Optional array of allowed file extensions
+ * @param operationMode - Optional operation mode ('plan' | 'execute')
  * @returns Promise<void>
  * @throws Error if validation fails or deletion fails
  */
 export async function safeDeleteFile(
   filePath: string, 
-  allowedExtensions?: string[]
+  allowedExtensions?: string[],
+  operationMode?: 'plan' | 'execute'
 ): Promise<void> {
+  // Block file deletion in plan mode
+  if (operationMode === 'plan') {
+    throw new Error('You are in planning mode. File deletion is not allowed. Please describe your implementation plan instead.')
+  }
+
   let resolvedPath = filePath;
   if (isWSLPath(filePath)) {
     resolvedPath = await resolveToWindowsPath(filePath);

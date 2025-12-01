@@ -1027,8 +1027,8 @@ function setupServer() {
   // Tool Execution Endpoint
   app.post('/api/tools/execute', async (req, res) => {
     try {
-      const { toolName, args, rootPath } = req.body
-      console.log(`[LocalServer] Executing tool: ${toolName}`)
+      const { toolName, args, rootPath, operationMode } = req.body
+      console.log(`[LocalServer] Executing tool: ${toolName} (operationMode: ${operationMode || 'execute'})`)
 
       let result: any = `Tool ${toolName} not implemented on local server`
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
@@ -1064,7 +1064,7 @@ function setupServer() {
           const { path: filePath, content, directory, createParentDirs, overwrite, executable } = parsedArgs
           if (!filePath) throw new Error('path is required')
 
-          result = await createTextFile(filePath, content, { directory, createParentDirs, overwrite, executable })
+          result = await createTextFile(filePath, content, { directory, createParentDirs, overwrite, executable, operationMode })
           break
         }
         case 'edit_file': {
@@ -1091,6 +1091,7 @@ function setupServer() {
             enableFuzzyMatching,
             fuzzyThreshold,
             preserveIndentation,
+            operationMode,
           })
           break
         }
@@ -1099,9 +1100,9 @@ function setupServer() {
           if (!filePath) throw new Error('path is required')
 
           if (allowedExtensions) {
-            await safeDeleteFile(filePath, allowedExtensions)
+            await safeDeleteFile(filePath, allowedExtensions, operationMode)
           } else {
-            await deleteFile(filePath)
+            await deleteFile(filePath, operationMode)
           }
           result = { success: true, path: filePath }
           break
