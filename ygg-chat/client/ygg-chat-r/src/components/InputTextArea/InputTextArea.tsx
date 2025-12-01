@@ -34,25 +34,21 @@ interface TextAreaProps {
 const allowedMentionChar = /[A-Za-z0-9._\/\-]/
 
 function findActiveMention(value: string, cursorPos: number) {
-  let idx = Math.max(0, cursorPos - 1)
-  while (idx >= 0) {
-    const char = value[idx]
-    if (char === '@') {
-      const prev = idx > 0 ? value[idx - 1] : ''
-      if (prev && allowedMentionChar.test(prev)) {
-        // This @ is part of another word (like an email) – keep looking
-        idx -= 1
-        continue
-      }
-      const term = value.slice(idx + 1, cursorPos)
-      return { start: idx, term }
-    }
-    if (!allowedMentionChar.test(char)) {
-      break
-    }
-    idx -= 1
+  const beforeCursor = value.slice(0, cursorPos)
+  const atIndex = beforeCursor.lastIndexOf('@')
+  if (atIndex === -1) return null
+
+  const prevChar = atIndex > 0 ? beforeCursor[atIndex - 1] : ''
+  if (prevChar && allowedMentionChar.test(prevChar)) return null
+
+  const afterAt = beforeCursor.slice(atIndex + 1)
+  let mentionLength = 0
+  while (mentionLength < afterAt.length && allowedMentionChar.test(afterAt[mentionLength])) {
+    mentionLength += 1
   }
-  return null
+
+  const term = afterAt.slice(0, mentionLength)
+  return { start: atIndex, term }
 }
 
 export const InputTextArea: React.FC<TextAreaProps> = ({
@@ -110,22 +106,12 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
     onChange?.(newValue)
 
     const cursorPos = e.target.selectionStart ?? newValue.length
-    const activeMention = findActiveMention(newValue, cursorPos)
+    const mention = findActiveMention(newValue, cursorPos)
 
-    if (activeMention) {
-      setActiveMention(activeMention)
-      const filtered = localMentionableFiles.filter(
-        file =>
-          file.name.toLowerCase().includes(activeMention.term.toLowerCase()) ||
-          file.path.toLowerCase().includes(activeMention.term.toLowerCase())
-      )
-      setFilteredFiles(filtered)
-      setSelectedFileIndex(0)
-      setShowFileList(filtered.length > 0)
+    if (mention) {
+      setActiveMention(mention)
     } else {
       setActiveMention(null)
-      setFilteredFiles([])
-      setShowFileList(false)
     }
   }
 
@@ -395,23 +381,23 @@ const handleFileSelection = async (file: { path: string; name: string; mention: 
     }
   }, [showFileList])
 
-  // Keep the floating list in sync if the available files change due to selection additions/removals
+  // Re-filter when mention state or available files change
   useEffect(() => {
-    if (!showFileList) return
-    const currentValue = textareaRef.current?.value || ''
-    const atIndex = currentValue.lastIndexOf('@')
-    if (atIndex !== -1) {
-      const searchTerm = currentValue.slice(atIndex + 1).toLowerCase()
-      const filtered = localMentionableFiles.filter(
-        file => file.name.toLowerCase().includes(searchTerm) || file.path.toLowerCase().includes(searchTerm)
-      )
-      setFilteredFiles(filtered)
+    if (!activeMention) {
+      setFilteredFiles([])
       setSelectedFileIndex(0)
-      if (filtered.length === 0) setShowFileList(false)
-    } else {
       setShowFileList(false)
+      return
     }
-  }, [localMentionableFiles, showFileList])
+
+    const term = activeMention.term.toLowerCase()
+    const filtered = localMentionableFiles.filter(
+      file => file.name.toLowerCase().includes(term) || file.path.toLowerCase().includes(term)
+    )
+    setFilteredFiles(filtered)
+    setSelectedFileIndex(0)
+    setShowFileList(filtered.length > 0)
+  }, [activeMention, localMentionableFiles])
 
   // const replaceFileMentionsWithContent = useCallback(
   //   (message: string): string => {
