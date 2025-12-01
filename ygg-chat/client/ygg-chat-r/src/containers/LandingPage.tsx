@@ -51,7 +51,7 @@ const LandingPage: React.FC = () => {
         videoSrc: getAssetPath('video/models.webm'),
       },
     ],
-    [],
+    []
   )
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0)
@@ -59,9 +59,7 @@ const LandingPage: React.FC = () => {
   const featureRefs = useRef<(HTMLDivElement | null)[]>([])
   // const featuresContainerRef = useRef<HTMLDivElement>(null)
   const featuresSectionRef = useRef<HTMLElement>(null)
-  const [loadedVideos, setLoadedVideos] = useState<boolean[]>(() =>
-    new Array(features.length).fill(false),
-  )
+  const [loadedVideos, setLoadedVideos] = useState<boolean[]>(() => new Array(features.length).fill(false))
   const videoWrappersRef = useRef<(HTMLDivElement | null)[]>([])
   const videoElementsRef = useRef<(HTMLVideoElement | null)[]>([])
   const prevLoadedVideosRef = useRef<boolean[]>(new Array(features.length).fill(false))
@@ -145,7 +143,7 @@ const LandingPage: React.FC = () => {
           observer.unobserve(entry.target)
         })
       },
-      { rootMargin: '200px 0px', threshold: 0.35 },
+      { rootMargin: '200px 0px', threshold: 0.35 }
     )
 
     observerRef.current = observer
@@ -328,10 +326,9 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
           </div>
 
           {/* Tagline */}
-          <p className='text-base mt-2 sm:text-lg md:text-xl lg:text-2xl text-white dark:text-gray-100 text-center max-w-2xl leading-relaxed drop-shadow-md font-light'>
-            Use AI like Humans are Supposed to
+          <p className='text-base mt-6 sm:text-lg md:text-xl lg:text-2xl text-white dark:text-gray-100 text-center max-w-2xl leading-relaxed drop-shadow-md font-light'>
+            The most advanced AI interface on the planet.
             <br />
-            Make mistakes Learn Improve
           </p>
 
           {/* Scroll Indicator */}
@@ -418,41 +415,41 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
 
                     {/* Video/Image Placeholder */}
                     <div
-                    className='relative w-full aspect-video rounded-2xl bg-gray-100 dark:bg-yBlack-600 overflow-hidden mb-8 shadow-lg group'
-                    ref={el => {
-                      videoWrappersRef.current[index] = el
-                    }}
-                  >
-                    <video
-                      autoPlay
-                      onClick={() => {
-                        if (loadedVideos[index] && feature.videoSrc) {
-                          setExpandedVideoSrc(feature.videoSrc)
-                        }
-                      }}
-                      loop
-                      muted
-                      playsInline
-                      preload='none'
+                      className='relative w-full aspect-video rounded-2xl bg-gray-100 dark:bg-yBlack-600 overflow-hidden mb-8 shadow-lg group'
                       ref={el => {
-                        videoElementsRef.current[index] = el
+                        videoWrappersRef.current[index] = el
                       }}
-                      className='w-full h-full object-cover transition-transform duration-300 group-hover:scale-105'
                     >
-                      {loadedVideos[index] && feature.videoSrc ? (
-                        <source src={feature.videoSrc} type='video/webm' />
-                      ) : null}
-                    </video>
+                      <video
+                        autoPlay
+                        onClick={() => {
+                          if (loadedVideos[index] && feature.videoSrc) {
+                            setExpandedVideoSrc(feature.videoSrc)
+                          }
+                        }}
+                        loop
+                        muted
+                        playsInline
+                        preload='none'
+                        ref={el => {
+                          videoElementsRef.current[index] = el
+                        }}
+                        className='w-full h-full object-cover transition-transform duration-300 group-hover:scale-105'
+                      >
+                        {loadedVideos[index] && feature.videoSrc ? (
+                          <source src={feature.videoSrc} type='video/webm' />
+                        ) : null}
+                      </video>
 
-                    {!loadedVideos[index] && (
-                      <div className='absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-200 dark:from-yBlack-600 dark:to-yBlack-700'>
-                        <div className='text-center'>
-                          <i className='bx bx-video text-4xl text-gray-400 mb-2'></i>
-                          <p className='text-gray-500'>Video preview</p>
+                      {!loadedVideos[index] && (
+                        <div className='absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-100 to-blue-200 dark:from-yBlack-600 dark:to-yBlack-700'>
+                          <div className='text-center'>
+                            <i className='bx bx-video text-4xl text-gray-400 mb-2'></i>
+                            <p className='text-gray-500'>Video preview</p>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
 
                     {/* Description */}
                     <p className='text-xl pl-2 text-gray-900 dark:text-gray-300 leading-relaxed'>
@@ -468,19 +465,9 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
 
       {expandedVideoSrc && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4'>
-          <div
-            className='absolute inset-0 cursor-pointer'
-            onClick={handleExpandedVideoClose}
-          />
+          <div className='absolute inset-0 cursor-pointer' onClick={handleExpandedVideoClose} />
           <div className='relative w-full max-w-5xl rounded-3xl overflow-hidden bg-black shadow-2xl'>
-            <video
-              controls
-              autoPlay
-              muted
-              loop
-              className='w-full h-full object-cover'
-              src={expandedVideoSrc}
-            />
+            <video controls autoPlay muted loop className='w-full h-full object-cover' src={expandedVideoSrc} />
             <button
               className='absolute top-4 right-4 bg-black/60 text-white rounded-full p-2 hover:bg-black/80 transition'
               onClick={handleExpandedVideoClose}

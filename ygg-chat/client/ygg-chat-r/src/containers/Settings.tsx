@@ -1,209 +1,280 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, TextField } from '../components'
+import { Button } from '../components'
+import {
+  CustomVideoEntry,
+  addCustomVideo,
+  clearCustomVideoLibrary,
+  loadActiveCustomVideoId,
+  loadSavedVideos,
+  persistActiveCustomVideoId,
+  removeCustomVideo,
+  VIDEO_BACKGROUND_CHANGE_EVENT,
+} from '../helpers/videoBackgroundStorage'
 
-interface EnvVariable {
-  key: string
-  value: string
+const MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024 // 8MB
+
+type StatusMessage = {
+  type: 'success' | 'error' | 'info'
+  text: string
+}
+
+const formatSize = (size?: number) => {
+  if (!size) {
+    return 'n/a'
+  }
+
+  if (size < 1024) {
+    return `${size.toFixed(0)} bytes`
+  }
+
+  const kilo = size / 1024
+  if (kilo < 1024) {
+    return `${kilo.toFixed(1)} KB`
+  }
+
+  return `${(kilo / 1024).toFixed(1)} MB`
 }
 
 const Settings: React.FC = () => {
   const navigate = useNavigate()
-  const [envVars, setEnvVars] = useState<EnvVariable[]>([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const timeoutRef = useRef<number | null>(null)
+  const [videos, setVideos] = useState<CustomVideoEntry[]>(() => loadSavedVideos())
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(() => loadActiveCustomVideoId())
+  const [uploading, setUploading] = useState(false)
+  const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
 
   useEffect(() => {
-    fetchEnvVars()
+    const handleBackgroundChange = () => {
+      setVideos(loadSavedVideos())
+      setActiveVideoId(loadActiveCustomVideoId())
+    }
+
+    window.addEventListener(VIDEO_BACKGROUND_CHANGE_EVENT, handleBackgroundChange)
+    return () => window.removeEventListener(VIDEO_BACKGROUND_CHANGE_EVENT, handleBackgroundChange)
   }, [])
 
-  const fetchEnvVars = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/settings/env')
-      if (!response.ok) {
-        throw new Error('Failed to fetch environment variables')
-      }
-      const data = await response.json()
-
-      // Convert object to array of key-value pairs
-      const vars = Object.entries(data).map(([key, value]) => ({
-        key,
-        value: value as string,
-      }))
-      setEnvVars(vars)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load environment variables')
-    } finally {
-      setLoading(false)
+  const showStatus = (message: StatusMessage) => {
+    setStatusMessage(message)
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current)
     }
+
+    timeoutRef.current = window.setTimeout(() => setStatusMessage(null), 4000)
   }
 
-  const handleSave = async () => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    if (!['video/mp4', 'video/webm'].includes(file.type)) {
+      showStatus({ type: 'error', text: 'Video must be in MP4 or WebM format.' })
+      return
+    }
+
+    if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+      showStatus({ type: 'error', text: 'File must be smaller than 8MB to keep localStorage responsive.' })
+      return
+    }
+
+    setUploading(true)
+
     try {
-      setSaving(true)
-      setError(null)
-      setSuccess(null)
-
-      // Convert array back to object, filtering out empty keys
-      const envObject = envVars.reduce(
-        (acc, { key, value }) => {
-          if (key.trim()) {
-            acc[key.trim()] = value
-          }
-          return acc
-        },
-        {} as Record<string, string>
-      )
-
-      const response = await fetch('/api/settings/env', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(envObject),
+      const entry = await addCustomVideo({
+        mimeType: file.type,
+        name: file.name,
+        size: file.size,
+        lastModified: file.lastModified,
+        blob: file,
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to save environment variables')
-      }
-
-      setSuccess('Environment variables saved successfully!')
-      setTimeout(() => setSuccess(null), 3000)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save environment variables')
+      persistActiveCustomVideoId(entry.id)
+      setVideos(loadSavedVideos())
+      setActiveVideoId(entry.id)
+      showStatus({ type: 'success', text: 'Custom video saved and activated.' })
+    } catch (error) {
+      console.error(error)
+      showStatus({ type: 'error', text: 'Unable to save the custom video. Try again.' })
     } finally {
-      setSaving(false)
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
-  const handleAddVariable = () => {
-    setEnvVars([...envVars, { key: '', value: '' }])
+  const handleSelectVideo = (id: string) => {
+    persistActiveCustomVideoId(id)
+    setActiveVideoId(id)
+    showStatus({ type: 'success', text: 'Active background updated.' })
   }
 
-  const handleRemoveVariable = (index: number) => {
-    setEnvVars(envVars.filter((_, i) => i !== index))
+  const handleRemoveVideo = (id: string) => {
+    removeCustomVideo(id)
+    setVideos(loadSavedVideos())
+    if (activeVideoId === id) {
+      setActiveVideoId(null)
+    }
+    showStatus({ type: 'info', text: 'Video removed from gallery.' })
   }
 
-  const handleKeyChange = (index: number, key: string) => {
-    const updated = [...envVars]
-    updated[index].key = key
-    setEnvVars(updated)
+  const handleClearGallery = () => {
+    clearCustomVideoLibrary()
+    setVideos([])
+    setActiveVideoId(null)
+    showStatus({ type: 'success', text: 'Gallery cleared. Default wallpapers will be used.' })
   }
 
-  const handleValueChange = (index: number, value: string) => {
-    const updated = [...envVars]
-    updated[index].value = value
-    setEnvVars(updated)
+  const handleResetToDefault = () => {
+    persistActiveCustomVideoId(null)
+    setActiveVideoId(null)
+    showStatus({ type: 'success', text: 'Reverted to the built-in defaults.' })
   }
 
-  if (loading) {
+  const renderStatus = () => {
+    if (!statusMessage) return null
+
+    const colors = {
+      success:
+        'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/40 dark:border-emerald-800 dark:text-emerald-200',
+      error: 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-900/40 dark:border-rose-800 dark:text-rose-200',
+      info: 'bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-900/40 dark:border-sky-800 dark:text-sky-200',
+    }
+
     return (
-      <div className='bg-neutral-100 min-h-full dark:bg-yBlack-900'>
-        <div className='p-6 max-w-4xl mx-auto'>
-          <div className='flex items-center justify-center min-h-[200px]'>
-            <p className='text-stone-600 dark:text-stone-400'>Loading environment variables...</p>
-          </div>
-        </div>
-      </div>
+      <div className={`rounded-lg border px-4 py-2 text-sm ${colors[statusMessage.type]}`}>{statusMessage.text}</div>
     )
   }
 
   return (
-    <div className='bg-neutral-100 min-h-full dark:bg-yBlack-900'>
-      <div className='p-6 max-w-5xl mx-auto'>
-        {/* Header */}
-        <div className='flex items-center justify-between mb-6 py-4'>
-          <h1 className='text-2xl font-semibold text-stone-800 dark:text-stone-200'>Environment Variables</h1>
+    <div className='bg-neutral-100 mica min-h-full dark:bg-yBlack-900'>
+      <div className='mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8'>
+        <header className='flex flex-wrap items-center justify-between gap-4'>
+          <div>
+            <p className='text-sm uppercase tracking-[0.3em] text-stone-400 dark:text-stone-500'>Background</p>
+            <h1 className='text-3xl font-semibold text-stone-800 dark:text-stone-100'>Video Wallpaper Studio</h1>
+            <p className='mt-1 text-sm text-stone-500 dark:text-stone-400'>
+              Upload up to 8MB MP4/WebM clips and switch between them in one place.
+            </p>
+          </div>
           <Button variant='secondary' onClick={() => navigate('/homepage')} className='group'>
             <p className='transition-transform duration-100 group-active:scale-95'>Back to Home</p>
           </Button>
-        </div>
+        </header>
 
-        <div className='space-y-6'>
-          {/* Description */}
-          <div className='p-4 rounded-lg border border-blue-200 dark:border-sky-800'>
-            <p className='text-sm text-blue-800 dark:text-blue-200'>
-              Configure environment variables for your application. Changes require a server restart to take effect.
+        {renderStatus()}
+
+        <section className='rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:bg-zinc-900 dark:shadow-black/20'>
+          <div className='flex flex-col gap-1'>
+            <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100'>Custom Upload</h2>
+            <p className='text-sm text-stone-500 dark:text-stone-400'>
+              Drag in an MP4 or WebM and we’ll keep it ready for whenever you want that motion.
             </p>
           </div>
 
-          {/* Error/Success Messages */}
-          {error && (
-            <div className='p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg'>
-              <p className='text-sm text-red-800 dark:text-red-200'>{error}</p>
-            </div>
-          )}
-
-          {success && (
-            <div className='p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg'>
-              <p className='text-sm text-green-800 dark:text-green-200'>{success}</p>
-            </div>
-          )}
-
-          {/* Environment Variables List */}
-          <div className='space-y-4'>
-            {envVars.map((envVar, index) => (
-              <div
-                key={index}
-                className='flex gap-4 items-start p-4 bg-white dark:bg-zinc-800 rounded-lg border border-gray-200 dark:border-zinc-700 drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
-              >
-                <div className='flex-1'>
-                  <TextField
-                    label='Variable Name'
-                    placeholder='VARIABLE_NAME'
-                    value={envVar.key}
-                    onChange={value => handleKeyChange(index, value)}
-                  />
-                </div>
-                <div className='flex-1'>
-                  <TextField
-                    label='Value'
-                    placeholder='variable_value'
-                    value={envVar.value}
-                    onChange={value => handleValueChange(index, value)}
-                  />
-                </div>
-                <div className='pt-7'>
-                  <Button variant='danger' size='small' onClick={() => handleRemoveVariable(index)} className='group'>
-                    <i className='bx bx-trash text-lg group-active:scale-95'></i>
-                  </Button>
-                </div>
+          <div className='mt-4 flex flex-col gap-4 lg:flex-row lg:items-center'>
+            <div className='flex-1 space-y-1 py-2'>
+              <p className='text-sm text-stone-500 dark:text-stone-400'>Accepted formats: MP4, WebM · Max size 8MB.</p>
+              <div className='rounded-xl border border-dashed border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-500 dark:border-stone-700 dark:bg-zinc-800/60 dark:text-stone-200'>
+                <p>Uploaded wallpapers appear below. You can switch between them at any time.</p>
               </div>
-            ))}
+            </div>
 
-            {envVars.length === 0 && (
-              <div className='text-center py-8 text-stone-500 dark:text-stone-400'>
-                No environment variables configured. Click "Add Variable" to get started.
+            <div className='flex gap-3'>
+              <input
+                ref={fileInputRef}
+                type='file'
+                accept='video/mp4,video/webm'
+                className='hidden'
+                onChange={handleFileChange}
+              />
+              <Button variant='primary' onClick={() => fileInputRef.current?.click()} disabled={uploading} className='group'>
+                <p className='transition-transform duration-100 group-active:scale-95'>
+                  {uploading ? 'Processing…' : 'Browse for video'}
+                </p>
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section className='rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:bg-zinc-900 dark:shadow-black/20'>
+          <div className='flex flex-col gap-1'>
+            <div className='flex flex-wrap items-center justify-between gap-3'>
+              <div>
+                <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100'>Saved Wallpapers</h2>
+                <p className='text-sm text-stone-500 dark:text-stone-400'>Select or delete any saved clip.</p>
               </div>
+              <div className='flex flex-wrap gap-2'>
+                <Button variant='outline2' size='small' onClick={handleResetToDefault} className='group'>
+                  <p className='transition-transform duration-100 group-active:scale-95'>Reset to Default</p>
+                </Button>
+                <Button variant='outline2' size='small' onClick={handleClearGallery} className='group'>
+                  <p className='transition-transform duration-100 group-active:scale-95'>Clear Gallery</p>
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className='mt-5 grid gap-4 md:grid-cols-2'>
+            {videos.length === 0 ? (
+              <div className='col-span-full rounded-xl border-2 border-dashed border-stone-200 bg-stone-50/80 p-6 text-center text-sm text-stone-500 dark:border-stone-700 dark:bg-zinc-900/60 dark:text-stone-400'>
+                No saved wallpapers yet. Upload a video to get started.
+              </div>
+            ) : (
+              videos.map(video => {
+                const isActive = video.id === activeVideoId
+                return (
+                  <div
+                    key={video.id}
+                    className={`flex flex-col gap-3 rounded-xl border p-4 transition ${
+                      isActive
+                        ? 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-500/60 dark:bg-emerald-900/40'
+                        : 'border-stone-200 bg-stone-50/70 hover:border-indigo-400 hover:bg-white dark:border-stone-700 dark:bg-zinc-900/70 dark:hover:border-sky-600'
+                    }`}
+                  >
+                    <div className='flex items-start justify-between gap-3'>
+                      <div>
+                        <p className='text-base font-semibold text-stone-900 dark:text-stone-100'>{video.name || 'Uploaded wallpaper'}</p>
+                        <p className='text-xs text-stone-500 dark:text-stone-400'>
+                          {video.mimeType} · {formatSize(video.size)}
+                        </p>
+                        <p className='text-xs text-stone-400 dark:text-stone-500'>Added {new Date(video.createdAt).toLocaleString()}</p>
+                      </div>
+                      {isActive && (
+                        <span className='rounded-full border border-emerald-300 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:border-emerald-500/60 dark:text-emerald-200'>
+                          Active
+                        </span>
+                      )}
+                    </div>
+                    <div className='flex flex-wrap gap-2'>
+                      <Button
+                        variant={isActive ? 'primary' : 'outline2'}
+                        size='small'
+                        onClick={() => handleSelectVideo(video.id)}
+                        className='group'
+                      >
+                        <p className='transition-transform duration-100 group-active:scale-95'>
+                          {isActive ? 'Selected' : 'Use this wallpaper'}
+                        </p>
+                      </Button>
+                      <Button
+                        variant='outline2'
+                        size='small'
+                        onClick={() => handleRemoveVideo(video.id)}
+                        className='group'
+                      >
+                        <p className='transition-transform duration-100 group-active:scale-95'>Remove</p>
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
-
-          {/* Action Buttons */}
-          <div className='flex gap-4 justify-end'>
-            <Button variant='primary' size='large' onClick={handleAddVariable} className='group'>
-              <p className='transition-transform duration-100 group-active:scale-95'>Add Variable</p>
-            </Button>
-            <Button variant='primary' onClick={handleSave} disabled={saving} className='group'>
-              {saving ? (
-                'Saving...'
-              ) : (
-                <p className='transition-transform duration-100 group-active:scale-95'>Save Changes</p>
-              )}
-            </Button>
-          </div>
-
-          {/* Warning */}
-          <div className='p-4 bg-yellow-50 dark:bg-secondary-600 rounded-lg border border-yellow-200 dark:border-secondary-800'>
-            <p className='text-sm text-yellow-800 dark:text-neutral-200'>
-              <strong>Warning:</strong> Be careful when editing environment variables. Invalid values may cause the
-              application to malfunction. Always backup your .env file before making changes.
-            </p>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   )

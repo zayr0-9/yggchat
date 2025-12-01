@@ -13,6 +13,7 @@ import { globSearch } from './core/glob'
 import { readFileContinuation, readTextFile } from './core/readFile'
 import { readMultipleTextFiles } from './core/readFiles'
 import { ripgrepSearch } from './core/ripgrep'
+import { runBashCommand } from './core/bash'
 import searchHistory from './core/searchHistory'
 // export const directoryTool = tool({
 //   description:
@@ -653,6 +654,44 @@ const tools: tools[] = [
             searchPath,
           }
         }
+      },
+    },
+  },
+  {
+    name: 'bash',
+    enabled: false,
+    tool: {
+      description:
+        'Run bash commands inside the workspace. On Windows/Electron, paths are automatically converted to the default WSL distribution for compatibility.',
+      inputSchema: z.object({
+        command: z.string().describe('Shell command to execute'),
+        cwd: z.string().optional().describe('Working directory for the command'),
+        env: z.record(z.string(), z.string()).optional().describe('Optional environment variables'),
+        timeoutMs: z
+          .number()
+          .int()
+          .min(100)
+          .max(120000)
+          .optional()
+          .describe('Optional timeout in milliseconds (default 0 meaning no timeout)'),
+        maxOutputChars: z
+          .number()
+          .int()
+          .min(100)
+          .max(500000)
+          .optional()
+          .describe('Optional limit on total captured output characters (default 20000)'),
+      }),
+      execute: async ({ command, cwd, env, timeoutMs, maxOutputChars }: any) => {
+        if (!command || !command.trim()) {
+          throw new Error('command is required')
+        }
+        return await runBashCommand(command, {
+          cwd,
+          env: typeof env === 'object' && env !== null ? env : undefined,
+          timeoutMs,
+          maxOutputChars,
+        })
       },
     },
   },

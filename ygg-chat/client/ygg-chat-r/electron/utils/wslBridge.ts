@@ -69,6 +69,29 @@ export function isWSLPath(filePath: string): boolean {
 }
 
 /**
+ * Normalize a native path into a WSL-friendly path (/mnt/<drive>/... or equivalent)
+ */
+export function toWslPath(rawPath: string): string {
+  const trimmed = rawPath.trim()
+  if (!trimmed) {
+    return trimmed
+  }
+
+  if (trimmed.startsWith('/')) {
+    return trimmed
+  }
+
+  const driveMatch = trimmed.match(/^([a-zA-Z]):[\\/](.*)$/)
+  if (driveMatch) {
+    const drive = driveMatch[1].toLowerCase()
+    const rest = driveMatch[2].replace(/[\\/]+/g, '/')
+    return `/mnt/${drive}/${rest}`
+  }
+
+  return trimmed.replace(/[\\/]+/g, '/')
+}
+
+/**
  * Convert a potential WSL path to a Windows UNC path if needed.
  */
 export async function resolveToWindowsPath(filePath: string): Promise<string> {
