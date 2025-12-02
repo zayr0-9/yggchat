@@ -112,7 +112,7 @@ const tools: tools[] = [
     enabled: true,
     tool: {
       description:
-        'Read the contents of a text file (code, config, docs). Supports reading full files, single ranges, or multiple disjoint ranges. Rejects likely-binary files and truncates large files for safety.',
+        'Read the contents of a text file (code, config, docs). Supports reading full files, single ranges, or multiple disjoint ranges. Returns file metadata (line endings, encoding, modification time) and optional content hash for validation. Range info is in metadata only - content returned matches exactly what is in the file. Rejects likely-binary files and truncates large files for safety.',
       inputSchema: z.object({
         path: z.string().describe('The file path to read (absolute or relative)'),
         maxBytes: z
@@ -147,8 +147,12 @@ const tools: tools[] = [
           )
           .optional()
           .describe(
-            'Array of line range objects to read multiple disjoint sections. Format: [{"startLine": 10, "endLine": 50}, {"startLine": 100, "endLine": 150}]. Each range outputs with a "// Lines X-Y" header. Takes precedence over startLine/endLine params.'
+            'Array of line range objects to read multiple disjoint sections. Format: [{"startLine": 10, "endLine": 50}, {"startLine": 100, "endLine": 150}]. Range details are returned in metadata.ranges field. Takes precedence over startLine/endLine params.'
           ),
+        includeHash: z
+          .boolean()
+          .optional()
+          .describe('Calculate SHA256 content hash for validation with edit_file (default true)'),
       }),
       execute: async ({
         path,
@@ -156,15 +160,17 @@ const tools: tools[] = [
         startLine,
         endLine,
         ranges,
+        includeHash,
       }: {
         path: string
         maxBytes?: number
         startLine?: number
         endLine?: number
         ranges?: Array<{ startLine: number; endLine: number }>
+        includeHash?: boolean
       }) => {
         try {
-          const res = await readTextFile(path, { maxBytes, startLine, endLine, ranges })
+          const res = await readTextFile(path, { maxBytes, startLine, endLine, ranges, includeHash })
           return {
             success: true,
             path,
@@ -172,6 +178,15 @@ const tools: tools[] = [
             sizeBytes: res.sizeBytes,
             truncated: res.truncated,
             content: res.content,
+            contentHash: res.contentHash,
+            fileHash: res.fileHash,
+            metadata: {
+              lineEnding: res.metadata.lineEnding,
+              hasBOM: res.metadata.hasBOM,
+              encoding: res.metadata.encoding,
+              lastModified: res.metadata.lastModified,
+              inode: res.metadata.inode,
+            },
             startLine: res.startLine,
             endLine: res.endLine,
             totalLines: res.totalLines,
@@ -253,7 +268,7 @@ const tools: tools[] = [
     enabled: true,
     tool: {
       description:
-        'Read the next chunk of a file after a specific line number. Designed for pagination to avoid duplicate reads. Use this when you previously read a file up to line N and want to continue reading from line N+1.',
+        'Read the next chunk of a file after a specific line number. Designed for pagination to avoid duplicate reads. Use this when you previously read a file up to line N and want to continue reading from line N+1. Returns file metadata and content hash for validation.',
       inputSchema: z.object({
         path: z.string().describe('The file path to read (absolute or relative)'),
         afterLine: z
@@ -269,20 +284,26 @@ const tools: tools[] = [
           .max(5 * 1024 * 1024)
           .optional()
           .describe('Optional safety limit on bytes to read (1 to 5MB); defaults to 204800 (200KB)'),
+        includeHash: z
+          .boolean()
+          .optional()
+          .describe('Calculate SHA256 content hash for validation with edit_file (default true)'),
       }),
       execute: async ({
         path,
         afterLine,
         numLines,
         maxBytes,
+        includeHash,
       }: {
         path: string
         afterLine: number
         numLines: number
         maxBytes?: number
+        includeHash?: boolean
       }) => {
         try {
-          const res = await readFileContinuation(path, afterLine, numLines, { maxBytes })
+          const res = await readFileContinuation(path, afterLine, numLines, { maxBytes, includeHash })
           return {
             success: true,
             path,
@@ -290,6 +311,15 @@ const tools: tools[] = [
             sizeBytes: res.sizeBytes,
             truncated: res.truncated,
             content: res.content,
+            contentHash: res.contentHash,
+            fileHash: res.fileHash,
+            metadata: {
+              lineEnding: res.metadata.lineEnding,
+              hasBOM: res.metadata.hasBOM,
+              encoding: res.metadata.encoding,
+              lastModified: res.metadata.lastModified,
+              inode: res.metadata.inode,
+            },
             startLine: res.startLine,
             endLine: res.endLine,
             totalLines: res.totalLines,
@@ -377,7 +407,7 @@ const tools: tools[] = [
     enabled: true,
     tool: {
       description:
-        'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy.',
+        'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy. Supports content validation using hash and metadata from read_file to prevent editing stale content.',
       inputSchema: z.object({
         path: z.string().describe('The path to the file to edit'),
         operation: z.enum(['replace', 'replace_first', 'append']).describe('Type of edit operation'),
@@ -386,14 +416,46 @@ const tools: tools[] = [
         content: z.string().optional().describe('Content to append (required for append operation)'),
         createBackup: z.boolean().optional().describe('Whether to create a backup before editing (default false)'),
         encoding: z.string().optional().describe('File encoding (default utf8)'),
+        validateContent: z
+          .boolean()
+          .optional()
+          .describe('Validate file has not changed since read using hash/metadata (default true)'),
+        expectedHash: z
+          .string()
+          .optional()
+          .describe('Expected SHA256 content hash from read_file for validation. Prevents editing if file changed.'),
+        expectedMetadata: z
+          .object({
+            lineEnding: z.enum(['\n', '\r\n', 'mixed']).optional(),
+            hasBOM: z.boolean().optional(),
+            encoding: z.string().optional(),
+            lastModified: z.date().or(z.string()).optional(),
+            inode: z.number().optional(),
+          })
+          .optional()
+          .describe('Expected file metadata from read_file for validation'),
       }),
-      execute: async ({ path, operation, searchPattern, replacement, content, createBackup, encoding }: any) => {
+      execute: async ({
+        path,
+        operation,
+        searchPattern,
+        replacement,
+        content,
+        createBackup,
+        encoding,
+        validateContent,
+        expectedHash,
+        expectedMetadata,
+      }: any) => {
         return await editFile(path, operation, {
           searchPattern,
           replacement,
           content,
           createBackup,
           encoding,
+          validateContent,
+          expectedHash,
+          expectedMetadata,
         })
       },
     },

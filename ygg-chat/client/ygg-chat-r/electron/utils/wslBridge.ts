@@ -60,11 +60,11 @@ export async function getDefaultDistro(): Promise<string> {
  */
 export function isWSLPath(filePath: string): boolean {
   if (!isWindows()) return false
-  
+
   const trimmedPath = filePath.trim()
   const startsWithSlash = trimmedPath.startsWith('/')
   const isDriveLetter = trimmedPath.match(/^[a-zA-Z]:/)
-  
+
   return startsWithSlash && !isDriveLetter
 }
 
@@ -77,12 +77,21 @@ export function toWslPath(rawPath: string): string {
     return trimmed
   }
 
-  // Convert backslashes to forward slashes, then collapse multiple slashes
-  const normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
-  const lowerNormalized = normalized.toLowerCase()
+  // Convert backslashes to forward slashes first
+  let normalized = trimmed.replace(/\\/g, '/')
+  let lowerNormalized = normalized.toLowerCase()
 
-  if (lowerNormalized.startsWith('//wsl$')) {
-    const segments = normalized.split('/').filter(Boolean)
+  const isUncWSLPath = /^\/{2,}wsl\$/i.test(lowerNormalized)
+
+  // Collapse duplicate slashes only when it's not a UNC WSL path
+  if (!isUncWSLPath) {
+    normalized = normalized.replace(/\/+/g, '/')
+    lowerNormalized = normalized.toLowerCase()
+  }
+
+  if (isUncWSLPath) {
+    const withoutLeadingSlashes = normalized.replace(/^\/+/, '')
+    const segments = withoutLeadingSlashes.split('/').filter(Boolean)
     if (segments.length >= 2 && segments[0].toLowerCase() === 'wsl$') {
       const remainder = segments.slice(2).join('/')
       return remainder ? `/${remainder}` : '/'
@@ -112,12 +121,12 @@ export async function resolveToWindowsPath(filePath: string): Promise<string> {
   // Check if it looks like a WSL path (starts with / and not a drive letter)
   const trimmedPath = filePath.trim()
   if (!isWSLPath(trimmedPath)) {
-      return filePath
+    return filePath
   }
-  
+
   try {
     const distro = await getDefaultDistro()
-    
+
     // Ensure we don't double-prefix if it's already a UNC path
     if (trimmedPath.startsWith('\\\\wsl$')) return trimmedPath
 
@@ -136,18 +145,18 @@ export async function resolveToWindowsPath(filePath: string): Promise<string> {
 }
 
 export async function getWSLCommandArgs(
-  command: string, 
-  args: string[] = [], 
+  command: string,
+  args: string[] = [],
   cwd?: string
 ): Promise<[string, string[]]> {
   const distro = await getDefaultDistro()
   const finalArgs = ['-d', distro]
-  
+
   if (cwd) {
     finalArgs.push('--cd', cwd)
   }
-  
+
   finalArgs.push('-e', command, ...args)
-  
+
   return ['wsl.exe', finalArgs]
 }

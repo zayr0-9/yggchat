@@ -78,7 +78,7 @@ export interface StreamChunk {
     is_error: boolean
   }
   // CC-specific chunk type (from Claude Code SDK streaming events)
-  chunkType?: 'content_delta' | 'thinking_delta' | 'tool_start' | 'tool_end' | 'tool_progress'
+  chunkType?: 'content_delta' | 'thinking_delta' | 'tool_start' | 'tool_end' | 'tool_progress' | 'result_output' | 'system_output' | string
 }
 
 // Sequential event for streaming to preserve order

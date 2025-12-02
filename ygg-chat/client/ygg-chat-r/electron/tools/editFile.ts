@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { readTextFile } from './readFile.js'
+import * as crypto from 'crypto'
+import { readTextFile, FileMetadata } from './readFile.js'
 import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
 
 export interface EditFileOptions {
@@ -10,6 +11,9 @@ export interface EditFileOptions {
   fuzzyThreshold?: number // Similarity threshold for fuzzy matching (default: 0.8)
   preserveIndentation?: boolean // Preserve original indentation style (default: true)
   operationMode?: 'plan' | 'execute'
+  validateContent?: boolean // Validate file hasn't changed since read (default: true)
+  expectedHash?: string // Expected content hash from previous read
+  expectedMetadata?: FileMetadata // Expected file metadata from previous read
 }
 
 export type EditOperation = 'replace' | 'replace_first' | 'append'
@@ -25,6 +29,15 @@ export interface MatchResult {
   similarity?: number // For fuzzy matches
 }
 
+export interface FileValidationResult {
+  valid: boolean
+  reason?: string
+  expectedHash?: string
+  actualHash?: string
+  expectedModified?: Date
+  actualModified?: Date
+}
+
 export interface EditFileResult {
   success: boolean
   absolutePath: string
@@ -34,6 +47,7 @@ export interface EditFileResult {
   backup?: string
   matchStrategy?: MatchStrategy // Which strategy succeeded
   attemptedStrategies?: string[] // For debugging failed matches
+  validation?: FileValidationResult // Validation result if performed
 }
 
 /**
@@ -58,6 +72,7 @@ export async function editFileSearchReplace(
     enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
+    validateContent = true,
   } = options
 
   try {
@@ -65,6 +80,22 @@ export async function editFileSearchReplace(
     const fileData = await readTextFile(filePath)
     const originalContent = fileData.content
     const absolutePath = fileData.absolutePath
+
+    // Validate file content if requested
+    let validation: FileValidationResult | undefined
+    if (validateContent) {
+      validation = await validateFileContent(absolutePath, originalContent, options)
+      if (!validation.valid) {
+        return {
+          success: false,
+          absolutePath: toWslPath(absolutePath),
+          sizeBytes: fileData.sizeBytes,
+          replacements: 0,
+          message: `Validation failed: ${validation.reason}`,
+          validation,
+        }
+      }
+    }
 
     // Perform search and replace
     let newContent: string
@@ -158,6 +189,7 @@ export async function editFileSearchReplace(
       backup: backupPath ? toWslPath(backupPath) : undefined,
       matchStrategy,
       attemptedStrategies,
+      validation,
     }
   } catch (error: any) {
     return {
@@ -185,12 +217,29 @@ export async function editFileSearchReplaceFirst(
     enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
+    validateContent = true,
   } = options
 
   try {
     const fileData = await readTextFile(filePath)
     const originalContent = fileData.content
     const absolutePath = fileData.absolutePath
+
+    // Validate file content if requested
+    let validation: FileValidationResult | undefined
+    if (validateContent) {
+      validation = await validateFileContent(absolutePath, originalContent, options)
+      if (!validation.valid) {
+        return {
+          success: false,
+          absolutePath: toWslPath(absolutePath),
+          sizeBytes: fileData.sizeBytes,
+          replacements: 0,
+          message: `Validation failed: ${validation.reason}`,
+          validation,
+        }
+      }
+    }
 
     // Try layered matching strategies
     const matchResult = findMatchWithStrategies(
@@ -248,6 +297,7 @@ export async function editFileSearchReplaceFirst(
       backup: backupPath ? toWslPath(backupPath) : undefined,
       matchStrategy: matchResult.strategy,
       attemptedStrategies: matchResult.attemptedStrategies,
+      validation,
     }
   } catch (error: any) {
     return {
@@ -393,6 +443,56 @@ export async function editFile(
         message: `Unknown operation: ${operation}`,
       }
   }
+}
+
+/**
+ * Calculate SHA256 hash of content
+ */
+function calculateHash(content: string): string {
+  return crypto.createHash('sha256').update(content, 'utf8').digest('hex')
+}
+
+/**
+ * Validate file content hasn't changed since it was read
+ */
+async function validateFileContent(
+  absolutePath: string,
+  content: string,
+  options: EditFileOptions
+): Promise<FileValidationResult> {
+  if (!options.validateContent) {
+    return { valid: true }
+  }
+
+  const stats = await fs.promises.stat(absolutePath)
+  const currentHash = options.expectedHash ? calculateHash(content) : undefined
+
+  // Check hash if provided
+  if (options.expectedHash && currentHash !== options.expectedHash) {
+    return {
+      valid: false,
+      reason: 'Content hash mismatch - file may have been modified',
+      expectedHash: options.expectedHash,
+      actualHash: currentHash,
+    }
+  }
+
+  // Check modification time if metadata provided
+  if (options.expectedMetadata?.lastModified) {
+    const expectedTime = new Date(options.expectedMetadata.lastModified).getTime()
+    const actualTime = stats.mtime.getTime()
+
+    if (actualTime > expectedTime) {
+      return {
+        valid: false,
+        reason: 'File has been modified since it was read',
+        expectedModified: options.expectedMetadata.lastModified,
+        actualModified: stats.mtime,
+      }
+    }
+  }
+
+  return { valid: true }
 }
 
 /**

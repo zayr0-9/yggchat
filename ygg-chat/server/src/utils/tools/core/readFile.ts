@@ -13,7 +13,16 @@ export interface ReadFileOptions {
   startLine?: number // 1-based line number to start reading from (inclusive) - for single range
   endLine?: number // 1-based line number to stop reading at (inclusive) - for single range
   ranges?: LineRange[] // multiple disjoint ranges to read in a single call
+  includeHash?: boolean // Calculate content hash for validation (default: true)
   // Note: if 'ranges' is provided, startLine/endLine are ignored
+}
+
+export interface FileMetadata {
+  lineEnding: '\n' | '\r\n' | 'mixed'
+  hasBOM: boolean
+  encoding: BufferEncoding
+  lastModified: Date
+  inode?: number // Unix inode number for change detection
 }
 
 function isLikelyBinary(buf: Buffer): boolean {
@@ -35,6 +44,9 @@ export interface ReadFileResult {
   truncated: boolean
   sizeBytes: number
   absolutePath: string
+  contentHash?: string // SHA256 hash of returned content for validation
+  fileHash?: string // SHA256 hash of entire file (if content is partial)
+  metadata: FileMetadata
   startLine?: number
   endLine?: number
   totalLines?: number
@@ -179,6 +191,14 @@ export async function readTextFile(
     truncated,
     sizeBytes,
     absolutePath: abs,
+    // Stub metadata - actual implementation is in Electron
+    metadata: {
+      lineEnding: '\n',
+      hasBOM: false,
+      encoding: 'utf8',
+      lastModified: stats.mtime,
+      inode: stats.ino,
+    },
     startLine: actualStartLine,
     endLine: actualEndLine,
     totalLines,

@@ -658,6 +658,24 @@ function Chat() {
     }
   }, [currentConversationId, projectConversations, dispatch])
 
+  // Load cwd from conversation when conversation changes
+  // This populates the Claude Code working directory from cached conversation data
+  useEffect(() => {
+    if (currentConversationId && projectConversations.length > 0) {
+      // Find the current conversation in projectConversations (React Query cache)
+      const conversation = projectConversations.find(c => c.id === currentConversationId)
+
+      // Extract cwd from the conversation, default to empty string if not set
+      const conversationCwd = conversation?.cwd ?? ''
+
+      // Update ccCwd state with the loaded value
+      setCcCwd(conversationCwd)
+    } else {
+      // If no conversation is selected, clear cwd
+      setCcCwd('')
+    }
+  }, [currentConversationId, projectConversations])
+
   // Query invalidation is now handled directly in sendMessage and editMessageWithBranching success handlers
   // This prevents aggressive refetching and duplicate API requests
 

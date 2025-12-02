@@ -11,6 +11,7 @@ export interface Conversation {
   conversation_context: string | null
   research_note: string | null
   storage_mode?: StorageMode
+  cwd?: string | null
 }
 
 export interface ConversationsState {

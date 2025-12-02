@@ -454,6 +454,17 @@ async function processSDKMessage(
   }
 
   if (messageType === 'result') {
+    console.log('[ClaudeCode] RAW RESULT MESSAGE:', JSON.stringify(message, null, 2))
+
+    if (message.result) {
+      console.log('[ClaudeCode] Result received:', {
+        subtype: message.subtype,
+        is_error: message.is_error,
+        has_result_output: !!message.result,
+        result_length: message.result?.length || 0,
+      })
+    }
+
     if (onResponse) {
       await onResponse({
         messageType: 'result',

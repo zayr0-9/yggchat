@@ -1956,6 +1956,74 @@ function setupServer() {
           setSession(conversationId, cwd, response.sessionId)
         }
 
+        // ========================================================================
+        // Universal Content Extractor - Capture content from ANY message type
+        // ========================================================================
+
+        // Extract text content from any response field
+        let extractedContent: string | null = null
+
+        // Priority 1: Check for result.result (slash commands)
+        if (response.messageType === 'result' && response.result?.result) {
+          extractedContent = response.result.result
+          console.log('[LocalServer] 🔍 Extracted content from result.result:', extractedContent.substring(0, 100))
+        }
+
+        // Priority 2: Check for system messages with content
+        if (!extractedContent && response.messageType === 'system' && response.system) {
+          // Some system messages may contain displayable content
+          // Example: init messages with configuration info
+          const systemContent = (response.system as any).content || (response.system as any).message
+          if (systemContent && typeof systemContent === 'string') {
+            extractedContent = systemContent
+            console.log('[LocalServer] 🔍 Extracted content from system message')
+          }
+        }
+
+        // Priority 3: Check for any 'content' field in the response (catch-all)
+        if (!extractedContent && (response as any).content) {
+          const genericContent = (response as any).content
+          if (typeof genericContent === 'string') {
+            extractedContent = genericContent
+            console.log('[LocalServer] 🔍 Extracted content from generic content field')
+          } else if (Array.isArray(genericContent)) {
+            // If it's an array of blocks, try to extract text
+            const textBlocks = genericContent.filter((b: any) => b.type === 'text')
+            if (textBlocks.length > 0) {
+              extractedContent = textBlocks.map((b: any) => b.text || b.content || '').join('\n')
+              console.log('[LocalServer] 🔍 Extracted content from content blocks array')
+            }
+          }
+        }
+
+        // If we extracted content from a non-message type, add it to contentBlocks
+        if (extractedContent && response.messageType !== 'message') {
+          const syntheticBlock = {
+            type: 'text',
+            text: extractedContent,
+          }
+
+          contentBlocks.push(syntheticBlock)
+          textParts.push(extractedContent)
+
+          // Stream extracted content to frontend immediately
+          try {
+            res.write(`data: ${JSON.stringify({
+              type: 'chunk',
+              part: 'text',
+              delta: extractedContent,
+              chunkType: `${response.messageType}_output`,
+              sourceMessageType: response.messageType,
+            })}\n\n`)
+          } catch (error) {
+            console.error('[LocalServer] Error streaming extracted content:', error)
+          }
+        }
+
+        // ========================================================================
+        // End Universal Content Extractor
+        // ========================================================================
+
         if (response.messageType === 'message' && response.message) {
           for (const block of response.message.content) {
             contentBlocks.push(block)
@@ -1989,7 +2057,7 @@ function setupServer() {
               JSON.stringify(normalizeContentBlocksForStorage(contentBlocks)),
               new Date().toISOString()
             )
-            console.log('[LocalServer] 🤖 CC message saved:', ccMsgId)
+            console.log('[LocalServer] 🤖 CC message saved:', ccMsgId, '- blocks:', contentBlocks.length)
 
             // Send complete event
             res.write(`data: ${JSON.stringify({
@@ -1998,6 +2066,8 @@ function setupServer() {
               messageId: ccMsgId,
               messageCount: contentBlocks.length,
             })}\n\n`)
+          } else if (!contentBlocks.length && currentSessionId) {
+            console.log('[LocalServer] ⚠️ CC result received but no content to save')
           }
 
           // Reset accumulators
@@ -2185,6 +2255,74 @@ function setupServer() {
           setSession(conversationId, cwd, response.sessionId)
         }
 
+        // ========================================================================
+        // Universal Content Extractor - Capture content from ANY message type
+        // ========================================================================
+
+        // Extract text content from any response field
+        let extractedContent: string | null = null
+
+        // Priority 1: Check for result.result (slash commands)
+        if (response.messageType === 'result' && response.result?.result) {
+          extractedContent = response.result.result
+          console.log('[LocalServer] 🔍 Extracted content from result.result:', extractedContent.substring(0, 100))
+        }
+
+        // Priority 2: Check for system messages with content
+        if (!extractedContent && response.messageType === 'system' && response.system) {
+          // Some system messages may contain displayable content
+          // Example: init messages with configuration info
+          const systemContent = (response.system as any).content || (response.system as any).message
+          if (systemContent && typeof systemContent === 'string') {
+            extractedContent = systemContent
+            console.log('[LocalServer] 🔍 Extracted content from system message')
+          }
+        }
+
+        // Priority 3: Check for any 'content' field in the response (catch-all)
+        if (!extractedContent && (response as any).content) {
+          const genericContent = (response as any).content
+          if (typeof genericContent === 'string') {
+            extractedContent = genericContent
+            console.log('[LocalServer] 🔍 Extracted content from generic content field')
+          } else if (Array.isArray(genericContent)) {
+            // If it's an array of blocks, try to extract text
+            const textBlocks = genericContent.filter((b: any) => b.type === 'text')
+            if (textBlocks.length > 0) {
+              extractedContent = textBlocks.map((b: any) => b.text || b.content || '').join('\n')
+              console.log('[LocalServer] 🔍 Extracted content from content blocks array')
+            }
+          }
+        }
+
+        // If we extracted content from a non-message type, add it to contentBlocks
+        if (extractedContent && response.messageType !== 'message') {
+          const syntheticBlock = {
+            type: 'text',
+            text: extractedContent,
+          }
+
+          contentBlocks.push(syntheticBlock)
+          textParts.push(extractedContent)
+
+          // Stream extracted content to frontend immediately
+          try {
+            res.write(`data: ${JSON.stringify({
+              type: 'chunk',
+              part: 'text',
+              delta: extractedContent,
+              chunkType: `${response.messageType}_output`,
+              sourceMessageType: response.messageType,
+            })}\n\n`)
+          } catch (error) {
+            console.error('[LocalServer] Error streaming extracted content:', error)
+          }
+        }
+
+        // ========================================================================
+        // End Universal Content Extractor
+        // ========================================================================
+
         if (response.messageType === 'message' && response.message) {
           for (const block of response.message.content) {
             contentBlocks.push(block)
@@ -2217,6 +2355,7 @@ function setupServer() {
               JSON.stringify(normalizeContentBlocksForStorage(contentBlocks)),
               new Date().toISOString()
             )
+            console.log('[LocalServer] 🤖 CC message saved:', ccMsgId, '- blocks:', contentBlocks.length)
 
             res.write(`data: ${JSON.stringify({
               type: 'complete',
@@ -2224,6 +2363,8 @@ function setupServer() {
               messageId: ccMsgId,
               messageCount: contentBlocks.length,
             })}\n\n`)
+          } else if (!contentBlocks.length && currentSessionId) {
+            console.log('[LocalServer] ⚠️ CC result received but no content to save')
           }
 
           contentBlocks = []

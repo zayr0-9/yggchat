@@ -2860,6 +2860,19 @@ export const sendCCMessage = createAsyncThunk<
               } else if (chunk.type === 'system') {
                 // System events (init, auth, etc.) - log silently for now
                 console.log('[CC System]', chunk.message)
+              } else if (chunk.type === 'result') {
+                // Result message from slash commands - backend streams output as chunks
+                // But also handle direct result.result for compatibility
+                if (chunk.result?.result) {
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({
+                      type: 'chunk',
+                      content: chunk.result.result,
+                      part: 'text',
+                      chunkType: 'result_output',
+                    })
+                  )
+                }
               } else if (chunk.type === 'complete') {
                 sessionId = chunk.sessionId
                 messageCount = chunk.messageCount
@@ -3029,6 +3042,19 @@ export const sendCCBranch = createAsyncThunk<
               } else if (chunk.type === 'system') {
                 // System events (init, auth, etc.)
                 console.log('[CC System]', chunk.message)
+              } else if (chunk.type === 'result') {
+                // Result message from slash commands - backend streams output as chunks
+                // But also handle direct result.result for compatibility
+                if (chunk.result?.result) {
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({
+                      type: 'chunk',
+                      content: chunk.result.result,
+                      part: 'text',
+                      chunkType: 'result_output',
+                    })
+                  )
+                }
               } else if (chunk.type === 'complete') {
                 sessionId = chunk.sessionId
                 messageCount = chunk.messageCount

@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import * as crypto from 'crypto'
 import { resolveToWindowsPath, isWSLPath, toWslPath } from '../utils/wslBridge.js'
 
 export interface LineRange {
@@ -12,7 +13,16 @@ export interface ReadFileOptions {
   startLine?: number // 1-based line number to start reading from (inclusive) - for single range
   endLine?: number // 1-based line number to stop reading at (inclusive) - for single range
   ranges?: LineRange[] // multiple disjoint ranges to read in a single call
+  includeHash?: boolean // Calculate content hash for validation (default: true)
   // Note: if 'ranges' is provided, startLine/endLine are ignored
+}
+
+export interface FileMetadata {
+  lineEnding: '\n' | '\r\n' | 'mixed'
+  hasBOM: boolean
+  encoding: BufferEncoding
+  lastModified: Date
+  inode?: number // Unix inode number for change detection
 }
 
 function isLikelyBinary(buf: Buffer): boolean {
@@ -34,6 +44,9 @@ export interface ReadFileResult {
   truncated: boolean
   sizeBytes: number
   absolutePath: string
+  contentHash?: string // SHA256 hash of returned content for validation
+  fileHash?: string // SHA256 hash of entire file (if content is partial)
+  metadata: FileMetadata
   startLine?: number
   endLine?: number
   totalLines?: number
@@ -44,11 +57,41 @@ export interface ReadFileResult {
   }>
 }
 
+/**
+ * Calculate SHA256 hash of content
+ */
+function calculateHash(content: string): string {
+  return crypto.createHash('sha256').update(content, 'utf8').digest('hex')
+}
+
+/**
+ * Detect line ending style in content
+ */
+function detectLineEnding(content: string): '\n' | '\r\n' | 'mixed' {
+  const hasCRLF = content.includes('\r\n')
+  const hasLF = content.includes('\n')
+  const lfOnlyCount = (content.match(/(?<!\r)\n/g) || []).length
+
+  if (hasCRLF && lfOnlyCount > 0) return 'mixed'
+  if (hasCRLF) return '\r\n'
+  if (hasLF) return '\n'
+  return '\n' // default for single-line files
+}
+
+/**
+ * Detect BOM (Byte Order Mark) in buffer
+ */
+function hasBOM(buf: Buffer): boolean {
+  return buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF
+}
+
+
 export async function readTextFile(
   inputPath: string,
   options: ReadFileOptions = {}
 ): Promise<ReadFileResult> {
   const maxBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 200 * 1024
+  const includeHash = options.includeHash !== false // default to true
 
   // Resolve absolute path
   let abs = inputPath
@@ -99,8 +142,15 @@ export async function readTextFile(
     throw new Error('Binary file detected; reading binary is not supported by this tool')
   }
 
+  // Collect metadata before processing
+  const bomDetected = hasBOM(buf)
   let content = buf.toString('utf8')
+  const fullFileContent = content // Store original for hash calculation
   const truncated = !needsLineAccess && sizeBytes > maxBytes
+
+  // Detect line ending style from original full content
+  const lineEndingStyle = detectLineEnding(content)
+  const lineEnding = lineEndingStyle === 'mixed' || lineEndingStyle === '\r\n' ? '\r\n' : '\n'
 
   // Handle line-range slicing if requested
   let actualStartLine: number | undefined
@@ -108,9 +158,15 @@ export async function readTextFile(
   let totalLines: number | undefined
   let rangesInfo: Array<{ startLine: number; endLine: number; lineCount: number }> | undefined
 
+  // Split preserving all line ending types
+  const splitLines = (text: string): string[] => {
+    // Split by any line ending but preserve the actual ending used
+    return text.split(/\r?\n/)
+  }
+
   // Multi-range support takes precedence
   if (options.ranges && options.ranges.length > 0) {
-    const lines = content.split('\n')
+    const lines = splitLines(content)
     totalLines = lines.length
 
     // Validate and process each range
@@ -131,10 +187,13 @@ export async function readTextFile(
       // Extract lines for this range (convert to 0-based indexing)
       const rangeLines = lines.slice(start - 1, end)
 
-      // Add a header comment to mark the range
-      selectedParts.push(`// Lines ${start}-${end}`)
-      selectedParts.push(rangeLines.join('\n'))
-      selectedParts.push('') // blank line between ranges
+      // CRITICAL: Do NOT add header comments - they don't exist in the actual file
+      // and will cause mismatches with editFile. Range info is in metadata.
+      selectedParts.push(rangeLines.join(lineEnding))
+      if (options.ranges && options.ranges.length > 1) {
+        // Only add separator between multiple ranges
+        selectedParts.push('') // blank line between ranges
+      }
 
       rangesInfo.push({
         startLine: start,
@@ -148,10 +207,10 @@ export async function readTextFile(
       selectedParts.pop()
     }
 
-    content = selectedParts.join('\n')
+    content = selectedParts.join(lineEnding)
   } else if (options.startLine !== undefined || options.endLine !== undefined) {
     // Single range support (backward compatible)
-    const lines = content.split('\n')
+    const lines = splitLines(content)
     totalLines = lines.length
 
     // Validate and normalize line numbers (1-based to 0-based)
@@ -167,10 +226,23 @@ export async function readTextFile(
 
     // Slice the lines (convert to 0-based indexing)
     const selectedLines = lines.slice(start - 1, end)
-    content = selectedLines.join('\n')
+    content = selectedLines.join(lineEnding)
 
     actualStartLine = start
     actualEndLine = end
+  }
+
+  // Calculate content hashes if requested
+  const contentHash = includeHash ? calculateHash(content) : undefined
+  const fileHash = includeHash && content !== fullFileContent ? calculateHash(fullFileContent) : contentHash
+
+  // Build metadata
+  const metadata: FileMetadata = {
+    lineEnding: lineEndingStyle,
+    hasBOM: bomDetected,
+    encoding: 'utf8',
+    lastModified: stats.mtime,
+    inode: stats.ino,
   }
 
   return {
@@ -178,6 +250,9 @@ export async function readTextFile(
     truncated,
     sizeBytes,
     absolutePath: toWslPath(abs),
+    contentHash,
+    fileHash,
+    metadata,
     startLine: actualStartLine,
     endLine: actualEndLine,
     totalLines,
