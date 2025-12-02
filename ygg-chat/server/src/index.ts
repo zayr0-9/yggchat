@@ -292,6 +292,12 @@ if (env.VITE_ENVIRONMENT === 'web') {
     // Agent routes: Claude Code and other external agents
     const supaAgents = require('./routes/supaAgents').default
     app.use('/api/agents', supaAgents)
+
+    // OOB Auth routes: OAuth callback page + code exchange for Electron/CLI
+    const oobAuth = require('./routes/oobAuth').default
+    app.use('/auth', oobAuth)        // For /auth/callback (callback page)
+    app.use('/api/auth', oobAuth)    // For /api/auth/oob/* endpoints
+    console.log('[Startup] OOB Auth routes loaded')
   } catch (err) {
     console.error('[Startup] ❌ Failed to load supaChat router:', err)
   }

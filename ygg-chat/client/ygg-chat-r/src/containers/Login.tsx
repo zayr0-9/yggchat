@@ -6,11 +6,19 @@ import { isUserAllowlisted } from '../lib/auth/allowlist'
 import { supabase } from '../lib/supabase'
 import { dualSync } from '../lib/sync/dualSyncManager'
 
+// Railway server URL for OOB auth (where Redis runs)
+const RAILWAY_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'https://webdrasil-production.up.railway.app'
+
 const Login: React.FC = () => {
   const navigate = useNavigate()
   const { user, reloadSession } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // OOB (Out-of-Band) authentication state for Electron
+  const [oobMode, setOobMode] = useState(false)
+  const [oobCode, setOobCode] = useState('')
+  const [oauthUrl, setOauthUrl] = useState<string | null>(null)
 
   // Check if we're in Electron mode (build-time or runtime detection)
   const isElectronMode =
@@ -254,6 +262,138 @@ const Login: React.FC = () => {
     }
   }
 
+  // OOB Login flow - for Electron when deep links don't work
+  const handleOOBLogin = async (provider: 'google' | 'github') => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      if (!supabase) {
+        throw new Error('Supabase client not available.')
+      }
+
+      // Get OAuth URL with Railway callback (for OOB code display)
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: `${RAILWAY_URL}/auth/callback`,
+          skipBrowserRedirect: true,
+        },
+      })
+
+      if (error) throw error
+      if (!data?.url) throw new Error('No OAuth URL returned')
+
+      setOauthUrl(data.url)
+      setOobMode(true)
+      setLoading(false)
+
+      // Try to open in browser
+      if (window.electronAPI?.auth?.openExternal) {
+        await window.electronAPI.auth.openExternal(data.url)
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to initiate login')
+      setLoading(false)
+    }
+  }
+
+  // Exchange OOB code for tokens
+  const handleCodeSubmit = async () => {
+    if (!oobCode.trim()) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch(`${RAILWAY_URL}/api/auth/oob/exchange`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: oobCode.trim() }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Invalid or expired code')
+      }
+
+      const { access_token, refresh_token } = await res.json()
+
+      // Set session in Supabase
+      const { data, error } = await supabase!.auth.setSession({
+        access_token,
+        refresh_token,
+      })
+
+      if (error) throw error
+
+      console.log('[Login] OOB session established successfully')
+
+      // Handle Electron-specific authorization (same as deep link flow)
+      if (data.session?.user && isElectronMode) {
+        const userId = data.session.user.id
+        const userEmail = data.session.user.email || 'unknown'
+
+        console.log('[Login] Checking user authorization...', { userId, userEmail })
+
+        const isAllowed = await isUserAllowlisted(userId)
+
+        if (!isAllowed) {
+          console.warn('[Login] User not authorized:', userEmail)
+
+          if (window.electronAPI?.storage?.clear) {
+            await window.electronAPI.storage.clear()
+          }
+
+          await supabase!.auth.signOut()
+
+          setError(
+            `Access Denied: Pro access requires authorization. Your email (${userEmail}) is not approved. Please visit the official Yggdrasil website to subscribe.`
+          )
+          setLoading(false)
+          setOobMode(false)
+          return
+        }
+
+        console.log('[Login] User authorized, completing sign-in')
+
+        const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
+
+        // Sync to local SQLite
+        dualSync.syncUser({
+          id: userId,
+          username: username,
+          created_at: data.session.user.created_at,
+        })
+
+        // Save to Electron storage
+        if (window.electronAPI?.storage) {
+          const authStateForStorage = {
+            user: {
+              id: userId,
+              email: data.session.user.email || 'unknown',
+              username: username,
+            },
+            session: { access_token },
+            loading: false,
+            accessToken: access_token,
+            userId: userId,
+          }
+
+          await window.electronAPI.storage.set('auth_session', authStateForStorage)
+          await reloadSession()
+        }
+      }
+
+      setLoading(false)
+      setOobMode(false)
+    } catch (error: any) {
+      console.error('[Login] OOB code exchange failed:', error)
+      setError(error.message || 'Failed to verify code')
+      setLoading(false)
+    }
+  }
+
   return (
     <div className=' relative z-10 min-h-screen flex items-center justify-center bg-black/40 dark:bg-black/40 py-12 px-4 sm:px-6 lg:px-8'>
       <div className='max-w-md w-full space-y-8'>
@@ -273,63 +413,130 @@ const Login: React.FC = () => {
         )}
 
         <div className='space-y-6 relative z-10 justify-center items-center align-middle'>
-          <div className='space-y-8'>
-            <Button
-              onClick={() => handleOAuthLogin('github')}
-              disabled={loading}
-              variant='mica'
-              size='large'
-              className='w-full inline-flex justify-center items-center '
-            >
-              <svg className='w-5 h-5' fill='currentColor' viewBox='0 0 24 24'>
-                <path
-                  fillRule='evenodd'
-                  d='M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z'
-                  clipRule='evenodd'
-                />
-              </svg>
-              <span className='ml-3'>Continue with GitHub</span>
-            </Button>
+          {oobMode ? (
+            // OOB Code Entry UI
+            <div className='space-y-6'>
+              <div className='text-center'>
+                <p className='text-neutral-200 dark:text-neutral-100 mb-2'>
+                  Complete sign-in in your browser, then enter the code shown:
+                </p>
+              </div>
 
-            <div className='relative'>
-              <div className='absolute inset-0 flex items-center'>
-                <div className='w-full border-t border-2 border-stone-300 dark:border-stone-500' />
+              <input
+                type='text'
+                value={oobCode}
+                onChange={e => setOobCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
+                placeholder='ABCD-1234'
+                maxLength={9}
+                className='w-full text-center text-3xl tracking-[0.2em] font-mono py-4 px-6 
+                           bg-neutral-800/50 border-2 border-neutral-600 rounded-lg
+                           text-white placeholder-neutral-500
+                           focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20'
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && oobCode.length >= 8) {
+                    handleCodeSubmit()
+                  }
+                }}
+              />
+
+              <Button
+                onClick={handleCodeSubmit}
+                disabled={loading || oobCode.length < 8}
+                variant='mica'
+                size='large'
+                className='w-full'
+              >
+                {loading ? 'Verifying...' : 'Verify Code'}
+              </Button>
+
+              <div className='text-sm text-neutral-400 space-y-2'>
+                <p>Browser didn't open? Copy this URL:</p>
+                <div
+                  className='p-3 bg-neutral-800/50 rounded-lg break-all text-xs cursor-pointer hover:bg-neutral-700/50 transition-colors'
+                  onClick={() => {
+                    if (oauthUrl) {
+                      navigator.clipboard.writeText(oauthUrl)
+                    }
+                  }}
+                  title='Click to copy'
+                >
+                  {oauthUrl}
+                </div>
               </div>
-              <div className='relative flex justify-center text-sm'>
-                <span className='px-1.5 py-1 bg-gray-50 dark:bg-yBlack-900 border-2 dark:text-stone-300 border:stone-700 dark:border-stone-400 rounded-full text-gray-500'>
-                  Or
-                </span>
-              </div>
+
+              <button
+                onClick={() => {
+                  setOobMode(false)
+                  setOobCode('')
+                  setOauthUrl(null)
+                  setError(null)
+                }}
+                className='w-full text-neutral-400 hover:text-neutral-200 text-sm py-2 transition-colors'
+              >
+                ← Back to sign-in options
+              </button>
             </div>
+          ) : (
+            // Normal OAuth Buttons
+            <div className='space-y-8'>
+              <Button
+                onClick={() => (isElectronMode ? handleOOBLogin('github') : handleOAuthLogin('github'))}
+                disabled={loading}
+                variant='mica'
+                size='large'
+                className='w-full inline-flex justify-center items-center '
+              >
+                <svg className='w-5 h-5' fill='currentColor' viewBox='0 0 24 24'>
+                  <path
+                    fillRule='evenodd'
+                    d='M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z'
+                    clipRule='evenodd'
+                  />
+                </svg>
+                <span className='ml-3'>Continue with GitHub</span>
+              </Button>
 
-            <Button
-              onClick={() => handleOAuthLogin('google')}
-              disabled={loading}
-              variant='mica'
-              className='w-full inline-flex justify-center items-center'
-              size='large'
-            >
-              <svg className='w-5 h-5' viewBox='0 0 24 24'>
-                <path
-                  fill='currentColor'
-                  d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z'
-                />
-                <path
-                  fill='currentColor'
-                  d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z'
-                />
-                <path
-                  fill='currentColor'
-                  d='M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z'
-                />
-                <path
-                  fill='currentColor'
-                  d='M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z'
-                />
-              </svg>
-              <span className='ml-3'>Continue with Google</span>
-            </Button>
-          </div>
+              <div className='relative'>
+                <div className='absolute inset-0 flex items-center'>
+                  <div className='w-full border-t border-2 border-stone-300 dark:border-stone-500' />
+                </div>
+                <div className='relative flex justify-center text-sm'>
+                  <span className='px-1.5 py-1 bg-gray-50 dark:bg-yBlack-900 border-2 dark:text-stone-300 border:stone-700 dark:border-stone-400 rounded-full text-gray-500'>
+                    Or
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                onClick={() => (isElectronMode ? handleOOBLogin('google') : handleOAuthLogin('google'))}
+                disabled={loading}
+                variant='mica'
+                className='w-full inline-flex justify-center items-center'
+                size='large'
+              >
+                <svg className='w-5 h-5' viewBox='0 0 24 24'>
+                  <path
+                    fill='currentColor'
+                    d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z'
+                  />
+                  <path
+                    fill='currentColor'
+                    d='M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z'
+                  />
+                  <path
+                    fill='currentColor'
+                    d='M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z'
+                  />
+                  <path
+                    fill='currentColor'
+                    d='M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z'
+                  />
+                </svg>
+                <span className='ml-3'>Continue with Google</span>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
