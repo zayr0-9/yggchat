@@ -210,6 +210,7 @@ export interface ChatState {
   toolCallPermissionRequest: ToolCallPermissionRequest | null
   toolAutoApprove: boolean
   operationMode: OperationMode
+  ccSlashCommands: string[]
 }
 
 // Action payloads
@@ -245,6 +246,11 @@ export interface CCSessionInfo {
   lastMessageAt: string
   messageCount: number
   cwd: string
+}
+
+export interface SlashCommand {
+  name: string
+  description?: string
 }
 
 export interface SendCCMessagePayload {

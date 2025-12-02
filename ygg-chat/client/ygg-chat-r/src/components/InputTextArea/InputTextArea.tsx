@@ -29,6 +29,7 @@ interface TextAreaProps {
   outline?: boolean
   onProcessMessage?: (processMessage: (message: string) => string) => void
   variant?: 'primary' | 'outline'
+  slashCommands?: string[]
 }
 
 const allowedMentionChar = /[A-Za-z0-9._\/\-]/
@@ -51,6 +52,32 @@ function findActiveMention(value: string, cursorPos: number) {
   return { start: atIndex, term }
 }
 
+// Detect slash command at position 0 (e.g., "/compact", "/clear")
+const allowedSlashChar = /[A-Za-z0-9_\-]/
+
+function findActiveSlashCommand(value: string, cursorPos: number) {
+  // Slash commands must start at position 0
+  if (!value.startsWith('/')) return null
+
+  const beforeCursor = value.slice(0, cursorPos)
+  // Only process if cursor is within the slash command (after the /)
+  if (!beforeCursor.startsWith('/')) return null
+
+  const afterSlash = beforeCursor.slice(1)
+  let commandLength = 0
+  while (commandLength < afterSlash.length && allowedSlashChar.test(afterSlash[commandLength])) {
+    commandLength += 1
+  }
+
+  // If there's a space after the command, we're done with autocomplete
+  if (commandLength < afterSlash.length && afterSlash[commandLength] === ' ') {
+    return null
+  }
+
+  const term = afterSlash.slice(0, commandLength)
+  return { start: 0, term }
+}
+
 export const InputTextArea: React.FC<TextAreaProps> = ({
   label,
   placeholder = 'Type your message...',
@@ -71,6 +98,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   outline = false,
   onProcessMessage,
   variant = 'primary',
+  slashCommands,
   ...rest
 }) => {
   const dispatch = useDispatch()
@@ -100,14 +128,33 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   const [filteredFiles, setFilteredFiles] = useState<Array<{ path: string; name: string; mention: string }>>([])
   const [activeMention, setActiveMention] = useState<{ start: number; term: string } | null>(null)
 
+  // Slash command autocomplete state
+  const slashListRef = useRef<HTMLDivElement>(null)
+  const [showSlashList, setShowSlashList] = useState(false)
+  const [selectedSlashIndex, setSelectedSlashIndex] = useState(0)
+  const [filteredSlashCommands, setFilteredSlashCommands] = useState<string[]>([])
+  const [activeSlashCommand, setActiveSlashCommand] = useState<{ start: number; term: string } | null>(null)
+
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     if (state === 'disabled') return
     const newValue = e.target.value
     onChange?.(newValue)
 
     const cursorPos = e.target.selectionStart ?? newValue.length
-    const mention = findActiveMention(newValue, cursorPos)
 
+    // Check for slash commands first (must start at position 0)
+    if (slashCommands && slashCommands.length > 0) {
+      const slashCmd = findActiveSlashCommand(newValue, cursorPos)
+      if (slashCmd) {
+        setActiveSlashCommand(slashCmd)
+        setActiveMention(null) // Clear file mention when slash command is active
+        return
+      }
+    }
+    setActiveSlashCommand(null)
+
+    // Check for file mentions
+    const mention = findActiveMention(newValue, cursorPos)
     if (mention) {
       setActiveMention(mention)
     } else {
@@ -128,11 +175,55 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
     }
   }
 
+  const scrollToSelectedSlashItem = (index: number) => {
+    if (slashListRef.current) {
+      const listElement = slashListRef.current
+      const selectedElement = listElement.children[index] as HTMLElement
+      if (selectedElement) {
+        selectedElement.scrollIntoView({
+          block: 'nearest',
+          behavior: 'smooth',
+        })
+      }
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault()
       dispatch(chatSliceActions.operationModeToggled())
       return
+    }
+
+    // Handle slash command list navigation
+    if (showSlashList && filteredSlashCommands.length > 0) {
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault()
+          setSelectedSlashIndex(prev => {
+            const newIndex = prev < filteredSlashCommands.length - 1 ? prev + 1 : 0
+            setTimeout(() => scrollToSelectedSlashItem(newIndex), 0)
+            return newIndex
+          })
+          return
+        case 'ArrowUp':
+          e.preventDefault()
+          setSelectedSlashIndex(prev => {
+            const newIndex = prev > 0 ? prev - 1 : filteredSlashCommands.length - 1
+            setTimeout(() => scrollToSelectedSlashItem(newIndex), 0)
+            return newIndex
+          })
+          return
+        case 'Enter':
+        case 'Tab':
+          e.preventDefault()
+          handleSlashCommandSelection(filteredSlashCommands[selectedSlashIndex])
+          return
+        case 'Escape':
+          e.preventDefault()
+          setShowSlashList(false)
+          return
+      }
     }
 
     if (showFileList && filteredFiles.length > 0) {
@@ -303,6 +394,33 @@ const handleFileSelection = async (file: { path: string; name: string; mention: 
   }
 }
 
+  // Handle slash command selection from autocomplete
+  const handleSlashCommandSelection = (command: string) => {
+    if (!activeSlashCommand) {
+      setShowSlashList(false)
+      return
+    }
+
+    if (textareaRef.current) {
+      // Replace the partial command with the selected one
+      // The command already includes the `/` prefix, so just add a trailing space
+      const after = value.slice(activeSlashCommand.start + 1 + activeSlashCommand.term.length)
+      const newValue = `${command} ${after.trimStart()}`
+      onChange?.(newValue)
+
+      setTimeout(() => {
+        if (textareaRef.current) {
+          const cursorPos = command.length + 1 // After the command and space
+          textareaRef.current.focus()
+          textareaRef.current.setSelectionRange(cursorPos, cursorPos)
+        }
+      }, 0)
+    }
+
+    setActiveSlashCommand(null)
+    setShowSlashList(false)
+  }
+
   // Auto-resize functionality with debounced execution to prevent forced reflows
   const adjustHeightTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -348,6 +466,37 @@ const handleFileSelection = async (file: { path: string; name: string; mention: 
   useEffect(() => {
     debouncedAdjustHeight()
   }, [value, minRows, maxRows])
+
+  // Filter slash commands when active command changes
+  useEffect(() => {
+    if (activeSlashCommand && slashCommands) {
+      const term = activeSlashCommand.term.toLowerCase()
+      const filtered = slashCommands.filter(cmd =>
+        cmd.toLowerCase().startsWith(term)
+      )
+      setFilteredSlashCommands(filtered)
+      setShowSlashList(filtered.length > 0)
+      setSelectedSlashIndex(0)
+    } else {
+      setFilteredSlashCommands([])
+      setShowSlashList(false)
+      setSelectedSlashIndex(0)
+    }
+  }, [activeSlashCommand, slashCommands])
+
+  // Close slash list on outside click
+  useEffect(() => {
+    if (!showSlashList) return
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (slashListRef.current && !slashListRef.current.contains(e.target as Node)) {
+        setShowSlashList(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showSlashList])
 
   // Adjust height on mount and cleanup timeout
   useEffect(() => {
@@ -482,6 +631,30 @@ const handleFileSelection = async (file: { path: string; name: string; mention: 
       )}
 
       <div className={`relative`}>
+        {/* Slash Command Autocomplete Dropdown */}
+        {showSlashList && filteredSlashCommands.length > 0 && (
+          <div
+            ref={slashListRef}
+            className='absolute bottom-full left-0 mb-1 w-64 max-h-48 overflow-y-auto
+                       bg-white dark:bg-neutral-800 border border-neutral-200
+                       dark:border-neutral-700 rounded-lg shadow-lg z-50'
+          >
+            {filteredSlashCommands.map((command, index) => (
+              <div
+                key={command}
+                className={`px-3 py-2 cursor-pointer text-sm ${
+                  index === selectedSlashIndex
+                    ? 'bg-blue-500 text-white'
+                    : 'hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
+                }`}
+                onClick={() => handleSlashCommandSelection(command)}
+              >
+                <span className='font-medium'>{command}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Floating file list */}
         {showFileList && filteredFiles.length > 0 && (
           <div

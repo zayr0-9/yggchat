@@ -120,3 +120,6 @@ export const selectToolByName = createSelector(
   [selectTools, (_state: RootState, toolName: string) => toolName],
   (tools, toolName) => tools.find(tool => tool.name === toolName)
 )
+
+// CC Slash Commands selector
+export const selectCCSlashCommands = createSelector([selectChatState], chat => chat.ccSlashCommands)

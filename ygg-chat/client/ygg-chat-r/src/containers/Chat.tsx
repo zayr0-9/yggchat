@@ -22,6 +22,7 @@ import {
   chatSliceActions,
   deleteMessage,
   editMessageWithBranching,
+  fetchCCSlashCommands,
   initializeUserAndConversation,
   Message,
   refreshCurrentPathAfterDelete,
@@ -44,6 +45,7 @@ import {
   selectProviderState,
   selectSendingState,
   selectStreamState,
+  selectCCSlashCommands,
   sendCCBranch,
   sendCCMessage,
   sendMessage,
@@ -134,6 +136,7 @@ function Chat() {
   const selectedFilesForChat = useAppSelector(selectSelectedFilesForChat)
   const optimisticMessage = useAppSelector(state => state.chat.composition.optimisticMessage)
   const optimisticBranchMessage = useAppSelector(state => state.chat.composition.optimisticBranchMessage)
+  const ccSlashCommands = useAppSelector(selectCCSlashCommands)
 
   // File chip expanded modal state
   const [expandedFilePath, setExpandedFilePath] = useState<string | null>(null)
@@ -251,6 +254,16 @@ function Chat() {
     },
     [conversationMessages]
   )
+
+  // Fetch CC slash commands when CC mode is enabled and conversation exists
+  useEffect(() => {
+    if (ccMode && ccModeAvailable && currentConversationId) {
+      dispatch(fetchCCSlashCommands({ conversationId: currentConversationId, cwd: ccCwd || undefined }))
+    } else if (!ccMode) {
+      // Clear slash commands when CC mode is disabled
+      dispatch(chatSliceActions.ccSlashCommandsCleared())
+    }
+  }, [ccMode, ccModeAvailable, currentConversationId, ccCwd, dispatch])
 
   // Lock page scroll while chat is mounted
   useEffect(() => {
@@ -1869,7 +1882,7 @@ function Chat() {
         // - Object/Array (from Supabase): already parsed
         // Prioritize content_blocks over legacy fields (content, thinking_block, tool_calls)
         let contentBlocks: ContentBlock[] | undefined = undefined
-        if (msg.role === 'assistant' && msg.content_blocks) {
+        if ((msg.role === 'assistant' || msg.role === 'ex_agent') && msg.content_blocks) {
           try {
             if (typeof msg.content_blocks === 'object') {
               contentBlocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [msg.content_blocks]
@@ -2193,6 +2206,7 @@ function Chat() {
               minRows={1}
               autoFocus={true}
               showCharCount={false}
+              slashCommands={ccMode && ccModeAvailable ? ccSlashCommands : undefined}
             />
             {/* Selected file chips moved from InputTextArea */}
             {selectedFilesForChat && selectedFilesForChat.length > 0 && (

@@ -25,6 +25,7 @@ export {
   abortStreaming,
   deleteMessage,
   editMessageWithBranching,
+  fetchCCSlashCommands,
   getCCSessionInfo,
   refreshCurrentPathAfterDelete,
   respondToToolPermission,
@@ -65,6 +66,7 @@ export {
   selectStreamError,
   selectStreamState,
   selectValidationError,
+  selectCCSlashCommands,
 } from './chatSelectors'
 
 // Convenience re-exports

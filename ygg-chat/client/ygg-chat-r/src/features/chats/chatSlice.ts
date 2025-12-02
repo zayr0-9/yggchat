@@ -82,6 +82,7 @@ const makeInitialState = (): ChatState => ({
   toolCallPermissionRequest: null,
   toolAutoApprove: false,
   operationMode: 'execute',
+  ccSlashCommands: [],
 })
 
 const initialState: ChatState = makeInitialState()
@@ -581,6 +582,15 @@ export const chatSlice = createSlice({
 
     operationModeToggled: state => {
       state.operationMode = state.operationMode === 'plan' ? 'execute' : 'plan'
+    },
+
+    // CC Slash Commands
+    ccSlashCommandsLoaded: (state, action: PayloadAction<string[]>) => {
+      state.ccSlashCommands = action.payload
+    },
+
+    ccSlashCommandsCleared: state => {
+      state.ccSlashCommands = []
     },
 
     stateReset: () => makeInitialState(),

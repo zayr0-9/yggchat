@@ -28,6 +28,13 @@ import {
   readTodoList,
   writeTodoList,
 } from './tools/todoMd.js'
+import {
+  executeClaudeCode,
+  getSession,
+  setSession,
+  getAvailableSlashCommands,
+  CCResponse,
+} from './tools/claudeCode.js'
 
 const app = express()
 let server: any = null
@@ -1707,6 +1714,548 @@ function setupServer() {
       console.error('[LocalServer] ❌ Error bulk deleting messages:', error)
       res.status(500).json({ error: 'Failed to bulk delete messages' })
     }
+  })
+
+  // ============================================================================
+  // CLAUDE CODE AGENT ENDPOINTS
+  // ============================================================================
+
+  // Normalize CC SDK content blocks to ChatMessage format
+  // CC SDK uses: { type: 'text', text: string }, { type: 'thinking', thinking: string }
+  // ChatMessage expects: { type: 'text', content: string, index: number }, { type: 'thinking', content: string, index: number }
+  function normalizeContentBlocksForStorage(blocks: any[]): any[] {
+    return blocks.map((block, index) => {
+      if (block.type === 'text') {
+        return {
+          type: 'text',
+          index,
+          content: block.text || block.content || '',
+        }
+      } else if (block.type === 'thinking') {
+        return {
+          type: 'thinking',
+          index,
+          content: block.thinking || block.content || '',
+        }
+      } else if (block.type === 'tool_use') {
+        return {
+          type: 'tool_use',
+          index,
+          id: block.id,
+          name: block.name,
+          input: block.input,
+        }
+      } else if (block.type === 'tool_result') {
+        return {
+          type: 'tool_result',
+          index,
+          tool_use_id: block.tool_use_id,
+          content: block.content,
+          is_error: block.isError || block.is_error || false,
+        }
+      }
+      // Pass through unknown block types with index added
+      return { ...block, index }
+    })
+  }
+
+  // GET /api/agents/cc-session/:conversationId - Get CC session info
+  app.get('/api/agents/cc-session/:conversationId', (req, res) => {
+    try {
+      const { conversationId } = req.params
+      console.log('[LocalServer] 🤖 GET /api/agents/cc-session/:conversationId -', conversationId)
+
+      // Get conversation to retrieve cwd
+      const conversation = statements.getConversationById.get(conversationId) as any
+      if (!conversation) {
+        res.json({ hasSession: false })
+        return
+      }
+
+      const cwd = conversation.cwd || process.cwd()
+      const sessionId = getSession(conversationId, cwd)
+
+      if (!sessionId) {
+        // Also check database for ex_agent messages with session ID
+        const lastCCMessage = db!.prepare(`
+          SELECT ex_agent_session_id, created_at 
+          FROM messages 
+          WHERE conversation_id = ? AND role = 'ex_agent' AND ex_agent_session_id IS NOT NULL
+          ORDER BY created_at DESC LIMIT 1
+        `).get(conversationId) as { ex_agent_session_id: string; created_at: string } | undefined
+
+        if (!lastCCMessage?.ex_agent_session_id) {
+          res.json({ hasSession: false })
+          return
+        }
+
+        // Count messages in this session
+        const countResult = db!.prepare(`
+          SELECT COUNT(*) as count FROM messages 
+          WHERE conversation_id = ? AND ex_agent_session_id = ?
+        `).get(conversationId, lastCCMessage.ex_agent_session_id) as { count: number }
+
+        res.json({
+          hasSession: true,
+          sessionId: lastCCMessage.ex_agent_session_id,
+          lastMessageAt: lastCCMessage.created_at,
+          messageCount: countResult.count,
+          cwd: cwd,
+        })
+        return
+      }
+
+      res.json({
+        hasSession: true,
+        sessionId,
+        cwd,
+      })
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error getting CC session:', error)
+      res.status(500).json({ error: 'Failed to get CC session' })
+    }
+  })
+
+  // GET /api/agents/cc-commands/:conversationId - Get available slash commands
+  app.get('/api/agents/cc-commands/:conversationId', (req, res) => {
+    try {
+      const { conversationId } = req.params
+      const { cwd: queryCwd } = req.query
+      console.log('[LocalServer] 🤖 GET /api/agents/cc-commands/:conversationId -', conversationId)
+
+      // Get conversation to retrieve cwd if not provided in query
+      const conversation = statements.getConversationById.get(conversationId) as any
+      const cwd = (queryCwd as string) || conversation?.cwd || process.cwd()
+
+      const commands = getAvailableSlashCommands(conversationId, cwd)
+      console.log(`[LocalServer] Found ${commands.length} slash commands for conversation ${conversationId}`)
+
+      res.json({ commands })
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error getting CC slash commands:', error)
+      res.status(500).json({ error: 'Failed to get slash commands' })
+    }
+  })
+
+  // POST /api/agents/cc-messages/:conversationId - Send message to Claude Code
+  app.post('/api/agents/cc-messages/:conversationId', async (req, res) => {
+    console.log('\n🤖🤖🤖 [LocalServer] POST /api/agents/cc-messages - Claude Code message received')
+    console.log('🤖 Timestamp:', new Date().toISOString())
+    console.log('🤖 Conversation ID:', req.params.conversationId)
+
+    const { conversationId } = req.params
+    const {
+      message,
+      cwd: requestedCwd,
+      permissionMode = 'bypassPermissions',
+      resume,
+      sessionId: providedSessionId,
+      forkSession,
+    } = req.body as {
+      message: string
+      cwd?: string
+      permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
+      resume?: boolean
+      sessionId?: string
+      forkSession?: boolean
+    }
+
+    if (!message) {
+      res.status(400).json({ error: 'Message content required' })
+      return
+    }
+
+    // Get conversation to retrieve cwd if not provided
+    const conversation = statements.getConversationById.get(conversationId) as any
+    const cwd = requestedCwd || conversation?.cwd || process.cwd()
+
+    console.log('🤖 CC Request:', {
+      message: message.substring(0, 100),
+      cwd,
+      permissionMode,
+      resume,
+    })
+
+    // Set up SSE for streaming
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    })
+
+    try {
+      // Get last message for parent ID
+      const lastMessage = statements.getLastMessageByConversationId.get(conversationId) as any
+      const parentId = lastMessage?.id || null
+
+      // Save user message to local SQLite
+      const userMsgId = uuidv4()
+      const now = new Date().toISOString()
+      statements.upsertMessage.run(
+        userMsgId,
+        conversationId,
+        parentId,
+        '[]',
+        'user',
+        message,
+        null,
+        null,
+        null,
+        null,
+        'user-input',
+        null,
+        null,
+        null,
+        null,
+        now
+      )
+      console.log('[LocalServer] 🤖 User message saved:', userMsgId)
+
+      // Send user message event
+      res.write(`data: ${JSON.stringify({ type: 'user_message', message: { id: userMsgId, role: 'user', content: message } })}\n\n`)
+
+      // Determine session ID
+      let sessionId = providedSessionId || getSession(conversationId, cwd)
+      const shouldResume = resume !== undefined ? resume : !!sessionId
+
+      // Accumulate content blocks for saving
+      let contentBlocks: any[] = []
+      let textParts: string[] = []
+      let currentSessionId: string | null = sessionId || null
+
+      // Stream callback
+      const onStream = (data: any) => {
+        try {
+          res.write(`data: ${JSON.stringify(data)}\n\n`)
+        } catch (error) {
+          console.error('[LocalServer] Error writing stream data:', error)
+        }
+      }
+
+      // Streaming chunk callback for real-time deltas
+      const onStreamingChunk = async (chunk: any) => {
+        try {
+          res.write(`data: ${JSON.stringify({
+            type: 'chunk',
+            part: chunk.contentType === 'thinking' ? 'reasoning' : 'text',
+            delta: chunk.delta || '',
+            chunkType: chunk.type,
+          })}\n\n`)
+        } catch (error) {
+          console.error('[LocalServer] Error writing streaming chunk:', error)
+        }
+      }
+
+      // Response callback to accumulate content
+      const onResponse = async (response: CCResponse) => {
+        onStream(response)
+
+        if (response.sessionId) {
+          currentSessionId = response.sessionId
+          setSession(conversationId, cwd, response.sessionId)
+        }
+
+        if (response.messageType === 'message' && response.message) {
+          for (const block of response.message.content) {
+            contentBlocks.push(block)
+            if (block.type === 'text') {
+              textParts.push((block as any).text || '')
+            }
+          }
+        }
+
+        if (response.messageType === 'result') {
+          // Save accumulated CC message to database
+          if (contentBlocks.length > 0 && currentSessionId) {
+            const ccMsgId = uuidv4()
+            const textContent = textParts.join('\n\n').trim()
+
+            statements.upsertMessage.run(
+              ccMsgId,
+              conversationId,
+              userMsgId, // Parent is the user message
+              '[]',
+              'ex_agent',
+              textContent,
+              null,
+              null, // thinking_block - stored in content_blocks
+              null, // tool_calls - stored in content_blocks
+              null,
+              'claude-sonnet-4-5',
+              response.result?.is_error ? 'Generation completed with error' : null,
+              currentSessionId,
+              'claude_code',
+              JSON.stringify(normalizeContentBlocksForStorage(contentBlocks)),
+              new Date().toISOString()
+            )
+            console.log('[LocalServer] 🤖 CC message saved:', ccMsgId)
+
+            // Send complete event
+            res.write(`data: ${JSON.stringify({
+              type: 'complete',
+              sessionId: currentSessionId,
+              messageId: ccMsgId,
+              messageCount: contentBlocks.length,
+            })}\n\n`)
+          }
+
+          // Reset accumulators
+          contentBlocks = []
+          textParts = []
+        }
+
+        if (response.messageType === 'error') {
+          // Save partial message on error
+          if (contentBlocks.length > 0 && currentSessionId) {
+            const ccMsgId = uuidv4()
+            const textContent = textParts.join('\n\n').trim()
+
+            statements.upsertMessage.run(
+              ccMsgId,
+              conversationId,
+              userMsgId,
+              '[]',
+              'ex_agent',
+              textContent || '[Error during generation]',
+              null,
+              null,
+              null,
+              null,
+              'claude-sonnet-4-5',
+              response.error?.message || 'Error during generation',
+              currentSessionId,
+              'claude_code',
+              JSON.stringify(normalizeContentBlocksForStorage(contentBlocks)),
+              new Date().toISOString()
+            )
+          }
+        }
+      }
+
+      // Execute Claude Code
+      await executeClaudeCode(
+        conversationId,
+        message,
+        cwd,
+        onResponse,
+        permissionMode,
+        onStreamingChunk,
+        shouldResume ? sessionId : undefined,
+        forkSession
+      )
+
+      // Update conversation cwd if changed
+      if (cwd && conversation && conversation.cwd !== cwd) {
+        statements.updateConversationCwd.run(cwd, conversationId)
+      }
+
+      console.log('🤖 CC conversation completed successfully')
+    } catch (error) {
+      console.error('[LocalServer] CC Error:', error)
+      res.write(`data: ${JSON.stringify({
+        type: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })}\n\n`)
+    }
+
+    res.end()
+  })
+
+  // POST /api/agents/cc-messages-branch/:conversationId - Branch message to Claude Code
+  app.post('/api/agents/cc-messages-branch/:conversationId', async (req, res) => {
+    console.log('\n🤖🤖🤖 [LocalServer] POST /api/agents/cc-messages-branch - Claude Code branch message received')
+    console.log('🤖 Timestamp:', new Date().toISOString())
+    console.log('🤖 Conversation ID:', req.params.conversationId)
+
+    const { conversationId } = req.params
+    const {
+      message,
+      parentId,
+      cwd: requestedCwd,
+      permissionMode = 'bypassPermissions',
+      sessionId: providedSessionId,
+      forkSession,
+    } = req.body as {
+      message: string
+      parentId: string
+      cwd?: string
+      permissionMode?: 'default' | 'plan' | 'bypassPermissions' | 'acceptEdits'
+      sessionId?: string
+      forkSession?: boolean
+    }
+
+    if (!message) {
+      res.status(400).json({ error: 'Message content required' })
+      return
+    }
+
+    if (parentId === undefined) {
+      res.status(400).json({ error: 'parentId is required for branching' })
+      return
+    }
+
+    const conversation = statements.getConversationById.get(conversationId) as any
+    const cwd = requestedCwd || conversation?.cwd || process.cwd()
+
+    console.log('🤖 CC Branch Request:', {
+      message: message.substring(0, 100),
+      parentId,
+      cwd,
+      permissionMode,
+    })
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    })
+
+    try {
+      // Find session ID by walking up the parent chain
+      let sessionId = providedSessionId
+      if (!sessionId && parentId) {
+        let current = statements.getMessageById.get(parentId) as any
+        while (current && !sessionId) {
+          if (current.role === 'ex_agent' && current.ex_agent_session_id) {
+            sessionId = current.ex_agent_session_id
+            break
+          }
+          if (!current.parent_id) break
+          current = statements.getMessageById.get(current.parent_id)
+        }
+      }
+
+      // Save user message
+      const userMsgId = uuidv4()
+      const now = new Date().toISOString()
+      statements.upsertMessage.run(
+        userMsgId,
+        conversationId,
+        parentId,
+        '[]',
+        'user',
+        message,
+        null,
+        null,
+        null,
+        null,
+        'user-input',
+        null,
+        null,
+        null,
+        null,
+        now
+      )
+
+      res.write(`data: ${JSON.stringify({ type: 'user_message', message: { id: userMsgId, role: 'user', content: message } })}\n\n`)
+
+      let contentBlocks: any[] = []
+      let textParts: string[] = []
+      let currentSessionId: string | null = sessionId || null
+
+      const onStream = (data: any) => {
+        try {
+          res.write(`data: ${JSON.stringify(data)}\n\n`)
+        } catch (error) {
+          console.error('[LocalServer] Error writing stream data:', error)
+        }
+      }
+
+      // Streaming chunk callback for real-time deltas
+      const onStreamingChunk = async (chunk: any) => {
+        try {
+          res.write(`data: ${JSON.stringify({
+            type: 'chunk',
+            part: chunk.contentType === 'thinking' ? 'reasoning' : 'text',
+            delta: chunk.delta || '',
+            chunkType: chunk.type,
+          })}\n\n`)
+        } catch (error) {
+          console.error('[LocalServer] Error writing streaming chunk:', error)
+        }
+      }
+
+      const onResponse = async (response: CCResponse) => {
+        onStream(response)
+
+        if (response.sessionId) {
+          currentSessionId = response.sessionId
+          setSession(conversationId, cwd, response.sessionId)
+        }
+
+        if (response.messageType === 'message' && response.message) {
+          for (const block of response.message.content) {
+            contentBlocks.push(block)
+            if (block.type === 'text') {
+              textParts.push((block as any).text || '')
+            }
+          }
+        }
+
+        if (response.messageType === 'result') {
+          if (contentBlocks.length > 0 && currentSessionId) {
+            const ccMsgId = uuidv4()
+            const textContent = textParts.join('\n\n').trim()
+
+            statements.upsertMessage.run(
+              ccMsgId,
+              conversationId,
+              userMsgId,
+              '[]',
+              'ex_agent',
+              textContent,
+              null,
+              null,
+              null,
+              null,
+              'claude-sonnet-4-5',
+              response.result?.is_error ? 'Generation completed with error' : null,
+              currentSessionId,
+              'claude_code',
+              JSON.stringify(normalizeContentBlocksForStorage(contentBlocks)),
+              new Date().toISOString()
+            )
+
+            res.write(`data: ${JSON.stringify({
+              type: 'complete',
+              sessionId: currentSessionId,
+              messageId: ccMsgId,
+              messageCount: contentBlocks.length,
+            })}\n\n`)
+          }
+
+          contentBlocks = []
+          textParts = []
+        }
+      }
+
+      await executeClaudeCode(
+        conversationId,
+        message,
+        cwd,
+        onResponse,
+        permissionMode,
+        onStreamingChunk,
+        sessionId,
+        forkSession ?? true // Default to fork for branch
+      )
+
+      if (cwd && conversation && conversation.cwd !== cwd) {
+        statements.updateConversationCwd.run(cwd, conversationId)
+      }
+
+      console.log('🤖 CC branch conversation completed successfully')
+    } catch (error) {
+      console.error('[LocalServer] CC Branch Error:', error)
+      res.write(`data: ${JSON.stringify({
+        type: 'error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })}\n\n`)
+    }
+
+    res.end()
   })
 }
 

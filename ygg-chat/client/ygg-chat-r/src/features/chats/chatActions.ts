@@ -2701,25 +2701,51 @@ export const insertBulkMessages = createAsyncThunk<
 /**
  * Fetch Claude Code session info for a conversation
  * Returns session metadata without starting/resuming a session
+ * Always uses local server - CC is local-only
  */
 export const getCCSessionInfo = createAsyncThunk<
   { hasSession: boolean; sessionId?: string; lastMessageAt?: string; messageCount?: number; cwd?: string },
   ConversationId,
   { state: RootState; extra: ThunkExtraArgument }
->('chat/getCCSessionInfo', async (conversationId, { extra, rejectWithValue }) => {
-  const { auth } = extra
+>('chat/getCCSessionInfo', async (conversationId, { rejectWithValue }) => {
   try {
-    const response = await apiCall<{
+    // CC always routes to local server
+    const response = await localApi.get<{
       hasSession: boolean
       sessionId?: string
       lastMessageAt?: string
       messageCount?: number
       cwd?: string
-    }>(`/agents/cc-session/${conversationId}`, auth.accessToken)
+    }>(`/agents/cc-session/${conversationId}`)
 
     return response
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to get CC session info'
+    return rejectWithValue(message)
+  }
+})
+
+/**
+ * Fetch available slash commands for Claude Code session
+ * Commands are discovered from SDK init message and include built-in + custom commands
+ * Always uses local server - CC is local-only
+ */
+export const fetchCCSlashCommands = createAsyncThunk<
+  string[],
+  { conversationId: ConversationId; cwd?: string },
+  { state: RootState; extra: ThunkExtraArgument }
+>('chat/fetchCCSlashCommands', async ({ conversationId, cwd }, { dispatch, rejectWithValue }) => {
+  try {
+    const queryParams = cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''
+    const response = await localApi.get<{ commands: string[] }>(
+      `/agents/cc-commands/${conversationId}${queryParams}`
+    )
+
+    const commands = response.commands || []
+    dispatch(chatSliceActions.ccSlashCommandsLoaded(commands))
+    return commands
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch CC slash commands'
     return rejectWithValue(message)
   }
 })
@@ -2730,6 +2756,7 @@ export const getCCSessionInfo = createAsyncThunk<
  * Similar to sendMessage but uses CC agent endpoints.
  * Automatically saves messages with ex_agent role.
  * Tracks CC session ID in message metadata.
+ * Always uses local server - CC is local-only.
  */
 export const sendCCMessage = createAsyncThunk<
   { sessionId: string; messageCount: number; userMessageId?: MessageId },
@@ -2741,7 +2768,6 @@ export const sendCCMessage = createAsyncThunk<
     { conversationId, message, cwd, permissionMode = 'default', resume, sessionId: resumeSessionId, forkSession },
     { dispatch, extra, rejectWithValue, signal }
   ) => {
-    const { auth } = extra
     dispatch(chatSliceActions.sendingStarted())
 
     let controller: AbortController | undefined
@@ -2761,8 +2787,8 @@ export const sendCCMessage = createAsyncThunk<
       if (resumeSessionId) requestBody.sessionId = resumeSessionId
       if (forkSession !== undefined) requestBody.forkSession = forkSession
 
-      // Create streaming request to CC endpoint
-      const response = await createStreamingRequest(`/agents/cc-messages/${conversationId}`, auth.accessToken, {
+      // CC always routes to local server (no auth needed)
+      const response = await fetch(`${LOCAL_API_BASE}/agents/cc-messages/${conversationId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -2885,6 +2911,10 @@ export const sendCCMessage = createAsyncThunk<
   }
 )
 
+/**
+ * Send branch message to Claude Code agent with SSE streaming
+ * Always uses local server - CC is local-only.
+ */
 export const sendCCBranch = createAsyncThunk<
   { sessionId: string; messageCount: number; userMessageId?: MessageId },
   SendCCBranchPayload,
@@ -2904,7 +2934,6 @@ export const sendCCBranch = createAsyncThunk<
     },
     { dispatch, extra, rejectWithValue, signal }
   ) => {
-    const { auth } = extra
     dispatch(chatSliceActions.sendingStarted())
 
     let controller: AbortController | undefined
@@ -2929,8 +2958,8 @@ export const sendCCBranch = createAsyncThunk<
       if (resumeSessionId) requestBody.sessionId = resumeSessionId
       if (forkSession !== undefined) requestBody.forkSession = forkSession
 
-      // Create streaming request to CC branch endpoint
-      const response = await createStreamingRequest(`/agents/cc-messages-branch/${conversationId}`, auth.accessToken, {
+      // CC always routes to local server (no auth needed)
+      const response = await fetch(`${LOCAL_API_BASE}/agents/cc-messages-branch/${conversationId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),

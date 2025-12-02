@@ -1705,7 +1705,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           <>
             {/* Display mode - only show if no contentBlocks or streamEvents present (to avoid duplication) */}
             {(!contentBlocks || contentBlocks.length === 0) && (!streamEvents || streamEvents.length === 0) && (
-              <div className='prose px-4 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[20px]'>
+              <div className='prose px-4 py-2 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[20px]'>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
