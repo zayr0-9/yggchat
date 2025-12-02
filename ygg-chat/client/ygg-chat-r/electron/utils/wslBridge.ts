@@ -77,23 +77,32 @@ export function toWslPath(rawPath: string): string {
     return trimmed
   }
 
-  if (trimmed.startsWith('/')) {
-    return trimmed
+  // Convert backslashes to forward slashes, then collapse multiple slashes
+  const normalized = trimmed.replace(/\\/g, '/').replace(/\/+/g, '/')
+  const lowerNormalized = normalized.toLowerCase()
+
+  if (lowerNormalized.startsWith('//wsl$')) {
+    const segments = normalized.split('/').filter(Boolean)
+    if (segments.length >= 2 && segments[0].toLowerCase() === 'wsl$') {
+      const remainder = segments.slice(2).join('/')
+      return remainder ? `/${remainder}` : '/'
+    }
   }
 
-  const driveMatch = trimmed.match(/^([a-zA-Z]):[\\/](.*)$/)
+  if (normalized.startsWith('/')) {
+    return normalized
+  }
+
+  const driveMatch = lowerNormalized.match(/^([a-zA-Z]):\/(.*)$/)
   if (driveMatch) {
-    const drive = driveMatch[1].toLowerCase()
-    const rest = driveMatch[2].replace(/[\\/]+/g, '/')
+    const drive = driveMatch[1]
+    const rest = driveMatch[2]
     return `/mnt/${drive}/${rest}`
   }
 
-  return trimmed.replace(/[\\/]+/g, '/')
+  return normalized
 }
 
-/**
- * Convert a potential WSL path to a Windows UNC path if needed.
- */
 export async function resolveToWindowsPath(filePath: string): Promise<string> {
   // If not windows, just return the path
   if (!isWindows()) {

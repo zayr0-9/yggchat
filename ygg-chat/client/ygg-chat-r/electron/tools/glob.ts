@@ -1,7 +1,7 @@
 import { glob } from 'glob'
 import os from 'os'
 import * as path from 'path'
-import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
+import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_MATCHES = 3000
 const DEFAULT_TIMEOUT_MS = 5000
@@ -118,7 +118,7 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
     const ignorePatterns = mergeIgnorePatterns(DEFAULT_IGNORE_PATTERNS, ignore)
 
     const globOptions: any = {
-      cwd: resolvedCwd,
+      cwd: toWslPath(resolvedCwd),
       ignore: ignorePatterns,
       dot,
       absolute,
@@ -159,7 +159,7 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
         matches: [],
         error: `Too many matches (${results.length} > ${maxMatches}). Narrow the pattern or reduce cwd scope.`,
         pattern: sanitizedPattern,
-        cwd: resolvedCwd,
+        cwd: toWslPath(resolvedCwd),
         durationMs: Date.now() - startTime,
         totalMatches: results.length,
       }
@@ -173,7 +173,7 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
       success: true,
       matches,
       pattern: sanitizedPattern,
-      cwd: resolvedCwd,
+      cwd: toWslPath(resolvedCwd),
       durationMs: Date.now() - startTime,
       totalMatches: matches.length,
     }

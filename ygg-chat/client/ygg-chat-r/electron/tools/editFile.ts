@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { readTextFile } from './readFile.js'
-import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
+import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
 
 export interface EditFileOptions {
   createBackup?: boolean
@@ -89,7 +89,7 @@ export async function editFileSearchReplace(
       if (!matchResult.found) {
         return {
           success: false,
-          absolutePath,
+          absolutePath: toWslPath(absolutePath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Search pattern not found in file. Attempted strategies: ${attemptedStrategies.join(', ')}`,
@@ -148,14 +148,14 @@ export async function editFileSearchReplace(
 
     return {
       success: true,
-      absolutePath,
+      absolutePath: toWslPath(absolutePath),
       sizeBytes: newStats.size,
       replacements,
       message:
         replacements > 0
           ? `Successfully replaced ${replacements} occurrence(s)${strategyMessage} in ${filePath}`
           : `No changes needed in ${filePath}`,
-      backup: backupPath,
+      backup: backupPath ? toWslPath(backupPath) : undefined,
       matchStrategy,
       attemptedStrategies,
     }
@@ -203,7 +203,7 @@ export async function editFileSearchReplaceFirst(
     if (!matchResult.found) {
       return {
         success: false,
-        absolutePath,
+        absolutePath: toWslPath(absolutePath),
         sizeBytes: fileData.sizeBytes,
         replacements: 0,
         message: `Search pattern not found in file. Attempted strategies: ${matchResult.attemptedStrategies.join(', ')}`,
@@ -241,11 +241,11 @@ export async function editFileSearchReplaceFirst(
 
     return {
       success: true,
-      absolutePath,
+      absolutePath: toWslPath(absolutePath),
       sizeBytes: newStats.size,
       replacements: 1,
       message: `Successfully replaced first occurrence${strategyMessage} in ${filePath}`,
-      backup: backupPath,
+      backup: backupPath ? toWslPath(backupPath) : undefined,
       matchStrategy: matchResult.strategy,
       attemptedStrategies: matchResult.attemptedStrategies,
     }
@@ -305,11 +305,11 @@ export async function appendToFile(
 
     return {
       success: true,
-      absolutePath,
+      absolutePath: toWslPath(absolutePath),
       sizeBytes: newStats.size,
       replacements: 1, // Consider append as one "replacement"
       message: `Successfully appended content to ${filePath}`,
-      backup: backupPath,
+      backup: backupPath ? toWslPath(backupPath) : undefined,
     }
   } catch (error: any) {
     return {
