@@ -1939,7 +1939,7 @@ const TodoListView: React.FC<{
   return (
     <div
       key={key}
-      className='todo-list-card relative mb-4 mx-3 rounded-2xl border border-blue-200 bg-white/60 dark:border-blue-700/60 dark:bg-yBlack-900 shadow-[0px_0px_5px_0px_rgba(37,99,235,0.3)] dark:shadow-[0px_0px_20px_0px_rgba(37,99,235,0.35)]'
+      className='todo-list-card relative mb-4 mx-3 rounded-xl border border-blue-200 bg-white/60 dark:border-yellow-700/40 dark:bg-yBlack-900 shadow-[0px_0px_5px_0px_rgba(0,0,0,0.08)] dark:shadow-[0px_0px_4px_0px_rgba(0,0,0,0.35)]'
     >
       <div className='flex items-center justify-between px-4 py-3'>
         <div>
@@ -1976,11 +1976,11 @@ const TodoListView: React.FC<{
                   key={`todo-item-${idx}`}
                   className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
                     item.done
-                      ? 'border-neutral-200 bg-neutral-50/40 text-neutral-800 dark:border-neutral-600 dark:bg-neutral-900/20 dark:text-neutral-200'
-                      : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-700 dark:bg-neutral-900/40 dark:text-neutral-200'
+                      ? 'border-neutral-200 bg-neutral-50/40 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                      : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
                   }`}
                 >
-                  <span className='text-lg'>{item.done ? '✔️' : '⬜'}</span>
+                  <span className='text-lg'>{item.done ? '[✔️]' : '[ ]'}</span>
                   <span className={`${item.done ? 'line-through opacity-80' : ''}`}>{item.text}</span>
                 </li>
               ))}
