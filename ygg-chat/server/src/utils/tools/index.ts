@@ -407,15 +407,16 @@ const tools: tools[] = [
     enabled: true,
     tool: {
       description:
-        'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy. Supports content validation using hash and metadata from read_file to prevent editing stale content.',
+        'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy. Escape sequences like \\n, \\t, \\r in search patterns are interpreted by default (disable with interpretEscapeSequences: false). Supports content validation using hash and metadata from read_file to prevent editing stale content.',
       inputSchema: z.object({
         path: z.string().describe('The path to the file to edit'),
         operation: z.enum(['replace', 'replace_first', 'append']).describe('Type of edit operation'),
-        searchPattern: z.string().optional().describe('REQUIRED for replace/replace_first operations. The exact text pattern to find in the file.'),
-        replacement: z.string().optional().describe('REQUIRED for replace/replace_first operations. The text to replace the search pattern with.'),
+        searchPattern: z.string().optional().describe('REQUIRED for replace/replace_first operations. The exact text pattern to find in the file. Escape sequences like \\n (newline), \\t (tab), \\r (carriage return) are interpreted by default.'),
+        replacement: z.string().optional().describe('REQUIRED for replace/replace_first operations. The text to replace the search pattern with. Supports escape sequences.'),
         content: z.string().optional().describe('REQUIRED for append operation. The content to append to the end of the file.'),
         createBackup: z.boolean().optional().describe('Whether to create a backup before editing (default false)'),
         encoding: z.string().optional().describe('File encoding (default utf8)'),
+        interpretEscapeSequences: z.boolean().optional().describe('Interpret escape sequences (\\n, \\t, \\r, etc.) in search and replacement strings (default true)'),
         validateContent: z
           .boolean()
           .optional()
@@ -443,6 +444,7 @@ const tools: tools[] = [
         content,
         createBackup,
         encoding,
+        interpretEscapeSequences,
         validateContent,
         expectedHash,
         expectedMetadata,
@@ -453,6 +455,7 @@ const tools: tools[] = [
           content,
           createBackup,
           encoding,
+          interpretEscapeSequences,
           validateContent,
           expectedHash,
           expectedMetadata,

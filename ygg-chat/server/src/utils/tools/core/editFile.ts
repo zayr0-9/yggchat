@@ -9,6 +9,7 @@ export interface EditFileOptions {
   enableFuzzyMatching?: boolean // Enable layered matching strategies (default: true)
   fuzzyThreshold?: number // Similarity threshold for fuzzy matching (default: 0.8)
   preserveIndentation?: boolean // Preserve original indentation style (default: true)
+  interpretEscapeSequences?: boolean // Interpret \n, \t, etc. in patterns (default: true)
   validateContent?: boolean // Validate file hasn't changed since read (default: true)
   expectedHash?: string //Expected content hash from previous read
   expectedMetadata?: FileMetadata // Expected file metadata from previous read

@@ -10,6 +10,7 @@ export interface EditFileOptions {
   enableFuzzyMatching?: boolean // Enable layered matching strategies (default: true)
   fuzzyThreshold?: number // Similarity threshold for fuzzy matching (default: 0.8)
   preserveIndentation?: boolean // Preserve original indentation style (default: true)
+  interpretEscapeSequences?: boolean // Interpret \n, \t, etc. in patterns (default: true)
   operationMode?: 'plan' | 'execute'
   validateContent?: boolean // Validate file hasn't changed since read (default: true)
   expectedHash?: string // Expected content hash from previous read
@@ -72,6 +73,7 @@ export async function editFileSearchReplace(
     enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
+    interpretEscapeSequences = true,
     validateContent = true,
   } = options
 
@@ -113,7 +115,8 @@ export async function editFileSearchReplace(
         originalContent,
         searchPattern,
         enableFuzzyMatching,
-        fuzzyThreshold
+        fuzzyThreshold,
+        interpretEscapeSequences
       )
       attemptedStrategies = matchResult.attemptedStrategies
 
@@ -137,9 +140,13 @@ export async function editFileSearchReplace(
         finalReplacement = applyIndentation(replacement, originalIndentation)
       }
 
+      // Interpret escape sequences in replacement
+      finalReplacement = interpretEscapeSequences(finalReplacement, interpretEscapeSequences)
+
       // For global replacement, we need to handle multiple occurrences
-      // First, count all exact matches
-      const exactRegex = new RegExp(escapeRegExp(searchPattern), 'g')
+      // First, count all exact matches using the processed pattern
+      const processedSearchPattern = interpretEscapeSequences(searchPattern, interpretEscapeSequences)
+      const exactRegex = new RegExp(escapeRegExp(processedSearchPattern), 'g')
       const exactMatches = originalContent.match(exactRegex)
 
       if (exactMatches && exactMatches.length > 0) {
@@ -217,6 +224,7 @@ export async function editFileSearchReplaceFirst(
     enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
+    interpretEscapeSequences = true,
     validateContent = true,
   } = options
 
@@ -246,7 +254,8 @@ export async function editFileSearchReplaceFirst(
       originalContent,
       searchPattern,
       enableFuzzyMatching,
-      fuzzyThreshold
+      fuzzyThreshold,
+      interpretEscapeSequences
     )
 
     if (!matchResult.found) {
@@ -266,6 +275,9 @@ export async function editFileSearchReplaceFirst(
       const originalIndentation = captureIndentation(matchResult.matchedText)
       finalReplacement = applyIndentation(replacement, originalIndentation)
     }
+
+    // Interpret escape sequences in replacement
+    finalReplacement = interpretEscapeSequences(finalReplacement, interpretEscapeSequences)
 
     const newContent =
       originalContent.substring(0, matchResult.startIndex) +
@@ -503,6 +515,39 @@ function escapeRegExp(string: string): string {
 }
 
 /**
+ * Interpret common escape sequences in a string.
+ * Converts literal escape sequences to their actual characters:
+ * - \\n → newline
+ * - \\r → carriage return
+ * - \\t → tab
+ * - \\\\ → backslash
+ * - \\' → single quote
+ * - \\" → double quote
+ *
+ * @param str - String potentially containing escape sequences
+ * @param enable - Whether to perform interpretation (default: true)
+ * @returns String with escape sequences interpreted
+ */
+function interpretEscapeSequences(str: string, enable: boolean = true): string {
+  if (!enable) return str
+
+  // Use placeholder to protect literal backslashes (\\)
+  const BACKSLASH_PLACEHOLDER = '\u0000LITERAL_BACKSLASH\u0000'
+
+  return str
+    // First, protect literal backslashes: \\ → placeholder
+    .replace(/\\\\/g, BACKSLASH_PLACEHOLDER)
+    // Then interpret escape sequences
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\'/g, "'")
+    .replace(/\\"/g, '"')
+    // Finally, restore literal backslashes
+    .replace(new RegExp(BACKSLASH_PLACEHOLDER, 'g'), '\\')
+}
+
+/**
  * Normalize line endings to \n
  */
 function normalizeLineEndings(str: string): string {
@@ -661,19 +706,23 @@ function findMatchWithStrategies(
   content: string,
   pattern: string,
   enableFuzzy: boolean = true,
-  fuzzyThreshold: number = 0.8
+  fuzzyThreshold: number = 0.8,
+  interpretEscapes: boolean = true
 ): MatchResult & { attemptedStrategies: string[] } {
   const attemptedStrategies: string[] = []
 
+  // Interpret escape sequences in pattern at the start
+  const processedPattern = interpretEscapeSequences(pattern, interpretEscapes)
+
   // Strategy 1: Exact match
   attemptedStrategies.push('exact')
-  const exactIndex = content.indexOf(pattern)
+  const exactIndex = content.indexOf(processedPattern)
   if (exactIndex !== -1) {
     return {
       found: true,
       startIndex: exactIndex,
-      endIndex: exactIndex + pattern.length,
-      matchedText: pattern,
+      endIndex: exactIndex + processedPattern.length,
+      matchedText: processedPattern,
       strategy: 'exact',
       attemptedStrategies,
     }
@@ -682,7 +731,7 @@ function findMatchWithStrategies(
   // Strategy 2: Line ending normalized match
   attemptedStrategies.push('line_ending_normalized')
   const normalizedContent = normalizeLineEndings(content)
-  const normalizedPattern = normalizeLineEndings(pattern)
+  const normalizedPattern = normalizeLineEndings(processedPattern)
   const lineEndingIndex = normalizedContent.indexOf(normalizedPattern)
   if (lineEndingIndex !== -1) {
     // Find the actual position in original content
@@ -708,7 +757,7 @@ function findMatchWithStrategies(
   const wsIndex = wsNormalizedContent.indexOf(wsNormalizedPattern)
   if (wsIndex !== -1) {
     // Find the actual text in original content that matches
-    const match = findOriginalTextForNormalizedMatch(content, pattern)
+    const match = findOriginalTextForNormalizedMatch(content, processedPattern)
     if (match.found) {
       return {
         found: true,
@@ -724,7 +773,7 @@ function findMatchWithStrategies(
   // Strategy 4: Fuzzy match (only if enabled)
   if (enableFuzzy) {
     attemptedStrategies.push('fuzzy')
-    const fuzzyMatch = findFuzzyMatch(content, pattern, fuzzyThreshold)
+    const fuzzyMatch = findFuzzyMatch(content, processedPattern, fuzzyThreshold)
     if (fuzzyMatch.found) {
       return {
         found: true,
