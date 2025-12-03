@@ -411,9 +411,9 @@ const tools: tools[] = [
       inputSchema: z.object({
         path: z.string().describe('The path to the file to edit'),
         operation: z.enum(['replace', 'replace_first', 'append']).describe('Type of edit operation'),
-        searchPattern: z.string().optional().describe('The text pattern to find (required for replace operations)'),
-        replacement: z.string().optional().describe('The replacement text (required for replace operations)'),
-        content: z.string().optional().describe('Content to append (required for append operation)'),
+        searchPattern: z.string().optional().describe('REQUIRED for replace/replace_first operations. The exact text pattern to find in the file.'),
+        replacement: z.string().optional().describe('REQUIRED for replace/replace_first operations. The text to replace the search pattern with.'),
+        content: z.string().optional().describe('REQUIRED for append operation. The content to append to the end of the file.'),
         createBackup: z.boolean().optional().describe('Whether to create a backup before editing (default false)'),
         encoding: z.string().optional().describe('File encoding (default utf8)'),
         validateContent: z
