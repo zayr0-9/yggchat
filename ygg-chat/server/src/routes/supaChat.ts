@@ -1469,7 +1469,7 @@ router.post(
     } finally {
       try {
         const { id: _ } = { id: '' }
-      } catch {}
+      } catch { }
     }
 
     res.end()

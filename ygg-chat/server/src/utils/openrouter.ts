@@ -419,7 +419,7 @@ async function reserveCreditsForGeneration(
       .from('provider_runs')
       .insert({
         user_id: userId,
-        conversation_id: storageMode === 'local' ? null : (conversationId || null),
+        conversation_id: storageMode === 'local' ? null : conversationId || null,
         message_id: messageId || null,
         model,
         reservation_ref_id: reservationRefId,
@@ -988,7 +988,7 @@ export async function generateResponse(
                 toolCallBuffer = ''
               } catch (e) {
                 // If JSON parsing fails, check if we have empty object - this might be Grok's issue
-                console.error(`❌ [openrouter] Failed to parse tool call buffer:`, e)
+                // console.error(`❌ [openrouter] Failed to parse tool call buffer:`, e)
                 // console.error(`❌ [openrouter] Buffer content: ${toolCallBuffer}`)
                 if (toolCallBuffer === '{}' || !toolCallBuffer.trim()) {
                   // console.log(
