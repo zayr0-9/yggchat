@@ -14,7 +14,6 @@ import {
   ToolCallPermissionRequest,
 } from './chatTypes'
 
-
 const makeInitialState = (): ChatState => ({
   providerState: {
     providers: Object.values(providersList.providers),
@@ -81,7 +80,7 @@ const makeInitialState = (): ChatState => ({
   tools: [],
   toolCallPermissionRequest: null,
   toolAutoApprove: false,
-  operationMode: 'execute',
+  operationMode: 'plan',
   ccSlashCommands: [],
 })
 
@@ -338,7 +337,10 @@ export const chatSlice = createSlice({
       state.conversation.messages = []
     },
 
-    messageUpdated: (state, action: PayloadAction<{ id: MessageId; content: string; note?: string; content_blocks?: any }>) => {
+    messageUpdated: (
+      state,
+      action: PayloadAction<{ id: MessageId; content: string; note?: string; content_blocks?: any }>
+    ) => {
       const { id, content, note, content_blocks } = action.payload
       const msg = state.conversation.messages.find(m => m.id === id)
       if (msg) {

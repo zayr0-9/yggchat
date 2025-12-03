@@ -21,6 +21,7 @@ import {
 } from '../middleware/rateLimiter'
 import { verifyAuth } from '../middleware/supaAuth'
 import { asyncHandler } from '../utils/asyncHandler'
+import { canAccessPaidModels, canUserGenerate, decrementFreeGeneration, isFreeTierModel } from '../utils/freeTier'
 import { abortGeneration, clearGeneration, createGeneration } from '../utils/generationManager'
 import { extractJsonObjects } from '../utils/jsonExtractor'
 import { modelService } from '../utils/modelService'
@@ -187,6 +188,21 @@ router.get(
         return res.status(400).json({ error: 'Missing OPENROUTER_API_KEY' })
       }
 
+      // Extract userId and check tier (optional auth - works without)
+      let userId: string | null = null
+      let canAccessPaid = true
+
+      try {
+        const authHeader = req.headers.authorization
+        if (authHeader?.startsWith('Bearer ')) {
+          const { userId: authenticatedUserId } = await verifyAuth(req)
+          userId = authenticatedUserId
+          canAccessPaid = await canAccessPaidModels(userId)
+        }
+      } catch (authError) {
+        // Unauthenticated - show all models
+      }
+
       const response = await fetch('https://openrouter.ai/api/v1/models', {
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -277,10 +293,21 @@ router.get(
         })
         .filter(Boolean) as any[]
 
-      const preferredDefault = 'gpt-4o'
-      const defaultModel = models.find((m: any) => m.name === preferredDefault) || models[0] || null
+      // Filter models based on tier
+      let filteredModels = models
+      if (!canAccessPaid && userId) {
+        filteredModels = models.filter(model => isFreeTierModel(model))
+        console.log(`[Models] Filtered to ${filteredModels.length} free tier models for user ${userId}`)
+      }
 
-      res.json({ models, default: defaultModel })
+      const preferredDefault = 'gpt-4o'
+      const defaultModel = filteredModels.find((m: any) => m.name === preferredDefault) || filteredModels[0] || null
+
+      res.json({
+        models: filteredModels,
+        default: defaultModel,
+        isFreeTier: !canAccessPaid,
+      })
     } catch (error) {
       console.error('Error fetching OpenRouter models:', error)
       res.status(500).json({ error: 'Failed to fetch OpenRouter models' })
@@ -1100,6 +1127,18 @@ router.post(
   asyncHandler(async (req, res) => {
     const conversationId = req.params.id
     const { client, userId } = await verifyAuth(req)
+
+    // Check if user can generate (checks subscription, credits, OR free generations)
+    const { canGenerate, freeGenerationsRemaining, reason } = await canUserGenerate(userId)
+
+    if (!canGenerate) {
+      return res.status(403).json({
+        error: 'generation_limit_reached',
+        message: reason,
+        freeGenerationsRemaining: 0,
+      })
+    }
+
     const {
       content,
       messages,
@@ -1383,6 +1422,25 @@ router.post(
             // console.log(assistantMessage)
 
             const cleanedMessage = { ...assistantMessage, content: cleanedContent }
+
+            // Decrement free generation counter if applicable
+            try {
+              const newCount = await decrementFreeGeneration(userId)
+              if (newCount >= 0) {
+                // Send update to client via SSE
+                res.write(
+                  `data: ${JSON.stringify({
+                    type: 'free_generations_update',
+                    remaining: newCount,
+                    iteration: i,
+                  })}\n\n`
+                )
+              }
+            } catch (error) {
+              console.error('[Generation/repeat] Failed to decrement free generation:', error)
+              // Don't fail the generation - just log
+            }
+
             res.write(`data: ${JSON.stringify({ type: 'complete', message: cleanedMessage, iteration: i })}\n\n`)
           } catch (createError) {
             console.error('❌ [supaChat/repeat] Failed to create assistant message:', createError)
@@ -1429,6 +1487,18 @@ router.post(
 
     const conversationId = req.params.id
     const { client, userId } = await verifyAuth(req)
+
+    // Check if user can generate (checks subscription, credits, OR free generations)
+    const { canGenerate, freeGenerationsRemaining, reason } = await canUserGenerate(userId)
+
+    if (!canGenerate) {
+      return res.status(403).json({
+        error: 'generation_limit_reached',
+        message: reason,
+        freeGenerationsRemaining: 0,
+      })
+    }
+
     const {
       content,
       messages,
@@ -1667,7 +1737,7 @@ router.post(
           combinedMessages,
           chunk => {
             // console.log('[supaChat] Received chunk length:', chunk.length)
-            console.log('[supaChat] Received chunk:', chunk.substring(0, 50) + '...')
+            // console.log('[supaChat] Received chunk:', chunk.substring(0, 50) + '...')
             try {
               const obj = JSON.parse(chunk)
               const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | undefined
@@ -1879,6 +1949,26 @@ router.post(
           }
           // console.log(assistantMessage)
           const cleanedMessage = { ...assistantMessage, content: cleanedContent }
+
+          // Decrement free generation counter if applicable
+          if (!isLocalMode) {
+            try {
+              const newCount = await decrementFreeGeneration(userId)
+              if (newCount >= 0) {
+                // Send update to client via SSE
+                res.write(
+                  `data: ${JSON.stringify({
+                    type: 'free_generations_update',
+                    remaining: newCount,
+                  })}\n\n`
+                )
+              }
+            } catch (error) {
+              console.error('[Generation] Failed to decrement free generation:', error)
+              // Don't fail the generation - just log
+            }
+          }
+
           res.write(
             `data: ${JSON.stringify({
               type: 'complete',

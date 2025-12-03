@@ -60,6 +60,7 @@ export interface Profile {
   stripe_customer_id?: string | null
   active_subscription_id?: string | null
   quick_chat_project_id?: string | null
+  free_generations_remaining: number
 }
 
 export interface User extends Profile {}

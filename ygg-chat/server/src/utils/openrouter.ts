@@ -7,6 +7,7 @@ import { ProviderCostService } from '../database/models'
 import { supabaseAdmin } from '../database/supamodels'
 import { getApiKey } from './apiKeyManager'
 import { getCachedAttachmentBase64 } from './attachmentCache'
+import { canAccessPaidModels } from './freeTier'
 import { moneyAdd, moneyFormat, moneyMax, moneyMultiply } from './money'
 import tools from './tools'
 
@@ -377,7 +378,8 @@ async function reserveCreditsForGeneration(
   messages: Array<{ role: string; content: any }>,
   stepIndex: number,
   messageId?: MessageId,
-  conversationId?: string
+  conversationId?: string,
+  storageMode: 'cloud' | 'local' = 'cloud'
 ): Promise<{ reservationRefId: string; reservedCredits: number; providerRunId: string }> {
   const reservedCredits = estimateCreditsForGeneration(messages, model, pricing)
   const reservationRefId = randomUUID()
@@ -411,11 +413,13 @@ async function reserveCreditsForGeneration(
     const ledgerEntryId = data as string
 
     // Create provider_runs entry
+    // For local mode, don't include conversation_id to avoid FK constraint errors
+    // (local conversations don't exist in cloud Supabase)
     const { data: providerRun, error: providerRunError } = await supabaseAdmin
       .from('provider_runs')
       .insert({
         user_id: userId,
-        conversation_id: conversationId || null,
+        conversation_id: storageMode === 'local' ? null : (conversationId || null),
         message_id: messageId || null,
         model,
         reservation_ref_id: reservationRefId,
@@ -713,25 +717,36 @@ export async function generateResponse(
     // ===================================================================
     // Only reserve if userId is provided (meaning credits are enabled)
     if (userId) {
-      try {
-        const pricing = await getModelPricing(model)
-        const reservation = await reserveCreditsForGeneration(
-          userId,
-          model,
-          pricing,
-          conversationMessages,
-          stepCount,
-          messageId,
-          conversationId
-        )
-        currentProviderRunId = reservation.providerRunId
-        currentReservationRefId = reservation.reservationRefId
-        console.log(`💳 Step ${stepCount}: Reserved ${moneyFormat(reservation.reservedCredits)} credits`)
-      } catch (error: any) {
-        // If reservation fails (e.g., insufficient credits), stop the generation
-        const errorMsg = error.message || 'Failed to reserve credits'
-        onChunk(JSON.stringify({ part: 'error', delta: errorMsg }))
-        throw error
+      // Check if user is on free tier
+      const hasPaidAccess = await canAccessPaidModels(userId)
+
+      if (hasPaidAccess) {
+        // User has subscription or credits - proceed with normal credit reservation
+        try {
+          const pricing = await getModelPricing(model)
+          const reservation = await reserveCreditsForGeneration(
+            userId,
+            model,
+            pricing,
+            conversationMessages,
+            stepCount,
+            messageId,
+            conversationId,
+            storageMode
+          )
+          currentProviderRunId = reservation.providerRunId
+          currentReservationRefId = reservation.reservationRefId
+          console.log(`💳 Step ${stepCount}: Reserved ${moneyFormat(reservation.reservedCredits)} credits`)
+        } catch (error: any) {
+          // If reservation fails (e.g., insufficient credits), stop the generation
+          const errorMsg = error.message || 'Failed to reserve credits'
+          onChunk(JSON.stringify({ part: 'error', delta: errorMsg }))
+          throw error
+        }
+      } else {
+        // Free tier user - skip credit reservation
+        // Free generation eligibility already checked in supaChat.ts before calling generateResponse()
+        console.log(`🆓 Step ${stepCount}: Free tier user - skipping credit reservation`)
       }
     }
 
@@ -974,7 +989,7 @@ export async function generateResponse(
               } catch (e) {
                 // If JSON parsing fails, check if we have empty object - this might be Grok's issue
                 console.error(`❌ [openrouter] Failed to parse tool call buffer:`, e)
-                console.error(`❌ [openrouter] Buffer content: ${toolCallBuffer}`)
+                // console.error(`❌ [openrouter] Buffer content: ${toolCallBuffer}`)
                 if (toolCallBuffer === '{}' || !toolCallBuffer.trim()) {
                   // console.log(
                   //   `Warning: Tool call ${currentToolCall.name} has empty arguments, will try to extract from content`
@@ -994,12 +1009,13 @@ export async function generateResponse(
                   }
                   // Reset buffer after handling
                   toolCallBuffer = ''
-                } else {
-                  // For other parse errors on supposedly complete JSON, log but don't stop the stream
-                  console.warn(
-                    `⚠️ [openrouter] Tool call JSON incomplete or malformed, continuing to accumulate: ${toolCallBuffer.substring(0, 50)}...`
-                  )
                 }
+                // else {
+                //   // For other parse errors on supposedly complete JSON, log but don't stop the stream
+                //   // console.warn(
+                //   //   `⚠️ [openrouter] Tool call JSON incomplete or malformed, continuing to accumulate: ${toolCallBuffer.substring(0, 50)}...`
+                //   // )
+                // }
               }
             } else if (currentToolCall && toolCallBuffer) {
               // Buffer exists but doesn't have closing brace yet, just keep accumulating
@@ -1112,10 +1128,10 @@ export async function generateResponse(
 
           // If there are client tools, halt and return for client execution
           if (clientToolCalls.length > 0) {
-            console.log(
-              '🛑 [openrouter] Client-side execution mode: halting for client tools:',
-              clientToolCalls.map(t => t.name)
-            )
+            // console.log(
+            //   '🛑 [openrouter] Client-side execution mode: halting for client tools:',
+            //   clientToolCalls.map(t => t.name)
+            // )
 
             // Remove the assistant message we just added (contains ALL tools)
             conversationMessages.pop()
@@ -1170,7 +1186,7 @@ export async function generateResponse(
 
           // If ONLY server-only tools, continue the loop to process results
           if (serverOnlyToolCalls.length > 0 && clientToolCalls.length === 0) {
-            console.log('✅ [openrouter] All server-only tools executed, continuing loop')
+            // console.log('✅ [openrouter] All server-only tools executed, continuing loop')
             // Continue to next step to process tool results
             continue
           }

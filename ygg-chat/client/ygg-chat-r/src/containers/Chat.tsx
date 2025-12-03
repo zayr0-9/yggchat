@@ -29,6 +29,7 @@ import {
   resolveAttachmentUrl,
   respondToToolPermission,
   respondToToolPermissionAndEnableAll,
+  selectCCSlashCommands,
   selectConversationMessages,
   selectCurrentConversationId,
   selectCurrentPath,
@@ -45,7 +46,6 @@ import {
   selectProviderState,
   selectSendingState,
   selectStreamState,
-  selectCCSlashCommands,
   sendCCBranch,
   sendCCMessage,
   sendMessage,
@@ -121,8 +121,8 @@ function Chat() {
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
   const inputAreaBorderClasses =
     operationMode === 'plan'
-      ? 'outline-1 outline-blue-500 dark:outline-blue-500 border border-blue-500 dark:border-blue-500'
-      : 'outline-1 dark:outline-1 dark:outline-orange-700/70 outline-orange-700/70'
+      ? 'outline-2 outline-blue-200/70 dark:outline-neutral-500/50'
+      : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
 
   // React Query for message fetching - MOVED BELOW after projectConversations is available
   // to enable passing storage_mode from cached conversations
@@ -2203,7 +2203,7 @@ function Chat() {
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
           <div
-            className={`acrylic-subtle pb-1 ${inputAreaBorderClasses} rounded-3xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900`}
+            className={`acrylic-subtle pb-1 ${inputAreaBorderClasses} rounded-3xl shadow-[0_0px_12px_-3px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900`}
           >
             {toolCallPermissionRequest && (
               <ToolPermissionDialog
@@ -2296,7 +2296,6 @@ function Chat() {
                     {ideContext?.extensionConnected ? '' : ''}
                     {workspace?.name && `${workspace.name}`}
                   </div>
-
                   <Button
                     variant='outline2'
                     className='rounded-full'
@@ -2313,7 +2312,6 @@ function Chat() {
                       onAnimationEnd={() => setSpinSettings(false)}
                     ></i>
                   </Button>
-
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
                   {/* Provider selector commented out - defaulting to OpenRouter */}
                   {/* <Select
@@ -2348,44 +2346,48 @@ function Chat() {
                     }
                     modelSelect={true}
                   />
-                  <Button
-                    variant='outline2'
-                    size='large'
-                    onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
-                    className={
-                      toolAutoApprove
-                        ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50'
-                        : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
-                    }
-                    title={
-                      toolAutoApprove
-                        ? 'Auto-approving tools (click to disable)'
-                        : 'Asking for permission (click to auto-approve)'
-                    }
-                    aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
-                  >
-                    <i className='bx bx-shield-quarter mr-1'></i>
-                    {toolAutoApprove ? 'Allow all' : 'Ask'}
-                  </Button>
-                  <Button
-                    variant='outline2'
-                    size='large'
-                    onClick={() => dispatch(chatSliceActions.operationModeToggled())}
-                    className={
-                      operationMode === 'plan'
-                        ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-900/30 border-fuchsia-200 dark:border-fuchsia-700/60'
-                        : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
-                    }
-                    title={
-                      operationMode === 'plan'
-                        ? 'Plan mode enabled (tools will be blocked)'
-                        : 'Execution mode enabled (tools may modify files)'
-                    }
-                    aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
-                  >
-                    <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
-                    {operationMode === 'plan' ? 'Chat' : 'Agent'}
-                  </Button>
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl ? (
+                    <Button
+                      variant='outline2'
+                      size='large'
+                      onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
+                      className={
+                        toolAutoApprove
+                          ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50'
+                          : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                      }
+                      title={
+                        toolAutoApprove
+                          ? 'Auto-approving tools (click to disable)'
+                          : 'Asking for permission (click to auto-approve)'
+                      }
+                      aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
+                    >
+                      <i className='bx bx-shield-quarter mr-1'></i>
+                      {toolAutoApprove ? 'Allow all' : 'Ask'}
+                    </Button>
+                  ) : null}
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl ? (
+                    <Button
+                      variant='outline2'
+                      size='large'
+                      onClick={() => dispatch(chatSliceActions.operationModeToggled())}
+                      className={
+                        operationMode === 'plan'
+                          ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-900/30 border-fuchsia-200 dark:border-fuchsia-700/60'
+                          : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                      }
+                      title={
+                        operationMode === 'plan'
+                          ? 'Plan mode enabled (tools will be blocked)'
+                          : 'Execution mode enabled (tools may modify files)'
+                      }
+                      aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
+                    >
+                      <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
+                      {operationMode === 'plan' ? 'Chat' : 'Agent'}
+                    </Button>
+                  ) : null}
                   {/* <Button
                     variant='outline2'
                     className='rounded-full'

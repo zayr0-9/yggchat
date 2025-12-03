@@ -1,4 +1,4 @@
-import { BaseMessage, BaseModel, MessageId, ConversationId } from '../../../../../shared/types'
+import { BaseMessage, BaseModel, ConversationId, MessageId } from '../../../../../shared/types'
 
 // Message types (shared with conversations)
 export interface Message extends BaseMessage {
@@ -78,7 +78,15 @@ export interface StreamChunk {
     is_error: boolean
   }
   // CC-specific chunk type (from Claude Code SDK streaming events)
-  chunkType?: 'content_delta' | 'thinking_delta' | 'tool_start' | 'tool_end' | 'tool_progress' | 'result_output' | 'system_output' | string
+  chunkType?:
+    | 'content_delta'
+    | 'thinking_delta'
+    | 'tool_start'
+    | 'tool_end'
+    | 'tool_progress'
+    | 'result_output'
+    | 'system_output'
+    | string
 }
 
 // Sequential event for streaming to preserve order
@@ -190,7 +198,6 @@ export interface InitializationState {
 export interface ToolCallPermissionRequest {
   toolCall: ToolCall
 }
-
 
 export type OperationMode = 'plan' | 'execute'
 
