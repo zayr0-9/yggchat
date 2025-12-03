@@ -73,7 +73,7 @@ export async function editFileSearchReplace(
     enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
-    interpretEscapeSequences = true,
+    interpretEscapeSequences: shouldInterpretEscapes = true,
     validateContent = true,
   } = options
 
@@ -116,7 +116,7 @@ export async function editFileSearchReplace(
         searchPattern,
         enableFuzzyMatching,
         fuzzyThreshold,
-        interpretEscapeSequences
+        shouldInterpretEscapes
       )
       attemptedStrategies = matchResult.attemptedStrategies
 
@@ -141,11 +141,11 @@ export async function editFileSearchReplace(
       }
 
       // Interpret escape sequences in replacement
-      finalReplacement = interpretEscapeSequences(finalReplacement, interpretEscapeSequences)
+      finalReplacement = interpretEscapeSequences(finalReplacement, shouldInterpretEscapes)
 
       // For global replacement, we need to handle multiple occurrences
       // First, count all exact matches using the processed pattern
-      const processedSearchPattern = interpretEscapeSequences(searchPattern, interpretEscapeSequences)
+      const processedSearchPattern = interpretEscapeSequences(searchPattern, shouldInterpretEscapes)
       const exactRegex = new RegExp(escapeRegExp(processedSearchPattern), 'g')
       const exactMatches = originalContent.match(exactRegex)
 
@@ -224,7 +224,7 @@ export async function editFileSearchReplaceFirst(
     enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
-    interpretEscapeSequences = true,
+    interpretEscapeSequences: shouldInterpretEscapes = true,
     validateContent = true,
   } = options
 
@@ -255,7 +255,7 @@ export async function editFileSearchReplaceFirst(
       searchPattern,
       enableFuzzyMatching,
       fuzzyThreshold,
-      interpretEscapeSequences
+      shouldInterpretEscapes
     )
 
     if (!matchResult.found) {
@@ -277,7 +277,7 @@ export async function editFileSearchReplaceFirst(
     }
 
     // Interpret escape sequences in replacement
-    finalReplacement = interpretEscapeSequences(finalReplacement, interpretEscapeSequences)
+    finalReplacement = interpretEscapeSequences(finalReplacement, shouldInterpretEscapes)
 
     const newContent =
       originalContent.substring(0, matchResult.startIndex) +
