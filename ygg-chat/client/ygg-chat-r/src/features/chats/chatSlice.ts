@@ -82,6 +82,11 @@ const makeInitialState = (): ChatState => ({
   toolAutoApprove: false,
   operationMode: 'plan',
   ccSlashCommands: [],
+  freeTier: {
+    freeGenerationsRemaining: null,
+    showLimitModal: false,
+    isFreeTierUser: false,
+  },
 })
 
 const initialState: ChatState = makeInitialState()
@@ -593,6 +598,18 @@ export const chatSlice = createSlice({
 
     ccSlashCommandsCleared: state => {
       state.ccSlashCommands = []
+    },
+
+    /* Free tier reducers */
+    freeGenerationsUpdated: (state, action: PayloadAction<{ remaining: number; isFreeTier: boolean }>) => {
+      state.freeTier.freeGenerationsRemaining = action.payload.remaining
+      state.freeTier.isFreeTierUser = action.payload.isFreeTier
+    },
+    freeTierLimitModalShown: state => {
+      state.freeTier.showLimitModal = true
+    },
+    freeTierLimitModalHidden: state => {
+      state.freeTier.showLimitModal = false
     },
 
     stateReset: () => makeInitialState(),

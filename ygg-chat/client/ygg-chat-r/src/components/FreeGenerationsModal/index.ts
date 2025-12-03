@@ -1,0 +1,1 @@
+export { FreeGenerationsModal } from './FreeGenerationsModal'

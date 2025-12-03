@@ -321,11 +321,12 @@ export async function appendToFile(
   const { createBackup = false, encoding = 'utf8' } = options
 
   try {
-    let absolutePath = filePath
+    // Resolve path for fs operations (UNC format on Windows)
+    let fsPath: string  // Path for fs.promises operations
     if (isWSLPath(filePath)) {
-      absolutePath = await resolveToWindowsPath(filePath)
+      fsPath = await resolveToWindowsPath(filePath)
     } else {
-      absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
+      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
     }
 
     let originalContent = ''
@@ -334,8 +335,7 @@ export async function appendToFile(
     try {
       const fileData = await readTextFile(filePath)
       originalContent = fileData.content
-      // Update absolutePath from read result just in case
-      absolutePath = fileData.absolutePath
+      // Note: fileData.absolutePath is already in WSL format, don't use it for fs operations
     } catch {
       fileExists = false
     }
@@ -344,18 +344,18 @@ export async function appendToFile(
     let backupPath: string | undefined
     if (createBackup && fileExists) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      backupPath = `${absolutePath}.backup.${timestamp}`
+      backupPath = `${fsPath}.backup.${timestamp}`
       await fs.promises.writeFile(backupPath, originalContent, encoding)
     }
 
-    // Append content
-    await fs.promises.appendFile(absolutePath, content, encoding)
+    // Append content using fsPath (UNC format on Windows)
+    await fs.promises.appendFile(fsPath, content, encoding)
 
-    const newStats = await fs.promises.stat(absolutePath)
+    const newStats = await fs.promises.stat(fsPath)
 
     return {
       success: true,
-      absolutePath: toWslPath(absolutePath),
+      absolutePath: toWslPath(fsPath),  // Convert back to WSL format
       sizeBytes: newStats.size,
       replacements: 1, // Consider append as one "replacement"
       message: `Successfully appended content to ${filePath}`,

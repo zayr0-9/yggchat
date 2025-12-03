@@ -616,6 +616,14 @@ export const sendMessage = createAsyncThunk<
         }
 
         if (!response.ok) {
+          // Handle free tier limit exceeded (403)
+          if (response.status === 403) {
+            const errorData = await response.json().catch(() => ({ error: 'unknown' }))
+            if (errorData.error === 'generation_limit_reached') {
+              dispatch(chatSliceActions.freeTierLimitModalShown())
+              throw new Error(errorData.message || 'Free generations exhausted. Please upgrade to continue.')
+            }
+          }
           const errorText = await response.text()
           throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to send message'}`)
         }
@@ -781,6 +789,14 @@ export const sendMessage = createAsyncThunk<
                   // Reset streaming buffer for next iteration
                   dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
                   messageId = chunk.message.id
+                } else if (chunk.type === 'free_generations_update') {
+                  // Update free generations remaining count
+                  dispatch(
+                    chatSliceActions.freeGenerationsUpdated({
+                      remaining: chunk.remaining,
+                      isFreeTier: true,
+                    })
+                  )
                 } else if (chunk.type === 'aborted') {
                   // Server deleted the empty assistant message, no need to keep it in client state
                   dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
@@ -1270,6 +1286,14 @@ export const editMessageWithBranching = createAsyncThunk<
         })
 
         if (!response.ok) {
+          // Handle free tier limit exceeded (403)
+          if (response.status === 403) {
+            const errorData = await response.json().catch(() => ({ error: 'unknown' }))
+            if (errorData.error === 'generation_limit_reached') {
+              dispatch(chatSliceActions.freeTierLimitModalShown())
+              throw new Error(errorData.message || 'Free generations exhausted. Please upgrade to continue.')
+            }
+          }
           const errorText = await response.text()
           throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
@@ -1429,6 +1453,14 @@ export const editMessageWithBranching = createAsyncThunk<
                   }
                   // Reset streaming buffer for next iteration
                   dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
+                } else if (chunk.type === 'free_generations_update') {
+                  // Update free generations remaining count
+                  dispatch(
+                    chatSliceActions.freeGenerationsUpdated({
+                      remaining: chunk.remaining,
+                      isFreeTier: true,
+                    })
+                  )
                 } else if (chunk.type === 'aborted') {
                   // Server deleted the empty assistant message, no need to keep it in client state
                   dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
@@ -1697,6 +1729,14 @@ export const sendMessageToBranch = createAsyncThunk<
         })
 
         if (!response.ok) {
+          // Handle free tier limit exceeded (403)
+          if (response.status === 403) {
+            const errorData = await response.json().catch(() => ({ error: 'unknown' }))
+            if (errorData.error === 'generation_limit_reached') {
+              dispatch(chatSliceActions.freeTierLimitModalShown())
+              throw new Error(errorData.message || 'Free generations exhausted. Please upgrade to continue.')
+            }
+          }
           const errorText = await response.text()
           throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
@@ -1812,6 +1852,14 @@ export const sendMessageToBranch = createAsyncThunk<
                   }
                   // Reset streaming buffer for next iteration
                   dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
+                } else if (chunk.type === 'free_generations_update') {
+                  // Update free generations remaining count
+                  dispatch(
+                    chatSliceActions.freeGenerationsUpdated({
+                      remaining: chunk.remaining,
+                      isFreeTier: true,
+                    })
+                  )
                 } else if (chunk.type === 'aborted') {
                   // Server deleted the empty assistant message, no need to keep it in client state
                   dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))

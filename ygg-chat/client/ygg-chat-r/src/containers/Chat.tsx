@@ -8,6 +8,7 @@ import { MessageId } from '../../../../shared/types'
 import {
   Button,
   ChatMessage,
+  FreeGenerationsModal,
   Heimdall,
   InputTextArea,
   Select,
@@ -119,6 +120,8 @@ function Chat() {
   const currentConversationId = useAppSelector(selectCurrentConversationId)
   const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
+  const showFreeTierModal = useAppSelector(state => state.chat.freeTier.showLimitModal)
+  // const freeGenerationsRemaining = useAppSelector(state => state.chat.freeTier.freeGenerationsRemaining)
   const inputAreaBorderClasses =
     operationMode === 'plan'
       ? 'outline-2 outline-blue-200/70 dark:outline-neutral-500/50'
@@ -1978,7 +1981,7 @@ function Chat() {
           {/* Conversation Title Editor */}
           {currentConversationId && (
             <div
-              className={`absolute z-500 mb-2 top-0 left-0 px-2 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+              className={`absolute mb-2 top-0 left-0 px-2 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
             >
               <div className=' rounded-2xl flex items-center gap-2 py-1 xl:py-1 2xl:p-2 mt-1 bg-transparent acrylic shadow-[0_2px_5px_1px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65)]  '>
                 <Button
@@ -2724,6 +2727,12 @@ function Chat() {
       {(expandedFilePath || closingFilePath) && (
         <div className='fixed inset-0 z-[99998] bg-transparent' onClick={handleCloseExpandedPreview} />
       )}
+
+      {/* Free Tier Limit Modal */}
+      <FreeGenerationsModal
+        isOpen={showFreeTierModal}
+        onClose={() => dispatch(chatSliceActions.freeTierLimitModalHidden())}
+      />
     </div>
   )
 }

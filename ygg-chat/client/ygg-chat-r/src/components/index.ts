@@ -1,6 +1,7 @@
 export { Button } from './Button/button'
 export { ChatMessage } from './ChatMessage/ChatMessage'
 export { ContextMenu } from './ContextMenu/ContextMenu'
+export { FreeGenerationsModal } from './FreeGenerationsModal/FreeGenerationsModal'
 export { Heimdall } from './Heimdall/Heimdall'
 export { InputTextArea } from './InputTextArea/InputTextArea'
 export { LowBar } from './LowBar/LowBar'

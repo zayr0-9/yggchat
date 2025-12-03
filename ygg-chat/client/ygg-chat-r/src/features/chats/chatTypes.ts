@@ -58,7 +58,15 @@ export interface ToolCall {
 
 // Stream-specific types
 export interface StreamChunk {
-  type: 'chunk' | 'complete' | 'error' | 'user_message' | 'reset' | 'generation_started' | 'tool_call'
+  type:
+    | 'chunk'
+    | 'complete'
+    | 'error'
+    | 'user_message'
+    | 'reset'
+    | 'generation_started'
+    | 'tool_call'
+    | 'free_generations_update'
   content?: string
   // delta is used for token-level updates from the server
   delta?: string
@@ -77,6 +85,8 @@ export interface StreamChunk {
     content: any
     is_error: boolean
   }
+  // free tier update data
+  remaining?: number
   // CC-specific chunk type (from Claude Code SDK streaming events)
   chunkType?:
     | 'content_delta'
@@ -218,6 +228,11 @@ export interface ChatState {
   toolAutoApprove: boolean
   operationMode: OperationMode
   ccSlashCommands: string[]
+  freeTier: {
+    freeGenerationsRemaining: number | null
+    showLimitModal: boolean
+    isFreeTierUser: boolean
+  }
 }
 
 // Action payloads
