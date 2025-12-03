@@ -80,16 +80,16 @@ export function toWslPath(rawPath: string): string {
   // Convert backslashes to forward slashes first
   let normalized = trimmed.replace(/\\/g, '/')
   let lowerNormalized = normalized.toLowerCase()
+const isUncWSLPath = lowerNormalized.startsWith('//wsl$')
 
-  const isUncWSLPath = /^\/{2,}wsl\$/i.test(lowerNormalized)
+// Collapse duplicate slashes only when it's not a UNC WSL path
+if (!isUncWSLPath) {
+  normalized = normalized.replace(/\\+/g, '/')
+  lowerNormalized = normalized.toLowerCase()
+}
 
-  // Collapse duplicate slashes only when it's not a UNC WSL path
-  if (!isUncWSLPath) {
-    normalized = normalized.replace(/\/+/g, '/')
-    lowerNormalized = normalized.toLowerCase()
-  }
+if (isUncWSLPath) {
 
-  if (isUncWSLPath) {
     const withoutLeadingSlashes = normalized.replace(/^\/+/, '')
     const segments = withoutLeadingSlashes.split('/').filter(Boolean)
     if (segments.length >= 2 && segments[0].toLowerCase() === 'wsl$') {
