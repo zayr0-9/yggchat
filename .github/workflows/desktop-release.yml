@@ -49,7 +49,9 @@ jobs:
           cd ygg-chat/client/ygg-chat-r
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             export CSC_IDENTITY_AUTO_DISCOVERY=false
-            export ELECTRON_BUILDER_DISABLE_CODE_SIGNING=true
+            export WIN_CSC_LINK=""
+            export CSC_LINK=""
+            export CSC_KEY_PASSWORD=""
             npm run build:win
           elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
             npm run build:linux
@@ -63,6 +65,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
+        shell: bash
         run: |
           set -euo pipefail
           cd ygg-chat/client/ygg-chat-r/release
