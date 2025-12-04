@@ -40,7 +40,7 @@
     "playwright": "^1.40.0",
     "rate-limit-redis": "^4.2.3",
     "strip-markdown": "^6.0.0",
-    "stripe": "^19.1.0",
+    "stripe": "19.1.0",
     "tree-sitter": "^0.21.1",
     "tree-sitter-javascript": "^0.23.1",
     "tree-sitter-json": "^0.24.8",
