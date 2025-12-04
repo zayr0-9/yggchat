@@ -78,19 +78,26 @@ export async function editFileSearchReplace(
   } = options
 
   try {
+    // Resolve path for fs operations (UNC format on Windows)
+    let fsPath: string  // Path for fs.promises operations
+    if (isWSLPath(filePath)) {
+      fsPath = await resolveToWindowsPath(filePath)
+    } else {
+      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
+    }
+
     // Read the file first
     const fileData = await readTextFile(filePath)
     const originalContent = fileData.content
-    const absolutePath = fileData.absolutePath
 
     // Validate file content if requested
     let validation: FileValidationResult | undefined
     if (validateContent) {
-      validation = await validateFileContent(absolutePath, originalContent, options)
+      validation = await validateFileContent(fsPath, originalContent, options)
       if (!validation.valid) {
         return {
           success: false,
-          absolutePath: toWslPath(absolutePath),
+          absolutePath: toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Validation failed: ${validation.reason}`,
@@ -123,7 +130,7 @@ export async function editFileSearchReplace(
       if (!matchResult.found) {
         return {
           success: false,
-          absolutePath: toWslPath(absolutePath),
+          absolutePath: toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Search pattern not found in file. Attempted strategies: ${attemptedStrategies.join(', ')}`,
@@ -167,17 +174,17 @@ export async function editFileSearchReplace(
     let backupPath: string | undefined
     if (createBackup && replacements > 0) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      backupPath = `${absolutePath}.backup.${timestamp}`
+      backupPath = `${fsPath}.backup.${timestamp}`
       await fs.promises.writeFile(backupPath, originalContent, encoding)
     }
 
     // Write the modified content back to file
     if (replacements > 0) {
-      await fs.promises.writeFile(absolutePath, newContent, encoding)
+      await fs.promises.writeFile(fsPath, newContent, encoding)
     }
 
     // Get new file size
-    const newStats = await fs.promises.stat(absolutePath)
+    const newStats = await fs.promises.stat(fsPath)
 
     const strategyMessage =
       matchStrategy && matchStrategy !== 'exact'
@@ -186,7 +193,7 @@ export async function editFileSearchReplace(
 
     return {
       success: true,
-      absolutePath: toWslPath(absolutePath),
+      absolutePath: toWslPath(fsPath),
       sizeBytes: newStats.size,
       replacements,
       message:
@@ -229,18 +236,25 @@ export async function editFileSearchReplaceFirst(
   } = options
 
   try {
+    // Resolve path for fs operations (UNC format on Windows)
+    let fsPath: string  // Path for fs.promises operations
+    if (isWSLPath(filePath)) {
+      fsPath = await resolveToWindowsPath(filePath)
+    } else {
+      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
+    }
+
     const fileData = await readTextFile(filePath)
     const originalContent = fileData.content
-    const absolutePath = fileData.absolutePath
 
     // Validate file content if requested
     let validation: FileValidationResult | undefined
     if (validateContent) {
-      validation = await validateFileContent(absolutePath, originalContent, options)
+      validation = await validateFileContent(fsPath, originalContent, options)
       if (!validation.valid) {
         return {
           success: false,
-          absolutePath: toWslPath(absolutePath),
+          absolutePath: toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Validation failed: ${validation.reason}`,
@@ -261,7 +275,7 @@ export async function editFileSearchReplaceFirst(
     if (!matchResult.found) {
       return {
         success: false,
-        absolutePath: toWslPath(absolutePath),
+        absolutePath: toWslPath(fsPath),
         sizeBytes: fileData.sizeBytes,
         replacements: 0,
         message: `Search pattern not found in file. Attempted strategies: ${matchResult.attemptedStrategies.join(', ')}`,
@@ -288,21 +302,21 @@ export async function editFileSearchReplaceFirst(
     let backupPath: string | undefined
     if (createBackup) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      backupPath = `${absolutePath}.backup.${timestamp}`
+      backupPath = `${fsPath}.backup.${timestamp}`
       await fs.promises.writeFile(backupPath, originalContent, encoding)
     }
 
     // Write the modified content
-    await fs.promises.writeFile(absolutePath, newContent, encoding)
+    await fs.promises.writeFile(fsPath, newContent, encoding)
 
-    const newStats = await fs.promises.stat(absolutePath)
+    const newStats = await fs.promises.stat(fsPath)
 
     const strategyMessage =
       matchResult.strategy !== 'exact' ? ` (matched using ${matchResult.strategy} strategy)` : ''
 
     return {
       success: true,
-      absolutePath: toWslPath(absolutePath),
+      absolutePath: toWslPath(fsPath),
       sizeBytes: newStats.size,
       replacements: 1,
       message: `Successfully replaced first occurrence${strategyMessage} in ${filePath}`,

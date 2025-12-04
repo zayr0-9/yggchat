@@ -327,7 +327,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
 
           {/* Tagline */}
           <p className='text-base mt-6 sm:text-lg md:text-xl lg:text-2xl text-white dark:text-gray-100 text-center max-w-2xl leading-relaxed drop-shadow-md font-light'>
-            The most advanced AI interface on the planet.
+            The most advanced AGI interface on the planet.
             <br />
           </p>
 
