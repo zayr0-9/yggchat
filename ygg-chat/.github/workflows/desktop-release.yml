@@ -1,0 +1,51 @@
+name: Desktop Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: Build Electron release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [20.x]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install workspace dependencies
+        run: |
+          npm install
+          npm --prefix client/ygg-chat-r install
+          npm --prefix server install
+
+      - name: Build ${{ matrix.os }}
+        run: |
+          cd client/ygg-chat-r
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            npm run build:win
+          elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            npm run build:linux
+          else
+            npm run build:mac
+          fi
+        shell: bash
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-artifacts
+          path: client/ygg-chat-r/release

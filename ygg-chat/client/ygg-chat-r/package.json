@@ -17,6 +17,7 @@
     "rebuild:client": "electron-rebuild -f -w better-sqlite3",
     "build:win": "npm run build:server && npm run build:electron && npm run build:electron:main && electron-builder --win",
     "build:linux": "npm run build:electron && npm run build:electron:main && electron-builder --linux",
+    "build:mac": "npm run build:electron && npm run build:electron:main && electron-builder --mac",
     "build:all": "npm run build:electron && npm run build:electron:main && electron-builder --win --linux",
     "lint": "eslint .",
     "preview": "vite preview",
