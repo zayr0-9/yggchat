@@ -15,6 +15,7 @@ build/
 electron/*.cjs
 electron/*.js
 electron/*.mjs
+!electron/esbuild.main.mjs
 electron/*.js.map
 electron/tools/*.js
 electron/tools/*.js.map
