@@ -70,6 +70,36 @@ jobs:
           set -euo pipefail
           cd ygg-chat/client/ygg-chat-r/release
 
+          # Validation
+          echo "=== Supabase Upload Configuration ==="
+
+          if [ -z "${SUPABASE_URL:-}" ]; then
+            echo "ERROR: SUPABASE_URL is not set"
+            exit 1
+          fi
+
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "ERROR: SUPABASE_SERVICE_ROLE_KEY is not set"
+            exit 1
+          fi
+
+          if [ -z "${SUPABASE_BUCKET:-}" ]; then
+            echo "ERROR: SUPABASE_BUCKET is not set"
+            exit 1
+          fi
+
+          if [[ ! "${SUPABASE_URL}" =~ ^https?:// ]]; then
+            echo "ERROR: SUPABASE_URL must include protocol (https://)"
+            echo "Current value: ${SUPABASE_URL}"
+            exit 1
+          fi
+
+          echo "SUPABASE_URL: ${SUPABASE_URL}"
+          echo "SUPABASE_BUCKET: ${SUPABASE_BUCKET}"
+          echo "Platform: ${{ matrix.os }}"
+          echo ""
+
+          # Platform detection
           case "${{ matrix.os }}" in
             windows-latest) platform_dir="windows" ;;
             ubuntu-latest) platform_dir="linux" ;;
@@ -79,19 +109,58 @@ jobs:
 
           target_prefix="updates/${platform_dir}"
 
+          echo "=== Files to Upload ==="
+          ls -lh
+          echo ""
+
+          # Upload with detailed logging
+          echo "=== Starting Upload Process ==="
+          upload_count=0
+          failure_count=0
+
           for artifact in *; do
             if [ -d "${artifact}" ]; then
-              echo "Skipping directory ${artifact}"
+              echo "Skipping directory: ${artifact}"
               continue
             fi
 
-            echo "Uploading ${artifact} to ${target_prefix}/${artifact}"
-            curl -sSf \
-              -X POST "${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${target_prefix}/${artifact}?upsert=true" \
+            file_size=$(stat -c%s "${artifact}" 2>/dev/null || stat -f%z "${artifact}" 2>/dev/null || echo "unknown")
+            upload_url="${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${target_prefix}/${artifact}?upsert=true"
+
+            echo ""
+            echo "Uploading: ${artifact}"
+            echo "  Size: ${file_size} bytes"
+            echo "  Target: ${target_prefix}/${artifact}"
+
+            http_code=$(curl -s -w "%{http_code}" -o /tmp/upload_response.txt \
+              -X POST "${upload_url}" \
               -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Content-Type: application/octet-stream" \
-              --data-binary @"${artifact}"
+              --data-binary @"${artifact}")
+
+            response_body=$(cat /tmp/upload_response.txt 2>/dev/null || echo "")
+
+            if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ]; then
+              echo "  Status: ${http_code} - SUCCESS"
+              ((upload_count++))
+            else
+              echo "  Status: ${http_code} - FAILED"
+              echo "  Response: ${response_body}"
+              ((failure_count++))
+            fi
           done
+
+          echo ""
+          echo "=== Upload Summary ==="
+          echo "Successful: ${upload_count}"
+          echo "Failed: ${failure_count}"
+
+          if [ ${failure_count} -gt 0 ]; then
+            echo "ERROR: ${failure_count} file(s) failed to upload"
+            exit 1
+          fi
+
+          echo "All files uploaded successfully"
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
