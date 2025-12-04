@@ -1,6 +1,7 @@
 import { ChildProcess, spawn } from 'child_process'
 import Conf from 'conf'
 import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -16,6 +17,8 @@ let localServerStarted = false
 
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat'
+const UPDATE_FEED_BASE_URL = process.env.SUPABASE_UPDATE_FEED_BASE_URL || ''
+let autoUpdaterConfigured = false
 
 // Set App User Model ID for Windows taskbar icon
 if (process.platform === 'win32') {
@@ -370,6 +373,7 @@ app.whenReady().then(async () => {
 
     console.log('[Electron] Creating window...')
     createWindow()
+    configureAutoUpdater()
   } catch (error) {
     console.error('[Electron] Failed to start:', error)
     app.quit()
@@ -503,6 +507,20 @@ ipcMain.handle('platform:info', async () => {
   }
 })
 
+ipcMain.handle('autoUpdater:check', async () => {
+  if (!autoUpdaterConfigured) {
+    return { success: false, error: 'Auto-updater not configured' }
+  }
+
+  try {
+    await autoUpdater.checkForUpdates()
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron] Manual update check failed:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
 // Open OAuth URL in external browser
 ipcMain.handle('auth:openExternal', async (_event, url: string) => {
   console.log('[Electron IPC] Opening external URL for OAuth:', url)
@@ -625,3 +643,84 @@ ipcMain.handle('theme:update', async (_event, isDark: boolean) => {
     applyTitleBarTheme(mainWindow, isDark)
   }
 })
+
+function configureAutoUpdater() {
+  if (autoUpdaterConfigured) {
+    return
+  }
+
+  if (!app.isPackaged) {
+    console.log('[Electron] Auto-updater skipped: not packaged')
+    return
+  }
+
+  if (!UPDATE_FEED_BASE_URL) {
+    console.warn('[Electron] Auto-updater skipped: SUPABASE_UPDATE_FEED_BASE_URL missing')
+    return
+  }
+
+  const platformDir =
+    process.platform === 'win32'
+      ? 'windows'
+      : process.platform === 'darwin'
+        ? 'mac'
+        : 'linux'
+
+  const normalizedBase = UPDATE_FEED_BASE_URL.replace(/\/+$/, '')
+  const feedUrl = `${normalizedBase}/${platformDir}`
+
+  try {
+    autoUpdater.setFeedURL({
+      provider: 'generic',
+      url: feedUrl,
+    })
+  } catch (error) {
+    console.error('[Electron] Failed to set feed URL:', error)
+    return
+  }
+
+  autoUpdaterConfigured = true
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[Electron] Checking for updates...')
+    mainWindow?.webContents.send('autoUpdater:checking')
+  })
+
+  autoUpdater.on('update-available', info => {
+    console.log('[Electron] Update available:', info?.version)
+    mainWindow?.webContents.send('autoUpdater:update-available', info)
+  })
+
+  autoUpdater.on('update-not-available', info => {
+    console.log('[Electron] No updates available')
+    mainWindow?.webContents.send('autoUpdater:update-not-available', info)
+  })
+
+  autoUpdater.on('download-progress', progressObj => {
+    mainWindow?.webContents.send('autoUpdater:download-progress', progressObj)
+  })
+
+  autoUpdater.on('update-downloaded', info => {
+    console.log('[Electron] Update downloaded, will install on quit')
+    mainWindow?.webContents.send('autoUpdater:update-downloaded', info)
+    setImmediate(() => autoUpdater.quitAndInstall())
+  })
+
+  autoUpdater.on('error', error => {
+    console.error('[Electron] Auto-updater error:', error)
+    mainWindow?.webContents.send('autoUpdater:error', error ? error.message || String(error) : 'Unknown error')
+  })
+
+  setTimeout(() => {
+    autoUpdater
+      .checkForUpdatesAndNotify()
+      .then(result => {
+        if (!result?.downloadPromise) {
+          console.log('[Electron] No update download triggered')
+        }
+      })
+      .catch(error => {
+        console.error('[Electron] Failed to check for updates:', error)
+      })
+  }, 3000)
+}

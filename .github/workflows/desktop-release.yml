@@ -41,6 +41,7 @@ jobs:
           echo "VITE_STRIPE_PUBLISHABLE_KEY=${{ secrets.VITE_STRIPE_PUBLISHABLE_KEY }}" >> $GITHUB_ENV
           echo "VITE_ENVIRONMENT=electron" >> $GITHUB_ENV
           echo "VITE_API_URL=https://webdrasil-production.up.railway.app/api" >> $GITHUB_ENV
+          echo "SUPABASE_UPDATE_FEED_BASE_URL=${{ secrets.SUPABASE_UPDATE_FEED_BASE_URL }}" >> $GITHUB_ENV
         shell: bash
 
       - name: Build ${{ matrix.os }}
