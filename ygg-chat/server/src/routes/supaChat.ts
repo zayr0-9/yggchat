@@ -315,6 +315,50 @@ router.get(
   })
 )
 
+// Fetch openRouter ZDR-capable endpoints
+router.get(
+  '/models/openrouter/zdr',
+  asyncHandler(async (req, res) => {
+    try {
+      const apiKey = process.env.OPENROUTER_API_KEY
+      if (!apiKey) {
+        return res.status(400).json({ error: 'Missing OPENROUTER_API_KEY' })
+      }
+
+      const response = await fetch('https://openrouter.ai/api/v1/endpoints/zdr', {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        return res.status(response.status).json({ error: text || response.statusText })
+      }
+
+      const data = (await response.json()) as { data?: any[] }
+      const endpoints: any[] = Array.isArray(data?.data) ? data.data! : []
+
+      const normalized = endpoints.map(endpoint => ({
+        id: String(endpoint?.name || endpoint?.id || ''),
+        displayName: String(endpoint?.model_name || endpoint?.name || endpoint?.id || ''),
+        providerName: String(endpoint?.provider_name || endpoint?.provider || ''),
+        contextLength: Number(endpoint?.context_length ?? 0),
+        supportsImplicitCaching: Boolean(endpoint?.supports_implicit_caching),
+        pricing: endpoint?.pricing || {},
+        supportedParameters: Array.isArray(endpoint?.supported_parameters) ? endpoint.supported_parameters : [],
+        raw: endpoint,
+      }))
+
+      res.json({ endpoints: normalized })
+    } catch (error) {
+      console.error('Error fetching OpenRouter ZDR endpoints:', error)
+      res.status(500).json({ error: 'Failed to fetch OpenRouter ZDR endpoints' })
+    }
+  })
+)
+
 // Fetch Anthropic models on the server to keep API key private
 router.get(
   '/models/anthropic',
@@ -1469,7 +1513,7 @@ router.post(
     } finally {
       try {
         const { id: _ } = { id: '' }
-      } catch { }
+      } catch {}
     }
 
     res.end()

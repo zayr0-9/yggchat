@@ -274,8 +274,8 @@ export const chatSlice = createSlice({
         }
       } else if (chunk.type === 'complete') {
         state.streaming.messageId = chunk.message?.id || null
-        state.streaming.active = false
-        state.streaming.streamingMessageId = null
+        // Do NOT set active=false here. Wait for explicit streamCompleted action.
+        // This is crucial for multi-turn loops where 'complete' chunks arrive per turn.
       } else if (chunk.type === 'error') {
         state.streaming.error = chunk.error || 'Unknown stream error'
         state.streaming.active = false
@@ -411,7 +411,23 @@ export const chatSlice = createSlice({
         return path
       }
 
-      state.conversation.currentPath = buildPathToMessage(newMessage.id)
+      // Only auto-navigate if:
+      // 1. It's a user message (user initiated a new branch)
+      // 2. OR we are currently at the parent of the new message (extending current view)
+      // 3. OR the current path is empty
+      const currentTip =
+        state.conversation.currentPath.length > 0
+          ? state.conversation.currentPath[state.conversation.currentPath.length - 1]
+          : null
+
+      const shouldSwitch =
+        newMessage.role === 'user' ||
+        state.conversation.currentPath.length === 0 ||
+        currentTip === newMessage.parent_id
+
+      if (shouldSwitch) {
+        state.conversation.currentPath = buildPathToMessage(newMessage.id)
+      }
     },
 
     // Set current path for navigation through branches

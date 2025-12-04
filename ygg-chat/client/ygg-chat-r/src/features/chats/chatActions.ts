@@ -243,12 +243,12 @@ const updateMessageInCache = (
     const updatedMessages = existingData.messages.map(msg =>
       msg.id === messageId
         ? {
-            ...msg,
-            content: updatedContent,
-            content_plain_text: updatedContent,
-            ...(updatedNote !== undefined && { note: updatedNote }),
-            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
-          }
+          ...msg,
+          content: updatedContent,
+          content_plain_text: updatedContent,
+          ...(updatedNote !== undefined && { note: updatedNote }),
+          ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
+        }
         : msg
     )
 
@@ -524,6 +524,12 @@ export const sendMessage = createAsyncThunk<
         turnCount++
         continueTurn = false // Default to stop unless tool calls occur
 
+        // Check if streaming was aborted by user
+        if (!getState().chat.streaming.active) {
+          controller?.abort()
+          break
+        }
+
         let response = null
 
         if (!modelName) {
@@ -707,7 +713,7 @@ export const sendMessage = createAsyncThunk<
                     const baseTitle = contentForTitle.slice(0, 50)
                     const title = baseTitle ? `${baseTitle}...` : ''
                     if (title) {
-                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      ; (dispatch as any)(updateConversationTitle({ id: conversationId, title }))
                       titleUpdated = true
                     }
                   }
@@ -818,7 +824,8 @@ export const sendMessage = createAsyncThunk<
         }
 
         // End of stream for this turn. Check if we have pending tool calls to execute locally.
-        if (assistantToolCalls.length > 0 && executionMode === 'client') {
+        // Also check if streaming is still active (user didn't click Stop)
+        if (assistantToolCalls.length > 0 && executionMode === 'client' && getState().chat.streaming.active) {
           // Filter out tool calls that were already processed by server
           const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
 
