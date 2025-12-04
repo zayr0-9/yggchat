@@ -1,12 +1,14 @@
 import { spawn } from 'child_process';
 import Conf from 'conf';
 import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import autoUpdaterPkg from 'electron-updater';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { startLocalServer, stopLocalServer } from './localServer.js';
+// Destructure autoUpdater from CommonJS module (ESM/CJS interop)
+const { autoUpdater } = autoUpdaterPkg;
 // ESM: Get __dirname from import.meta.url
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 let mainWindow = null;
