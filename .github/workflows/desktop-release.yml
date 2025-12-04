@@ -49,6 +49,7 @@ jobs:
           cd ygg-chat/client/ygg-chat-r
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             export CSC_IDENTITY_AUTO_DISCOVERY=false
+            export ELECTRON_BUILDER_DISABLE_CODE_SIGNING=true
             npm run build:win
           elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
             npm run build:linux
@@ -76,6 +77,11 @@ jobs:
           target_prefix="updates/${platform_dir}"
 
           for artifact in *; do
+            if [ -d "${artifact}" ]; then
+              echo "Skipping directory ${artifact}"
+              continue
+            fi
+
             echo "Uploading ${artifact} to ${target_prefix}/${artifact}"
             curl -sSf \
               -X POST "${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${target_prefix}/${artifact}?upsert=true" \
