@@ -12,7 +12,7 @@
     "build:web": "cross-env BUILD_TARGET=web tsc -b && cross-env BUILD_TARGET=web vite build",
     "build:electron": "cross-env BUILD_TARGET=electron tsc -b && cross-env BUILD_TARGET=electron vite build",
     "build:electron:main": "tsc -p electron/tsconfig.json && node -e \"require('fs').renameSync('electron/main.js', 'electron/main.mjs'); require('fs').renameSync('electron/preload.js', 'electron/preload.mjs')\"",
-    "build:server": "cd ../../server && npm install && npm run build",
+    "build:server": "cd ../../server && npm run build",
     "rebuild:server": "cd ../../server && npm rebuild better-sqlite3 --runtime=electron --target=34.0.0 --dist-url=https://electronjs.org/headers --build-from-source",
     "rebuild:client": "electron-rebuild -f -w better-sqlite3",
     "build:win": "npm run build:server && npm run build:electron && npm run build:electron:main && electron-builder --win",
