@@ -15,7 +15,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: [20.x]
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -25,16 +25,18 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
+          cache-dependency-path: ygg-chat/package-lock.json
 
       - name: Install workspace dependencies
         run: |
+          cd ygg-chat
           npm install
           npm --prefix client/ygg-chat-r install
           npm --prefix server install
 
       - name: Build ${{ matrix.os }}
         run: |
-          cd client/ygg-chat-r
+          cd ygg-chat/client/ygg-chat-r
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             npm run build:win
           elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
@@ -48,4 +50,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-artifacts
-          path: client/ygg-chat-r/release
+          path: ygg-chat/client/ygg-chat-r/release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: ygg-chat/client/ygg-chat-r/release/*
+          draft: false
+          prerelease: false
