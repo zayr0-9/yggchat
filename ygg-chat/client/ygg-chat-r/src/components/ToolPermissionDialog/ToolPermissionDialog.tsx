@@ -9,7 +9,12 @@ interface ToolPermissionDialogProps {
   onAllowAll: () => void
 }
 
-export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({ toolCall, onGrant, onDeny, onAllowAll }) => {
+export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({
+  toolCall,
+  onGrant,
+  onDeny,
+  onAllowAll,
+}) => {
   return (
     <div className='absolute bottom-[100%] left-0 right-0 mx-4 mt-1 mb-2 z-30'>
       <div className='bg-white dark:bg-neutral-900 rounded-xl shadow-lg border border-neutral-200 dark:border-neutral-700 p-4 animate-in slide-in-from-bottom-2 fade-in duration-200'>
@@ -21,7 +26,7 @@ export const ToolPermissionDialog: React.FC<ToolPermissionDialogProps> = ({ tool
           <div className='flex-1 min-w-0'>
             <h3 className='font-medium text-neutral-900 dark:text-neutral-100'>Permission Required</h3>
             <p className='text-sm text-neutral-600 dark:text-neutral-400 mt-1'>
-              Claude wants to execute
+              Valkyrie wants to execute
               <span className='font-mono text-amber-600 dark:text-blue-500 mx-1'>{toolCall.name}</span>
             </p>
 

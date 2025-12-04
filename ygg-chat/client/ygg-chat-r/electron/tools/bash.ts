@@ -71,7 +71,12 @@ export async function runBashCommand(command: string, options: BashOptions = {})
   const { cmd, args, wslCwd } = await buildCommand(command, resolvedCwd)
 
   const spawnOptions: { cwd?: string; env: NodeJS.ProcessEnv } = {
-    env: { ...process.env, ...(options.env || {}) },
+    env: {
+      ...process.env,
+      COLUMNS: '120',
+      LINES: '24',
+      ...(options.env || {}),
+    },
   }
 
   if (!isWindows()) {
