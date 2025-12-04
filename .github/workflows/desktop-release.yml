@@ -59,9 +59,9 @@ jobs:
       - name: Upload release artifacts to Supabase
         if: always()
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SUPABASE_BUCKET: ${{ secrets.SUPABASE_UPDATE_BUCKET }}
+          SUPABASE_BUCKET: ${{ secrets.SUPABASE_BUCKET }}
         run: |
           set -euo pipefail
           cd ygg-chat/client/ygg-chat-r/release
