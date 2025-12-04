@@ -143,11 +143,11 @@ jobs:
 
             if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ]; then
               echo "  Status: ${http_code} - SUCCESS"
-              ((upload_count++))
+              upload_count=$((upload_count + 1))
             else
               echo "  Status: ${http_code} - FAILED"
               echo "  Response: ${response_body}"
-              ((failure_count++))
+              failure_count=$((failure_count + 1))
             fi
           done
 
