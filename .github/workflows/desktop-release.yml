@@ -134,7 +134,7 @@ jobs:
             echo "  Target: ${target_prefix}/${artifact}"
 
             http_code=$(curl -s -w "%{http_code}" -o /tmp/upload_response.txt \
-              -X POST "${upload_url}" \
+              -X PUT "${upload_url}" \
               -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Content-Type: application/octet-stream" \
               --data-binary @"${artifact}")
