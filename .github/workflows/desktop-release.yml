@@ -12,7 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest]
+        # Temporarily disabled for testing: windows-latest, macos-latest
         node-version: [22.x]
     permissions:
       contents: write
