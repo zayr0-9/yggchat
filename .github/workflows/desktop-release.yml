@@ -3,7 +3,7 @@ name: Desktop Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 jobs:
   build:
@@ -24,7 +24,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: "npm"
           cache-dependency-path: ygg-chat/package-lock.json
 
       - name: Install workspace dependencies
@@ -47,6 +47,7 @@ jobs:
         run: |
           cd ygg-chat/client/ygg-chat-r
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
             npm run build:win
           elif [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
             npm run build:linux
@@ -54,7 +55,33 @@ jobs:
             npm run build:mac
           fi
         shell: bash
+      - name: Upload release artifacts to Supabase
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_BUCKET: ${{ secrets.SUPABASE_UPDATE_BUCKET }}
+        run: |
+          set -euo pipefail
+          cd ygg-chat/client/ygg-chat-r/release
 
+          case "${{ matrix.os }}" in
+            windows-latest) platform_dir="windows" ;;
+            ubuntu-latest) platform_dir="linux" ;;
+            macos-latest) platform_dir="mac" ;;
+            *) echo "Unsupported platform: ${{ matrix.os }}" && exit 1 ;;
+          esac
+
+          target_prefix="updates/${platform_dir}"
+
+          for artifact in *; do
+            echo "Uploading ${artifact} to ${target_prefix}/${artifact}"
+            curl -sSf \
+              -X POST "${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${target_prefix}/${artifact}?upsert=true" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"${artifact}"
+          done
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:

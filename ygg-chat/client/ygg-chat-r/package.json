@@ -159,6 +159,12 @@
       "category": "Office"
     },
     "npmRebuild": true,
-    "nativeRebuilder": "sequential"
+    "nativeRebuilder": "sequential",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://awvlmkkdnwmpgomsuneb.supabase.co/storage/v1/object/public/updates/"
+      }
+    ]
   }
 }
