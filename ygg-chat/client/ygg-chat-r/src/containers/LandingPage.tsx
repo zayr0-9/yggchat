@@ -558,7 +558,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                     </div>
 
                     {/* Description */}
-                    <ul className='text-xl pl-2 text-gray-900 dark:text-gray-300 leading-relaxed list-disc ml-4 space-y-2'>
+                    <ul className='text-xl pl-2 pt-4 text-gray-900 dark:text-gray-300 leading-relaxed list-disc ml-4 space-y-10'>
                       {feature.description.map((point, i) => (
                         <li key={i}>{point}</li>
                       ))}
