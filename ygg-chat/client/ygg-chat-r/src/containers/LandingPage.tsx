@@ -379,15 +379,15 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                 </div>
                 <h3 className='text-2xl font-semibold text-gray-900 dark:text-white mb-3'>Linear Chat Constraints</h3>
                 <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     Sequential chats force premature commitment to a single path—discovering a fundamental flaw means
                     abandoning hours of work.
                   </li>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     Exploration is penalized: you can't branch to test alternatives or clarify requirements without
                     starting over.
                   </li>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     LLM inconsistency becomes a liability; you can't "reroll" from a promising point in history to
                     explore different outcomes.
                   </li>
@@ -403,15 +403,15 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                   Context Rot & Runaway Costs
                 </h3>
                 <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     Conversations bloat over time, pushing token costs up while response quality deteriorates from
                     stale, distorted history.
                   </li>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     Agentic workflows accelerate the damage with excessive tool calls and naive truncation that discards
                     critical state.
                   </li>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     Hallucinations compound as models lose semantic grounding, turning long sessions from useful to
                     unreliable.
                   </li>
@@ -427,15 +427,15 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                   Zero Data Ownership & Privacy Exposure
                 </h3>
                 <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     Proprietary code and conversations are absorbed into corporate training pipelines and retention
                     policies.
                   </li>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     Account suspensions can instantly erase months of project history with no recourse—your data is held
                     hostage.
                   </li>
-                  <li className='mb-2'>
+                  <li className='mb-4'>
                     We provide local-first operation and zero-knowledge cloud options with no telemetry or profiling,
                     ensuring complete control.
                   </li>
