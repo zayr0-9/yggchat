@@ -257,20 +257,20 @@ function createWindow() {
     // Platform-specific title bar settings
     ...(process.platform === 'win32' && app.isPackaged
       ? {
-          titleBarStyle: 'hidden',
-          titleBarOverlay: {
-            color: '#f2f4f7', // Initial light theme color
-            symbolColor: '#0f172a',
-            height: 35, // Ensure height is set for draggable region
-          },
-        }
+        titleBarStyle: 'hidden',
+        titleBarOverlay: {
+          color: '#f2f4f7', // Initial light theme color
+          symbolColor: '#0f172a',
+          height: 35, // Ensure height is set for draggable region
+        },
+      }
       : process.platform === 'darwin'
         ? {
-            titleBarStyle: 'hidden', // Standard for macOS
-          }
+          titleBarStyle: 'hidden', // Standard for macOS
+        }
         : {
-            titleBarStyle: 'default', // Native title bar for Linux (safest)
-          }),
+          titleBarStyle: 'default', // Native title bar for Linux (safest)
+        }),
     show: false, // Don't show until ready
   })
 
@@ -315,10 +315,10 @@ function createWindow() {
     mainWindow.loadFile(indexPath)
 
     // DEBUG: Force DevTools to open after a delay
-    setTimeout(() => {
-      console.log('[Electron] Force opening DevTools...')
-      mainWindow?.webContents.openDevTools({ mode: 'detach' })
-    }, 3000)
+    // setTimeout(() => {
+    //   console.log('[Electron] Force opening DevTools...')
+    //   mainWindow?.webContents.openDevTools({ mode: 'detach' })
+    // }, 3000)
   }
 
   mainWindow.on('closed', () => {

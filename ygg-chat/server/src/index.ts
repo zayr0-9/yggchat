@@ -387,7 +387,7 @@ if (env.VITE_ENVIRONMENT === 'web') {
   console.log('⏭️  Skipping reconciliation worker (not in web mode)')
 }
 
-;(async () => {
+; (async () => {
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3001
 
   server.on('error', (error: any) => {
@@ -402,7 +402,7 @@ if (env.VITE_ENVIRONMENT === 'web') {
     const addr = server.address()
     const bindHost = typeof addr === 'string' ? addr : addr?.address
     const bindFamily = typeof addr === 'string' ? 'pipe' : addr?.family
-    
+
     console.log(`🚀 Server listening on port ${port}`)
     console.log(`   Bound to: ${bindHost} (${bindFamily})`)
     console.log(`🔌 WebSocket IDE Context on ws://localhost:${port}/ide-context`)
@@ -430,7 +430,7 @@ async function migratePlainTextAndFTS() {
       // If for some reason column is missing (shouldn't happen), add it
       try {
         db.exec(`ALTER TABLE messages ADD COLUMN plain_text_content TEXT`)
-      } catch {}
+      } catch { }
     }
 
     // Select messages missing plain_text_content
@@ -460,11 +460,15 @@ async function migratePlainTextAndFTS() {
   }
 }
 
-// Run migration in background after DB init
-migratePlainTextAndFTS().catch((err) => {
-  console.error('❌ Fatal error in migratePlainTextAndFTS:', err)
-  // Don't crash - log and continue
-})
+// Run migration in background after DB init (only for local/electron modes)
+if (env.VITE_ENVIRONMENT !== 'web') {
+  migratePlainTextAndFTS().catch((err) => {
+    console.error('❌ Fatal error in migratePlainTextAndFTS:', err)
+    // Don't crash - log and continue
+  })
+} else {
+  console.log('⏭️  Skipping SQLite migration (web mode uses Supabase)')
+}
 
 app.get('/api/debug/routes', (req, res) => {
   const routes: any[] = []
