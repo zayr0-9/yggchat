@@ -22,25 +22,28 @@ export class SupabaseSyncProvider implements SyncProvider {
   }
 
   async enableSync(): Promise<void> {
-    console.log('[SupabaseSync] Enabling cloud sync...')
+    // console.log('[SupabaseSync] Enabling cloud sync...')
 
     this.status.enabled = true
     this.status.error = null
     this.notifyListeners()
 
     // Start periodic sync (every 5 minutes)
-    this.syncInterval = window.setInterval(() => {
-      this.syncNow().catch((error) => {
-        console.error('[SupabaseSync] Periodic sync failed:', error)
-      })
-    }, 5 * 60 * 1000)
+    this.syncInterval = window.setInterval(
+      () => {
+        this.syncNow().catch(error => {
+          console.error('[SupabaseSync] Periodic sync failed:', error)
+        })
+      },
+      5 * 60 * 1000
+    )
 
     // Do initial sync
     await this.syncNow()
   }
 
   async disableSync(): Promise<void> {
-    console.log('[SupabaseSync] Disabling cloud sync...')
+    // console.log('[SupabaseSync] Disabling cloud sync...')
 
     this.status.enabled = false
     this.notifyListeners()
@@ -61,7 +64,7 @@ export class SupabaseSyncProvider implements SyncProvider {
       throw new Error('Sync is not enabled')
     }
 
-    console.log('[SupabaseSync] Starting sync...')
+    // console.log('[SupabaseSync] Starting sync...')
 
     this.status.syncing = true
     this.status.error = null
@@ -75,13 +78,13 @@ export class SupabaseSyncProvider implements SyncProvider {
       // 4. Merge into local storage
 
       // Placeholder delay
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await new Promise(resolve => setTimeout(resolve, 1000))
 
       this.status.lastSyncAt = new Date().toISOString()
       this.status.syncing = false
       this.notifyListeners()
 
-      console.log('[SupabaseSync] Sync completed successfully')
+      // console.log('[SupabaseSync] Sync completed successfully')
     } catch (error) {
       console.error('[SupabaseSync] Sync failed:', error)
 
@@ -106,7 +109,7 @@ export class SupabaseSyncProvider implements SyncProvider {
   }
 
   private notifyListeners() {
-    this.listeners.forEach((listener) => {
+    this.listeners.forEach(listener => {
       try {
         listener(this.status)
       } catch (error) {

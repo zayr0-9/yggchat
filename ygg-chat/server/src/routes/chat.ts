@@ -423,7 +423,7 @@ router.post(
     try {
       // Parse args if it's a string
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args || {}
-      console.log(`🔧 Executing tool: ${toolName}`, parsedArgs)
+      // console.log(`🔧 Executing tool: ${toolName}`, parsedArgs)
 
       const result = await tool.tool.execute(parsedArgs)
 
@@ -1056,7 +1056,7 @@ router.post(
                   const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
                   currentToolCalls.push(obj.toolCall)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
-                  console.log(`✅ [chat/repeat] Accumulated tool call: ${obj.toolCall.name}`)
+                  // console.log(`✅ [chat/repeat] Accumulated tool call: ${obj.toolCall.name}`)
                   // Forward to client with structured data
                   res.write(
                     `data: ${JSON.stringify({ type: 'chunk', part: 'tool_call', toolCall: obj.toolCall, iteration: i })}\n\n`
@@ -1348,7 +1348,7 @@ router.post(
     // Process file mentions in the content
     const processedContent =
       filesToUse && filesToUse.length > 0 ? replaceFileMentionsWithContent(content, filesToUse) : content
-    console.log('server | processedContent', processedContent)
+    // console.log('server | processedContent', processedContent)
 
     // Verify conversation exists
     const conversation = ConversationService.getById(conversationId)

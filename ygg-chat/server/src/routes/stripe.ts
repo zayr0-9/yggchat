@@ -176,43 +176,43 @@ router.post(
       return res.status(400).json({ error: 'Invalid signature' })
     }
 
-    console.log(`[Stripe Webhook] Received event: ${event.type} [${event.id}]`)
+    // console.log(`[Stripe Webhook] Received event: ${event.type} [${event.id}]`)
 
     // Handle different event types
     try {
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as any
-          console.log(
-            `[Stripe Webhook] Processing checkout.session.completed - Session: ${session.id}, Customer: ${session.customer}`
-          )
+          // console.log(
+          //   `[Stripe Webhook] Processing checkout.session.completed - Session: ${session.id}, Customer: ${session.customer}`
+          // )
           await handleCheckoutComplete(session)
           break
         }
 
         case 'invoice.payment_succeeded': {
           const invoice = event.data.object as any
-          console.log(
-            `[Stripe Webhook] Processing invoice.payment_succeeded - Invoice: ${invoice.id}, Subscription: ${invoice.subscription}`
-          )
+          // console.log(
+          //   `[Stripe Webhook] Processing invoice.payment_succeeded - Invoice: ${invoice.id}, Subscription: ${invoice.subscription}`
+          // )
           await handleInvoicePaymentSucceeded(invoice)
           break
         }
 
         case 'invoice.payment_failed': {
           const invoice = event.data.object as any
-          console.log(
-            `[Stripe Webhook] Processing invoice.payment_failed - Invoice: ${invoice.id}, Subscription: ${invoice.subscription}`
-          )
+          // console.log(
+          //   `[Stripe Webhook] Processing invoice.payment_failed - Invoice: ${invoice.id}, Subscription: ${invoice.subscription}`
+          // )
           await handleInvoicePaymentFailed(invoice)
           break
         }
 
         case 'customer.subscription.created': {
           const subscription = event.data.object as any
-          console.log(
-            `[Stripe Webhook] Processing customer.subscription.created - Subscription: ${subscription.id}, Status: ${subscription.status}`
-          )
+          // console.log(
+          //   `[Stripe Webhook] Processing customer.subscription.created - Subscription: ${subscription.id}, Status: ${subscription.status}`
+          // )
           await handleSubscriptionCreated(subscription)
           break
         }
@@ -228,7 +228,7 @@ router.post(
 
         case 'customer.subscription.deleted': {
           const subscription = event.data.object as any
-          console.log(`[Stripe Webhook] Processing customer.subscription.deleted - Subscription: ${subscription.id}`)
+          // console.log(`[Stripe Webhook] Processing customer.subscription.deleted - Subscription: ${subscription.id}`)
           await handleSubscriptionDeleted(subscription)
           break
         }
@@ -237,9 +237,9 @@ router.post(
         case 'payment_intent.succeeded':
         case 'payment_intent.created': {
           const paymentIntent = event.data.object as any
-          console.log(
-            `[Stripe Webhook] ${event.type} - Payment Intent: ${paymentIntent.id} (no action needed, handled by invoice events)`
-          )
+          // console.log(
+          //   `[Stripe Webhook] ${event.type} - Payment Intent: ${paymentIntent.id} (no action needed, handled by invoice events)`
+          // )
           break
         }
 
@@ -247,7 +247,7 @@ router.post(
         case 'customer.created':
         case 'customer.updated':
         case 'payment_method.attached': {
-          console.log(`[Stripe Webhook] ${event.type} [${event.id}] (no action needed)`)
+          // console.log(`[Stripe Webhook] ${event.type} [${event.id}] (no action needed)`)
           break
         }
 
@@ -256,7 +256,7 @@ router.post(
         case 'invoice.finalized':
         case 'invoice.paid': {
           const invoice = event.data.object as any
-          console.log(`[Stripe Webhook] ${event.type} - Invoice: ${invoice.id} (no action needed)`)
+          // console.log(`[Stripe Webhook] ${event.type} - Invoice: ${invoice.id} (no action needed)`)
           break
         }
 

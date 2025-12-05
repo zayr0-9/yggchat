@@ -27,11 +27,11 @@ export class SupabaseAuthProvider implements AuthProvider {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[SupabaseAuth] Auth state changed:', event, {
-        hasSession: !!session,
-        hasAccessToken: !!session?.access_token,
-        tokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
-      })
+      // console.log('[SupabaseAuth] Auth state changed:', event, {
+      //   hasSession: !!session,
+      //   hasAccessToken: !!session?.access_token,
+      //   tokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
+      // })
 
       if (event === 'SIGNED_OUT') {
         clearClaimsCache()
@@ -45,10 +45,10 @@ export class SupabaseAuthProvider implements AuthProvider {
           userId: session.user?.id ?? null,
           loading: false,
         }
-        console.log('[SupabaseAuth] Cached session from callback:', {
-          userId: this.cachedSession.userId,
-          hasAccessToken: !!this.cachedSession.accessToken,
-        })
+        // console.log('[SupabaseAuth] Cached session from callback:', {
+        //   userId: this.cachedSession.userId,
+        //   hasAccessToken: !!this.cachedSession.accessToken,
+        // })
       }
 
       // Notify all listeners
@@ -64,14 +64,14 @@ export class SupabaseAuthProvider implements AuthProvider {
       const code = params.get('code')
 
       if (code) {
-        console.log('[SupabaseAuth] Detected OAuth code in URL, exchanging for session...')
+        // console.log('[SupabaseAuth] Detected OAuth code in URL, exchanging for session...')
         try {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
           if (error) {
             console.error('[SupabaseAuth] Failed to exchange code for session:', error)
           } else if (data.session) {
-            console.log('[SupabaseAuth] Successfully exchanged code for session')
+            // console.log('[SupabaseAuth] Successfully exchanged code for session')
             // The onAuthStateChange listener will handle the session update
 
             // Clean up URL
@@ -106,10 +106,10 @@ export class SupabaseAuthProvider implements AuthProvider {
     try {
       // If we have a cached session from the callback, return it (most recent)
       if (this.cachedSession) {
-        console.log('[SupabaseAuth] Returning cached session:', {
-          userId: this.cachedSession.userId,
-          hasAccessToken: !!this.cachedSession.accessToken,
-        })
+        // console.log('[SupabaseAuth] Returning cached session:', {
+        //   userId: this.cachedSession.userId,
+        //   hasAccessToken: !!this.cachedSession.accessToken,
+        // })
         return this.cachedSession
       }
 
@@ -132,7 +132,7 @@ export class SupabaseAuthProvider implements AuthProvider {
       const session = data.session
 
       if (!session) {
-        console.log('[SupabaseAuth] No session from SDK')
+        // console.log('[SupabaseAuth] No session from SDK')
         return {
           user: null,
           session: null,
@@ -142,11 +142,11 @@ export class SupabaseAuthProvider implements AuthProvider {
         }
       }
 
-      console.log('[SupabaseAuth] Got session from SDK:', {
-        userId: session.user?.id,
-        hasAccessToken: !!session.access_token,
-        tokenPreview: session.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
-      })
+      // console.log('[SupabaseAuth] Got session from SDK:', {
+      //   userId: session.user?.id,
+      //   hasAccessToken: !!session.access_token,
+      //   tokenPreview: session.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
+      // })
 
       // Cache this session
       this.cachedSession = {
@@ -175,7 +175,7 @@ export class SupabaseAuthProvider implements AuthProvider {
       throw new Error('Supabase client not initialized')
     }
 
-    console.log('[SupabaseAuth] Logging in...')
+    // console.log('[SupabaseAuth] Logging in...')
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: credentials.email,
@@ -187,7 +187,7 @@ export class SupabaseAuthProvider implements AuthProvider {
       throw error
     }
 
-    console.log('[SupabaseAuth] Login successful')
+    // console.log('[SupabaseAuth] Login successful')
 
     return {
       user: (data.user as any) ?? null,
@@ -204,7 +204,7 @@ export class SupabaseAuthProvider implements AuthProvider {
       return
     }
 
-    console.log('[SupabaseAuth] Logging out...')
+    // console.log('[SupabaseAuth] Logging out...')
 
     clearClaimsCache()
 
@@ -215,7 +215,7 @@ export class SupabaseAuthProvider implements AuthProvider {
       throw error
     }
 
-    console.log('[SupabaseAuth] Logout successful')
+    // console.log('[SupabaseAuth] Logout successful')
   }
 
   async refreshToken(): Promise<AuthState> {
@@ -223,7 +223,7 @@ export class SupabaseAuthProvider implements AuthProvider {
       throw new Error('Supabase client not initialized')
     }
 
-    console.log('[SupabaseAuth] Refreshing token...')
+    // console.log('[SupabaseAuth] Refreshing token...')
 
     const { data, error } = await supabase.auth.refreshSession()
 
@@ -232,7 +232,7 @@ export class SupabaseAuthProvider implements AuthProvider {
       throw error
     }
 
-    console.log('[SupabaseAuth] Token refreshed successfully')
+    // console.log('[SupabaseAuth] Token refreshed successfully')
 
     return {
       user: (data.user as any) ?? null,
@@ -291,7 +291,7 @@ export class SupabaseAuthProvider implements AuthProvider {
    */
   private handleStorageChange = (event: StorageEvent) => {
     if (event.key === 'supabase-auth-token' && event.newValue !== event.oldValue) {
-      console.log('[SupabaseAuth] Auth state changed in another tab')
+      // console.log('[SupabaseAuth] Auth state changed in another tab')
 
       // Re-read session and notify listeners
       this.getSession().then(state => {

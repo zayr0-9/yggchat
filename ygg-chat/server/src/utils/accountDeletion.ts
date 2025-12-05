@@ -1,6 +1,5 @@
 // server/src/utils/accountDeletion.ts
 import { supabaseAdmin } from '../database/supamodels'
-import { cancelSubscription } from './stripe'
 
 /**
  * Storage bucket name for attachments
@@ -57,7 +56,7 @@ async function deleteStorageFiles(storagePaths: string[]): Promise<number> {
     return 0
   }
 
-  console.log(`[AccountDeletion] Attempting to delete ${storagePaths.length} files from storage`)
+  // console.log(`[AccountDeletion] Attempting to delete ${storagePaths.length} files from storage`)
 
   const { data, error } = await supabaseAdmin.storage.from(STORAGE_BUCKET).remove(storagePaths)
 
@@ -87,7 +86,7 @@ async function cancelUserSubscription(userId: string): Promise<boolean> {
       .single()
 
     if (profileError || !profile || !profile.active_subscription_id) {
-      console.log('[AccountDeletion] No active subscription to cancel')
+      // console.log('[AccountDeletion] No active subscription to cancel')
       return false
     }
 
@@ -101,7 +100,7 @@ async function cancelUserSubscription(userId: string): Promise<boolean> {
       .single()
 
     if (subError || !subscription || !subscription.stripe_subscription_id) {
-      console.log('[AccountDeletion] No Stripe subscription found')
+      // console.log('[AccountDeletion] No Stripe subscription found')
       return false
     }
 
@@ -116,7 +115,7 @@ async function cancelUserSubscription(userId: string): Promise<boolean> {
     // Cancel immediately (don't wait for period end since account is being deleted)
     await stripe.subscriptions.cancel(subscription.stripe_subscription_id)
 
-    console.log(`[AccountDeletion] Canceled Stripe subscription: ${subscription.stripe_subscription_id}`)
+    // console.log(`[AccountDeletion] Canceled Stripe subscription: ${subscription.stripe_subscription_id}`)
     return true
   } catch (error: any) {
     // Log the error but don't fail the entire deletion process
@@ -164,7 +163,7 @@ async function cancelUserSubscription(userId: string): Promise<boolean> {
  * @returns AccountDeletionResult with success status and details
  */
 export async function deleteUserAccount(userId: string): Promise<AccountDeletionResult> {
-  console.log(`[AccountDeletion] Starting account deletion for user: ${userId}`)
+  // console.log(`[AccountDeletion] Starting account deletion for user: ${userId}`)
 
   try {
     // Step 1: Verify user exists
@@ -174,35 +173,32 @@ export async function deleteUserAccount(userId: string): Promise<AccountDeletion
       throw new Error(`User not found: ${userId}`)
     }
 
-    console.log(`[AccountDeletion] Found user: ${user.user.email || userId}`)
+    // console.log(`[AccountDeletion] Found user: ${user.user.email || userId}`)
 
     // Step 2: Get all attachment files
-    console.log('[AccountDeletion] Fetching attachment files...')
+    // console.log('[AccountDeletion] Fetching attachment files...')
     const attachmentFiles = await getUserAttachmentFiles(userId)
     const storagePaths = attachmentFiles.map(f => f.storage_path)
 
     // Step 3: Delete files from storage
-    console.log('[AccountDeletion] Deleting storage files...')
+    // console.log('[AccountDeletion] Deleting storage files...')
     const deletedFilesCount = await deleteStorageFiles(storagePaths)
 
     // Step 4: Cancel active subscription
-    console.log('[AccountDeletion] Checking for active subscription...')
+    // console.log('[AccountDeletion] Checking for active subscription...')
     const subscriptionCanceled = await cancelUserSubscription(userId)
 
     // Step 5: Delete profile first (triggers cascade to all user content)
     // This must happen BEFORE deleting from auth.users
-    console.log('[AccountDeletion] Deleting user profile...')
-    const { error: profileDeleteError } = await supabaseAdmin
-      .from('profiles')
-      .delete()
-      .eq('id', userId)
+    // console.log('[AccountDeletion] Deleting user profile...')
+    const { error: profileDeleteError } = await supabaseAdmin.from('profiles').delete().eq('id', userId)
 
     if (profileDeleteError) {
       throw new Error(`Failed to delete user profile: ${profileDeleteError.message}`)
     }
 
     // Step 6: Delete user from auth.users (now succeeds since profile is gone)
-    console.log('[AccountDeletion] Deleting user from auth.users...')
+    // console.log('[AccountDeletion] Deleting user from auth.users...')
     const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
     if (authDeleteError) {

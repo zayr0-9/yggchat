@@ -264,7 +264,7 @@ async function attemptBrowse(url: string, options: BrowseWebOptions, attempt: nu
     } catch (error) {
       // If networkidle fails, try with just 'load'
       if (waitForNetworkIdle) {
-        console.log(`Attempt ${attempt}: networkidle failed, trying with 'load'`)
+        // console.log(`Attempt ${attempt}: networkidle failed, trying with 'load'`)
         await page.goto(url, {
           waitUntil: 'load',
           timeout,
@@ -631,7 +631,7 @@ export async function browseWeb(url: string, options: BrowseWebOptions = {}): Pr
       lastError = error instanceof Error ? error : new Error(String(error))
 
       if (attempt <= retries) {
-        console.log(`Attempt ${attempt} failed for ${url}: ${lastError.message}. Retrying in ${retryDelay}ms...`)
+        // console.log(`Attempt ${attempt} failed for ${url}: ${lastError.message}. Retrying in ${retryDelay}ms...`)
         await new Promise(resolve => setTimeout(resolve, retryDelay))
 
         // Increase timeout for subsequent attempts

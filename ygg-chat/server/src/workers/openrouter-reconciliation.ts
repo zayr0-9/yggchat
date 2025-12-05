@@ -15,7 +15,7 @@
  */
 
 import { supabaseAdmin } from '../database/supamodels'
-import { moneyFormat, moneyIsZero, moneySubtract } from '../utils/money'
+import { moneyIsZero, moneySubtract } from '../utils/money'
 
 // Configuration
 const RECONCILE_BATCH_SIZE = 10 // Process 10 runs at a time
@@ -95,16 +95,16 @@ async function fetchGenerationDetails(generationId: string): Promise<OpenRouterG
     }
 
     const data = (await response.json()) as any
-    console.log(`✅ Fetched generation ${generationId}:`, {
-      model: data.data?.model,
-      usage: data.data?.usage,
-      total_cost: data.data?.total_cost,
-      tokens: {
-        prompt: data.data?.tokens_prompt,
-        completion: data.data?.tokens_completion,
-        reasoning: data.data?.native_tokens_reasoning,
-      },
-    })
+    // console.log(`✅ Fetched generation ${generationId}:`, {
+    //   model: data.data?.model,
+    //   usage: data.data?.usage,
+    //   total_cost: data.data?.total_cost,
+    //   tokens: {
+    //     prompt: data.data?.tokens_prompt,
+    //     completion: data.data?.tokens_completion,
+    //     reasoning: data.data?.native_tokens_reasoning,
+    //   },
+    // })
 
     return data.data || null
   } catch (error) {
@@ -197,9 +197,9 @@ async function applyCreditAdjustment(
       return false
     }
 
-    console.log(
-      `✅ Applied ${kind} of ${moneyFormat(adjustmentDelta)} credits for generation ${providerRun.generation_id}`
-    )
+    // console.log(
+    //   `✅ Applied ${kind} of ${moneyFormat(adjustmentDelta)} credits for generation ${providerRun.generation_id}`
+    // )
     return true
   } catch (error) {
     console.error(`Error in applyCreditAdjustment for ${providerRun.generation_id}:`, error)
@@ -263,7 +263,7 @@ async function reconcileProviderRun(providerRun: ProviderRun): Promise<'success'
 
   // If delta is zero (or very close), no adjustment needed
   if (moneyIsZero(adjustmentDelta)) {
-    console.log(`✅ No adjustment needed for ${providerRun.generation_id} (exact match)`)
+    // console.log(`✅ No adjustment needed for ${providerRun.generation_id} (exact match)`)
     // Mark as reconciled
     await supabaseAdmin
       .from('provider_runs')
@@ -301,7 +301,7 @@ async function reconcileProviderRun(providerRun: ProviderRun): Promise<'success'
     return 'retry'
   }
 
-  console.log(`✅ Successfully reconciled generation ${providerRun.generation_id}`)
+  // console.log(`✅ Successfully reconciled generation ${providerRun.generation_id}`)
   return 'success'
 }
 
@@ -375,7 +375,7 @@ async function cleanupStuckAbortedReservations(): Promise<void> {
           })
           .eq('id', run.id)
 
-        console.log(`✅ Cleaned up stuck reservation ${run.id}, refunded ${run.reserved_credits} credits`)
+        // console.log(`✅ Cleaned up stuck reservation ${run.id}, refunded ${run.reserved_credits} credits`)
       } catch (error) {
         console.error(`Error processing stuck run ${run.id}:`, error)
       }

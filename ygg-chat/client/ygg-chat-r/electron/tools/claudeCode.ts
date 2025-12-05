@@ -170,7 +170,7 @@ function storeSlashCommands(conversationId: string, cwd: string, commands: any[]
   const commandNames = commands.map(cmd => cmd.name || cmd).filter(name => typeof name === 'string')
   if (commandNames.length > 0) {
     slashCommands.set(sessionKey, commandNames)
-    console.log(`[ClaudeCode] Stored ${commandNames.length} slash commands for key "${sessionKey}"`)
+    // console.log(`[ClaudeCode] Stored ${commandNames.length} slash commands for key "${sessionKey}"`)
   }
 }
 
@@ -358,7 +358,7 @@ async function processSDKMessage(
         message.message?.stop_reason,
         message.message?.usage
       )
-      logMessageStats(parsed)
+      // logMessageStats(parsed)
 
       if (onResponse) {
         const response: CCResponse = {
@@ -454,16 +454,16 @@ async function processSDKMessage(
   }
 
   if (messageType === 'result') {
-    console.log('[ClaudeCode] RAW RESULT MESSAGE:', JSON.stringify(message, null, 2))
+    // console.log('[ClaudeCode] RAW RESULT MESSAGE:', JSON.stringify(message, null, 2))
 
-    if (message.result) {
-      console.log('[ClaudeCode] Result received:', {
-        subtype: message.subtype,
-        is_error: message.is_error,
-        has_result_output: !!message.result,
-        result_length: message.result?.length || 0,
-      })
-    }
+    // if (message.result) {
+    //   console.log('[ClaudeCode] Result received:', {
+    //     subtype: message.subtype,
+    //     is_error: message.is_error,
+    //     has_result_output: !!message.result,
+    //     result_length: message.result?.length || 0,
+    //   })
+    // }
 
     if (onResponse) {
       await onResponse({
@@ -540,11 +540,11 @@ export async function executeClaudeCodeWSL(
   const isCommand = isSlashCommand(userMessage)
   const existingSessionId = sessionId || sessions.get(sessionKey)
 
-  console.log(`[ClaudeCode] Executing via WSL SDK`)
-  console.log(`[ClaudeCode] Working directory: ${cwd}`)
-  console.log(`[ClaudeCode] Permission mode: ${permissionMode}`)
-  console.log(`[ClaudeCode] Session ID: ${existingSessionId || 'new'}`)
-  console.log(`[ClaudeCode] ${isCommand ? 'Slash command' : 'User message'}: ${userMessage}`)
+  // console.log(`[ClaudeCode] Executing via WSL SDK`)
+  // console.log(`[ClaudeCode] Working directory: ${cwd}`)
+  // console.log(`[ClaudeCode] Permission mode: ${permissionMode}`)
+  // console.log(`[ClaudeCode] Session ID: ${existingSessionId || 'new'}`)
+  // console.log(`[ClaudeCode] ${isCommand ? 'Slash command' : 'User message'}: ${userMessage}`)
 
   try {
     const { query } = await import('@anthropic-ai/claude-agent-sdk')
@@ -579,14 +579,14 @@ export async function executeClaudeCodeWSL(
     let capturedSessionId: string | null = null
 
     for await (const message of query({ prompt, options })) {
-      console.log('[ClaudeCode] Message Type:', (message as any).type)
+      // console.log('[ClaudeCode] Message Type:', (message as any).type)
 
       const msgSessionId = await processSDKMessage(message, conversationId, cwd, onResponse, onStreamingChunk)
 
       if (msgSessionId && !sessions.has(sessionKey)) {
         sessions.set(sessionKey, msgSessionId)
         capturedSessionId = msgSessionId
-        console.log(`[ClaudeCode] Session ID saved: ${msgSessionId}`)
+        // console.log(`[ClaudeCode] Session ID saved: ${msgSessionId}`)
       }
     }
 
@@ -626,10 +626,10 @@ export async function executeClaudeCodeWindows(
   // Convert /mnt/c/... to C:\... if needed
   const windowsCwd = cwd.startsWith('/mnt/') ? wslMountToWindowsPath(cwd) : cwd
 
-  console.log(`[ClaudeCode] Executing via Windows CLI`)
-  console.log(`[ClaudeCode] Working directory: ${windowsCwd}`)
-  console.log(`[ClaudeCode] Permission mode: ${permissionMode}`)
-  console.log(`[ClaudeCode] Session ID: ${existingSessionId || 'new'}`)
+  // console.log(`[ClaudeCode] Executing via Windows CLI`)
+  // console.log(`[ClaudeCode] Working directory: ${windowsCwd}`)
+  // console.log(`[ClaudeCode] Permission mode: ${permissionMode}`)
+  // console.log(`[ClaudeCode] Session ID: ${existingSessionId || 'new'}`)
 
   return new Promise((resolve, reject) => {
     const args = ['--print', '--output-format', 'stream-json']
@@ -737,7 +737,7 @@ export async function executeClaudeCode(
   forkSession?: boolean
 ): Promise<string | null> {
   if (isWSLPath(cwd)) {
-    console.log('[ClaudeCode] Detected WSL path, using SDK')
+    // console.log('[ClaudeCode] Detected WSL path, using SDK')
     return executeClaudeCodeWSL(
       conversationId,
       userMessage,
@@ -749,7 +749,7 @@ export async function executeClaudeCode(
       forkSession
     )
   } else {
-    console.log('[ClaudeCode] Detected Windows path, using CLI')
+    // console.log('[ClaudeCode] Detected Windows path, using CLI')
     return executeClaudeCodeWindows(
       conversationId,
       userMessage,

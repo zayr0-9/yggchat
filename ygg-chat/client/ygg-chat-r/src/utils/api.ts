@@ -1,6 +1,6 @@
 // utils/api.ts
 import { ConversationId, StorageMode } from '../../../../shared/types'
-import { getSessionFromStorage, refreshTokenIfNeeded, getTokenExpirationTime } from '../lib/jwtUtils'
+import { getSessionFromStorage, getTokenExpirationTime, refreshTokenIfNeeded } from '../lib/jwtUtils'
 
 // Base configuration
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
@@ -18,7 +18,7 @@ const handleLocalApiError = (error: any, endpoint: string): never => {
   if (error instanceof TypeError && error.message.includes('fetch')) {
     throw new Error(
       `Local server not available at ${LOCAL_API_BASE}. ` +
-      `Please ensure the Electron app is running with the local server enabled.`
+        `Please ensure the Electron app is running with the local server enabled.`
     )
   }
   // Re-throw other errors
@@ -32,7 +32,7 @@ export const localApi = {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       return handleLocalApiError(error, endpoint)
     }
@@ -44,12 +44,12 @@ export const localApi = {
         ...options,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...options?.headers },
-        body: data ? JSON.stringify(data) : undefined
+        body: data ? JSON.stringify(data) : undefined,
       })
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       return handleLocalApiError(error, endpoint)
     }
@@ -61,12 +61,12 @@ export const localApi = {
         ...options,
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...options?.headers },
-        body: data ? JSON.stringify(data) : undefined
+        body: data ? JSON.stringify(data) : undefined,
       })
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       return handleLocalApiError(error, endpoint)
     }
@@ -78,11 +78,11 @@ export const localApi = {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      return await response.json() as T
+      return (await response.json()) as T
     } catch (error) {
       return handleLocalApiError(error, endpoint)
     }
-  }
+  },
 }
 
 /**
@@ -99,7 +99,7 @@ async function ensureValidToken(): Promise<string | null> {
 
   const session = getSessionFromStorage()
   if (!session?.access_token) {
-    console.log('[api] No session found')
+    // console.log('[api] No session found')
     return null
   }
 
@@ -111,7 +111,7 @@ async function ensureValidToken(): Promise<string | null> {
 
   // Refresh if token expires in < 5 minutes (300 seconds)
   if (expiresIn < 300) {
-    console.log(`[api] Token expires in ${expiresIn}s, refreshing...`)
+    // console.log(`[api] Token expires in ${expiresIn}s, refreshing...`)
     await refreshTokenIfNeeded()
     // Get the refreshed token
     const refreshedSession = getSessionFromStorage()
@@ -123,7 +123,7 @@ async function ensureValidToken(): Promise<string | null> {
 
 // Helper function to handle login redirection based on environment
 const redirectToLogin = () => {
-  console.log('[api] Redirecting to login...')
+  // console.log('[api] Redirecting to login...')
   if (environment === 'electron') {
     // In Electron with HashRouter, we need to update the hash
     window.location.hash = '/login'
@@ -171,7 +171,7 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
         const newToken = newSession?.access_token
 
         if (newToken) {
-          console.log('[api] Token refreshed, retrying request...')
+          // console.log('[api] Token refreshed, retrying request...')
           // Retry the request with the new token
           response = await makeRequest(newToken)
 
@@ -284,7 +284,7 @@ export const createStreamingRequest = async (
         const newToken = newSession?.access_token
 
         if (newToken) {
-          console.log('[api] Token refreshed, retrying streaming request...')
+          // console.log('[api] Token refreshed, retrying streaming request...')
           // Retry the request with the new token
           response = await makeStreamRequest(newToken)
 
@@ -350,11 +350,7 @@ export const patchConversationResearchNote = (
 ) =>
   api.patch<ConversationPatchResponse>(`/conversations/${conversationId}/research-note`, accessToken, { researchNote })
 
-export const patchConversationCwd = (
-  conversationId: ConversationId,
-  cwd: string | null,
-  accessToken: string | null
-) =>
+export const patchConversationCwd = (conversationId: ConversationId, cwd: string | null, accessToken: string | null) =>
   api.patch<ConversationPatchResponse>(`/conversations/${conversationId}/cwd`, accessToken, { cwd })
 
 export const cloneConversation = (conversationId: ConversationId, accessToken: string | null) =>

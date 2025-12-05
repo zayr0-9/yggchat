@@ -8,7 +8,7 @@
 import type { AuthProvider } from './types'
 
 // Re-export types for convenience
-export type { AuthProvider, AuthState, User, Session, Credentials, AuthChangeCallback } from './types'
+export type { AuthChangeCallback, AuthProvider, AuthState, Credentials, Session, User } from './types'
 
 let cachedProvider: AuthProvider | null = null
 
@@ -31,41 +31,41 @@ export async function getAuthProvider(): Promise<AuthProvider> {
     return cachedProvider
   }
 
-  console.log('[AuthFactory] Creating auth provider...')
-  console.log('[AuthFactory] Build target:', typeof __BUILD_TARGET__ !== 'undefined' ? __BUILD_TARGET__ : 'unknown')
-  console.log('[AuthFactory] Runtime env:', import.meta.env.VITE_ENVIRONMENT || 'unknown')
+  // console.log('[AuthFactory] Creating auth provider...')
+  // console.log('[AuthFactory] Build target:', typeof __BUILD_TARGET__ !== 'undefined' ? __BUILD_TARGET__ : 'unknown')
+  // console.log('[AuthFactory] Runtime env:', import.meta.env.VITE_ENVIRONMENT || 'unknown')
 
   let provider: AuthProvider
 
   // Build-time selection (preferred - allows tree-shaking)
   if (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) {
-    console.log('[AuthFactory] Using Electron auth provider (build-time)')
+    // console.log('[AuthFactory] Using Electron auth provider (build-time)')
     const { ElectronAuthProvider } = await import('./electron')
     provider = new ElectronAuthProvider()
   } else if (typeof __IS_WEB__ !== 'undefined' && __IS_WEB__) {
-    console.log('[AuthFactory] Using Supabase auth provider (build-time)')
+    // console.log('[AuthFactory] Using Supabase auth provider (build-time)')
     const { SupabaseAuthProvider } = await import('./supabase')
     provider = new SupabaseAuthProvider()
   } else if (typeof __IS_LOCAL__ !== 'undefined' && __IS_LOCAL__) {
-    console.log('[AuthFactory] Using local auth provider (build-time)')
+    // console.log('[AuthFactory] Using local auth provider (build-time)')
     const { LocalAuthProvider } = await import('./local')
     provider = new LocalAuthProvider()
   }
   // Runtime fallback (for development and when build constants not set)
   else {
     const runtimeEnv = import.meta.env.VITE_ENVIRONMENT || 'local'
-    console.log('[AuthFactory] Using runtime environment:', runtimeEnv)
+    // console.log('[AuthFactory] Using runtime environment:', runtimeEnv)
 
     if (runtimeEnv === 'electron') {
-      console.log('[AuthFactory] Using Electron auth provider (runtime)')
+      // console.log('[AuthFactory] Using Electron auth provider (runtime)')
       const { ElectronAuthProvider } = await import('./electron')
       provider = new ElectronAuthProvider()
     } else if (runtimeEnv === 'web') {
-      console.log('[AuthFactory] Using Supabase auth provider (runtime)')
+      // console.log('[AuthFactory] Using Supabase auth provider (runtime)')
       const { SupabaseAuthProvider } = await import('./supabase')
       provider = new SupabaseAuthProvider()
     } else {
-      console.log('[AuthFactory] Using local auth provider (runtime)')
+      // console.log('[AuthFactory] Using local auth provider (runtime)')
       const { LocalAuthProvider } = await import('./local')
       provider = new LocalAuthProvider()
     }

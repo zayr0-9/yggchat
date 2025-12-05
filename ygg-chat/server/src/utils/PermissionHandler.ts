@@ -22,15 +22,15 @@ export async function promptUserPermission(
     toolUseID: string
   }
 ): Promise<PermissionResult> {
-  console.log('\n' + '='.repeat(70))
-  console.log('🔐 PERMISSION REQUEST (AUTO-GRANTED)')
-  console.log('='.repeat(70))
-  console.log(`Tool: ${toolName}`)
-  console.log(`Tool Use ID: ${options.toolUseID}`)
-  console.log(`Input:`)
-  console.log(JSON.stringify(toolInput, null, 2))
-  console.log('✅ Permission automatically GRANTED')
-  console.log('='.repeat(70) + '\n')
+  // console.log('\n' + '='.repeat(70))
+  // console.log('🔐 PERMISSION REQUEST (AUTO-GRANTED)')
+  // console.log('='.repeat(70))
+  // console.log(`Tool: ${toolName}`)
+  // console.log(`Tool Use ID: ${options.toolUseID}`)
+  // console.log(`Input:`)
+  // console.log(JSON.stringify(toolInput, null, 2))
+  // console.log('✅ Permission automatically GRANTED')
+  // console.log('='.repeat(70) + '\n')
 
   return {
     behavior: 'allow',

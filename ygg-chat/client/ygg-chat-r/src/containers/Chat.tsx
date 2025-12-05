@@ -338,14 +338,14 @@ function Chat() {
 
   // Helper: scroll to show latest message at top of viewport (for normal mode)
   const scrollToShowLatestAtTop = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    console.log('scrolling to top')
+    // console.log('scrolling to top')
     const container = messagesContainerRef.current
     if (!container) return
 
     // Scroll to position the latest message near the top of the viewport
     // We scroll to the bottom, which naturally shows the newest message
     const targetScroll = container.scrollHeight - container.clientHeight
-    console.log('targetScroll', targetScroll, container.scrollHeight, container.clientHeight)
+    // console.log('targetScroll', targetScroll, container.scrollHeight, container.clientHeight)
     container.scrollTo({ top: Math.max(0, targetScroll), behavior })
   }, [])
 
@@ -383,17 +383,17 @@ function Chat() {
   // This avoids unreliable cache lookups inside queryFn
   const conversationStorageMode = useMemo(() => {
     if (!conversationIdFromUrl) {
-      console.log('[Chat] conversationStorageMode: No conversationIdFromUrl')
+      // console.log('[Chat] conversationStorageMode: No conversationIdFromUrl')
       return undefined
     }
     const conv = projectConversations.find(c => String(c.id) === String(conversationIdFromUrl))
     const mode = conv?.storage_mode
-    console.log('[Chat] conversationStorageMode computed:', {
-      conversationIdFromUrl,
-      projectConversationsCount: projectConversations.length,
-      foundConversation: !!conv,
-      storage_mode: mode,
-    })
+    // console.log('[Chat] conversationStorageMode computed:', {
+    //   conversationIdFromUrl,
+    //   projectConversationsCount: projectConversations.length,
+    //   foundConversation: !!conv,
+    //   storage_mode: mode,
+    // })
     return mode
   }, [conversationIdFromUrl, projectConversations])
 
@@ -496,7 +496,7 @@ function Chat() {
       if (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl) {
         // Use type assertion or cast if the action is not properly typed in the dispatch
         // but since it's a thunk, dispatch handles it fine.
-        ; (dispatch as any)(
+        ;(dispatch as any)(
           syncConversationToLocal({
             conversationId: String(conversationIdFromUrl),
             messages: reactQueryMessages,
@@ -618,7 +618,7 @@ function Chat() {
       setLeftWidthPct(pct)
       try {
         window.localStorage.setItem('chat:leftWidthPct', pct.toFixed(2))
-      } catch { }
+      } catch {}
     }
 
     const onMouseMove = (e: MouseEvent) => handleMove(e.clientX)
@@ -1476,7 +1476,7 @@ function Chat() {
       if (currentConversationId) {
         // Replace any @file mentions with actual file contents before branching
         const processed = replaceFileMentionsWithPath(newContent)
-        console.log(processed)
+        // console.log(processed)
 
         // Find the message to check if it has children
         const parsedId = parseId(id)
@@ -1667,11 +1667,11 @@ function Chat() {
   const performDelete = useCallback(
     (id: string) => {
       const messageId = parseId(id)
-      console.log('[Chat] performDelete called:', {
-        messageId,
-        currentConversationId,
-        conversationStorageMode,
-      })
+      // console.log('[Chat] performDelete called:', {
+      //   messageId,
+      //   currentConversationId,
+      //   conversationStorageMode,
+      // })
       dispatch(chatSliceActions.messageDeleted(messageId))
       if (currentConversationId) {
         dispatch(
@@ -1789,10 +1789,10 @@ function Chat() {
                   researchNotesCache.map(item =>
                     item.id === currentConversationId
                       ? {
-                        ...item,
-                        research_note: updatedNote,
-                        updated_at: new Date().toISOString(),
-                      }
+                          ...item,
+                          research_note: updatedNote,
+                          updated_at: new Date().toISOString(),
+                        }
                       : item
                   )
                 )
@@ -1815,7 +1815,7 @@ function Chat() {
             }
           }
 
-          console.log('Added to research note successfully')
+          // console.log('Added to research note successfully')
         })
         .catch(error => {
           console.error('Failed to update research note:', error)
@@ -2007,7 +2007,7 @@ function Chat() {
                     setHeimdallVisible(newValue)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', String(newValue))
-                    } catch { }
+                    } catch {}
                   }}
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
@@ -2269,10 +2269,11 @@ function Chat() {
 
                       {/* Hover tooltip that can expand into anchored modal */}
                       <div
-                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${isExpanded
-                          ? 'hidden'
-                          : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
-                          }`}
+                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${
+                          isExpanded
+                            ? 'hidden'
+                            : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
+                        }`}
                       >
                         <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-2 truncate'>
                           {file.name || file.relativePath.split('/').pop() || file.path.split('/').pop()}
@@ -2597,7 +2598,7 @@ function Chat() {
                   setHeimdallVisible(false)
                   try {
                     window.localStorage.setItem('chat:heimdallVisible', 'false')
-                  } catch { }
+                  } catch {}
                 }}
               />
             )}
@@ -2639,7 +2640,7 @@ function Chat() {
                     setHeimdallVisible(false)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', 'false')
-                    } catch { }
+                    } catch {}
                   }}
                   className='fixed bottom-6 right-6 z-[110] w-12 h-12 rounded-full bg-neutral-700 dark:bg-neutral-600 hover:bg-neutral-800 dark:hover:bg-neutral-500 text-white shadow-lg flex items-center justify-center transition-colors'
                   aria-label='Close tree view'

@@ -35,27 +35,24 @@ export function useProjects() {
       // In Electron mode, fetch both cloud and local projects
       if (environment === 'electron') {
         const [cloudProjects, localProjects] = await Promise.all([
-          api.get<ProjectWithLatestConversation[]>(
-            `/projects/sorted/latest-conversation?userId=${userId}`,
-            accessToken
-          ).catch(err => {
-            console.error('Failed to fetch cloud projects:', err)
+          api
+            .get<ProjectWithLatestConversation[]>(`/projects/sorted/latest-conversation?userId=${userId}`, accessToken)
+            .catch(err => {
+              console.error('Failed to fetch cloud projects:', err)
+              return []
+            }),
+          localApi.get<ProjectWithLatestConversation[]>(`/local/projects?userId=${userId}`).catch(err => {
+            console.error('Failed to fetch local projects:', err)
             return []
           }),
-          localApi.get<ProjectWithLatestConversation[]>(`/local/projects?userId=${userId}`)
-            .catch(err => {
-              console.error('Failed to fetch local projects:', err)
-              return []
-            })
         ])
 
         // Merge and sort by latest_conversation_updated_at or updated_at
-        const merged = [...cloudProjects, ...localProjects]
-          .sort((a, b) => {
-            const dateA = new Date(a.latest_conversation_updated_at || a.updated_at).getTime()
-            const dateB = new Date(b.latest_conversation_updated_at || b.updated_at).getTime()
-            return dateB - dateA
-          })
+        const merged = [...cloudProjects, ...localProjects].sort((a, b) => {
+          const dateA = new Date(a.latest_conversation_updated_at || a.updated_at).getTime()
+          const dateB = new Date(b.latest_conversation_updated_at || b.updated_at).getTime()
+          return dateB - dateA
+        })
 
         return merged
       }
@@ -103,16 +100,16 @@ export function useProject(projectId: ProjectId | null, storageMode?: 'local' | 
         effectiveStorageMode = project?.storage_mode || 'cloud'
       }
 
-      console.log('[useProject] Fetching project:', projectId, 'storage_mode:', effectiveStorageMode)
+      // console.log('[useProject] Fetching project:', projectId, 'storage_mode:', effectiveStorageMode)
 
       // Route to appropriate API based on storage mode
       if (effectiveStorageMode === 'local' && environment === 'electron') {
-        console.log('[useProject] Using local API for project:', projectId)
+        // console.log('[useProject] Using local API for project:', projectId)
         return localApi.get<Project>(`/local/projects/${projectId}`)
       }
 
       // Default to cloud API
-      console.log('[useProject] Using cloud API for project:', projectId)
+      // console.log('[useProject] Using cloud API for project:', projectId)
       return api.get<Project>(`/projects/${projectId}`, accessToken)
     },
     enabled: !!projectId && !!accessToken,
@@ -149,21 +146,20 @@ export function useConversations(enabled: boolean = true) {
       // In Electron mode, fetch both cloud and local conversations
       if (environment === 'electron') {
         const [cloudConversations, localConversations] = await Promise.all([
-          api.get<Conversation[]>(`/users/${userId}/conversations`, accessToken)
-            .catch(err => {
-              console.error('Failed to fetch cloud conversations:', err)
-              return []
-            }),
-          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
-            .catch(err => {
-              console.error('Failed to fetch local conversations:', err)
-              return []
-            })
+          api.get<Conversation[]>(`/users/${userId}/conversations`, accessToken).catch(err => {
+            console.error('Failed to fetch cloud conversations:', err)
+            return []
+          }),
+          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`).catch(err => {
+            console.error('Failed to fetch local conversations:', err)
+            return []
+          }),
         ])
 
         // Merge and sort by updated_at
-        const merged = [...cloudConversations, ...localConversations]
-          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        const merged = [...cloudConversations, ...localConversations].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )
 
         return merged
       }
@@ -211,22 +207,23 @@ export function useConversationsByProject(projectId: ProjectId | null) {
       // In Electron mode, fetch both cloud and local conversations
       if (environment === 'electron') {
         const [cloudConversations, localConversations] = await Promise.all([
-          api.get<Conversation[]>(`/conversations/project/${projectId}`, accessToken)
-            .catch(err => {
-              console.error('Failed to fetch cloud project conversations:', err)
-              return []
-            }),
-          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+          api.get<Conversation[]>(`/conversations/project/${projectId}`, accessToken).catch(err => {
+            console.error('Failed to fetch cloud project conversations:', err)
+            return []
+          }),
+          localApi
+            .get<Conversation[]>(`/local/conversations?userId=${userId}`)
             .then(convs => convs.filter(c => c.project_id === projectId))
             .catch(err => {
               console.error('Failed to fetch local project conversations:', err)
               return []
-            })
+            }),
         ])
 
         // Merge and sort by updated_at
-        const merged = [...cloudConversations, ...localConversations]
-          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        const merged = [...cloudConversations, ...localConversations].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )
 
         return merged
       }
@@ -345,14 +342,14 @@ export function useConversationMessages(conversationId: ConversationId | null, s
         // This finds the conversation even if it's only loaded in a specific project view
         const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
 
-        for (const [queryKey, data] of allConversationQueries) {
+        for (const [data] of allConversationQueries) {
           if (Array.isArray(data)) {
             // Robust comparison handling both string/number IDs
             const match = data.find(c => String(c.id) === String(conversationId))
             if (match) {
               if (match.storage_mode) {
                 effectiveStorageMode = match.storage_mode
-                console.log('[useConversationMessages] Found storage_mode in cache:', effectiveStorageMode, 'from query:', queryKey)
+                // console.log('[useConversationMessages] Found storage_mode in cache:', effectiveStorageMode, 'from query:', queryKey)
                 break
               }
 
@@ -360,13 +357,15 @@ export function useConversationMessages(conversationId: ConversationId | null, s
               if (match.project_id && accessToken) {
                 // Need to find project in cache - usually ['projects', userId]
                 // Note: userId is inside useAuth closure
-                const projectsQuery = queryClient.getQueriesData<ProjectWithLatestConversation[]>({ queryKey: ['projects'] })
+                const projectsQuery = queryClient.getQueriesData<ProjectWithLatestConversation[]>({
+                  queryKey: ['projects'],
+                })
                 for (const [_, projects] of projectsQuery) {
                   if (Array.isArray(projects)) {
                     const project = projects.find(p => p.id === match.project_id)
                     if (project?.storage_mode) {
                       effectiveStorageMode = project.storage_mode
-                      console.log('[useConversationMessages] Found storage_mode via project cache:', effectiveStorageMode)
+                      // console.log('[useConversationMessages] Found storage_mode via project cache:', effectiveStorageMode)
                       break
                     }
                   }
@@ -380,17 +379,22 @@ export function useConversationMessages(conversationId: ConversationId | null, s
         if (!effectiveStorageMode) effectiveStorageMode = 'cloud'
       }
 
-      console.log('[useConversationMessages] Fetching messages for conversation:', conversationId, 'storage_mode:', effectiveStorageMode)
+      // console.log('[useConversationMessages] Fetching messages for conversation:', conversationId, 'storage_mode:', effectiveStorageMode)
 
       // Route to appropriate API based on storage mode
       if (effectiveStorageMode === 'local' && environment === 'electron') {
-        console.log('[useConversationMessages] Using local API for conversation:', conversationId)
-        return localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(`/local/conversations/${conversationId}/messages/tree`)
+        // console.log('[useConversationMessages] Using local API for conversation:', conversationId)
+        return localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
+          `/local/conversations/${conversationId}/messages/tree`
+        )
       }
 
       // Default to cloud API
-      console.log('[useConversationMessages] Using cloud API for conversation:', conversationId)
-      return api.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(`/conversations/${conversationId}/messages/tree`, accessToken)
+      // console.log('[useConversationMessages] Using cloud API for conversation:', conversationId)
+      return api.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
+        `/conversations/${conversationId}/messages/tree`,
+        accessToken
+      )
     },
     enabled: !!conversationId && !!accessToken,
     staleTime: 30000, // 30 seconds - messages only change on user actions (send/edit/branch)
@@ -403,16 +407,12 @@ export function useConversationMessages(conversationId: ConversationId | null, s
   // Sync storage_mode to cache when data is fetched
   useEffect(() => {
     if (query.data?.meta?.storage_mode && conversationId) {
-      console.log('[useConversationMessages] Updating storage_mode in cache:', query.data.meta.storage_mode)
+      // console.log('[useConversationMessages] Updating storage_mode in cache:', query.data.meta.storage_mode)
 
       // Update the conversation in the list cache
-      queryClient.setQueryData<Conversation[]>(['conversations'], (old) => {
+      queryClient.setQueryData<Conversation[]>(['conversations'], old => {
         if (!old) return old
-        return old.map(c =>
-          c.id === conversationId
-            ? { ...c, storage_mode: query.data.meta.storage_mode! }
-            : c
-        )
+        return old.map(c => (c.id === conversationId ? { ...c, storage_mode: query.data.meta.storage_mode! } : c))
       })
     }
   }, [query.data, conversationId, queryClient])
@@ -679,7 +679,9 @@ export function useRefreshModels() {
       return {
         models: isStringArray ? (response.models as string[]).map(stringToModel) : (response.models as Model[]),
         default:
-          typeof response.default === 'string' ? stringToModel(response.default as string) : (response.default as Model),
+          typeof response.default === 'string'
+            ? stringToModel(response.default as string)
+            : (response.default as Model),
       }
     },
     onSuccess: (data, provider) => {
@@ -821,7 +823,10 @@ export function useFilteredModels(provider: string | null) {
       }
 
       // Filter by structured outputs support
-      if (filters.supportsStructuredOutputs !== undefined && model.supportsStructuredOutputs !== filters.supportsStructuredOutputs) {
+      if (
+        filters.supportsStructuredOutputs !== undefined &&
+        model.supportsStructuredOutputs !== filters.supportsStructuredOutputs
+      ) {
         return false
       }
 

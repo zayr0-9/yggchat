@@ -614,13 +614,13 @@ router.get(
   '/users/:userId/conversations',
   authenticatedRateLimiter, // Apply authenticated user rate limiter
   asyncHandler(async (req, res) => {
-    console.log('\n🔴🔴🔴 [SERVER] GET /users/:userId/conversations')
-    console.log('🔴 Timestamp:', new Date().toISOString())
-    console.log('🔴 User-Agent:', req.headers['user-agent'])
-    console.log('🔴 Referer:', req.headers['referer'] || req.headers['referrer'])
-    console.log('🔴 Origin:', req.headers['origin'])
-    console.log('🔴 All Headers:', JSON.stringify(req.headers, null, 2))
-    console.log('🔴 Stack:', new Error().stack)
+    // console.log('\n🔴🔴🔴 [SERVER] GET /users/:userId/conversations')
+    // console.log('🔴 Timestamp:', new Date().toISOString())
+    // console.log('🔴 User-Agent:', req.headers['user-agent'])
+    // console.log('🔴 Referer:', req.headers['referer'] || req.headers['referrer'])
+    // console.log('🔴 Origin:', req.headers['origin'])
+    // console.log('🔴 All Headers:', JSON.stringify(req.headers, null, 2))
+    // console.log('🔴 Stack:', new Error().stack)
 
     const { client } = await verifyAuth(req)
     const conversations = await ConversationService.getByUser(client)
@@ -632,13 +632,13 @@ router.get(
 router.get(
   '/users/:userId/conversations/recent',
   asyncHandler(async (req, res) => {
-    console.log('\n🔴🔴🔴 [SERVER] GET /users/:userId/conversations/recent')
-    console.log('🔴 Timestamp:', new Date().toISOString())
-    console.log('🔴 User-Agent:', req.headers['user-agent'])
-    console.log('🔴 Referer:', req.headers['referer'] || req.headers['referrer'])
-    console.log('🔴 Origin:', req.headers['origin'])
-    console.log('🔴 Query params:', req.query)
-    console.log('🔴 Stack:', new Error().stack)
+    // console.log('\n🔴🔴🔴 [SERVER] GET /users/:userId/conversations/recent')
+    // console.log('🔴 Timestamp:', new Date().toISOString())
+    // console.log('🔴 User-Agent:', req.headers['user-agent'])
+    // console.log('🔴 Referer:', req.headers['referer'] || req.headers['referrer'])
+    // console.log('🔴 Origin:', req.headers['origin'])
+    // console.log('🔴 Query params:', req.query)
+    // console.log('🔴 Stack:', new Error().stack)
 
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10
     const { client } = await verifyAuth(req)
@@ -662,13 +662,13 @@ router.get(
 router.get(
   '/conversations/project/:projectId',
   asyncHandler(async (req, res) => {
-    console.log('\n🔴🔴🔴 [SERVER] GET /conversations/project/:projectId')
-    console.log('🔴 Timestamp:', new Date().toISOString())
-    console.log('🔴 Project ID:', req.params.projectId)
-    console.log('🔴 User-Agent:', req.headers['user-agent'])
-    console.log('🔴 Referer:', req.headers['referer'] || req.headers['referrer'])
-    console.log('🔴 Origin:', req.headers['origin'])
-    console.log('🔴 Stack:', new Error().stack)
+    // console.log('\n🔴🔴🔴 [SERVER] GET /conversations/project/:projectId')
+    // console.log('🔴 Timestamp:', new Date().toISOString())
+    // console.log('🔴 Project ID:', req.params.projectId)
+    // console.log('🔴 User-Agent:', req.headers['user-agent'])
+    // console.log('🔴 Referer:', req.headers['referer'] || req.headers['referrer'])
+    // console.log('🔴 Origin:', req.headers['origin'])
+    // console.log('🔴 Stack:', new Error().stack)
 
     const projectId = req.params.projectId
     const { client } = await verifyAuth(req)
@@ -1301,7 +1301,7 @@ router.post(
               } else if (part === 'tool_result') {
                 // Handle tool result events (from tool execution)
                 if (obj?.toolResult) {
-                  console.log(`✅ [supaChat/repeat] Tool result received: ${obj.toolResult.tool_use_id}`)
+                  // console.log(`✅ [supaChat/repeat] Tool result received: ${obj.toolResult.tool_use_id}`)
                   // Log tool result event
                   contentBlocksEvents.push({ type: 'tool_result', toolResult: obj.toolResult })
                   // Forward to client with structured data
@@ -1315,7 +1315,7 @@ router.post(
                   const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
                   currentToolCalls.push(obj.toolCall)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
-                  console.log(`✅ [supaChat/repeat] Accumulated tool call: ${obj.toolCall.name}`)
+                  // console.log(`✅ [supaChat/repeat] Accumulated tool call: ${obj.toolCall.name}`)
                   // Log tool call event with complete flag
                   contentBlocksEvents.push({ type: 'tool_call', toolCall: obj.toolCall, complete: true })
                   // Forward to client with structured data
@@ -1525,9 +1525,9 @@ router.post(
   '/conversations/:id/messages',
   expensiveOperationsRateLimiter, // Apply expensive operations rate limiter (AI streaming)
   asyncHandler(async (req, res) => {
-    console.log('\n🟢🟢🟢 [SERVER] POST /conversations/:id/messages - Message send received')
-    console.log('🟢 Timestamp:', new Date().toISOString())
-    console.log('🟢 Conversation ID:', req.params.id)
+    // console.log('\n🟢🟢🟢 [SERVER] POST /conversations/:id/messages - Message send received')
+    // console.log('🟢 Timestamp:', new Date().toISOString())
+    // console.log('🟢 Conversation ID:', req.params.id)
 
     const conversationId = req.params.id
     const { client, userId } = await verifyAuth(req)
@@ -1794,7 +1794,7 @@ router.post(
               } else if (part === 'tool_result') {
                 // Handle tool result events (from tool execution)
                 if (obj?.toolResult) {
-                  console.log(`✅ [supaChat] Tool result received: ${obj.toolResult.tool_use_id}`)
+                  // console.log(`✅ [supaChat] Tool result received: ${obj.toolResult.tool_use_id}`)
                   // Log tool result event
                   contentBlocksEvents.push({ type: 'tool_result', toolResult: obj.toolResult })
                   // Forward to client with structured data
@@ -1805,12 +1805,12 @@ router.post(
               } else if (part === 'tool_call') {
                 // Get structured tool call from obj.toolCall (not from delta)
                 if (obj?.toolCall) {
-                  console.log(`✅ [supaChat] Received structured tool call: ${obj.toolCall.name}`)
+                  // console.log(`✅ [supaChat] Received structured tool call: ${obj.toolCall.name}`)
                   // If it's valid tool call, add it to the array
                   const currentToolCalls = assistantToolCalls ? JSON.parse(assistantToolCalls) : []
                   currentToolCalls.push(obj.toolCall)
                   assistantToolCalls = JSON.stringify(currentToolCalls)
-                  console.log('✅ [supaChat] Updated assistantToolCalls, current length:', currentToolCalls.length)
+                  // console.log('✅ [supaChat] Updated assistantToolCalls, current length:', currentToolCalls.length)
                   // Log tool call event with complete flag
                   contentBlocksEvents.push({ type: 'tool_call', toolCall: obj.toolCall, complete: true })
                   // Forward to client with structured data
@@ -1819,10 +1819,10 @@ router.post(
                   )
                 } else {
                   // If no structured toolCall, treat delta as regular content
-                  console.warn(
-                    '⚠️  [supaChat] Received tool_call part but no toolCall object:',
-                    delta.substring(0, 150)
-                  )
+                  // console.warn(
+                  //   '⚠️  [supaChat] Received tool_call part but no toolCall object:',
+                  //   delta.substring(0, 150)
+                  // )
                   assistantContent += delta
                   // Log as text event
                   contentBlocksEvents.push({ type: 'text', delta })
@@ -1932,19 +1932,19 @@ router.post(
         console.log('Original content length:', assistantContent.length, 'Cleaned length:', cleanedContent.length)
 
         // Validate assistantToolCalls before passing to MessageService.create
-        console.log('🔧 [supaChat] assistantToolCalls value:', assistantToolCalls)
-        console.log('🔧 [supaChat] assistantToolCalls type:', typeof assistantToolCalls)
-        console.log('🔧 [supaChat] assistantToolCalls length:', assistantToolCalls?.length)
-        console.log('🔧 [supaChat] assistantToolCalls is empty string?:', assistantToolCalls === '')
-        console.log('🔧 [supaChat] assistantToolCalls is truthy?:', !!assistantToolCalls)
+        // console.log('🔧 [supaChat] assistantToolCalls value:', assistantToolCalls)
+        // console.log('🔧 [supaChat] assistantToolCalls type:', typeof assistantToolCalls)
+        // console.log('🔧 [supaChat] assistantToolCalls length:', assistantToolCalls?.length)
+        // console.log('🔧 [supaChat] assistantToolCalls is empty string?:', assistantToolCalls === '')
+        // console.log('🔧 [supaChat] assistantToolCalls is truthy?:', !!assistantToolCalls)
 
         if (assistantToolCalls) {
           try {
             const parsed = JSON.parse(assistantToolCalls)
-            console.log('🔧 [supaChat] Parsed assistantToolCalls successfully:', JSON.stringify(parsed))
+            // console.log('🔧 [supaChat] Parsed assistantToolCalls successfully:', JSON.stringify(parsed))
           } catch (e) {
             console.error(
-              '🔧 [supaChat] Failed to parse assistantToolCalls:',
+              // '🔧 [supaChat] Failed to parse assistantToolCalls:',
               e instanceof Error ? e.message : String(e)
             )
           }
@@ -1953,12 +1953,12 @@ router.post(
         // Create assistant message with final content (not update placeholder)
         try {
           console.log(
-            '📤 [supaChat] Calling MessageService.create with tool_calls:',
+            // '📤 [supaChat] Calling MessageService.create with tool_calls:',
             assistantToolCalls ? assistantToolCalls.substring(0, 100) : 'empty'
           )
-          console.log('📤 [supaChat] Saving content_blocks with', contentBlocksEvents.length, 'events')
+          // console.log('📤 [supaChat] Saving content_blocks with', contentBlocksEvents.length, 'events')
           const accumulatedBlocks = accumulateContentBlocks(contentBlocksEvents)
-          console.log('📤 [supaChat] Accumulated into', accumulatedBlocks.length, 'blocks')
+          // console.log('📤 [supaChat] Accumulated into', accumulatedBlocks.length, 'blocks')
 
           let assistantMessage
           // Check if local mode - skip Supabase saves
@@ -2028,15 +2028,15 @@ router.post(
             await ConversationService.updateTitle(client, conversationId, title)
           }
         } catch (createError) {
-          console.error('❌ [supaChat] Failed to create assistant message:', createError)
-          console.error('❌ [supaChat] Message details:', {
-            conversationId,
-            userId,
-            parentId: userMessage.id,
-            contentLength: cleanedContent.length,
-            thinkingLength: assistantThinking.length,
-            toolCallsValue: assistantToolCalls,
-          })
+          // console.error('❌ [supaChat] Failed to create assistant message:', createError)
+          // console.error('❌ [supaChat] Message details:', {
+          //   conversationId,
+          //   userId,
+          //   parentId: userMessage.id,
+          //   contentLength: cleanedContent.length,
+          //   thinkingLength: assistantThinking.length,
+          //   toolCallsValue: assistantToolCalls,
+          // })
           // Send error to client but don't throw - let outer catch handle it
           throw createError
         }

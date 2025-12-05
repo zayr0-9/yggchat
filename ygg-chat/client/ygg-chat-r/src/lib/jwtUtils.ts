@@ -23,31 +23,31 @@ export function getSessionFromStorage(): Session | null {
     const storageKey = 'supabase-auth-token'
     const stored = localStorage.getItem(storageKey)
 
-    console.log('[jwtUtils] Reading from localStorage key:', storageKey)
+    // console.log('[jwtUtils] Reading from localStorage key:', storageKey)
 
     if (!stored) {
-      console.log('[jwtUtils] No data in localStorage')
+      // console.log('[jwtUtils] No data in localStorage')
       return null
     }
 
     // Parse the stored session data
     const parsed = JSON.parse(stored)
-    console.log('[jwtUtils] Parsed localStorage:', {
-      hasCurrentSession: !!parsed?.currentSession,
-      hasSession: !!parsed?.session,
-      topLevelKeys: Object.keys(parsed || {}),
-    })
+    // console.log('[jwtUtils] Parsed localStorage:', {
+    //   hasCurrentSession: !!parsed?.currentSession,
+    //   hasSession: !!parsed?.session,
+    //   topLevelKeys: Object.keys(parsed || {}),
+    // })
 
     // Supabase stores session in different formats depending on version
     // Try to extract session from various possible structures
     const session = parsed?.currentSession || parsed?.session || parsed
 
-    console.log('[jwtUtils] Extracted session:', {
-      hasAccessToken: !!session?.access_token,
-      accessTokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
-      hasUser: !!session?.user,
-      userId: session?.user?.id,
-    })
+    // console.log('[jwtUtils] Extracted session:', {
+    //   hasAccessToken: !!session?.access_token,
+    //   accessTokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'null',
+    //   hasUser: !!session?.user,
+    //   userId: session?.user?.id,
+    // })
 
     if (!session?.access_token) {
       console.warn('[jwtUtils] Session missing access_token')
@@ -227,7 +227,7 @@ export function getTokenExpirationTime(): number | null {
 export async function refreshTokenIfNeeded(force = false): Promise<boolean> {
   // If a refresh is already in progress, wait for it to complete
   if (refreshPromise) {
-    console.log('[jwtUtils] Refresh already in progress, waiting...')
+    // console.log('[jwtUtils] Refresh already in progress, waiting...')
     return await refreshPromise
   }
 
@@ -238,25 +238,25 @@ export async function refreshTokenIfNeeded(force = false): Promise<boolean> {
       const session = getSessionFromStorage()
 
       if (!session) {
-        console.log('[jwtUtils] No session found, cannot refresh')
+        // console.log('[jwtUtils] No session found, cannot refresh')
         return false
       }
 
       // Check if token expires in the next 5 minutes (300 seconds)
       const expiresAt = session.expires_at
       if (!expiresAt) {
-        console.warn('[jwtUtils] Session missing expires_at')
+        // console.warn('[jwtUtils] Session missing expires_at')
         return false
       }
 
       const now = Math.floor(Date.now() / 1000)
       const expiresIn = expiresAt - now
 
-      console.log('[jwtUtils] Token expires in', expiresIn, 'seconds')
+      // console.log('[jwtUtils] Token expires in', expiresIn, 'seconds')
 
       // Refresh if token expires in less than 5 minutes OR if forced
       if (force || expiresIn < 300) {
-        console.log(`[jwtUtils] ${force ? 'Force refreshing' : 'Refreshing'} token...`)
+        // console.log(`[jwtUtils] ${force ? 'Force refreshing' : 'Refreshing'} token...`)
 
         // Check if supabase client is available
         if (!supabase) {
@@ -273,7 +273,7 @@ export async function refreshTokenIfNeeded(force = false): Promise<boolean> {
         }
 
         if (data.session) {
-          console.log('[jwtUtils] ✅ Token refreshed successfully')
+          // console.log('[jwtUtils] ✅ Token refreshed successfully')
           // Clear claims cache since we have a new token
           clearClaimsCache()
           return true

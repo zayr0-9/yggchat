@@ -43,7 +43,6 @@ export const supabaseAdmin: SupabaseClient = createClient(supabaseUrl, supabaseS
 // Keeping for backward compatibility during migration
 export const supabase: SupabaseClient = supabaseAdmin
 
-
 // Interfaces matching Supabase schema
 
 export interface Profile {
@@ -605,15 +604,15 @@ export class ConversationService {
   }
 
   static async getByUser(client: SupabaseClient): Promise<Conversation[]> {
-    console.log('🔴 [ConversationService.getByUser] CALLED')
-    console.log('🔴 Stack:', new Error().stack)
+    // console.log('🔴 [ConversationService.getByUser] CALLED')
+    // console.log('🔴 Stack:', new Error().stack)
     const { data } = await client.from('conversations').select('*').order('updated_at', { ascending: false })
     return data || []
   }
 
   static async getRecentByUser(client: SupabaseClient, limit: number): Promise<Conversation[]> {
-    console.log('🔴 [ConversationService.getRecentByUser] CALLED, limit:', limit)
-    console.log('🔴 Stack:', new Error().stack)
+    // console.log('🔴 [ConversationService.getRecentByUser] CALLED, limit:', limit)
+    // console.log('🔴 Stack:', new Error().stack)
     const safeLimit = Math.max(1, Math.min(100, Number(limit) || 10))
     const { data } = await client
       .from('conversations')
@@ -626,7 +625,9 @@ export class ConversationService {
 
   static async getResearchNotesByUser(
     client: SupabaseClient
-  ): Promise<Array<{ id: string; title: string; research_note: string; updated_at: string; project_id: string | null }>> {
+  ): Promise<
+    Array<{ id: string; title: string; research_note: string; updated_at: string; project_id: string | null }>
+  > {
     const { data } = await client
       .from('conversations')
       .select('id, title, research_note, updated_at, project_id')
@@ -635,8 +636,7 @@ export class ConversationService {
       .order('updated_at', { ascending: false })
 
     // Filter out whitespace-only notes
-    const filtered =
-      data?.filter(conv => conv.research_note && conv.research_note.trim().length > 0) || []
+    const filtered = data?.filter(conv => conv.research_note && conv.research_note.trim().length > 0) || []
 
     return filtered as Array<{
       id: string
@@ -648,8 +648,8 @@ export class ConversationService {
   }
 
   static async getByProjectId(client: SupabaseClient, id: string): Promise<Conversation[]> {
-    console.log('🔴 [ConversationService.getByProjectId] CALLED, projectId:', id)
-    console.log('🔴 Stack:', new Error().stack)
+    // console.log('🔴 [ConversationService.getByProjectId] CALLED, projectId:', id)
+    // console.log('🔴 Stack:', new Error().stack)
     const { data } = await client.from('conversations').select('*').eq('project_id', id)
     return data || []
   }
@@ -821,24 +821,33 @@ export class MessageService {
   ): Promise<Message> {
     // Parse tool_calls safely - if invalid JSON, log and set to null
     let parsedToolCalls: any = null
-    console.log('📥 [MessageService.create] Received tool_calls parameter:', typeof tool_calls, 'Length:', tool_calls?.length)
-    console.log('📥 [MessageService.create] tool_calls value:', tool_calls)
-    console.log('📥 [MessageService.create] tool_calls is empty string?:', tool_calls === '')
-    console.log('📥 [MessageService.create] tool_calls is truthy?:', !!tool_calls)
+    // console.log(
+    //   '📥 [MessageService.create] Received tool_calls parameter:',
+    //   typeof tool_calls,
+    //   'Length:',
+    //   tool_calls?.length
+    // )
+    // console.log('📥 [MessageService.create] tool_calls value:', tool_calls)
+    // console.log('📥 [MessageService.create] tool_calls is empty string?:', tool_calls === '')
+    // console.log('📥 [MessageService.create] tool_calls is truthy?:', !!tool_calls)
 
     if (tool_calls) {
       try {
         console.log('🔧 [MessageService.create] Raw tool_calls string:', tool_calls.substring(0, 200))
         parsedToolCalls = JSON.parse(tool_calls)
-        console.log('✅ [MessageService.create] Successfully parsed tool_calls:', JSON.stringify(parsedToolCalls).substring(0, 200))
+        console.log(
+          '✅ [MessageService.create] Successfully parsed tool_calls:',
+          JSON.stringify(parsedToolCalls).substring(0, 200)
+        )
       } catch (parseError) {
         console.error('❌ [MessageService.create] Failed to parse tool_calls JSON:', parseError)
         console.error('❌ Invalid tool_calls value:', tool_calls.substring(0, 200))
         // Continue with null - don't fail message creation
       }
-    } else {
-      console.log('⚠️  [MessageService.create] tool_calls is falsy, will be stored as null in database')
     }
+    // else {
+    //   // console.log('⚠️  [MessageService.create] tool_calls is falsy, will be stored as null in database')
+    // }
 
     // console.log('inserting the following fields - - - - - - - ', {
     //   conversation_id: conversationId,
@@ -861,13 +870,13 @@ export class MessageService {
       plainTextContent = content
     }
 
-    console.log('💾 [MessageService.create] About to insert message with:', {
-      role,
-      content_length: content.length,
-      thinking_block_length: thinking_block.length,
-      tool_calls: parsedToolCalls,
-      model_name: modelName || 'unknown',
-    })
+    // console.log('💾 [MessageService.create] About to insert message with:', {
+    //   role,
+    //   content_length: content.length,
+    //   thinking_block_length: thinking_block.length,
+    //   tool_calls: parsedToolCalls,
+    //   model_name: modelName || 'unknown',
+    // })
 
     const { data: created, error } = await client
       .from('messages')
@@ -994,12 +1003,7 @@ export class MessageService {
     }
 
     // Single UPDATE query with all fields including plain_text_content
-    const { data } = await client
-      .from('messages')
-      .update(updateObj)
-      .eq('id', id)
-      .select()
-      .single()
+    const { data } = await client.from('messages').update(updateObj).eq('id', id).select().single()
 
     return data ? (data as Message) : undefined
   }
@@ -1087,7 +1091,6 @@ export class MessageService {
     const uniqueModels = [...new Set((data || []).map((m: any) => m.model_name).filter(Boolean))]
     return uniqueModels.slice(0, safeLimit)
   }
-
 }
 
 export class ProviderCostService {

@@ -1,11 +1,11 @@
-import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { Session, User } from '@supabase/supabase-js'
-import { setUser, clearUser } from '../features/users/usersSlice'
+import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { clearUser, setUser } from '../features/users/usersSlice'
+import { getAuthProvider, type AuthProvider as IAuthProvider } from '../lib/auth'
+import { dualSync } from '../lib/sync/dualSyncManager'
 import { store } from '../store/store'
 import { updateThunkExtraAuth } from '../store/thunkExtra'
 import { API_BASE } from '../utils/api'
-import { getAuthProvider, type AuthProvider as IAuthProvider } from '../lib/auth'
-import { dualSync } from '../lib/sync/dualSyncManager'
 
 export interface AuthContextType {
   user: User | null
@@ -55,7 +55,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Update Redux thunk extra auth
       updateThunkExtraAuth(newState.accessToken, newState.userId)
 
-      console.log('[AuthContext] Session updated:', newState.userId ?? 'none')
+      // console.log('[AuthContext] Session updated:', newState.userId ?? 'none')
 
       return newState
     })
@@ -64,13 +64,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Fetch user profile from API and sync to Redux
   const syncUserProfile = useCallback(async (userId: string | null, accessToken: string | null) => {
     if (!userId || !accessToken) {
-      console.log('[AuthContext] Clearing user profile from Redux')
+      // console.log('[AuthContext] Clearing user profile from Redux')
       store.dispatch(clearUser())
       return
     }
 
     try {
-      console.log('[AuthContext] Fetching user profile for:', userId)
+      // console.log('[AuthContext] Fetching user profile for:', userId)
       const response = await fetch(`${API_BASE}/users/${userId}`, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -84,18 +84,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const profile = await response.json()
-      console.log('[AuthContext] User profile fetched:', profile.username)
+      // console.log('[AuthContext] User profile fetched:', profile.username)
 
       // Dispatch to Redux
       store.dispatch(setUser(profile))
 
       // Sync user to local SQLite database (Electron mode only)
       const isElectronMode =
-        (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
-        import.meta.env.VITE_ENVIRONMENT === 'electron'
+        (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
 
       if (isElectronMode) {
-        console.log('[AuthContext] Syncing user to local SQLite:', profile.id)
+        // console.log('[AuthContext] Syncing user to local SQLite:', profile.id)
         dualSync.syncUser({
           id: profile.id,
           username: profile.username,
@@ -115,7 +114,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const initializeAuth = async () => {
       try {
-        console.log('[AuthContext] Initializing auth provider...')
+        // console.log('[AuthContext] Initializing auth provider...')
 
         // Get the appropriate provider for this environment
         const authProvider = await getAuthProvider()
@@ -140,7 +139,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         await syncUserProfile(session.userId, session.accessToken)
 
         // Subscribe to auth state changes
-        unsubscribe = authProvider.onAuthStateChange(async (user) => {
+        unsubscribe = authProvider.onAuthStateChange(async user => {
           if (!mounted) return
 
           // Get the actual session with access token from the provider
@@ -159,7 +158,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Set up periodic token refresh if provider requires network auth
         if (authProvider.requiresNetworkAuth()) {
-          console.log('[AuthContext] Setting up periodic token refresh')
+          // console.log('[AuthContext] Setting up periodic token refresh')
           refreshInterval = window.setInterval(async () => {
             try {
               await authProvider.refreshToken()
@@ -171,7 +170,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Add visibility change listener - refresh when tab becomes visible
           const handleVisibilityChange = async () => {
             if (document.visibilityState === 'visible') {
-              console.log('[AuthContext] Tab became visible, checking token...')
+              // console.log('[AuthContext] Tab became visible, checking token...')
               try {
                 await authProvider.refreshToken()
               } catch (error) {
@@ -182,7 +181,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
           // Add window focus listener - refresh when window gains focus
           const handleWindowFocus = async () => {
-            console.log('[AuthContext] Window gained focus, checking token...')
+            // console.log('[AuthContext] Window gained focus, checking token...')
             try {
               await authProvider.refreshToken()
             } catch (error) {
@@ -214,7 +213,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Cleanup
     return () => {
       mounted = false
-      console.log('[AuthContext] Cleaning up auth provider')
+      // console.log('[AuthContext] Cleaning up auth provider')
 
       if (unsubscribe) {
         unsubscribe()
@@ -227,36 +226,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [updateAuthState, syncUserProfile])
 
   // Sign in using the provider
-  const signIn = useCallback(async (credentials: { email: string; password: string }) => {
-    console.log('[AuthContext] Signing in...')
+  const signIn = useCallback(
+    async (credentials: { email: string; password: string }) => {
+      // console.log('[AuthContext] Signing in...')
 
-    if (!provider) {
-      console.warn('[AuthContext] Provider not initialized yet')
-      throw new Error('Auth provider not initialized')
-    }
+      if (!provider) {
+        console.warn('[AuthContext] Provider not initialized yet')
+        throw new Error('Auth provider not initialized')
+      }
 
-    try {
-      const authState = await provider.login(credentials)
+      try {
+        const authState = await provider.login(credentials)
 
-      // Update state
-      updateAuthState({
-        user: authState.user as any,
-        session: authState.session as any,
-        accessToken: authState.accessToken,
-        userId: authState.userId,
-      })
+        // Update state
+        updateAuthState({
+          user: authState.user as any,
+          session: authState.session as any,
+          accessToken: authState.accessToken,
+          userId: authState.userId,
+        })
 
-      // Sync user profile to Redux
-      await syncUserProfile(authState.userId, authState.accessToken)
-    } catch (error) {
-      console.error('[AuthContext] Sign in failed:', error)
-      throw error
-    }
-  }, [provider, updateAuthState, syncUserProfile])
+        // Sync user profile to Redux
+        await syncUserProfile(authState.userId, authState.accessToken)
+      } catch (error) {
+        console.error('[AuthContext] Sign in failed:', error)
+        throw error
+      }
+    },
+    [provider, updateAuthState, syncUserProfile]
+  )
 
   // Sign out using the provider
   const signOut = useCallback(async () => {
-    console.log('[AuthContext] Signing out...')
+    // console.log('[AuthContext] Signing out...')
 
     if (!provider) {
       console.warn('[AuthContext] Provider not initialized yet')
@@ -284,7 +286,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Reload session from storage (for Electron OAuth flow)
   const reloadSession = useCallback(async () => {
-    console.log('[AuthContext] Reloading session from storage...')
+    // console.log('[AuthContext] Reloading session from storage...')
 
     if (!provider) {
       console.warn('[AuthContext] Provider not initialized yet')
@@ -310,7 +312,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Sync user profile to Redux
         await syncUserProfile(session.userId, session.accessToken)
 
-        console.log('[AuthContext] Session reloaded successfully')
+        // console.log('[AuthContext] Session reloaded successfully')
       } catch (error) {
         console.error('[AuthContext] Failed to reload session:', error)
       }

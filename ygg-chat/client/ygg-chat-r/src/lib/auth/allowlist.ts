@@ -20,7 +20,7 @@ export interface AllowlistEntry {
  * @returns true if user is in allowlist, false otherwise
  */
 export async function isUserAllowlisted(userId: string): Promise<boolean> {
-  console.log('[Allowlist] Checking if user is allowlisted:', userId)
+  // console.log('[Allowlist] Checking if user is allowlisted:', userId)
 
   if (!supabase) {
     console.warn('[Allowlist] Supabase client not available')
@@ -28,25 +28,21 @@ export async function isUserAllowlisted(userId: string): Promise<boolean> {
   }
 
   try {
-    console.log('[Allowlist] Querying electron_allowlist table...')
+    // console.log('[Allowlist] Querying electron_allowlist table...')
 
-    const { data, error } = await supabase
-      .from('electron_allowlist')
-      .select('user_id')
-      .eq('user_id', userId)
-      .single()
+    const { data, error } = await supabase.from('electron_allowlist').select('user_id').eq('user_id', userId).single()
 
-    console.log('[Allowlist] Query completed:', {
-      hasData: !!data,
-      hasError: !!error,
-      errorCode: error?.code,
-      errorMessage: error?.message,
-    })
+    // console.log('[Allowlist] Query completed:', {
+    //   hasData: !!data,
+    //   hasError: !!error,
+    //   errorCode: error?.code,
+    //   errorMessage: error?.message,
+    // })
 
     if (error) {
       // User not found is expected for non-allowlisted users
       if (error.code === 'PGRST116') {
-        console.log('[Allowlist] User not in allowlist (PGRST116 - no rows):', userId)
+        // console.log('[Allowlist] User not in allowlist (PGRST116 - no rows):', userId)
         return false
       }
 
@@ -60,7 +56,7 @@ export async function isUserAllowlisted(userId: string): Promise<boolean> {
       throw error
     }
 
-    console.log('[Allowlist] User authorized:', userId)
+    // console.log('[Allowlist] User authorized:', userId)
     return !!data
   } catch (error) {
     console.error('[Allowlist] Exception during allowlist check:', error)
@@ -89,13 +85,13 @@ export async function isEmailAllowlisted(email: string): Promise<boolean> {
 
     if (error) {
       if (error.code === 'PGRST116') {
-        console.log('[Allowlist] Email not in allowlist:', email)
+        // console.log('[Allowlist] Email not in allowlist:', email)
         return false
       }
       throw error
     }
 
-    console.log('[Allowlist] Email authorized:', email)
+    // console.log('[Allowlist] Email authorized:', email)
     return !!data
   } catch (error) {
     console.error('[Allowlist] Error checking email allowlist:', error)

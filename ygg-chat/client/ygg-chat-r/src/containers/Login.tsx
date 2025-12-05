@@ -40,17 +40,17 @@ const Login: React.FC = () => {
   useEffect(() => {
     if (!supabase) return
 
-    console.log('[Login] Setting up onAuthStateChange listener')
+    // console.log('[Login] Setting up onAuthStateChange listener')
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Login] Auth state changed:', {
-        event,
-        hasSession: !!session,
-        hasUser: !!session?.user,
-        userId: session?.user?.id,
-      })
+      // console.log('[Login] Auth state changed:', {
+      //   event,
+      //   hasSession: !!session,
+      //   hasUser: !!session?.user,
+      //   userId: session?.user?.id,
+      // })
 
       // Clear loading state on successful sign-in
       // Authorization checks are handled in the OAuth callback handler for Electron
@@ -68,10 +68,10 @@ const Login: React.FC = () => {
   useEffect(() => {
     if (!window.electronAPI?.auth?.onOAuthCallback) return
 
-    console.log('[Login] Setting up OAuth callback listener for Electron')
+    // console.log('[Login] Setting up OAuth callback listener for Electron')
 
     const cleanup = window.electronAPI.auth.onOAuthCallback(async (callbackUrl: string) => {
-      console.log('[Login] Received OAuth callback from external browser:', callbackUrl)
+      // console.log('[Login] Received OAuth callback from external browser:', callbackUrl)
       setLoading(true)
       setError(null)
 
@@ -99,18 +99,18 @@ const Login: React.FC = () => {
 
         if (error) throw error
 
-        console.log('[Login] OAuth session established successfully')
+        // console.log('[Login] OAuth session established successfully')
 
         // Handle Electron-specific authorization and setup
         if (data.session?.user && isElectronMode) {
           const userId = data.session.user.id
           const userEmail = data.session.user.email || 'unknown'
 
-          console.log('[Login] Electron mode: Checking user authorization...', { userId, userEmail })
+          // console.log('[Login] Electron mode: Checking user authorization...', { userId, userEmail })
 
           const isAllowed = await isUserAllowlisted(userId)
 
-          console.log('[Login] Allowlist check result:', { isAllowed, userId })
+          // console.log('[Login] Allowlist check result:', { isAllowed, userId })
 
           if (!isAllowed) {
             console.warn('[Login] User not authorized for Electron access:', userEmail)
@@ -119,7 +119,7 @@ const Login: React.FC = () => {
             if (window.electronAPI?.storage?.clear) {
               try {
                 await window.electronAPI.storage.clear()
-                console.log('[Login] Cleared stored data for unauthorized user')
+                // console.log('[Login] Cleared stored data for unauthorized user')
               } catch (clearError) {
                 console.error('[Login] Failed to clear storage:', clearError)
               }
@@ -136,12 +136,12 @@ const Login: React.FC = () => {
             return
           }
 
-          console.log('[Login] User authorized, completing sign-in')
+          // console.log('[Login] User authorized, completing sign-in')
 
           // Use Supabase user data directly for local SQLite sync (no Railway call needed)
           const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
 
-          console.log('[Login] Syncing Supabase user to local SQLite...', { userId, username })
+          // console.log('[Login] Syncing Supabase user to local SQLite...', { userId, username })
 
           // Sync user to local SQLite database (fire-and-forget)
           dualSync.syncUser({
@@ -168,11 +168,11 @@ const Login: React.FC = () => {
               }
 
               await window.electronAPI.storage.set('auth_session', authStateForStorage)
-              console.log('[Login] OAuth session saved to Electron storage')
+              // console.log('[Login] OAuth session saved to Electron storage')
 
               // Reload the session in AuthContext to update user state
               await reloadSession()
-              console.log('[Login] Auth session reloaded in context')
+              // console.log('[Login] Auth session reloaded in context')
             } catch (storageError) {
               console.error('[Login] Failed to save OAuth session to storage:', storageError)
             }
@@ -217,18 +217,18 @@ const Login: React.FC = () => {
         if (error) throw error
 
         if (data?.url) {
-          console.log('[Login] Opening OAuth in external browser (deep link flow)')
+          // console.log('[Login] Opening OAuth in external browser (deep link flow)')
           const result = await window.electronAPI.auth.openExternal(data.url)
 
           if (!result.success) {
             // Browser failed to open - immediately switch to OOB flow
-            console.log('[Login] Failed to open browser, switching to OOB flow')
+            // console.log('[Login] Failed to open browser, switching to OOB flow')
             setLoading(false)
             handleOOBLogin(provider)
             return
           }
 
-          console.log('[Login] OAuth URL opened in external browser, waiting for callback...')
+          // console.log('[Login] OAuth URL opened in external browser, waiting for callback...')
 
           // Enter "waiting for callback" state
           setPendingProvider(provider)
@@ -323,14 +323,14 @@ const Login: React.FC = () => {
 
       if (error) throw error
 
-      console.log('[Login] OOB session established successfully')
+      // console.log('[Login] OOB session established successfully')
 
       // Handle Electron-specific authorization (same as deep link flow)
       if (data.session?.user && isElectronMode) {
         const userId = data.session.user.id
         const userEmail = data.session.user.email || 'unknown'
 
-        console.log('[Login] Checking user authorization...', { userId, userEmail })
+        // console.log('[Login] Checking user authorization...', { userId, userEmail })
 
         const isAllowed = await isUserAllowlisted(userId)
 
@@ -351,7 +351,7 @@ const Login: React.FC = () => {
           return
         }
 
-        console.log('[Login] User authorized, completing sign-in')
+        // console.log('[Login] User authorized, completing sign-in')
 
         const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
 
@@ -495,12 +495,8 @@ const Login: React.FC = () => {
             <div className='space-y-6'>
               <div className='text-center'>
                 <div className='inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-4'></div>
-                <p className='text-neutral-200 dark:text-neutral-100 mb-2'>
-                  Completing sign-in in browser...
-                </p>
-                <p className='text-neutral-400 text-sm'>
-                  Waiting for authentication to complete
-                </p>
+                <p className='text-neutral-200 dark:text-neutral-100 mb-2'>Completing sign-in in browser...</p>
+                <p className='text-neutral-400 text-sm'>Waiting for authentication to complete</p>
               </div>
 
               {showFallbackLink && (

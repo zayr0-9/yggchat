@@ -157,7 +157,7 @@ export function useIdeContext(): UseIdeContextReturn {
       // In Electron, use the local sync server (port 3002) which handles IDE context
       if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
         websocketUrl = 'ws://localhost:3002/ide-context?type=frontend&id=ygg-chat'
-        console.log('[useIdeContext] Electron mode detected, using local server:', websocketUrl)
+        // console.log('[useIdeContext] Electron mode detected, using local server:', websocketUrl)
       }
 
       globalWebSocket = new WebSocket(websocketUrl)
@@ -223,7 +223,8 @@ export function useIdeContext(): UseIdeContextReturn {
               globalDispatch(setExtensionStatus(isRealExtensionResponse))
 
               if (projectState.workspace) {
-                const name = typeof projectState.workspace === 'string' ? projectState.workspace : projectState.workspace.name
+                const name =
+                  typeof projectState.workspace === 'string' ? projectState.workspace : projectState.workspace.name
                 const rootPath = typeof projectState.workspace === 'string' ? null : projectState.workspace.rootPath
 
                 globalDispatch(

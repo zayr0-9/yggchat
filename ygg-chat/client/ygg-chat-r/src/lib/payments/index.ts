@@ -8,12 +8,7 @@
 import type { PaymentProvider } from './types'
 
 // Re-export types for convenience
-export type {
-  PaymentProvider,
-  SubscriptionStatus,
-  TierInfo,
-  CreditHistoryEntry,
-} from './types'
+export type { CreditHistoryEntry, PaymentProvider, SubscriptionStatus, TierInfo } from './types'
 
 let cachedProvider: PaymentProvider | null = null
 
@@ -36,12 +31,12 @@ export async function getPaymentProvider(): Promise<PaymentProvider> {
     return cachedProvider
   }
 
-  console.log('[PaymentFactory] Creating payment provider...')
-  console.log(
-    '[PaymentFactory] Build target:',
-    typeof __BUILD_TARGET__ !== 'undefined' ? __BUILD_TARGET__ : 'unknown',
-  )
-  console.log('[PaymentFactory] Runtime env:', import.meta.env.VITE_ENVIRONMENT || 'unknown')
+  // console.log('[PaymentFactory] Creating payment provider...')
+  // console.log(
+  //   '[PaymentFactory] Build target:',
+  //   typeof __BUILD_TARGET__ !== 'undefined' ? __BUILD_TARGET__ : 'unknown',
+  // )
+  // console.log('[PaymentFactory] Runtime env:', import.meta.env.VITE_ENVIRONMENT || 'unknown')
 
   let provider: PaymentProvider
 
@@ -50,25 +45,25 @@ export async function getPaymentProvider(): Promise<PaymentProvider> {
     (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
     (typeof __IS_LOCAL__ !== 'undefined' && __IS_LOCAL__)
   ) {
-    console.log('[PaymentFactory] Using No-Op payment provider (build-time)')
+    // console.log('[PaymentFactory] Using No-Op payment provider (build-time)')
     const { NoOpPaymentProvider } = await import('./none')
     provider = new NoOpPaymentProvider()
   } else if (typeof __IS_WEB__ !== 'undefined' && __IS_WEB__) {
-    console.log('[PaymentFactory] Using Stripe payment provider (build-time)')
+    // console.log('[PaymentFactory] Using Stripe payment provider (build-time)')
     const { StripePaymentProvider } = await import('./stripe')
     provider = new StripePaymentProvider()
   }
   // Runtime fallback (for development and when build constants not set)
   else {
     const runtimeEnv = import.meta.env.VITE_ENVIRONMENT || 'local'
-    console.log('[PaymentFactory] Using runtime environment:', runtimeEnv)
+    // console.log('[PaymentFactory] Using runtime environment:', runtimeEnv)
 
     if (runtimeEnv === 'web') {
-      console.log('[PaymentFactory] Using Stripe payment provider (runtime)')
+      // console.log('[PaymentFactory] Using Stripe payment provider (runtime)')
       const { StripePaymentProvider } = await import('./stripe')
       provider = new StripePaymentProvider()
     } else {
-      console.log('[PaymentFactory] Using No-Op payment provider (runtime)')
+      // console.log('[PaymentFactory] Using No-Op payment provider (runtime)')
       const { NoOpPaymentProvider } = await import('./none')
       provider = new NoOpPaymentProvider()
     }

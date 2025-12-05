@@ -1,4 +1,4 @@
-import type { AuthProvider, AuthState, Credentials, AuthChangeCallback, User } from './types'
+import type { AuthChangeCallback, AuthProvider, AuthState, Credentials, User } from './types'
 
 /**
  * Local Auth Provider
@@ -27,7 +27,7 @@ export class LocalAuthProvider implements AuthProvider {
   private listeners: Set<AuthChangeCallback> = new Set()
 
   async initialize(): Promise<void> {
-    console.log('[LocalAuth] Initialized with hardcoded local user')
+    // console.log('[LocalAuth] Initialized with hardcoded local user')
     // Notify listeners of initial state
     this.notifyListeners(this.authState.user)
   }
@@ -38,12 +38,12 @@ export class LocalAuthProvider implements AuthProvider {
 
   async login(_credentials: Credentials): Promise<AuthState> {
     // In local mode, login always succeeds with the hardcoded user
-    console.log('[LocalAuth] Login called (always succeeds in local mode)')
+    // console.log('[LocalAuth] Login called (always succeeds in local mode)')
     return this.authState
   }
 
   async logout(): Promise<void> {
-    console.log('[LocalAuth] Logout called (no-op in local mode)')
+    // console.log('[LocalAuth] Logout called (no-op in local mode)')
     // In local mode, we don't actually logout
     // Just notify listeners
     this.notifyListeners(null)
@@ -75,7 +75,7 @@ export class LocalAuthProvider implements AuthProvider {
   }
 
   private notifyListeners(user: User | null) {
-    this.listeners.forEach((listener) => {
+    this.listeners.forEach(listener => {
       try {
         listener(user)
       } catch (error) {

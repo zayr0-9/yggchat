@@ -218,7 +218,7 @@ async function fetchAllModelsPricing(): Promise<void> {
 
     const data: any = await response.json()
     const models = data.data || []
-    console.log(`Found ${models.length} models from OpenRouter`)
+    // console.log(`Found ${models.length} models from OpenRouter`)
 
     // Clear existing cache and rebuild
     allModelsPricingCache.clear()
@@ -436,9 +436,9 @@ async function reserveCreditsForGeneration(
       // The reservation was successful, so we can proceed
     }
 
-    console.log(
-      `✅ Reserved ${moneyFormat(reservedCredits)} credits for user ${userId} (reservation: ${reservationRefId})`
-    )
+    // console.log(
+    //   `✅ Reserved ${moneyFormat(reservedCredits)} credits for user ${userId} (reservation: ${reservationRefId})`
+    // )
 
     return {
       reservationRefId,
@@ -519,9 +519,9 @@ async function finishProviderRun(
     const needsImmediateRefund = status === 'aborted' && !providerRun?.generation_id
 
     if (needsImmediateRefund && providerRun) {
-      console.log(
-        `💸 Generation aborted before streaming - immediately refunding ${moneyFormat(providerRun.reserved_credits)} credits`
-      )
+      // console.log(
+      //   `💸 Generation aborted before streaming - immediately refunding ${moneyFormat(providerRun.reserved_credits)} credits`
+      // )
 
       // Refund the full reserved amount since no generation occurred
       try {
@@ -543,7 +543,7 @@ async function finishProviderRun(
         if (refundError) {
           console.error('Error refunding credits for aborted generation:', refundError)
         } else {
-          console.log(`✅ Refunded ${moneyFormat(providerRun.reserved_credits)} credits for aborted generation`)
+          // console.log(`✅ Refunded ${moneyFormat(providerRun.reserved_credits)} credits for aborted generation`)
 
           // Mark as reconciled immediately since we've handled the refund
           const { error: updateError } = await supabaseAdmin
@@ -559,9 +559,10 @@ async function finishProviderRun(
 
           if (updateError) {
             console.error('Error updating provider run after refund:', updateError)
-          } else {
-            console.log(`🏁 Marked provider run ${providerRunId} as reconciled (immediate refund)`)
           }
+          // else {
+          //   console.log(`🏁 Marked provider run ${providerRunId} as reconciled (immediate refund)`)
+          // }
           return
         }
       } catch (refundError) {
@@ -582,9 +583,10 @@ async function finishProviderRun(
 
     if (error) {
       console.error('Error finishing provider run:', error)
-    } else {
-      console.log(`🏁 Marked provider run ${providerRunId} as ${status}, ready for reconciliation`)
     }
+    // else {
+    //   console.log(`🏁 Marked provider run ${providerRunId} as ${status}, ready for reconciliation`)
+    // }
   } catch (error) {
     console.error('Error in finishProviderRun:', error)
   }
@@ -743,18 +745,19 @@ export async function generateResponse(
           )
           currentProviderRunId = reservation.providerRunId
           currentReservationRefId = reservation.reservationRefId
-          console.log(`💳 Step ${stepCount}: Reserved ${moneyFormat(reservation.reservedCredits)} credits`)
+          // console.log(`💳 Step ${stepCount}: Reserved ${moneyFormat(reservation.reservedCredits)} credits`)
         } catch (error: any) {
           // If reservation fails (e.g., insufficient credits), stop the generation
           const errorMsg = error.message || 'Failed to reserve credits'
           onChunk(JSON.stringify({ part: 'error', delta: errorMsg }))
           throw error
         }
-      } else {
-        // Free tier user - skip credit reservation
-        // Free generation eligibility already checked in supaChat.ts before calling generateResponse()
-        console.log(`🆓 Step ${stepCount}: Free tier user - skipping credit reservation`)
       }
+      // else {
+      //   // Free tier user - skip credit reservation
+      //   // Free generation eligibility already checked in supaChat.ts before calling generateResponse()
+      //   console.log(`🆓 Step ${stepCount}: Free tier user - skipping credit reservation`)
+      // }
     }
 
     if (abortSignal?.aborted) {
@@ -1537,10 +1540,11 @@ async function logGenerationCost(
 
     if (creditsFromUsage > 0) {
       totals.totalOpenRouterCredits += creditsFromUsage
-      console.log('💰 OpenRouter credits found:', creditsFromUsage, 'Total:', totals.totalOpenRouterCredits)
-    } else {
-      console.log('⚠️ No cost/credits found in usage object fields:', Object.keys(usage))
+      // console.log('💰 OpenRouter credits found:', creditsFromUsage, 'Total:', totals.totalOpenRouterCredits)
     }
+    // else {
+    //   // console.log('⚠️ No cost/credits found in usage object fields:', Object.keys(usage))
+    // }
 
     const pricing = await getModelPricing(model)
     if (pricing) {
@@ -1548,11 +1552,11 @@ async function logGenerationCost(
       totals.totalCostUSD += costs.totalCost
     }
   } catch (error) {
-    console.log(`\n🔹 Step ${stepCount} Generation Summary:`)
-    console.log(`Model: ${model}`)
-    console.log(`Tokens: ${usage.total_tokens || 'unknown'}`)
+    // console.log(`\n🔹 Step ${stepCount} Generation Summary:`)
+    // console.log(`Model: ${model}`)
+    // console.log(`Tokens: ${usage.total_tokens || 'unknown'}`)
     console.log('Cost: Error calculating -', error)
-    console.log()
+    // console.log()
   }
 }
 
@@ -1636,16 +1640,16 @@ async function handleImageAttachments(
       if (att.sha256) {
         const cached = await getCachedAttachmentBase64(att.sha256)
         if (cached) {
-          console.log(`Cache hit for attachment sha256:${att.sha256.substring(0, 12)}...`)
+          // console.log(`Cache hit for attachment sha256:${att.sha256.substring(0, 12)}...`)
           parts.push({ type: 'image_url', image_url: { url: `data:${cached.mimeType};base64,${cached.base64}` } })
           continue // Skip disk/network read
         }
-        console.log(`Cache miss for attachment sha256:${att.sha256.substring(0, 12)}...`)
+        // console.log(`Cache miss for attachment sha256:${att.sha256.substring(0, 12)}...`)
       }
 
       // Check if filePath is a Supabase Storage URL
       if (att.filePath && att.filePath.startsWith('http')) {
-        console.log(`Fetching image from Supabase Storage:${att.filePath}`)
+        // console.log(`Fetching image from Supabase Storage:${att.filePath}`)
 
         // Extract the path from the Supabase URL
         // Format: https://<project>.supabase.co/storage/v1/object/public/<bucket>/<path>
@@ -1676,7 +1680,7 @@ async function handleImageAttachments(
               mediaType = contentType
             }
 
-            console.log(`Successfully downloaded image from Supabase:${objectPath}`)
+            // console.log(`Successfully downloaded image from Supabase:${objectPath}`)
           }
         } else {
           console.error(`Invalid Supabase Storage URL format:${att.filePath}`)
@@ -1684,7 +1688,7 @@ async function handleImageAttachments(
         }
       } else if (att.filePath) {
         // Try to read as local file (for backwards compatibility)
-        console.log(`Attempting to read local file:${att.filePath}`)
+        // console.log(`Attempting to read local file:${att.filePath}`)
 
         const baseDir = path.resolve(__dirname, '..')
         let abs = path.isAbsolute(att.filePath) ? att.filePath : path.join(baseDir, att.filePath)
@@ -1701,7 +1705,7 @@ async function handleImageAttachments(
           const found = candidates.find(p => fs.existsSync(p))
           if (found) {
             abs = found
-            console.log(`Resolved attachment path:${abs}`)
+            // console.log(`Resolved attachment path:${abs}`)
           } else {
             console.error(`Local file not found:${att.filePath}`)
             continue
@@ -1722,7 +1726,7 @@ async function handleImageAttachments(
         // Add image in OpenAI format
         parts.push({ type: 'image_url', image_url: { url: `data:${mediaType};base64,${base64}` } })
 
-        console.log(`Successfully processed image attachment:${att.filePath}`)
+        // console.log(`Successfully processed image attachment:${att.filePath}`)
       }
     } catch (error) {
       console.error(`Error processing attachment${att.filePath}:`, error)

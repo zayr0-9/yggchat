@@ -86,9 +86,9 @@ router.post(
   '/cc-messages/:conversationId',
   expensiveOperationsRateLimiter, // CC is expensive, use same limits as AI streaming
   asyncHandler(async (req, res) => {
-    console.log('\n🤖🤖🤖 [SERVER] POST /api/agents/cc-messages - Claude Code message received')
-    console.log('🤖 Timestamp:', new Date().toISOString())
-    console.log('🤖 Conversation ID:', req.params.conversationId)
+    // console.log('\n🤖🤖🤖 [SERVER] POST /api/agents/cc-messages - Claude Code message received')
+    // console.log('🤖 Timestamp:', new Date().toISOString())
+    // console.log('🤖 Conversation ID:', req.params.conversationId)
 
     const conversationId = req.params.conversationId
     const jwt = getAuthToken(req)
@@ -114,12 +114,12 @@ router.post(
       return res.status(400).json({ error: 'Message content required' })
     }
 
-    console.log('🤖 CC Request:', {
-      message: message.substring(0, 100),
-      cwd,
-      permissionMode,
-      resume,
-    })
+    // console.log('🤖 CC Request:', {
+    //   message: message.substring(0, 100),
+    //   cwd,
+    //   permissionMode,
+    //   resume,
+    // })
 
     // Set up SSE (Server-Sent Events) for streaming
     res.writeHead(200, {
@@ -178,7 +178,7 @@ router.post(
         })}\n\n`
       )
 
-      console.log('🤖 CC conversation completed successfully')
+      // console.log('🤖 CC conversation completed successfully')
     } catch (error) {
       console.error('[CC Endpoint] Error:', error)
 
@@ -199,9 +199,9 @@ router.post(
   '/cc-messages-branch/:conversationId',
   expensiveOperationsRateLimiter,
   asyncHandler(async (req, res) => {
-    console.log('\n🤖🤖🤖 [SERVER] POST /api/agents/cc-messages-branch - Claude Code branch message received')
-    console.log('🤖 Timestamp:', new Date().toISOString())
-    console.log('🤖 Conversation ID:', req.params.conversationId)
+    // console.log('\n🤖🤖🤖 [SERVER] POST /api/agents/cc-messages-branch - Claude Code branch message received')
+    // console.log('🤖 Timestamp:', new Date().toISOString())
+    // console.log('🤖 Conversation ID:', req.params.conversationId)
 
     const conversationId = req.params.conversationId
     const jwt = getAuthToken(req)
@@ -231,12 +231,12 @@ router.post(
       return res.status(400).json({ error: 'parentId is required for branching (use null for root branches)' })
     }
 
-    console.log('🤖 CC Branch Request:', {
-      message: message.substring(0, 100),
-      parentId,
-      cwd,
-      permissionMode,
-    })
+    // console.log('🤖 CC Branch Request:', {
+    //   message: message.substring(0, 100),
+    //   parentId,
+    //   cwd,
+    //   permissionMode,
+    // })
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -275,7 +275,7 @@ router.post(
         })}\n\n`
       )
 
-      console.log('🤖 CC branch conversation completed successfully')
+      // console.log('🤖 CC branch conversation completed successfully')
     } catch (error) {
       console.error('[CC Branch Endpoint] Error:', error)
 

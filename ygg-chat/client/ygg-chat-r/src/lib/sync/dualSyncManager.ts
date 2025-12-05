@@ -63,7 +63,7 @@ class DualSyncManager {
         const data = await response.json()
         this.localServerAvailable = data.status === 'ok'
         this.enabled = this.localServerAvailable
-        console.log('[DualSync] Local server available:', this.localServerAvailable)
+        // console.log('[DualSync] Local server available:', this.localServerAvailable)
       } else {
         this.localServerAvailable = false
         this.enabled = false
@@ -80,7 +80,7 @@ class DualSyncManager {
   // Enable/disable sync
   setEnabled(enabled: boolean): void {
     this.enabled = enabled && this.localServerAvailable
-    console.log('[DualSync] Sync enabled:', this.enabled)
+    // console.log('[DualSync] Sync enabled:', this.enabled)
     this.notifyStatusChange()
   }
 
@@ -111,13 +111,13 @@ class DualSyncManager {
   // Enqueue a sync operation
   enqueue(operation: Omit<SyncOperation, 'id' | 'retryCount' | 'timestamp'>): void {
     if (!this.enabled) {
-      console.log('[DualSync] Sync disabled, skipping operation:', operation.type, operation.action)
+      // console.log('[DualSync] Sync disabled, skipping operation:', operation.type, operation.action)
       return
     }
 
     // NEW: Skip local-only records
     if (operation.data?.storage_mode === 'local') {
-      console.log('[DualSync] Skipping local-only record:', operation.type, operation.data.id)
+      // console.log('[DualSync] Skipping local-only record:', operation.type, operation.data.id)
       return
     }
 
@@ -129,7 +129,7 @@ class DualSyncManager {
     }
 
     this.queue.push(op)
-    console.log(`[DualSync] Enqueued ${op.type} ${op.action} operation (queue: ${this.queue.length})`)
+    // console.log(`[DualSync] Enqueued ${op.type} ${op.action} operation (queue: ${this.queue.length})`)
     this.notifyStatusChange()
 
     // Process queue if not already processing
@@ -154,7 +154,7 @@ class DualSyncManager {
         // Success - remove from queue
         this.queue.shift()
         this.lastSyncAt = new Date().toISOString()
-        console.log(`[DualSync] Successfully synced ${operation.type} ${operation.action}`)
+        // console.log(`[DualSync] Successfully synced ${operation.type} ${operation.action}`)
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error)
         operation.retryCount++
@@ -245,7 +245,7 @@ class DualSyncManager {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: (method === 'POST' || method === 'PATCH') ? JSON.stringify(operation.data) : undefined,
+      body: method === 'POST' || method === 'PATCH' ? JSON.stringify(operation.data) : undefined,
       signal: AbortSignal.timeout(5000),
     })
 
@@ -272,7 +272,7 @@ class DualSyncManager {
   syncProject(projectData: any, action: 'create' | 'update' | 'delete' = 'create'): void {
     // Skip local-only projects
     if (projectData?.storage_mode === 'local') {
-      console.log('[DualSync] Skipping local-only project:', projectData.id)
+      // console.log('[DualSync] Skipping local-only project:', projectData.id)
       return
     }
 
@@ -286,7 +286,7 @@ class DualSyncManager {
   syncConversation(conversationData: any, action: 'create' | 'update' | 'delete' = 'create'): void {
     // Skip local-only conversations
     if (conversationData?.storage_mode === 'local') {
-      console.log('[DualSync] Skipping local-only conversation:', conversationData.id)
+      // console.log('[DualSync] Skipping local-only conversation:', conversationData.id)
       return
     }
 
@@ -340,7 +340,7 @@ class DualSyncManager {
   // Batch sync for efficiency
   async syncBatch(operations: Array<{ type: string; action: string; data: any }>): Promise<void> {
     if (!this.enabled) {
-      console.log('[DualSync] Sync disabled, skipping batch operation')
+      // console.log('[DualSync] Sync disabled, skipping batch operation')
       return
     }
 
@@ -359,10 +359,10 @@ class DualSyncManager {
         throw new Error(`Batch sync failed: HTTP ${response.status}: ${errorText}`)
       }
 
-      const result = await response.json()
-      console.log(
-        `[DualSync] Batch sync completed: ${result.results.filter((r: any) => r.success).length}/${operations.length} succeeded`
-      )
+      // const result = await response.json()
+      // console.log(
+      //   `[DualSync] Batch sync completed: ${result.results.filter((r: any) => r.success).length}/${operations.length} succeeded`
+      // )
       this.lastSyncAt = new Date().toISOString()
       this.notifyStatusChange()
     } catch (error) {

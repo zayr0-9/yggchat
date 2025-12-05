@@ -243,12 +243,12 @@ const updateMessageInCache = (
     const updatedMessages = existingData.messages.map(msg =>
       msg.id === messageId
         ? {
-          ...msg,
-          content: updatedContent,
-          content_plain_text: updatedContent,
-          ...(updatedNote !== undefined && { note: updatedNote }),
-          ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
-        }
+            ...msg,
+            content: updatedContent,
+            content_plain_text: updatedContent,
+            ...(updatedNote !== undefined && { note: updatedNote }),
+            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
+          }
         : msg
     )
 
@@ -374,8 +374,8 @@ const parseContentBlocks = (blocks: string | any[] | undefined): any[] => {
 }
 
 const executeLocalTool = async (toolCall: any, rootPath: string | null, operationMode: OperationMode) => {
-  console.log(`🔧 Executing local tool: ${toolCall.name}`)
-  console.log(`[chatActions] rootPath passed to tool: ${rootPath}`)
+  // console.log(`🔧 Executing local tool: ${toolCall.name}`)
+  // console.log(`[chatActions] rootPath passed to tool: ${rootPath}`)
   try {
     const response = await fetch(`${LOCAL_API_BASE}/tools/execute`, {
       method: 'POST',
@@ -713,7 +713,7 @@ export const sendMessage = createAsyncThunk<
                     const baseTitle = contentForTitle.slice(0, 50)
                     const title = baseTitle ? `${baseTitle}...` : ''
                     if (title) {
-                      ; (dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
                       titleUpdated = true
                     }
                   }
@@ -721,7 +721,7 @@ export const sendMessage = createAsyncThunk<
 
                 // Handle tool results (accumulated server-side into content_blocks)
                 if (chunk.part === 'tool_result' && chunk.toolResult) {
-                  console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
+                  // console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
 
                   // Mark this tool call as processed by server
                   processedToolCallIds.add(chunk.toolResult.tool_use_id)
@@ -830,11 +830,11 @@ export const sendMessage = createAsyncThunk<
           const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
 
           if (pendingToolCalls.length > 0) {
-            console.log(`🛠️ [chatActions] Executing ${pendingToolCalls.length} tool calls locally...`)
+            // console.log(`🛠️ [chatActions] Executing ${pendingToolCalls.length} tool calls locally...`)
 
-            if (processedToolCallIds.size > 0) {
-              console.log(`⏩ [chatActions] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
-            }
+            // if (processedToolCallIds.size > 0) {
+            //   console.log(`⏩ [chatActions] Skipped ${processedToolCallIds.size} tool calls already handled by server`)
+            // }
 
             // 1. Synthesize Assistant Message if we didn't get a 'complete' event
             // (In client mode, server aborts before sending 'complete')
@@ -881,7 +881,7 @@ export const sendMessage = createAsyncThunk<
             // Get rootPath from IDE context to help determine if we're in WSL
             const rootPath = state.ideContext.workspace?.rootPath || null
             const operationMode = state.chat.operationMode
-            console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
+            // console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
             for (const toolCall of pendingToolCalls) {
               // Execute tool
               const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode)
@@ -950,13 +950,13 @@ export const sendMessage = createAsyncThunk<
             assistantToolCalls = []
           } else {
             // All tool calls handled by server (or none exist)
-            if (assistantToolCalls.length > 0 && processedToolCallIds.size > 0) {
-              console.log('✅ [chatActions] All tool calls handled by server')
-              // Ensure message state is complete if we have a messageId
-              if (messageId) {
-                // This might be redundant if server sent 'complete', but ensures safety
-              }
-            }
+            // if (assistantToolCalls.length > 0 && processedToolCallIds.size > 0) {
+            //   console.log('✅ [chatActions] All tool calls handled by server')
+            //   // Ensure message state is complete if we have a messageId
+            //   if (messageId) {
+            //     // This might be redundant if server sent 'complete', but ensures safety
+            //   }
+            // }
 
             // If no pending calls, we're done with this turn
             continueTurn = false
@@ -1110,20 +1110,20 @@ export const deleteMessage = createAsyncThunk<
     const effectiveStorageMode = storageMode ?? getStorageModeFromCache(extra.queryClient, conversationId)
     const isLocalMode = shouldUseLocalApi(effectiveStorageMode)
 
-    console.log('[deleteMessage] Routing decision:', {
-      passedStorageMode: storageMode,
-      effectiveStorageMode,
-      isLocalMode,
-      environment,
-      conversationId,
-      messageId: id,
-    })
+    // console.log('[deleteMessage] Routing decision:', {
+    //   passedStorageMode: storageMode,
+    //   effectiveStorageMode,
+    //   isLocalMode,
+    //   environment,
+    //   conversationId,
+    //   messageId: id,
+    // })
 
     if (isLocalMode) {
-      console.log('[deleteMessage] -> Routing to LOCAL API: /local/messages/' + id)
+      // console.log('[deleteMessage] -> Routing to LOCAL API: /local/messages/' + id)
       await localApi.delete(`/local/messages/${id}`)
     } else {
-      console.log('[deleteMessage] -> Routing to CLOUD API: /messages/' + id)
+      // console.log('[deleteMessage] -> Routing to CLOUD API: /messages/' + id)
       await apiCall(`/messages/${id}`, auth.accessToken, { method: 'DELETE' })
     }
     // Sync React Query cache immediately
@@ -1390,9 +1390,9 @@ export const editMessageWithBranching = createAsyncThunk<
 
                 // Handle tool results (accumulated server-side into content_blocks)
                 if (chunk.part === 'tool_result' && chunk.toolResult) {
-                  console.log(
-                    `✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
-                  )
+                  // console.log(
+                  //   `✅ [editMessageWithBranching] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
+                  // )
 
                   // Mark this tool call as processed by server
                   processedToolCallIds.add(chunk.toolResult.tool_use_id)
@@ -1493,13 +1493,13 @@ export const editMessageWithBranching = createAsyncThunk<
           const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
 
           if (pendingToolCalls.length > 0) {
-            console.log(`🛠️ [editMessageWithBranching] Executing ${pendingToolCalls.length} tool calls locally...`)
+            // console.log(`🛠️ [editMessageWithBranching] Executing ${pendingToolCalls.length} tool calls locally...`)
 
-            if (processedToolCallIds.size > 0) {
-              console.log(
-                `⏩ [editMessageWithBranching] Skipped ${processedToolCallIds.size} tool calls already handled by server`
-              )
-            }
+            // if (processedToolCallIds.size > 0) {
+            //   console.log(
+            //     `⏩ [editMessageWithBranching] Skipped ${processedToolCallIds.size} tool calls already handled by server`
+            //   )
+            // }
 
             // 1. Synthesize Assistant Message if we didn't get a 'complete' event
             if (!messageId && turnAssistantMessageId) {
@@ -1606,9 +1606,9 @@ export const editMessageWithBranching = createAsyncThunk<
             assistantThinking = ''
             assistantToolCalls = []
           } else {
-            if (assistantToolCalls.length > 0 && processedToolCallIds.size > 0) {
-              console.log('✅ [editMessageWithBranching] All tool calls handled by server')
-            }
+            // if (assistantToolCalls.length > 0 && processedToolCallIds.size > 0) {
+            //   console.log('✅ [editMessageWithBranching] All tool calls handled by server')
+            // }
             continueTurn = false
           }
         } else {
@@ -1796,9 +1796,9 @@ export const sendMessageToBranch = createAsyncThunk<
 
                 // Handle tool results (accumulated server-side into content_blocks)
                 if (chunk.part === 'tool_result' && chunk.toolResult) {
-                  console.log(
-                    `✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
-                  )
+                  // console.log(
+                  //   `✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
+                  // )
 
                   // Mark this tool call as processed by server
                   processedToolCallIds.add(chunk.toolResult.tool_use_id)
@@ -1892,13 +1892,13 @@ export const sendMessageToBranch = createAsyncThunk<
           const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
 
           if (pendingToolCalls.length > 0) {
-            console.log(`🛠️ [sendMessageToBranch] Executing ${pendingToolCalls.length} tool calls locally...`)
+            // console.log(`🛠️ [sendMessageToBranch] Executing ${pendingToolCalls.length} tool calls locally...`)
 
-            if (processedToolCallIds.size > 0) {
-              console.log(
-                `⏩ [sendMessageToBranch] Skipped ${processedToolCallIds.size} tool calls already handled by server`
-              )
-            }
+            // if (processedToolCallIds.size > 0) {
+            //   console.log(
+            //     `⏩ [sendMessageToBranch] Skipped ${processedToolCallIds.size} tool calls already handled by server`
+            //   )
+            // }
 
             // 1. Synthesize Assistant Message if we didn't get a 'complete' event
             if (!messageId && turnAssistantMessageId) {
@@ -2177,18 +2177,18 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
       const conversation = state.conversations.items.find(c => c.id === conversationId)
       const storageMode = conversation?.storage_mode || 'cloud'
 
-      console.log(`[fetchMessageTree] ConversationId: ${conversationId}`)
-      console.log(`[fetchMessageTree] Found in state: ${!!conversation}`)
-      console.log(`[fetchMessageTree] Storage Mode: ${storageMode}`)
-      console.log(`[fetchMessageTree] Environment: ${environment}`)
+      // console.log(`[fetchMessageTree] ConversationId: ${conversationId}`)
+      // console.log(`[fetchMessageTree] Found in state: ${!!conversation}`)
+      // console.log(`[fetchMessageTree] Storage Mode: ${storageMode}`)
+      // console.log(`[fetchMessageTree] Environment: ${environment}`)
 
       if (shouldUseLocalApi(storageMode, environment)) {
-        console.log('[fetchMessageTree] Routing to LOCAL API')
+        // console.log('[fetchMessageTree] Routing to LOCAL API')
         response = await localApi.get<{ messages: Message[]; tree: any }>(
           `/local/conversations/${conversationId}/messages/tree`
         )
       } else {
-        console.log('[fetchMessageTree] Routing to CLOUD API')
+        // console.log('[fetchMessageTree] Routing to CLOUD API')
         response = await apiCall<{ messages: Message[]; tree: any }>(
           `/conversations/${conversationId}/messages/tree`,
           auth.accessToken
@@ -2424,21 +2424,21 @@ export const deleteSelectedNodes = createAsyncThunk<
     const effectiveStorageMode = storageMode ?? getStorageModeFromCache(extra.queryClient, conversationId)
     const isLocalMode = shouldUseLocalApi(effectiveStorageMode)
 
-    console.log('[deleteSelectedNodes] Routing decision:', {
-      passedStorageMode: storageMode,
-      effectiveStorageMode,
-      isLocalMode,
-      environment,
-      conversationId,
-      messageCount: ids.length,
-    })
+    // console.log('[deleteSelectedNodes] Routing decision:', {
+    //   passedStorageMode: storageMode,
+    //   effectiveStorageMode,
+    //   isLocalMode,
+    //   environment,
+    //   conversationId,
+    //   messageCount: ids.length,
+    // })
 
     let response: { deleted: number }
     if (isLocalMode) {
-      console.log('[deleteSelectedNodes] -> Routing to LOCAL API: /local/messages/deleteMany')
+      // console.log('[deleteSelectedNodes] -> Routing to LOCAL API: /local/messages/deleteMany')
       response = await localApi.post<{ deleted: number }>('/local/messages/deleteMany', { ids })
     } else {
-      console.log('[deleteSelectedNodes] -> Routing to CLOUD API: /messages/deleteMany')
+      // console.log('[deleteSelectedNodes] -> Routing to CLOUD API: /messages/deleteMany')
       response = await apiCall<{ deleted: number }>('/messages/deleteMany', auth.accessToken, {
         method: 'POST',
         body: JSON.stringify({ ids }),
@@ -2748,7 +2748,6 @@ export const insertBulkMessages = createAsyncThunk<
   }
 })
 
-
 // ============================================================================
 // CLAUDE CODE AGENT ENDPOINTS
 // ============================================================================
@@ -2792,9 +2791,7 @@ export const fetchCCSlashCommands = createAsyncThunk<
 >('chat/fetchCCSlashCommands', async ({ conversationId, cwd }, { dispatch, rejectWithValue }) => {
   try {
     const queryParams = cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''
-    const response = await localApi.get<{ commands: string[] }>(
-      `/agents/cc-commands/${conversationId}${queryParams}`
-    )
+    const response = await localApi.get<{ commands: string[] }>(`/agents/cc-commands/${conversationId}${queryParams}`)
 
     const commands = response.commands || []
     dispatch(chatSliceActions.ccSlashCommandsLoaded(commands))
