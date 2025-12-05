@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "rm -f package-lock.json && cd client/ygg-chat-r && npm_config_workspaces=false npm install --omit=optional --ignore-scripts && npm run build",
+  "buildCommand": "npm install --workspace=client/ygg-chat-r --ignore-scripts && npm run build --workspace=client/ygg-chat-r",
   "outputDirectory": "client/ygg-chat-r/dist",
   "installCommand": "echo 'Skipping root install'",
   "framework": null,
