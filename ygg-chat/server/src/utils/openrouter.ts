@@ -669,8 +669,15 @@ export async function generateResponse(
   let currentReservationRefId: string | null = null
   let generationIdCaptured = false
 
-  // Server-only tools that are allowed in cloud mode (require API keys on server)
-  const CLOUD_ALLOWED_TOOLS = ['brave_search', 'exa_search', 'exa_code_context']
+  // Server-side tools allowed in cloud mode (require API keys on server)
+  const CLOUD_SERVER_TOOLS = ['brave_search', 'exa_search', 'exa_code_context']
+
+  // Client-side tools allowed in cloud mode (execute on local machine via Electron)
+  // These require local resources (browser, filesystem access) but no server API keys
+  const CLOUD_CLIENT_TOOLS = ['browse_web']
+
+  // All tools allowed in cloud mode
+  const CLOUD_ALLOWED_TOOLS = [...CLOUD_SERVER_TOOLS, ...CLOUD_CLIENT_TOOLS]
 
   // Convert tools to OpenAI format
   // In cloud mode, only allow server-side search tools (no agentic/local tools)
