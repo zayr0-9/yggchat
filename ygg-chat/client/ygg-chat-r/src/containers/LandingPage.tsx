@@ -350,6 +350,95 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
         }`}
       >
         <div className='sm:max-w-6xl lg:max-w-7xl xl:max-w-[1600px] 2xl:max-w-full mx-auto'>
+          {/* Issues Section */}
+          <div className='px-6 md:px-12 lg:px-16 pt-30 pb-50'>
+            <h2 className='text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4 text-center'>
+              The Problem
+            </h2>
+            <p className='text-lg text-gray-600 dark:text-gray-400 text-center max-w-2xl mx-auto mb-24'>
+              Current AI interfaces are inefficient. Here's what we're fixing.
+            </p>
+
+            <div className='grid grid-cols-1 mx-auto md:grid-cols-3 gap-6 lg:gap-22'>
+              {/* Issue 1: Data & Privacy */}
+              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-red-400/50 dark:hover:border-red-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/10'>
+                <div className='w-16 h-16 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300'>
+                  <i className='bx bx-git-branch text-2xl text-amber-600 dark:text-amber-400'></i>
+                </div>
+                <h3 className='text-2xl font-semibold text-gray-900 dark:text-white mb-3'>Linear Chat Constraints</h3>
+                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
+                  <li className='mb-2'>
+                    Sequential chats force premature commitment to a single path—discovering a fundamental flaw means
+                    abandoning hours of work.
+                  </li>
+                  <li className='mb-2'>
+                    Exploration is penalized: you can't branch to test alternatives or clarify requirements without
+                    starting over.
+                  </li>
+                  <li className='mb-2'>
+                    LLM inconsistency becomes a liability; you can't "reroll" from a promising point in history to
+                    explore different outcomes.
+                  </li>
+                </ul>
+              </div>
+
+              {/* Issue 2: Workflow & Structure */}
+              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-amber-400/50 dark:hover:border-amber-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10'>
+                <div className='w-16 h-16 rounded-xl bg-purple-100 dark:bg-purple-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300'>
+                  <i className='bx bx-brain text-2xl text-purple-600 dark:text-purple-400'></i>
+                </div>
+                <h3 className='text-2xl font-semibold text-gray-900 dark:text-white mb-3'>
+                  Context Rot & Runaway Costs
+                </h3>
+                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
+                  <li className='mb-2'>
+                    Conversations bloat over time, pushing token costs up while response quality deteriorates from
+                    stale, distorted history.
+                  </li>
+                  <li className='mb-2'>
+                    Agentic workflows accelerate the damage with excessive tool calls and naive truncation that discards
+                    critical state.
+                  </li>
+                  <li className='mb-2'>
+                    Hallucinations compound as models lose semantic grounding, turning long sessions from useful to
+                    unreliable.
+                  </li>
+                </ul>
+              </div>
+
+              {/* Issue 3: Context Management */}
+              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-red-400/50 dark:hover:border-red-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/10'>
+                <div className='w-16 h-16 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300'>
+                  <i className='bx bx-lock-alt text-2xl text-red-600 dark:text-red-400'></i>
+                </div>
+                <h3 className='text-2xl font-semibold text-gray-900 dark:text-white mb-3'>
+                  Zero Data Ownership & Privacy Exposure
+                </h3>
+                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
+                  <li className='mb-2'>
+                    Proprietary code and conversations are absorbed into corporate training pipelines and retention
+                    policies.
+                  </li>
+                  <li className='mb-2'>
+                    Account suspensions can instantly erase months of project history with no recourse—your data is held
+                    hostage.
+                  </li>
+                  <li className='mb-2'>
+                    We provide local-first operation and zero-knowledge cloud options with no telemetry or profiling,
+                    ensuring complete control.
+                  </li>
+                </ul>
+              </div>
+            </div>
+            {/* <p className='text-3xl md:text-4xl  lg:text-4xl font-bold text-gray-900 dark:text-white text-center max-w-2xl mx-auto mt-48 mb-24'>
+              Yggdrasil solves this.
+            </p>
+            <div className='relative bottom-6 mb-20 md:bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-2 animate-bounce'>
+              <span className='text-black/70 dark:text-gray-300 text-md md:text-lg font-medium'></span>
+              <i className='bx bx-chevron-down text-black dark:text-gray-300 text-2xl'></i>
+            </div> */}
+          </div>
+
           <div className='grid grid-cols-1 lg:grid-cols-2 gap-0 min-h-screen'>
             {/* Left Side - Features List */}
             <div className='lg:sticky lg:top-0 lg:h-screen mr-8 flex items-center justify-center p-8 md:p-12 lg:p-16'>
