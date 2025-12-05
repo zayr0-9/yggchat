@@ -28,6 +28,7 @@ import {
   useResearchNotes,
 } from '../hooks/useQueries'
 import { parseId } from '../utils/helpers'
+import { DownloadAppModal } from './downloadApp'
 import EditProject from './EditProject'
 import SideBar from './sideBar'
 
@@ -113,6 +114,8 @@ const ConversationPage: React.FC = () => {
   const [showNewConversationModal, setShowNewConversationModal] = useState(false)
   const [newConvTitle, setNewConvTitle] = useState('')
   const [storageMode, setStorageMode] = useState<StorageMode>('cloud')
+  // Download app modal state
+  const [showDownloadModal, setShowDownloadModal] = useState(false)
   // Sorting function for conversations
   const sortConversations = (
     convs: Conversation[],
@@ -317,6 +320,8 @@ const ConversationPage: React.FC = () => {
                 </Button>
               )} */}
             </div>
+            {/* Download App Button - only visible in Electron when VITE_ENVIRONMENT is 'web' */}
+
             {/* {selectedProject?.context && (
               <p className='text-sm text-gray-600 ygg-line-clamp-6 dark:text-gray-300 ml-12'>
                 {selectedProject.context}
@@ -330,6 +335,22 @@ const ConversationPage: React.FC = () => {
               Chats
             </h2>
             <div className='flex items-center gap-2 my-1 p-0 lg:p-1 '>
+              {import.meta.env.VITE_ENVIRONMENT === 'web' && (
+                <Button
+                  variant='acrylic'
+                  size='medium'
+                  onClick={() => setShowDownloadModal(true)}
+                  rounded='full'
+                  title='Download App'
+                  aria-label='Download App'
+                  className='mr-2'
+                >
+                  <i
+                    className='bx bx-download text-lg sm:text-lg 2xl:text-2xl mx-0.5 my-1.5 transition-all hover:scale-96 duration-200'
+                    aria-hidden='true'
+                  ></i>
+                </Button>
+              )}
               <Button
                 variant='acrylic'
                 size='large'
@@ -341,6 +362,7 @@ const ConversationPage: React.FC = () => {
                   Project Settings
                 </p>
               </Button>
+
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
@@ -393,9 +415,8 @@ const ConversationPage: React.FC = () => {
                 title='Refresh conversations from server'
               >
                 <i
-                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
-                    isRefetching ? 'animate-spin' : ''
-                  }`}
+                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${isRefetching ? 'animate-spin' : ''
+                    }`}
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -436,7 +457,7 @@ const ConversationPage: React.FC = () => {
                         className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0 ml-2'
                         onClick={
                           (e => {
-                            ;(e as unknown as React.MouseEvent).stopPropagation()
+                            ; (e as unknown as React.MouseEvent).stopPropagation()
                             handleDelete(conv)
                           }) as unknown as () => void
                         }
@@ -575,6 +596,9 @@ const ConversationPage: React.FC = () => {
 
       {/* Research Notes List - Fixed bottom-right */}
       <LowBar conversationId={null} mode='list' notes={researchNotes} isLoadingNotes={notesLoading} />
+
+      {/* Download App Modal */}
+      <DownloadAppModal isOpen={showDownloadModal} onClose={() => setShowDownloadModal(false)} />
     </div>
   )
 }

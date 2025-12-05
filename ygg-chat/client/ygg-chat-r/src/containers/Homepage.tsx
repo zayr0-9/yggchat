@@ -16,6 +16,7 @@ import { useIsMobile } from '../hooks/useMediaQuery'
 import { useProjects, useResearchNotes } from '../hooks/useQueries'
 import { getAssetPath } from '../utils/assetPath'
 import { sortProjects } from '../utils/sortProjects'
+import { DownloadAppModal } from './downloadApp'
 import EditProject from './EditProject'
 import SideBar from './sideBar'
 
@@ -62,6 +63,8 @@ const Homepage: React.FC = () => {
 
   // Mobile options menu state
   const [showMobileOptionsMenu, setShowMobileOptionsMenu] = useState(false)
+  // Download app modal state
+  const [showDownloadModal, setShowDownloadModal] = useState(false)
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null)
 
   // Theme state
@@ -248,6 +251,8 @@ const Homepage: React.FC = () => {
               Projects
             </h2>
             <div className='flex items-center gap-3 my-1 mr-1 rounded-4xl '>
+              {/* Download App Button - only visible in Electron when VITE_ENVIRONMENT is 'web' */}
+
               <Button
                 variant='acrylic'
                 size='medium'
@@ -262,6 +267,22 @@ const Homepage: React.FC = () => {
                   aria-hidden='true'
                 ></i>
               </Button>
+              {import.meta.env.VITE_ENVIRONMENT === 'web' && (
+                <Button
+                  variant='acrylic'
+                  size='medium'
+                  onClick={() => setShowDownloadModal(true)}
+                  rounded='full'
+                  title='Download App'
+                  aria-label='Download App'
+                  className=''
+                >
+                  <i
+                    className='bx bx-download text-lg sm:text-lg 2xl:text-2xl mx-0.5 my-1.5 transition-all hover:scale-96 duration-200'
+                    aria-hidden='true'
+                  ></i>
+                </Button>
+              )}
               <Button
                 variant='acrylic'
                 size='medium'
@@ -327,11 +348,10 @@ const Homepage: React.FC = () => {
                     size='small'
                     rounded='full'
                     onClick={() => setStorageFilter('all')}
-                    className={`transition-all duration-200 ${
-                      storageFilter === 'all'
-                        ? 'bg-blue-500 text-white dark:bg-blue-600'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                    }`}
+                    className={`transition-all duration-200 ${storageFilter === 'all'
+                      ? 'bg-blue-500 text-white dark:bg-blue-600'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                      }`}
                   >
                     <p className='text-xs px-1'>All</p>
                   </Button>
@@ -340,11 +360,10 @@ const Homepage: React.FC = () => {
                     size='small'
                     rounded='full'
                     onClick={() => setStorageFilter('cloud')}
-                    className={`transition-all duration-200 ${
-                      storageFilter === 'cloud'
-                        ? 'bg-blue-500 text-white dark:bg-blue-600'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                    }`}
+                    className={`transition-all duration-200 ${storageFilter === 'cloud'
+                      ? 'bg-blue-500 text-white dark:bg-blue-600'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                      }`}
                   >
                     <p className='text-xs px-1'>Cloud</p>
                   </Button>
@@ -353,11 +372,10 @@ const Homepage: React.FC = () => {
                     size='small'
                     rounded='full'
                     onClick={() => setStorageFilter('local')}
-                    className={`transition-all duration-200 ${
-                      storageFilter === 'local'
-                        ? 'bg-green-500 text-white dark:bg-green-600'
-                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                    }`}
+                    className={`transition-all duration-200 ${storageFilter === 'local'
+                      ? 'bg-green-500 text-white dark:bg-green-600'
+                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                      }`}
                   >
                     <p className='text-xs px-1'>Local</p>
                   </Button>
@@ -566,6 +584,9 @@ const Homepage: React.FC = () => {
 
       {/* Research Notes List - Fixed bottom-right */}
       <LowBar conversationId={null} mode='list' notes={researchNotes} isLoadingNotes={notesLoading} />
+
+      {/* Download App Modal */}
+      <DownloadAppModal isOpen={showDownloadModal} onClose={() => setShowDownloadModal(false)} />
     </div>
   )
 }
