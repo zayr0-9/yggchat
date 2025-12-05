@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import { useAuth } from '../hooks/useAuth'
-import { isUserAllowlisted } from '../lib/auth/allowlist'
 import { supabase } from '../lib/supabase'
 import { dualSync } from '../lib/sync/dualSyncManager'
 
@@ -101,42 +100,9 @@ const Login: React.FC = () => {
 
         // console.log('[Login] OAuth session established successfully')
 
-        // Handle Electron-specific authorization and setup
+        // Handle Electron-specific setup
         if (data.session?.user && isElectronMode) {
           const userId = data.session.user.id
-          const userEmail = data.session.user.email || 'unknown'
-
-          // console.log('[Login] Electron mode: Checking user authorization...', { userId, userEmail })
-
-          const isAllowed = await isUserAllowlisted(userId)
-
-          // console.log('[Login] Allowlist check result:', { isAllowed, userId })
-
-          if (!isAllowed) {
-            console.warn('[Login] User not authorized for Electron access:', userEmail)
-
-            // Clear any stored session data to prevent unauthorized access
-            if (window.electronAPI?.storage?.clear) {
-              try {
-                await window.electronAPI.storage.clear()
-                // console.log('[Login] Cleared stored data for unauthorized user')
-              } catch (clearError) {
-                console.error('[Login] Failed to clear storage:', clearError)
-              }
-            }
-
-            // Sign out immediately
-            await supabase!.auth.signOut()
-
-            // Show error message
-            setError(
-              `Access Denied: Pro access requires authorization. Your email (${userEmail}) is not approved for this application. Please visit the official Yggdrasil website to subscribe.`
-            )
-            setLoading(false)
-            return
-          }
-
-          // console.log('[Login] User authorized, completing sign-in')
 
           // Use Supabase user data directly for local SQLite sync (no Railway call needed)
           const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
@@ -325,34 +291,9 @@ const Login: React.FC = () => {
 
       // console.log('[Login] OOB session established successfully')
 
-      // Handle Electron-specific authorization (same as deep link flow)
+      // Handle Electron-specific setup (same as deep link flow)
       if (data.session?.user && isElectronMode) {
         const userId = data.session.user.id
-        const userEmail = data.session.user.email || 'unknown'
-
-        // console.log('[Login] Checking user authorization...', { userId, userEmail })
-
-        const isAllowed = await isUserAllowlisted(userId)
-
-        if (!isAllowed) {
-          console.warn('[Login] User not authorized:', userEmail)
-
-          if (window.electronAPI?.storage?.clear) {
-            await window.electronAPI.storage.clear()
-          }
-
-          await supabase!.auth.signOut()
-
-          setError(
-            `Access Denied: Pro access requires authorization. Your email (${userEmail}) is not approved. Please visit the official Yggdrasil website to subscribe.`
-          )
-          setLoading(false)
-          setOobMode(false)
-          return
-        }
-
-        // console.log('[Login] User authorized, completing sign-in')
-
         const username = data.session.user.user_metadata?.name || data.session.user.email?.split('@')[0] || 'user'
 
         // Sync to local SQLite
