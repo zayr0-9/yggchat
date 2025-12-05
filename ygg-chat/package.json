@@ -5,8 +5,7 @@
   "private": true,
   "workspaces": [
     "client/ygg-chat-r",
-    "server",
-    "shared"
+    "server"
   ],
   "scripts": {
     "migrate": "npm --prefix server run migrate",
