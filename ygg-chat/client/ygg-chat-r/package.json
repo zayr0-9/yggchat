@@ -27,7 +27,6 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.5",
-    "@electron/get": "^2.0.3",
     "@mdxeditor/editor": "^3.40.1",
     "@reduxjs/toolkit": "^2.8.2",
     "@stripe/stripe-js": "^8.0.0",
@@ -41,8 +40,6 @@
     "ajv": "^8.17.1",
     "ajv-formats": "^2.1.1",
     "atomically": "^2.1.0",
-    "better-sqlite3": "^11.8.1",
-    "bindings": "^1.5.0",
     "boxicons": "^2.1.4",
     "clsx": "^2.1.1",
     "conf": "^12.0.0",
@@ -50,10 +47,8 @@
     "date-fns": "^4.1.0",
     "debounce-fn": "^5.1.2",
     "dexie": "^4.0.11",
-    "electron-updater": "^6.6.2",
     "env-paths": "^3.0.0",
     "express": "^4.21.2",
-    "file-uri-to-path": "^2.0.0",
     "framer-motion": "^12.23.12",
     "glob": "^13.0.0",
     "highlight.js": "^11.11.1",
@@ -76,7 +71,6 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.1",
     "@eslint/js": "^9.25.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/better-sqlite3": "^7.6.12",
@@ -90,9 +84,6 @@
     "@vitejs/plugin-react-swc": "^3.9.0",
     "autoprefixer": "^10.4.21",
     "cross-env": "^7.0.3",
-    "electron": "34.0.0",
-    "electron-builder": "^26.0.0",
-    "electron-rebuild": "^3.2.9",
     "esbuild": "^0.27.1",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
@@ -103,6 +94,17 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",
     "vite": "^6.3.5"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.8.1",
+    "bindings": "^1.5.0",
+    "file-uri-to-path": "^2.0.0",
+    "@electron/get": "^2.0.3",
+    "@electron/rebuild": "^4.0.1",
+    "electron": "34.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-rebuild": "^3.2.9",
+    "electron-updater": "^6.6.2"
   },
   "build": {
     "appId": "com.yggdrasil.chat",
