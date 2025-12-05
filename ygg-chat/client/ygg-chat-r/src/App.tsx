@@ -3,6 +3,7 @@ import './App.css'
 import { LiquidGlassSVG } from './components/LiquidGlassSVG'
 import ProtectedRoute from './components/ProtectedRoute'
 import { TitleBar } from './components/TitleBar/TitleBar'
+import { UpdateModal } from './components/UpdateModal/UpdateModal'
 import VideoBackground from './components/VideoBackground'
 import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, PaymentPlans, PrivacyPolicy, RefundPolicy, Settings, TermsOfService } from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
@@ -25,6 +26,8 @@ function App() {
       <LiquidGlassSVG />
       {/* Establish IDE Context WebSocket globally so it's not tied to any specific page */}
       <IdeContextBootstrap />
+      {/* Global update modal for Electron auto-updates */}
+      <UpdateModal />
       <Routes>
         {/* Public route */}
         <Route path='/landingpage' element={<LandingPage />} />

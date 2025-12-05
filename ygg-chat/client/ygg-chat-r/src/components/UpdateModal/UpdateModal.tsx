@@ -1,0 +1,178 @@
+import React, { useEffect, useState, useCallback } from 'react'
+import { Button } from '../Button/button'
+
+interface UpdateInfo {
+    version: string
+}
+
+interface DownloadProgress {
+    percent: number
+    bytesPerSecond: number
+    transferred: number
+    total: number
+}
+
+export const UpdateModal: React.FC = () => {
+    const [isOpen, setIsOpen] = useState(false)
+    const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+    const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null)
+    const [isDownloading, setIsDownloading] = useState(false)
+    const [isReady, setIsReady] = useState(false)
+    const [isInstalling, setIsInstalling] = useState(false)
+
+    const handleInstallNow = useCallback(async () => {
+        if (!window.electronAPI?.autoUpdater) return
+        setIsInstalling(true)
+        try {
+            await window.electronAPI.autoUpdater.installNow()
+        } catch (error) {
+            console.error('Failed to install update:', error)
+            setIsInstalling(false)
+        }
+    }, [])
+
+    const handleLater = useCallback(() => {
+        setIsOpen(false)
+        // Update will install when app is closed
+    }, [])
+
+    useEffect(() => {
+        // Only run in Electron
+        if (!window.electronAPI?.autoUpdater) return
+
+        const cleanups: (() => void)[] = []
+
+        // Update available - show downloading state
+        cleanups.push(
+            window.electronAPI.autoUpdater.onUpdateAvailable((info) => {
+                console.log('[UpdateModal] Update available:', info.version)
+                setUpdateInfo(info)
+                setIsDownloading(true)
+                setIsOpen(true)
+            })
+        )
+
+        // Download progress
+        cleanups.push(
+            window.electronAPI.autoUpdater.onDownloadProgress((progress) => {
+                setDownloadProgress(progress)
+            })
+        )
+
+        // Update downloaded - ready to install
+        cleanups.push(
+            window.electronAPI.autoUpdater.onUpdateDownloaded((info) => {
+                console.log('[UpdateModal] Update downloaded:', info.version)
+                setUpdateInfo(info)
+                setIsDownloading(false)
+                setIsReady(true)
+                setIsOpen(true)
+            })
+        )
+
+        // Error handling
+        cleanups.push(
+            window.electronAPI.autoUpdater.onError((error) => {
+                console.error('[UpdateModal] Update error:', error)
+                setIsDownloading(false)
+                setIsOpen(false)
+            })
+        )
+
+        return () => {
+            cleanups.forEach((cleanup) => cleanup())
+        }
+    }, [])
+
+    if (!isOpen) return null
+
+    const formatBytes = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B`
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+        return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    }
+
+    return (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200'>
+            <div className='bg-white dark:bg-yBlack-900 rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-700 p-6 max-w-md w-full mx-4 animate-in slide-in-from-bottom-4 duration-300'>
+                <div className='flex flex-col items-center text-center'>
+                    {/* Icon */}
+                    <div className='flex-shrink-0 p-4 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 mb-4'>
+                        <i className={`bx ${isDownloading ? 'bx-download bx-tada' : 'bx-rocket'} text-4xl`}></i>
+                    </div>
+
+                    {/* Title */}
+                    <h2 className='text-2xl font-semibold text-neutral-900 dark:text-neutral-100 mb-2'>
+                        {isDownloading ? 'Downloading Update...' : 'Update Ready!'}
+                    </h2>
+
+                    {/* Version info */}
+                    {updateInfo && (
+                        <p className='text-neutral-600 dark:text-neutral-400 mb-4'>
+                            Version <span className='font-semibold text-green-600 dark:text-green-400'>{updateInfo.version}</span>{' '}
+                            {isDownloading ? 'is downloading' : 'is ready to install'}
+                        </p>
+                    )}
+
+                    {/* Download progress bar */}
+                    {isDownloading && downloadProgress && (
+                        <div className='w-full mb-6'>
+                            <div className='w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2 mb-2'>
+                                <div
+                                    className='bg-green-500 h-2 rounded-full transition-all duration-300'
+                                    style={{ width: `${downloadProgress.percent}%` }}
+                                />
+                            </div>
+                            <div className='flex justify-between text-xs text-neutral-500 dark:text-neutral-400'>
+                                <span>{formatBytes(downloadProgress.transferred)} / {formatBytes(downloadProgress.total)}</span>
+                                <span>{downloadProgress.percent.toFixed(0)}%</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Description for ready state */}
+                    {isReady && (
+                        <p className='text-sm text-neutral-500 dark:text-neutral-400 mb-6'>
+                            The update has been downloaded. You can install it now and restart, or it will be installed automatically
+                            when you close the app.
+                        </p>
+                    )}
+
+                    {/* Actions */}
+                    {isReady && (
+                        <div className='flex flex-col sm:flex-row items-center gap-2 w-full'>
+                            <Button
+                                variant='outline2'
+                                size='medium'
+                                onClick={handleLater}
+                                disabled={isInstalling}
+                                className='w-full sm:w-auto text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 border-neutral-200 dark:border-neutral-700'
+                            >
+                                Install on Close
+                            </Button>
+                            <Button
+                                variant='outline2'
+                                size='medium'
+                                onClick={handleInstallNow}
+                                disabled={isInstalling}
+                                className='w-full sm:w-auto border-0 bg-green-600 hover:bg-green-700 text-white'
+                            >
+                                {isInstalling ? (
+                                    <>
+                                        <i className='bx bx-loader-alt bx-spin mr-2'></i>
+                                        Installing...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className='bx bx-rocket mr-2'></i>
+                                        Install Now & Restart
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}

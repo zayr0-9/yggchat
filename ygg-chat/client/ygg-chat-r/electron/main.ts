@@ -20,7 +20,9 @@ let localServerStarted = false
 
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat'
-const UPDATE_FEED_BASE_URL = process.env.SUPABASE_UPDATE_FEED_BASE_URL || ''
+const UPDATE_FEED_BASE_URL =
+  process.env.SUPABASE_UPDATE_FEED_BASE_URL ||
+  'https://awvlmkkdnwmpgomsuneb.supabase.co/storage/v1/object/public/updates/updates'
 let autoUpdaterConfigured = false
 
 // Set App User Model ID for Windows taskbar icon
@@ -307,7 +309,7 @@ function createWindow() {
     })
 
     mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      console.log('[Renderer Console]', { level, message, line, sourceId })
+      // console.log('[Renderer Console]', { level, message, line, sourceId })
     })
 
     mainWindow.loadFile(indexPath)
@@ -545,6 +547,18 @@ ipcMain.handle('autoUpdater:check', async () => {
   }
 })
 
+ipcMain.handle('autoUpdater:installNow', async () => {
+  console.log('[Electron] User requested immediate update install')
+  try {
+    // quitAndInstall will close the app and run the installer
+    autoUpdater.quitAndInstall(false, true) // isSilent=false, isForceRunAfter=true
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron] Failed to install update:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
 // Open OAuth URL in external browser
 ipcMain.handle('auth:openExternal', async (_event, url: string) => {
   console.log('[Electron IPC] Opening external URL for OAuth:', url)
@@ -720,9 +734,9 @@ function configureAutoUpdater() {
   })
 
   autoUpdater.on('update-downloaded', info => {
-    console.log('[Electron] Update downloaded, will install on quit')
+    console.log('[Electron] Update downloaded, ready to install')
     mainWindow?.webContents.send('autoUpdater:update-downloaded', info)
-    setImmediate(() => autoUpdater.quitAndInstall())
+    // Don't auto-install - let user choose via modal
   })
 
   autoUpdater.on('error', error => {

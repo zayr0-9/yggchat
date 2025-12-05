@@ -12,5 +12,7 @@ export { Select } from './Select/Select'
 export { TitleBar } from './TitleBar/TitleBar'
 export { ToolPermissionDialog } from './ToolPermissionDialog/ToolPermissionDialog'
 export { ToolAutoApproveIndicator } from './ToolAutoApproveIndicator/ToolAutoApproveIndicator'
+export { UpdateModal } from './UpdateModal/UpdateModal'
 // export { ChatInputWithSend } from './components/ChatInputWithSend/ChatInputWithSend'
 // export { MessageList } from './components/MessageList/MessageList'
+

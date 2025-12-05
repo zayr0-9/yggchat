@@ -17,6 +17,7 @@ electron/*.js
 electron/*.mjs
 !electron/esbuild.main.mjs
 electron/*.js.map
+electron/*.mjs.map
 electron/tools/*.js
 electron/tools/*.js.map
 electron/utils/*.js
