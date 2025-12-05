@@ -1,0 +1,82 @@
+{
+  "appId": "com.yggdrasil.chat",
+  "icon": "public/img/logo-l-thick.png",
+  "productName": "Yggdrasil",
+  "directories": {
+    "output": "release"
+  },
+  "artifactName": "Yggdrasil-${version}-${os}-${arch}.${ext}",
+  "files": [
+    "dist-electron/**/*",
+    "electron/main.mjs",
+    "electron/preload.mjs"
+  ],
+  "asarUnpack": [
+    "**/node_modules/better-sqlite3/**/*",
+    "**/node_modules/bindings/**/*",
+    "**/node_modules/file-uri-to-path/**/*",
+    "**/node_modules/electron-updater/**/*"
+  ],
+  "extraResources": [
+    {
+      "from": "../../server/dist",
+      "to": "server/dist",
+      "filter": [
+        "**/*",
+        "!**/supamodels.js",
+        "!**/supaChat.js",
+        "!**/stripe.js",
+        "!**/CCSupabase.js",
+        "!**/supaAttachments.js",
+        "!**/openrouter-reconciliation.js",
+        "!**/openrouter.js",
+        "!**/openai.js",
+        "!**/provider.js"
+      ]
+    },
+    {
+      "from": "../../server/node_modules",
+      "to": "server/node_modules",
+      "filter": [
+        "**/*"
+      ]
+    },
+    {
+      "from": "../../server/package.json",
+      "to": "server/package.json"
+    },
+    {
+      "from": "../../server/src/database",
+      "to": "server/src/database",
+      "filter": [
+        "**/*.sql",
+        "**/*.txt"
+      ]
+    }
+  ],
+  "win": {
+    "target": [
+      "nsis"
+    ]
+  },
+  "mac": {
+    "target": [
+      "dmg"
+    ],
+    "category": "public.app-category.productivity"
+  },
+  "linux": {
+    "target": [
+      "AppImage"
+    ],
+    "category": "Office"
+  },
+  "npmRebuild": true,
+  "nativeRebuilder": "sequential",
+  "publish": [
+    {
+      "provider": "generic",
+      "url": "https://awvlmkkdnwmpgomsuneb.supabase.co/storage/v1/object/public/updates/updates"
+    }
+  ]
+}
