@@ -38,11 +38,9 @@ export default defineConfig(function (_a) {
                         if (id.includes('@stripe/stripe-js') || id.includes('stripe')) {
                             return 'stripe';
                         }
-                        // Separate Supabase code
-                        if (id.includes('@supabase/supabase-js')) {
-                            return 'supabase';
-                        }
-                        // Vendor chunk for common deps
+                        // Don't separate Supabase - it causes circular dependency issues
+                        // when loaded via file:// protocol in Electron
+                        // Vendor chunk for common deps (includes Supabase)
                         if (id.includes('node_modules')) {
                             return 'vendor';
                         }

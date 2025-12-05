@@ -294,8 +294,29 @@ function createWindow() {
     mainWindow.webContents.openDevTools()
   } else {
     // Production: Load from built files
-    console.log('[Electron] Production mode - loading from dist-electron/index.html')
-    mainWindow.loadFile(path.join(__dirname, '../dist-electron/index.html'))
+    const indexPath = path.join(__dirname, '../dist-electron/index.html')
+    console.log('[Electron] Production mode - loading from:', indexPath)
+
+    // Add error listeners BEFORE loading
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+      console.error('[Electron] Failed to load:', { errorCode, errorDescription, validatedURL })
+    })
+
+    mainWindow.webContents.on('did-finish-load', () => {
+      console.log('[Electron] Page finished loading')
+    })
+
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      console.log('[Renderer Console]', { level, message, line, sourceId })
+    })
+
+    mainWindow.loadFile(indexPath)
+
+    // DEBUG: Force DevTools to open after a delay
+    setTimeout(() => {
+      console.log('[Electron] Force opening DevTools...')
+      mainWindow?.webContents.openDevTools({ mode: 'detach' })
+    }, 3000)
   }
 
   mainWindow.on('closed', () => {
@@ -662,12 +683,7 @@ function configureAutoUpdater() {
     return
   }
 
-  const platformDir =
-    process.platform === 'win32'
-      ? 'windows'
-      : process.platform === 'darwin'
-        ? 'mac'
-        : 'linux'
+  const platformDir = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'mac' : 'linux'
 
   const normalizedBase = UPDATE_FEED_BASE_URL.replace(/\/+$/, '')
   const feedUrl = `${normalizedBase}/${platformDir}`
