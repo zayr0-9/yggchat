@@ -20,6 +20,11 @@ const Login: React.FC = () => {
   const [oobCode, setOobCode] = useState('')
   const [oauthUrl, setOauthUrl] = useState<string | null>(null)
 
+  // Hybrid flow state: try deep link first, show fallback after 5 seconds
+  const [waitingForCallback, setWaitingForCallback] = useState(false)
+  const [showFallbackLink, setShowFallbackLink] = useState(false)
+  const [pendingProvider, setPendingProvider] = useState<'google' | 'github' | null>(null)
+
   // Check if we're in Electron mode (build-time or runtime detection)
   const isElectronMode =
     (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
@@ -69,6 +74,11 @@ const Login: React.FC = () => {
       console.log('[Login] Received OAuth callback from external browser:', callbackUrl)
       setLoading(true)
       setError(null)
+
+      // Clear waiting state since callback was received
+      setWaitingForCallback(false)
+      setShowFallbackLink(false)
+      setPendingProvider(null)
 
       try {
         // Extract the hash/query parameters from the callback URL
@@ -195,19 +205,7 @@ const Login: React.FC = () => {
 
       // Check if running in Electron
       if (window.electronAPI?.auth) {
-        // Get platform info to determine the best OAuth method
-        let platform: string | null = null
-        if (window.electronAPI?.platformInfo?.get) {
-          try {
-            const info = await window.electronAPI.platformInfo.get()
-            platform = info.platform
-            console.log('[Login] Platform detected:', platform)
-          } catch (error) {
-            console.error('[Login] Failed to get platform info:', error)
-          }
-        }
-
-        // Get the OAuth URL from Supabase
+        // Get the OAuth URL from Supabase (deep link flow)
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider,
           options: {
@@ -219,30 +217,28 @@ const Login: React.FC = () => {
         if (error) throw error
 
         if (data?.url) {
-          // On Linux (WSL), use OAuth window to avoid blank browser issues
-          // On Windows/Mac, use external browser for better UX
-          // const useOAuthWindow = platform === 'linux' && window.electronAPI.auth.openOAuthWindow
-          const useOAuthWindow = false
-          if (useOAuthWindow) {
-            console.log('[Login] Linux/WSL detected - opening OAuth in Electron window')
-            const result = await window.electronAPI.auth.openOAuthWindow(data.url)
+          console.log('[Login] Opening OAuth in external browser (deep link flow)')
+          const result = await window.electronAPI.auth.openExternal(data.url)
 
-            if (!result.success) {
-              throw new Error('Failed to open OAuth window')
-            }
-
-            console.log('[Login] OAuth window opened, waiting for callback...')
-          } else {
-            console.log('[Login] Opening OAuth in external browser')
-            const result = await window.electronAPI.auth.openExternal(data.url)
-
-            if (!result.success) {
-              throw new Error('Failed to open external browser')
-            }
-
-            console.log('[Login] OAuth URL opened in external browser, waiting for callback...')
+          if (!result.success) {
+            // Browser failed to open - immediately switch to OOB flow
+            console.log('[Login] Failed to open browser, switching to OOB flow')
+            setLoading(false)
+            handleOOBLogin(provider)
+            return
           }
-          // Loading state will be cleared when callback is received
+
+          console.log('[Login] OAuth URL opened in external browser, waiting for callback...')
+
+          // Enter "waiting for callback" state
+          setPendingProvider(provider)
+          setWaitingForCallback(true)
+          setLoading(false)
+
+          // Show fallback link after 5 seconds
+          setTimeout(() => {
+            setShowFallbackLink(true)
+          }, 5000)
         } else {
           throw new Error('No OAuth URL returned from Supabase')
         }
@@ -394,6 +390,23 @@ const Login: React.FC = () => {
     }
   }
 
+  // Switch from deep link waiting to OOB flow
+  const handleSwitchToOOB = () => {
+    setWaitingForCallback(false)
+    setShowFallbackLink(false)
+    if (pendingProvider) {
+      handleOOBLogin(pendingProvider)
+    }
+  }
+
+  // Cancel waiting for callback and return to initial state
+  const handleCancelWaiting = () => {
+    setWaitingForCallback(false)
+    setShowFallbackLink(false)
+    setPendingProvider(null)
+    setError(null)
+  }
+
   return (
     <div className=' relative z-10 min-h-screen flex items-center justify-center bg-black/40 dark:bg-black/40 py-12 px-4 sm:px-6 lg:px-8'>
       <div className='max-w-md w-full space-y-8'>
@@ -477,12 +490,41 @@ const Login: React.FC = () => {
                 ← Back to sign-in options
               </button>
             </div>
+          ) : waitingForCallback ? (
+            // Waiting for deep link callback UI
+            <div className='space-y-6'>
+              <div className='text-center'>
+                <div className='inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-4'></div>
+                <p className='text-neutral-200 dark:text-neutral-100 mb-2'>
+                  Completing sign-in in browser...
+                </p>
+                <p className='text-neutral-400 text-sm'>
+                  Waiting for authentication to complete
+                </p>
+              </div>
+
+              {showFallbackLink && (
+                <button
+                  onClick={handleSwitchToOOB}
+                  className='w-full text-blue-400 hover:text-blue-300 text-sm py-2 transition-colors underline'
+                >
+                  Having trouble? Enter code manually
+                </button>
+              )}
+
+              <button
+                onClick={handleCancelWaiting}
+                className='w-full text-neutral-400 hover:text-neutral-200 text-sm py-2 transition-colors'
+              >
+                Cancel
+              </button>
+            </div>
           ) : (
             // Normal OAuth Buttons
             <div className='space-y-8'>
               <Button
-                onClick={() => (isElectronMode ? handleOOBLogin('github') : handleOAuthLogin('github'))}
-                disabled={loading}
+                onClick={() => handleOAuthLogin('github')}
+                disabled={loading || waitingForCallback}
                 variant='mica'
                 size='large'
                 className='w-full inline-flex justify-center items-center '
@@ -509,8 +551,8 @@ const Login: React.FC = () => {
               </div>
 
               <Button
-                onClick={() => (isElectronMode ? handleOOBLogin('google') : handleOAuthLogin('google'))}
-                disabled={loading}
+                onClick={() => handleOAuthLogin('google')}
+                disabled={loading || waitingForCallback}
                 variant='mica'
                 className='w-full inline-flex justify-center items-center'
                 size='large'
