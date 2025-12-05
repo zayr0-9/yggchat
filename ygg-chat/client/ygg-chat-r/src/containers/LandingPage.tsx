@@ -9,7 +9,7 @@ interface Feature {
   id: number
   title: string
   superscript: string
-  description: string
+  description: string[]
   videoSrc?: string
 }
 
@@ -20,34 +20,46 @@ const LandingPage: React.FC = () => {
     () => [
       {
         id: 1,
-        title: 'Branch',
+        title: 'Branch: Never Abandon Work Again',
         superscript: '01',
-        description:
-          "As conversations naturally branch into tangents and follow-up questions, Yggdrasil's intelligent navigation system visualizes and manages the full structure of your dialogue. Every edit spawns a new branch, ensuring an immutable, accurate log of every message. Nothing is ever lost, delivering complete transparency into the evolution of your thought.",
+        description: [
+          'Break linear traps → Branch from any message to explore alternatives without losing progress. Discover a dead-end? Roll back instantly and reroll from any promising point in history.',
+          'Parallel experimentation → Run multiple solution paths in parallel branches. Compare architectural approaches side-by-side before committing code.',
+          'Immutable audit trail → Every edit spawns a new branch. Full provenance of how decisions evolved—critical for debugging and compliance.',
+        ],
         videoSrc: getAssetPath('video/branching.webm'),
       },
       {
         id: 2,
-        title: 'Context Management',
+        title: 'Context Management: Cut Costs, Eliminate Hallucinations',
         superscript: '02',
-        description:
-          'Intelligent context management ensures your AI always remembers what matters. Track, organize, and maintain conversation state across branches with precision. Never lose important details in long conversations.',
+        description: [
+          `Branch-isolated costs → Pay only for tokens in the active branch. No auto-compression, no hidden overhead.`,
+          'Manual curation → You choose what context to keep. No black-box algorithms—full deterministic control.',
+          `Zero drift → Keeping context short via branches, eliminates context contamination and model hallucinations`,
+        ],
         videoSrc: getAssetPath('video/branchactions.webm'),
       },
       {
         id: 3,
-        title: 'Agentic Capabilities',
+        title: 'Agentic Control: Autonomous Execution, Human Oversight',
         superscript: '03',
-        description:
-          'Empower your AI with autonomous capabilities. Create agents that can act independently, make decisions, and accomplish complex tasks. Perfect for automation and advanced workflows.',
+        description: [
+          'Zero-overhead branch separation → Dedicate one branch to planning, another to agent execution. Distribute tasks manually with full visibility— with complete manual state management.',
+          'Stateful task execution → Agents maintain precise context across complex multi-step workflows without bloating costs.',
+          'Complete permission system → Lock agents to specific tools. Every action is permissioned, no blind trust, no overreach. Stay safe in Chat mode for planning before execution.',
+        ],
         videoSrc: getAssetPath('video/agent.webm'),
       },
       {
         id: 4,
-        title: 'Multiple Models',
+        title: 'Model Routing: Eliminate LLM Inconsistency',
         superscript: '04',
-        description:
-          'Switch between different AI models seamlessly. Leverage the best model for each task—whether you need speed, creativity, or specialized expertise. Compare outputs across models in real-time.',
+        description: [
+          'Dynamic model selection → Route specific tasks to optimal models in real-time—Claude 4.5 for reasoning, GPT-5-mini for speed, or specialized models for literature, image etc.',
+          'Branch-level comparison → Spawn branches to test the same prompt across models simultaneously. A/B test outputs without restarting conversations.',
+          'Cost-performance optimization → Automatically downgrade models for low-risk tasks and upgrade for critical decisions—cut spend without sacrificing quality.',
+        ],
         videoSrc: getAssetPath('video/models.webm'),
       },
     ],
@@ -351,15 +363,15 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
       >
         <div className='sm:max-w-6xl lg:max-w-7xl xl:max-w-[1600px] 2xl:max-w-full mx-auto'>
           {/* Issues Section */}
-          <div className='px-6 md:px-12 lg:px-16 pt-30 pb-50'>
-            <h2 className='text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-4 text-center'>
+          <div className='px-6 md:px-12 lg:px-16 pt-50 pb-50'>
+            <h2 className='text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 dark:text-white mb-8 text-center'>
               The Problem
             </h2>
-            <p className='text-lg text-gray-600 dark:text-gray-400 text-center max-w-2xl mx-auto mb-24'>
+            <p className='text-2xl text-gray-600 dark:text-gray-200 text-center max-w-2xl mx-auto mb-34'>
               Current AI interfaces are inefficient. Here's what we're fixing.
             </p>
 
-            <div className='grid grid-cols-1 mx-auto md:grid-cols-3 gap-6 lg:gap-22'>
+            <div className='grid grid-cols-1 mx-auto sm:grid-cols-1 md:grid-cols-3 gap-6 md:gap-12 2xl:gap-22'>
               {/* Issue 1: Data & Privacy */}
               <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-red-400/50 dark:hover:border-red-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/10'>
                 <div className='w-16 h-16 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300'>
@@ -430,6 +442,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                 </ul>
               </div>
             </div>
+
             {/* <p className='text-3xl md:text-4xl  lg:text-4xl font-bold text-gray-900 dark:text-white text-center max-w-2xl mx-auto mt-48 mb-24'>
               Yggdrasil solves this.
             </p>
@@ -437,16 +450,20 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
               <span className='text-black/70 dark:text-gray-300 text-md md:text-lg font-medium'></span>
               <i className='bx bx-chevron-down text-black dark:text-gray-300 text-2xl'></i>
             </div> */}
+            <div className='relative left-1/2 transform -translate-x-1/2 flex flex-col items-center mt-40 animate-bounce'>
+              <span className='text-black/70 dark:text-gray-300 text-md md:text-lg font-medium'></span>
+              <i className='bx bx-chevron-down text-black dark:text-gray-300 text-2xl'></i>
+            </div>
           </div>
 
           <div className='grid grid-cols-1 lg:grid-cols-2 gap-0 min-h-screen'>
             {/* Left Side - Features List */}
             <div className='lg:sticky lg:top-0 lg:h-screen mr-8 flex items-center justify-center p-8 md:p-12 lg:p-16'>
-              <div className='w-full max-w-md'>
-                <h2 className='text-3xl md:text-4xl  lg:text-6xl font-bold text-gray-900 dark:text-white mb-8'>
+              <div className='w-full max-w-lg'>
+                <h2 className='text-3xl md:text-4xl  lg:text-6xl font-bold text-gray-900 dark:text-white mb-12'>
                   Features
                 </h2>
-                <div className='space-y-2'>
+                <div className='space-y-6'>
                   {features.map((feature, index) => (
                     <button
                       key={feature.id}
@@ -541,9 +558,11 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                     </div>
 
                     {/* Description */}
-                    <p className='text-xl pl-2 text-gray-900 dark:text-gray-300 leading-relaxed'>
-                      {feature.description}
-                    </p>
+                    <ul className='text-xl pl-2 text-gray-900 dark:text-gray-300 leading-relaxed list-disc ml-4 space-y-2'>
+                      {feature.description.map((point, i) => (
+                        <li key={i}>{point}</li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
               ))}
