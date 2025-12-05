@@ -1,4 +1,5 @@
 {
+  "electronVersion": "34.0.0",
   "appId": "com.yggdrasil.chat",
   "icon": "public/img/logo-l-thick.png",
   "productName": "Yggdrasil",
