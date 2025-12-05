@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd client/ygg-chat-r && npm install && npm run build",
+  "buildCommand": "cd client/ygg-chat-r && npm install --ignore-optional && npm run build",
   "outputDirectory": "client/ygg-chat-r/dist",
   "installCommand": "echo 'Skipping root install'",
   "framework": null,
