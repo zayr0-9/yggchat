@@ -72,13 +72,16 @@
   },
   "optionalDependencies": {
     "@electron/get": "^2.0.3",
+    "@electron/rebuild": "^4.0.1",
     "better-sqlite3": "^11.8.1",
     "bindings": "^1.5.0",
+    "electron": "34.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-rebuild": "^3.2.9",
     "electron-updater": "^6.6.2",
     "file-uri-to-path": "^2.0.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.1",
     "@eslint/js": "^9.25.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/better-sqlite3": "^7.6.12",
@@ -92,9 +95,6 @@
     "@vitejs/plugin-react-swc": "^3.9.0",
     "autoprefixer": "^10.4.21",
     "cross-env": "^7.0.3",
-    "electron": "34.0.0",
-    "electron-builder": "^26.0.0",
-    "electron-rebuild": "^3.2.9",
     "esbuild": "^0.27.1",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
