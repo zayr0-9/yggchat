@@ -289,9 +289,18 @@ function Chat() {
 
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
-        const height = entry.contentRect.height
+        let height = entry.contentRect.height
+        // Use borderBoxSize if available for more accurate height including padding/borders
+        if (entry.borderBoxSize && entry.borderBoxSize.length > 0) {
+          height = entry.borderBoxSize[0].blockSize
+        }
+
+        // Add margin
+        const style = window.getComputedStyle(inputArea)
+        const marginBottom = parseFloat(style.marginBottom) || 0
+
         if (height > 0) {
-          setInputAreaHeight(height - height)
+          setInputAreaHeight(height + marginBottom)
         }
       }
     })
@@ -299,9 +308,11 @@ function Chat() {
     observer.observe(inputArea)
 
     // Initial measurement
-    const initialHeight = inputArea.getBoundingClientRect().height
-    if (initialHeight > 0) {
-      setInputAreaHeight(initialHeight)
+    const rect = inputArea.getBoundingClientRect()
+    const style = window.getComputedStyle(inputArea)
+    const marginBottom = parseFloat(style.marginBottom) || 0
+    if (rect.height > 0) {
+      setInputAreaHeight(rect.height + marginBottom)
     }
 
     return () => {
@@ -498,7 +509,7 @@ function Chat() {
       if (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl) {
         // Use type assertion or cast if the action is not properly typed in the dispatch
         // but since it's a thunk, dispatch handles it fine.
-        ;(dispatch as any)(
+        ; (dispatch as any)(
           syncConversationToLocal({
             conversationId: String(conversationIdFromUrl),
             messages: reactQueryMessages,
@@ -620,7 +631,7 @@ function Chat() {
       setLeftWidthPct(pct)
       try {
         window.localStorage.setItem('chat:leftWidthPct', pct.toFixed(2))
-      } catch {}
+      } catch { }
     }
 
     const onMouseMove = (e: MouseEvent) => handleMove(e.clientX)
@@ -1815,10 +1826,10 @@ function Chat() {
                   researchNotesCache.map(item =>
                     item.id === currentConversationId
                       ? {
-                          ...item,
-                          research_note: updatedNote,
-                          updated_at: new Date().toISOString(),
-                        }
+                        ...item,
+                        research_note: updatedNote,
+                        updated_at: new Date().toISOString(),
+                      }
                       : item
                   )
                 )
@@ -2007,7 +2018,7 @@ function Chat() {
           {/* Conversation Title Editor */}
           {currentConversationId && (
             <div
-              className={`absolute mb-2 top-0 left-0 px-2 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+              className={`absolute mb-2 top-0 left-0 px-2 z-10  mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
             >
               <div className=' rounded-2xl flex items-center gap-2 py-1 xl:py-1 2xl:p-2 mt-1 bg-transparent acrylic shadow-[0_2px_5px_1px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65)]  '>
                 <Button
@@ -2033,7 +2044,7 @@ function Chat() {
                     setHeimdallVisible(newValue)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', String(newValue))
-                    } catch {}
+                    } catch { }
                   }}
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
@@ -2225,7 +2236,7 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute bg-red mb-2 bottom-0 left-0 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+          className={`absolute z-10 bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
           style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {/* Controls row (above) */}
@@ -2295,11 +2306,10 @@ function Chat() {
 
                       {/* Hover tooltip that can expand into anchored modal */}
                       <div
-                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${
-                          isExpanded
-                            ? 'hidden'
-                            : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
-                        }`}
+                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${isExpanded
+                          ? 'hidden'
+                          : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
+                          }`}
                       >
                         <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-2 truncate'>
                           {file.name || file.relativePath.split('/').pop() || file.path.split('/').pop()}
@@ -2609,7 +2619,7 @@ function Chat() {
                   setHeimdallVisible(false)
                   try {
                     window.localStorage.setItem('chat:heimdallVisible', 'false')
-                  } catch {}
+                  } catch { }
                 }}
               />
             )}
@@ -2651,7 +2661,7 @@ function Chat() {
                     setHeimdallVisible(false)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', 'false')
-                    } catch {}
+                    } catch { }
                   }}
                   className='fixed bottom-6 right-6 z-[110] w-12 h-12 rounded-full bg-neutral-700 dark:bg-neutral-600 hover:bg-neutral-800 dark:hover:bg-neutral-500 text-white shadow-lg flex items-center justify-center transition-colors'
                   aria-label='Close tree view'
