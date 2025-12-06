@@ -48,6 +48,10 @@ function findActiveMention(value: string, cursorPos: number) {
     mentionLength += 1
   }
 
+  // Cursor must still be inside the mention (no spaces/newlines/other chars between @ and cursor)
+  // Allow empty term when cursor is immediately after @ (for discoverability)
+  if (mentionLength !== afterAt.length) return null
+
   const term = afterAt.slice(0, mentionLength)
   return { start: atIndex, term }
 }
