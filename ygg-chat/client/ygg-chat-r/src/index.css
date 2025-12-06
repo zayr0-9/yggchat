@@ -28,6 +28,7 @@
   font-weight: 400;
   font-style: normal;
 }
+
 .germania-one-regular {
   font-family: 'Germania One', system-ui;
   font-weight: 400;
@@ -41,6 +42,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 /* Ensure dark variant is available globally and early */
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant 2xl (@media (min-width: 1920px) and (max-width: 2559px));
@@ -54,9 +56,11 @@
 @theme {
   --font-sans: 'DM Sans', Inter, system-ui, sans-serif;
 }
+
 @theme {
   --breakpoint-2xl: initial;
 }
+
 /* Highlight.js base theme for rehype-highlight
    We import the light theme unconditionally, then provide .dark-scoped overrides below.
    This ensures manual dark mode (toggling the `.dark` class) also switches syntax colors. */
@@ -69,7 +73,7 @@
 
   /* Transparent body background to let page backgrounds show through */
   body {
-    background-color: transparent;
+    background-color: black;
   }
 
   /* Pixel density normalization for high-DPI displays */
@@ -105,9 +109,10 @@
     padding: 0;
   }
 }
+
 /* Markdown code styling */
 .prose pre:not(.not-prose) {
-  @apply bg-gray-100 text-gray-800 dark:bg-neutral-800 dark:text-neutral-100  p-3 overflow-x-auto;
+  @apply bg-gray-100 text-gray-800 dark:bg-neutral-800 dark:text-neutral-100 p-3 overflow-x-auto;
 }
 
 .prose :not(pre) > code {
@@ -162,6 +167,7 @@
 .prose pre code::after {
   content: none !important;
 }
+
 .dark .prose pre code::before,
 .dark .prose pre code::after {
   content: none !important;
@@ -181,17 +187,22 @@ pre > code {
 /* Dark-mode highlight.js token overrides (approx. Atom One Dark) */
 /* These only apply when the root has `.dark` class, enabling manual dark toggle compatibility */
 .dark .hljs {
-  color: #abb2bf; /* base text */
+  color: #abb2bf;
+  /* base text */
 }
+
 .dark .hljs-comment,
 .dark .hljs-quote {
-  color: #5c6370; /* muted */
+  color: #5c6370;
+  /* muted */
   font-style: italic;
 }
+
 .dark .hljs-keyword,
 .dark .hljs-operator {
   color: #c678dd;
 }
+
 .dark .hljs-variable,
 .dark .hljs-template-variable,
 .dark .hljs-attr,
@@ -202,6 +213,7 @@ pre > code {
 .dark .hljs-selector-class {
   color: #e06c75;
 }
+
 .dark .hljs-number,
 .dark .hljs-literal,
 .dark .hljs-type,
@@ -209,11 +221,13 @@ pre > code {
 .dark .hljs-bullet {
   color: #d19a66;
 }
+
 .dark .hljs-string,
 .dark .hljs-doctag,
 .dark .hljs-addition {
   color: #98c379;
 }
+
 .dark .hljs-title,
 .dark .hljs-section,
 .dark .hljs-name,
@@ -221,16 +235,20 @@ pre > code {
 .dark .hljs-tag .hljs-attribute {
   color: #61afef;
 }
+
 .dark .hljs-meta,
 .dark .hljs-subst {
   color: #56b6c2;
 }
+
 .dark .hljs-deletion {
   color: #e06c75;
 }
+
 .dark .hljs-emphasis {
   font-style: italic;
 }
+
 .dark .hljs-strong {
   font-weight: 700;
 }
@@ -250,10 +268,12 @@ body.ygg-no-select * {
   100% {
     opacity: 0.8;
   }
+
   50% {
     opacity: 0.6;
   }
 }
+
 .animate-pulse-slow {
   animation: ygg-pulse 4s ease-in-out infinite;
 }
@@ -264,10 +284,12 @@ body.ygg-no-select * {
   100% {
     stroke: #ffffff;
   }
+
   50% {
     stroke: #fafafa;
   }
 }
+
 .animate-color-cycle {
   animation: ygg-color-cycle 4s ease-in-out infinite;
 }
@@ -276,12 +298,16 @@ body.ygg-no-select * {
 @keyframes ygg-stroke-pulse-dark {
   0%,
   100% {
-    stroke: #fafafa; /* neutral-50 */
+    stroke: #fafafa;
+    /* neutral-50 */
   }
+
   50% {
-    stroke: #404040; /* neutral-700 */
+    stroke: #404040;
+    /* neutral-700 */
   }
 }
+
 .dark .animate-stroke-pulse {
   animation: ygg-stroke-pulse-dark 4s ease-in-out infinite;
 }
@@ -292,11 +318,13 @@ body.ygg-no-select * {
     opacity: 0;
     transform: scale(0);
   }
+
   100% {
     opacity: 1;
     transform: scale(1);
   }
 }
+
 .animate-scale-in {
   animation: ygg-scale-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -304,32 +332,42 @@ body.ygg-no-select * {
 @utility no-scrollbar {
   @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
 }
+
 /* Thin scrollbar utility */
 .thin-scrollbar {
   /* Firefox */
   scroll-padding-top: 4px;
   scroll-padding-bottom: 4px;
-  scrollbar-color: #c5c5c5; /* Hidden by default */
+  scrollbar-color: #c5c5c5;
+  /* Hidden by default */
 }
+
 .thin-scrollbar:hover {
   /* Firefox - show on hover */
-  scrollbar-color: #c5c5c5; /* light: neutral-400 thumb on transparent track */
+  scrollbar-color: #c5c5c5;
+  /* light: neutral-400 thumb on transparent track */
 }
+
 /* Chromium/WebKit */
 .thin-scrollbar::-webkit-scrollbar {
   width: 10px;
 }
+
 .thin-scrollbar::-webkit-scrollbar-thumb {
-  background-color: transparent; /* Hidden by default */
+  background-color: transparent;
+  /* Hidden by default */
   border-radius: 20px;
   border: 0.5px solid transparent;
   box-shadow: inset 0 0 0 1px rgba(90, 90, 90, 0.02);
   transition: background-color 0.2s ease-in-out;
   /* background-clip: padding-box; */
 }
+
 .thin-scrollbar:hover::-webkit-scrollbar-thumb {
-  background-color: #c5c5c5; /* light: neutral-400 - visible on hover */
+  background-color: #c5c5c5;
+  /* light: neutral-400 - visible on hover */
 }
+
 .thin-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
@@ -341,21 +379,26 @@ body.ygg-no-select * {
 /* Dark mode overrides */
 .dark .thin-scrollbar {
   /* Firefox */
-  scrollbar-color: transparent transparent; /* Hidden by default */
+  scrollbar-color: transparent transparent;
+  /* Hidden by default */
 }
+
 .dark .thin-scrollbar:hover {
   /* Firefox - show on hover */
-  scrollbar-color: #262626 transparent; /* dark: neutral-800 thumb on transparent track */
+  scrollbar-color: #262626 transparent;
+  /* dark: neutral-800 thumb on transparent track */
 }
 
 .dark .thin-scrollbar:hover::-webkit-scrollbar-thumb {
-  background-color: #262626; /* dark: neutral-800 - visible on hover */
+  background-color: #262626;
+  /* dark: neutral-800 - visible on hover */
 }
 
 /* Utility: multi-line clamp without Tailwind plugin */
 .ygg-line-clamp-6 {
   display: -webkit-box;
-  line-clamp: 6; /* standard property for compatibility */
+  line-clamp: 6;
+  /* standard property for compatibility */
   -webkit-line-clamp: 6;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -364,7 +407,8 @@ body.ygg-no-select * {
 
 .ygg-line-clamp-15 {
   display: -webkit-box;
-  line-clamp: 15; /* standard property for compatibility */
+  line-clamp: 15;
+  /* standard property for compatibility */
   -webkit-line-clamp: 15;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -387,8 +431,10 @@ body.ygg-no-select * {
   position: absolute;
   left: 0;
   right: 0;
-  height: 2px; /* adjust fade height */
-  pointer-events: none; /* don’t block clicks on items */
+  height: 2px;
+  /* adjust fade height */
+  pointer-events: none;
+  /* don’t block clicks on items */
   z-index: 10;
 }
 
@@ -474,6 +520,7 @@ html {
   /* SVG filters are defined inline in the HTML where the effect is used */
   /* Or injected dynamically via JavaScript if needed */
 }
+
 .smooth-height {
   transition: height 0.3s ease-out;
   overflow: hidden;

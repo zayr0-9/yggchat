@@ -217,15 +217,26 @@ function getIconPath(isDark: boolean) {
     : path.join(__dirname, '../public/img', logoFile)
 }
 
-function applyTitleBarTheme(win: BrowserWindow, isDark?: boolean) {
-  // No overlay when frameless on Windows; only update icon
-  const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
-  win.setIcon(getIconPath(useDark))
-}
+// function applyTitleBarTheme(win: BrowserWindow, isDark?: boolean) {
+//   // Only apply overlay on Windows where it's supported and requested, AND ONLY IN PRODUCTION
+//   if (process.platform === 'win32' && app.isPackaged) {
+//     // Use provided isDark value, or fall back to system preference
+//     const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
+//     win.setTitleBarOverlay({
+//       color: 'transparent',
+//       symbolColor: useDark ? '#f2f4f7' : '#0f172a',
+//       height: 35, // Ensure there is a grippable area
+//     })
+//   }
 
-nativeTheme.on('updated', () => {
-  if (mainWindow) applyTitleBarTheme(mainWindow)
-})
+//   // Update Window Icon
+//   const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
+//   win.setIcon(getIconPath(useDark))
+// }
+
+// nativeTheme.on('updated', () => {
+//   if (mainWindow) applyTitleBarTheme(mainWindow)
+// })
 
 function createWindow() {
   const iconPath = getIconPath(nativeTheme.shouldUseDarkColors)
@@ -246,38 +257,24 @@ function createWindow() {
     // Platform-specific title bar settings
     ...(process.platform === 'win32'
       ? {
-        frame: false,
-        titleBarStyle: 'hidden', // or 'hiddenInset'
-        backgroundColor: '#00000000', // keep full-window transparency; set to your app bg if desired
-      }
+          frame: false,
+          titleBarOverlay: false,
+        }
       : process.platform === 'darwin'
         ? {
-          titleBarStyle: 'hidden', // Standard for macOS
-        }
+            titleBarStyle: 'hidden', // Standard for macOS
+          }
         : {
-          titleBarStyle: 'default', // Native title bar for Linux (safest)
-        }),
+            titleBarStyle: 'default', // Native title bar for Linux (safest)
+          }),
     show: false, // Don't show until ready
   })
 
-  applyTitleBarTheme(mainWindow)
+  // applyTitleBarTheme(mainWindow)
 
   // Show window when ready to avoid flicker
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
-  })
-
-  // Re-apply overlay after navigations/focus to prevent tint regressions (Windows)
-  mainWindow.on('focus', () => {
-    applyTitleBarTheme(mainWindow!)
-  })
-
-  mainWindow.webContents.on('did-navigate', () => {
-    applyTitleBarTheme(mainWindow!)
-  })
-
-  mainWindow.webContents.on('did-navigate-in-page', () => {
-    applyTitleBarTheme(mainWindow!)
   })
 
   // Load the app
@@ -674,31 +671,12 @@ ipcMain.handle('window:close', async () => {
   }
 })
 
-// Allow renderer to explicitly set title bar overlay (used on theme changes)
-ipcMain.handle('titlebar:set-overlay', async (_event, payload: { color?: string; symbolColor?: string; height?: number }) => {
-  if (!mainWindow) return { success: false, error: 'no-window' }
-  try {
-    if (process.platform === 'win32') {
-      mainWindow.setTitleBarOverlay({
-        color: payload.color ?? '#00000001',
-        symbolColor: payload.symbolColor ?? (nativeTheme.shouldUseDarkColors ? '#f2f4f7' : '#0f172a'),
-        height: payload.height ?? 35,
-      })
-      return { success: true }
-    }
-    return { success: false, error: 'unsupported-platform' }
-  } catch (error) {
-    console.error('[Electron] Failed to set titlebar overlay:', error)
-    return { success: false, error: error instanceof Error ? error.message : String(error) }
-  }
-})
-
 // Theme synchronization - update title bar when app theme changes
-ipcMain.handle('theme:update', async (_event, isDark: boolean) => {
-  if (mainWindow) {
-    applyTitleBarTheme(mainWindow, isDark)
-  }
-})
+// ipcMain.handle('theme:update', async (_event, isDark: boolean) => {
+//   if (mainWindow) {
+//     applyTitleBarTheme(mainWindow, isDark)
+//   }
+// })
 
 function configureAutoUpdater() {
   if (autoUpdaterConfigured) {

@@ -5,7 +5,19 @@ import ProtectedRoute from './components/ProtectedRoute'
 import { TitleBar } from './components/TitleBar/TitleBar'
 import { UpdateModal } from './components/UpdateModal/UpdateModal'
 import VideoBackground from './components/VideoBackground'
-import { Chat, ConversationPage, Homepage, LandingPage, Login, PaymentPage, PaymentPlans, PrivacyPolicy, RefundPolicy, Settings, TermsOfService } from './containers'
+import {
+  Chat,
+  ConversationPage,
+  Homepage,
+  LandingPage,
+  Login,
+  PaymentPage,
+  PaymentPlans,
+  PrivacyPolicy,
+  RefundPolicy,
+  Settings,
+  TermsOfService,
+} from './containers'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
@@ -28,65 +40,67 @@ function App() {
       <IdeContextBootstrap />
       {/* Global update modal for Electron auto-updates */}
       <UpdateModal />
-      <Routes>
-        {/* Public route */}
-        <Route path='/landingpage' element={<LandingPage />} />
-        {/* Public route */}
-        <Route path='/login' element={<Login />} />
-        {/* Public route */}
-        <Route path='/paymentplan' element={<PaymentPlans />} />
-        {/* Public route */}
-        <Route path='/terms' element={<TermsOfService />} />
-        {/* Public route */}
-        <Route path='/refund-policy' element={<RefundPolicy />} />
-        {/* Public route */}
-        <Route path='/privacy' element={<PrivacyPolicy />} />
-        {/* Protected routes */}
-        <Route
-          path='/conversationPage'
-          element={
-            <ProtectedRoute>
-              <ConversationPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path='/' element={isElectron ? <Navigate to='/login' replace /> : <LandingPage />} />
-        <Route
-          path='/homepage'
-          element={
-            <ProtectedRoute>
-              <Homepage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path='/chat/:projectId/:id'
-          element={
-            <ProtectedRoute>
-              <Chat />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path='/settings'
-          element={
-            <ProtectedRoute>
-              <Settings />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path='/payment'
-          element={
-            <ProtectedRoute>
-              <PaymentPage />
-            </ProtectedRoute>
-          }
-        />
+      <div className='app-content'>
+        <Routes>
+          {/* Public route */}
+          <Route path='/landingpage' element={<LandingPage />} />
+          {/* Public route */}
+          <Route path='/login' element={<Login />} />
+          {/* Public route */}
+          <Route path='/paymentplan' element={<PaymentPlans />} />
+          {/* Public route */}
+          <Route path='/terms' element={<TermsOfService />} />
+          {/* Public route */}
+          <Route path='/refund-policy' element={<RefundPolicy />} />
+          {/* Public route */}
+          <Route path='/privacy' element={<PrivacyPolicy />} />
+          {/* Protected routes */}
+          <Route
+            path='/conversationPage'
+            element={
+              <ProtectedRoute>
+                <ConversationPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path='/' element={isElectron ? <Navigate to='/login' replace /> : <LandingPage />} />
+          <Route
+            path='/homepage'
+            element={
+              <ProtectedRoute>
+                <Homepage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path='/chat/:projectId/:id'
+            element={
+              <ProtectedRoute>
+                <Chat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path='/settings'
+            element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path='/payment'
+            element={
+              <ProtectedRoute>
+                <PaymentPage />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Fallback */}
-        <Route path='*' element={<Navigate to='/' replace />} />
-      </Routes>
+          {/* Fallback */}
+          <Route path='*' element={<Navigate to='/' replace />} />
+        </Routes>
+      </div>
     </Router>
   )
 }
