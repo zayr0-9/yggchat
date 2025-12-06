@@ -7,7 +7,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: #f2f4f7;
+  background-color: transparent;
   color: #0f172a;
   z-index: 9999;
   user-select: none;
@@ -15,13 +15,13 @@
 }
 
 .dark .titlebar {
-  background-color: #111829;
+  background-color: transparent;
   color: #f2f4f7;
   /* border-bottom: 1px solid rgba(255, 255, 255, 0.1); */
 }
 
 .dark .titlebar.titlebar-chat {
-  background-color: #171717;
+  background-color: transparent;
 }
 
 .dark .titlebar.titlebar-chat .titlebar-button {

@@ -223,7 +223,7 @@ function applyTitleBarTheme(win: BrowserWindow, isDark?: boolean) {
     // Use provided isDark value, or fall back to system preference
     const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
     win.setTitleBarOverlay({
-      color: useDark ? '#101828' : '#f2f4f7',
+      color: 'transparent',
       symbolColor: useDark ? '#f2f4f7' : '#0f172a',
       height: 35, // Ensure there is a grippable area
     })
@@ -259,7 +259,7 @@ function createWindow() {
       ? {
         titleBarStyle: 'hidden',
         titleBarOverlay: {
-          color: '#f2f4f7', // Initial light theme color
+          color: 'transparent', // transparent overlay; rely on renderer background
           symbolColor: '#0f172a',
           height: 35, // Ensure height is set for draggable region
         },
