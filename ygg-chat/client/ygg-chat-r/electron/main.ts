@@ -218,18 +218,7 @@ function getIconPath(isDark: boolean) {
 }
 
 function applyTitleBarTheme(win: BrowserWindow, isDark?: boolean) {
-  // Apply overlay on Windows wherever supported
-  if (process.platform === 'win32') {
-    // Use provided isDark value, or fall back to system preference
-    const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
-    win.setTitleBarOverlay({
-      color: '#00000001', // use tiny alpha to avoid Windows dark-mode fallback tint
-      symbolColor: useDark ? '#f2f4f7' : '#0f172a',
-      height: 35, // Ensure there is a grippable area
-    })
-  }
-
-  // Update Window Icon
+  // No overlay when frameless on Windows; only update icon
   const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
   win.setIcon(getIconPath(useDark))
 }
@@ -257,13 +246,9 @@ function createWindow() {
     // Platform-specific title bar settings
     ...(process.platform === 'win32'
       ? {
-        titleBarStyle: 'hidden',
-        titleBarOverlay: {
-          color: '#00000001', // tiny alpha to avoid dark-mode fallback tint
-          symbolColor: '#0f172a',
-          height: 35, // Ensure height is set for draggable region
-        },
-        backgroundColor: '#00000001',
+        frame: false,
+        titleBarStyle: 'hidden', // or 'hiddenInset'
+        backgroundColor: '#00000000', // keep full-window transparency; set to your app bg if desired
       }
       : process.platform === 'darwin'
         ? {
