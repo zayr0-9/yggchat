@@ -65,6 +65,7 @@ import {
   systemPromptSet,
   updateResearchNote,
 } from '../features/conversations'
+import { updateCwd } from '../features/conversations/conversationActions'
 import { removeSelectedFileForChat, updateIdeContext } from '../features/ideContext'
 import { selectSelectedFilesForChat, selectWorkspace } from '../features/ideContext/ideContextSelectors'
 import { selectSelectedProject } from '../features/projects/projectSelectors'
@@ -679,6 +680,30 @@ function Chat() {
       setCcCwd('')
     }
   }, [currentConversationId, projectConversations])
+
+  // Auto-sync cwd from IDE extension when connected
+  useEffect(() => {
+    // Only run if:
+    // 1. IDE extension is connected
+    // 2. workspace.rootPath is available
+    // 3. There's an active conversation
+    // 4. rootPath differs from current ccCwd (avoid redundant updates)
+    if (
+      ideContext?.extensionConnected &&
+      workspace?.rootPath &&
+      currentConversationId &&
+      workspace.rootPath !== ccCwd
+    ) {
+      // Update local state
+      setCcCwd(workspace.rootPath)
+
+      // Persist to database
+      dispatch(updateCwd({
+        id: currentConversationId,
+        cwd: workspace.rootPath
+      }))
+    }
+  }, [ideContext?.extensionConnected, workspace?.rootPath, currentConversationId, ccCwd, dispatch])
 
   // Query invalidation is now handled directly in sendMessage and editMessageWithBranching success handlers
   // This prevents aggressive refetching and duplicate API requests
