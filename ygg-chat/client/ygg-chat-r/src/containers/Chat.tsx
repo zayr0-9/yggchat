@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { MessageId } from '../../../../shared/types'
 import {
+  ActionPopover,
   Button,
   ChatMessage,
   FreeGenerationsModal,
@@ -2349,128 +2350,113 @@ function Chat() {
                     }
                     modelSelect={true}
                   />
-                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl ? (
-                    <Button
-                      variant='outline2'
-                      size='large'
-                      onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
-                      className={
-                        toolAutoApprove
-                          ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50'
-                          : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                    <ActionPopover
+                      isActive={toolAutoApprove || operationMode === 'plan' || ccMode}
+                      footer={
+                        <input
+                          type='text'
+                          value={ccCwd}
+                          onChange={e => setCcCwd(e.target.value)}
+                          placeholder='Working directory (optional)'
+                          className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                          title='Specify the working directory for Claude Code agent'
+                        />
                       }
-                      title={
-                        toolAutoApprove
-                          ? 'Auto-approving tools (click to disable)'
-                          : 'Asking for permission (click to auto-approve)'
-                      }
-                      aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
                     >
-                      <i className='bx bx-shield-quarter mr-1'></i>
-                      {toolAutoApprove ? 'Allow all' : 'Ask'}
-                    </Button>
-                  ) : null}
-                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl ? (
-                    <Button
-                      variant='outline2'
-                      size='large'
-                      onClick={() => dispatch(chatSliceActions.operationModeToggled())}
-                      className={
-                        operationMode === 'plan'
-                          ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-900/30 border-fuchsia-200 dark:border-fuchsia-700/60'
-                          : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
-                      }
-                      title={
-                        operationMode === 'plan'
-                          ? 'Plan mode enabled (tools will be blocked)'
-                          : 'Execution mode enabled (tools may modify files)'
-                      }
-                      aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
-                    >
-                      <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
-                      {operationMode === 'plan' ? 'Chat' : 'Agent'}
-                    </Button>
-                  ) : null}
-                  {/* <Button
+                      {/* Claude Code toggle */}
+                      <Button
+                        variant={ccMode ? 'primary' : 'outline2'}
+                        size='medium'
+                        onClick={() => setCCMode(!ccMode)}
+                        title='Toggle Claude Code Agent Mode'
+                      >
+                        <i className='bx bx-terminal mr-1' aria-hidden='true'></i>
+                        {ccMode ? 'CC On' : 'CC Off'}
+                      </Button>
+
+                      {/* Allow All / Ask toggle */}
+                      <Button
+                        variant='outline2'
+                        size='medium'
+                        onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
+                        className={
+                          toolAutoApprove
+                            ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50'
+                            : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                        }
+                        title={
+                          toolAutoApprove
+                            ? 'Auto-approving tools (click to disable)'
+                            : 'Asking for permission (click to auto-approve)'
+                        }
+                        aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
+                      >
+                        <i className='bx bx-shield-quarter mr-1'></i>
+                        {toolAutoApprove ? 'Allow all' : 'Ask'}
+                      </Button>
+
+                      {/* Chat / Agent toggle */}
+                      <Button
+                        variant='outline2'
+                        size='medium'
+                        onClick={() => dispatch(chatSliceActions.operationModeToggled())}
+                        className={
+                          operationMode === 'plan'
+                            ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-900/30 border-fuchsia-200 dark:border-fuchsia-700/60'
+                            : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                        }
+                        title={
+                          operationMode === 'plan'
+                            ? 'Plan mode enabled (tools will be blocked)'
+                            : 'Execution mode enabled (tools may modify files)'
+                        }
+                        aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
+                      >
+                        <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
+                        {operationMode === 'plan' ? 'Chat' : 'Agent'}
+                      </Button>
+                    </ActionPopover>
+                  )}
+                  {/* Thinking toggle - next to popover, disabled when not supported */}
+                  <Button
                     variant='outline2'
                     className='rounded-full'
-                    size='medium'
-                    onClick={() => {
-                      setSpinRefresh(true)
-                      handleRefreshModels()
-                    }}
+                    size='large'
+                    onClick={() => setThink(t => !t)}
+                    disabled={!selectedModel?.thinking}
+                    title={selectedModel?.thinking ? 'Enable thinking' : 'Thinking not supported by this model'}
                   >
-                    <i
-                      className={`bx bx-refresh text-[26px] sm:text-[18px] md:text-[16px] lg:text-[18px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinRefresh ? 'animate-[spin_0.6s_linear_1]' : ''}`}
-                      aria-hidden='true'
-                      onAnimationEnd={() => setSpinRefresh(false)}
-                    ></i>
-                  </Button> */}
-                  {selectedModel?.thinking && (
-                    <Button
-                      variant='outline2'
-                      className='rounded-full'
-                      size='large'
-                      onClick={() => setThink(t => !t)}
-                      title='Enable thinking'
-                    >
-                      {think ? (
-                        <>
-                          <img
-                            src={getAssetPath('img/thinkingonlightmode.svg')}
-                            alt='Thinking active'
-                            className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
-                          />
-                          <img
-                            src={getAssetPath('img/thinkingondarkmode.svg')}
-                            alt='Thinking active'
-                            className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
-                          />
-                        </>
-                      ) : (
-                        <>
-                          <img
-                            src={getAssetPath('img/thinkingofflightmode.svg')}
-                            alt='Thinking'
-                            className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
-                          />
-                          <img
-                            src={getAssetPath('img/thinkingoffdarkmode.svg')}
-                            alt='Thinking'
-                            className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[16px] md:h-[16px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
-                          />
-                        </>
-                      )}
-                    </Button>
-                  )}
+                    {think ? (
+                      <>
+                        <img
+                          src={getAssetPath('img/thinkingonlightmode.svg')}
+                          alt='Thinking active'
+                          className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                        />
+                        <img
+                          src={getAssetPath('img/thinkingondarkmode.svg')}
+                          alt='Thinking active'
+                          className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <img
+                          src={getAssetPath('img/thinkingofflightmode.svg')}
+                          alt='Thinking'
+                          className='w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] md:w-[24px] md:h-[24px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                        />
+                        <img
+                          src={getAssetPath('img/thinkingoffdarkmode.svg')}
+                          alt='Thinking'
+                          className='w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] md:w-[24px] md:h-[24px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                        />
+                      </>
+                    )}
+                  </Button>
                 </div>
                 <div className='flex items-center justify-end gap-2 pl-2.5'>
-                  {/* Claude Code mode toggle button (minimal UI, hidden in web mode) */}
-                  {ccModeAvailable && currentConversationId && !sendingState.streaming && !sendingState.sending && (
-                    <Button
-                      variant={ccMode ? 'primary' : 'outline2'}
-                      size='medium'
-                      onClick={() => setCCMode(!ccMode)}
-                      title='Toggle Claude Code Agent Mode'
-                    >
-                      <i className='bx bx-code-block text-[18px]' aria-hidden='true'></i>
-                    </Button>
-                  )}
-                  {/* Claude Code working directory input (appears when CC mode is active, hidden in web mode) */}
-                  {ccModeAvailable &&
-                    ccMode &&
-                    currentConversationId &&
-                    !sendingState.streaming &&
-                    !sendingState.sending && (
-                      <input
-                        type='text'
-                        value={ccCwd}
-                        onChange={e => setCcCwd(e.target.value)}
-                        placeholder='Working directory (optional)'
-                        className='px-3 py-2 text-sm border text-neutral-50 border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500'
-                        title='Specify the working directory for Claude Code agent'
-                      />
-                    )}
                   {!currentConversationId ? (
                     'Creating...'
                   ) : sendingState.streaming ? (
