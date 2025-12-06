@@ -1053,7 +1053,7 @@ function setupServer() {
           const { path: filePath, maxBytes, startLine, endLine, ranges } = parsedArgs
           if (!filePath) throw new Error('path is required')
 
-          const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges })
+          const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges, cwd: rootPath })
           result = { success: true, ...fileRes }
           break
         }
@@ -1063,7 +1063,7 @@ function setupServer() {
           if (afterLine === undefined) throw new Error('afterLine is required')
           if (!numLines) throw new Error('numLines is required')
 
-          const fileRes = await readFileContinuation(filePath, afterLine, numLines, { maxBytes })
+          const fileRes = await readFileContinuation(filePath, afterLine, numLines, { maxBytes, cwd: rootPath })
           result = { success: true, ...fileRes }
           break
         }
@@ -1071,7 +1071,7 @@ function setupServer() {
           const { paths, baseDir, maxBytes, startLine, endLine } = parsedArgs
           if (!paths) throw new Error('paths are required')
 
-          const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine })
+          const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine, cwd: rootPath })
           result = { success: true, ...filesRes }
           break
         }
@@ -1079,7 +1079,7 @@ function setupServer() {
           const { path: filePath, content, directory, createParentDirs, overwrite, executable } = parsedArgs
           if (!filePath) throw new Error('path is required')
 
-          result = await createTextFile(filePath, content, { directory, createParentDirs, overwrite, executable, operationMode })
+          result = await createTextFile(filePath, content, { directory, createParentDirs, overwrite, executable, operationMode, cwd: rootPath })
           break
         }
         case 'edit_file': {
@@ -1107,6 +1107,7 @@ function setupServer() {
             fuzzyThreshold,
             preserveIndentation,
             operationMode,
+            cwd: rootPath,
           })
           break
         }
@@ -1115,9 +1116,9 @@ function setupServer() {
           if (!filePath) throw new Error('path is required')
 
           if (allowedExtensions) {
-            await safeDeleteFile(filePath, allowedExtensions, operationMode)
+            await safeDeleteFile(filePath, allowedExtensions, operationMode, rootPath)
           } else {
-            await deleteFile(filePath, operationMode)
+            await deleteFile(filePath, operationMode, rootPath)
           }
           result = { success: true, path: filePath }
           break

@@ -25,12 +25,15 @@ export async function readMultipleTextFiles(
     throw new Error('No file paths provided')
   }
 
+  // Use cwd for path resolution, falling back to process.cwd()
+  const cwdBase = options.cwd || process.cwd()
+
   const baseDir = options.baseDir
     ? path.isAbsolute(options.baseDir)
       ? options.baseDir
-      : path.resolve(process.cwd(), options.baseDir)
-    : // Default to the current working directory
-      process.cwd()
+      : path.resolve(cwdBase, options.baseDir)
+    : // Default to cwd or current working directory
+      cwdBase
 
   const parts: string[] = []
   const meta: Array<{
@@ -49,6 +52,7 @@ export async function readMultipleTextFiles(
         maxBytes: options.maxBytes,
         startLine: options.startLine,
         endLine: options.endLine,
+        cwd: options.cwd,
       })
       
       // Use forward slashes for consistency in headers, even on Windows

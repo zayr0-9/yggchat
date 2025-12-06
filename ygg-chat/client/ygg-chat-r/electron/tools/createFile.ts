@@ -8,6 +8,7 @@ export interface CreateFileOptions {
   overwrite?: boolean
   executable?: boolean
   operationMode?: 'plan' | 'execute'
+  cwd?: string // Workspace directory for path resolution and restriction
 }
 
 export interface CreateFileResult {
@@ -38,6 +39,7 @@ export async function createTextFile(
     overwrite = false,
     executable = false,
     operationMode,
+    cwd,
   } = options
 
   // Block file creation in plan mode
@@ -73,15 +75,31 @@ export async function createTextFile(
       if (!path.isAbsolute(filePath) && directory) {
         targetPath = path.resolve(directory, filePath)
       } else if (!path.isAbsolute(filePath)) {
-        targetPath = path.resolve(process.cwd(), filePath)
+        const basePath = directory || cwd || process.cwd()
+        targetPath = path.resolve(basePath, filePath)
       } else {
         targetPath = filePath
       }
     }
-    
+
     let windowsPath = targetPath
     if (isWSL) {
       windowsPath = await resolveToWindowsPath(targetPath)
+    }
+
+    // Workspace validation: reject paths outside cwd
+    if (cwd) {
+      const normalizedCwd = path.resolve(cwd)
+      const normalizedTarget = path.resolve(targetPath)
+      if (!normalizedTarget.startsWith(normalizedCwd + path.sep) && normalizedTarget !== normalizedCwd) {
+        return {
+          success: false,
+          absolutePath: targetPath,
+          created: false,
+          sizeBytes: 0,
+          message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+        }
+      }
     }
 
     // Check if file already exists

@@ -15,6 +15,7 @@ export interface EditFileOptions {
   validateContent?: boolean // Validate file hasn't changed since read (default: true)
   expectedHash?: string // Expected content hash from previous read
   expectedMetadata?: FileMetadata // Expected file metadata from previous read
+  cwd?: string // Workspace directory for path resolution and restriction
 }
 
 export type EditOperation = 'replace' | 'replace_first' | 'append'
@@ -83,11 +84,27 @@ export async function editFileSearchReplace(
     if (isWSLPath(filePath)) {
       fsPath = await resolveToWindowsPath(filePath)
     } else {
-      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
+      const basePath = options.cwd || process.cwd()
+      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
+    }
+
+    // Workspace validation: reject paths outside cwd
+    if (options.cwd) {
+      const normalizedCwd = path.resolve(options.cwd)
+      const normalizedPath = path.resolve(fsPath)
+      if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+        return {
+          success: false,
+          absolutePath: fsPath,
+          sizeBytes: 0,
+          replacements: 0,
+          message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+        }
+      }
     }
 
     // Read the file first
-    const fileData = await readTextFile(filePath)
+    const fileData = await readTextFile(filePath, { cwd: options.cwd })
     const originalContent = fileData.content
 
     // Validate file content if requested
@@ -241,10 +258,26 @@ export async function editFileSearchReplaceFirst(
     if (isWSLPath(filePath)) {
       fsPath = await resolveToWindowsPath(filePath)
     } else {
-      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
+      const basePath = options.cwd || process.cwd()
+      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
     }
 
-    const fileData = await readTextFile(filePath)
+    // Workspace validation: reject paths outside cwd
+    if (options.cwd) {
+      const normalizedCwd = path.resolve(options.cwd)
+      const normalizedPath = path.resolve(fsPath)
+      if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+        return {
+          success: false,
+          absolutePath: fsPath,
+          sizeBytes: 0,
+          replacements: 0,
+          message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+        }
+      }
+    }
+
+    const fileData = await readTextFile(filePath, { cwd: options.cwd })
     const originalContent = fileData.content
 
     // Validate file content if requested
@@ -352,14 +385,30 @@ export async function appendToFile(
     if (isWSLPath(filePath)) {
       fsPath = await resolveToWindowsPath(filePath)
     } else {
-      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath)
+      const basePath = options.cwd || process.cwd()
+      fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
+    }
+
+    // Workspace validation: reject paths outside cwd
+    if (options.cwd) {
+      const normalizedCwd = path.resolve(options.cwd)
+      const normalizedPath = path.resolve(fsPath)
+      if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+        return {
+          success: false,
+          absolutePath: fsPath,
+          sizeBytes: 0,
+          replacements: 0,
+          message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+        }
+      }
     }
 
     let originalContent = ''
     let fileExists = true
 
     try {
-      const fileData = await readTextFile(filePath)
+      const fileData = await readTextFile(filePath, { cwd: options.cwd })
       originalContent = fileData.content
       // Note: fileData.absolutePath is already in WSL format, don't use it for fs operations
     } catch {

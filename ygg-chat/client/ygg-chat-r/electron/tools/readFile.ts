@@ -14,6 +14,7 @@ export interface ReadFileOptions {
   endLine?: number // 1-based line number to stop reading at (inclusive) - for single range
   ranges?: LineRange[] // multiple disjoint ranges to read in a single call
   includeHash?: boolean // Calculate content hash for validation (default: true)
+  cwd?: string // workspace directory for path resolution and restriction
   // Note: if 'ranges' is provided, startLine/endLine are ignored
 }
 
@@ -98,7 +99,17 @@ export async function readTextFile(
   if (isWSLPath(inputPath)) {
     abs = await resolveToWindowsPath(inputPath)
   } else {
-    abs = path.isAbsolute(inputPath) ? inputPath : path.resolve(process.cwd(), inputPath)
+    const basePath = options.cwd || process.cwd()
+    abs = path.isAbsolute(inputPath) ? inputPath : path.resolve(basePath, inputPath)
+  }
+
+  // Workspace validation: reject paths outside cwd
+  if (options.cwd) {
+    const normalizedCwd = path.resolve(options.cwd)
+    const normalizedAbs = path.resolve(abs)
+    if (!normalizedAbs.startsWith(normalizedCwd + path.sep) && normalizedAbs !== normalizedCwd) {
+      throw new Error(`Access denied: Path '${inputPath}' resolves to '${abs}' which is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`)
+    }
   }
 
   // Check existence and get size
@@ -274,7 +285,7 @@ export async function readFileContinuation(
   inputPath: string,
   afterLine: number,
   numLines: number,
-  options: Omit<ReadFileOptions, 'startLine' | 'endLine' | 'ranges'> = {}
+  options: Omit<ReadFileOptions, 'startLine' | 'endLine' | 'ranges'> & { cwd?: string } = {}
 ): Promise<ReadFileResult> {
   if (afterLine < 0) {
     throw new Error('afterLine must be >= 0 (use 0 to read from beginning)')

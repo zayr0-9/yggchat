@@ -878,8 +878,8 @@ export const sendMessage = createAsyncThunk<
             // 2. Execute tools and append tool_result blocks to assistant message
             const toolResultBlocks: any[] = []
 
-            // Get rootPath from IDE context to help determine if we're in WSL
-            const rootPath = state.ideContext.workspace?.rootPath || null
+            // Get rootPath from conversation cwd first, falling back to IDE context
+            const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
             const operationMode = state.chat.operationMode
             // console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
             for (const toolCall of pendingToolCalls) {
@@ -1541,7 +1541,7 @@ export const editMessageWithBranching = createAsyncThunk<
 
             // 2. Execute tools and append tool_result blocks to assistant message
             const toolResultBlocks: any[] = []
-            const rootPath = state.ideContext.workspace?.rootPath || null
+            const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
             const operationMode = state.chat.operationMode
 
             for (const toolCall of pendingToolCalls) {
@@ -1950,7 +1950,7 @@ export const sendMessageToBranch = createAsyncThunk<
 
             // 2. Execute tools and append tool_result blocks to assistant message
             const toolResultBlocks: any[] = []
-            const rootPath = state.ideContext.workspace?.rootPath || null
+            const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
             const operationMode = state.chat.operationMode
 
             for (const toolCall of pendingToolCalls) {
