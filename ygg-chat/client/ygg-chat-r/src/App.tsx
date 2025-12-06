@@ -10,6 +10,7 @@ import {
   ConversationPage,
   Homepage,
   LandingPage,
+  FAQPage,
   Login,
   PaymentPage,
   PaymentPlans,
@@ -44,6 +45,8 @@ function App() {
         <Routes>
           {/* Public route */}
           <Route path='/landingpage' element={<LandingPage />} />
+          {/* Public route */}
+          <Route path='/faq' element={<FAQPage />} />
           {/* Public route */}
           <Route path='/login' element={<Login />} />
           {/* Public route */}

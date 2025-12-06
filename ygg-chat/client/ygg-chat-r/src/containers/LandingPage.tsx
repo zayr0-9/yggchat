@@ -65,6 +65,7 @@ const LandingPage: React.FC = () => {
     ],
     []
   )
+
   const [isDarkMode, setIsDarkMode] = useState(false)
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0)
   const [isInFeaturesSection, setIsInFeaturesSection] = useState(false)
@@ -259,7 +260,7 @@ const LandingPage: React.FC = () => {
             Pricing
           </button>
           <button
-            onClick={() => handleNavigation('#faq')}
+            onClick={() => handleNavigation('/faq')}
             className={`${isInFeaturesSection ? 'text-black' : 'text-white'} dark:text-gray-200 hover:bg-neutral-200/30 rounded-2xl p-2 px-3 active:scale-97 dark:hover:text-neutral-50 transition-colors duration-200 font-medium`}
           >
             FAQ
@@ -373,14 +374,16 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
 
             <div className='grid grid-cols-1 mx-auto sm:grid-cols-1 md:grid-cols-3 gap-6 md:gap-12 2xl:gap-22'>
               {/* Issue 1: Data & Privacy */}
-              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-red-400/50 dark:hover:border-red-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/10'>
+              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-amber-100/50 dark:hover:border-amber-500/20 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/10'>
                 <div className='w-16 h-16 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300'>
                   <i className='bx bx-git-branch text-2xl text-amber-600 dark:text-amber-400'></i>
                 </div>
-                <h3 className='text-2xl font-semibold text-gray-900 dark:text-white mb-3'>Linear Chat Constraints</h3>
-                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
+                <h3 className='text-2xl sm:text-2xl md:text-md lg:text-xl font-semibold text-gray-900 dark:text-white mb-3'>
+                  Linear Chat Constraints
+                </h3>
+                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-lg sm:text-xl md:text-sm lg:text-lg list-disc pl-5'>
                   <li className='mb-4'>
-                    Sequential chats force premature commitment to a single path—discovering a fundamental flaw means
+                    Linear chats force premature commitment to a single path—discovering a fundamental flaw means
                     abandoning hours of work.
                   </li>
                   <li className='mb-4'>
@@ -395,14 +398,14 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
               </div>
 
               {/* Issue 2: Workflow & Structure */}
-              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-amber-400/50 dark:hover:border-amber-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10'>
+              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-purple-200/50 dark:hover:border-purple-500/20 transition-all duration-300 hover:shadow-lg hover:shadow-amber-500/10'>
                 <div className='w-16 h-16 rounded-xl bg-purple-100 dark:bg-purple-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300'>
                   <i className='bx bx-brain text-2xl text-purple-600 dark:text-purple-400'></i>
                 </div>
-                <h3 className='text-2xl font-semibold text-gray-900 dark:text-white mb-3'>
+                <h3 className='text-2xl sm:text-2xl md:text-md lg:text-xl font-semibold text-gray-900 dark:text-white mb-3'>
                   Context Rot & Runaway Costs
                 </h3>
-                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
+                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-lg sm:text-xl md:text-sm lg:text-lg list-disc pl-5'>
                   <li className='mb-4'>
                     Conversations bloat over time, pushing token costs up while response quality deteriorates from
                     stale, distorted history.
@@ -419,14 +422,14 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
               </div>
 
               {/* Issue 3: Context Management */}
-              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-red-400/50 dark:hover:border-red-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/10'>
+              <div className='group p-6 lg:p-8 rounded-2xl bg-white/50 dark:bg-yBlack-600/50 backdrop-blur-sm border border-gray-200/50 dark:border-white/10 hover:border-red-200/50 dark:hover:border-red-500/20 transition-all duration-300 hover:shadow-lg hover:shadow-red-500/10'>
                 <div className='w-16 h-16 rounded-xl bg-red-100 dark:bg-red-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300'>
                   <i className='bx bx-lock-alt text-2xl text-red-600 dark:text-red-400'></i>
                 </div>
-                <h3 className='text-2xl font-semibold text-gray-900 dark:text-white mb-3'>
+                <h3 className='text-2xl sm:text-2xl md:text-md lg:text-xl font-semibold text-gray-900 dark:text-white mb-3'>
                   Zero Data Ownership & Privacy Exposure
                 </h3>
-                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-xl list-disc pl-5'>
+                <ul className='text-gray-600 dark:text-gray-400 leading-relaxed text-lg sm:text-xl md:text-sm lg:text-lg list-disc pl-5'>
                   <li className='mb-4'>
                     Proprietary code and conversations are absorbed into corporate training pipelines and retention
                     policies.
