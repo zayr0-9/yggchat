@@ -33,6 +33,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   theme: {
     update: (isDark: boolean) => ipcRenderer.invoke('theme:update', isDark),
   },
+  titleBar: {
+    setOverlay: (payload: { color?: string; symbolColor?: string; height?: number }) =>
+      ipcRenderer.invoke('titlebar:set-overlay', payload),
+  },
   autoUpdater: {
     check: () => ipcRenderer.invoke('autoUpdater:check'),
     installNow: () => ipcRenderer.invoke('autoUpdater:installNow'),

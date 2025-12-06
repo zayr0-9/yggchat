@@ -218,12 +218,12 @@ function getIconPath(isDark: boolean) {
 }
 
 function applyTitleBarTheme(win: BrowserWindow, isDark?: boolean) {
-  // Only apply overlay on Windows where it's supported and requested, AND ONLY IN PRODUCTION
-  if (process.platform === 'win32' && app.isPackaged) {
+  // Apply overlay on Windows wherever supported
+  if (process.platform === 'win32') {
     // Use provided isDark value, or fall back to system preference
     const useDark = isDark !== undefined ? isDark : nativeTheme.shouldUseDarkColors
     win.setTitleBarOverlay({
-      color: 'transparent',
+      color: '#00000001', // use tiny alpha to avoid Windows dark-mode fallback tint
       symbolColor: useDark ? '#f2f4f7' : '#0f172a',
       height: 35, // Ensure there is a grippable area
     })
@@ -255,14 +255,15 @@ function createWindow() {
       sandbox: false,
     },
     // Platform-specific title bar settings
-    ...(process.platform === 'win32' && app.isPackaged
+    ...(process.platform === 'win32'
       ? {
         titleBarStyle: 'hidden',
         titleBarOverlay: {
-          color: 'transparent', // transparent overlay; rely on renderer background
+          color: '#00000001', // tiny alpha to avoid dark-mode fallback tint
           symbolColor: '#0f172a',
           height: 35, // Ensure height is set for draggable region
         },
+        backgroundColor: '#00000001',
       }
       : process.platform === 'darwin'
         ? {
@@ -279,6 +280,19 @@ function createWindow() {
   // Show window when ready to avoid flicker
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
+  })
+
+  // Re-apply overlay after navigations/focus to prevent tint regressions (Windows)
+  mainWindow.on('focus', () => {
+    applyTitleBarTheme(mainWindow!)
+  })
+
+  mainWindow.webContents.on('did-navigate', () => {
+    applyTitleBarTheme(mainWindow!)
+  })
+
+  mainWindow.webContents.on('did-navigate-in-page', () => {
+    applyTitleBarTheme(mainWindow!)
   })
 
   // Load the app
@@ -672,6 +686,25 @@ ipcMain.handle('window:maximize', async () => {
 ipcMain.handle('window:close', async () => {
   if (mainWindow) {
     mainWindow.close()
+  }
+})
+
+// Allow renderer to explicitly set title bar overlay (used on theme changes)
+ipcMain.handle('titlebar:set-overlay', async (_event, payload: { color?: string; symbolColor?: string; height?: number }) => {
+  if (!mainWindow) return { success: false, error: 'no-window' }
+  try {
+    if (process.platform === 'win32') {
+      mainWindow.setTitleBarOverlay({
+        color: payload.color ?? '#00000001',
+        symbolColor: payload.symbolColor ?? (nativeTheme.shouldUseDarkColors ? '#f2f4f7' : '#0f172a'),
+        height: payload.height ?? 35,
+      })
+      return { success: true }
+    }
+    return { success: false, error: 'unsupported-platform' }
+  } catch (error) {
+    console.error('[Electron] Failed to set titlebar overlay:', error)
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 })
 
