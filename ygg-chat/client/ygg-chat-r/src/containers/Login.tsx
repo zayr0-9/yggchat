@@ -123,14 +123,13 @@ const Login: React.FC = () => {
                 user: {
                   id: userId,
                   email: data.session.user.email || 'unknown',
-                  username: username,
+                  username,
                 },
-                session: {
-                  access_token: access_token,
-                },
+                // Persist full session (access + refresh tokens + expiry)
+                session: data.session,
                 loading: false,
-                accessToken: access_token,
-                userId: userId,
+                accessToken: data.session.access_token,
+                userId,
               }
 
               await window.electronAPI.storage.set('auth_session', authStateForStorage)
@@ -309,12 +308,13 @@ const Login: React.FC = () => {
             user: {
               id: userId,
               email: data.session.user.email || 'unknown',
-              username: username,
+              username,
             },
-            session: { access_token },
+            // Persist full session (access + refresh tokens + expiry)
+            session: data.session,
             loading: false,
-            accessToken: access_token,
-            userId: userId,
+            accessToken: data.session.access_token,
+            userId,
           }
 
           await window.electronAPI.storage.set('auth_session', authStateForStorage)

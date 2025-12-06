@@ -11,7 +11,9 @@ import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
 
 // Tool imports
+import { runBashCommand } from './tools/bash.js'
 import { browseWeb } from './tools/browseWeb.js'
+import { CCResponse, executeClaudeCode, getAvailableSlashCommands, getSession, setSession } from './tools/claudeCode.js'
 import { createTextFile } from './tools/createFile.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
@@ -20,21 +22,40 @@ import { globSearch } from './tools/glob.js'
 import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
-import { runBashCommand } from './tools/bash.js'
-import {
-  generateTodoId,
-  getTodoStorageDirectory,
-  listTodoIds,
-  readTodoList,
-  writeTodoList,
-} from './tools/todoMd.js'
-import {
-  executeClaudeCode,
-  getSession,
-  setSession,
-  getAvailableSlashCommands,
-  CCResponse,
-} from './tools/claudeCode.js'
+import { generateTodoId, getTodoStorageDirectory, listTodoIds, readTodoList, writeTodoList } from './tools/todoMd.js'
+
+/**
+ * Validates and resolves a path to ensure it's within the allowed rootPath scope.
+ * Prevents directory traversal attacks.
+ */
+function validateAndResolvePath(
+  inputPath: string | undefined,
+  rootPath: string | undefined,
+  fallbackToRoot = true
+): string {
+  // If no input path provided
+  if (!inputPath) {
+    if (fallbackToRoot && rootPath) return rootPath
+    return '.'
+  }
+
+  // If no rootPath constraint, just resolve the path
+  if (!rootPath) {
+    return path.isAbsolute(inputPath) ? path.normalize(inputPath) : path.resolve(inputPath)
+  }
+
+  // Resolve to absolute path
+  const resolvedPath = path.isAbsolute(inputPath) ? path.normalize(inputPath) : path.resolve(rootPath, inputPath)
+
+  const normalizedRoot = path.normalize(rootPath)
+
+  // Security: Ensure resolved path is within rootPath scope
+  if (!resolvedPath.startsWith(normalizedRoot + path.sep) && resolvedPath !== normalizedRoot) {
+    throw new Error(`Path must be within workspace: ${rootPath}`)
+  }
+
+  return resolvedPath
+}
 
 const app = express()
 let server: any = null
@@ -309,7 +330,7 @@ function ensureUserExists(userId: string) {
   if (!db) return
   const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(userId)
   if (!existing) {
-    console.log('[LocalServer] Auto-creating user stub:', userId)
+    // console.log('[LocalServer] Auto-creating user stub:', userId)
     db.prepare('INSERT INTO users (id, username, created_at) VALUES (?, ?, ?)').run(
       userId,
       `synced-user-${userId.substring(0, 8)}`,
@@ -323,7 +344,7 @@ function ensureProjectExists(projectId: string, userId: string) {
   ensureUserExists(userId) // Project requires user to exist
   const existing = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId)
   if (!existing) {
-    console.log('[LocalServer] Auto-creating project stub:', projectId)
+    // console.log('[LocalServer] Auto-creating project stub:', projectId)
     const now = new Date().toISOString()
     db.prepare(
       'INSERT INTO projects (id, name, user_id, context, system_prompt, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -339,7 +360,7 @@ function ensureConversationExists(conversationId: string, userId: string, projec
   }
   const existing = db.prepare('SELECT id FROM conversations WHERE id = ?').get(conversationId)
   if (!existing) {
-    console.log('[LocalServer] Auto-creating conversation stub:', conversationId)
+    // console.log('[LocalServer] Auto-creating conversation stub:', conversationId)
     const now = new Date().toISOString()
     db.prepare(
       'INSERT INTO conversations (id, project_id, user_id, title, model_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -416,7 +437,7 @@ interface ConnectedClient {
 const clients = new Set<ConnectedClient>()
 
 function initializeWebSocketServer(serverInstance: any) {
-  console.log('[LocalServer] Initializing WebSocket Server on /ide-context')
+  // console.log('[LocalServer] Initializing WebSocket Server on /ide-context')
 
   wss = new WebSocketServer({ server: serverInstance, path: '/ide-context' })
 
@@ -432,7 +453,7 @@ function initializeWebSocketServer(serverInstance: any) {
     }
 
     clients.add(client)
-    console.log(`[LocalServer] Client connected: ${client.type} (${client.id})`)
+    // console.log(`[LocalServer] Client connected: ${client.type} (${client.id})`)
 
     ws.on('message', data => {
       try {
@@ -477,7 +498,7 @@ function initializeWebSocketServer(serverInstance: any) {
             })
 
             if (extensionClients.length === 0) {
-              console.warn('[LocalServer] No extensions available to handle context request')
+              // console.warn('[LocalServer] No extensions available to handle context request')
               // Send back an empty response so frontend stops waiting
               client.ws.send(
                 JSON.stringify({
@@ -516,7 +537,7 @@ function initializeWebSocketServer(serverInstance: any) {
 
     ws.on('close', () => {
       clients.delete(client)
-      console.log(`[LocalServer] Client disconnected: ${client.type} (${client.id})`)
+      // console.log(`[LocalServer] Client disconnected: ${client.type} (${client.id})`)
     })
 
     ws.on('error', error => {
@@ -541,7 +562,7 @@ function setupServer() {
     try {
       const { id, username, created_at } = req.body
       statements.upsertUser.run(id, username, created_at || new Date().toISOString())
-      console.log('[LocalServer] Synced user:', id)
+      // console.log('[LocalServer] Synced user:', id)
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error syncing user:', error)
@@ -574,7 +595,7 @@ function setupServer() {
         created_at || new Date().toISOString(),
         updated_at || new Date().toISOString()
       )
-      console.log('[LocalServer] Synced project:', id, '- storage_mode:', storage_mode || 'cloud')
+      // console.log('[LocalServer] Synced project:', id, '- storage_mode:', storage_mode || 'cloud')
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error syncing project:', error)
@@ -586,7 +607,7 @@ function setupServer() {
     try {
       const { id } = req.params
       statements.deleteProject.run(id)
-      console.log('[LocalServer] Deleted project:', id)
+      // console.log('[LocalServer] Deleted project:', id)
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error deleting project:', error)
@@ -629,24 +650,24 @@ function setupServer() {
         updated_at,
       } = req.body
 
-      console.log(
-        '[LocalServer] 🔄 POST /api/sync/conversation - conversationId:',
-        id,
-        'title:',
-        title,
-        'storage_mode:',
-        storage_mode
-      )
+      // console.log(
+      //   '[LocalServer] 🔄 POST /api/sync/conversation - conversationId:',
+      //   id,
+      //   'title:',
+      //   title,
+      //   'storage_mode:',
+      //   storage_mode
+      // )
 
       // Handle owner_id -> user_id mapping (Railway sends owner_id)
       const effectiveUserId = user_id || owner_id
       if (!effectiveUserId) {
-        console.log('[LocalServer] ❌ Missing user_id or owner_id')
+        // console.log('[LocalServer] ❌ Missing user_id or owner_id')
         res.status(400).json({ error: 'Missing user_id or owner_id' })
         return
       }
 
-      console.log('[LocalServer] 👤 Effective userId:', effectiveUserId, 'projectId:', project_id)
+      // console.log('[LocalServer] 👤 Effective userId:', effectiveUserId, 'projectId:', project_id)
 
       // Ensure dependencies exist before upserting conversation
       ensureUserExists(effectiveUserId)
@@ -668,20 +689,20 @@ function setupServer() {
         created_at || new Date().toISOString(),
         updated_at || new Date().toISOString()
       )
-      console.log('[LocalServer] ✅ Synced conversation successfully:', id, '- title:', title)
+      // console.log('[LocalServer] ✅ Synced conversation successfully:', id, '- title:', title)
 
       // Verify the conversation was saved
-      const saved = statements.getConversationById.get(id)
-      if (saved) {
-        console.log(
-          '[LocalServer] ✅ Verified conversation exists in DB:',
-          id,
-          '- storage_mode:',
-          (saved as any).storage_mode
-        )
-      } else {
-        console.log('[LocalServer] ⚠️  Warning: Conversation not found after save:', id)
-      }
+      // const saved = statements.getConversationById.get(id)
+      // if (saved) {
+      //   console.log(
+      //     '[LocalServer] ✅ Verified conversation exists in DB:',
+      //     id,
+      //     '- storage_mode:',
+      //     (saved as any).storage_mode
+      //   )
+      // } else {
+      //   console.log('[LocalServer] ⚠️  Warning: Conversation not found after save:', id)
+      // }
 
       res.json({ success: true, id })
     } catch (error) {
@@ -694,7 +715,7 @@ function setupServer() {
     try {
       const { id } = req.params
       statements.deleteConversation.run(id)
-      console.log('[LocalServer] Deleted conversation:', id)
+      // console.log('[LocalServer] Deleted conversation:', id)
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error deleting conversation:', error)
@@ -744,18 +765,18 @@ function setupServer() {
         project_id,
       } = req.body
 
-      console.log(
-        '[LocalServer] 💾 POST /api/sync/message - messageId:',
-        id,
-        'conversationId:',
-        conversation_id,
-        'role:',
-        role
-      )
-      console.log('[LocalServer] 📝 Message content preview:', content?.substring(0, 50))
+      // console.log(
+      //   '[LocalServer] 💾 POST /api/sync/message - messageId:',
+      //   id,
+      //   'conversationId:',
+      //   conversation_id,
+      //   'role:',
+      //   role
+      // )
+      // console.log('[LocalServer] 📝 Message content preview:', content?.substring(0, 50))
 
       if (!conversation_id) {
-        console.log('[LocalServer] ❌ Missing conversation_id')
+        // console.log('[LocalServer] ❌ Missing conversation_id')
         res.status(400).json({ error: 'Missing conversation_id' })
         return
       }
@@ -803,22 +824,22 @@ function setupServer() {
         typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null),
         created_at || new Date().toISOString()
       )
-      console.log(
-        '[LocalServer] ✅ Synced message successfully:',
-        id,
-        '- role:',
-        role,
-        'conversation:',
-        conversation_id
-      )
+      // console.log(
+      //   '[LocalServer] ✅ Synced message successfully:',
+      //   id,
+      //   '- role:',
+      //   role,
+      //   'conversation:',
+      //   conversation_id
+      // )
 
       // Verify the message was saved
-      const saved = statements.getMessageById.get(id)
-      if (saved) {
-        console.log('[LocalServer] ✅ Verified message exists in DB:', id)
-      } else {
-        console.log('[LocalServer] ⚠️  Warning: Message not found after save:', id)
-      }
+      // const saved = statements.getMessageById.get(id)
+      // if (saved) {
+      //   console.log('[LocalServer] ✅ Verified message exists in DB:', id)
+      // } else {
+      //   console.log('[LocalServer] ⚠️  Warning: Message not found after save:', id)
+      // }
 
       res.json({ success: true, id })
     } catch (error) {
@@ -831,7 +852,7 @@ function setupServer() {
     try {
       const { id } = req.params
       statements.deleteMessage.run(id)
-      console.log('[LocalServer] Deleted message:', id)
+      // console.log('[LocalServer] Deleted message:', id)
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error deleting message:', error)
@@ -878,7 +899,7 @@ function setupServer() {
         statements.linkAttachment.run(linkId, message_id, id, new Date().toISOString())
       }
 
-      console.log('[LocalServer] Synced attachment:', id)
+      // console.log('[LocalServer] Synced attachment:', id)
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error syncing attachment:', error)
@@ -912,7 +933,7 @@ function setupServer() {
         api_credit_cost || 0,
         created_at || new Date().toISOString()
       )
-      console.log('[LocalServer] Synced provider cost:', id)
+      // console.log('[LocalServer] Synced provider cost:', id)
       res.json({ success: true, id })
     } catch (error) {
       console.error('[LocalServer] Error syncing provider cost:', error)
@@ -1029,9 +1050,9 @@ function setupServer() {
 
     try {
       transaction()
-      console.log(
-        `[LocalServer] Batch sync completed: ${results.filter(r => r.success).length}/${operations.length} succeeded`
-      )
+      // console.log(
+      //   `[LocalServer] Batch sync completed: ${results.filter(r => r.success).length}/${operations.length} succeeded`
+      // )
       res.json({ success: true, results })
     } catch (error) {
       console.error('[LocalServer] Batch sync failed:', error)
@@ -1043,7 +1064,7 @@ function setupServer() {
   app.post('/api/tools/execute', async (req, res) => {
     try {
       const { toolName, args, rootPath, operationMode } = req.body
-      console.log(`[LocalServer] Executing tool: ${toolName} (operationMode: ${operationMode || 'execute'})`)
+      // console.log(`[LocalServer] Executing tool: ${toolName} (operationMode: ${operationMode || 'execute'})`)
 
       let result: any = `Tool ${toolName} not implemented on local server`
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
@@ -1079,7 +1100,14 @@ function setupServer() {
           const { path: filePath, content, directory, createParentDirs, overwrite, executable } = parsedArgs
           if (!filePath) throw new Error('path is required')
 
-          result = await createTextFile(filePath, content, { directory, createParentDirs, overwrite, executable, operationMode, cwd: rootPath })
+          result = await createTextFile(filePath, content, {
+            directory,
+            createParentDirs,
+            overwrite,
+            executable,
+            operationMode,
+            cwd: rootPath,
+          })
           break
         }
         case 'edit_file': {
@@ -1125,12 +1153,11 @@ function setupServer() {
         }
         case 'directory': {
           const { path: dirPath, maxDepth, includeHidden, includeSizes } = parsedArgs
-          // Use rootPath from request if dirPath is not absolute or not provided?
-          // The directory tool logic resolves against process.cwd() if relative.
-          // If rootPath is sent by client, maybe we should change CWD?
-          // But let's just pass the path.
 
-          const structure = await extractDirectoryStructure(dirPath || rootPath || '.', {
+          // Validate and resolve path (security: must be within rootPath)
+          const finalDirPath = validateAndResolvePath(dirPath, rootPath)
+
+          const structure = await extractDirectoryStructure(finalDirPath, {
             maxDepth,
             includeHidden,
             includeSizes,
@@ -1142,7 +1169,8 @@ function setupServer() {
           const { pattern, cwd, ignore, dot, absolute } = parsedArgs
           if (!pattern) throw new Error('pattern is required')
 
-          const actualCwd = cwd || rootPath // Prefer explicit cwd, fallback to rootPath
+          // Validate cwd (security: must be within rootPath)
+          const actualCwd = validateAndResolvePath(cwd, rootPath)
           result = await globSearch(pattern, { cwd: actualCwd, ignore, dot, absolute })
           break
         }
@@ -1151,6 +1179,7 @@ function setupServer() {
             regex,
             pattern,
             path: dirPath,
+            searchPath: altSearchPath, // Accept searchPath as alias for path
             glob: globPattern,
             case_insensitive,
             lineNumbers,
@@ -1161,16 +1190,14 @@ function setupServer() {
             noIgnore,
             contextLines,
           } = parsedArgs
+
           const query = regex || pattern
           if (!query) throw new Error('pattern or regex is required')
 
-          const searchPath = dirPath || rootPath || '.'
+          // Validate and resolve path (security: must be within rootPath)
+          const finalSearchPath = validateAndResolvePath(dirPath || altSearchPath, rootPath)
 
-          // Map parameters to new tool options (snake_case from some clients to camelCase)
-          // Client seems to send 'case_insensitive' (snake), but new tool uses 'caseSensitive' (camel, boolean inverted)
-          // Check old localServer impl: it used `caseSensitive: !case_insensitive`
-
-          result = await ripgrepSearch(query, searchPath, {
+          result = await ripgrepSearch(query, finalSearchPath, {
             caseSensitive: !case_insensitive,
             glob: globPattern,
             lineNumbers,
@@ -1192,8 +1219,12 @@ function setupServer() {
         case 'bash': {
           const { command, cwd, env, timeoutMs, maxOutputChars } = parsedArgs
           if (!command) throw new Error('command is required')
+
+          // Validate cwd (security: must be within rootPath)
+          const finalCwd = validateAndResolvePath(cwd, rootPath)
+
           result = await runBashCommand(command, {
-            cwd: cwd || rootPath || undefined,
+            cwd: finalCwd,
             env,
             timeoutMs,
             maxOutputChars,
@@ -1355,23 +1386,23 @@ function setupServer() {
   app.get('/api/local/projects/:id', (req, res) => {
     try {
       const { id } = req.params
-      console.log('[LocalServer] GET /api/local/projects/:id - projectId:', id)
+      // console.log('[LocalServer] GET /api/local/projects/:id - projectId:', id)
       const project = statements.getProjectById.get(id)
 
       if (!project) {
-        console.log('[LocalServer] Project not found:', id)
+        // console.log('[LocalServer] Project not found:', id)
         res.status(404).json({ error: 'Project not found' })
         return
       }
 
       // Verify it's actually a local project
       if (project.storage_mode !== 'local') {
-        console.log('[LocalServer] Project is not local storage:', id)
+        // console.log('[LocalServer] Project is not local storage:', id)
         res.status(404).json({ error: 'Project not found' })
         return
       }
 
-      console.log('[LocalServer] Found local project:', id)
+      // console.log('[LocalServer] Found local project:', id)
       res.json(project)
     } catch (error) {
       console.error('[LocalServer] Error fetching local project:', error)
@@ -1417,7 +1448,7 @@ function setupServer() {
         )
 
       const updated = statements.getProjectById.get(id)
-      console.log('[LocalServer] Updated local project:', id)
+      // console.log('[LocalServer] Updated local project:', id)
       res.json(updated)
     } catch (error) {
       console.error('[LocalServer] Error updating local project:', error)
@@ -1429,15 +1460,15 @@ function setupServer() {
   app.get('/api/local/conversations', (req, res) => {
     try {
       const userId = req.query.userId as string
-      console.log('[LocalServer] 📋 GET /api/local/conversations - userId:', userId)
+      // console.log('[LocalServer] 📋 GET /api/local/conversations - userId:', userId)
       if (!userId) {
-        console.log('[LocalServer] ❌ Missing userId parameter')
+        // console.log('[LocalServer] ❌ Missing userId parameter')
         res.status(400).json({ error: 'userId required' })
         return
       }
       const conversations = statements.getLocalConversations.all(userId)
-      console.log('[LocalServer] ✅ Found', conversations.length, 'local conversations for user:', userId)
-      console.log('[LocalServer] 📊 Conversations:', JSON.stringify(conversations, null, 2))
+      // console.log('[LocalServer] ✅ Found', conversations.length, 'local conversations for user:', userId)
+      // console.log('[LocalServer] 📊 Conversations:', JSON.stringify(conversations, null, 2))
       res.json(conversations)
     } catch (error) {
       console.error('[LocalServer] ❌ Error fetching local conversations:', error)
@@ -1532,7 +1563,7 @@ function setupServer() {
       db!.prepare(sql).run(...values)
 
       const updated = statements.getConversationById.get(id)
-      console.log('[LocalServer] Updated local conversation:', id, '- fields:', Object.keys(req.body).join(', '))
+      // console.log('[LocalServer] Updated local conversation:', id, '- fields:', Object.keys(req.body).join(', '))
       res.json(updated)
     } catch (error) {
       console.error('[LocalServer] Error updating conversation:', error)
@@ -1544,16 +1575,16 @@ function setupServer() {
   app.get('/api/local/conversations/:id', (req, res) => {
     try {
       const { id } = req.params
-      console.log('[LocalServer] 🔍 GET /api/local/conversations/:id - conversationId:', id)
+      // console.log('[LocalServer] 🔍 GET /api/local/conversations/:id - conversationId:', id)
       const conversation = statements.getConversationById.get(id)
 
       if (!conversation) {
-        console.log('[LocalServer] ❌ Conversation not found:', id)
+        // console.log('[LocalServer] ❌ Conversation not found:', id)
         res.status(404).json({ error: 'Conversation not found' })
         return
       }
 
-      console.log('[LocalServer] ✅ Found conversation:', JSON.stringify(conversation, null, 2))
+      // console.log('[LocalServer] ✅ Found conversation:', JSON.stringify(conversation, null, 2))
       res.json(conversation)
     } catch (error) {
       console.error('[LocalServer] ❌ Error fetching conversation:', error)
@@ -1565,9 +1596,9 @@ function setupServer() {
   app.delete('/api/local/conversations/:id', (req, res) => {
     try {
       const { id } = req.params
-      console.log('[LocalServer] 🗑️ DELETE /api/local/conversations/:id - conversationId:', id)
+      // console.log('[LocalServer] 🗑️ DELETE /api/local/conversations/:id - conversationId:', id)
       statements.deleteConversation.run(id)
-      console.log('[LocalServer] ✅ Conversation deleted:', id)
+      // console.log('[LocalServer] ✅ Conversation deleted:', id)
       res.json({ success: true })
     } catch (error) {
       console.error('[LocalServer] ❌ Error deleting conversation:', error)
@@ -1579,13 +1610,13 @@ function setupServer() {
   app.get('/api/local/conversations/:id/messages', (req, res) => {
     try {
       const { id } = req.params
-      console.log('[LocalServer] 💬 GET /api/local/conversations/:id/messages - conversationId:', id)
+      // console.log('[LocalServer] 💬 GET /api/local/conversations/:id/messages - conversationId:', id)
       const messages = statements.getMessagesByConversationId.all(id)
-      console.log('[LocalServer] ✅ Found', messages.length, 'messages for conversation:', id)
-      if (messages.length > 0) {
-        console.log('[LocalServer] 📊 First message:', JSON.stringify(messages[0], null, 2))
-        console.log('[LocalServer] 📊 Last message:', JSON.stringify(messages[messages.length - 1], null, 2))
-      }
+      // console.log('[LocalServer] ✅ Found', messages.length, 'messages for conversation:', id)
+      // if (messages.length > 0) {
+      //   console.log('[LocalServer] 📊 First message:', JSON.stringify(messages[0], null, 2))
+      //   console.log('[LocalServer] 📊 Last message:', JSON.stringify(messages[messages.length - 1], null, 2))
+      // }
       res.json(messages)
     } catch (error) {
       console.error('[LocalServer] ❌ Error fetching messages:', error)
@@ -1597,9 +1628,9 @@ function setupServer() {
   app.get('/api/local/conversations/:id/messages/tree', (req, res) => {
     try {
       const { id } = req.params
-      console.log('[LocalServer] 🌲 GET /api/local/conversations/:id/messages/tree - conversationId:', id)
+      // console.log('[LocalServer] 🌲 GET /api/local/conversations/:id/messages/tree - conversationId:', id)
       const messages = statements.getMessagesByConversationId.all(id)
-      console.log('[LocalServer] 📦 Raw messages fetched:', messages.length)
+      // console.log('[LocalServer] 📦 Raw messages fetched:', messages.length)
 
       // Parse JSON fields (children_ids, tool_calls, content_blocks)
       const normalizedMessages = messages.map((msg: any) => ({
@@ -1676,9 +1707,9 @@ function setupServer() {
   app.delete('/api/local/messages/:id', (req, res) => {
     try {
       const { id } = req.params
-      console.log('[LocalServer] 🗑️ DELETE /api/local/messages/:id - messageId:', id)
+      // console.log('[LocalServer] 🗑️ DELETE /api/local/messages/:id - messageId:', id)
       statements.deleteMessage.run(id)
-      console.log('[LocalServer] ✅ Message deleted:', id)
+      // console.log('[LocalServer] ✅ Message deleted:', id)
       res.json({ success: true })
     } catch (error) {
       console.error('[LocalServer] ❌ Error deleting message:', error)
@@ -1690,8 +1721,8 @@ function setupServer() {
   app.post('/api/local/messages/deleteMany', (req, res) => {
     try {
       const { ids } = req.body
-      console.log('[LocalServer] 🗑️ POST /api/local/messages/deleteMany - ids:', ids)
-      
+      // console.log('[LocalServer] 🗑️ POST /api/local/messages/deleteMany - ids:', ids)
+
       if (!Array.isArray(ids) || ids.length === 0) {
         res.status(400).json({ error: 'ids must be a non-empty array' })
         return
@@ -1707,9 +1738,9 @@ function setupServer() {
           statements.deleteMessage.run(id)
         }
       })
-      
+
       deleteTransaction(ids)
-      console.log('[LocalServer] ✅ Bulk deleted', ids.length, 'messages')
+      // console.log('[LocalServer] ✅ Bulk deleted', ids.length, 'messages')
       res.json({ deleted: ids.length })
     } catch (error) {
       console.error('[LocalServer] ❌ Error bulk deleting messages:', error)
@@ -1764,7 +1795,7 @@ function setupServer() {
   app.get('/api/agents/cc-session/:conversationId', (req, res) => {
     try {
       const { conversationId } = req.params
-      console.log('[LocalServer] 🤖 GET /api/agents/cc-session/:conversationId -', conversationId)
+      // console.log('[LocalServer] 🤖 GET /api/agents/cc-session/:conversationId -', conversationId)
 
       // Get conversation to retrieve cwd
       const conversation = statements.getConversationById.get(conversationId) as any
@@ -1778,12 +1809,16 @@ function setupServer() {
 
       if (!sessionId) {
         // Also check database for ex_agent messages with session ID
-        const lastCCMessage = db!.prepare(`
+        const lastCCMessage = db!
+          .prepare(
+            `
           SELECT ex_agent_session_id, created_at 
           FROM messages 
           WHERE conversation_id = ? AND role = 'ex_agent' AND ex_agent_session_id IS NOT NULL
           ORDER BY created_at DESC LIMIT 1
-        `).get(conversationId) as { ex_agent_session_id: string; created_at: string } | undefined
+        `
+          )
+          .get(conversationId) as { ex_agent_session_id: string; created_at: string } | undefined
 
         if (!lastCCMessage?.ex_agent_session_id) {
           res.json({ hasSession: false })
@@ -1791,10 +1826,14 @@ function setupServer() {
         }
 
         // Count messages in this session
-        const countResult = db!.prepare(`
+        const countResult = db!
+          .prepare(
+            `
           SELECT COUNT(*) as count FROM messages 
           WHERE conversation_id = ? AND ex_agent_session_id = ?
-        `).get(conversationId, lastCCMessage.ex_agent_session_id) as { count: number }
+        `
+          )
+          .get(conversationId, lastCCMessage.ex_agent_session_id) as { count: number }
 
         res.json({
           hasSession: true,
@@ -1822,14 +1861,14 @@ function setupServer() {
     try {
       const { conversationId } = req.params
       const { cwd: queryCwd } = req.query
-      console.log('[LocalServer] 🤖 GET /api/agents/cc-commands/:conversationId -', conversationId)
+      // console.log('[LocalServer] 🤖 GET /api/agents/cc-commands/:conversationId -', conversationId)
 
       // Get conversation to retrieve cwd if not provided in query
       const conversation = statements.getConversationById.get(conversationId) as any
       const cwd = (queryCwd as string) || conversation?.cwd || process.cwd()
 
       const commands = getAvailableSlashCommands(conversationId, cwd)
-      console.log(`[LocalServer] Found ${commands.length} slash commands for conversation ${conversationId}`)
+      // console.log(`[LocalServer] Found ${commands.length} slash commands for conversation ${conversationId}`)
 
       res.json({ commands })
     } catch (error) {
@@ -1840,9 +1879,9 @@ function setupServer() {
 
   // POST /api/agents/cc-messages/:conversationId - Send message to Claude Code
   app.post('/api/agents/cc-messages/:conversationId', async (req, res) => {
-    console.log('\n🤖🤖🤖 [LocalServer] POST /api/agents/cc-messages - Claude Code message received')
-    console.log('🤖 Timestamp:', new Date().toISOString())
-    console.log('🤖 Conversation ID:', req.params.conversationId)
+    // console.log('\n🤖🤖🤖 [LocalServer] POST /api/agents/cc-messages - Claude Code message received')
+    // console.log('🤖 Timestamp:', new Date().toISOString())
+    // console.log('🤖 Conversation ID:', req.params.conversationId)
 
     const { conversationId } = req.params
     const {
@@ -1870,12 +1909,12 @@ function setupServer() {
     const conversation = statements.getConversationById.get(conversationId) as any
     const cwd = requestedCwd || conversation?.cwd || process.cwd()
 
-    console.log('🤖 CC Request:', {
-      message: message.substring(0, 100),
-      cwd,
-      permissionMode,
-      resume,
-    })
+    // console.log('🤖 CC Request:', {
+    //   message: message.substring(0, 100),
+    //   cwd,
+    //   permissionMode,
+    //   resume,
+    // })
 
     // Set up SSE for streaming
     res.writeHead(200, {
@@ -1911,10 +1950,12 @@ function setupServer() {
         null,
         now
       )
-      console.log('[LocalServer] 🤖 User message saved:', userMsgId)
+      // console.log('[LocalServer] 🤖 User message saved:', userMsgId)
 
       // Send user message event
-      res.write(`data: ${JSON.stringify({ type: 'user_message', message: { id: userMsgId, role: 'user', content: message } })}\n\n`)
+      res.write(
+        `data: ${JSON.stringify({ type: 'user_message', message: { id: userMsgId, role: 'user', content: message } })}\n\n`
+      )
 
       // Determine session ID
       let sessionId = providedSessionId || getSession(conversationId, cwd)
@@ -1937,12 +1978,14 @@ function setupServer() {
       // Streaming chunk callback for real-time deltas
       const onStreamingChunk = async (chunk: any) => {
         try {
-          res.write(`data: ${JSON.stringify({
-            type: 'chunk',
-            part: chunk.contentType === 'thinking' ? 'reasoning' : 'text',
-            delta: chunk.delta || '',
-            chunkType: chunk.type,
-          })}\n\n`)
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'chunk',
+              part: chunk.contentType === 'thinking' ? 'reasoning' : 'text',
+              delta: chunk.delta || '',
+              chunkType: chunk.type,
+            })}\n\n`
+          )
         } catch (error) {
           console.error('[LocalServer] Error writing streaming chunk:', error)
         }
@@ -1967,7 +2010,7 @@ function setupServer() {
         // Priority 1: Check for result.result (slash commands)
         if (response.messageType === 'result' && response.result?.result) {
           extractedContent = response.result.result
-          console.log('[LocalServer] 🔍 Extracted content from result.result:', extractedContent.substring(0, 100))
+          // console.log('[LocalServer] 🔍 Extracted content from result.result:', extractedContent.substring(0, 100))
         }
 
         // Priority 2: Check for system messages with content
@@ -1977,7 +2020,7 @@ function setupServer() {
           const systemContent = (response.system as any).content || (response.system as any).message
           if (systemContent && typeof systemContent === 'string') {
             extractedContent = systemContent
-            console.log('[LocalServer] 🔍 Extracted content from system message')
+            // console.log('[LocalServer] 🔍 Extracted content from system message')
           }
         }
 
@@ -1986,13 +2029,13 @@ function setupServer() {
           const genericContent = (response as any).content
           if (typeof genericContent === 'string') {
             extractedContent = genericContent
-            console.log('[LocalServer] 🔍 Extracted content from generic content field')
+            // console.log('[LocalServer] 🔍 Extracted content from generic content field')
           } else if (Array.isArray(genericContent)) {
             // If it's an array of blocks, try to extract text
             const textBlocks = genericContent.filter((b: any) => b.type === 'text')
             if (textBlocks.length > 0) {
               extractedContent = textBlocks.map((b: any) => b.text || b.content || '').join('\n')
-              console.log('[LocalServer] 🔍 Extracted content from content blocks array')
+              // console.log('[LocalServer] 🔍 Extracted content from content blocks array')
             }
           }
         }
@@ -2009,13 +2052,15 @@ function setupServer() {
 
           // Stream extracted content to frontend immediately
           try {
-            res.write(`data: ${JSON.stringify({
-              type: 'chunk',
-              part: 'text',
-              delta: extractedContent,
-              chunkType: `${response.messageType}_output`,
-              sourceMessageType: response.messageType,
-            })}\n\n`)
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'chunk',
+                part: 'text',
+                delta: extractedContent,
+                chunkType: `${response.messageType}_output`,
+                sourceMessageType: response.messageType,
+              })}\n\n`
+            )
           } catch (error) {
             console.error('[LocalServer] Error streaming extracted content:', error)
           }
@@ -2058,18 +2103,21 @@ function setupServer() {
               JSON.stringify(normalizeContentBlocksForStorage(contentBlocks)),
               new Date().toISOString()
             )
-            console.log('[LocalServer] 🤖 CC message saved:', ccMsgId, '- blocks:', contentBlocks.length)
+            // console.log('[LocalServer] 🤖 CC message saved:', ccMsgId, '- blocks:', contentBlocks.length)
 
             // Send complete event
-            res.write(`data: ${JSON.stringify({
-              type: 'complete',
-              sessionId: currentSessionId,
-              messageId: ccMsgId,
-              messageCount: contentBlocks.length,
-            })}\n\n`)
-          } else if (!contentBlocks.length && currentSessionId) {
-            console.log('[LocalServer] ⚠️ CC result received but no content to save')
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'complete',
+                sessionId: currentSessionId,
+                messageId: ccMsgId,
+                messageCount: contentBlocks.length,
+              })}\n\n`
+            )
           }
+          // else if (!contentBlocks.length && currentSessionId) {
+          //   console.log('[LocalServer] ⚠️ CC result received but no content to save')
+          // }
 
           // Reset accumulators
           contentBlocks = []
@@ -2121,13 +2169,15 @@ function setupServer() {
         statements.updateConversationCwd.run(cwd, conversationId)
       }
 
-      console.log('🤖 CC conversation completed successfully')
+      // console.log('🤖 CC conversation completed successfully')
     } catch (error) {
       console.error('[LocalServer] CC Error:', error)
-      res.write(`data: ${JSON.stringify({
-        type: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      })}\n\n`)
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })}\n\n`
+      )
     }
 
     res.end()
@@ -2135,9 +2185,9 @@ function setupServer() {
 
   // POST /api/agents/cc-messages-branch/:conversationId - Branch message to Claude Code
   app.post('/api/agents/cc-messages-branch/:conversationId', async (req, res) => {
-    console.log('\n🤖🤖🤖 [LocalServer] POST /api/agents/cc-messages-branch - Claude Code branch message received')
-    console.log('🤖 Timestamp:', new Date().toISOString())
-    console.log('🤖 Conversation ID:', req.params.conversationId)
+    // console.log('\n🤖🤖🤖 [LocalServer] POST /api/agents/cc-messages-branch - Claude Code branch message received')
+    // console.log('🤖 Timestamp:', new Date().toISOString())
+    // console.log('🤖 Conversation ID:', req.params.conversationId)
 
     const { conversationId } = req.params
     const {
@@ -2169,12 +2219,12 @@ function setupServer() {
     const conversation = statements.getConversationById.get(conversationId) as any
     const cwd = requestedCwd || conversation?.cwd || process.cwd()
 
-    console.log('🤖 CC Branch Request:', {
-      message: message.substring(0, 100),
-      parentId,
-      cwd,
-      permissionMode,
-    })
+    // console.log('🤖 CC Branch Request:', {
+    //   message: message.substring(0, 100),
+    //   parentId,
+    //   cwd,
+    //   permissionMode,
+    // })
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -2220,7 +2270,9 @@ function setupServer() {
         now
       )
 
-      res.write(`data: ${JSON.stringify({ type: 'user_message', message: { id: userMsgId, role: 'user', content: message } })}\n\n`)
+      res.write(
+        `data: ${JSON.stringify({ type: 'user_message', message: { id: userMsgId, role: 'user', content: message } })}\n\n`
+      )
 
       let contentBlocks: any[] = []
       let textParts: string[] = []
@@ -2237,12 +2289,14 @@ function setupServer() {
       // Streaming chunk callback for real-time deltas
       const onStreamingChunk = async (chunk: any) => {
         try {
-          res.write(`data: ${JSON.stringify({
-            type: 'chunk',
-            part: chunk.contentType === 'thinking' ? 'reasoning' : 'text',
-            delta: chunk.delta || '',
-            chunkType: chunk.type,
-          })}\n\n`)
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'chunk',
+              part: chunk.contentType === 'thinking' ? 'reasoning' : 'text',
+              delta: chunk.delta || '',
+              chunkType: chunk.type,
+            })}\n\n`
+          )
         } catch (error) {
           console.error('[LocalServer] Error writing streaming chunk:', error)
         }
@@ -2266,7 +2320,7 @@ function setupServer() {
         // Priority 1: Check for result.result (slash commands)
         if (response.messageType === 'result' && response.result?.result) {
           extractedContent = response.result.result
-          console.log('[LocalServer] 🔍 Extracted content from result.result:', extractedContent.substring(0, 100))
+          // console.log('[LocalServer] 🔍 Extracted content from result.result:', extractedContent.substring(0, 100))
         }
 
         // Priority 2: Check for system messages with content
@@ -2276,7 +2330,7 @@ function setupServer() {
           const systemContent = (response.system as any).content || (response.system as any).message
           if (systemContent && typeof systemContent === 'string') {
             extractedContent = systemContent
-            console.log('[LocalServer] 🔍 Extracted content from system message')
+            // console.log('[LocalServer] 🔍 Extracted content from system message')
           }
         }
 
@@ -2285,13 +2339,13 @@ function setupServer() {
           const genericContent = (response as any).content
           if (typeof genericContent === 'string') {
             extractedContent = genericContent
-            console.log('[LocalServer] 🔍 Extracted content from generic content field')
+            // console.log('[LocalServer] 🔍 Extracted content from generic content field')
           } else if (Array.isArray(genericContent)) {
             // If it's an array of blocks, try to extract text
             const textBlocks = genericContent.filter((b: any) => b.type === 'text')
             if (textBlocks.length > 0) {
               extractedContent = textBlocks.map((b: any) => b.text || b.content || '').join('\n')
-              console.log('[LocalServer] 🔍 Extracted content from content blocks array')
+              // console.log('[LocalServer] 🔍 Extracted content from content blocks array')
             }
           }
         }
@@ -2308,13 +2362,15 @@ function setupServer() {
 
           // Stream extracted content to frontend immediately
           try {
-            res.write(`data: ${JSON.stringify({
-              type: 'chunk',
-              part: 'text',
-              delta: extractedContent,
-              chunkType: `${response.messageType}_output`,
-              sourceMessageType: response.messageType,
-            })}\n\n`)
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'chunk',
+                part: 'text',
+                delta: extractedContent,
+                chunkType: `${response.messageType}_output`,
+                sourceMessageType: response.messageType,
+              })}\n\n`
+            )
           } catch (error) {
             console.error('[LocalServer] Error streaming extracted content:', error)
           }
@@ -2356,17 +2412,20 @@ function setupServer() {
               JSON.stringify(normalizeContentBlocksForStorage(contentBlocks)),
               new Date().toISOString()
             )
-            console.log('[LocalServer] 🤖 CC message saved:', ccMsgId, '- blocks:', contentBlocks.length)
+            // console.log('[LocalServer] 🤖 CC message saved:', ccMsgId, '- blocks:', contentBlocks.length)
 
-            res.write(`data: ${JSON.stringify({
-              type: 'complete',
-              sessionId: currentSessionId,
-              messageId: ccMsgId,
-              messageCount: contentBlocks.length,
-            })}\n\n`)
-          } else if (!contentBlocks.length && currentSessionId) {
-            console.log('[LocalServer] ⚠️ CC result received but no content to save')
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'complete',
+                sessionId: currentSessionId,
+                messageId: ccMsgId,
+                messageCount: contentBlocks.length,
+              })}\n\n`
+            )
           }
+          // else if (!contentBlocks.length && currentSessionId) {
+          //   console.log('[LocalServer] ⚠️ CC result received but no content to save')
+          // }
 
           contentBlocks = []
           textParts = []
@@ -2388,13 +2447,15 @@ function setupServer() {
         statements.updateConversationCwd.run(cwd, conversationId)
       }
 
-      console.log('🤖 CC branch conversation completed successfully')
+      // console.log('🤖 CC branch conversation completed successfully')
     } catch (error) {
       console.error('[LocalServer] CC Branch Error:', error)
-      res.write(`data: ${JSON.stringify({
-        type: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      })}\n\n`)
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'error',
+          error: error instanceof Error ? error.message : 'Unknown error',
+        })}\n\n`
+      )
     }
 
     res.end()
@@ -2410,8 +2471,8 @@ export function startLocalServer(port: number = 3002, dbPath?: string): Promise<
       setupServer()
 
       server = app.listen(port, '0.0.0.0', () => {
-        console.log(`[LocalServer] Local sync server running on http://0.0.0.0:${port}`)
-        console.log(`[LocalServer] Database path: ${actualDbPath}`)
+        // console.log(`[LocalServer] Local sync server running on http://0.0.0.0:${port}`)
+        // console.log(`[LocalServer] Database path: ${actualDbPath}`)
 
         // Initialize WebSocket Server after HTTP server is running
         initializeWebSocketServer(server)
