@@ -15,9 +15,28 @@ let refreshPromise: Promise<boolean> | null = null
  * Read session from localStorage ONLY (no network calls).
  * This bypasses Supabase SDK's getSession() which may trigger network requests.
  *
- * @returns Session object from localStorage or null
+ * In Electron mode, we first try to get the session from Electron storage
+ * which is the authoritative source, then fall back to localStorage.
+ *
+ * @returns Session object from storage or null
  */
 export function getSessionFromStorage(): Session | null {
+  // Check if running in Electron mode
+  const isElectronMode =
+    (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
+    (typeof window !== 'undefined' && (window as any).electronAPI)
+
+  // In Electron mode, try to get session from Electron storage synchronously
+  // Note: Electron storage is async, but we cache the session in a module variable
+  // that gets updated by ElectronAuthProvider
+  if (isElectronMode && typeof window !== 'undefined' && (window as any)._cachedElectronSession) {
+    const electronSession = (window as any)._cachedElectronSession
+    if (electronSession?.session?.access_token) {
+      return electronSession.session as Session
+    }
+  }
+
+  // Fall back to localStorage (works for web mode and as Electron fallback)
   try {
     // Supabase stores session in localStorage with this key
     const storageKey = 'supabase-auth-token'
@@ -264,8 +283,21 @@ export async function refreshTokenIfNeeded(force = false): Promise<boolean> {
           return false
         }
 
+        // Get the refresh token from the session
+        // In Electron mode, the Supabase client may not have a session yet,
+        // so we need to explicitly pass the refresh token
+        const refreshToken = session.refresh_token
+        if (!refreshToken) {
+          console.warn('[jwtUtils] ⚠️  No refresh token in session - cannot refresh')
+          return false
+        }
+
         // This will call /auth/v1/token endpoint (NOT /auth/v1/user!)
-        const { data, error } = await supabase.auth.refreshSession()
+        // We must pass the refresh_token explicitly because Supabase client
+        // may not have been initialized with the session yet (especially in Electron)
+        const { data, error } = await supabase.auth.refreshSession({
+          refresh_token: refreshToken,
+        })
 
         if (error) {
           console.error('[jwtUtils] ❌ Failed to refresh session:', error)
@@ -276,6 +308,27 @@ export async function refreshTokenIfNeeded(force = false): Promise<boolean> {
           // console.log('[jwtUtils] ✅ Token refreshed successfully')
           // Clear claims cache since we have a new token
           clearClaimsCache()
+
+          // In Electron mode, update the window cache with the new session
+          const isElectronMode =
+            (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
+            (typeof window !== 'undefined' && (window as any).electronAPI)
+
+          if (isElectronMode && typeof window !== 'undefined') {
+            const cachedSession = (window as any)._cachedElectronSession
+            if (cachedSession) {
+              // Update the cached session with new tokens
+              cachedSession.session = data.session
+              cachedSession.accessToken = data.session.access_token
+                ; (window as any)._cachedElectronSession = cachedSession
+
+              // Also save to Electron storage
+              if ((window as any).electronAPI?.storage) {
+                ; (window as any).electronAPI.storage.set('auth_session', cachedSession)
+              }
+            }
+          }
+
           return true
         }
       }

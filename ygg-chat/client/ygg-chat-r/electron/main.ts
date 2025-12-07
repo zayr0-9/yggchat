@@ -257,16 +257,16 @@ function createWindow() {
     // Platform-specific title bar settings
     ...(process.platform === 'win32'
       ? {
-        frame: false,
-        titleBarOverlay: false,
-      }
+          frame: false,
+          titleBarOverlay: false,
+        }
       : process.platform === 'darwin'
         ? {
-          titleBarStyle: 'hidden', // Standard for macOS
-        }
+            titleBarStyle: 'hidden', // Standard for macOS
+          }
         : {
-          titleBarStyle: 'default', // Native title bar for Linux (safest)
-        }),
+            titleBarStyle: 'default', // Native title bar for Linux (safest)
+          }),
     show: false, // Don't show until ready
   })
 
@@ -311,10 +311,10 @@ function createWindow() {
     mainWindow.loadFile(indexPath)
 
     // DEBUG: Force DevTools to open after a delay
-    // setTimeout(() => {
-    //   console.log('[Electron] Force opening DevTools...')
-    //   mainWindow?.webContents.openDevTools({ mode: 'detach' })
-    // }, 3000)
+    setTimeout(() => {
+      console.log('[Electron] Force opening DevTools...')
+      mainWindow?.webContents.openDevTools({ mode: 'detach' })
+    }, 3000)
   }
 
   mainWindow.on('closed', () => {

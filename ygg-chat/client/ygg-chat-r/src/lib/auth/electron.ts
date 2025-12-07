@@ -24,6 +24,16 @@ export class ElectronAuthProvider implements AuthProvider {
   private listeners: Set<AuthChangeCallback> = new Set()
   private electronAPI: any = null
 
+  /**
+   * Sync authState to window for synchronous access by jwtUtils.ts
+   * This allows api.ts to get the current session without async calls
+   */
+  private syncCacheToWindow() {
+    if (typeof window !== 'undefined') {
+      ; (window as any)._cachedElectronSession = this.authState
+    }
+  }
+
   async initialize(): Promise<void> {
     // console.log('[ElectronAuth] Initializing...')
 
@@ -40,6 +50,7 @@ export class ElectronAuthProvider implements AuthProvider {
 
           // Temporarily set state to check expiry/refresh
           this.authState = savedSession
+          this.syncCacheToWindow()
 
           // Check if token is expired (for cloud sessions)
           if (
@@ -62,6 +73,7 @@ export class ElectronAuthProvider implements AuthProvider {
                 accessToken: null,
                 userId: null,
               }
+              this.syncCacheToWindow()
               // Clear the stored session
               if (this.electronAPI?.storage) {
                 await this.electronAPI.storage.set('auth_session', null)
@@ -120,6 +132,7 @@ export class ElectronAuthProvider implements AuthProvider {
         accessToken: ElectronAuthProvider.ELECTRON_TOKEN,
         userId: ElectronAuthProvider.ELECTRON_USER_ID,
       }
+      this.syncCacheToWindow()
 
       // Save to Electron storage if available
       if (this.electronAPI) {
@@ -174,6 +187,7 @@ export class ElectronAuthProvider implements AuthProvider {
           accessToken: result.accessToken || ElectronAuthProvider.ELECTRON_TOKEN,
           userId: result.userId || ElectronAuthProvider.ELECTRON_USER_ID,
         }
+        this.syncCacheToWindow()
 
         // If we have a real session from the result (which we should if the main process does it right), good.
         // If not, we might be limited.
@@ -233,6 +247,7 @@ export class ElectronAuthProvider implements AuthProvider {
       accessToken: null,
       userId: null,
     }
+    this.syncCacheToWindow()
 
     // Notify listeners (triggers redirect to login)
     this.notifyListeners(null)
@@ -279,6 +294,7 @@ export class ElectronAuthProvider implements AuthProvider {
           accessToken: data.session.access_token,
           // update user if needed, but usually id is same
         }
+        this.syncCacheToWindow()
 
         // Save to Electron storage
         if (this.electronAPI) {
@@ -331,6 +347,7 @@ export class ElectronAuthProvider implements AuthProvider {
       if (savedSession && savedSession.user) {
         // console.log('[ElectronAuth] Reloaded session from storage:', savedSession.user.id)
         this.authState = savedSession
+        this.syncCacheToWindow()
 
         // Check expiry and sync
         if (this.authState.session?.access_token && this.authState.user.id !== ElectronAuthProvider.ELECTRON_USER_ID) {
@@ -349,6 +366,7 @@ export class ElectronAuthProvider implements AuthProvider {
                 accessToken: null,
                 userId: null,
               }
+              this.syncCacheToWindow()
               await this.electronAPI.storage.set('auth_session', null)
               this.notifyListeners(null)
               return
