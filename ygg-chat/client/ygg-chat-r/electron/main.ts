@@ -304,17 +304,19 @@ function createWindow() {
       console.log('[Electron] Page finished loading')
     })
 
-    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-      // console.log('[Renderer Console]', { level, message, line, sourceId })
-    })
+    // mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    //   // console.log('[Renderer Console]', { level, message, line, sourceId })
+    // })
 
     mainWindow.loadFile(indexPath)
 
     // DEBUG: Force DevTools to open after a delay
-    setTimeout(() => {
-      console.log('[Electron] Force opening DevTools...')
-      mainWindow?.webContents.openDevTools({ mode: 'detach' })
-    }, 3000)
+    if (!app.isPackaged) {
+      setTimeout(() => {
+        console.log('[Electron] Force opening DevTools...')
+        mainWindow?.webContents.openDevTools({ mode: 'detach' })
+      }, 3000)
+    }
   }
 
   mainWindow.on('closed', () => {
