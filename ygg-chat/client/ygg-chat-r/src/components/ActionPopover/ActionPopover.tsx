@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '../Button/button'
 
@@ -8,11 +8,17 @@ interface ActionPopoverProps {
   footer?: React.ReactNode
 }
 
+interface PopoverPosition {
+  top: number
+  left: number
+  measured: boolean // Whether we've measured the popover dimensions
+}
+
 export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive = false, footer }) => {
   const [open, setOpen] = useState(false)
   const btnRef = useRef<HTMLButtonElement | null>(null)
   const popoverRef = useRef<HTMLDivElement | null>(null)
-  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null)
+  const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null)
 
   // Close on outside click
   useEffect(() => {
@@ -39,30 +45,113 @@ export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [open])
 
-  // Compute popover position (above the trigger button)
+  // Reset position when opening (start with unmeasured state)
   useEffect(() => {
-    const compute = () => {
+    if (open) {
       const btn = btnRef.current
       if (!btn || typeof window === 'undefined') return
       const rect = btn.getBoundingClientRect()
 
-      // Position above the button with a small gap
+      // Initial position (will be corrected after measurement)
       setPopoverPosition({
-        top: rect.top - 8, // 8px gap above
-        left: rect.left + rect.width / 2, // Center horizontally
+        top: rect.top - 8,
+        left: rect.left + rect.width / 2,
+        measured: false,
+      })
+    } else {
+      setPopoverPosition(null)
+    }
+  }, [open])
+
+  // Use layoutEffect to measure and reposition synchronously before paint
+  useLayoutEffect(() => {
+    if (!open || !popoverPosition || popoverPosition.measured) return
+
+    const popover = popoverRef.current
+    const btn = btnRef.current
+    if (!popover || !btn || typeof window === 'undefined') return
+
+    const btnRect = btn.getBoundingClientRect()
+    const popoverRect = popover.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const padding = 8 // Minimum distance from viewport edges
+
+    // Calculate ideal position (centered above button)
+    let top = btnRect.top - 8 - popoverRect.height
+    let left = btnRect.left + btnRect.width / 2 - popoverRect.width / 2
+
+    // Adjust horizontal position to stay within viewport
+    if (left < padding) {
+      left = padding
+    } else if (left + popoverRect.width > viewportWidth - padding) {
+      left = viewportWidth - padding - popoverRect.width
+    }
+
+    // Adjust vertical position if not enough space above
+    if (top < padding) {
+      // Position below the button instead
+      top = btnRect.bottom + 8
+    }
+
+    // If still overflows bottom, clamp to viewport
+    if (top + popoverRect.height > viewportHeight - padding) {
+      top = viewportHeight - padding - popoverRect.height
+    }
+
+    setPopoverPosition({
+      top,
+      left,
+      measured: true,
+    })
+  }, [open, popoverPosition])
+
+  // Handle resize and scroll while open
+  useEffect(() => {
+    if (!open || !popoverPosition?.measured) return
+
+    const recompute = () => {
+      const popover = popoverRef.current
+      const btn = btnRef.current
+      if (!popover || !btn || typeof window === 'undefined') return
+
+      const btnRect = btn.getBoundingClientRect()
+      const popoverRect = popover.getBoundingClientRect()
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      const padding = 8
+
+      let top = btnRect.top - 8 - popoverRect.height
+      let left = btnRect.left + btnRect.width / 2 - popoverRect.width / 2
+
+      if (left < padding) {
+        left = padding
+      } else if (left + popoverRect.width > viewportWidth - padding) {
+        left = viewportWidth - padding - popoverRect.width
+      }
+
+      if (top < padding) {
+        top = btnRect.bottom + 8
+      }
+
+      if (top + popoverRect.height > viewportHeight - padding) {
+        top = viewportHeight - padding - popoverRect.height
+      }
+
+      setPopoverPosition({
+        top,
+        left,
+        measured: true,
       })
     }
 
-    compute()
-    if (!open) return
-
-    window.addEventListener('resize', compute)
-    window.addEventListener('scroll', compute, true)
+    window.addEventListener('resize', recompute)
+    window.addEventListener('scroll', recompute, true)
     return () => {
-      window.removeEventListener('resize', compute)
-      window.removeEventListener('scroll', compute, true)
+      window.removeEventListener('resize', recompute)
+      window.removeEventListener('scroll', recompute, true)
     }
-  }, [open])
+  }, [open, popoverPosition?.measured])
 
   const handleToggle = useCallback(() => {
     setOpen(o => !o)
@@ -77,14 +166,14 @@ export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive
         onClick={handleToggle}
         className={
           isActive
-            ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50'
+            ? 'text-blue-700 dark:text-orange-400 bg-blue-50 dark:bg-orange-900/20 border-blue-300 dark:border-orange-700/50'
             : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
         }
         title='Toggle options'
         aria-haspopup='true'
         aria-expanded={open}
       >
-        <i className='bx bx-dots-horizontal-rounded text-[18px]' aria-hidden='true' />
+        <i className='bx bx-dots-horizontal-rounded text-[20px]' aria-hidden='true' />
       </Button>
 
       {open &&
@@ -92,11 +181,13 @@ export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive
         createPortal(
           <div
             ref={popoverRef}
-            className='fixed z-[100] rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white/90 dark:bg-neutral-800/90 backdrop-blur-md shadow-xl'
+            className='fixed z-10 rounded-2xl p-1 overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white/90 dark:bg-neutral-800/60 backdrop-blur-md shadow-xl'
             style={{
               top: `${popoverPosition.top}px`,
               left: `${popoverPosition.left}px`,
-              transform: 'translate(-50%, -100%)', // Center horizontally, position above
+              // Hide until measured to prevent visual jump
+              visibility: popoverPosition.measured ? 'visible' : 'hidden',
+              opacity: popoverPosition.measured ? 1 : 0,
             }}
           >
             <div className='flex items-center gap-1 p-2'>{children}</div>

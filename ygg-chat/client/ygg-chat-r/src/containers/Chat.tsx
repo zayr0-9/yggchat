@@ -2014,7 +2014,7 @@ function Chat() {
         {/* Messages Display */}
 
         <div
-          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-transparent flex-1 min-h-0 transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-4 md:px-8 lg:px-12 xl:px-20' : ''}`}
+          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-transparent flex-1 min-h-0 transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-0 md:px-0 lg:px-12 xl:px-20' : ''}`}
           style={{ paddingBottom: `${inputAreaHeight}px` }}
         >
           {/* Conversation Title Editor */}
@@ -2397,20 +2397,27 @@ function Chat() {
                           value={ccCwd}
                           onChange={e => setCcCwd(e.target.value)}
                           placeholder='Working directory (optional)'
-                          className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-600 rounded-lg bg-white dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                          className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
                           title='Specify the working directory for Claude Code agent'
                         />
                       }
                     >
                       {/* Claude Code toggle */}
                       <Button
-                        variant={ccMode ? 'primary' : 'outline2'}
+                        variant={ccMode ? 'outline2' : 'outline2'}
                         size='medium'
                         onClick={() => setCCMode(!ccMode)}
                         title='Toggle Claude Code Agent Mode'
                       >
-                        <i className='bx bx-terminal mr-1' aria-hidden='true'></i>
-                        {ccMode ? 'CC On' : 'CC Off'}
+                        <i
+                          className={`bx bx-terminal mr-1 ${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
+                          aria-hidden='true'
+                        ></i>
+                        <div
+                          className={`${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
+                        >
+                          {ccMode ? 'CC On' : 'CC Off'}
+                        </div>
                       </Button>
 
                       {/* Allow All / Ask toggle */}
@@ -2420,8 +2427,8 @@ function Chat() {
                         onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
                         className={
                           toolAutoApprove
-                            ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50'
-                            : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                            ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
+                            : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
                         }
                         title={
                           toolAutoApprove
@@ -2441,8 +2448,8 @@ function Chat() {
                         onClick={() => dispatch(chatSliceActions.operationModeToggled())}
                         className={
                           operationMode === 'plan'
-                            ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-900/30 border-fuchsia-200 dark:border-fuchsia-700/60'
-                            : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
+                            ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
+                            : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
                         }
                         title={
                           operationMode === 'plan'
@@ -2470,12 +2477,12 @@ function Chat() {
                         <img
                           src={getAssetPath('img/thinkingonlightmode.svg')}
                           alt='Thinking active'
-                          className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                          className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
                         />
                         <img
                           src={getAssetPath('img/thinkingondarkmode.svg')}
                           alt='Thinking active'
-                          className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                          className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
                         />
                       </>
                     ) : (
@@ -2483,12 +2490,12 @@ function Chat() {
                         <img
                           src={getAssetPath('img/thinkingofflightmode.svg')}
                           alt='Thinking'
-                          className='w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] md:w-[24px] md:h-[24px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                          className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
                         />
                         <img
                           src={getAssetPath('img/thinkingoffdarkmode.svg')}
                           alt='Thinking'
-                          className='w-[22px] h-[22px] sm:w-[24px] sm:h-[24px] md:w-[24px] md:h-[24px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                          className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
                         />
                       </>
                     )}
