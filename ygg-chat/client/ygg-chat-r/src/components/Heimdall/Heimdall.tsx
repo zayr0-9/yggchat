@@ -187,16 +187,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [plainMessages, setPlainMessages] = useState<any[]>([])
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      try {
-        const res = (await stripMarkdownToText(flatMessages as any)) as any
-        if (!cancelled) {
-          setPlainMessages(Array.isArray(res) ? (res as any[]) : (flatMessages as any[]))
+      ; (async () => {
+        try {
+          const res = (await stripMarkdownToText(flatMessages as any)) as any
+          if (!cancelled) {
+            setPlainMessages(Array.isArray(res) ? (res as any[]) : (flatMessages as any[]))
+          }
+        } catch {
+          if (!cancelled) setPlainMessages(flatMessages as any[])
         }
-      } catch {
-        if (!cancelled) setPlainMessages(flatMessages as any[])
-      }
-    })()
+      })()
     return () => {
       cancelled = true
     }
@@ -244,13 +244,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const addGlobalNoSelect = () => {
     try {
       document.body.classList.add('ygg-no-select')
-    } catch {}
+    } catch { }
   }
 
   const removeGlobalNoSelect = () => {
     try {
       document.body.classList.remove('ygg-no-select')
-    } catch {}
+    } catch { }
   }
 
   // Debounced update function for notes
@@ -329,7 +329,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     if (isDraggingRef.current || isSelectingRef.current) {
       try {
         e.preventDefault()
-      } catch {}
+      } catch { }
     }
     if (!e.touches || e.touches.length === 0) return
     const t = e.touches[0]
@@ -438,10 +438,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     isDraggingRef.current = false
     setIsSelecting(false)
     isSelectingRef.current = false
+    // These are stable utility functions defined outside hooks, safe to call directly
     removeGlobalNoSelect()
     removeGlobalMoveListeners()
     return true
-  }, [removeGlobalMoveListeners, removeGlobalNoSelect])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const endPinch = useCallback(() => {
     const state = pinchStateRef.current
@@ -471,13 +473,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     try {
       e.preventDefault()
-    } catch {}
+    } catch { }
     // Hide any open custom context menu upon new interaction
     setShowContextMenu(false)
     // Capture pointer so we continue to receive move/up events outside
     try {
-      ;(e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId)
-    } catch {}
+      ; (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId)
+    } catch { }
 
     const isRightButton = e.button === 2 && e.pointerType !== 'touch'
     const isPrimaryLike = e.button === 0 || e.pointerType === 'touch' || e.buttons === 1
@@ -572,7 +574,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
       try {
         e.preventDefault()
-      } catch {}
+      } catch { }
       return // Don't process dragging/selecting while pinching
     }
 
@@ -613,8 +615,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     try {
-      ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
-    } catch {}
+      ; (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
+    } catch { }
 
     // Handle click on node (when user didn't drag)
     if (!hasMovedRef.current && clickedNodeRef.current && onNodeSelect) {
@@ -659,8 +661,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     try {
-      ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
-    } catch {}
+      ; (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
+    } catch { }
 
     handleMouseUp()
   }
@@ -677,7 +679,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       pinchStateRef.current = null
       pointerMap.clear()
     }
-  }, [removeGlobalMoveListeners, removeGlobalNoSelect])
+    // These are stable utility functions, not hook-created, so no dependencies needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Dedicated cleanup for note debounce timer (only on unmount)
   useEffect(() => {
@@ -1041,10 +1045,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       // Prevent default scrolling behavior and handle zoom instead
       try {
         e.preventDefault()
-      } catch {}
+      } catch { }
       try {
         e.stopPropagation()
-      } catch {}
+      } catch { }
 
       // Handle zoom centered at the cursor position
       // Normalize delta to pixels across browsers/devices
@@ -1816,9 +1820,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 x2={nodeWidth - 72}
                 y2={nodeHeight + 14}
                 strokeWidth='5'
-                className={`animate-pulse-slow transition-colors duration-200 ${
-                  isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-indigo-200 dark:stroke-yPurple-50'
-                }`}
+                className={`animate-pulse-slow transition-colors duration-200 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-indigo-200 dark:stroke-yPurple-50'
+                  }`}
               />
             )}
             {/* Selection highlight */}
@@ -1841,9 +1844,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               height={nodeHeight}
               rx='8'
               strokeWidth='2'
-              className={`cursor-pointer hover:opacity-90 transition-opacity duration-200 ${
-                compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
-              } ${node.sender === 'user' ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400' : node.sender === 'ex_agent' ? 'fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 dark:stroke-orange-600' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400 '} `}
+              className={`cursor-pointer hover:opacity-90 transition-opacity duration-200 ${compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
+                } ${node.sender === 'user' ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400' : node.sender === 'ex_agent' ? 'fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 dark:stroke-orange-600' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400 '} `}
               style={{
                 filter:
                   compactMode && focusedNodeId === node.id
@@ -1890,23 +1892,23 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                   {node.message && node.message.trim().length > 0
                     ? node.message
                     : (() => {
-                        const nodeIdParsed = parseId(node.id)
-                        if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) return '...'
-                        const msg = getCurrentMessage(nodeIdParsed)
-                        if (msg?.tool_calls && msg.tool_calls.length > 0) {
-                          const toolNames = msg.tool_calls.map((tc: any) => tc.name).join(', ')
+                      const nodeIdParsed = parseId(node.id)
+                      if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) return '...'
+                      const msg = getCurrentMessage(nodeIdParsed)
+                      if (msg?.tool_calls && msg.tool_calls.length > 0) {
+                        const toolNames = msg.tool_calls.map((tc: any) => tc.name).join(', ')
+                        return toolNames || 'Tool Call'
+                      }
+                      // Check content_blocks for tool_use
+                      if (msg?.content_blocks && Array.isArray(msg.content_blocks)) {
+                        const toolUses = msg.content_blocks.filter((block: any) => block.type === 'tool_use')
+                        if (toolUses.length > 0) {
+                          const toolNames = toolUses.map((tc: any) => tc.name).join(', ')
                           return toolNames || 'Tool Call'
                         }
-                        // Check content_blocks for tool_use
-                        if (msg?.content_blocks && Array.isArray(msg.content_blocks)) {
-                          const toolUses = msg.content_blocks.filter((block: any) => block.type === 'tool_use')
-                          if (toolUses.length > 0) {
-                            const toolNames = toolUses.map((tc: any) => tc.name).join(', ')
-                            return toolNames || 'Tool Call'
-                          }
-                        }
-                        return '...'
-                      })()}
+                      }
+                      return '...'
+                    })()}
                 </p>
               </div>
             </foreignObject>
@@ -1983,13 +1985,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               cx={x}
               cy={y + circleRadius}
               r={circleRadius}
-              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400'} ${
-                node.sender === 'user'
+              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400'} ${node.sender === 'user'
                   ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400'
                   : node.sender === 'ex_agent'
                     ? 'fill-orange-50 stroke-orange-600'
                     : 'fill-indigo-50 stroke-yPurple-500'
-              } `}
+                } `}
               style={{
                 transform: selectedNode?.id === node.id ? 'scale(1.1)' : 'scale(1)',
                 transformOrigin: `${x}px ${y + circleRadius}px`,
@@ -2173,11 +2174,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         </button>
         <button
           onClick={toggleFilterEmptyMessages}
-          className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${
-            filterEmptyMessages
+          className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${filterEmptyMessages
               ? 'bg-blue-100 text-blue-700 dark:bg-neutral-500/60 dark:text-blue-100'
               : 'bg-neutral-50 text-stone-800 dark:text-stone-200 dark:bg-yBlack-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-          }`}
+            }`}
           title={filterEmptyMessages ? 'Show Empty Messages' : 'Hide Empty Messages'}
         >
           <i className='bx bx-filter text-xl' />
@@ -2274,9 +2274,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                             setSearchQuery('')
                           }}
                           onMouseEnter={() => setSearchHoverIndex(idx)}
-                          className={`w-full text-left px-3 py-4 hover:bg-stone-100 dark:hover:bg-neutral-800 ${
-                            idx === searchHoverIndex ? 'bg-stone-100 dark:bg-neutral-800' : ''
-                          }`}
+                          className={`w-full text-left px-3 py-4 hover:bg-stone-100 dark:hover:bg-neutral-800 ${idx === searchHoverIndex ? 'bg-stone-100 dark:bg-neutral-800' : ''
+                            }`}
                         >
                           <div className='items-start gap-2'>
                             <span className='line-clamp-2'>{snippet || '(empty message)'}</span>
