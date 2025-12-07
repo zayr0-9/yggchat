@@ -2015,7 +2015,7 @@ function Chat() {
 
         <div
           className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-transparent flex-1 min-h-0 transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-0 md:px-0 lg:px-12 xl:px-20' : ''}`}
-          style={{ paddingBottom: `${inputAreaHeight}px` }}
+          style={{ paddingBottom: `0px` }}
         >
           {/* Conversation Title Editor */}
           {currentConversationId && (

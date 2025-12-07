@@ -82,7 +82,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   copied = false,
 }) => {
   return (
-    <div className='flex items-center gap-0.5 sm:gap-1 max-[767px]:opacity-100 opacity-0 group-hover:opacity-100 border-1 border-stone-300 dark:bg-yBlack-900 dark:border-1 dark:border-neutral-700 transition-opacity rounded-3xl duration-200 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_6px_2px_rgba(0,0,0,0.35)] [will-change:contents] [transform:translateZ(0)]'>
+    <div className='flex items-center gap-0.5 sm:gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 border-1 border-stone-300 dark:bg-yBlack-900 dark:border-1 dark:border-neutral-700 transition-opacity rounded-3xl duration-200 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_6px_2px_rgba(0,0,0,0.35)] [will-change:contents] [transform:translateZ(0)]'>
       <div className='flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 sm:py-1'>
         {isEditing ? (
           <>
