@@ -257,16 +257,16 @@ function createWindow() {
     // Platform-specific title bar settings
     ...(process.platform === 'win32'
       ? {
-          frame: false,
-          titleBarOverlay: false,
-        }
+        frame: false,
+        titleBarOverlay: false,
+      }
       : process.platform === 'darwin'
         ? {
-            titleBarStyle: 'hidden', // Standard for macOS
-          }
+          titleBarStyle: 'hidden', // Standard for macOS
+        }
         : {
-            titleBarStyle: 'default', // Native title bar for Linux (safest)
-          }),
+          titleBarStyle: 'default', // Native title bar for Linux (safest)
+        }),
     show: false, // Don't show until ready
   })
 
@@ -671,12 +671,11 @@ ipcMain.handle('window:close', async () => {
   }
 })
 
-// Theme synchronization - update title bar when app theme changes
-// ipcMain.handle('theme:update', async (_event, isDark: boolean) => {
-//   if (mainWindow) {
-//     applyTitleBarTheme(mainWindow, isDark)
-//   }
-// })
+// Theme synchronization - disabled (titlebar is now transparent)
+// Handler kept as no-op to prevent "No handler registered" errors
+ipcMain.handle('theme:update', async () => {
+  // No-op: theme sync disabled since titlebar is transparent
+})
 
 function configureAutoUpdater() {
   if (autoUpdaterConfigured) {

@@ -109,5 +109,5 @@ body.has-titlebar {
 
 body.has-titlebar .app-content {
   padding-top: var(--titlebar-height);
-  height: calc(100% - var(--titlebar-height));
+  box-sizing: border-box;
 }
