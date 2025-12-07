@@ -104,7 +104,7 @@ export async function readTextFile(
   } else {
     const basePath = options.cwd || process.cwd()
     abs = path.isAbsolute(inputPath) ? inputPath : path.resolve(basePath, inputPath)
-    if (/^[a-zA-Z]:[\/]/.test(abs)) {
+    if (/^[a-zA-Z]:[\\\/]/.test(abs)) {
       pathType = 'windows'
     }
   }
