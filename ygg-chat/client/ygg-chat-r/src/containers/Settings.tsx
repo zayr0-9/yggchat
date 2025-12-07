@@ -150,7 +150,7 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className='bg-neutral-100 mica min-h-full dark:bg-yBlack-900'>
+    <div className='h-full overflow-y-auto bg-neutral-100 mica min-h-full dark:bg-yBlack-900'>
       <div className='mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8'>
         <header className='flex flex-wrap items-center justify-between gap-4'>
           <div>
@@ -229,11 +229,10 @@ const Settings: React.FC = () => {
                 return (
                   <div
                     key={video.id}
-                    className={`flex flex-col gap-3 rounded-xl border p-4 transition ${
-                      isActive
+                    className={`flex flex-col gap-3 rounded-xl border p-4 transition ${isActive
                         ? 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-500/60 dark:bg-emerald-900/40'
                         : 'border-stone-200 bg-stone-50/70 hover:border-indigo-400 hover:bg-white dark:border-stone-700 dark:bg-zinc-900/70 dark:hover:border-sky-600'
-                    }`}
+                      }`}
                   >
                     <div className='flex items-start justify-between gap-3'>
                       <div>
