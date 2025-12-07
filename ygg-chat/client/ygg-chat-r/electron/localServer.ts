@@ -1688,7 +1688,7 @@ function setupServer() {
       }
 
       // Verify conversation exists
-      const conversation = statements.getConversationById.get(conversationId) as { user_id: string } | undefined
+      const conversation = statements.getConversationById.get(conversationId) as { user_id: string; title?: string } | undefined
       if (!conversation) {
         res.status(404).json({ error: 'Conversation not found' })
         return
@@ -1739,6 +1739,13 @@ function setupServer() {
 
         createdMessages.push(createdMessage)
         lastMessageId = messageId
+      }
+
+      // Auto-generate title if this is the first message chain and title is empty
+      if (!conversation.title && messages.length > 0) {
+        const firstContent = messages[0].content
+        const title = firstContent.slice(0, 100) + (firstContent.length > 100 ? '...' : '')
+        statements.updateConversationTitle.run(title, conversationId)
       }
 
       // Update conversation updated_at timestamp
