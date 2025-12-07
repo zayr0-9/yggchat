@@ -321,7 +321,7 @@ const FAQPage: React.FC = () => {
   }
 
   return (
-    <div className='min-h-screen w-full bg-blue-200 dark:bg-blue-900 text-gray-900 dark:text-gray-100'>
+    <div className='h-full overflow-y-auto min-h-screen w-full bg-blue-200 dark:bg-blue-900 text-gray-900 dark:text-gray-100'>
       <header className='sticky top-0 z-30 flex items-center justify-between px-6 sm:px-8 py-3 bg-transparent dark:bg-transparent backdrop-blur-sm'>
         <div className='flex items-center gap-3'>
           <Link to='/' className='text-white font-semibold tracking-wide text-lg hover:text-gray-200'>
@@ -384,9 +384,8 @@ const FAQPage: React.FC = () => {
               </button>
 
               <div
-                className={`px-6 pb-6 divide-y divide-gray-200/60 dark:divide-white/10 overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
-                  openSections[section.title] ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-                }`}
+                className={`px-6 pb-6 divide-y divide-gray-200/60 dark:divide-white/10 overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${openSections[section.title] ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+                  }`}
                 aria-hidden={!openSections[section.title]}
               >
                 <div className={openSections[section.title] ? 'pt-6' : 'pt-0'}>

@@ -115,11 +115,10 @@ const MessageActions: React.FC<MessageActionsProps> = ({
           <>
             <button
               onClick={onCopy}
-              className={`p-1.5 rounded-2xl transition-colors duration-150 hover:scale-104 ${
-                copied
-                  ? 'text-green-500 hover:text-green-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900'
-                  : 'text-stone-700 hover:text-blue-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-transform duration-100 active:scale-90'
-              }`}
+              className={`p-1.5 rounded-2xl transition-colors duration-150 hover:scale-104 ${copied
+                ? 'text-green-500 hover:text-green-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900'
+                : 'text-stone-700 hover:text-blue-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-transform duration-100 active:scale-90'
+                }`}
               title={copied ? 'Copied' : 'Copy message'}
             >
               {copied ? (
@@ -537,7 +536,7 @@ const formatToolResultSummary = (content: any): string | null => {
   try {
     const data = typeof content === 'string' ? JSON.parse(content) : content
     if (!data || typeof data !== 'object' || !('success' in data)) return null
-    return `${data.success}`
+    return data.success ? 'success' : 'failure'
   } catch {
     return null
   }
@@ -911,7 +910,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         items.push({
           label: '',
           icon: undefined,
-          onClick: () => {},
+          onClick: () => { },
           separator: true,
         })
       }
@@ -1257,28 +1256,35 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const argPair = getFirstArgPair(group.args)
       const resultSummary =
         group.results.length > 0
-          ? formatToolResultSummary(group.results[0].content) ||
-            truncateChars(formatToolResultContent(group.results[0].content))
+          ? formatToolResultSummary(group.results[0].content)
           : null
-      const summary = resultSummary
-        ? argPair
-          ? `${resultSummary} | ${argPair} `
-          : resultSummary
-        : pathParam || (
-            <span className='inline-flex items-center gap-1 text-blue-500 dark:text-blue-300'>
-              <i className='bx bx-dots-horizontal-rounded text-2xl animate-pulse'></i>
-            </span>
-          )
+      const pathContent = pathParam || null
       return (
         <div
           key={toggleKey}
-          className='tool-call-card relative p-2 mb-4 mx-3 rounded-xl border border-neutral-200/70 bg-blue-50/40 dark:border-neutral-900/40 dark:bg-neutral-900/70 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'
+          className='tool-call-card relative p-2 mb-0 mx-3 rounded-xl border border-neutral-200/70 bg-blue-50/40 dark:border-neutral-900/40 dark:bg-neutral-900/70 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'
         >
           <div className='flex items-start justify-between gap-4'>
-            <div className='flex items-start gap-3'>
-              <p className='text-base font-semibold text-blue-900 dark:text-blue-100'>{group.name || 'Tool Result'}</p>
+            <div className='flex items-center gap-3 min-w-0 flex-1 overflow-hidden'>
+              <p className='text-base font-semibold text-blue-900 dark:text-blue-100 shrink-0'>{group.name || 'Tool Result'}</p>
               {!isExpanded && (
-                <div className='text-xs pt-1 text-blue-700 dark:text-blue-200 line-clamp-3'>{summary}</div>
+                <div className='flex items-center gap-2 min-w-0 flex-1 overflow-hidden'>
+                  {resultSummary && (
+                    <span className={`text-xs shrink-0 ${resultSummary === 'success' ? 'text-emerald-600 dark:text-emerald-200' : 'text-red-600 dark:text-red-400'}`}>
+                      {resultSummary}
+                    </span>
+                  )}
+                  {!resultSummary && (
+                    <span className='inline-flex items-center text-blue-500 dark:text-blue-300 shrink-0'>
+                      <i className='bx bx-dots-horizontal-rounded text-xl animate-pulse'></i>
+                    </span>
+                  )}
+                  {pathContent && (
+                    <span className='text-xs text-blue-700 dark:text-blue-200 min-w-0 overflow-hidden whitespace-nowrap' style={{ direction: 'rtl', textOverflow: 'ellipsis' }}>
+                      {pathContent}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
@@ -1321,11 +1327,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   {group.results.map((result, resultIdx) => (
                     <div
                       key={`${group.id}-result-${resultIdx}`}
-                      className={`rounded-xl border p-3 whitespace-pre-wrap leading-relaxed ${
-                        result.is_error
-                          ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
-                          : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
-                      }`}
+                      className={`rounded-xl border p-3 whitespace-pre-wrap leading-relaxed ${result.is_error
+                        ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
+                        : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
+                        }`}
                     >
                       <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
                         <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
@@ -1344,9 +1349,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     return (
       <div
         id={`message-${id}`}
-        className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-2 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
+        className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-0 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
-        // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
+      // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
         {role === 'user' && (
@@ -1402,66 +1407,69 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       </ReactMarkdown>
                     </div>
                   )
-                }
-                return null
-              } else if (event.type === 'reasoning' && event.delta) {
-                // Accumulate consecutive reasoning events into one block
-                let accumulatedReasoning = event.delta || ''
-                for (let i = idx + 1; i < streamEvents.length; i++) {
-                  if (streamEvents[i].type === 'reasoning' && streamEvents[i].delta) {
-                    accumulatedReasoning += streamEvents[i].delta
-                  } else {
-                    break
+                } else if (event.type === 'reasoning' && event.delta) {
+                  // Accumulate consecutive reasoning events into one block
+                  let accumulatedReasoning = event.delta || ''
+                  for (let i = idx + 1; i < streamEvents.length; i++) {
+                    if (streamEvents[i].type === 'reasoning' && streamEvents[i].delta) {
+                      accumulatedReasoning += streamEvents[i].delta
+                    } else {
+                      break
+                    }
                   }
-                }
-                // Only render if this is the first reasoning event in the sequence
-                if (idx === 0 || streamEvents[idx - 1].type !== 'reasoning') {
-                  const isExpanded = expandedBlocks.reasoning.has(idx)
-                  return (
-                    <div
-                      key={`reasoning-${idx}`}
-                      className='relative rounded-xl p-2 bg-neutral-50 mx-3 sm:px-2 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
-                    >
-                      <div className='flex items-center justify-between'>
-                        <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
-                          Reasoning
-                        </div>
-                        <Button
-                          variant='outline2'
-                          size='small'
-                          onClick={() => toggleBlock('reasoning', idx)}
-                          title={isExpanded ? 'Hide details' : 'Show details'}
-                        >
-                          {isExpanded ? (
-                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                            </svg>
-                          ) : (
-                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                            </svg>
-                          )}
-                        </Button>
-                      </div>
-                      {isExpanded ? (
-                        <div className='prose max-w-none dark:prose-invert w-full text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px] mt-2'>
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                            components={{ pre: PreRenderer, a: MarkdownLink }}
+                  // Only render if this is the first reasoning event in the sequence
+                  if (idx === 0 || streamEvents[idx - 1].type !== 'reasoning') {
+                    const isExpanded = expandedBlocks.reasoning.has(idx)
+                    const reasoningSummary = truncateWords(accumulatedReasoning)
+                    return (
+                      <div
+                        key={`reasoning-${idx}`}
+                        className='relative rounded-xl p-2 bg-neutral-50 mx-3 sm:px-2 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                      >
+                        <div className='flex items-center justify-between gap-3'>
+                          <div className='flex items-center gap-2 min-w-0'>
+                            <span className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
+                              Reasoning
+                            </span>
+                            {!isExpanded && (
+                              <div className='text-xs text-neutral-600 dark:text-neutral-400 line-clamp-1 overflow-hidden min-w-0'>
+                                {reasoningSummary}
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            variant='outline2'
+                            size='small'
+                            onClick={() => toggleBlock('reasoning', idx)}
+                            title={isExpanded ? 'Hide details' : 'Show details'}
                           >
-                            {accumulatedReasoning}
-                          </ReactMarkdown>
+                            {isExpanded ? (
+                              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                              </svg>
+                            ) : (
+                              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                              </svg>
+                            )}
+                          </Button>
                         </div>
-                      ) : (
-                        <div className='text-xs text-neutral-600 dark:text-neutral-400 mt-2'>
-                          {truncateWords(accumulatedReasoning)}
-                        </div>
-                      )}
-                    </div>
-                  )
+                        {isExpanded && (
+                          <div className='prose max-w-none dark:prose-invert w-full text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px] mt-2'>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                              components={{ pre: PreRenderer, a: MarkdownLink }}
+                            >
+                              {accumulatedReasoning}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+                  return null
                 }
-                return null
               } else if (event.type === 'tool_call' && event.toolCall && event.complete) {
                 const toolCall = event.toolCall
                 const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolCall.id}-${idx}`)
@@ -1531,7 +1539,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         ) : !editingState && Array.isArray(contentBlocks) && contentBlocks.length > 0 ? (
           // Render content_blocks if available (prioritized over legacy fields)
           // Uses same formatting as streaming events
-          <div className='space-y-3 mb-3'>
+          <div className='space-y-3 mb-2'>
             {contentBlocks.map((block, idx) => {
               const groupedTool = contentToolGroupsByIndex.get(idx)
               if (groupedTool) {
@@ -1555,14 +1563,22 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 )
               } else if (block.type === 'thinking') {
                 const isExpanded = expandedBlocks.reasoning.has(block.index)
+                const reasoningSummary = truncateWords(block.content)
                 return (
                   <div
                     key={`thinking-${block.index}-${idx}`}
-                    className='relative mb-5 mx-3 rounded-xl p-2 border border-neutral-100 bg-neutral-50 sm:px-2 dark:border-1 dark:border-transparent dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                    className='relative mb-3 mx-3 rounded-xl p-2 border border-neutral-100 bg-neutral-50 sm:px-2 dark:border-1 dark:border-transparent dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
                   >
-                    <div className='flex items-center justify-between mb-2'>
-                      <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
-                        Reasoning
+                    <div className='flex items-center justify-between gap-3 mb-0'>
+                      <div className='flex items-center gap-2 min-w-0'>
+                        <span className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
+                          Reasoning
+                        </span>
+                        {!isExpanded && reasoningSummary && (
+                          <div className='text-xs text-neutral-600 dark:text-neutral-400 line-clamp-1 overflow-hidden min-w-0'>
+                            {reasoningSummary}
+                          </div>
+                        )}
                       </div>
                       <Button
                         variant='outline2'
@@ -1581,7 +1597,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                         )}
                       </Button>
                     </div>
-                    {isExpanded ? (
+                    {isExpanded && (
                       <div className='prose max-w-none dark:prose-invert w-full px-4 py-1 text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px]'>
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
@@ -1590,10 +1606,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                         >
                           {block.content}
                         </ReactMarkdown>
-                      </div>
-                    ) : (
-                      <div className='text-xs text-neutral-600 dark:text-neutral-400'>
-                        {truncateWords(block.content)}
                       </div>
                     )}
                   </div>
@@ -1974,11 +1986,10 @@ const TodoListView: React.FC<{
               {todoItems.map((item, idx) => (
                 <li
                   key={`todo-item-${idx}`}
-                  className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
-                    item.done
-                      ? 'border-neutral-200 bg-neutral-50/40 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                      : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                  }`}
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${item.done
+                    ? 'border-neutral-200 bg-neutral-50/40 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                    : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                    }`}
                 >
                   <span className='text-lg'>{item.done ? '[✔️]' : '[ ]'}</span>
                   <span className={`${item.done ? 'line-through opacity-80' : ''}`}>{item.text}</span>
