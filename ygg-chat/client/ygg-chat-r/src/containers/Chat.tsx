@@ -2243,7 +2243,14 @@ function Chat() {
               )}
             {streamState.active && (
               <div className='pb-4 px-3 flex justify-end'>
-                <video src='/video/loadingoutput.webm' autoPlay loop muted playsInline className='h-6 xl:h-8 w-auto' />
+                <video
+                  src={getAssetPath('video/loadingoutput.webm')}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className='h-6 xl:h-8 w-auto'
+                />
               </div>
             )}
             {/* Bottom sentinel for robust scrolling */}
