@@ -36,8 +36,12 @@ const Login: React.FC = () => {
   }, [user, navigate])
 
   // Monitor auth state changes - just for logging and cleanup
+  // NOTE: Skip in Electron mode - ElectronAuthProvider handles auth state through useAuth()
+  // Having this listener active in Electron causes conflicts with the provider's state management
   useEffect(() => {
     if (!supabase) return
+    // Skip in Electron mode to prevent dual auth state management
+    if (isElectronMode) return
 
     // console.log('[Login] Setting up onAuthStateChange listener')
 
@@ -61,7 +65,7 @@ const Login: React.FC = () => {
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
+  }, [isElectronMode])
 
   // Handle OAuth callback from external browser (Electron only)
   useEffect(() => {

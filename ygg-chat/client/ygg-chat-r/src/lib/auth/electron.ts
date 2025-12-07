@@ -53,8 +53,19 @@ export class ElectronAuthProvider implements AuthProvider {
               //  console.log('[ElectronAuth] Token refreshed during initialization')
             } catch (refreshError) {
               console.error('[ElectronAuth] Failed to refresh token on init:', refreshError)
-              // Clear invalid session
-              await this.logout()
+              // Don't call logout() here - it triggers Supabase signOut which causes flicker
+              // Instead, just clear the local state and storage directly
+              this.authState = {
+                user: null,
+                session: null,
+                loading: false,
+                accessToken: null,
+                userId: null,
+              }
+              // Clear the stored session
+              if (this.electronAPI?.storage) {
+                await this.electronAPI.storage.set('auth_session', null)
+              }
               return
             }
           }
@@ -329,7 +340,17 @@ export class ElectronAuthProvider implements AuthProvider {
               await this.refreshToken()
             } catch (e) {
               console.error('Failed to refresh reloaded token:', e)
-              await this.logout()
+              // Don't call logout() - it triggers Supabase signOut causing flicker
+              // Just clear state directly
+              this.authState = {
+                user: null,
+                session: null,
+                loading: false,
+                accessToken: null,
+                userId: null,
+              }
+              await this.electronAPI.storage.set('auth_session', null)
+              this.notifyListeners(null)
               return
             }
           }
