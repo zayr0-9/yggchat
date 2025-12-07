@@ -44,7 +44,6 @@ export interface ReadFileResult {
   content: string
   truncated: boolean
   sizeBytes: number
-  absolutePath: string
   contentHash?: string // SHA256 hash of returned content for validation
   fileHash?: string // SHA256 hash of entire file (if content is partial)
   metadata: FileMetadata
@@ -262,13 +261,10 @@ export async function readTextFile(
     inode: stats.ino,
   }
 
-  const absolutePath = pathType === 'windows' ? abs : toWslPath(abs)
-
   return {
     content,
     truncated,
     sizeBytes,
-    absolutePath,
     contentHash,
     fileHash,
     metadata,

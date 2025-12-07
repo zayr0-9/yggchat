@@ -42,7 +42,6 @@ export interface FileValidationResult {
 
 export interface EditFileResult {
   success: boolean
-  absolutePath: string
   sizeBytes: number
   replacements: number
   message: string
@@ -101,7 +100,6 @@ export async function editFileSearchReplace(
       if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
         return {
           success: false,
-          absolutePath: fsPath,
           sizeBytes: 0,
           replacements: 0,
           message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
@@ -120,7 +118,6 @@ export async function editFileSearchReplace(
       if (!validation.valid) {
         return {
           success: false,
-          absolutePath: pathType === 'windows' ? fsPath : toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Validation failed: ${validation.reason}`,
@@ -153,7 +150,6 @@ export async function editFileSearchReplace(
       if (!matchResult.found) {
         return {
           success: false,
-          absolutePath: pathType === 'windows' ? fsPath : toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Search pattern not found in file. Attempted strategies: ${attemptedStrategies.join(', ')}`,
@@ -216,7 +212,6 @@ export async function editFileSearchReplace(
 
     return {
       success: true,
-      absolutePath: toWslPath(fsPath),
       sizeBytes: newStats.size,
       replacements,
       message:
@@ -231,7 +226,6 @@ export async function editFileSearchReplace(
   } catch (error: any) {
     return {
       success: false,
-      absolutePath: '',
       sizeBytes: 0,
       replacements: 0,
       message: `Error editing file: ${error.message}`,
@@ -281,7 +275,6 @@ export async function editFileSearchReplaceFirst(
       if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
         return {
           success: false,
-          absolutePath: fsPath,
           sizeBytes: 0,
           replacements: 0,
           message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
@@ -299,7 +292,6 @@ export async function editFileSearchReplaceFirst(
       if (!validation.valid) {
         return {
           success: false,
-          absolutePath: pathType === 'windows' ? fsPath : toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Validation failed: ${validation.reason}`,
@@ -320,7 +312,6 @@ export async function editFileSearchReplaceFirst(
     if (!matchResult.found) {
       return {
         success: false,
-        absolutePath: toWslPath(fsPath),
         sizeBytes: fileData.sizeBytes,
         replacements: 0,
         message: `Search pattern not found in file. Attempted strategies: ${matchResult.attemptedStrategies.join(', ')}`,
@@ -361,7 +352,6 @@ export async function editFileSearchReplaceFirst(
 
     return {
       success: true,
-      absolutePath: toWslPath(fsPath),
       sizeBytes: newStats.size,
       replacements: 1,
       message: `Successfully replaced first occurrence${strategyMessage} in ${filePath}`,
@@ -373,7 +363,6 @@ export async function editFileSearchReplaceFirst(
   } catch (error: any) {
     return {
       success: false,
-      absolutePath: '',
       sizeBytes: 0,
       replacements: 0,
       message: `Error editing file: ${error.message}`,
@@ -414,7 +403,6 @@ export async function appendToFile(
       if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
         return {
           success: false,
-          absolutePath: fsPath,
           sizeBytes: 0,
           replacements: 0,
           message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
@@ -448,16 +436,16 @@ export async function appendToFile(
 
     return {
       success: true,
-      absolutePath: toWslPath(fsPath),  // Convert back to WSL format
       sizeBytes: newStats.size,
       replacements: 1, // Consider append as one "replacement"
       message: `Successfully appended content to ${filePath}`,
       backup: backupPath ? (pathType === 'windows' ? backupPath : toWslPath(backupPath)) : undefined,
 
+    }
+
   } catch (error: any) {
     return {
       success: false,
-      absolutePath: '',
       sizeBytes: 0,
       replacements: 0,
       message: `Error appending to file: ${error.message}`,
@@ -481,7 +469,6 @@ export async function editFile(
   if (options.operationMode === 'plan') {
     return {
       success: false,
-      absolutePath: filePath,
       sizeBytes: 0,
       replacements: 0,
       message: 'You are in planning mode. File modification is not allowed. Please describe your implementation plan instead.',
@@ -495,7 +482,6 @@ export async function editFile(
       if (!searchPattern || replacement === undefined) {
         return {
           success: false,
-          absolutePath: '',
           sizeBytes: 0,
           replacements: 0,
           message: 'searchPattern and replacement are required for replace operation',
@@ -507,7 +493,6 @@ export async function editFile(
       if (!searchPattern || replacement === undefined) {
         return {
           success: false,
-          absolutePath: '',
           sizeBytes: 0,
           replacements: 0,
           message: 'searchPattern and replacement are required for replace_first operation',
@@ -519,7 +504,6 @@ export async function editFile(
       if (!content) {
         return {
           success: false,
-          absolutePath: '',
           sizeBytes: 0,
           replacements: 0,
           message: 'content is required for append operation',
@@ -530,7 +514,6 @@ export async function editFile(
     default:
       return {
         success: false,
-        absolutePath: '',
         sizeBytes: 0,
         replacements: 0,
         message: `Unknown operation: ${operation}`,

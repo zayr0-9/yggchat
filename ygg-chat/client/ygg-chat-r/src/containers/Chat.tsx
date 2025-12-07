@@ -77,11 +77,11 @@ import {
   ResearchNoteItem,
   useConversationMessages,
   useConversationsByProject,
+  useConversationStorageMode,
   useFilteredModels,
   useModels,
   useSelectedModel,
   useSelectModel,
-  useConversationStorageMode,
 } from '../hooks/useQueries'
 import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
@@ -524,7 +524,7 @@ function Chat() {
       if (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl) {
         // Use type assertion or cast if the action is not properly typed in the dispatch
         // but since it's a thunk, dispatch handles it fine.
-        ; (dispatch as any)(
+        ;(dispatch as any)(
           syncConversationToLocal({
             conversationId: String(conversationIdFromUrl),
             messages: reactQueryMessages,
@@ -646,7 +646,7 @@ function Chat() {
       setLeftWidthPct(pct)
       try {
         window.localStorage.setItem('chat:leftWidthPct', pct.toFixed(2))
-      } catch { }
+      } catch {}
     }
 
     const onMouseMove = (e: MouseEvent) => handleMove(e.clientX)
@@ -1843,10 +1843,10 @@ function Chat() {
                   researchNotesCache.map(item =>
                     item.id === currentConversationId
                       ? {
-                        ...item,
-                        research_note: updatedNote,
-                        updated_at: new Date().toISOString(),
-                      }
+                          ...item,
+                          research_note: updatedNote,
+                          updated_at: new Date().toISOString(),
+                        }
                       : item
                   )
                 )
@@ -2061,7 +2061,7 @@ function Chat() {
                     setHeimdallVisible(newValue)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', String(newValue))
-                    } catch { }
+                    } catch {}
                   }}
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
@@ -2242,8 +2242,8 @@ function Chat() {
                 />
               )}
             {streamState.active && (
-              <div className=' pb-4 px-3 text-stone-800 dark:text-stone-200 flex justify-end'>
-                <i className='bx bx-loader-alt text-2xl animate-spin' style={{ animationDuration: '1s' }}></i>
+              <div className='pb-4 px-3 flex justify-end'>
+                <video src='/video/loadingoutput.webm' autoPlay loop muted playsInline className='h-6 xl:h-8 w-auto' />
               </div>
             )}
             {/* Bottom sentinel for robust scrolling */}
@@ -2323,10 +2323,11 @@ function Chat() {
 
                       {/* Hover tooltip that can expand into anchored modal */}
                       <div
-                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${isExpanded
-                          ? 'hidden'
-                          : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
-                          }`}
+                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${
+                          isExpanded
+                            ? 'hidden'
+                            : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
+                        }`}
                       >
                         <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-2 truncate'>
                           {file.name || file.relativePath.split('/').pop() || file.path.split('/').pop()}
@@ -2643,7 +2644,7 @@ function Chat() {
                   setHeimdallVisible(false)
                   try {
                     window.localStorage.setItem('chat:heimdallVisible', 'false')
-                  } catch { }
+                  } catch {}
                 }}
               />
             )}
@@ -2685,7 +2686,7 @@ function Chat() {
                     setHeimdallVisible(false)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', 'false')
-                    } catch { }
+                    } catch {}
                   }}
                   className='fixed bottom-6 right-6 z-110 w-12 h-12 rounded-full bg-neutral-700 dark:bg-neutral-600 hover:bg-neutral-800 dark:hover:bg-neutral-500 text-white shadow-lg flex items-center justify-center transition-colors'
                   aria-label='Close tree view'

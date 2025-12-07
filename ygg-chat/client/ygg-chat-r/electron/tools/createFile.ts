@@ -13,7 +13,6 @@ export interface CreateFileOptions {
 
 export interface CreateFileResult {
   success: boolean
-  absolutePath: string
   created: boolean
   sizeBytes: number
   message: string
@@ -46,7 +45,6 @@ export async function createTextFile(
   if (operationMode === 'plan') {
     return {
       success: false,
-      absolutePath: filePath,
       created: false,
       sizeBytes: 0,
       message: 'You are in planning mode. File creation is not allowed. Please describe your implementation plan instead.',
@@ -94,7 +92,6 @@ export async function createTextFile(
       if (!normalizedTarget.startsWith(normalizedCwd + path.sep) && normalizedTarget !== normalizedCwd) {
         return {
           success: false,
-          absolutePath: targetPath,
           created: false,
           sizeBytes: 0,
           message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
@@ -111,7 +108,6 @@ export async function createTextFile(
     if (fileExists && !overwrite) {
       return {
         success: false,
-        absolutePath: targetPath,
         created: false,
         sizeBytes: 0,
         message: `File already exists at ${targetPath}. Use overwrite option to replace it.`,
@@ -121,7 +117,7 @@ export async function createTextFile(
     // Create parent directories if needed
     const parentDir = isWSL ? targetPath.substring(0, targetPath.lastIndexOf('/')) : path.dirname(targetPath)
     let dirsCreated = false
-    
+
     // We need the windows path for the parent dir too
     let windowsParentDir = parentDir
     if (isWSL) {
@@ -135,7 +131,6 @@ export async function createTextFile(
       } catch (mkdirError: any) {
         return {
           success: false,
-          absolutePath: targetPath,
           created: false,
           sizeBytes: 0,
           message: `Failed to create parent directories: ${mkdirError.message}`,
@@ -151,7 +146,6 @@ export async function createTextFile(
       if (!dirExists) {
         return {
           success: false,
-          absolutePath: targetPath,
           created: false,
           sizeBytes: 0,
           message: `Parent directory does not exist: ${parentDir}`,
@@ -181,7 +175,6 @@ export async function createTextFile(
 
     return {
       success: true,
-      absolutePath: targetPath,
       created: true,
       sizeBytes: stats.size,
       message,
@@ -190,7 +183,6 @@ export async function createTextFile(
   } catch (error: any) {
     return {
       success: false,
-      absolutePath: '',
       created: false,
       sizeBytes: 0,
       message: `Error creating file: ${error.message}`,

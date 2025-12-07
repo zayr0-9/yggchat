@@ -1,5 +1,6 @@
 import * as path from 'path'
 import { readTextFile, ReadFileOptions } from './readFile.js'
+import { resolveToWindowsPath, isWSLPath, toWslPath } from '../utils/wslBridge.js'
 
 export interface ReadMultipleOptions extends ReadFileOptions {
   baseDir?: string // used to compute the header-relative path separator
@@ -13,7 +14,6 @@ export async function readMultipleTextFiles(
   combined: string
   files: Array<{
     relativePath: string
-    absolutePath: string
     sizeBytes: number
     truncated: boolean
     startLine?: number
@@ -33,12 +33,11 @@ export async function readMultipleTextFiles(
       ? options.baseDir
       : path.resolve(cwdBase, options.baseDir)
     : // Default to cwd or current working directory
-      cwdBase
+    cwdBase
 
   const parts: string[] = []
   const meta: Array<{
     relativePath: string
-    absolutePath: string
     sizeBytes: number
     truncated: boolean
     startLine?: number
@@ -54,9 +53,20 @@ export async function readMultipleTextFiles(
         endLine: options.endLine,
         cwd: options.cwd,
       })
-      
+
+      let absResolved = p
+      if (isWSLPath(p)) {
+        absResolved = await resolveToWindowsPath(p)
+      } else {
+        absResolved = path.resolve(cwdBase, p)
+      }
+
+      // Ensure we have a path compatible with baseDir (likely WSL/Posix) for relative calculation
+      // If we are on Windows/WSL, we might want to ensure consistent format
+      const absForRel = process.platform === 'win32' || isWSLPath(absResolved) ? toWslPath(absResolved) : absResolved
+
       // Use forward slashes for consistency in headers, even on Windows
-      const rel = path.relative(baseDir, res.absolutePath).replace(/\\/g, '/')
+      const rel = path.relative(baseDir, absForRel).replace(/\\/g, '/')
 
       // Separator is the relative path itself, on its own line
       if (parts.length > 0) parts.push('') // blank line between files
@@ -65,7 +75,6 @@ export async function readMultipleTextFiles(
 
       meta.push({
         relativePath: rel,
-        absolutePath: res.absolutePath,
         sizeBytes: res.sizeBytes,
         truncated: res.truncated,
         startLine: res.startLine,
@@ -73,19 +82,18 @@ export async function readMultipleTextFiles(
         totalLines: res.totalLines,
       })
     } catch (error: any) {
-        // If one file fails, we might want to include the error in the output instead of crashing everything
-        const errorMsg = `[Error reading file: ${error.message}]`
-        
-        if (parts.length > 0) parts.push('')
-        parts.push(p) // Use the requested path as header
-        parts.push(errorMsg)
-        
-        meta.push({
-            relativePath: p,
-            absolutePath: '',
-            sizeBytes: 0,
-            truncated: false,
-        })
+      // If one file fails, we might want to include the error in the output instead of crashing everything
+      const errorMsg = `[Error reading file: ${error.message}]`
+
+      if (parts.length > 0) parts.push('')
+      parts.push(p) // Use the requested path as header
+      parts.push(errorMsg)
+
+      meta.push({
+        relativePath: p,
+        sizeBytes: 0,
+        truncated: false,
+      })
     }
   }
 

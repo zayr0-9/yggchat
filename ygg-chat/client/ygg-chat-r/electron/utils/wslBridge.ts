@@ -80,15 +80,15 @@ export function toWslPath(rawPath: string): string {
   // Convert backslashes to forward slashes first
   let normalized = trimmed.replace(/\\/g, '/')
   let lowerNormalized = normalized.toLowerCase()
-const isUncWSLPath = lowerNormalized.startsWith('//wsl$')
+  const isUncWSLPath = lowerNormalized.startsWith('//wsl$')
 
-// Collapse duplicate slashes only when it's not a UNC WSL path
-if (!isUncWSLPath) {
-  normalized = normalized.replace(/\\+/g, '/')
-  lowerNormalized = normalized.toLowerCase()
-}
+  // Collapse duplicate slashes only when it's not a UNC WSL path
+  if (!isUncWSLPath) {
+    normalized = normalized.replace(/\\+/g, '/')
+    lowerNormalized = normalized.toLowerCase()
+  }
 
-if (isUncWSLPath) {
+  if (isUncWSLPath) {
 
     const withoutLeadingSlashes = normalized.replace(/^\/+/, '')
     const segments = withoutLeadingSlashes.split('/').filter(Boolean)
@@ -122,6 +122,14 @@ export async function resolveToWindowsPath(filePath: string): Promise<string> {
   const trimmedPath = filePath.trim()
   if (!isWSLPath(trimmedPath)) {
     return filePath
+  }
+
+  // Check for Git Bash / MinGW style paths (e.g. /c/Users/...)
+  const gitBashMatch = trimmedPath.match(/^\/([a-zA-Z])\/(.*)$/)
+  if (gitBashMatch) {
+    const drive = gitBashMatch[1]
+    const rest = gitBashMatch[2]
+    return `${drive}:${rest ? '\\' + rest.replace(/\//g, '\\') : '\\'}`
   }
 
   try {
