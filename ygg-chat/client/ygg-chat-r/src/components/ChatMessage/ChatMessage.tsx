@@ -210,7 +210,6 @@ const MessageActions: React.FC<MessageActionsProps> = ({
 }
 
 // Configuration for collapsed content display
-const COLLAPSED_CONTENT_CHAR_LIMIT = 130
 const COLLAPSED_CONTENT_WORD_LIMIT = 15
 
 // Helper function to convert contentBlocks to editable text
@@ -542,14 +541,6 @@ const formatToolResultSummary = (content: any): string | null => {
   }
 }
 
-const getFirstArgPair = (args: any): string | null => {
-  if (!args || typeof args !== 'object') return null
-  const firstKey = Object.keys(args)[0]
-  if (!firstKey) return null
-  const val = args[firstKey]
-  const displayVal = typeof val === 'string' ? val.slice(0, 60) + (val.length > 60 ? '...' : '') : String(val)
-  return `${firstKey}: ${displayVal}`
-}
 
 interface TodoItem {
   text: string
@@ -1223,12 +1214,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return words.slice(0, maxWords).join(' ') + '...'
     }
 
-    // Truncate content to first N characters
-    const truncateChars = (text: string | any, maxChars: number = COLLAPSED_CONTENT_CHAR_LIMIT): string => {
-      const content = typeof text === 'object' ? JSON.stringify(text) : String(text)
-      if (content.length <= maxChars) return content
-      return content.slice(0, maxChars) + '...'
-    }
 
     const renderToolCallGroupCard = (group: ToolCallRenderGroup, key: string) => {
       // Don't render orphaned groups (results waiting for their tool_call)
@@ -1253,7 +1238,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
 
       const pathParam = extractPathParam(group.args)
-      const argPair = getFirstArgPair(group.args)
       const resultSummary =
         group.results.length > 0
           ? formatToolResultSummary(group.results[0].content)
@@ -1407,69 +1391,70 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       </ReactMarkdown>
                     </div>
                   )
-                } else if (event.type === 'reasoning' && event.delta) {
-                  // Accumulate consecutive reasoning events into one block
-                  let accumulatedReasoning = event.delta || ''
-                  for (let i = idx + 1; i < streamEvents.length; i++) {
-                    if (streamEvents[i].type === 'reasoning' && streamEvents[i].delta) {
-                      accumulatedReasoning += streamEvents[i].delta
-                    } else {
-                      break
-                    }
-                  }
-                  // Only render if this is the first reasoning event in the sequence
-                  if (idx === 0 || streamEvents[idx - 1].type !== 'reasoning') {
-                    const isExpanded = expandedBlocks.reasoning.has(idx)
-                    const reasoningSummary = truncateWords(accumulatedReasoning)
-                    return (
-                      <div
-                        key={`reasoning-${idx}`}
-                        className='relative rounded-xl p-2 bg-neutral-50 mx-3 sm:px-2 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
-                      >
-                        <div className='flex items-center justify-between gap-3'>
-                          <div className='flex items-center gap-2 min-w-0'>
-                            <span className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
-                              Reasoning
-                            </span>
-                            {!isExpanded && (
-                              <div className='text-xs text-neutral-600 dark:text-neutral-400 line-clamp-1 overflow-hidden min-w-0'>
-                                {reasoningSummary}
-                              </div>
-                            )}
-                          </div>
-                          <Button
-                            variant='outline2'
-                            size='small'
-                            onClick={() => toggleBlock('reasoning', idx)}
-                            title={isExpanded ? 'Hide details' : 'Show details'}
-                          >
-                            {isExpanded ? (
-                              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                              </svg>
-                            ) : (
-                              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                              </svg>
-                            )}
-                          </Button>
-                        </div>
-                        {isExpanded && (
-                          <div className='prose max-w-none dark:prose-invert w-full text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px] mt-2'>
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                              components={{ pre: PreRenderer, a: MarkdownLink }}
-                            >
-                              {accumulatedReasoning}
-                            </ReactMarkdown>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  }
-                  return null
                 }
+                return null
+              } else if (event.type === 'reasoning' && event.delta) {
+                // Accumulate consecutive reasoning events into one block
+                let accumulatedReasoning = event.delta || ''
+                for (let i = idx + 1; i < streamEvents.length; i++) {
+                  if (streamEvents[i].type === 'reasoning' && streamEvents[i].delta) {
+                    accumulatedReasoning += streamEvents[i].delta
+                  } else {
+                    break
+                  }
+                }
+                // Only render if this is the first reasoning event in the sequence
+                if (idx === 0 || streamEvents[idx - 1].type !== 'reasoning') {
+                  const isExpanded = expandedBlocks.reasoning.has(idx)
+                  const reasoningSummary = truncateWords(accumulatedReasoning)
+                  return (
+                    <div
+                      key={`reasoning-${idx}`}
+                      className='relative rounded-xl p-2 bg-neutral-50 mx-3 sm:px-2 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                    >
+                      <div className='flex items-center justify-between gap-3'>
+                        <div className='flex items-center gap-2 min-w-0'>
+                          <span className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
+                            Reasoning
+                          </span>
+                          {!isExpanded && (
+                            <div className='text-xs text-neutral-600 dark:text-neutral-400 line-clamp-1 overflow-hidden min-w-0'>
+                              {reasoningSummary}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          variant='outline2'
+                          size='small'
+                          onClick={() => toggleBlock('reasoning', idx)}
+                          title={isExpanded ? 'Hide details' : 'Show details'}
+                        >
+                          {isExpanded ? (
+                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                            </svg>
+                          ) : (
+                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                            </svg>
+                          )}
+                        </Button>
+                      </div>
+                      {isExpanded && (
+                        <div className='prose max-w-none dark:prose-invert w-full text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px] mt-2'>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                            components={{ pre: PreRenderer, a: MarkdownLink }}
+                          >
+                            {accumulatedReasoning}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+                return null
               } else if (event.type === 'tool_call' && event.toolCall && event.complete) {
                 const toolCall = event.toolCall
                 const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolCall.id}-${idx}`)
