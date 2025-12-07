@@ -70,6 +70,7 @@ const LandingPage: React.FC = () => {
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0)
   const [isInFeaturesSection, setIsInFeaturesSection] = useState(false)
   const featureRefs = useRef<(HTMLDivElement | null)[]>([])
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   // const featuresContainerRef = useRef<HTMLDivElement>(null)
   const featuresSectionRef = useRef<HTMLElement>(null)
   const [loadedVideos, setLoadedVideos] = useState<boolean[]>(() => new Array(features.length).fill(false))
@@ -93,6 +94,9 @@ const LandingPage: React.FC = () => {
 
   // Monitor scroll position for features section and active feature
   useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
     const handleScroll = () => {
       if (!featuresSectionRef.current) return
 
@@ -121,10 +125,10 @@ const LandingPage: React.FC = () => {
       }
     }
 
-    window.addEventListener('scroll', handleScroll, { passive: true })
+    container.addEventListener('scroll', handleScroll, { passive: true })
     handleScroll()
 
-    return () => window.removeEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
   }, [])
 
   useEffect(() => {
@@ -174,7 +178,7 @@ const LandingPage: React.FC = () => {
       const videoEl = videoElementsRef.current[index]
       if (videoEl) {
         videoEl.load()
-        videoEl.play().catch(() => {})
+        videoEl.play().catch(() => { })
       }
       nextPrev[index] = true
     })
@@ -228,7 +232,7 @@ const LandingPage: React.FC = () => {
   }
 
   return (
-    <div className='w-full dark:bg-blue-900 bg-blue-200 min-h-screen' style={{ scrollSnapType: 'y mandatory' }}>
+    <div ref={scrollContainerRef} className='w-full h-full overflow-y-auto dark:bg-blue-900 bg-blue-200 min-h-screen'>
       {/* Header Navigation */}
       <nav className='sticky top-0 rounded-b-2xl z-30 flex items-center justify-between px-6 sm:px-4 md:px-8 py-2 md:py-3 bg-transparent dark:bg-transparent transition-all duration-300'>
         {/* Logo */}
@@ -356,11 +360,10 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
       <section
         ref={featuresSectionRef}
         id='features'
-        className={`transition-colors duration-500 pt-20 ${
-          isInFeaturesSection
-            ? 'bg-transparent acrylic dark:bg-yBlack-700'
-            : 'bg-transparent acrylic-light dark:bg-yBlack-800'
-        }`}
+        className={`transition-colors duration-500 pt-20 ${isInFeaturesSection
+          ? 'bg-transparent acrylic dark:bg-yBlack-700'
+          : 'bg-transparent acrylic-light dark:bg-yBlack-800'
+          }`}
       >
         <div className='sm:max-w-6xl lg:max-w-7xl xl:max-w-[1600px] 2xl:max-w-full mx-auto'>
           {/* Issues Section */}
@@ -471,28 +474,25 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                     <button
                       key={feature.id}
                       onClick={() => handleFeatureClick(index)}
-                      className={`w-full text-left p-4 rounded-xl transition-all duration-300 group ${
-                        activeFeatureIndex === index
-                          ? 'bg-transparent dark:bg-transparent scale-105'
-                          : 'hover:scale-105 dark:hover:bg-transparent scale-102'
-                      }`}
+                      className={`w-full text-left p-4 rounded-xl transition-all duration-300 group ${activeFeatureIndex === index
+                        ? 'bg-transparent dark:bg-transparent scale-105'
+                        : 'hover:scale-105 dark:hover:bg-transparent scale-102'
+                        }`}
                     >
                       <div className='flex items-center gap-1.5'>
                         <h3
-                          className={`text-3xl font-semibold ${
-                            activeFeatureIndex === index
-                              ? 'text-black-600 dark:text-neutral-50'
-                              : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-neutral-50'
-                          }`}
+                          className={`text-3xl font-semibold ${activeFeatureIndex === index
+                            ? 'text-black-600 dark:text-neutral-50'
+                            : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-neutral-50'
+                            }`}
                         >
                           {feature.title}
                         </h3>
                         <span
-                          className={`text-xs pb-5 font-mono text-blue-500 dark:text-neutral-200 ${
-                            activeFeatureIndex === index
-                              ? 'text-black-600 dark:text-neutral-50'
-                              : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-neutral-50'
-                          }`}
+                          className={`text-xs pb-5 font-mono text-blue-500 dark:text-neutral-200 ${activeFeatureIndex === index
+                            ? 'text-black-600 dark:text-neutral-50'
+                            : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-neutral-50'
+                            }`}
                         >
                           {feature.superscript}
                         </span>
@@ -511,7 +511,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                   ref={el => {
                     featureRefs.current[index] = el
                   }}
-                  className='min-h-screen snap-start snap-always flex items-center justify-center p-8 md:p-12 lg:p-16'
+                  className='min-h-screen flex items-center justify-center p-8 md:p-12 lg:p-16'
                 >
                   <div className='w-full max-w-2xl rounded-3xl'>
                     {/* Mobile Feature Title */}
