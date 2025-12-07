@@ -152,7 +152,7 @@ function Chat() {
   // Anchor position for fixed expanded panel (viewport coords)
   const [expandedAnchor, setExpandedAnchor] = useState<{ left: number; top: number } | null>(null)
   // Dynamic input area height for adaptive padding
-  const [inputAreaHeight, setInputAreaHeight] = useState(170)
+  // const [inputAreaHeight, setInputAreaHeight] = useState(170)
   const [containerHeight, setContainerHeight] = useState(1100)
 
   const handleCloseExpandedPreview = useCallback(() => {
@@ -283,42 +283,42 @@ function Chat() {
   }, [])
 
   // Measure input area height dynamically with ResizeObserver
-  useEffect(() => {
-    const inputArea = inputAreaRef.current
-    if (!inputArea) return
+  // useEffect(() => {
+  //   const inputArea = inputAreaRef.current
+  //   if (!inputArea) return
 
-    const observer = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        let height = entry.contentRect.height
-        // Use borderBoxSize if available for more accurate height including padding/borders
-        if (entry.borderBoxSize && entry.borderBoxSize.length > 0) {
-          height = entry.borderBoxSize[0].blockSize
-        }
+  //   const observer = new ResizeObserver(entries => {
+  //     for (const entry of entries) {
+  //       let height = entry.contentRect.height
+  //       // Use borderBoxSize if available for more accurate height including padding/borders
+  //       if (entry.borderBoxSize && entry.borderBoxSize.length > 0) {
+  //         height = entry.borderBoxSize[0].blockSize
+  //       }
 
-        // Add margin
-        const style = window.getComputedStyle(inputArea)
-        const marginBottom = parseFloat(style.marginBottom) || 0
+  //       // Add margin
+  //       const style = window.getComputedStyle(inputArea)
+  //       const marginBottom = parseFloat(style.marginBottom) || 0
 
-        if (height > 0) {
-          setInputAreaHeight(height + marginBottom)
-        }
-      }
-    })
+  //       // if (height > 0) {
+  //       //   setInputAreaHeight(height + marginBottom)
+  //       // }
+  //     }
+  //   })
 
-    observer.observe(inputArea)
+  //   observer.observe(inputArea)
 
-    // Initial measurement
-    const rect = inputArea.getBoundingClientRect()
-    const style = window.getComputedStyle(inputArea)
-    const marginBottom = parseFloat(style.marginBottom) || 0
-    if (rect.height > 0) {
-      setInputAreaHeight(rect.height + marginBottom)
-    }
+  //   // Initial measurement
+  //   const rect = inputArea.getBoundingClientRect()
+  //   const style = window.getComputedStyle(inputArea)
+  //   const marginBottom = parseFloat(style.marginBottom) || 0
+  //   if (rect.height > 0) {
+  //     setInputAreaHeight(rect.height + marginBottom)
+  //   }
 
-    return () => {
-      observer.disconnect()
-    }
-  }, [])
+  //   return () => {
+  //     observer.disconnect()
+  //   }
+  // }, [])
 
   // Measure messages container height dynamically
   useEffect(() => {

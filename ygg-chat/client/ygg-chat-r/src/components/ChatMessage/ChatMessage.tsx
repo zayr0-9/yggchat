@@ -115,10 +115,11 @@ const MessageActions: React.FC<MessageActionsProps> = ({
           <>
             <button
               onClick={onCopy}
-              className={`p-1.5 rounded-2xl transition-colors duration-150 hover:scale-104 ${copied
-                ? 'text-green-500 hover:text-green-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900'
-                : 'text-stone-700 hover:text-blue-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-transform duration-100 active:scale-90'
-                }`}
+              className={`p-1.5 rounded-2xl transition-colors duration-150 hover:scale-104 ${
+                copied
+                  ? 'text-green-500 hover:text-green-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900'
+                  : 'text-stone-700 hover:text-blue-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-transform duration-100 active:scale-90'
+              }`}
               title={copied ? 'Copied' : 'Copy message'}
             >
               {copied ? (
@@ -541,7 +542,6 @@ const formatToolResultSummary = (content: any): string | null => {
   }
 }
 
-
 interface TodoItem {
   text: string
   done: boolean
@@ -901,7 +901,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         items.push({
           label: '',
           icon: undefined,
-          onClick: () => { },
+          onClick: () => {},
           separator: true,
         })
       }
@@ -1214,7 +1214,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return words.slice(0, maxWords).join(' ') + '...'
     }
 
-
     const renderToolCallGroupCard = (group: ToolCallRenderGroup, key: string) => {
       // Don't render orphaned groups (results waiting for their tool_call)
       if (group.anchorIndex === -1) {
@@ -1238,10 +1237,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
 
       const pathParam = extractPathParam(group.args)
-      const resultSummary =
-        group.results.length > 0
-          ? formatToolResultSummary(group.results[0].content)
-          : null
+      const resultSummary = group.results.length > 0 ? formatToolResultSummary(group.results[0].content) : null
       const pathContent = pathParam || null
       return (
         <div
@@ -1250,11 +1246,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         >
           <div className='flex items-start justify-between gap-4'>
             <div className='flex items-center gap-3 min-w-0 flex-1 overflow-hidden'>
-              <p className='text-base font-semibold text-blue-900 dark:text-blue-100 shrink-0'>{group.name || 'Tool Result'}</p>
+              <p className='text-base font-semibold text-blue-900 dark:text-blue-100 shrink-0'>
+                {group.name || 'Tool Result'}
+              </p>
               {!isExpanded && (
                 <div className='flex items-center gap-2 min-w-0 flex-1 overflow-hidden'>
                   {resultSummary && (
-                    <span className={`text-xs shrink-0 ${resultSummary === 'success' ? 'text-emerald-600 dark:text-emerald-200' : 'text-red-600 dark:text-red-400'}`}>
+                    <span
+                      className={`text-xs shrink-0 ${resultSummary === 'success' ? 'text-emerald-600 dark:text-emerald-200' : 'text-red-600 dark:text-red-400'}`}
+                    >
                       {resultSummary}
                     </span>
                   )}
@@ -1264,7 +1264,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     </span>
                   )}
                   {pathContent && (
-                    <span className='text-xs text-blue-700 dark:text-blue-200 min-w-0 overflow-hidden whitespace-nowrap' style={{ direction: 'rtl', textOverflow: 'ellipsis' }}>
+                    <span
+                      className='text-xs text-blue-700 dark:text-blue-200 min-w-0 overflow-hidden whitespace-nowrap'
+                      style={{ direction: 'rtl', textOverflow: 'ellipsis' }}
+                    >
                       {pathContent}
                     </span>
                   )}
@@ -1311,10 +1314,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   {group.results.map((result, resultIdx) => (
                     <div
                       key={`${group.id}-result-${resultIdx}`}
-                      className={`rounded-xl border p-3 whitespace-pre-wrap leading-relaxed ${result.is_error
-                        ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
-                        : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
-                        }`}
+                      className={`rounded-xl border p-3 whitespace-pre-wrap leading-relaxed ${
+                        result.is_error
+                          ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
+                          : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
+                      }`}
                     >
                       <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
                         <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
@@ -1335,7 +1339,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         id={`message-${id}`}
         className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-0 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
-      // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
+        // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
         {role === 'user' && (
@@ -1714,7 +1718,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             )}
           </>
         )}
-        {hasContent && modelName && (
+        {hasContent && modelName && role !== 'user' && (
           <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
         )}
 
@@ -1971,10 +1975,11 @@ const TodoListView: React.FC<{
               {todoItems.map((item, idx) => (
                 <li
                   key={`todo-item-${idx}`}
-                  className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${item.done
-                    ? 'border-neutral-200 bg-neutral-50/40 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                    : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                    }`}
+                  className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
+                    item.done
+                      ? 'border-neutral-200 bg-neutral-50/40 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                      : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                  }`}
                 >
                   <span className='text-lg'>{item.done ? '[✔️]' : '[ ]'}</span>
                   <span className={`${item.done ? 'line-through opacity-80' : ''}`}>{item.text}</span>

@@ -193,7 +193,7 @@ export const LowBar: React.FC<LowBarProps> = ({
     >
       {/* Container with shadow and border */}
       <div
-        className={`h-full flex flex-col ${isExpanded ? 'bg-neutral-50/30 dark:bg-neutral-900/30' : 'bg-transparent dark:bg-transparent'} rounded-3xl overflow-hidden shadow-[0px_0px_3px_-2px_rgba(0,0,0,0)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700`}
+        className={`h-full flex flex-col ${isExpanded ? 'bg-neutral-50/30 dark:bg-transparent' : 'bg-transparent dark:bg-transparent'} rounded-3xl overflow-hidden shadow-[0px_0px_3px_-2px_rgba(0,0,0,0)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700/60`}
       >
         {/* Header bar (always visible) */}
         <Button
