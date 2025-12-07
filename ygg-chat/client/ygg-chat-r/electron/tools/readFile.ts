@@ -94,13 +94,19 @@ export async function readTextFile(
   const maxBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 200 * 1024
   const includeHash = options.includeHash !== false // default to true
 
-  // Resolve absolute path
+  // Resolve absolute path and track path type
   let abs = inputPath
+  let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+
   if (isWSLPath(inputPath)) {
     abs = await resolveToWindowsPath(inputPath)
+    pathType = 'wsl'
   } else {
     const basePath = options.cwd || process.cwd()
     abs = path.isAbsolute(inputPath) ? inputPath : path.resolve(basePath, inputPath)
+    if (/^[a-zA-Z]:[\/]/.test(abs)) {
+      pathType = 'windows'
+    }
   }
 
   // Workspace validation: reject paths outside cwd
@@ -256,11 +262,13 @@ export async function readTextFile(
     inode: stats.ino,
   }
 
+  const absolutePath = pathType === 'windows' ? abs : toWslPath(abs)
+
   return {
     content,
     truncated,
     sizeBytes,
-    absolutePath: toWslPath(abs),
+    absolutePath,
     contentHash,
     fileHash,
     metadata,

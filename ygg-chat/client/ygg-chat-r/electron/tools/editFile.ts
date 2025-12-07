@@ -79,13 +79,19 @@ export async function editFileSearchReplace(
   } = options
 
   try {
-    // Resolve path for fs operations (UNC format on Windows)
+    // Resolve path for fs operations (UNC format on Windows) and track path type
     let fsPath: string  // Path for fs.promises operations
+    let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+
     if (isWSLPath(filePath)) {
       fsPath = await resolveToWindowsPath(filePath)
+      pathType = 'wsl'
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
+      if (/^[a-zA-Z]:[\/]/.test(fsPath)) {
+        pathType = 'windows'
+      }
     }
 
     // Workspace validation: reject paths outside cwd
@@ -114,7 +120,7 @@ export async function editFileSearchReplace(
       if (!validation.valid) {
         return {
           success: false,
-          absolutePath: toWslPath(fsPath),
+          absolutePath: pathType === 'windows' ? fsPath : toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Validation failed: ${validation.reason}`,
@@ -147,7 +153,7 @@ export async function editFileSearchReplace(
       if (!matchResult.found) {
         return {
           success: false,
-          absolutePath: toWslPath(fsPath),
+          absolutePath: pathType === 'windows' ? fsPath : toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Search pattern not found in file. Attempted strategies: ${attemptedStrategies.join(', ')}`,
@@ -217,7 +223,7 @@ export async function editFileSearchReplace(
         replacements > 0
           ? `Successfully replaced ${replacements} occurrence(s)${strategyMessage} in ${filePath}`
           : `No changes needed in ${filePath}`,
-      backup: backupPath ? toWslPath(backupPath) : undefined,
+      backup: backupPath ? (pathType === 'windows' ? backupPath : toWslPath(backupPath)) : undefined,
       matchStrategy,
       attemptedStrategies,
       validation,
@@ -253,13 +259,19 @@ export async function editFileSearchReplaceFirst(
   } = options
 
   try {
-    // Resolve path for fs operations (UNC format on Windows)
+    // Resolve path for fs operations (UNC format on Windows) and track path type
     let fsPath: string  // Path for fs.promises operations
+    let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+
     if (isWSLPath(filePath)) {
       fsPath = await resolveToWindowsPath(filePath)
+      pathType = 'wsl'
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
+      if (/^[a-zA-Z]:[\/]/.test(fsPath)) {
+        pathType = 'windows'
+      }
     }
 
     // Workspace validation: reject paths outside cwd
@@ -287,7 +299,7 @@ export async function editFileSearchReplaceFirst(
       if (!validation.valid) {
         return {
           success: false,
-          absolutePath: toWslPath(fsPath),
+          absolutePath: pathType === 'windows' ? fsPath : toWslPath(fsPath),
           sizeBytes: fileData.sizeBytes,
           replacements: 0,
           message: `Validation failed: ${validation.reason}`,
@@ -353,7 +365,7 @@ export async function editFileSearchReplaceFirst(
       sizeBytes: newStats.size,
       replacements: 1,
       message: `Successfully replaced first occurrence${strategyMessage} in ${filePath}`,
-      backup: backupPath ? toWslPath(backupPath) : undefined,
+      backup: backupPath ? (pathType === 'windows' ? backupPath : toWslPath(backupPath)) : undefined,
       matchStrategy: matchResult.strategy,
       attemptedStrategies: matchResult.attemptedStrategies,
       validation,
@@ -380,13 +392,19 @@ export async function appendToFile(
   const { createBackup = false, encoding = 'utf8' } = options
 
   try {
-    // Resolve path for fs operations (UNC format on Windows)
+    // Resolve path for fs operations (UNC format on Windows) and track path type
     let fsPath: string  // Path for fs.promises operations
+    let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+
     if (isWSLPath(filePath)) {
       fsPath = await resolveToWindowsPath(filePath)
+      pathType = 'wsl'
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
+      if (/^[a-zA-Z]:[\/]/.test(fsPath)) {
+        pathType = 'windows'
+      }
     }
 
     // Workspace validation: reject paths outside cwd
@@ -434,8 +452,8 @@ export async function appendToFile(
       sizeBytes: newStats.size,
       replacements: 1, // Consider append as one "replacement"
       message: `Successfully appended content to ${filePath}`,
-      backup: backupPath ? toWslPath(backupPath) : undefined,
-    }
+      backup: backupPath ? (pathType === 'windows' ? backupPath : toWslPath(backupPath)) : undefined,
+
   } catch (error: any) {
     return {
       success: false,

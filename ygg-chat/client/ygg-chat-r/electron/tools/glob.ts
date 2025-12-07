@@ -1,7 +1,7 @@
 import { glob } from 'glob'
 import os from 'os'
 import * as path from 'path'
-import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
+import { isWindows, isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_MATCHES = 3000
 const DEFAULT_TIMEOUT_MS = 5000
@@ -26,9 +26,10 @@ const DEFAULT_IGNORE_PATTERNS = [
 
 const HOMEDIR = os.homedir()
 
-async function ensureWithinWorkspace(cwd: string): Promise<string> {
+async function ensureWithinWorkspace(cwd: string): Promise<{ resolved: string; type: 'windows' | 'wsl' }> {
   if (isWSLPath(cwd)) {
-    return await resolveToWindowsPath(cwd)
+    const winPath = await resolveToWindowsPath(cwd)
+    return { resolved: winPath, type: 'wsl' }
   }
 
   const resolved = path.resolve(cwd)
@@ -41,7 +42,7 @@ async function ensureWithinWorkspace(cwd: string): Promise<string> {
     // For now, we'll allow it if it's not the fs root.
   }
 
-  return resolved
+  return { resolved, type: isWindows() ? 'windows' : 'wsl' }
 }
 
 function mergeIgnorePatterns(defaults: string[], custom?: string | string[]): string[] {
@@ -113,12 +114,12 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
   } = options
 
   try {
-    const resolvedCwd = await ensureWithinWorkspace(cwd)
+    const { resolved: resolvedCwd, type: resolvedType } = await ensureWithinWorkspace(cwd)
     const sanitizedPattern = enforcePatternDepth(pattern)
     const ignorePatterns = mergeIgnorePatterns(DEFAULT_IGNORE_PATTERNS, ignore)
 
     const globOptions: any = {
-      cwd: toWslPath(resolvedCwd),
+      cwd: resolvedType === 'windows' ? resolvedCwd : toWslPath(resolvedCwd),
       ignore: ignorePatterns,
       dot,
       absolute,
@@ -159,7 +160,7 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
         matches: [],
         error: `Too many matches (${results.length} > ${maxMatches}). Narrow the pattern or reduce cwd scope.`,
         pattern: sanitizedPattern,
-        cwd: toWslPath(resolvedCwd),
+        cwd: resolvedType === 'windows' ? resolvedCwd : toWslPath(resolvedCwd),
         durationMs: Date.now() - startTime,
         totalMatches: results.length,
       }
@@ -173,7 +174,7 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
       success: true,
       matches,
       pattern: sanitizedPattern,
-      cwd: toWslPath(resolvedCwd),
+      cwd: resolvedType === 'windows' ? resolvedCwd : toWslPath(resolvedCwd),
       durationMs: Date.now() - startTime,
       totalMatches: matches.length,
     }

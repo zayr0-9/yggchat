@@ -28,29 +28,42 @@ export interface BashResult {
   error?: string
 }
 
-function resolveCwd(inputCwd?: string): string {
-  const cwdCandidate = (inputCwd?.trim() || process.cwd()).trim()
-  if (!cwdCandidate) return process.cwd()
-
-  if (isWindows()) {
-    const normalized = path.win32.isAbsolute(cwdCandidate)
-      ? path.win32.normalize(cwdCandidate)
-      : path.win32.resolve(cwdCandidate)
-    return toWslPath(normalized)
-  }
-
-  return path.isAbsolute(cwdCandidate) ? cwdCandidate : path.resolve(cwdCandidate)
+type CwdResolution = {
+  display: string // what we return to the caller (windows stays windows)
+  forSpawn?: string // what we pass to WSL/bash (converted when on windows)
+  type: 'windows' | 'posix'
 }
 
-async function buildCommand(command: string, cwd?: string): Promise<{ cmd: string; args: string[]; wslCwd?: string }> {
-  const args = ['-lc', command]
-  if (!isWindows()) {
-    return { cmd: 'bash', args, wslCwd: cwd }
+function resolveCwd(inputCwd?: string): CwdResolution {
+  const cwdCandidate = (inputCwd?.trim() || process.cwd()).trim()
+  if (!cwdCandidate) {
+    const fallback = process.cwd()
+    return { display: fallback, forSpawn: fallback, type: isWindows() ? 'windows' : 'posix' }
   }
 
-  const normalizedCwd = cwd ? toWslPath(cwd) : undefined
-  const [cmd, wslArgs] = await getWSLCommandArgs('bash', args, normalizedCwd)
-  return { cmd, args: wslArgs, wslCwd: normalizedCwd }
+  if (isWindows()) {
+    const normalizedWin = path.win32.isAbsolute(cwdCandidate)
+      ? path.win32.normalize(cwdCandidate)
+      : path.win32.resolve(cwdCandidate)
+    return { display: normalizedWin, forSpawn: toWslPath(normalizedWin), type: 'windows' }
+  }
+
+  const posix = path.isAbsolute(cwdCandidate) ? cwdCandidate : path.resolve(cwdCandidate)
+  return { display: posix, forSpawn: posix, type: 'posix' }
+}
+
+async function buildCommand(
+  command: string,
+  spawnCwd?: string,
+  type: 'windows' | 'posix' = 'posix'
+): Promise<{ cmd: string; args: string[]; wslCwd?: string }> {
+  const args = ['-lc', command]
+  if (type === 'posix') {
+    return { cmd: 'bash', args, wslCwd: spawnCwd }
+  }
+
+  const [cmd, wslArgs] = await getWSLCommandArgs('bash', args, spawnCwd)
+  return { cmd, args: wslArgs, wslCwd: spawnCwd }
 }
 
 function clampMaxOutput(max?: number): number {
@@ -66,9 +79,9 @@ function clampMaxOutput(max?: number): number {
 export async function runBashCommand(command: string, options: BashOptions = {}): Promise<BashResult> {
   const startTime = Date.now()
   const maxOutputChars = clampMaxOutput(options.maxOutputChars)
-  const resolvedCwd = resolveCwd(options.cwd)
+  const { display: displayCwd, forSpawn: spawnCwd, type: cwdType } = resolveCwd(options.cwd)
 
-  const { cmd, args, wslCwd } = await buildCommand(command, resolvedCwd)
+  const { cmd, args, wslCwd } = await buildCommand(command, spawnCwd, cwdType)
 
   const spawnOptions: { cwd?: string; env: NodeJS.ProcessEnv } = {
     env: {
@@ -79,8 +92,8 @@ export async function runBashCommand(command: string, options: BashOptions = {})
     },
   }
 
-  if (!isWindows()) {
-    spawnOptions.cwd = resolvedCwd
+  if (cwdType === 'posix') {
+    spawnOptions.cwd = spawnCwd
   }
 
   let stdout = ''
@@ -148,7 +161,7 @@ export async function runBashCommand(command: string, options: BashOptions = {})
       finalize({
         success: false,
         command: `${cmd} ${args.join(' ')}`,
-        cwd: wslCwd ?? resolvedCwd,
+        cwd: wslCwd ?? displayCwd,
         stdout,
         stderr,
         exitCode: null,
@@ -167,7 +180,7 @@ export async function runBashCommand(command: string, options: BashOptions = {})
       finalize({
         success: !timedOut && code === 0,
         command: `${cmd} ${args.join(' ')}`,
-        cwd: wslCwd ?? resolvedCwd,
+        cwd: wslCwd ?? displayCwd,
         stdout,
         stderr,
         exitCode: code,
