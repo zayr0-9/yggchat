@@ -70,7 +70,7 @@ const PaymentPlans: React.FC = () => {
   ]
 
   return (
-    <div className='min-h-screen dark:bg-blue-900 bg-blue-200 text-neutral-900 dark:text-neutral-100 py-12 px-6'>
+    <div className='h-full overflow-y-auto min-h-screen dark:bg-blue-900 bg-blue-200 text-neutral-900 dark:text-neutral-100 py-12 px-6'>
       <div className='max-w-7xl mx-auto'>
         {/* Header */}
         <div className='text-center mb-12'>
@@ -85,11 +85,10 @@ const PaymentPlans: React.FC = () => {
           {plans.map(plan => (
             <div
               key={plan.id}
-              className={`relative text-[16px] rounded-2xl p-4 transition-all duration-300 transform flex flex-col ${
-                plan.featured
+              className={`relative text-[16px] rounded-2xl p-4 transition-all duration-300 transform flex flex-col ${plan.featured
                   ? 'bg-transparent mica text-neutral-900 dark:text-neutral-100'
                   : 'bg-transparent mica text-neutral-900 dark:text-neutral-100'
-              }`}
+                }`}
             >
               {/* {plan.featured && (
                 <div className='absolute -top-6 left-1/2 transform -translate-x-1/2'>
@@ -121,11 +120,10 @@ const PaymentPlans: React.FC = () => {
               </div>
 
               <button
-                className={`w-full py-3 mt-8 px-6 rounded-lg font-semibold transition-all duration-200 ${
-                  plan.featured
+                className={`w-full py-3 mt-8 px-6 rounded-lg font-semibold transition-all duration-200 ${plan.featured
                     ? 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100 '
                     : 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100'
-                }`}
+                  }`}
                 onClick={() => handleNavigation('/login')}
               >
                 {plan.cta}
@@ -163,11 +161,10 @@ const PaymentPlans: React.FC = () => {
                     {plans.map(plan => (
                       <td key={plan.id} className='py-4 px-6 text-center text-[17px]'>
                         <span
-                          className={`font-medium ${
-                            feature.plans[plan.id] === 'Not included'
+                          className={`font-medium ${feature.plans[plan.id] === 'Not included'
                               ? 'text-neutral-900 dark:text-neutral-100/90'
                               : 'dark:text-white/90 text-neutral-900'
-                          }`}
+                            }`}
                         >
                           {feature.plans[plan.id] === 'Not included' ? 'x' : feature.plans[plan.id]}
                         </span>

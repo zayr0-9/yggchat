@@ -298,7 +298,7 @@ const PaymentPage: React.FC = () => {
   */
 
   return (
-    <div className='min-h-full bg-zinc-50 dark:bg-yBlack-500'>
+    <div className='h-full overflow-y-auto min-h-full bg-zinc-50 dark:bg-yBlack-500'>
       <div className='max-w-7xl mx-auto px-4 py-8'>
         {/* Header */}
         <div className='flex items-center justify-between mb-8'>
