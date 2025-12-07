@@ -243,12 +243,12 @@ const updateMessageInCache = (
     const updatedMessages = existingData.messages.map(msg =>
       msg.id === messageId
         ? {
-            ...msg,
-            content: updatedContent,
-            content_plain_text: updatedContent,
-            ...(updatedNote !== undefined && { note: updatedNote }),
-            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
-          }
+          ...msg,
+          content: updatedContent,
+          content_plain_text: updatedContent,
+          ...(updatedNote !== undefined && { note: updatedNote }),
+          ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
+        }
         : msg
     )
 
@@ -713,7 +713,7 @@ export const sendMessage = createAsyncThunk<
                     const baseTitle = contentForTitle.slice(0, 50)
                     const title = baseTitle ? `${baseTitle}...` : ''
                     if (title) {
-                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      ; (dispatch as any)(updateConversationTitle({ id: conversationId, title }))
                       titleUpdated = true
                     }
                   }
@@ -2148,10 +2148,15 @@ export const syncConversationToLocal = createAsyncThunk<
 })
 
 // Fetch Heimdall message tree and messages combined (optimization: single endpoint)
-export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: RootState; extra: ThunkExtraArgument }>(
+export const fetchMessageTree = createAsyncThunk<any, ConversationId | { conversationId: ConversationId; storageMode?: 'local' | 'cloud' }, { state: RootState; extra: ThunkExtraArgument }>(
   'chat/fetchMessageTree',
-  async (conversationId, { dispatch, extra, rejectWithValue, getState }) => {
+  async (payload, { dispatch, extra, rejectWithValue, getState }) => {
     const { auth } = extra
+
+    // Handle both old (just conversationId) and new (object with storageMode) signatures
+    const conversationId = typeof payload === 'object' ? payload.conversationId : payload
+    const explicitStorageMode = typeof payload === 'object' ? payload.storageMode : undefined
+
     // Gating: avoid duplicate in-flight fetches and throttle rapid refetches
     const state = getState() as RootState
     const { heimdall } = state.chat
@@ -2173,9 +2178,9 @@ export const fetchMessageTree = createAsyncThunk<any, ConversationId, { state: R
     try {
       let response: { messages: Message[]; tree: any }
 
-      // Check storage mode to determine routing
+      // Use explicit storageMode if provided, otherwise check state
       const conversation = state.conversations.items.find(c => c.id === conversationId)
-      const storageMode = conversation?.storage_mode || 'cloud'
+      const storageMode = explicitStorageMode || conversation?.storage_mode || 'cloud'
 
       // console.log(`[fetchMessageTree] ConversationId: ${conversationId}`)
       // console.log(`[fetchMessageTree] Found in state: ${!!conversation}`)
@@ -2719,12 +2724,14 @@ export const insertBulkMessages = createAsyncThunk<
       note?: string
       content_blocks?: any
     }>
+    storageMode?: 'local' | 'cloud' // Optional: explicitly set storage mode (useful for newly created conversations)
   },
   { extra: ThunkExtraArgument }
->('chat/insertBulkMessages', async ({ conversationId, messages }, { extra, rejectWithValue }) => {
+>('chat/insertBulkMessages', async ({ conversationId, messages, storageMode }, { extra, rejectWithValue }) => {
   const { auth } = extra
   try {
-    const effectiveStorageMode = getStorageModeFromCache(extra.queryClient, conversationId)
+    // Use provided storageMode if available, otherwise try cache lookup
+    const effectiveStorageMode = storageMode || getStorageModeFromCache(extra.queryClient, conversationId)
     if (shouldUseLocalApi(effectiveStorageMode, environment)) {
       const response = await localApi.post<{ messages: Message[] }>(
         `/local/conversations/${conversationId}/messages/bulk`,

@@ -81,6 +81,7 @@ import {
   useModels,
   useSelectedModel,
   useSelectModel,
+  useConversationStorageMode,
 } from '../hooks/useQueries'
 import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
@@ -109,6 +110,11 @@ function Chat() {
   const { id: conversationIdParam, projectId: projectIdParam } = useParams<{ id?: string; projectId?: string }>()
   const conversationIdFromUrl = conversationIdParam ? parseId(conversationIdParam) : null
   const projectIdFromUrl = projectIdParam === 'null' ? null : projectIdParam || null
+
+  // Get storageMode from navigation state (passed from Heimdall when creating new chat)
+  // This is CRITICAL for immediate routing to local server before cache is populated
+  const location = useLocation()
+  const storageModeFromNav = location.state?.storageMode as 'local' | 'cloud' | undefined
 
   // Redux selectors
   const providers = useAppSelector(selectProviderState)
@@ -392,23 +398,32 @@ function Chat() {
     projectIdFromUrl || selectedProject?.id || currentConversation?.project_id || null
   )
 
+  // Fetch storage mode using the robust hook
+  const { data: storageModeFromHook } = useConversationStorageMode(conversationIdFromUrl)
+
   // Compute storage_mode from projectConversations (already loaded from ConversationPage)
   // This avoids unreliable cache lookups inside queryFn
   const conversationStorageMode = useMemo(() => {
+    // Priority 1: Navigation state (immediate availability for new chats)
+    if (storageModeFromNav) return storageModeFromNav
+
+    // Priority 2: Hook result (robust check checking all caches + local fetch)
+    if (storageModeFromHook) return storageModeFromHook
+
     if (!conversationIdFromUrl) {
       // console.log('[Chat] conversationStorageMode: No conversationIdFromUrl')
       return undefined
     }
+
+    // Priority 3: Check project conversations cache
     const conv = projectConversations.find(c => String(c.id) === String(conversationIdFromUrl))
-    const mode = conv?.storage_mode
-    // console.log('[Chat] conversationStorageMode computed:', {
-    //   conversationIdFromUrl,
-    //   projectConversationsCount: projectConversations.length,
-    //   foundConversation: !!conv,
-    //   storage_mode: mode,
-    // })
-    return mode
-  }, [conversationIdFromUrl, projectConversations])
+    if (conv?.storage_mode) return conv.storage_mode
+
+    // Priority 4: Check all conversations cache (fallback)
+    const allConvs = queryClient.getQueryData<Conversation[]>(['conversations'])
+    const match = allConvs?.find(c => String(c.id) === String(conversationIdFromUrl))
+    return match?.storage_mode
+  }, [conversationIdFromUrl, projectConversations, storageModeFromNav, storageModeFromHook, queryClient])
 
   // React Query for message fetching (automatic deduplication and caching)
   // Use URL-derived ID to ensure correct fetching even on page refresh
@@ -509,7 +524,7 @@ function Chat() {
       if (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl) {
         // Use type assertion or cast if the action is not properly typed in the dispatch
         // but since it's a thunk, dispatch handles it fine.
-        ;(dispatch as any)(
+        ; (dispatch as any)(
           syncConversationToLocal({
             conversationId: String(conversationIdFromUrl),
             messages: reactQueryMessages,
@@ -631,7 +646,7 @@ function Chat() {
       setLeftWidthPct(pct)
       try {
         window.localStorage.setItem('chat:leftWidthPct', pct.toFixed(2))
-      } catch {}
+      } catch { }
     }
 
     const onMouseMove = (e: MouseEvent) => handleMove(e.clientX)
@@ -964,7 +979,7 @@ function Chat() {
   }, [displayMessages])
 
   // If URL contains a #messageId fragment, capture it once
-  const location = useLocation()
+  // const location = useLocation() // Moved to top
   const hashMessageId = React.useMemo(() => {
     if (location.hash && location.hash.startsWith('#')) {
       const idNum = parseId(location.hash.substring(1))
@@ -1828,10 +1843,10 @@ function Chat() {
                   researchNotesCache.map(item =>
                     item.id === currentConversationId
                       ? {
-                          ...item,
-                          research_note: updatedNote,
-                          updated_at: new Date().toISOString(),
-                        }
+                        ...item,
+                        research_note: updatedNote,
+                        updated_at: new Date().toISOString(),
+                      }
                       : item
                   )
                 )
@@ -2046,7 +2061,7 @@ function Chat() {
                     setHeimdallVisible(newValue)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', String(newValue))
-                    } catch {}
+                    } catch { }
                   }}
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
@@ -2308,11 +2323,10 @@ function Chat() {
 
                       {/* Hover tooltip that can expand into anchored modal */}
                       <div
-                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${
-                          isExpanded
-                            ? 'hidden'
-                            : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
-                        }`}
+                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${isExpanded
+                          ? 'hidden'
+                          : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
+                          }`}
                       >
                         <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-2 truncate'>
                           {file.name || file.relativePath.split('/').pop() || file.path.split('/').pop()}
@@ -2629,7 +2643,7 @@ function Chat() {
                   setHeimdallVisible(false)
                   try {
                     window.localStorage.setItem('chat:heimdallVisible', 'false')
-                  } catch {}
+                  } catch { }
                 }}
               />
             )}
@@ -2671,7 +2685,7 @@ function Chat() {
                     setHeimdallVisible(false)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', 'false')
-                    } catch {}
+                    } catch { }
                   }}
                   className='fixed bottom-6 right-6 z-110 w-12 h-12 rounded-full bg-neutral-700 dark:bg-neutral-600 hover:bg-neutral-800 dark:hover:bg-neutral-500 text-white shadow-lg flex items-center justify-center transition-colors'
                   aria-label='Close tree view'

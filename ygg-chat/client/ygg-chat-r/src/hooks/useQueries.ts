@@ -262,6 +262,37 @@ export function useRecentConversations(limit: number = 8) {
     queryFn: async () => {
       if (!userId) throw new Error('User not authenticated')
       const query = new URLSearchParams({ limit: String(limit) }).toString()
+
+      // In Electron mode, fetch both cloud and local conversations
+      if (environment === 'electron') {
+        const [cloudConversations, localConversations] = await Promise.all([
+          api.get<any[]>(`/users/${userId}/conversations/recent?${query}`, accessToken).catch(err => {
+            console.error('Failed to fetch cloud recent conversations:', err)
+            return []
+          }),
+          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`).catch(err => {
+            console.error('Failed to fetch local conversations:', err)
+            return []
+          }),
+        ])
+
+        // Transform cloud response to client format
+        const normalizedCloud: Conversation[] = cloudConversations.map((conv: any) => ({
+          ...conv,
+          id: String(conv.id),
+          user_id: conv.owner_id || String(conv.user_id),
+          project_id: conv.project_id ? String(conv.project_id) : null,
+        }))
+
+        // Merge, sort by updated_at, and take the most recent `limit` conversations
+        const merged = [...normalizedCloud, ...localConversations]
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          .slice(0, limit)
+
+        return merged
+      }
+
+      // Web mode: cloud only
       const response = await api.get<any[]>(`/users/${userId}/conversations/recent?${query}`, accessToken)
 
       // Transform server response to client format
@@ -315,6 +346,54 @@ export function useConversationData(conversationId: ConversationId | null) {
     staleTime: 2000, // Conversation data changes frequently during chat
   })
 }
+
+/**
+ * Hook to determine the storage mode for a conversation with high reliability.
+ * Checks multiple cache sources and falls back to fetching if necessary.
+ *
+ * Priority:
+ * 1. Check 'conversations' cache (all conversations)
+ * 2. Check 'conversations', 'project', projectId cache
+ * 3. Check 'conversations', 'recent' cache
+ * 4. Fetch from local server (if Electron) - authoritative source for local
+ * 5. Default to 'cloud'
+ */
+export function useConversationStorageMode(conversationId: ConversationId | null) {
+  const queryClient = useQueryClient()
+
+  return useQuery({
+    queryKey: ['conversations', conversationId, 'storage_mode'],
+    queryFn: async () => {
+      if (!conversationId) return 'cloud'
+
+      // 1. Check all cached conversation lists
+      const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
+      for (const [_, data] of allConversationQueries) {
+        if (Array.isArray(data)) {
+          const match = data.find(c => String(c.id) === String(conversationId))
+          if (match?.storage_mode) return match.storage_mode
+        }
+      }
+
+      // 2. If in Electron, try fetching from local server first (fastest for local)
+      if (environment === 'electron') {
+        try {
+          const localConv = await localApi.get<Conversation>(`/local/conversations/${conversationId}`)
+          if (localConv) return localConv.storage_mode || 'local'
+        } catch {
+          // Not found locally, proceed to cloud check
+        }
+      }
+
+      // 3. Default to cloud (or could fetch from cloud to be sure, but 'cloud' is safe default)
+      return 'cloud' as const
+    },
+    enabled: !!conversationId,
+    staleTime: Infinity, // Storage mode never changes for a conversation ID
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+  })
+}
+
 
 /**
  * Fetch messages and tree data for a conversation in a single request

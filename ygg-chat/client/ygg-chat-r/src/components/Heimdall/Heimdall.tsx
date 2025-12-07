@@ -1214,7 +1214,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       dispatch(chatSliceActions.nodesSelected([]))
 
       // Refresh the message tree (now fetches both tree and messages in one call)
-      await (dispatch as any)(fetchMessageTree(conversationId))
+      await (dispatch as any)(fetchMessageTree({ conversationId, storageMode }))
     } catch (error) {
       console.error('Failed to delete nodes:', error)
     } finally {
@@ -1407,7 +1407,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const systemPrompt = currentConversation?.system_prompt || null
       const conversationContext = currentConversation?.conversation_context || null
       const newConversation = await (dispatch as any)(
-        createConversation({ title, projectId, systemPrompt, conversationContext })
+        createConversation({ title, projectId, systemPrompt, conversationContext, storageMode })
       ).unwrap()
 
       if (!newConversation?.id) {
@@ -1420,11 +1420,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         insertBulkMessages({
           conversationId: newConversation.id,
           messages: messagesToCopy,
+          storageMode, // Pass storage mode explicitly since new conversation isn't in cache yet
         })
       ).unwrap()
 
       // Fetch messages and tree to populate the new conversation before navigation
-      await (dispatch as any)(fetchMessageTree(newConversation.id)).unwrap()
+      await (dispatch as any)(fetchMessageTree({ conversationId: newConversation.id, storageMode })).unwrap()
 
       // Invalidate React Query cache to update conversations list in sidebar/dropdowns
       queryClient.invalidateQueries({ queryKey: ['conversations'] })
@@ -1432,8 +1433,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         queryClient.invalidateQueries({ queryKey: ['conversations', 'project', projectId] })
       }
 
-      // Navigate to the new chat
-      navigate(`/chat/${newConversation.project_id || 'unknown'}/${newConversation.id}`)
+      // Navigate to the new chat with storageMode in state for immediate API routing
+      navigate(`/chat/${newConversation.project_id || 'unknown'}/${newConversation.id}`, {
+        state: { storageMode },
+      })
     } catch (error) {
       console.error('Failed to create new chat from selection:', error)
     } finally {
@@ -1986,10 +1989,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               cy={y + circleRadius}
               r={circleRadius}
               className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400'} ${node.sender === 'user'
-                  ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400'
-                  : node.sender === 'ex_agent'
-                    ? 'fill-orange-50 stroke-orange-600'
-                    : 'fill-indigo-50 stroke-yPurple-500'
+                ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400'
+                : node.sender === 'ex_agent'
+                  ? 'fill-orange-50 stroke-orange-600'
+                  : 'fill-indigo-50 stroke-yPurple-500'
                 } `}
               style={{
                 transform: selectedNode?.id === node.id ? 'scale(1.1)' : 'scale(1)',
@@ -2175,8 +2178,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         <button
           onClick={toggleFilterEmptyMessages}
           className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${filterEmptyMessages
-              ? 'bg-blue-100 text-blue-700 dark:bg-neutral-500/60 dark:text-blue-100'
-              : 'bg-neutral-50 text-stone-800 dark:text-stone-200 dark:bg-yBlack-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+            ? 'bg-blue-100 text-blue-700 dark:bg-neutral-500/60 dark:text-blue-100'
+            : 'bg-neutral-50 text-stone-800 dark:text-stone-200 dark:bg-yBlack-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
             }`}
           title={filterEmptyMessages ? 'Show Empty Messages' : 'Hide Empty Messages'}
         >

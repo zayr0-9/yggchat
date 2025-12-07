@@ -1665,6 +1665,95 @@ function setupServer() {
     }
   })
 
+  // POST /api/local/conversations/:id/messages/bulk
+  // Bulk insert messages (for copying message chains to new conversation)
+  app.post('/api/local/conversations/:id/messages/bulk', (req, res) => {
+    try {
+      const { id: conversationId } = req.params
+      const { messages } = req.body as {
+        messages: Array<{
+          role: 'user' | 'assistant'
+          content: string
+          thinking_block?: string
+          model_name?: string
+          tool_calls?: string
+          note?: string
+          content_blocks?: any
+        }>
+      }
+
+      if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        res.status(400).json({ error: 'Messages array required' })
+        return
+      }
+
+      // Verify conversation exists
+      const conversation = statements.getConversationById.get(conversationId) as { user_id: string } | undefined
+      if (!conversation) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+
+      const createdMessages: any[] = []
+      let lastMessageId: string | null = null
+      const now = new Date().toISOString()
+
+      // Insert messages sequentially, maintaining parent-child relationships (linear chain)
+      for (const msg of messages) {
+        const messageId = uuidv4()
+
+        statements.upsertMessage.run(
+          messageId,
+          conversationId,
+          lastMessageId, // Parent is the previous message in the chain
+          '[]', // children_ids starts empty (trigger will update parent's children_ids)
+          msg.role,
+          msg.content,
+          msg.content, // plain_text_content
+          msg.thinking_block || null,
+          msg.tool_calls ? (typeof msg.tool_calls === 'string' ? msg.tool_calls : JSON.stringify(msg.tool_calls)) : null,
+          null, // tool_call_id
+          msg.model_name || 'unknown',
+          msg.note || null,
+          null, // ex_agent_session_id
+          null, // ex_agent_type
+          msg.content_blocks ? (typeof msg.content_blocks === 'string' ? msg.content_blocks : JSON.stringify(msg.content_blocks)) : null,
+          now
+        )
+
+        const createdMessage = {
+          id: messageId,
+          conversation_id: conversationId,
+          parent_id: lastMessageId,
+          children_ids: [],
+          role: msg.role,
+          content: msg.content,
+          plain_text_content: msg.content,
+          thinking_block: msg.thinking_block || null,
+          tool_calls: msg.tool_calls || null,
+          model_name: msg.model_name || 'unknown',
+          note: msg.note || null,
+          content_blocks: msg.content_blocks || null,
+          created_at: now,
+        }
+
+        createdMessages.push(createdMessage)
+        lastMessageId = messageId
+      }
+
+      // Update conversation updated_at timestamp
+      if (db) {
+        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
+      }
+
+      console.log('[LocalServer] ✅ Bulk inserted', createdMessages.length, 'messages into conversation:', conversationId)
+      res.json({ messages: createdMessages })
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error bulk inserting messages:', error)
+      res.status(500).json({ error: 'Failed to bulk insert messages' })
+    }
+  })
+
   // PUT /api/local/messages/:id
   app.put('/api/local/messages/:id', (req, res) => {
     try {
