@@ -19,6 +19,7 @@ import {
   Settings,
   TermsOfService,
 } from './containers'
+import { Analytics } from '@vercel/analytics/react'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
@@ -30,81 +31,84 @@ const Router = isElectron ? HashRouter : BrowserRouter
 
 function App() {
   return (
-    <Router>
-      {/* Custom title bar for Windows Electron */}
-      <TitleBar />
-      {/* Persistent video background across all routes */}
-      <VideoBackground />
-      {/* SVG filters for liquid glass effect */}
-      <LiquidGlassSVG />
-      {/* Establish IDE Context WebSocket globally so it's not tied to any specific page */}
-      <IdeContextBootstrap />
-      {/* Global update modal for Electron auto-updates */}
-      <UpdateModal />
-      <div className='app-content'>
-        <Routes>
-          {/* Public route */}
-          <Route path='/landingpage' element={<LandingPage />} />
-          {/* Public route */}
-          <Route path='/faq' element={<FAQPage />} />
-          {/* Public route */}
-          <Route path='/login' element={<Login />} />
-          {/* Public route */}
-          <Route path='/paymentplan' element={<PaymentPlans />} />
-          {/* Public route */}
-          <Route path='/terms' element={<TermsOfService />} />
-          {/* Public route */}
-          <Route path='/refund-policy' element={<RefundPolicy />} />
-          {/* Public route */}
-          <Route path='/privacy' element={<PrivacyPolicy />} />
-          {/* Protected routes */}
-          <Route
-            path='/conversationPage'
-            element={
-              <ProtectedRoute>
-                <ConversationPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path='/' element={isElectron ? <Navigate to='/login' replace /> : <LandingPage />} />
-          <Route
-            path='/homepage'
-            element={
-              <ProtectedRoute>
-                <Homepage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path='/chat/:projectId/:id'
-            element={
-              <ProtectedRoute>
-                <Chat />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path='/settings'
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path='/payment'
-            element={
-              <ProtectedRoute>
-                <PaymentPage />
-              </ProtectedRoute>
-            }
-          />
+    <>
+      <Router>
+        {/* Custom title bar for Windows Electron */}
+        <TitleBar />
+        {/* Persistent video background across all routes */}
+        <VideoBackground />
+        {/* SVG filters for liquid glass effect */}
+        <LiquidGlassSVG />
+        {/* Establish IDE Context WebSocket globally so it's not tied to any specific page */}
+        <IdeContextBootstrap />
+        {/* Global update modal for Electron auto-updates */}
+        <UpdateModal />
+        <div className='app-content'>
+          <Routes>
+            {/* Public route */}
+            <Route path='/landingpage' element={<LandingPage />} />
+            {/* Public route */}
+            <Route path='/faq' element={<FAQPage />} />
+            {/* Public route */}
+            <Route path='/login' element={<Login />} />
+            {/* Public route */}
+            <Route path='/paymentplan' element={<PaymentPlans />} />
+            {/* Public route */}
+            <Route path='/terms' element={<TermsOfService />} />
+            {/* Public route */}
+            <Route path='/refund-policy' element={<RefundPolicy />} />
+            {/* Public route */}
+            <Route path='/privacy' element={<PrivacyPolicy />} />
+            {/* Protected routes */}
+            <Route
+              path='/conversationPage'
+              element={
+                <ProtectedRoute>
+                  <ConversationPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path='/' element={isElectron ? <Navigate to='/login' replace /> : <LandingPage />} />
+            <Route
+              path='/homepage'
+              element={
+                <ProtectedRoute>
+                  <Homepage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path='/chat/:projectId/:id'
+              element={
+                <ProtectedRoute>
+                  <Chat />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path='/settings'
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path='/payment'
+              element={
+                <ProtectedRoute>
+                  <PaymentPage />
+                </ProtectedRoute>
+              }
+            />
 
-          {/* Fallback */}
-          <Route path='*' element={<Navigate to='/' replace />} />
-        </Routes>
-      </div>
-    </Router>
+            {/* Fallback */}
+            <Route path='*' element={<Navigate to='/' replace />} />
+          </Routes>
+        </div>
+      </Router>
+      <Analytics />
+    </>
   )
 }
 
