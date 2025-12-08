@@ -1,17 +1,13 @@
 {
   "electronVersion": "34.0.0",
   "appId": "com.yggdrasil.chat",
-  "icon": "public/img/logo-l-thick.png",
+  "icon": "public/img/taskbar-logo.png",
   "productName": "Yggdrasil",
   "directories": {
     "output": "release"
   },
   "artifactName": "Yggdrasil-${version}-${os}-${arch}.${ext}",
-  "files": [
-    "dist-electron/**/*",
-    "electron/main.mjs",
-    "electron/preload.mjs"
-  ],
+  "files": ["dist-electron/**/*", "electron/main.mjs", "electron/preload.mjs"],
   "asarUnpack": [
     "**/node_modules/better-sqlite3/**/*",
     "**/node_modules/bindings/**/*",
@@ -38,9 +34,7 @@
     {
       "from": "../../server/node_modules",
       "to": "server/node_modules",
-      "filter": [
-        "**/*"
-      ]
+      "filter": ["**/*"]
     },
     {
       "from": "../../server/package.json",
@@ -49,27 +43,18 @@
     {
       "from": "../../server/src/database",
       "to": "server/src/database",
-      "filter": [
-        "**/*.sql",
-        "**/*.txt"
-      ]
+      "filter": ["**/*.sql", "**/*.txt"]
     }
   ],
   "win": {
-    "target": [
-      "nsis"
-    ]
+    "target": ["nsis"]
   },
   "mac": {
-    "target": [
-      "dmg"
-    ],
+    "target": ["dmg"],
     "category": "public.app-category.productivity"
   },
   "linux": {
-    "target": [
-      "AppImage"
-    ],
+    "target": ["AppImage"],
     "category": "Office"
   },
   "npmRebuild": true,
