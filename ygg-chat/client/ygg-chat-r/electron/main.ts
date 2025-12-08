@@ -211,7 +211,7 @@ function startServer(): Promise<void> {
 
 // Helper to get icon path
 function getIconPath(_isDark?: boolean) {
-  const logoFile = 'taskbar-logo.svg'
+  const logoFile = 'taskbar-logo.png'
   return app.isPackaged
     ? path.join(__dirname, '../dist-electron/img', logoFile)
     : path.join(__dirname, '../public/img', logoFile)
@@ -257,16 +257,16 @@ function createWindow() {
     // Platform-specific title bar settings
     ...(process.platform === 'win32'
       ? {
-        frame: false,
-        titleBarOverlay: false,
-      }
+          frame: false,
+          titleBarOverlay: false,
+        }
       : process.platform === 'darwin'
         ? {
-          titleBarStyle: 'hidden', // Standard for macOS
-        }
+            titleBarStyle: 'hidden', // Standard for macOS
+          }
         : {
-          titleBarStyle: 'default', // Native title bar for Linux (safest)
-        }),
+            titleBarStyle: 'default', // Native title bar for Linux (safest)
+          }),
     show: false, // Don't show until ready
   })
 
