@@ -12,19 +12,13 @@ export interface BashOptions {
   maxOutputChars?: number
 }
 
+
 export interface BashResult {
   success: boolean
   command: string
   cwd: string
   stdout: string
   stderr: string
-  exitCode: number | null
-  signal: NodeJS.Signals | null
-  durationMs: number
-  timedOut: boolean
-  stdoutTruncated: boolean
-  stderrTruncated: boolean
-  maxOutputChars: number
   error?: string
 }
 
@@ -77,7 +71,7 @@ function clampMaxOutput(max?: number): number {
 }
 
 export async function runBashCommand(command: string, options: BashOptions = {}): Promise<BashResult> {
-  const startTime = Date.now()
+  // const startTime = Date.now()
   const maxOutputChars = clampMaxOutput(options.maxOutputChars)
   const { display: displayCwd, forSpawn: spawnCwd, type: cwdType } = resolveCwd(options.cwd)
 
@@ -98,16 +92,12 @@ export async function runBashCommand(command: string, options: BashOptions = {})
 
   let stdout = ''
   let stderr = ''
-  let stdoutTruncated = false
-  let stderrTruncated = false
   let remaining = maxOutputChars
-  let timedOut = false
   let timeoutHandle: NodeJS.Timeout | null = null
+  let timedOut = false
 
   const append = (target: 'stdout' | 'stderr', chunk: Buffer) => {
     if (remaining <= 0) {
-      if (target === 'stdout') stdoutTruncated = true
-      else stderrTruncated = true
       return
     }
 
@@ -115,10 +105,8 @@ export async function runBashCommand(command: string, options: BashOptions = {})
     const toTake = Math.min(remaining, text.length)
     if (target === 'stdout') {
       stdout += text.slice(0, toTake)
-      if (toTake < text.length) stdoutTruncated = true
     } else {
       stderr += text.slice(0, toTake)
-      if (toTake < text.length) stderrTruncated = true
     }
 
     remaining -= toTake
@@ -157,39 +145,23 @@ export async function runBashCommand(command: string, options: BashOptions = {})
     }
 
     child.on('error', error => {
-      const durationMs = Date.now() - startTime
       finalize({
         success: false,
         command: `${cmd} ${args.join(' ')}`,
         cwd: wslCwd ?? displayCwd,
         stdout,
         stderr,
-        exitCode: null,
-        signal: null,
-        durationMs,
-        timedOut,
-        stdoutTruncated,
-        stderrTruncated,
-        maxOutputChars,
         error: error instanceof Error ? error.message : String(error),
       })
     })
 
-    child.on('close', (code, signal) => {
-      const durationMs = Date.now() - startTime
+    child.on('close', (code) => {
       finalize({
         success: !timedOut && code === 0,
         command: `${cmd} ${args.join(' ')}`,
         cwd: wslCwd ?? displayCwd,
         stdout,
         stderr,
-        exitCode: code,
-        signal,
-        durationMs,
-        timedOut,
-        stdoutTruncated,
-        stderrTruncated,
-        maxOutputChars,
       })
     })
   })

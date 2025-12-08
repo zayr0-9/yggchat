@@ -1093,7 +1093,7 @@ function setupServer() {
           if (!paths) throw new Error('paths are required')
 
           const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine, cwd: rootPath })
-          result = { success: true, ...filesRes }
+          result = { success: true, files: filesRes }
           break
         }
         case 'create_file': {
@@ -1688,7 +1688,9 @@ function setupServer() {
       }
 
       // Verify conversation exists
-      const conversation = statements.getConversationById.get(conversationId) as { user_id: string; title?: string } | undefined
+      const conversation = statements.getConversationById.get(conversationId) as
+        | { user_id: string; title?: string }
+        | undefined
       if (!conversation) {
         res.status(404).json({ error: 'Conversation not found' })
         return
@@ -1711,13 +1713,21 @@ function setupServer() {
           msg.content,
           msg.content, // plain_text_content
           msg.thinking_block || null,
-          msg.tool_calls ? (typeof msg.tool_calls === 'string' ? msg.tool_calls : JSON.stringify(msg.tool_calls)) : null,
+          msg.tool_calls
+            ? typeof msg.tool_calls === 'string'
+              ? msg.tool_calls
+              : JSON.stringify(msg.tool_calls)
+            : null,
           null, // tool_call_id
           msg.model_name || 'unknown',
           msg.note || null,
           null, // ex_agent_session_id
           null, // ex_agent_type
-          msg.content_blocks ? (typeof msg.content_blocks === 'string' ? msg.content_blocks : JSON.stringify(msg.content_blocks)) : null,
+          msg.content_blocks
+            ? typeof msg.content_blocks === 'string'
+              ? msg.content_blocks
+              : JSON.stringify(msg.content_blocks)
+            : null,
           now
         )
 
@@ -1753,7 +1763,12 @@ function setupServer() {
         db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
       }
 
-      console.log('[LocalServer] ✅ Bulk inserted', createdMessages.length, 'messages into conversation:', conversationId)
+      console.log(
+        '[LocalServer] ✅ Bulk inserted',
+        createdMessages.length,
+        'messages into conversation:',
+        conversationId
+      )
       res.json({ messages: createdMessages })
     } catch (error) {
       console.error('[LocalServer] ❌ Error bulk inserting messages:', error)

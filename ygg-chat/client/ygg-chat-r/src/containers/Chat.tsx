@@ -2241,7 +2241,7 @@ function Chat() {
                   className=''
                 />
               )}
-            {streamState.active && (
+            {/* {streamState.active && (
               <div className='pb-4 px-3 flex justify-end'>
                 <video
                   src={getAssetPath('video/loadingoutput.webm')}
@@ -2249,8 +2249,14 @@ function Chat() {
                   loop
                   muted
                   playsInline
-                  className='h-6 xl:h-8 w-auto'
+                  className='h-6 xl:h-8 w-auto rounded-full overflow-hidden'
+                  style={{ imageRendering: 'auto' }}
                 />
+              </div>
+            )} */}
+            {streamState.active && (
+              <div className=' pb-4 px-3 text-stone-800 dark:text-stone-200 flex justify-end'>
+                <i className='bx bx-loader-alt text-2xl animate-spin' style={{ animationDuration: '1s' }}></i>
               </div>
             )}
             {/* Bottom sentinel for robust scrolling */}

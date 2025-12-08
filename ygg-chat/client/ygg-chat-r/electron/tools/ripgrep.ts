@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
-import { getWSLCommandArgs, isWSLPath } from '../utils/wslBridge.js'
+import { getWSLCommandArgs, isWSLPath, isWindows, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_OUTPUT_CHARS = (() => {
   const envValue = Number(process.env.RIPGREP_MAX_OUTPUT_CHARS ?? process.env.RIPGREP_OUTPUT_LIMIT)
@@ -65,7 +65,9 @@ export async function ripgrepSearch(
       ? Math.floor(userMaxOutputChars)
       : DEFAULT_MAX_OUTPUT_CHARS
 
-  const isWSL = isWSLPath(searchPath)
+  // Determine if we should use WSL
+  // If we are on Windows, we ALWAYS want to use WSL because that's where the tools are
+  const useWSL = isWindows() || isWSLPath(searchPath)
 
   // Build rg command arguments
   const args: string[] = []
@@ -74,8 +76,16 @@ export async function ripgrepSearch(
   args.push(pattern)
 
   // Path to search
-  // If WSL, keep as is. If Windows, resolve it.
-  const resolvedPath = isWSL ? searchPath : path.resolve(searchPath)
+  // If using WSL, convert to WSL path. Otherwise resolve to absolute path.
+  let resolvedPath = searchPath
+  if (useWSL) {
+    // If it's already a WSL path (starts with /), keep it. 
+    // If it's a Windows path, convert it.
+    resolvedPath = toWslPath(searchPath)
+  } else {
+    resolvedPath = path.resolve(searchPath)
+  }
+
   args.push(resolvedPath)
 
   // Options
@@ -125,7 +135,7 @@ export async function ripgrepSearch(
   let cmd = 'rg'
   let cmdArgs = args
 
-  if (isWSL) {
+  if (useWSL) {
     const wsl = await getWSLCommandArgs('rg', args)
     cmd = wsl[0]
     cmdArgs = wsl[1]
