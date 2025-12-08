@@ -231,7 +231,11 @@ export const DownloadAppModal: React.FC<DownloadAppModalProps> = ({ isOpen, onCl
                     </div>
 
                     {/* Footer */}
-                    <div className='mt-6 pt-4 border-t border-neutral-200 dark:border-neutral-700'>
+                    <div className='mt-6 pt-4 border-t border-neutral-200 dark:border-neutral-700 flex flex-col gap-2'>
+                        <p className='text-xs text-center text-neutral-400'>
+                            <i className='bx bx-error-circle mr-1'></i>
+                            You might see a SmartScreen (Windows) or 'Unidentified Developer' (macOS) warning that you can safely ignore
+                        </p>
                         <p className='text-xs text-center text-neutral-500 dark:text-neutral-500'>
                             <i className='bx bx-info-circle mr-1'></i>
                             Download links will open in your default browser

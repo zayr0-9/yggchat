@@ -245,7 +245,7 @@ const Homepage: React.FC = () => {
             </div>
           </div>
         </div>
-        <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
+        <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 flex flex-col min-h-0'>
           <div className='mb-4 flex items-center justify-between'>
             <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[38px] 4xl:text-[38px] py-2 font-bold dark:text-neutral-100'>
               Projects
@@ -268,20 +268,26 @@ const Homepage: React.FC = () => {
                 ></i>
               </Button>
               {import.meta.env.VITE_ENVIRONMENT === 'web' && (
-                <Button
-                  variant='acrylic'
-                  size='medium'
-                  onClick={() => setShowDownloadModal(true)}
-                  rounded='full'
-                  title='Download App'
-                  aria-label='Download App'
-                  className=''
-                >
-                  <i
-                    className='bx bx-download text-lg sm:text-lg 2xl:text-2xl mx-0.5 my-1.5 transition-all hover:scale-96 duration-200'
-                    aria-hidden='true'
-                  ></i>
-                </Button>
+                <div className='relative flex items-center justify-center'>
+                  <div className='absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-blue-500 dark:bg-blue-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg pointer-events-none z-50'>
+                    Download our desktop app!
+                    <div className='absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-blue-500 dark:border-t-blue-700'></div>
+                  </div>
+                  <Button
+                    variant='acrylic'
+                    size='medium'
+                    onClick={() => setShowDownloadModal(true)}
+                    rounded='full'
+                    title='Download App'
+                    aria-label='Download App'
+                    className=''
+                  >
+                    <i
+                      className='bx bx-download text-lg sm:text-lg 2xl:text-2xl mx-0.5 my-1.5 transition-all hover:scale-96 duration-200'
+                      aria-hidden='true'
+                    ></i>
+                  </Button>
+                </div>
               )}
               <Button
                 variant='acrylic'
