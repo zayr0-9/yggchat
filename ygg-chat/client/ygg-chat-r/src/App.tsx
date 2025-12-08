@@ -107,7 +107,7 @@ function App() {
           </Routes>
         </div>
       </Router>
-      <Analytics />
+      {!isElectron && <Analytics />}
     </>
   )
 }
