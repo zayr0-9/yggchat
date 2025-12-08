@@ -1,3 +1,4 @@
+import { TIER_INFOS } from '../../constants/pricingData'
 import type { CreditHistoryEntry, PaymentProvider, SubscriptionStatus, TierInfo } from './types'
 
 /**
@@ -43,6 +44,6 @@ export class NoOpPaymentProvider implements PaymentProvider {
   }
 
   async getPricingInfo(): Promise<TierInfo[]> {
-    return []
+    return TIER_INFOS
   }
 }

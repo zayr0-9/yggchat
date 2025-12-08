@@ -6,6 +6,8 @@ import { getSessionFromStorage } from '../lib/jwtUtils'
 import { getPaymentProvider, type SubscriptionStatus, type TierInfo } from '../lib/payments'
 import { apiCall } from '../utils/api'
 
+import { TIER_INFOS } from '../constants/pricingData'
+
 interface PricingInfo {
   tiers: {
     Ultra: TierInfo
@@ -14,36 +16,8 @@ interface PricingInfo {
   }
 }
 
-// Default tiers for display when API is not available (e.g. in Electron)
-const DEFAULT_TIERS: TierInfo[] = [
-  {
-    name: 'Basic',
-    price: 9.99,
-    priceId: 'price_low',
-    credits: 400,
-    features: ['Limited conversations', 'Database', '300 credits/mo'],
-  },
-  {
-    name: 'Pro',
-    price: 19.99,
-    priceId: 'price_mid',
-    credits: 800,
-    features: ['Access to advanced models', 'Fast response speed', '800 credits/mo', 'Priority support'],
-  },
-  {
-    name: 'Ultra',
-    price: 49.99,
-    priceId: 'price_high',
-    credits: 2200,
-    features: [
-      'Access to all models',
-      'Fastest response speed',
-      '2,200 credits/mo',
-      'Priority support',
-      'Early access to features',
-    ],
-  },
-]
+// Default tiers derived from shared data
+const DEFAULT_TIERS: TierInfo[] = TIER_INFOS
 
 const PaymentPage: React.FC = () => {
   const navigate = useNavigate()

@@ -1,50 +1,11 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 
-interface Plan {
-  id: string
-  name: string
-  price: number
-  billingCycle: string
-  description: string
-  featured?: boolean
-  cta: string
-}
-
-interface Feature {
-  name: string
-  plans: Record<string, string> // Changed from boolean to string
-}
+import { PLANS, PRICING_FEATURES } from '../constants/pricingData'
 
 const PaymentPlans: React.FC = () => {
   // Data for 3 pricing plans
-  const plans: Plan[] = [
-    {
-      id: 'basic',
-      name: 'Basic',
-      price: 9.99,
-      billingCycle: '/month',
-      description: 'Perfect for individuals getting started',
-      cta: 'Subscribe',
-    },
-    {
-      id: 'pro',
-      name: 'Pro',
-      price: 19.99,
-      billingCycle: '/month',
-      description: 'Best for growing businesses',
-      featured: true,
-      cta: 'Subscribe',
-    },
-    {
-      id: 'ultra',
-      name: 'Ultra',
-      price: 49.99,
-      billingCycle: '/month',
-      description: 'For large teams and organizations',
-      cta: 'Subscribe',
-    },
-  ]
+  const plans = PLANS
 
   const navigate = useNavigate()
 
@@ -58,16 +19,7 @@ const PaymentPlans: React.FC = () => {
   }
 
   // Data for 6 features across plans with descriptive text
-  const features: Feature[] = [
-    { name: 'Multiple Models', plans: { basic: '400+', pro: '400+', ultra: '400+' } },
-    { name: 'Credits', plans: { basic: '400', pro: '800', ultra: '2200' } },
-    { name: 'Cloud Sync', plans: { basic: 'Limited Cloud', pro: 'Unlimited', ultra: 'Unlimited' } },
-    { name: 'Database', plans: { basic: 'Cloud', pro: 'Cloud + Local', ultra: 'Cloud + Local' } },
-    { name: 'Agents', plans: { basic: 'Not included', pro: 'Yes', ultra: 'Yes' } },
-    { name: 'Claude Code support', plans: { basic: 'Not included', pro: 'Yes', ultra: 'Yes' } },
-    { name: 'Storage', plans: { basic: '1GB', pro: '10GB', ultra: '50GB' } },
-    { name: 'Local version', plans: { basic: 'Not included', pro: 'Yes', ultra: 'Yes' } },
-  ]
+  const features = PRICING_FEATURES
 
   return (
     <div className='h-full overflow-y-auto min-h-screen dark:bg-blue-900 bg-blue-200 text-neutral-900 dark:text-neutral-100 py-12 px-6'>
@@ -86,8 +38,8 @@ const PaymentPlans: React.FC = () => {
             <div
               key={plan.id}
               className={`relative text-[16px] rounded-2xl p-4 transition-all duration-300 transform flex flex-col ${plan.featured
-                  ? 'bg-transparent mica text-neutral-900 dark:text-neutral-100'
-                  : 'bg-transparent mica text-neutral-900 dark:text-neutral-100'
+                ? 'bg-transparent mica text-neutral-900 dark:text-neutral-100'
+                : 'bg-transparent mica text-neutral-900 dark:text-neutral-100'
                 }`}
             >
               {/* {plan.featured && (
@@ -121,8 +73,8 @@ const PaymentPlans: React.FC = () => {
 
               <button
                 className={`w-full py-3 mt-8 px-6 rounded-lg font-semibold transition-all duration-200 ${plan.featured
-                    ? 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100 '
-                    : 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100'
+                  ? 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100 '
+                  : 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100'
                   }`}
                 onClick={() => handleNavigation('/login')}
               >
@@ -162,8 +114,8 @@ const PaymentPlans: React.FC = () => {
                       <td key={plan.id} className='py-4 px-6 text-center text-[17px]'>
                         <span
                           className={`font-medium ${feature.plans[plan.id] === 'Not included'
-                              ? 'text-neutral-900 dark:text-neutral-100/90'
-                              : 'dark:text-white/90 text-neutral-900'
+                            ? 'text-neutral-900 dark:text-neutral-100/90'
+                            : 'dark:text-white/90 text-neutral-900'
                             }`}
                         >
                           {feature.plans[plan.id] === 'Not included' ? 'x' : feature.plans[plan.id]}

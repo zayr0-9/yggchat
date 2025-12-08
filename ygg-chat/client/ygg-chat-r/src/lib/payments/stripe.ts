@@ -5,6 +5,7 @@ import type {
   CreditHistoryEntry,
 } from './types'
 import { API_BASE } from '../../utils/api'
+import { TIER_INFOS } from '../../constants/pricingData'
 
 /**
  * Stripe Payment Provider
@@ -86,22 +87,7 @@ export class StripePaymentProvider implements PaymentProvider {
   }
 
   async getPricingInfo(): Promise<TierInfo[]> {
-    const response = await fetch(`${API_BASE}/stripe/pricing-info`)
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({
-        error: 'Failed to get pricing info',
-      }))
-      throw new Error(errorData.error || 'Failed to get pricing info')
-    }
-
-    const data = await response.json()
-
-    // Convert from object format to array
-    return [
-      { ...data.tiers.low, name: 'Low' },
-      { ...data.tiers.mid, name: 'Mid' },
-      { ...data.tiers.high, name: 'High' },
-    ]
+    // Return client-side enforced pricing info to ensure UI consistency
+    return TIER_INFOS
   }
 }
