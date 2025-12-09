@@ -35,7 +35,7 @@ function isFsRootPath(inputPath: string): boolean {
   return normalizeForComparison(inputPath) === normalizeForComparison(parsedRoot)
 }
 
-function detectWorkspaceRoot(): string {
+async function detectWorkspaceRoot(): Promise<string> {
   const candidates = [
     process.env.WORKSPACE_ROOT?.trim(),
     path.resolve(__dirname, '../..'),
@@ -45,7 +45,16 @@ function detectWorkspaceRoot(): string {
   for (const candidate of candidates) {
     if (!candidate) continue
     try {
-      const resolved = path.resolve(candidate)
+      let resolved = candidate
+      const pathType = detectPathType(candidate)
+
+      // On Windows with Linux path, convert to UNC for Node.js fs access
+      if (isWindows() && pathType === 'linux') {
+        resolved = await resolveToWindowsPath(candidate)
+      } else {
+        resolved = path.resolve(candidate)
+      }
+
       const stats = fs.statSync(resolved)
       if (stats.isDirectory()) {
         return resolved
@@ -58,8 +67,24 @@ function detectWorkspaceRoot(): string {
   return path.resolve(process.cwd())
 }
 
-const WORKSPACE_ROOT = detectWorkspaceRoot()
-const NORMALIZED_WORKSPACE_ROOT = normalizeForComparison(WORKSPACE_ROOT)
+// Lazy async initialization for workspace root
+let WORKSPACE_ROOT: string | null = null
+let NORMALIZED_WORKSPACE_ROOT: string | null = null
+
+async function getWorkspaceRoot(): Promise<string> {
+  if (WORKSPACE_ROOT === null) {
+    WORKSPACE_ROOT = await detectWorkspaceRoot()
+    NORMALIZED_WORKSPACE_ROOT = normalizeForComparison(WORKSPACE_ROOT)
+  }
+  return WORKSPACE_ROOT
+}
+
+async function getNormalizedWorkspaceRoot(): Promise<string> {
+  if (NORMALIZED_WORKSPACE_ROOT === null) {
+    await getWorkspaceRoot()
+  }
+  return NORMALIZED_WORKSPACE_ROOT!
+}
 
 function isSameOrSubPath(candidate: string, root: string): boolean {
   if (candidate === root) return true
@@ -68,25 +93,28 @@ function isSameOrSubPath(candidate: string, root: string): boolean {
   return nextChar === '/' || nextChar === undefined
 }
 
-function ensurePathWithinWorkspace(candidatePath: string): string {
+async function ensurePathWithinWorkspace(candidatePath: string): Promise<string> {
   const resolved = path.resolve(candidatePath)
   const normalized = normalizeForComparison(resolved)
+  const workspaceRoot = await getWorkspaceRoot()
+  const normalizedRoot = await getNormalizedWorkspaceRoot()
 
-  if (isSameOrSubPath(normalized, NORMALIZED_WORKSPACE_ROOT)) {
+  if (isSameOrSubPath(normalized, normalizedRoot)) {
     return resolved
   }
 
   throw new Error(
-    `Access to '${candidatePath}' is blocked. Directory paths must stay within '${WORKSPACE_ROOT}'.`
+    `Access to '${candidatePath}' is blocked. Directory paths must stay within '${workspaceRoot}'.`
   )
 }
 
 async function resolveRequestedDirectory(rawRootDir: string): Promise<string> {
   const trimmed = (rawRootDir ?? '').trim()
   const sanitized = trimmed.length === 0 ? '.' : trimmed
+  const workspaceRoot = await getWorkspaceRoot()
 
   if (sanitized === '.' || sanitized === './') {
-    return WORKSPACE_ROOT
+    return workspaceRoot
   }
 
   if (isFsRootPath(sanitized)) {
@@ -96,14 +124,14 @@ async function resolveRequestedDirectory(rawRootDir: string): Promise<string> {
   let candidateInput = sanitized
   const pathType = detectPathType(candidateInput)
 
-  // On Windows with a Linux path, convert to UNC path
+  // On Windows with a Linux path, convert to UNC path for Node.js fs access
   if (isWindows() && pathType === 'linux') {
     candidateInput = await resolveToWindowsPath(candidateInput)
   }
 
   const resolved = path.isAbsolute(candidateInput)
     ? candidateInput
-    : path.resolve(WORKSPACE_ROOT, candidateInput)
+    : path.resolve(workspaceRoot, candidateInput)
 
   return ensurePathWithinWorkspace(resolved)
 }

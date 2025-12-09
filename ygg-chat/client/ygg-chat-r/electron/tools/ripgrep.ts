@@ -7,7 +7,7 @@ const DEFAULT_MAX_OUTPUT_CHARS = (() => {
   if (Number.isFinite(envValue) && envValue > 0) {
     return Math.floor(envValue)
   }
-  return 5000
+  return 10000
 })()
 
 // Multi-layered limits to prevent overwhelming responses
