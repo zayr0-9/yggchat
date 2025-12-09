@@ -178,7 +178,7 @@ const LandingPage: React.FC = () => {
       const videoEl = videoElementsRef.current[index]
       if (videoEl) {
         videoEl.load()
-        videoEl.play().catch(() => { })
+        videoEl.play().catch(() => {})
       }
       nextPrev[index] = true
     })
@@ -229,6 +229,10 @@ const LandingPage: React.FC = () => {
     } else {
       navigate(path)
     }
+  }
+
+  const handleTryNow = () => {
+    navigate('/login')
   }
 
   return (
@@ -350,7 +354,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
 
           {/* Scroll Indicator */}
           <div className='absolute bottom-6 mb-20 md:bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-2 animate-bounce'>
-            <span className='text-white/70 dark:text-gray-300 text-xs md:text-sm font-medium'>Scroll to explore</span>
+            <span className='text-white dark:text-gray-300 text-xs md:text-sm font-medium'>Scroll to explore</span>
             <i className='bx bx-chevron-down text-white dark:text-gray-300 text-2xl'></i>
           </div>
         </div>
@@ -360,10 +364,11 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
       <section
         ref={featuresSectionRef}
         id='features'
-        className={`transition-colors duration-500 pt-20 ${isInFeaturesSection
-          ? 'bg-transparent acrylic dark:bg-yBlack-700'
-          : 'bg-transparent acrylic-light dark:bg-yBlack-800'
-          }`}
+        className={`transition-colors duration-500 pt-20 ${
+          isInFeaturesSection
+            ? 'bg-transparent acrylic dark:bg-yBlack-700'
+            : 'bg-transparent acrylic-light dark:bg-yBlack-800'
+        }`}
       >
         <div className='sm:max-w-6xl lg:max-w-7xl xl:max-w-[1600px] 2xl:max-w-full mx-auto'>
           {/* Issues Section */}
@@ -474,25 +479,28 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
                     <button
                       key={feature.id}
                       onClick={() => handleFeatureClick(index)}
-                      className={`w-full text-left p-4 rounded-xl transition-all duration-300 group ${activeFeatureIndex === index
-                        ? 'bg-transparent dark:bg-transparent scale-105'
-                        : 'hover:scale-105 dark:hover:bg-transparent scale-102'
-                        }`}
+                      className={`w-full text-left p-4 rounded-xl transition-all duration-300 group ${
+                        activeFeatureIndex === index
+                          ? 'bg-transparent dark:bg-transparent scale-105'
+                          : 'hover:scale-105 dark:hover:bg-transparent scale-102'
+                      }`}
                     >
                       <div className='flex items-center gap-1.5'>
                         <h3
-                          className={`text-3xl font-semibold ${activeFeatureIndex === index
-                            ? 'text-black-600 dark:text-neutral-50'
-                            : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-neutral-50'
-                            }`}
+                          className={`text-3xl font-semibold ${
+                            activeFeatureIndex === index
+                              ? 'text-black-600 dark:text-neutral-50'
+                              : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-neutral-50'
+                          }`}
                         >
                           {feature.title}
                         </h3>
                         <span
-                          className={`text-xs pb-5 font-mono text-blue-500 dark:text-neutral-200 ${activeFeatureIndex === index
-                            ? 'text-black-600 dark:text-neutral-50'
-                            : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-neutral-50'
-                            }`}
+                          className={`text-xs pb-5 font-mono text-blue-500 dark:text-neutral-200 ${
+                            activeFeatureIndex === index
+                              ? 'text-black-600 dark:text-neutral-50'
+                              : 'text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-neutral-50'
+                          }`}
                         >
                           {feature.superscript}
                         </span>
@@ -626,6 +634,13 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
           </div>
         </div>
       </footer>
+      <button
+        type='button'
+        onClick={handleTryNow}
+        className='fixed z-50 bottom-16 right-16 rounded-full acrylic px-8 py-4 text-base font-semibold text-black dark:text-white dark:border dark:border-white dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)] transition duration-200 hover:scale-105'
+      >
+        Start Free Trial
+      </button>
     </div>
   )
 }

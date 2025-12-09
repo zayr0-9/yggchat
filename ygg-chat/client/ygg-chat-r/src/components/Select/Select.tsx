@@ -26,6 +26,7 @@ interface SelectProps {
   modelData?: Record<string, BaseModel>
   onFavoritesChange?: () => void
   modelSelect?: boolean
+  footerContent?: React.ReactNode
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -42,6 +43,7 @@ export const Select: React.FC<SelectProps> = ({
   modelData,
   onFavoritesChange,
   modelSelect = false,
+  footerContent,
 }) => {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number>(-1)
@@ -241,7 +243,7 @@ export const Select: React.FC<SelectProps> = ({
             ref={listRef}
             role='listbox'
             tabIndex={-1}
-            className={`fixed z-[100] rounded-2xl overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent shadow-xl`}
+            className={`fixed z-[100] rounded-2xl overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent shadow-xl flex flex-col`}
             style={{
               maxHeight: listMaxHeight,
               top: `${dropdownPosition.top}px`,
@@ -268,7 +270,7 @@ export const Select: React.FC<SelectProps> = ({
               </div>
             )}
             <div
-              className={`overflow-y-scroll no-scrollbar ${blur === 'high' ? 'acrylic-medium' : 'acrylic-ultra-light-nb-2'}`}
+              className={`flex-1 min-h-0 overflow-y-scroll no-scrollbar ${blur === 'high' ? 'acrylic-medium' : 'acrylic-ultra-light-nb-2'}`}
               style={{ maxHeight: searchBarVisible ? (listMaxHeight || 280) - 50 : listMaxHeight }}
             >
               {filteredOptions.length === 0 ? (
@@ -335,6 +337,11 @@ export const Select: React.FC<SelectProps> = ({
                 })
               )}
             </div>
+            {footerContent && (
+              <div className='border-t border-neutral-800 dark:border-neutral-200 acrylic-medium dark:bg-transparent'>
+                {footerContent}
+              </div>
+            )}
           </div>,
           document.body
         )}

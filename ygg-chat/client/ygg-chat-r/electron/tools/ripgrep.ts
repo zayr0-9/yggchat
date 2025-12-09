@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
-import { getWSLCommandArgs, isWSLPath, isWindows, toWslPath } from '../utils/wslBridge.js'
+import { getWSLCommandArgs, isWindows, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_OUTPUT_CHARS = (() => {
   const envValue = Number(process.env.RIPGREP_MAX_OUTPUT_CHARS ?? process.env.RIPGREP_OUTPUT_LIMIT)
@@ -41,6 +41,25 @@ export interface RipgrepResult {
   durationMs?: number
 }
 
+/**
+ * Resolve the search path similarly to how bash.ts resolves cwd
+ * On Windows: convert to WSL path and run through WSL
+ * On Linux/Mac: use the path directly
+ */
+function resolveSearchPath(inputPath: string): { display: string; forRg: string; useWSL: boolean } {
+  const pathCandidate = (inputPath?.trim() || '.').trim()
+
+  if (isWindows()) {
+    // On Windows, always use WSL - convert the path appropriately
+    const normalizedWin = path.win32.isAbsolute(pathCandidate) ? path.win32.normalize(pathCandidate) : pathCandidate // Keep relative paths as-is, or resolve if needed
+    return { display: normalizedWin, forRg: toWslPath(normalizedWin), useWSL: true }
+  }
+
+  // On POSIX, use the path directly
+  const posixPath = path.isAbsolute(pathCandidate) ? pathCandidate : path.resolve(pathCandidate)
+  return { display: posixPath, forRg: posixPath, useWSL: false }
+}
+
 export async function ripgrepSearch(
   pattern: string,
   searchPath: string = '.',
@@ -65,9 +84,8 @@ export async function ripgrepSearch(
       ? Math.floor(userMaxOutputChars)
       : DEFAULT_MAX_OUTPUT_CHARS
 
-  // Determine if we should use WSL
-  // If we are on Windows, we ALWAYS want to use WSL because that's where the tools are
-  const useWSL = isWindows() || isWSLPath(searchPath)
+  // Resolve the search path - this determines if we use WSL and what path to pass to rg
+  const { forRg: resolvedPath, useWSL } = resolveSearchPath(searchPath)
 
   // Build rg command arguments
   const args: string[] = []
@@ -75,17 +93,7 @@ export async function ripgrepSearch(
   // Pattern (must be first non-option argument)
   args.push(pattern)
 
-  // Path to search
-  // If using WSL, convert to WSL path. Otherwise resolve to absolute path.
-  let resolvedPath = searchPath
-  if (useWSL) {
-    // If it's already a WSL path (starts with /), keep it. 
-    // If it's a Windows path, convert it.
-    resolvedPath = toWslPath(searchPath)
-  } else {
-    resolvedPath = path.resolve(searchPath)
-  }
-
+  // Path to search (already resolved/converted)
   args.push(resolvedPath)
 
   // Options
@@ -136,6 +144,7 @@ export async function ripgrepSearch(
   let cmdArgs = args
 
   if (useWSL) {
+    // Use getWSLCommandArgs to run rg through WSL
     const wsl = await getWSLCommandArgs('rg', args)
     cmd = wsl[0]
     cmdArgs = wsl[1]

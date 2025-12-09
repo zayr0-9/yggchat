@@ -83,6 +83,7 @@ import {
   useSelectedModel,
   useSelectModel,
 } from '../hooks/useQueries'
+import { getPaymentProvider, type SubscriptionStatus } from '../lib/payments'
 import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
@@ -90,12 +91,53 @@ import { parseId } from '../utils/helpers'
 function Chat() {
   const dispatch = useAppDispatch()
   const { accessToken, userId } = useAuth()
-  const { ideContext } = useIdeContext()
   const navigate = useNavigate()
+  const { ideContext } = useIdeContext()
   const queryClient = useQueryClient()
 
   // Local state for input to completely avoid Redux dispatches during typing
   const [localInput, setLocalInput] = useState('')
+
+  // Subscription status for free/paid detection
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const loadStatus = async () => {
+      try {
+        const provider = await getPaymentProvider()
+        if (!userId) return
+        const status = await provider.getSubscriptionStatus(userId)
+        if (!cancelled) setSubscriptionStatus(status)
+      } catch (err) {
+        console.warn('[Chat] Failed to fetch subscription status', err)
+      }
+    }
+    loadStatus()
+    return () => {
+      cancelled = true
+    }
+  }, [userId])
+
+  const hasActiveAccess = useMemo(() => {
+    if (!subscriptionStatus || !subscriptionStatus.tier) return false
+    const status = subscriptionStatus.status
+    if (status === 'active') return true
+    if ((status === 'past_due' || status === 'canceled') && subscriptionStatus.currentPeriodEnd) {
+      const periodEnd = new Date(subscriptionStatus.currentPeriodEnd)
+      return new Date() < periodEnd
+    }
+    return false
+  }, [subscriptionStatus])
+
+  const isFreeUser = !hasActiveAccess
+  const modelSelectFooter = isFreeUser ? (
+    <div className='p-1 space-y-2'>
+      {/* <div className='text-sm text-neutral-700 dark:text-neutral-200'>Subscribe now for access to all 400+ models</div> */}
+      <Button variant='outline2' size='medium' className='w-full' onClick={() => navigate('/payment')}>
+        Subscribe now for access to all 400+ models
+      </Button>
+    </div>
+  ) : null
 
   // Claude Code mode toggle (disabled in web mode)
   const [ccMode, setCCMode] = useState(import.meta.env.VITE_ENVIRONMENT === 'web' ? false : false)
@@ -2415,6 +2457,7 @@ function Chat() {
                       />
                     }
                     modelSelect={true}
+                    footerContent={modelSelectFooter}
                   />
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
                     <ActionPopover
