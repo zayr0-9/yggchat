@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
 import { promisify } from 'util'
-import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
+import { detectPathType, isWindows, resolveToWindowsPath } from '../utils/wslBridge.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -94,7 +94,10 @@ async function resolveRequestedDirectory(rawRootDir: string): Promise<string> {
   }
 
   let candidateInput = sanitized
-  if (isWSLPath(candidateInput)) {
+  const pathType = detectPathType(candidateInput)
+
+  // On Windows with a Linux path, convert to UNC path
+  if (isWindows() && pathType === 'linux') {
     candidateInput = await resolveToWindowsPath(candidateInput)
   }
 
@@ -329,7 +332,7 @@ export async function extractDirectoryStructure(rawRootDir: string, options: Dir
       if (!entry.isDir && includeSizes && entry.stats) {
         sizePart = ` (${getFileSizeStr(entry.stats.size)})`
       }
-      
+
       // We want to display just the name in the tree structure, not full path
       const line = `${indent}${entry.name}${suffix}${sizePart}`
       result.push(line)

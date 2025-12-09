@@ -1,7 +1,7 @@
 import { glob } from 'glob'
 import os from 'os'
 import * as path from 'path'
-import { isWindows, isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
+import { detectPathType, isWindows, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_MATCHES = 3000
 const DEFAULT_TIMEOUT_MS = 5000
@@ -27,7 +27,10 @@ const DEFAULT_IGNORE_PATTERNS = [
 const HOMEDIR = os.homedir()
 
 async function ensureWithinWorkspace(cwd: string): Promise<{ resolved: string; type: 'windows' | 'wsl' }> {
-  if (isWSLPath(cwd)) {
+  const pathType = detectPathType(cwd)
+
+  // On Windows with a Linux path, resolve to UNC path for Node.js fs access
+  if (isWindows() && pathType === 'linux') {
     const winPath = await resolveToWindowsPath(cwd)
     return { resolved: winPath, type: 'wsl' }
   }

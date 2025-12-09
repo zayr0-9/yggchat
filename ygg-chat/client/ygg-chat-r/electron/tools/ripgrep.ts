@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
-import { getWSLCommandArgs, isWindows, toWslPath } from '../utils/wslBridge.js'
+import { getWSLCommandArgs, shouldUseWSL, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_OUTPUT_CHARS = (() => {
   const envValue = Number(process.env.RIPGREP_MAX_OUTPUT_CHARS ?? process.env.RIPGREP_OUTPUT_LIMIT)
@@ -42,22 +42,22 @@ export interface RipgrepResult {
 }
 
 /**
- * Resolve the search path similarly to how bash.ts resolves cwd
+ * Resolve the search path for ripgrep
  * On Windows: convert to WSL path and run through WSL
- * On Linux/Mac: use the path directly
+ * On macOS/Linux: use the path directly (native execution)
  */
-function resolveSearchPath(inputPath: string): { display: string; forRg: string; useWSL: boolean } {
+function resolveSearchPath(inputPath: string): { forRg: string; useWSL: boolean } {
   const pathCandidate = (inputPath?.trim() || '.').trim()
+  const useWSL = shouldUseWSL()
 
-  if (isWindows()) {
-    // On Windows, always use WSL - convert the path appropriately
-    const normalizedWin = path.win32.isAbsolute(pathCandidate) ? path.win32.normalize(pathCandidate) : pathCandidate // Keep relative paths as-is, or resolve if needed
-    return { display: normalizedWin, forRg: toWslPath(normalizedWin), useWSL: true }
+  if (useWSL) {
+    // On Windows: convert all paths to WSL format
+    return { forRg: toWslPath(pathCandidate), useWSL: true }
   }
 
-  // On POSIX, use the path directly
-  const posixPath = path.isAbsolute(pathCandidate) ? pathCandidate : path.resolve(pathCandidate)
-  return { display: posixPath, forRg: posixPath, useWSL: false }
+  // On macOS/Linux: use path directly
+  const resolved = path.isAbsolute(pathCandidate) ? pathCandidate : path.resolve(pathCandidate)
+  return { forRg: resolved, useWSL: false }
 }
 
 export async function ripgrepSearch(
