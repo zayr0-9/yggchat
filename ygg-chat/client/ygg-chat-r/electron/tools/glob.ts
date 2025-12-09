@@ -84,8 +84,6 @@ export interface GlobResult {
   error?: string
   pattern?: string
   cwd?: string
-  durationMs?: number
-  totalMatches?: number
 }
 
 export async function globSearch(pattern: string, options: GlobOptions = {}): Promise<GlobResult> {
@@ -96,8 +94,6 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
       error: 'Pattern cannot be empty',
     }
   }
-
-  const startTime = Date.now()
 
   const {
     cwd = process.cwd(),
@@ -164,8 +160,6 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
         error: `Too many matches (${results.length} > ${maxMatches}). Narrow the pattern or reduce cwd scope.`,
         pattern: sanitizedPattern,
         cwd: resolvedType === 'windows' ? resolvedCwd : toWslPath(resolvedCwd),
-        durationMs: Date.now() - startTime,
-        totalMatches: results.length,
       }
     }
 
@@ -178,8 +172,6 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
       matches,
       pattern: sanitizedPattern,
       cwd: resolvedType === 'windows' ? resolvedCwd : toWslPath(resolvedCwd),
-      durationMs: Date.now() - startTime,
-      totalMatches: matches.length,
     }
   } catch (error: any) {
     return {
@@ -188,7 +180,6 @@ export async function globSearch(pattern: string, options: GlobOptions = {}): Pr
       error: error?.message || 'Glob search failed',
       pattern,
       cwd,
-      durationMs: Date.now() - startTime,
     }
   }
 }

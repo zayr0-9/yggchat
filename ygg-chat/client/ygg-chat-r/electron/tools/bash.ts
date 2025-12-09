@@ -4,12 +4,29 @@ import { getWSLCommandArgs, isWindows, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_OUTPUT_CHARS = 20000
 
+// Commands that return exit code 1 for "no matches" (not an error)
+const EXIT_1_NO_MATCH_COMMANDS = ['grep', 'egrep', 'fgrep', 'diff', 'cmp', 'awk']
+
+function getDefaultSuccessCodes(command: string): number[] {
+  const trimmed = command.trim()
+  const firstWord = trimmed.split(/\s+/)[0]
+  // Handle paths like /usr/bin/grep
+  const basename = firstWord.split('/').pop() || firstWord
+
+  if (EXIT_1_NO_MATCH_COMMANDS.includes(basename)) {
+    return [0, 1]
+  }
+  return [0]
+}
+
 export interface BashOptions {
   cwd?: string
   env?: NodeJS.ProcessEnv
   input?: string
   timeoutMs?: number
   maxOutputChars?: number
+  /** Treat these exit codes as success instead of failure */
+  successCodes?: number[]
 }
 
 
@@ -156,8 +173,9 @@ export async function runBashCommand(command: string, options: BashOptions = {})
     })
 
     child.on('close', (code) => {
+      const successCodes = new Set(options.successCodes ?? getDefaultSuccessCodes(command))
       finalize({
-        success: !timedOut && code === 0,
+        success: !timedOut && code !== null && successCodes.has(code),
         command: `${cmd} ${args.join(' ')}`,
         cwd: wslCwd ?? displayCwd,
         stdout,

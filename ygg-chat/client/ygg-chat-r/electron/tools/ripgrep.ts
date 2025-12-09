@@ -11,7 +11,7 @@ const DEFAULT_MAX_OUTPUT_CHARS = (() => {
 })()
 
 // Multi-layered limits to prevent overwhelming responses
-const MAX_RESULT_LINES = 1000 // Maximum number of match objects
+const MAX_RESULT_LINES = 5000 // Maximum number of match objects
 const MAX_LINE_LENGTH = 1000 // Maximum characters per individual line (will truncate)
 // const MAX_TOTAL_CHARS = 5000 // Maximum total characters across all match content
 
@@ -38,7 +38,6 @@ export interface RipgrepResult {
   }>
   error?: string
   command?: string
-  durationMs?: number
 }
 
 /**
@@ -65,7 +64,6 @@ export async function ripgrepSearch(
   searchPath: string = '.',
   options: RipgrepOptions = {}
 ): Promise<RipgrepResult> {
-  const startTime = Date.now()
   const {
     caseSensitive = false,
     lineNumbers = true,
@@ -173,13 +171,10 @@ export async function ripgrepSearch(
         matches: [],
         error: `Failed to execute ripgrep: ${error.message}. Make sure ripgrep (rg) is installed and in your PATH.`,
         command,
-        durationMs: Date.now() - startTime,
       })
     })
 
     child.on('close', code => {
-      const durationMs = Date.now() - startTime
-
       // rg returns 0 when matches found, 1 when no matches, 2 for error
       if (code === 2 && stderr) {
         resolve({
@@ -187,7 +182,6 @@ export async function ripgrepSearch(
           matches: [],
           error: `ripgrep error: ${stderr.trim()}`,
           command,
-          durationMs,
         })
         return
       }
@@ -207,7 +201,6 @@ export async function ripgrepSearch(
             matches: [],
             error: `Search returned too many matches (${matches.length} matches, limit is ${MAX_RESULT_LINES}). Please narrow your search by: (1) using a more specific pattern, (2) adding a glob filter (e.g., '*.ts'), (3) reducing the search path, or (4) using maxCount to limit matches per file.`,
             command,
-            durationMs,
           })
           return
         }
@@ -226,7 +219,6 @@ export async function ripgrepSearch(
             matches: [],
             error: `Search output too large (${totalChars} characters, limit is ${maxOutputChars}). Please narrow your search by: (1) using a more specific pattern, (2) adding a glob filter (e.g., '*.ts'), (3) reducing the search path, or (4) using maxCount to limit matches per file.`,
             command,
-            durationMs,
           })
           return
         }
@@ -242,7 +234,6 @@ export async function ripgrepSearch(
           success: true,
           matches,
           command,
-          durationMs,
         })
       } catch (parseError: any) {
         resolve({
@@ -250,7 +241,6 @@ export async function ripgrepSearch(
           matches: [],
           error: `Failed to parse ripgrep output: ${parseError.message}`,
           command,
-          durationMs,
         })
       }
     })
