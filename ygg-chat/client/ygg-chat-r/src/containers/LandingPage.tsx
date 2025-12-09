@@ -637,7 +637,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
       <button
         type='button'
         onClick={handleTryNow}
-        className='fixed z-50 bottom-16 right-16 rounded-full acrylic px-8 py-4 text-base font-semibold text-black dark:text-white dark:border dark:border-white dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)] transition duration-200 hover:scale-105'
+        className='fixed z-50 bottom-10 right-6 md:bottom-16 md:right-16 rounded-full acrylic px-8 py-4 text-base font-semibold text-black dark:text-white dark:border dark:border-white dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)] transition duration-200 hover:scale-105'
       >
         Start Free Trial
       </button>
