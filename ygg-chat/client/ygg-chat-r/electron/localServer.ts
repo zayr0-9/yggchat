@@ -308,6 +308,14 @@ function initializeLocalDatabase(dbPath: string) {
         INSERT OR IGNORE INTO message_attachment_links (id, message_id, attachment_id, created_at)
         VALUES (?, ?, ?, ?)
       `),
+    getAttachmentsByMessageId: db.prepare(`
+        SELECT ma.*
+        FROM message_attachment_links mal
+        JOIN message_attachments ma ON ma.id = mal.attachment_id
+        WHERE mal.message_id = ?
+        ORDER BY ma.created_at ASC
+      `),
+    getAttachmentById: db.prepare('SELECT * FROM message_attachments WHERE id = ?'),
 
     // Provider Cost
     upsertProviderCost: db.prepare(`
@@ -971,6 +979,150 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Error syncing attachment:', error)
       res.status(500).json({ error: 'Failed to sync attachment' })
+    }
+  })
+
+  // Save base64 image attachments for a message (used by local-only mode)
+  app.post('/api/local/attachments/save-base64', (req, res) => {
+    try {
+      const { messageId, attachments } = req.body as {
+        messageId: string
+        attachments: Array<{
+          dataUrl: string
+          name?: string
+          type?: string
+          size?: number
+        }>
+      }
+
+      if (!messageId || !attachments || !Array.isArray(attachments) || attachments.length === 0) {
+        res.status(400).json({ error: 'messageId and attachments array required' })
+        return
+      }
+
+      if (!db || !statements || !currentDbPath) {
+        res.status(500).json({ error: 'Database not initialized' })
+        return
+      }
+
+      const savedAttachments: Array<{ id: string; file_path: string }> = []
+      const imagesDir = path.join(path.dirname(currentDbPath), 'user_images')
+
+      // Ensure directory exists
+      if (!fs.existsSync(imagesDir)) {
+        fs.mkdirSync(imagesDir, { recursive: true })
+      }
+
+      for (const attachment of attachments) {
+        try {
+          const { dataUrl } = attachment
+
+          // Parse data URL: data:image/png;base64,xxxxx
+          const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
+          if (!matches) {
+            console.warn('[LocalServer] Invalid data URL format, skipping')
+            continue
+          }
+
+          const mimeType = matches[1]
+          const base64Data = matches[2]
+          const buffer = Buffer.from(base64Data, 'base64')
+
+          // Calculate SHA256 for deduplication
+          const sha256 = crypto.createHash('sha256').update(buffer).digest('hex')
+
+          // Determine file extension
+          const ext = mimeType.split('/')[1] || 'png'
+          const fileName = `${sha256}.${ext}`
+          const filePath = path.join(imagesDir, fileName)
+
+          // Write file (skip if already exists - deduplication)
+          if (!fs.existsSync(filePath)) {
+            fs.writeFileSync(filePath, buffer)
+          }
+
+          // Create attachment record
+          const attachmentId = uuidv4()
+          const now = new Date().toISOString()
+
+          statements.upsertAttachment.run(
+            attachmentId,
+            messageId,
+            'image',
+            mimeType,
+            'file',
+            null, // url
+            filePath,
+            null, // width
+            null, // height
+            buffer.length,
+            sha256,
+            now
+          )
+
+          // Link attachment to message
+          statements.linkAttachment.run(uuidv4(), messageId, attachmentId, now)
+
+          savedAttachments.push({ id: attachmentId, file_path: filePath })
+          console.log('[LocalServer] Saved user image attachment:', filePath)
+        } catch (attachmentError) {
+          console.error('[LocalServer] Error saving individual attachment:', attachmentError)
+        }
+      }
+
+      res.json({ success: true, attachments: savedAttachments })
+    } catch (error) {
+      console.error('[LocalServer] Error saving base64 attachments:', error)
+      res.status(500).json({ error: 'Failed to save attachments' })
+    }
+  })
+
+  // Serve local attachment file by ID
+  app.get('/api/local/attachments/:id/file', (req, res) => {
+    try {
+      const { id } = req.params
+
+      if (!db || !statements) {
+        res.status(500).json({ error: 'Database not initialized' })
+        return
+      }
+
+      const attachment = statements.getAttachmentById.get(id) as {
+        id: string
+        file_path: string | null
+        url: string | null
+        mime_type: string
+      } | undefined
+
+      if (!attachment) {
+        res.status(404).json({ error: 'Attachment not found' })
+        return
+      }
+
+      // If it's a URL-based attachment, redirect
+      if (attachment.url) {
+        res.redirect(attachment.url)
+        return
+      }
+
+      // If it's a file-based attachment, serve the file
+      if (attachment.file_path) {
+        if (!fs.existsSync(attachment.file_path)) {
+          res.status(404).json({ error: 'File not found on disk' })
+          return
+        }
+
+        res.setHeader('Content-Type', attachment.mime_type || 'application/octet-stream')
+        res.setHeader('Cache-Control', 'public, max-age=31536000') // Cache for 1 year (content-addressed)
+        const stream = fs.createReadStream(attachment.file_path)
+        stream.pipe(res)
+        return
+      }
+
+      res.status(404).json({ error: 'No file path or URL for attachment' })
+    } catch (error) {
+      console.error('[LocalServer] Error serving attachment file:', error)
+      res.status(500).json({ error: 'Failed to serve attachment' })
     }
   })
 
@@ -1699,13 +1851,21 @@ function setupServer() {
       const messages = statements.getMessagesByConversationId.all(id)
       // console.log('[LocalServer] 📦 Raw messages fetched:', messages.length)
 
-      // Parse JSON fields (children_ids, tool_calls, content_blocks)
-      const normalizedMessages = messages.map((msg: any) => ({
-        ...msg,
-        children_ids: msg.children_ids ? JSON.parse(msg.children_ids) : [],
-        tool_calls: msg.tool_calls ? JSON.parse(msg.tool_calls) : null,
-        content_blocks: msg.content_blocks ? JSON.parse(msg.content_blocks) : null,
-      }))
+      // Parse JSON fields (children_ids, tool_calls, content_blocks) and fetch attachments
+      const normalizedMessages = messages.map((msg: any) => {
+        // Fetch attachments for this message
+        const attachments = statements.getAttachmentsByMessageId.all(msg.id) as any[]
+
+        return {
+          ...msg,
+          children_ids: msg.children_ids ? JSON.parse(msg.children_ids) : [],
+          tool_calls: msg.tool_calls ? JSON.parse(msg.tool_calls) : null,
+          content_blocks: msg.content_blocks ? JSON.parse(msg.content_blocks) : null,
+          attachments,
+          attachments_count: attachments.length,
+          has_attachments: attachments.length > 0,
+        }
+      })
 
       // console.log('[LocalServer] ✨ Normalized messages:', normalizedMessages.length)
       // if (normalizedMessages.length > 0) {

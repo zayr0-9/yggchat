@@ -590,7 +590,7 @@ function Chat() {
           // Fetch and convert binaries to base64 asynchronously (don't await, let it run in background)
           Promise.all(
             includedAttachments.map(async (a: any) => {
-              const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path)
+              const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path, a.id)
               if (!url) return null
               try {
                 const res = await fetch(url)

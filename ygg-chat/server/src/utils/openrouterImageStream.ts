@@ -72,6 +72,7 @@ export async function streamImageGeneration(options: ImageStreamOptions, callbac
   let chunkCount = 0
   let imageCount = 0
   let buffer = '' // Buffer for incomplete SSE data
+  const sentImageUrls = new Set<string>() // Track sent images to prevent duplicates
 
   while (reader) {
     const { done, value } = await reader.read()

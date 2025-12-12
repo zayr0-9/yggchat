@@ -340,8 +340,23 @@ export const blobToDataURL = (blob: Blob): Promise<string> =>
   })
 
 // Resolve an attachment's accessible URL from url or file_path
-export const resolveAttachmentUrl = (urlOrPath?: string | null, filePath?: string | null): string | null => {
+export const resolveAttachmentUrl = (
+  urlOrPath?: string | null,
+  filePath?: string | null,
+  attachmentId?: string | null
+): string | null => {
   const origin = API_BASE.replace(/\/?api\/?$/, '')
+
+  // For local mode with attachment ID, use the local file serving endpoint
+  // This handles absolute paths like /home/user/.config/yggdrasil/user_images/...
+  if (attachmentId && environment === 'electron' && filePath) {
+    const fp = filePath.replace(/\\/g, '/')
+    // Check if it's an absolute path (not a relative server path)
+    if (fp.startsWith('/') && !fp.startsWith('/uploads') && !fp.startsWith('/data/')) {
+      return `http://127.0.0.1:3002/api/local/attachments/${attachmentId}/file`
+    }
+  }
+
   if (urlOrPath) {
     if (/^https?:\/\//i.test(urlOrPath)) return urlOrPath
     if (urlOrPath.startsWith('/')) return `${origin}${urlOrPath}`
@@ -352,7 +367,13 @@ export const resolveAttachmentUrl = (urlOrPath?: string | null, filePath?: strin
       const filename = fp.split('/').pop() || ''
       if (filename) return `${origin}/uploads/${filename}`
     }
-    // Fallbacks
+    // For electron with absolute paths but no attachment ID, still try local endpoint by path
+    if (environment === 'electron' && fp.startsWith('/') && !fp.startsWith('/uploads') && !fp.startsWith('/data/')) {
+      // Can't serve without ID, return null to indicate unavailable
+      console.warn('[resolveAttachmentUrl] Local file path without attachment ID:', fp)
+      return null
+    }
+    // Fallbacks for relative paths
     if (fp.startsWith('/')) return `${origin}${fp}`
     return `${origin}/${fp}`
   }
@@ -693,6 +714,16 @@ export const sendMessage = createAsyncThunk<
                     user_id: auth.userId,
                     project_id: selectedProject?.id || null,
                   })
+
+                  // Save image attachments to local DB when in local mode
+                  if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
+                    localApi
+                      .post('/local/attachments/save-base64', {
+                        messageId: chunk.message.id,
+                        attachments: attachmentsBase64,
+                      })
+                      .catch(err => console.error('[sendMessage] Failed to save local attachments:', err))
+                  }
 
                   // Add to local history tracking for next turn
                   currentTurnHistory.push(chunk.message)
@@ -1368,6 +1399,16 @@ export const editMessageWithBranching = createAsyncThunk<
                     project_id: selectedProject?.id || null,
                   })
 
+                  // Save image attachments to local DB when in local mode
+                  if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
+                    localApi
+                      .post('/local/attachments/save-base64', {
+                        messageId: chunk.message.id,
+                        attachments: attachmentsBase64,
+                      })
+                      .catch(err => console.error('[editMessageWithBranching] Failed to save local attachments:', err))
+                  }
+
                   // Add to local history for next turn
                   currentTurnHistory.push(chunk.message)
 
@@ -1811,6 +1852,16 @@ export const sendMessageToBranch = createAsyncThunk<
                     user_id: auth.userId,
                     project_id: selectedProject?.id || null,
                   })
+
+                  // Save image attachments to local DB when in local mode
+                  if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
+                    localApi
+                      .post('/local/attachments/save-base64', {
+                        messageId: chunk.message.id,
+                        attachments: attachmentsBase64,
+                      })
+                      .catch(err => console.error('[sendMessageToBranch] Failed to save local attachments:', err))
+                  }
                 }
 
                 // Handle tool results (accumulated server-side into content_blocks)
@@ -2262,7 +2313,7 @@ export const fetchMessageTree = createAsyncThunk<
           // Fetch and convert binaries to base64 (async operation)
           Promise.all(
             includedAttachments.map(async (a: any) => {
-              const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path)
+              const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path, a.id)
               if (!url) return null
               try {
                 const res = await fetch(url)
@@ -2580,7 +2631,7 @@ export const fetchAttachmentsByMessage = createAsyncThunk<
     const dataUrls: string[] = (
       await Promise.all(
         (attachments || []).map(async a => {
-          const url = resolveAttachmentUrl(a.url, a.file_path)
+          const url = resolveAttachmentUrl(a.url, a.file_path, a.id)
           if (!url) return null
           try {
             const res = await fetch(url)

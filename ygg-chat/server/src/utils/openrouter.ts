@@ -787,18 +787,47 @@ export async function generateResponse(
     }
 
     // Prepare messages for this step
-    // OpenRouter SDK uses camelCase (toolCalls, toolCallId) not snake_case
-    let formattedMessages: any[] = conversationMessages.map(msg => {
-      const m = msg as any
-      return {
-        role: m.role,
-        content: m.content,
-        ...(m.tool_calls && { toolCalls: m.tool_calls }),
-        ...(m.toolCalls && { toolCalls: m.toolCalls }),
-        ...(m.tool_call_id && { toolCallId: m.tool_call_id }),
-        ...(m.toolCallId && { toolCallId: m.toolCallId }),
-      }
-    })
+    // OpenRouter SDK uses camelCase (toolCalls, toolCallId, imageUrl) not snake_case
+    // Convert content arrays from OpenAI format (image_url) to OpenRouter SDK format (imageUrl)
+    const convertContentForOpenRouterSDK = (content: any): any => {
+      if (!Array.isArray(content)) return content
+      return content.map((part: any) => {
+        if (part.type === 'image_url' && part.image_url && !part.imageUrl) {
+          // Convert snake_case image_url to camelCase imageUrl for OpenRouter SDK
+          return {
+            type: 'image_url',
+            imageUrl: part.image_url,
+          }
+        }
+        return part
+      })
+    }
+    let formattedMessages: any[]
+    if (isImageGenerationModel(model)) {
+      formattedMessages = conversationMessages.map(msg => {
+        const m = msg as any
+        return {
+          role: m.role,
+          content: m.content,
+          ...(m.tool_calls && { toolCalls: m.tool_calls }),
+          ...(m.toolCalls && { toolCalls: m.toolCalls }),
+          ...(m.tool_call_id && { toolCallId: m.tool_call_id }),
+          ...(m.toolCallId && { toolCallId: m.toolCallId }),
+        }
+      })
+    } else {
+      formattedMessages = conversationMessages.map(msg => {
+        const m = msg as any
+        return {
+          role: m.role,
+          content: convertContentForOpenRouterSDK(m.content),
+          ...(m.tool_calls && { toolCalls: m.tool_calls }),
+          ...(m.toolCalls && { toolCalls: m.toolCalls }),
+          ...(m.tool_call_id && { toolCallId: m.tool_call_id }),
+          ...(m.toolCallId && { toolCallId: m.toolCallId }),
+        }
+      })
+    }
 
     // Handle image attachments (only for the first step)
     if (stepCount === 1) {
