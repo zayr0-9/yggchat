@@ -8,6 +8,7 @@ import { generateResponse as lmstudioGenerate } from './lmstudio'
 import { generateResponse as ollamaGenerate } from './ollama'
 import { generateResponse as openaiGenerate } from './openai'
 import { generateResponse as openrouterGenerate } from './openrouter'
+import { isImageGenerationModel } from './openrouterImageStream'
 
 export type ProviderType = 'ollama' | 'gemini' | 'anthropic' | 'openai' | 'openrouter' | 'lmstudio'
 
@@ -52,9 +53,53 @@ export async function generateResponse(
   const attachmentNote =
     Array.isArray(attachments) && attachments.length > 0
       ? `Attached ${attachments.length} image(s):\n${attachments
-          .map((a, idx) => `  ${idx + 1}. ${a.url || '(inline image)'}${a.mimeType ? ` (${a.mimeType})` : ''}`)
-          .join('\n')}`
+        .map((a, idx) => `  ${idx + 1}. ${a.url || '(inline image)'}${a.mimeType ? ` (${a.mimeType})` : ''}`)
+        .join('\n')}`
       : ''
+
+  // Auto-attach logic for OpenRouter image editing
+  if (provider === 'openrouter' && isImageGenerationModel(providerModel)) {
+    // Only applies if we have at least 2 messages (assistant -> user)
+    if (messages.length >= 2) {
+      const lastMsg = messages[messages.length - 1] as any
+      const prevMsg = messages[messages.length - 2] as any
+
+      if (lastMsg?.role === 'user' && prevMsg?.role === 'assistant') {
+        const prevContentBlocks = (prevMsg.content_blocks || []) as any[]
+        // Check if previous message had an image
+        const imageBlock = prevContentBlocks.find((b: any) => b.type === 'image')
+
+        if (imageBlock && imageBlock.url) {
+          // Check if current user message already handles images (uploaded by user)
+          const userContentBlocks = (lastMsg.content_blocks || []) as any[]
+          const userHasImages = userContentBlocks.some((b: any) => b.type === 'image' || b.type === 'image_url')
+
+          if (!userHasImages) {
+            console.log(
+              '🖼️ [provider] Auto-attaching previous generated image to user message for image-to-image editing context'
+            )
+
+            // Ensure content_blocks array exists
+            if (!lastMsg.content_blocks) {
+              lastMsg.content_blocks = []
+            }
+            // If starting empty but has text content, migrate text to block first
+            if (lastMsg.content_blocks.length === 0 && lastMsg.content) {
+              lastMsg.content_blocks.push({ type: 'text', text: lastMsg.content })
+            }
+
+            // Append the image block
+            // Note: We use 'image' type here, standard provider conversion will handle it
+            lastMsg.content_blocks.push({
+              type: 'image',
+              url: imageBlock.url,
+              mimeType: imageBlock.mimeType || 'image/png',
+            })
+          }
+        }
+      }
+    }
+  }
 
   // Convert a single message's content_blocks to OpenAI format messages
   // Handles sequential blocks: [text, tool_use, tool_result, text, image] -> multiple messages
@@ -103,11 +148,21 @@ export async function generateResponse(
           currentText += textContent
         }
       } else if (block.type === 'image') {
-        // Handle assistant-generated images - accumulate for multipart format
+        // Handle assistant-generated images
+        // PROPER HANDLING: OpenAI/OpenRouter spec does NOT allow image_url in assistant messages.
+        // We must convert this to a text representation to pass validation.
         const imageUrl = block.url || block.image_url?.url
         if (imageUrl) {
-          currentImages.push({ url: imageUrl, mimeType: block.mimeType })
-          // console.log(`📦 [provider] Found image block, accumulated ${currentImages.length} images`)
+          if (currentText) currentText += '\n\n'
+
+          // Safety: If it's a data URI (base64), use a placeholder to avoid exploding context window
+          if (imageUrl.startsWith('data:')) {
+            currentText += '[Generated Image]'
+          } else {
+            // For remote URLs, it's safe to include the link
+            currentText += `[Generated Image: ${imageUrl}]`
+          }
+          // console.log(`📦 [provider] Converted assistant image to text placeholder for validation safety`)
         }
       } else if (block.type === 'thinking') {
         // Skip thinking blocks for OpenAI format (handled via reasoning param)
@@ -250,26 +305,50 @@ export async function generateResponse(
           // console.log(`📤 [provider] Message ${msgIdx} expanded to ${convertedMessages.length} OpenAI messages`)
           result.push(...convertedMessages)
         } else {
-          // For user messages, just extract text content
-          const textContent = msg.content_blocks
+          // For user messages, extract text AND images from content_blocks
+          const textBlocks = msg.content_blocks
             .filter((block: any) => block.type === 'text')
             .map((block: any) => block.content || block.text || '')
             .join('')
-          if (textContent || msg.content) {
-            // Check if user message has artifacts (images)
-            if (hasArtifacts) {
-              const contentParts: any[] = [{ type: 'text', text: textContent || msg.content || '' }]
-              for (const artifact of msgArtifacts) {
-                if (typeof artifact === 'string' && artifact.startsWith('data:')) {
-                  contentParts.push({ type: 'image_url', image_url: { url: artifact } })
+
+          const imageBlocks = msg.content_blocks
+            .filter((block: any) => block.type === 'image' || block.type === 'image_url')
+
+          const mergedText = (textBlocks || '') + (msg.content || '')
+
+          if (mergedText || imageBlocks.length > 0) {
+            // Check if user message has artifacts (images) from attachments
+            // Combine everything into multipart content
+            if (hasArtifacts || imageBlocks.length > 0) {
+              const contentParts: any[] = []
+
+              if (mergedText) {
+                contentParts.push({ type: 'text', text: mergedText })
+              }
+
+              // Add images from content_blocks (auto-attached context)
+              for (const imgBlock of imageBlocks) {
+                const url = imgBlock.url || imgBlock.image_url?.url
+                if (url) {
+                  contentParts.push({ type: 'image_url', image_url: { url } })
                 }
               }
-              // console.log(`📤 [provider] Message ${msgIdx} (user with artifacts): ${contentParts.length} parts`)
+
+              // Add images from artifacts (user uploads)
+              if (hasArtifacts) {
+                for (const artifact of msgArtifacts) {
+                  if (typeof artifact === 'string' && artifact.startsWith('data:')) {
+                    contentParts.push({ type: 'image_url', image_url: { url: artifact } })
+                  }
+                }
+              }
+
               result.push({ role: 'user', content: contentParts })
             } else {
+              // Just text
               result.push({
                 role: role as 'user' | 'assistant',
-                content: textContent || msg.content || '',
+                content: mergedText,
               })
             }
           }
