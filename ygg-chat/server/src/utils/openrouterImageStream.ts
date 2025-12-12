@@ -74,10 +74,21 @@ export async function streamImageGeneration(options: ImageStreamOptions, callbac
   let buffer = '' // Buffer for incomplete SSE data
   const sentImageUrls = new Set<string>() // Track sent images to prevent duplicates
 
+  // Buffer for images found during the stream
+  const bufferedImages: string[] = []
+
   while (reader) {
     const { done, value } = await reader.read()
     if (done) {
       console.log('[IMAGE STREAM] Stream done. Total chunks:', chunkCount, 'Images found:', imageCount)
+
+      // Emit the last buffered image if any
+      if (bufferedImages.length > 0) {
+        const lastImage = bufferedImages[bufferedImages.length - 1]
+        console.log('[IMAGE STREAM] Emitting final image (count: ' + bufferedImages.length + '), URL length:', lastImage.length)
+        callbacks.onImage(lastImage, 'image/png')
+      }
+
       break
     }
 
@@ -142,9 +153,15 @@ export async function streamImageGeneration(options: ImageStreamOptions, callbac
               for (const image of images) {
                 const imageUrl = image.image_url?.url || image.url
                 if (imageUrl) {
-                  imageCount++
-                  console.log('[IMAGE STREAM] Sending image #' + imageCount + ', URL length:', imageUrl.length)
-                  callbacks.onImage(imageUrl, 'image/png')
+                  // Buffer the image instead of sending immediately
+                  if (!sentImageUrls.has(imageUrl)) {
+                    bufferedImages.push(imageUrl)
+                    sentImageUrls.add(imageUrl)
+                    imageCount++
+                    console.log('[IMAGE STREAM] Buffered image #' + imageCount + ', URL length:', imageUrl.length)
+                  } else {
+                    console.log('[IMAGE STREAM] Skipping duplicate image URL during buffer:', imageUrl.substring(0, 50) + '...')
+                  }
                 }
               }
             }

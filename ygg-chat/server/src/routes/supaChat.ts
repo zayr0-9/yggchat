@@ -1346,7 +1346,17 @@ router.post(
               } else if (part === 'image') {
                 // Handle image events from image generation models
                 const imageUrl = obj?.url || delta
-                contentBlocksEvents.push({ type: 'image', url: imageUrl, mimeType: obj?.mimeType || 'image/png' })
+                // Check if we already have this image event
+                const exists = contentBlocksEvents.some(
+                  (e: any) => e.type === 'image' && e.url === imageUrl
+                )
+                if (!exists) {
+                  contentBlocksEvents.push({
+                    type: 'image',
+                    url: imageUrl,
+                    mimeType: obj?.mimeType || 'image/png',
+                  })
+                }
                 res.write(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'image', url: imageUrl, mimeType: obj?.mimeType || 'image/png', content: '', iteration: i })}\n\n`
                 )
@@ -1846,7 +1856,17 @@ router.post(
               } else if (part === 'image') {
                 // Handle image events from image generation models
                 const imageUrl = obj?.url || delta
-                contentBlocksEvents.push({ type: 'image', url: imageUrl, mimeType: obj?.mimeType || 'image/png' })
+                // Check if we already have this image event
+                const exists = contentBlocksEvents.some(
+                  (e: any) => e.type === 'image' && e.url === imageUrl
+                )
+                if (!exists) {
+                  contentBlocksEvents.push({
+                    type: 'image',
+                    url: imageUrl,
+                    mimeType: obj?.mimeType || 'image/png',
+                  })
+                }
                 res.write(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'image', url: imageUrl, mimeType: obj?.mimeType || 'image/png', content: '' })}\n\n`
                 )
