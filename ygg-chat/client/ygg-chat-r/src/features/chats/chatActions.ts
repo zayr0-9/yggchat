@@ -243,12 +243,12 @@ const updateMessageInCache = (
     const updatedMessages = existingData.messages.map(msg =>
       msg.id === messageId
         ? {
-          ...msg,
-          content: updatedContent,
-          content_plain_text: updatedContent,
-          ...(updatedNote !== undefined && { note: updatedNote }),
-          ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
-        }
+            ...msg,
+            content: updatedContent,
+            content_plain_text: updatedContent,
+            ...(updatedNote !== undefined && { note: updatedNote }),
+            ...(updatedContentBlocks && { content_blocks: updatedContentBlocks }),
+          }
         : msg
     )
 
@@ -505,6 +505,12 @@ export const sendMessage = createAsyncThunk<
       const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
       const storageMode = conversationMeta?.storage_mode || 'cloud'
 
+      // Prepend cwd to system prompt if it exists
+      if (conversationMeta?.cwd) {
+        const cwdPrefix = `Current working directory: ${conversationMeta.cwd}\n\n`
+        systemPrompt = cwdPrefix + systemPrompt
+      }
+
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       // For local tool execution support (GemTools), we prefer client mode even in web environment
@@ -713,7 +719,7 @@ export const sendMessage = createAsyncThunk<
                     const baseTitle = contentForTitle.slice(0, 50)
                     const title = baseTitle ? `${baseTitle}...` : ''
                     if (title) {
-                      ; (dispatch as any)(updateConversationTitle({ id: conversationId, title }))
+                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title }))
                       titleUpdated = true
                     }
                   }
@@ -1237,6 +1243,12 @@ export const editMessageWithBranching = createAsyncThunk<
       const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
       const storageMode = conversationMeta?.storage_mode || 'cloud'
 
+      // Prepend cwd to system prompt if it exists
+      if (conversationMeta?.cwd) {
+        const cwdPrefix = `Current working directory: ${conversationMeta.cwd}\n\n`
+        systemPrompt = cwdPrefix + systemPrompt
+      }
+
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       const executionMode = 'client' // Prefer client execution for tools
@@ -1692,6 +1704,13 @@ export const sendMessageToBranch = createAsyncThunk<
       const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
       const storageMode = conversationMeta?.storage_mode || 'cloud'
 
+      // Prepend cwd to system prompt if it exists
+      let effectiveSystemPrompt = systemPrompt
+      if (conversationMeta?.cwd) {
+        const cwdPrefix = `Current working directory: ${conversationMeta.cwd}\n\n`
+        effectiveSystemPrompt = cwdPrefix + (systemPrompt || '')
+      }
+
       if (!modelName) {
         throw new Error('No model selected')
       }
@@ -1721,7 +1740,7 @@ export const sendMessageToBranch = createAsyncThunk<
             content: currentTurnContent,
             modelName,
             parentId: currentParentId,
-            systemPrompt,
+            systemPrompt: effectiveSystemPrompt,
             conversationContext: combinedContext,
             projectContext,
             provider: serverProvider,
@@ -2148,140 +2167,141 @@ export const syncConversationToLocal = createAsyncThunk<
 })
 
 // Fetch Heimdall message tree and messages combined (optimization: single endpoint)
-export const fetchMessageTree = createAsyncThunk<any, ConversationId | { conversationId: ConversationId; storageMode?: 'local' | 'cloud' }, { state: RootState; extra: ThunkExtraArgument }>(
-  'chat/fetchMessageTree',
-  async (payload, { dispatch, extra, rejectWithValue, getState }) => {
-    const { auth } = extra
+export const fetchMessageTree = createAsyncThunk<
+  any,
+  ConversationId | { conversationId: ConversationId; storageMode?: 'local' | 'cloud' },
+  { state: RootState; extra: ThunkExtraArgument }
+>('chat/fetchMessageTree', async (payload, { dispatch, extra, rejectWithValue, getState }) => {
+  const { auth } = extra
 
-    // Handle both old (just conversationId) and new (object with storageMode) signatures
-    const conversationId = typeof payload === 'object' ? payload.conversationId : payload
-    const explicitStorageMode = typeof payload === 'object' ? payload.storageMode : undefined
+  // Handle both old (just conversationId) and new (object with storageMode) signatures
+  const conversationId = typeof payload === 'object' ? payload.conversationId : payload
+  const explicitStorageMode = typeof payload === 'object' ? payload.storageMode : undefined
 
-    // Gating: avoid duplicate in-flight fetches and throttle rapid refetches
-    const state = getState() as RootState
-    const { heimdall } = state.chat
-    const now = Date.now()
-    if (heimdall.loading && heimdall.lastConversationId === conversationId) {
-      // Skip: already fetching for this conversation
-      return null as any
+  // Gating: avoid duplicate in-flight fetches and throttle rapid refetches
+  const state = getState() as RootState
+  const { heimdall } = state.chat
+  const now = Date.now()
+  if (heimdall.loading && heimdall.lastConversationId === conversationId) {
+    // Skip: already fetching for this conversation
+    return null as any
+  }
+  if (
+    heimdall.lastConversationId === conversationId &&
+    typeof heimdall.lastFetchedAt === 'number' &&
+    now - heimdall.lastFetchedAt < 250
+  ) {
+    // Skip: fetched very recently for same conversation
+    return null as any
+  }
+
+  dispatch(chatSliceActions.heimdallLoadingStarted())
+  try {
+    let response: { messages: Message[]; tree: any }
+
+    // Use explicit storageMode if provided, otherwise check state
+    const conversation = state.conversations.items.find(c => c.id === conversationId)
+    const storageMode = explicitStorageMode || conversation?.storage_mode || 'cloud'
+
+    // console.log(`[fetchMessageTree] ConversationId: ${conversationId}`)
+    // console.log(`[fetchMessageTree] Found in state: ${!!conversation}`)
+    // console.log(`[fetchMessageTree] Storage Mode: ${storageMode}`)
+    // console.log(`[fetchMessageTree] Environment: ${environment}`)
+
+    if (shouldUseLocalApi(storageMode, environment)) {
+      // console.log('[fetchMessageTree] Routing to LOCAL API')
+      response = await localApi.get<{ messages: Message[]; tree: any }>(
+        `/local/conversations/${conversationId}/messages/tree`
+      )
+    } else {
+      // console.log('[fetchMessageTree] Routing to CLOUD API')
+      response = await apiCall<{ messages: Message[]; tree: any }>(
+        `/conversations/${conversationId}/messages/tree`,
+        auth.accessToken
+      )
     }
-    if (
-      heimdall.lastConversationId === conversationId &&
-      typeof heimdall.lastFetchedAt === 'number' &&
-      now - heimdall.lastFetchedAt < 250
-    ) {
-      // Skip: fetched very recently for same conversation
-      return null as any
-    }
 
-    dispatch(chatSliceActions.heimdallLoadingStarted())
-    try {
-      let response: { messages: Message[]; tree: any }
+    // Handle both old and new response formats for backward compatibility
+    const treeData = response.tree || response
+    const messages = response.messages
 
-      // Use explicit storageMode if provided, otherwise check state
-      const conversation = state.conversations.items.find(c => c.id === conversationId)
-      const storageMode = explicitStorageMode || conversation?.storage_mode || 'cloud'
+    // If messages are included, load them into state
+    if (messages && Array.isArray(messages)) {
+      // Ensure client-only fields exist
+      const normalizedMessages: Message[] = messages.map(m => ({
+        ...m,
+        pastedContext: Array.isArray((m as any).pastedContext) ? (m as any).pastedContext : [],
+        artifacts: Array.isArray((m as any).artifacts) ? (m as any).artifacts : [],
+      }))
 
-      // console.log(`[fetchMessageTree] ConversationId: ${conversationId}`)
-      // console.log(`[fetchMessageTree] Found in state: ${!!conversation}`)
-      // console.log(`[fetchMessageTree] Storage Mode: ${storageMode}`)
-      // console.log(`[fetchMessageTree] Environment: ${environment}`)
+      dispatch(chatSliceActions.messagesLoaded(normalizedMessages))
 
-      if (shouldUseLocalApi(storageMode, environment)) {
-        // console.log('[fetchMessageTree] Routing to LOCAL API')
-        response = await localApi.get<{ messages: Message[]; tree: any }>(
-          `/local/conversations/${conversationId}/messages/tree`
-        )
-      } else {
-        // console.log('[fetchMessageTree] Routing to CLOUD API')
-        response = await apiCall<{ messages: Message[]; tree: any }>(
-          `/conversations/${conversationId}/messages/tree`,
-          auth.accessToken
-        )
-      }
+      // Conditional attachments fetch: only when metadata indicates or when metadata absent
+      const attachmentsByMessage = state.chat.attachments.byMessage || {}
 
-      // Handle both old and new response formats for backward compatibility
-      const treeData = response.tree || response
-      const messages = response.messages
+      for (const msg of normalizedMessages) {
+        const alreadyFetched = Array.isArray(attachmentsByMessage[msg.id]) && attachmentsByMessage[msg.id].length > 0
 
-      // If messages are included, load them into state
-      if (messages && Array.isArray(messages)) {
-        // Ensure client-only fields exist
-        const normalizedMessages: Message[] = messages.map(m => ({
-          ...m,
-          pastedContext: Array.isArray((m as any).pastedContext) ? (m as any).pastedContext : [],
-          artifacts: Array.isArray((m as any).artifacts) ? (m as any).artifacts : [],
-        }))
+        // Check if attachments are included in the response (optimized path)
+        const includedAttachments = (msg as any).attachments
 
-        dispatch(chatSliceActions.messagesLoaded(normalizedMessages))
+        if (
+          !alreadyFetched &&
+          includedAttachments &&
+          Array.isArray(includedAttachments) &&
+          includedAttachments.length > 0
+        ) {
+          // Process included attachments - dispatch metadata immediately
+          dispatch(
+            chatSliceActions.attachmentsSetForMessage({
+              messageId: msg.id,
+              attachments: includedAttachments,
+            })
+          )
 
-        // Conditional attachments fetch: only when metadata indicates or when metadata absent
-        const attachmentsByMessage = state.chat.attachments.byMessage || {}
-
-        for (const msg of normalizedMessages) {
-          const alreadyFetched = Array.isArray(attachmentsByMessage[msg.id]) && attachmentsByMessage[msg.id].length > 0
-
-          // Check if attachments are included in the response (optimized path)
-          const includedAttachments = (msg as any).attachments
-
-          if (
-            !alreadyFetched &&
-            includedAttachments &&
-            Array.isArray(includedAttachments) &&
-            includedAttachments.length > 0
-          ) {
-            // Process included attachments - dispatch metadata immediately
-            dispatch(
-              chatSliceActions.attachmentsSetForMessage({
-                messageId: msg.id,
-                attachments: includedAttachments,
-              })
-            )
-
-            // Fetch and convert binaries to base64 (async operation)
-            Promise.all(
-              includedAttachments.map(async (a: any) => {
-                const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path)
-                if (!url) return null
-                try {
-                  const res = await fetch(url)
-                  if (!res.ok) return null
-                  const blob = await res.blob()
-                  return await blobToDataURL(blob)
-                } catch {
-                  return null
-                }
-              })
-            ).then(dataUrls => {
-              const validUrls = dataUrls.filter((x): x is string => Boolean(x))
-              if (validUrls.length > 0) {
-                dispatch(chatSliceActions.messageArtifactsSet({ messageId: msg.id, artifacts: validUrls }))
+          // Fetch and convert binaries to base64 (async operation)
+          Promise.all(
+            includedAttachments.map(async (a: any) => {
+              const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path)
+              if (!url) return null
+              try {
+                const res = await fetch(url)
+                if (!res.ok) return null
+                const blob = await res.blob()
+                return await blobToDataURL(blob)
+              } catch {
+                return null
               }
             })
-          } else if (!alreadyFetched) {
-            // Fallback: use old individual fetch logic if attachments not included
-            const hasMeta = typeof msg.has_attachments !== 'undefined' || typeof msg.attachments_count !== 'undefined'
-            const indicatesAttachments =
-              msg.has_attachments === true || (typeof msg.attachments_count === 'number' && msg.attachments_count > 0)
-
-            if ((hasMeta && indicatesAttachments) || !hasMeta) {
-              dispatch(fetchAttachmentsByMessage({ messageId: msg.id }))
+          ).then(dataUrls => {
+            const validUrls = dataUrls.filter((x): x is string => Boolean(x))
+            if (validUrls.length > 0) {
+              dispatch(chatSliceActions.messageArtifactsSet({ messageId: msg.id, artifacts: validUrls }))
             }
+          })
+        } else if (!alreadyFetched) {
+          // Fallback: use old individual fetch logic if attachments not included
+          const hasMeta = typeof msg.has_attachments !== 'undefined' || typeof msg.attachments_count !== 'undefined'
+          const indicatesAttachments =
+            msg.has_attachments === true || (typeof msg.attachments_count === 'number' && msg.attachments_count > 0)
+
+          if ((hasMeta && indicatesAttachments) || !hasMeta) {
+            dispatch(fetchAttachmentsByMessage({ messageId: msg.id }))
           }
         }
       }
-
-      // console.log('treeData', treeData)
-      dispatch(chatSliceActions.heimdallDataLoaded({ treeData }))
-
-      return response
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch message tree'
-      dispatch(chatSliceActions.heimdallError(message))
-      return rejectWithValue(message)
     }
+
+    // console.log('treeData', treeData)
+    dispatch(chatSliceActions.heimdallDataLoaded({ treeData }))
+
+    return response
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch message tree'
+    dispatch(chatSliceActions.heimdallError(message))
+    return rejectWithValue(message)
   }
-)
+})
 
 // Consolidated conversation initialization - fetches all required data in sequence to avoid rate limiting
 export const initializeConversationData = createAsyncThunk<

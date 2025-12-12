@@ -2,6 +2,8 @@
 @import './styles/mica.css';
 @import './styles/acrylic.css';
 
+@import 'katex/dist/katex.min.css';
+
 @font-face {
   font-family: 'Junicode';
   src: url('/fonts/Junicode-Bold.ttf') format('opentype');

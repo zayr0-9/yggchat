@@ -775,6 +775,70 @@ function Chat() {
     }
   }, [ideContext?.extensionConnected, workspace?.rootPath, currentConversationId, ccCwd, dispatch])
 
+  // Debounce cwd updates to save manual input to database
+  // Similar pattern to title update debounce (lines 503-556)
+  useEffect(() => {
+    if (!currentConversationId) return
+
+    // Find current conversation to compare against stored value
+    const conversation = projectConversations.find(c => c.id === currentConversationId)
+    const storedCwd = conversation?.cwd ?? ''
+
+    // Normalize for comparison (treat empty string same as null/undefined)
+    const normalizedCcCwd = ccCwd.trim()
+    const normalizedStoredCwd = (storedCwd || '').trim()
+
+    // No-op if unchanged
+    if (normalizedCcCwd === normalizedStoredCwd) return
+
+    const handle = setTimeout(() => {
+      dispatch(
+        updateCwd({
+          id: currentConversationId,
+          cwd: normalizedCcCwd || null, // Convert empty string to null
+        })
+      )
+        .unwrap()
+        .then(() => {
+          // Update React Query caches to reflect the new cwd
+          const projectId = selectedProject?.id || conversation?.project_id
+
+          // Update all conversations cache
+          const conversationsCache = queryClient.getQueryData<Conversation[]>(['conversations'])
+          if (conversationsCache) {
+            queryClient.setQueryData(
+              ['conversations'],
+              conversationsCache.map(conv =>
+                conv.id === currentConversationId ? { ...conv, cwd: normalizedCcCwd || null } : conv
+              )
+            )
+          }
+
+          // Update project conversations cache if project exists
+          if (projectId) {
+            const projectConversationsCache = queryClient.getQueryData<Conversation[]>([
+              'conversations',
+              'project',
+              projectId,
+            ])
+            if (projectConversationsCache) {
+              queryClient.setQueryData(
+                ['conversations', 'project', projectId],
+                projectConversationsCache.map(conv =>
+                  conv.id === currentConversationId ? { ...conv, cwd: normalizedCcCwd || null } : conv
+                )
+              )
+            }
+          }
+        })
+        .catch(error => {
+          console.error('Failed to update conversation cwd:', error)
+        })
+    }, 1000) // 1 second debounce (same as title)
+
+    return () => clearTimeout(handle)
+  }, [ccCwd, currentConversationId, projectConversations, dispatch, queryClient, selectedProject?.id])
+
   // Query invalidation is now handled directly in sendMessage and editMessageWithBranching success handlers
   // This prevents aggressive refetching and duplicate API requests
 

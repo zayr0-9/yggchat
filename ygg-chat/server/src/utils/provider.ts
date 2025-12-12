@@ -57,13 +57,14 @@ export async function generateResponse(
       : ''
 
   // Convert a single message's content_blocks to OpenAI format messages
-  // Handles sequential blocks: [text, tool_use, tool_result, text] -> multiple messages
+  // Handles sequential blocks: [text, tool_use, tool_result, text, image] -> multiple messages
   const convertContentBlocksToOpenAIMessages = (contentBlocks: any[]): any[] => {
     // console.log('📦 [provider] Converting content_blocks:', contentBlocks.length, 'blocks')
     // console.log('📦 [provider] Block types:', contentBlocks.map(b => b.type))
 
     const result: any[] = []
     let currentText = ''
+    let currentImages: Array<{ url: string; mimeType?: string }> = [] // Track images for multipart content
     let currentToolCalls: any[] = []
     let pendingToolResults: any[] = []
 
@@ -100,6 +101,13 @@ export async function generateResponse(
         } else {
           // Normal case: accumulate text
           currentText += textContent
+        }
+      } else if (block.type === 'image') {
+        // Handle assistant-generated images - accumulate for multipart format
+        const imageUrl = block.url || block.image_url?.url
+        if (imageUrl) {
+          currentImages.push({ url: imageUrl, mimeType: block.mimeType })
+          // console.log(`📦 [provider] Found image block, accumulated ${currentImages.length} images`)
         }
       } else if (block.type === 'thinking') {
         // Skip thinking blocks for OpenAI format (handled via reasoning param)
@@ -159,9 +167,22 @@ export async function generateResponse(
 
     // Flush any remaining content
     if (currentToolCalls.length > 0) {
+      // If we have images alongside tool calls, use multipart format
+      let toolCallContent: any = currentText || null
+      if (currentImages.length > 0) {
+        const contentParts: any[] = []
+        if (currentText.trim()) {
+          contentParts.push({ type: 'text', text: currentText })
+        }
+        for (const img of currentImages) {
+          contentParts.push({ type: 'image_url', image_url: { url: img.url } })
+        }
+        toolCallContent = contentParts
+        currentImages = []
+      }
       result.push({
         role: 'assistant',
-        content: currentText || null,
+        content: toolCallContent,
         tool_calls: currentToolCalls,
       })
       currentText = ''
@@ -172,12 +193,21 @@ export async function generateResponse(
       result.push(toolResult)
     }
 
-    // If we have remaining text (after tool results), create final assistant message
-    if (currentText.trim()) {
-      result.push({
-        role: 'assistant',
-        content: currentText,
-      })
+    // If we have remaining text/images (after tool results), create final assistant message
+    if (currentText.trim() || currentImages.length > 0) {
+      if (currentImages.length > 0) {
+        // Use multipart format when we have images
+        const contentParts: any[] = []
+        if (currentText.trim()) {
+          contentParts.push({ type: 'text', text: currentText })
+        }
+        for (const img of currentImages) {
+          contentParts.push({ type: 'image_url', image_url: { url: img.url } })
+        }
+        result.push({ role: 'assistant', content: contentParts })
+      } else {
+        result.push({ role: 'assistant', content: currentText })
+      }
     }
 
     // console.log(`📦 [provider] Conversion result: ${result.length} messages`)

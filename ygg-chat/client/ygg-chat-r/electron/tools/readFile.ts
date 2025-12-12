@@ -96,10 +96,15 @@ export async function readTextFile(
   // Resolve absolute path and track path type
   let abs = inputPath
   let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+  const willBeWsl = isWSLPath(inputPath)
 
-  if (isWSLPath(inputPath)) {
-    abs = await resolveToWindowsPath(inputPath)
+  // For WSL paths, resolve to absolute Linux path first (for validation)
+  if (willBeWsl) {
     pathType = 'wsl'
+    // Make path absolute using POSIX rules (before UNC conversion)
+    if (!inputPath.startsWith('/')) {
+      abs = options.cwd ? `${options.cwd.replace(/\/$/, '')}/${inputPath}` : inputPath
+    }
   } else {
     const basePath = options.cwd || process.cwd()
     abs = path.isAbsolute(inputPath) ? inputPath : path.resolve(basePath, inputPath)
@@ -108,13 +113,28 @@ export async function readTextFile(
     }
   }
 
-  // Workspace validation: reject paths outside cwd
+  // Workspace validation BEFORE UNC conversion (compare Linux to Linux)
   if (options.cwd) {
-    const normalizedCwd = path.resolve(options.cwd)
-    const normalizedAbs = path.resolve(abs)
-    if (!normalizedAbs.startsWith(normalizedCwd + path.sep) && normalizedAbs !== normalizedCwd) {
-      throw new Error(`Access denied: Path '${inputPath}' resolves to '${abs}' which is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`)
+    if (pathType === 'wsl') {
+      // Both are Linux paths - compare directly using POSIX rules
+      const normalizedCwd = options.cwd.replace(/\/$/, '')
+      const normalizedAbs = abs.replace(/\/$/, '')
+      if (!normalizedAbs.startsWith(normalizedCwd + '/') && normalizedAbs !== normalizedCwd) {
+        throw new Error(`Access denied: Path '${inputPath}' resolves to '${abs}' which is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`)
+      }
+    } else {
+      // Windows or native paths - use Node's path module
+      const normalizedCwd = path.resolve(options.cwd)
+      const normalizedAbs = path.resolve(abs)
+      if (!normalizedAbs.startsWith(normalizedCwd + path.sep) && normalizedAbs !== normalizedCwd) {
+        throw new Error(`Access denied: Path '${inputPath}' resolves to '${abs}' which is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`)
+      }
     }
+  }
+
+  // NOW convert to UNC for filesystem access
+  if (pathType === 'wsl') {
+    abs = await resolveToWindowsPath(abs)
   }
 
   // Check existence and get size

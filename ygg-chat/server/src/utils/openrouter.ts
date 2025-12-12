@@ -1,6 +1,6 @@
+import { OpenRouter } from '@openrouter/sdk'
 import { randomUUID } from 'crypto'
 import fs from 'fs'
-import OpenAI from 'openai'
 import path from 'path'
 import { MessageId } from '../../../shared/types'
 import { ProviderCostService } from '../database/models'
@@ -9,6 +9,7 @@ import { getApiKey } from './apiKeyManager'
 import { getCachedAttachmentBase64 } from './attachmentCache'
 import { canAccessPaidModels } from './freeTier'
 import { moneyAdd, moneyFormat, moneyMax, moneyMultiply } from './money'
+import { isImageGenerationModel, streamImageGeneration } from './openrouterImageStream'
 import tools from './tools'
 
 // Helper function to convert Zod schema to JSON schema
@@ -159,7 +160,8 @@ function convertZodField(field: any): any {
 }
 
 // OpenRouter client will be created dynamically with encrypted API key
-let openrouterInstance: OpenAI | null = null
+let openrouterInstance: OpenRouter | null = null
+let openrouterApiKey: string | null = null
 
 // Model pricing cache
 interface ModelPricing {
@@ -179,18 +181,11 @@ async function getOpenRouterClient() {
       throw new Error('OPENROUTER_API_KEY not found or failed to decrypt')
     }
 
-    const headers: Record<string, string> = {}
-    const referer = process.env.OPENROUTER_REFERER || process.env.SITE_URL
-    if (referer) headers['HTTP-Referer'] = referer
-    const title = process.env.OPENROUTER_TITLE || 'Yggdrasil'
-    headers['X-Title'] = title
-    headers['HTTP-Referer'] = 'https://yggchat.com'
-    headers['X-Title'] = 'Yggdrasil'
-
-    openrouterInstance = new OpenAI({
+    openrouterApiKey = apiKey
+    openrouterInstance = new OpenRouter({
       apiKey,
-      baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
-      defaultHeaders: headers,
+      httpReferer: process.env.OPENROUTER_REFERER || 'https://yggchat.com',
+      xTitle: process.env.OPENROUTER_TITLE || 'Yggdrasil',
     })
   }
   return openrouterInstance
@@ -199,12 +194,13 @@ async function getOpenRouterClient() {
 // Fetch all models pricing from OpenRouter and cache them
 async function fetchAllModelsPricing(): Promise<void> {
   try {
-    const client = await getOpenRouterClient()
+    // Ensure client is initialized (this also sets openrouterApiKey)
+    await getOpenRouterClient()
 
     // Fetch all models from OpenRouter
     const response = await fetch('https://openrouter.ai/api/v1/models', {
       headers: {
-        Authorization: `Bearer ${client.apiKey}`,
+        Authorization: `Bearer ${openrouterApiKey}`,
         'HTTP-Referer': process.env.OPENROUTER_REFERER || process.env.SITE_URL || '',
         'X-Title': process.env.OPENROUTER_TITLE || 'Yggdrasil',
       },
@@ -791,13 +787,16 @@ export async function generateResponse(
     }
 
     // Prepare messages for this step
+    // OpenRouter SDK uses camelCase (toolCalls, toolCallId) not snake_case
     let formattedMessages: any[] = conversationMessages.map(msg => {
       const m = msg as any
       return {
         role: m.role,
         content: m.content,
-        ...(m.tool_calls && { tool_calls: m.tool_calls }),
-        ...(m.tool_call_id && { tool_call_id: m.tool_call_id }),
+        ...(m.tool_calls && { toolCalls: m.tool_calls }),
+        ...(m.toolCalls && { toolCalls: m.toolCalls }),
+        ...(m.tool_call_id && { toolCallId: m.tool_call_id }),
+        ...(m.toolCallId && { toolCallId: m.toolCallId }),
       }
     })
 
@@ -818,6 +817,41 @@ export async function generateResponse(
 
     try {
       const openrouterClient = await getOpenRouterClient()
+
+      // Check if this is an image generation model - use raw streaming to capture images
+      if (isImageGenerationModel(model)) {
+        console.log('[OPENROUTER] Detected image generation model, routing to raw streaming:', model)
+        await streamImageGeneration(
+          {
+            apiKey: openrouterApiKey!,
+            model,
+            messages: formattedMessages,
+            maxTokens: 20000,
+            abortSignal,
+          },
+          {
+            onText: text => {
+              assistantContent += text
+              onChunk(JSON.stringify({ part: 'text', delta: text }))
+            },
+            onImage: (url, mimeType) => {
+              onChunk(JSON.stringify({ part: 'image', url, mimeType }))
+            },
+            onUsage: usage => {
+              finalUsage = usage
+              if (usage.cost) {
+                openrouterCreditsUsed = parseFloat(usage.cost) || 0
+              }
+            },
+            onError: error => {
+              onChunk(JSON.stringify({ part: 'error', delta: error }))
+            },
+          }
+        )
+        // Image generation complete, exit the step loop
+        console.log('[OPENROUTER] Raw image streaming completed')
+        break
+      }
 
       // // Log messages being sent to API
       // console.log('📤 [openrouter] Messages sent to API:')
@@ -860,7 +894,7 @@ export async function generateResponse(
       //   JSON.stringify(formattedMessages, null, 2).substring(0, 5000)
       // )
 
-      const stream: any = await openrouterClient.chat.completions.create(
+      const stream: any = await openrouterClient.chat.send(
         {
           model, // e.g. "openrouter/auto" or a specific openrouter/<provider>/<model> id
           provider: {
@@ -874,10 +908,11 @@ export async function generateResponse(
           },
           messages: formattedMessages,
           stream: true,
-          max_tokens: 50000,
+          maxTokens: 20000,
           tools: openaiTools.length > 0 ? openaiTools : undefined,
           usage: { include: true },
-          ...(think && { reasoning: { max_tokens: 30000 } }),
+          modalities: ['image', 'text'],
+          ...(think && { reasoning: { effort: 'high' } }),
         } as any,
         { signal: abortSignal }
       )
@@ -930,9 +965,9 @@ export async function generateResponse(
         }
 
         // Handle tool calls
-        if (delta.tool_calls) {
-          // console.log('🔧 [openrouter] Tool call delta received:', JSON.stringify(delta.tool_calls))
-          for (const toolCall of delta.tool_calls) {
+        if (delta.toolCalls) {
+          // console.log('🔧 [openrouter] Tool call delta received:', JSON.stringify(delta.toolCalls))
+          for (const toolCall of delta.toolCalls) {
             if (toolCall.id && toolCall.function?.name) {
               // New tool call
               currentToolCall = {
@@ -1041,6 +1076,23 @@ export async function generateResponse(
           onChunk(JSON.stringify({ part: 'text', delta: delta.content, chunkId: chunk.id }))
         }
 
+        // Handle images from image generation models (OpenRouter returns in separate 'images' array)
+        if (delta.images && Array.isArray(delta.images)) {
+          for (const image of delta.images) {
+            const imageUrl = image.image_url?.url || image.url
+            if (imageUrl) {
+              onChunk(
+                JSON.stringify({
+                  part: 'image',
+                  url: imageUrl,
+                  mimeType: 'image/png',
+                  chunkId: chunk.id,
+                })
+              )
+            }
+          }
+        }
+
         // Check if conversation is finished (no more deltas)
         if (choice.finish_reason === 'stop' || choice.finish_reason === 'length') {
           // If no usage data was provided, create estimated usage
@@ -1081,10 +1133,11 @@ export async function generateResponse(
         // )
 
         // Add assistant message with tool calls to conversation
+        // OpenRouter SDK uses camelCase (toolCalls)
         conversationMessages.push({
           role: 'assistant',
           content: assistantContent || null,
-          tool_calls: uniqueToolCalls.map(tc => ({
+          toolCalls: uniqueToolCalls.map(tc => ({
             id: tc.id,
             type: 'function' as const,
             function: {
@@ -1128,9 +1181,10 @@ export async function generateResponse(
               )
 
               // Add tool result to conversation for next iteration
+              // OpenRouter SDK uses camelCase (toolCallId)
               conversationMessages.push({
                 role: 'tool',
-                tool_call_id: toolCall.id,
+                toolCallId: toolCall.id,
                 content: result,
               } as any)
             }
@@ -1147,10 +1201,11 @@ export async function generateResponse(
             conversationMessages.pop()
 
             // Add new assistant message with ONLY client tools
+            // OpenRouter SDK uses camelCase (toolCalls)
             conversationMessages.push({
               role: 'assistant',
               content: assistantContent || null,
-              tool_calls: clientToolCalls.map(tc => ({
+              toolCalls: clientToolCalls.map(tc => ({
                 id: tc.id,
                 type: 'function' as const,
                 function: {
@@ -1223,9 +1278,10 @@ export async function generateResponse(
             })
           )
 
+          // OpenRouter SDK uses camelCase (toolCallId)
           conversationMessages.push({
             role: 'tool',
-            tool_call_id: toolCall.id,
+            toolCallId: toolCall.id,
             content: result,
           } as any)
         }
@@ -1298,14 +1354,14 @@ export async function generateResponse(
       if (isToolError && openaiTools.length > 0) {
         try {
           const retryClient = await getOpenRouterClient()
-          const stream: any = await retryClient.chat.completions.create(
+          const stream: any = await retryClient.chat.send(
             {
               model,
               messages: formattedMessages,
               stream: true,
-              max_tokens: 4000,
+              maxTokens: 4000,
               usage: { include: true },
-              ...(think && { reasoning: { max_tokens: 10000 } }),
+              ...(think && { reasoning: { effort: 'high' } }),
             } as any,
             {
               signal: abortSignal,
@@ -1368,6 +1424,22 @@ export async function generateResponse(
               onChunk(JSON.stringify({ part: 'text', delta: delta.content }))
             }
 
+            // Handle images from image generation models (OpenRouter returns in separate 'images' array)
+            if (delta.images && Array.isArray(delta.images)) {
+              for (const image of delta.images) {
+                const imageUrl = image.image_url?.url || image.url
+                if (imageUrl) {
+                  onChunk(
+                    JSON.stringify({
+                      part: 'image',
+                      url: imageUrl,
+                      mimeType: 'image/png',
+                    })
+                  )
+                }
+              }
+            }
+
             if (choice.finish_reason === 'stop' || choice.finish_reason === 'length') {
               if (!finalUsage) {
                 finalUsage = createEstimatedUsage(formattedMessages, assistantContent)
@@ -1417,7 +1489,7 @@ export async function generateResponse(
         for (let i = 0; i < lastMessages.length; i++) {
           const msg = lastMessages[i]
           console.error(
-            `    [${formattedMessages.length - 5 + i}] role=${msg.role}, has_tool_calls=${!!msg.tool_calls}, content_type=${typeof msg.content}`
+            `    [${formattedMessages.length - 5 + i}] role=${msg.role}, has_tool_calls=${!!msg.toolCalls}, content_type=${typeof msg.content}`
           )
         }
 
@@ -1641,7 +1713,8 @@ async function handleImageAttachments(
         const cached = await getCachedAttachmentBase64(att.sha256)
         if (cached) {
           // console.log(`Cache hit for attachment sha256:${att.sha256.substring(0, 12)}...`)
-          parts.push({ type: 'image_url', image_url: { url: `data:${cached.mimeType};base64,${cached.base64}` } })
+          // OpenRouter SDK uses camelCase (imageUrl)
+          parts.push({ type: 'image_url', imageUrl: { url: `data:${cached.mimeType};base64,${cached.base64}` } })
           continue // Skip disk/network read
         }
         // console.log(`Cache miss for attachment sha256:${att.sha256.substring(0, 12)}...`)
@@ -1723,8 +1796,8 @@ async function handleImageAttachments(
         // Convert to base64
         const base64 = imageBuffer.toString('base64')
 
-        // Add image in OpenAI format
-        parts.push({ type: 'image_url', image_url: { url: `data:${mediaType};base64,${base64}` } })
+        // Add image in OpenRouter SDK format (uses camelCase imageUrl)
+        parts.push({ type: 'image_url', imageUrl: { url: `data:${mediaType};base64,${base64}` } })
 
         // console.log(`Successfully processed image attachment:${att.filePath}`)
       }

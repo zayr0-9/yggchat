@@ -78,13 +78,18 @@ export async function editFileSearchReplace(
   } = options
 
   try {
-    // Resolve path for fs operations (UNC format on Windows) and track path type
-    let fsPath: string  // Path for fs.promises operations
+    // Resolve path for fs operations and track path type
+    let fsPath: string = filePath  // Path for fs.promises operations
     let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+    const willBeWsl = isWSLPath(filePath)
 
-    if (isWSLPath(filePath)) {
-      fsPath = await resolveToWindowsPath(filePath)
+    // For WSL paths, resolve to absolute Linux path first (for validation)
+    if (willBeWsl) {
       pathType = 'wsl'
+      // Make path absolute using POSIX rules (before UNC conversion)
+      if (!filePath.startsWith('/')) {
+        fsPath = options.cwd ? `${options.cwd.replace(/\/$/, '')}/${filePath}` : filePath
+      }
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
@@ -93,18 +98,38 @@ export async function editFileSearchReplace(
       }
     }
 
-    // Workspace validation: reject paths outside cwd
+    // Workspace validation BEFORE UNC conversion (compare Linux to Linux)
     if (options.cwd) {
-      const normalizedCwd = path.resolve(options.cwd)
-      const normalizedPath = path.resolve(fsPath)
-      if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
-        return {
-          success: false,
-          sizeBytes: 0,
-          replacements: 0,
-          message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+      if (pathType === 'wsl') {
+        // Both are Linux paths - compare directly using POSIX rules
+        const normalizedCwd = options.cwd.replace(/\/$/, '')
+        const normalizedPath = fsPath.replace(/\/$/, '')
+        if (!normalizedPath.startsWith(normalizedCwd + '/') && normalizedPath !== normalizedCwd) {
+          return {
+            success: false,
+            sizeBytes: 0,
+            replacements: 0,
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+          }
+        }
+      } else {
+        // Windows or native paths - use Node's path module
+        const normalizedCwd = path.resolve(options.cwd)
+        const normalizedPath = path.resolve(fsPath)
+        if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+          return {
+            success: false,
+            sizeBytes: 0,
+            replacements: 0,
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+          }
         }
       }
+    }
+
+    // NOW convert to UNC for filesystem access
+    if (pathType === 'wsl') {
+      fsPath = await resolveToWindowsPath(fsPath)
     }
 
     // Read the file first
@@ -253,13 +278,18 @@ export async function editFileSearchReplaceFirst(
   } = options
 
   try {
-    // Resolve path for fs operations (UNC format on Windows) and track path type
-    let fsPath: string  // Path for fs.promises operations
+    // Resolve path for fs operations and track path type
+    let fsPath: string = filePath  // Path for fs.promises operations
     let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+    const willBeWsl = isWSLPath(filePath)
 
-    if (isWSLPath(filePath)) {
-      fsPath = await resolveToWindowsPath(filePath)
+    // For WSL paths, resolve to absolute Linux path first (for validation)
+    if (willBeWsl) {
       pathType = 'wsl'
+      // Make path absolute using POSIX rules (before UNC conversion)
+      if (!filePath.startsWith('/')) {
+        fsPath = options.cwd ? `${options.cwd.replace(/\/$/, '')}/${filePath}` : filePath
+      }
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
@@ -268,18 +298,38 @@ export async function editFileSearchReplaceFirst(
       }
     }
 
-    // Workspace validation: reject paths outside cwd
+    // Workspace validation BEFORE UNC conversion (compare Linux to Linux)
     if (options.cwd) {
-      const normalizedCwd = path.resolve(options.cwd)
-      const normalizedPath = path.resolve(fsPath)
-      if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
-        return {
-          success: false,
-          sizeBytes: 0,
-          replacements: 0,
-          message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+      if (pathType === 'wsl') {
+        // Both are Linux paths - compare directly using POSIX rules
+        const normalizedCwd = options.cwd.replace(/\/$/, '')
+        const normalizedPath = fsPath.replace(/\/$/, '')
+        if (!normalizedPath.startsWith(normalizedCwd + '/') && normalizedPath !== normalizedCwd) {
+          return {
+            success: false,
+            sizeBytes: 0,
+            replacements: 0,
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+          }
+        }
+      } else {
+        // Windows or native paths - use Node's path module
+        const normalizedCwd = path.resolve(options.cwd)
+        const normalizedPath = path.resolve(fsPath)
+        if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+          return {
+            success: false,
+            sizeBytes: 0,
+            replacements: 0,
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+          }
         }
       }
+    }
+
+    // NOW convert to UNC for filesystem access
+    if (pathType === 'wsl') {
+      fsPath = await resolveToWindowsPath(fsPath)
     }
 
     const fileData = await readTextFile(filePath, { cwd: options.cwd })
@@ -381,13 +431,18 @@ export async function appendToFile(
   const { createBackup = false, encoding = 'utf8' } = options
 
   try {
-    // Resolve path for fs operations (UNC format on Windows) and track path type
-    let fsPath: string  // Path for fs.promises operations
+    // Resolve path for fs operations and track path type
+    let fsPath: string = filePath  // Path for fs.promises operations
     let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+    const willBeWsl = isWSLPath(filePath)
 
-    if (isWSLPath(filePath)) {
-      fsPath = await resolveToWindowsPath(filePath)
+    // For WSL paths, resolve to absolute Linux path first (for validation)
+    if (willBeWsl) {
       pathType = 'wsl'
+      // Make path absolute using POSIX rules (before UNC conversion)
+      if (!filePath.startsWith('/')) {
+        fsPath = options.cwd ? `${options.cwd.replace(/\/$/, '')}/${filePath}` : filePath
+      }
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
@@ -396,18 +451,38 @@ export async function appendToFile(
       }
     }
 
-    // Workspace validation: reject paths outside cwd
+    // Workspace validation BEFORE UNC conversion (compare Linux to Linux)
     if (options.cwd) {
-      const normalizedCwd = path.resolve(options.cwd)
-      const normalizedPath = path.resolve(fsPath)
-      if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
-        return {
-          success: false,
-          sizeBytes: 0,
-          replacements: 0,
-          message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+      if (pathType === 'wsl') {
+        // Both are Linux paths - compare directly using POSIX rules
+        const normalizedCwd = options.cwd.replace(/\/$/, '')
+        const normalizedPath = fsPath.replace(/\/$/, '')
+        if (!normalizedPath.startsWith(normalizedCwd + '/') && normalizedPath !== normalizedCwd) {
+          return {
+            success: false,
+            sizeBytes: 0,
+            replacements: 0,
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+          }
+        }
+      } else {
+        // Windows or native paths - use Node's path module
+        const normalizedCwd = path.resolve(options.cwd)
+        const normalizedPath = path.resolve(fsPath)
+        if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+          return {
+            success: false,
+            sizeBytes: 0,
+            replacements: 0,
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+          }
         }
       }
+    }
+
+    // NOW convert to UNC for filesystem access
+    if (pathType === 'wsl') {
+      fsPath = await resolveToWindowsPath(fsPath)
     }
 
     let originalContent = ''

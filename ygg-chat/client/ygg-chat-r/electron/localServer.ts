@@ -2,6 +2,7 @@
 // Embedded local SQLite server for dual-sync in Electron mode
 // This server runs on port 3002 and handles sync operations from Railway to local SQLite
 
+import crypto from 'crypto'
 import Database from 'better-sqlite3'
 import cors from 'cors'
 import express from 'express'
@@ -62,10 +63,12 @@ let server: any = null
 let wss: WebSocketServer | null = null
 let db: Database.Database | null = null
 let statements: any = {}
+let currentDbPath: string | null = null
 
 // Initialize database at specified path
 function initializeLocalDatabase(dbPath: string) {
   console.log('[LocalServer] Initializing database at:', dbPath)
+  currentDbPath = dbPath
 
   // Ensure directory exists
   const dbDir = path.dirname(dbPath)
@@ -365,6 +368,74 @@ function ensureConversationExists(conversationId: string, userId: string, projec
     db.prepare(
       'INSERT INTO conversations (id, project_id, user_id, title, model_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
     ).run(conversationId, projectId || null, userId, 'Synced Conversation', 'unknown', now, now)
+  }
+}
+
+// Helper to save generated images from image-generating models to local storage
+async function saveGeneratedImage(
+  messageId: string,
+  imageUrl: string,
+  mimeType: string = 'image/png'
+): Promise<{ filePath: string; attachmentId: string } | null> {
+  if (!db || !statements || !currentDbPath) {
+    console.error('[LocalServer] Database not initialized for saving generated image')
+    return null
+  }
+
+  try {
+    // Download the image
+    const response = await fetch(imageUrl)
+    if (!response.ok) {
+      console.error('[LocalServer] Failed to download image:', imageUrl, response.statusText)
+      return null
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer())
+
+    // Calculate SHA256 for deduplication
+    const sha256 = crypto.createHash('sha256').update(buffer).digest('hex')
+
+    // Determine file extension and path
+    const ext = mimeType.split('/')[1] || 'png'
+    const fileName = `${sha256}.${ext}`
+    const imagesDir = path.join(path.dirname(currentDbPath), 'generated_images')
+    const filePath = path.join(imagesDir, fileName)
+
+    // Ensure directory exists
+    if (!fs.existsSync(imagesDir)) {
+      fs.mkdirSync(imagesDir, { recursive: true })
+    }
+
+    // Write file
+    fs.writeFileSync(filePath, buffer)
+
+    // Create attachment record
+    const attachmentId = uuidv4()
+    const now = new Date().toISOString()
+
+    statements.upsertAttachment.run(
+      attachmentId,
+      messageId,
+      'image',
+      mimeType,
+      'file',
+      null, // url
+      filePath,
+      null, // width
+      null, // height
+      buffer.length,
+      sha256,
+      now
+    )
+
+    // Link attachment to message
+    statements.linkAttachment.run(uuidv4(), messageId, attachmentId, now)
+
+    console.log('[LocalServer] Saved generated image:', filePath)
+    return { filePath, attachmentId }
+  } catch (error) {
+    console.error('[LocalServer] Error saving generated image:', error)
+    return null
   }
 }
 
@@ -824,22 +895,18 @@ function setupServer() {
         typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null),
         created_at || new Date().toISOString()
       )
-      // console.log(
-      //   '[LocalServer] ✅ Synced message successfully:',
-      //   id,
-      //   '- role:',
-      //   role,
-      //   'conversation:',
-      //   conversation_id
-      // )
 
-      // Verify the message was saved
-      // const saved = statements.getMessageById.get(id)
-      // if (saved) {
-      //   console.log('[LocalServer] ✅ Verified message exists in DB:', id)
-      // } else {
-      //   console.log('[LocalServer] ⚠️  Warning: Message not found after save:', id)
-      // }
+      // Process any image content_blocks and save them locally
+      const parsedBlocks = typeof content_blocks === 'string' ? JSON.parse(content_blocks) : content_blocks
+      if (Array.isArray(parsedBlocks)) {
+        const imageBlocks = parsedBlocks.filter((block: any) => block.type === 'image' && block.url)
+        for (const imageBlock of imageBlocks) {
+          // Save image asynchronously (don't block response)
+          saveGeneratedImage(id, imageBlock.url, imageBlock.mimeType || 'image/png').catch(err => {
+            console.error('[LocalServer] Failed to save generated image:', err)
+          })
+        }
+      }
 
       res.json({ success: true, id })
     } catch (error) {

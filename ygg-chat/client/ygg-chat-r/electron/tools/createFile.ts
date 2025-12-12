@@ -85,16 +85,31 @@ export async function createTextFile(
       windowsPath = await resolveToWindowsPath(targetPath)
     }
 
-    // Workspace validation: reject paths outside cwd
+    // Workspace validation BEFORE UNC conversion (compare Linux to Linux for WSL)
     if (cwd) {
-      const normalizedCwd = path.resolve(cwd)
-      const normalizedTarget = path.resolve(targetPath)
-      if (!normalizedTarget.startsWith(normalizedCwd + path.sep) && normalizedTarget !== normalizedCwd) {
-        return {
-          success: false,
-          created: false,
-          sizeBytes: 0,
-          message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+      if (isWSL) {
+        // Both are Linux paths - compare directly using POSIX rules
+        const normalizedCwd = cwd.replace(/\/$/, '')
+        const normalizedTarget = targetPath.replace(/\/$/, '')
+        if (!normalizedTarget.startsWith(normalizedCwd + '/') && normalizedTarget !== normalizedCwd) {
+          return {
+            success: false,
+            created: false,
+            sizeBytes: 0,
+            message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+          }
+        }
+      } else {
+        // Windows or native paths - use Node's path module
+        const normalizedCwd = path.resolve(cwd)
+        const normalizedTarget = path.resolve(targetPath)
+        if (!normalizedTarget.startsWith(normalizedCwd + path.sep) && normalizedTarget !== normalizedCwd) {
+          return {
+            success: false,
+            created: false,
+            sizeBytes: 0,
+            message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+          }
         }
       }
     }

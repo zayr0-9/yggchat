@@ -240,6 +240,14 @@ export const chatSlice = createSlice({
               })
             }
           }
+        } else if (chunk.part === 'image') {
+          // Handle image events from image generation models
+          state.streaming.events.push({
+            type: 'image',
+            url: chunk.url,
+            mimeType: chunk.mimeType || 'image/png',
+            complete: true,
+          })
         } else {
           const delta = chunk.delta ?? chunk.content ?? ''
           state.streaming.buffer += delta

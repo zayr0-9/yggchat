@@ -8,7 +8,7 @@ export interface Message extends BaseMessage {
   //should write a function which extracts text content
   //when user drags and drops it on the input component
   // Content blocks for ex_agent messages (Claude Code responses stored chronologically)
-  content_blocks?: (ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock)[]
+  content_blocks?: (ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock | ImageBlock)[]
 }
 
 export interface miniMessage {
@@ -45,7 +45,14 @@ export interface ToolResultBlock {
   is_error: boolean
 }
 
-export type ContentBlock = ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock
+export interface ImageBlock {
+  type: 'image'
+  index: number
+  url: string
+  mimeType: string
+}
+
+export type ContentBlock = ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock | ImageBlock
 
 // Tool call types
 export interface ToolCall {
@@ -71,7 +78,10 @@ export interface StreamChunk {
   // delta is used for token-level updates from the server
   delta?: string
   // part distinguishes normal text from reasoning tokens from tool calls
-  part?: 'text' | 'reasoning' | 'tool_call' | 'tool_result'
+  part?: 'text' | 'reasoning' | 'tool_call' | 'tool_result' | 'image'
+  // image data for generated images
+  url?: string
+  mimeType?: string
   message?: Message
   error?: string
   // optional iteration index for multi-reply endpoints
@@ -101,7 +111,7 @@ export interface StreamChunk {
 
 // Sequential event for streaming to preserve order
 export interface StreamEvent {
-  type: 'text' | 'reasoning' | 'tool_call' | 'tool_result'
+  type: 'text' | 'reasoning' | 'tool_call' | 'tool_result' | 'image'
   content?: string
   delta?: string
   toolCall?: ToolCall
@@ -111,6 +121,9 @@ export interface StreamEvent {
     content: any
     is_error: boolean
   }
+  // Image data for generated images
+  url?: string
+  mimeType?: string
   // Indicates if this is a complete block (not a delta)
   complete?: boolean
 }

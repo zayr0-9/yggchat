@@ -3,11 +3,14 @@ import type { RootState } from '@/store/store'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
+import 'katex/dist/katex.min.css'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { useDispatch, useSelector } from 'react-redux'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { chatSliceActions } from '../../features/chats/chatSlice'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
@@ -1387,8 +1390,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
                     >
                       <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
                         components={{ pre: PreRenderer, a: MarkdownLink }}
                       >
                         {accumulatedText}
@@ -1447,8 +1450,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       {isExpanded && (
                         <div className='prose max-w-none dark:prose-invert w-full text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px] mt-2'>
                           <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
                             components={{ pre: PreRenderer, a: MarkdownLink }}
                           >
                             {accumulatedReasoning}
@@ -1521,6 +1524,17 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     )}
                   </div>
                 )
+              } else if (event.type === 'image' && event.url) {
+                return (
+                  <div key={`image-${idx}`} className='my-3 mx-1'>
+                    <img
+                      src={event.url}
+                      alt='Generated image'
+                      className='max-w-full h-auto rounded-lg shadow-md'
+                      loading='lazy'
+                    />
+                  </div>
+                )
               }
               return null
             })}
@@ -1542,8 +1556,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     className='prose sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
                   >
                     <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
                       components={{ pre: PreRenderer, a: MarkdownLink }}
                     >
                       {block.content}
@@ -1589,14 +1603,25 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     {isExpanded && (
                       <div className='prose max-w-none dark:prose-invert w-full px-4 py-1 text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px]'>
                         <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                          remarkPlugins={[remarkGfm, remarkMath]}
+                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
                           components={{ pre: PreRenderer, a: MarkdownLink }}
                         >
                           {block.content}
                         </ReactMarkdown>
                       </div>
                     )}
+                  </div>
+                )
+              } else if (block.type === 'image' && block.url) {
+                return (
+                  <div key={`image-${block.index}-${idx}`} className='my-3 mx-1'>
+                    <img
+                      src={block.url}
+                      alt='Generated image'
+                      className='max-w-full h-auto rounded-lg shadow-md'
+                      loading='lazy'
+                    />
                   </div>
                 )
               }
@@ -1656,8 +1681,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
                   >
                     <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
                       components={{ pre: PreRenderer, a: MarkdownLink }}
                     >
                       {thinking}
@@ -1708,8 +1733,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             {(!contentBlocks || contentBlocks.length === 0) && (!streamEvents || streamEvents.length === 0) && (
               <div className='prose px-4 py-2 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[20px]'>
                 <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
                   components={{ pre: PreRenderer, a: MarkdownLink }}
                 >
                   {content}

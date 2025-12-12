@@ -19,20 +19,41 @@ export async function deleteFile(filePath: string, operationMode?: 'plan' | 'exe
   try {
     // Resolve the path to handle relative paths
     let resolvedPath = filePath;
-    if (isWSLPath(filePath)) {
-      resolvedPath = await resolveToWindowsPath(filePath);
+    const willBeWsl = isWSLPath(filePath);
+
+    // For WSL paths, resolve to absolute Linux path first (for validation)
+    if (willBeWsl) {
+      // Make path absolute using POSIX rules (before UNC conversion)
+      if (!filePath.startsWith('/')) {
+        resolvedPath = cwd ? `${cwd.replace(/\/$/, '')}/${filePath}` : filePath;
+      }
     } else {
       const basePath = cwd || process.cwd();
       resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
     }
 
-    // Workspace validation: reject paths outside cwd
+    // Workspace validation BEFORE UNC conversion (compare Linux to Linux)
     if (cwd) {
-      const normalizedCwd = path.resolve(cwd);
-      const normalizedPath = path.resolve(resolvedPath);
-      if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
-        throw new Error(`Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`);
+      if (willBeWsl) {
+        // Both are Linux paths - compare directly using POSIX rules
+        const normalizedCwd = cwd.replace(/\/$/, '');
+        const normalizedPath = resolvedPath.replace(/\/$/, '');
+        if (!normalizedPath.startsWith(normalizedCwd + '/') && normalizedPath !== normalizedCwd) {
+          throw new Error(`Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`);
+        }
+      } else {
+        // Windows or native paths - use Node's path module
+        const normalizedCwd = path.resolve(cwd);
+        const normalizedPath = path.resolve(resolvedPath);
+        if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+          throw new Error(`Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`);
+        }
       }
+    }
+
+    // NOW convert to UNC for filesystem access
+    if (willBeWsl) {
+      resolvedPath = await resolveToWindowsPath(resolvedPath);
     }
 
     // Check if file exists
@@ -74,22 +95,43 @@ export async function safeDeleteFile(
   }
 
   let resolvedPath = filePath;
-  if (isWSLPath(filePath)) {
-    resolvedPath = await resolveToWindowsPath(filePath);
+  const willBeWsl = isWSLPath(filePath);
+
+  // For WSL paths, resolve to absolute Linux path first (for validation)
+  if (willBeWsl) {
+    // Make path absolute using POSIX rules (before UNC conversion)
+    if (!filePath.startsWith('/')) {
+      resolvedPath = cwd ? `${cwd.replace(/\/$/, '')}/${filePath}` : filePath;
+    }
   } else {
     const basePath = cwd || process.cwd();
     resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
   }
 
-  // Workspace validation: reject paths outside cwd
+  // Workspace validation BEFORE UNC conversion (compare Linux to Linux)
   if (cwd) {
-    const normalizedCwd = path.resolve(cwd);
-    const normalizedPath = path.resolve(resolvedPath);
-    if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
-      throw new Error(`Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`);
+    if (willBeWsl) {
+      // Both are Linux paths - compare directly using POSIX rules
+      const normalizedCwd = cwd.replace(/\/$/, '');
+      const normalizedPath = resolvedPath.replace(/\/$/, '');
+      if (!normalizedPath.startsWith(normalizedCwd + '/') && normalizedPath !== normalizedCwd) {
+        throw new Error(`Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`);
+      }
+    } else {
+      // Windows or native paths - use Node's path module
+      const normalizedCwd = path.resolve(cwd);
+      const normalizedPath = path.resolve(resolvedPath);
+      if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+        throw new Error(`Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`);
+      }
     }
   }
-  
+
+  // NOW convert to UNC for filesystem access
+  if (willBeWsl) {
+    resolvedPath = await resolveToWindowsPath(resolvedPath);
+  }
+
   // Validate file extension if provided
   if (allowedExtensions && allowedExtensions.length > 0) {
     const fileExt = path.extname(resolvedPath).toLowerCase();

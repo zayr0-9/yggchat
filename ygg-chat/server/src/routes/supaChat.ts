@@ -88,6 +88,14 @@ function accumulateContentBlocks(events: any[]): any[] {
         is_error: event.toolResult.is_error || false,
       })
       i++
+    } else if (event.type === 'image' && event.url) {
+      // Image events from image generation models
+      accumulated.push({
+        type: 'image',
+        url: event.url,
+        mimeType: event.mimeType || 'image/png',
+      })
+      i++
     } else {
       i++
     }
@@ -1289,7 +1297,7 @@ router.post(
           chunk => {
             try {
               const obj = JSON.parse(chunk)
-              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | undefined
+              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | 'image' | undefined
               const delta = String(obj?.delta ?? '')
               if (part === 'reasoning') {
                 assistantThinking += delta
@@ -1335,6 +1343,13 @@ router.post(
                     `data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta, iteration: i })}\n\n`
                   )
                 }
+              } else if (part === 'image') {
+                // Handle image events from image generation models
+                const imageUrl = obj?.url || delta
+                contentBlocksEvents.push({ type: 'image', url: imageUrl, mimeType: obj?.mimeType || 'image/png' })
+                res.write(
+                  `data: ${JSON.stringify({ type: 'chunk', part: 'image', url: imageUrl, mimeType: obj?.mimeType || 'image/png', content: '', iteration: i })}\n\n`
+                )
               } else {
                 if (delta.includes('{')) {
                   const { jsonObjects, cleanedText } = extractJsonObjects(delta)
@@ -1784,7 +1799,7 @@ router.post(
             // console.log('[supaChat] Received chunk:', chunk.substring(0, 50) + '...')
             try {
               const obj = JSON.parse(chunk)
-              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | undefined
+              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | 'image' | undefined
               const delta = String(obj?.delta ?? '')
               if (part === 'reasoning') {
                 assistantThinking += delta
@@ -1828,6 +1843,13 @@ router.post(
                   contentBlocksEvents.push({ type: 'text', delta })
                   res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta, content: delta })}\n\n`)
                 }
+              } else if (part === 'image') {
+                // Handle image events from image generation models
+                const imageUrl = obj?.url || delta
+                contentBlocksEvents.push({ type: 'image', url: imageUrl, mimeType: obj?.mimeType || 'image/png' })
+                res.write(
+                  `data: ${JSON.stringify({ type: 'chunk', part: 'image', url: imageUrl, mimeType: obj?.mimeType || 'image/png', content: '' })}\n\n`
+                )
               } else {
                 if (delta.includes('{')) {
                   const { jsonObjects, cleanedText } = extractJsonObjects(delta)
