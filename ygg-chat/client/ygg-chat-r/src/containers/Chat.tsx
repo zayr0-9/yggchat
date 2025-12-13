@@ -2508,13 +2508,15 @@ function Chat() {
             <div className='bg-transparent rounded-b-4xl dark:bg-transparent flex flex-col items-end pt-3 md:pt-0'>
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
-                  <div
-                    className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
-                    title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
-                  >
-                    {ideContext?.extensionConnected ? '🟢 ' : '🔴 '}
-                    {workspace?.name && `${workspace.name}`}
-                  </div>
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
+                    <div
+                      className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
+                      title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
+                    >
+                      {ideContext?.extensionConnected ? '🟢 ' : ''}
+                      {workspace?.name && `${workspace.name}`}
+                    </div>
+                  )}
                   <Button
                     variant='outline2'
                     className='rounded-full'
@@ -2678,7 +2680,6 @@ function Chat() {
                       </>
                     )}
                   </Button>
-
                   {/* Image upload button */}
                   <input
                     ref={imageInputRef}

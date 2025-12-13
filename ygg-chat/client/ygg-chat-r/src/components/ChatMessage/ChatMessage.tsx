@@ -1530,7 +1530,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     <img
                       src={event.url}
                       alt='Generated image'
-                      className='max-w-full h-auto rounded-lg shadow-md'
+                      className='max-w-full max-h-96 object-contain rounded-lg shadow-md'
                       loading='lazy'
                     />
                   </div>
@@ -1619,7 +1619,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     <img
                       src={block.url}
                       alt='Generated image'
-                      className='max-w-full h-auto rounded-lg shadow-md'
+                      className='max-w-full max-h-96 object-contain rounded-lg shadow-md'
                       loading='lazy'
                     />
                   </div>
