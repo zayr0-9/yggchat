@@ -1890,29 +1890,60 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               className={`${node.sender === 'user' ? 'stroke-neutral-200 dark:stroke-yPurple-400' : 'stroke-neutral-200 dark:stroke-yBrown-400'}`}
             /> */}
             <foreignObject width={nodeWidth} height={nodeHeight} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-              <div className='p-3 text-stone-800 dark:text-stone-300 text-sm h-full flex items-center'>
-                <p className='line-clamp-3 '>
-                  {node.message && node.message.trim().length > 0
-                    ? node.message
-                    : (() => {
-                      const nodeIdParsed = parseId(node.id)
-                      if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) return '...'
-                      const msg = getCurrentMessage(nodeIdParsed)
-                      if (msg?.tool_calls && msg.tool_calls.length > 0) {
-                        const toolNames = msg.tool_calls.map((tc: any) => tc.name).join(', ')
-                        return toolNames || 'Tool Call'
-                      }
-                      // Check content_blocks for tool_use
-                      if (msg?.content_blocks && Array.isArray(msg.content_blocks)) {
-                        const toolUses = msg.content_blocks.filter((block: any) => block.type === 'tool_use')
-                        if (toolUses.length > 0) {
-                          const toolNames = toolUses.map((tc: any) => tc.name).join(', ')
-                          return toolNames || 'Tool Call'
-                        }
-                      }
-                      return '...'
-                    })()}
-                </p>
+              <div className='relative p-3 text-stone-800 dark:text-stone-300 text-sm h-full flex items-center'>
+                {(() => {
+                  const nodeIdParsed = parseId(node.id)
+                  if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) {
+                    return <p className='line-clamp-3'>...</p>
+                  }
+                  const msg = getCurrentMessage(nodeIdParsed)
+
+                  // Check for image blocks in content_blocks
+                  if (msg?.content_blocks && Array.isArray(msg.content_blocks)) {
+                    const imageBlocks = msg.content_blocks.filter((block: any) => block.type === 'image' && block.url)
+                    if (imageBlocks.length > 0) {
+                      // Display the first image as a thumbnail
+                      const firstImage = imageBlocks[0]
+                      return (
+                        <div className='w-full h-full flex items-center justify-center overflow-hidden'>
+                          <img
+                            src={firstImage.url}
+                            alt='Generated image'
+                            className='max-w-full max-h-full object-contain rounded'
+                            style={{ maxHeight: nodeHeight - 24 }}
+                          />
+                          {imageBlocks.length > 1 && (
+                            <span className='absolute bottom-1 right-1 bg-black/50 text-white text-xs px-1.5 py-0.5 rounded'>
+                              +{imageBlocks.length - 1}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    }
+                  }
+
+                  // Show text content if available
+                  if (node.message && node.message.trim().length > 0) {
+                    return <p className='line-clamp-3'>{node.message}</p>
+                  }
+
+                  // Check for tool calls
+                  if (msg?.tool_calls && msg.tool_calls.length > 0) {
+                    const toolNames = msg.tool_calls.map((tc: any) => tc.name).join(', ')
+                    return <p className='line-clamp-3'>{toolNames || 'Tool Call'}</p>
+                  }
+
+                  // Check content_blocks for tool_use
+                  if (msg?.content_blocks && Array.isArray(msg.content_blocks)) {
+                    const toolUses = msg.content_blocks.filter((block: any) => block.type === 'tool_use')
+                    if (toolUses.length > 0) {
+                      const toolNames = toolUses.map((tc: any) => tc.name).join(', ')
+                      return <p className='line-clamp-3'>{toolNames || 'Tool Call'}</p>
+                    }
+                  }
+
+                  return <p className='line-clamp-3'>...</p>
+                })()}
               </div>
             </foreignObject>
             {/* Note indicator for expanded view */}
@@ -2460,13 +2491,49 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           <div className='text-sm text-stone-800 bg-neutral-50 dark:bg-neutral-800 dark:text-stone-200 mb-1'>
             {selectedNode.sender === 'user' ? 'User' : 'Assistant'}
           </div>
-          <div
-            className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${isMobile ? 'max-h-80 overflow-y-auto overflow-x-hidden thin-scrollbar' : 'overflow-hidden overflow-x-hidden ygg-line-clamp-15'}`}
-          >
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
-              {selectedNode.message}
-            </ReactMarkdown>
-          </div>
+          {(() => {
+            const nodeIdParsed = parseId(selectedNode.id)
+            const msg = (typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string'
+              ? getCurrentMessage(nodeIdParsed)
+              : null
+
+            // Check for image blocks
+            const imageBlocks = msg?.content_blocks?.filter((block: any) => block.type === 'image' && block.url) || []
+
+            if (imageBlocks.length > 0) {
+              return (
+                <div className='space-y-2'>
+                  {imageBlocks.map((img: any, idx: number) => (
+                    <img
+                      key={idx}
+                      src={img.url}
+                      alt={`Generated image ${idx + 1}`}
+                      className='max-w-full max-h-64 object-contain rounded'
+                    />
+                  ))}
+                  {selectedNode.message && selectedNode.message.trim().length > 0 && (
+                    <div
+                      className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${isMobile ? 'max-h-40 overflow-y-auto overflow-x-hidden thin-scrollbar' : 'overflow-hidden overflow-x-hidden ygg-line-clamp-8'}`}
+                    >
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
+                        {selectedNode.message}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+
+            return (
+              <div
+                className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${isMobile ? 'max-h-80 overflow-y-auto overflow-x-hidden thin-scrollbar' : 'overflow-hidden overflow-x-hidden ygg-line-clamp-15'}`}
+              >
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
+                  {selectedNode.message}
+                </ReactMarkdown>
+              </div>
+            )
+          })()}
         </div>
       )}
 
