@@ -187,16 +187,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [plainMessages, setPlainMessages] = useState<any[]>([])
   useEffect(() => {
     let cancelled = false
-      ; (async () => {
-        try {
-          const res = (await stripMarkdownToText(flatMessages as any)) as any
-          if (!cancelled) {
-            setPlainMessages(Array.isArray(res) ? (res as any[]) : (flatMessages as any[]))
-          }
-        } catch {
-          if (!cancelled) setPlainMessages(flatMessages as any[])
+    ;(async () => {
+      try {
+        const res = (await stripMarkdownToText(flatMessages as any)) as any
+        if (!cancelled) {
+          setPlainMessages(Array.isArray(res) ? (res as any[]) : (flatMessages as any[]))
         }
-      })()
+      } catch {
+        if (!cancelled) setPlainMessages(flatMessages as any[])
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -244,13 +244,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const addGlobalNoSelect = () => {
     try {
       document.body.classList.add('ygg-no-select')
-    } catch { }
+    } catch {}
   }
 
   const removeGlobalNoSelect = () => {
     try {
       document.body.classList.remove('ygg-no-select')
-    } catch { }
+    } catch {}
   }
 
   // Debounced update function for notes
@@ -329,7 +329,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     if (isDraggingRef.current || isSelectingRef.current) {
       try {
         e.preventDefault()
-      } catch { }
+      } catch {}
     }
     if (!e.touches || e.touches.length === 0) return
     const t = e.touches[0]
@@ -473,13 +473,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     try {
       e.preventDefault()
-    } catch { }
+    } catch {}
     // Hide any open custom context menu upon new interaction
     setShowContextMenu(false)
     // Capture pointer so we continue to receive move/up events outside
     try {
-      ; (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId)
-    } catch { }
+      ;(e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId)
+    } catch {}
 
     const isRightButton = e.button === 2 && e.pointerType !== 'touch'
     const isPrimaryLike = e.button === 0 || e.pointerType === 'touch' || e.buttons === 1
@@ -574,7 +574,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
       try {
         e.preventDefault()
-      } catch { }
+      } catch {}
       return // Don't process dragging/selecting while pinching
     }
 
@@ -615,8 +615,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     try {
-      ; (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
-    } catch { }
+      ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
+    } catch {}
 
     // Handle click on node (when user didn't drag)
     if (!hasMovedRef.current && clickedNodeRef.current && onNodeSelect) {
@@ -661,8 +661,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     try {
-      ; (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
-    } catch { }
+      ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
+    } catch {}
 
     handleMouseUp()
   }
@@ -1045,10 +1045,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       // Prevent default scrolling behavior and handle zoom instead
       try {
         e.preventDefault()
-      } catch { }
+      } catch {}
       try {
         e.stopPropagation()
-      } catch { }
+      } catch {}
 
       // Handle zoom centered at the cursor position
       // Normalize delta to pixels across browsers/devices
@@ -1823,8 +1823,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 x2={nodeWidth - 72}
                 y2={nodeHeight + 14}
                 strokeWidth='5'
-                className={`animate-pulse-slow transition-colors duration-200 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-indigo-200 dark:stroke-yPurple-50'
-                  }`}
+                className={`animate-pulse-slow transition-colors duration-200 ${
+                  isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-indigo-200 dark:stroke-yPurple-50'
+                }`}
               />
             )}
             {/* Selection highlight */}
@@ -1847,8 +1848,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               height={nodeHeight}
               rx='8'
               strokeWidth='2'
-              className={`cursor-pointer hover:opacity-90 transition-opacity duration-200 ${compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
-                } ${node.sender === 'user' ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400' : node.sender === 'ex_agent' ? 'fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 dark:stroke-orange-600' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400 '} `}
+              className={`cursor-pointer hover:opacity-90 transition-opacity duration-200 ${
+                compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
+              } ${node.sender === 'user' ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400' : node.sender === 'ex_agent' ? 'fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 dark:stroke-orange-600' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400 '} `}
               style={{
                 filter:
                   compactMode && focusedNodeId === node.id
@@ -2019,12 +2021,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               cx={x}
               cy={y + circleRadius}
               r={circleRadius}
-              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400'} ${node.sender === 'user'
-                ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400'
-                : node.sender === 'ex_agent'
-                  ? 'fill-orange-50 stroke-orange-600'
-                  : 'fill-indigo-50 stroke-yPurple-500'
-                } `}
+              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400'} ${
+                node.sender === 'user'
+                  ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400'
+                  : node.sender === 'ex_agent'
+                    ? 'fill-orange-50 stroke-orange-600'
+                    : 'fill-indigo-50 stroke-yPurple-500'
+              } `}
               style={{
                 transform: selectedNode?.id === node.id ? 'scale(1.1)' : 'scale(1)',
                 transformOrigin: `${x}px ${y + circleRadius}px`,
@@ -2208,10 +2211,11 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         </button>
         <button
           onClick={toggleFilterEmptyMessages}
-          className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${filterEmptyMessages
-            ? 'bg-blue-100 text-blue-700 dark:bg-neutral-500/60 dark:text-blue-100'
-            : 'bg-neutral-50 text-stone-800 dark:text-stone-200 dark:bg-yBlack-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-            }`}
+          className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${
+            filterEmptyMessages
+              ? 'bg-blue-100 text-blue-700 dark:bg-neutral-500/60 dark:text-blue-100'
+              : 'bg-neutral-50 text-stone-800 dark:text-stone-200 dark:bg-yBlack-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+          }`}
           title={filterEmptyMessages ? 'Show Empty Messages' : 'Hide Empty Messages'}
         >
           <i className='bx bx-filter text-xl' />
@@ -2308,8 +2312,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                             setSearchQuery('')
                           }}
                           onMouseEnter={() => setSearchHoverIndex(idx)}
-                          className={`w-full text-left px-3 py-4 hover:bg-stone-100 dark:hover:bg-neutral-800 ${idx === searchHoverIndex ? 'bg-stone-100 dark:bg-neutral-800' : ''
-                            }`}
+                          className={`w-full text-left px-3 py-4 hover:bg-stone-100 dark:hover:bg-neutral-800 ${
+                            idx === searchHoverIndex ? 'bg-stone-100 dark:bg-neutral-800' : ''
+                          }`}
                         >
                           <div className='items-start gap-2'>
                             <span className='line-clamp-2'>{snippet || '(empty message)'}</span>
@@ -2483,53 +2488,142 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           style={{
             left: Math.min(mousePosition.x + 10, dimensions.width - 400),
             top: Math.max(mousePosition.y + 10, 10),
-            maxWidth: '300px',
-            maxHeight: '400px',
-            overflow: 'hidden',
+            maxWidth: '320px',
+            maxHeight: '450px',
+            overflow: 'auto',
           }}
         >
-          <div className='text-sm text-stone-800 bg-neutral-50 dark:bg-neutral-800 dark:text-stone-200 mb-1'>
-            {selectedNode.sender === 'user' ? 'User' : 'Assistant'}
+          <div className='text-sm text-stone-800 bg-neutral-50 dark:bg-neutral-800 dark:text-stone-200 mb-2 font-medium'>
+            {selectedNode.sender === 'user' ? 'User' : selectedNode.sender === 'ex_agent' ? 'Agent' : 'Assistant'}
           </div>
           {(() => {
             const nodeIdParsed = parseId(selectedNode.id)
-            const msg = (typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string'
-              ? getCurrentMessage(nodeIdParsed)
-              : null
+            const msg =
+              (typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string'
+                ? getCurrentMessage(nodeIdParsed)
+                : null
 
-            // Check for image blocks
-            const imageBlocks = msg?.content_blocks?.filter((block: any) => block.type === 'image' && block.url) || []
+            const contentBlocks = msg?.content_blocks || []
+            const hasContentBlocks = Array.isArray(contentBlocks) && contentBlocks.length > 0
 
-            if (imageBlocks.length > 0) {
+            // If we have content_blocks, render them
+            if (hasContentBlocks) {
               return (
                 <div className='space-y-2'>
-                  {imageBlocks.map((img: any, idx: number) => (
-                    <img
-                      key={idx}
-                      src={img.url}
-                      alt={`Generated image ${idx + 1}`}
-                      className='max-w-full max-h-64 object-contain rounded'
-                    />
-                  ))}
-                  {selectedNode.message && selectedNode.message.trim().length > 0 && (
-                    <div
-                      className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${isMobile ? 'max-h-40 overflow-y-auto overflow-x-hidden thin-scrollbar' : 'overflow-hidden overflow-x-hidden ygg-line-clamp-8'}`}
-                    >
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
-                        {selectedNode.message}
-                      </ReactMarkdown>
-                    </div>
-                  )}
+                  {contentBlocks.map((block: any, idx: number) => {
+                    // Image block
+                    if (block.type === 'image' && block.url) {
+                      return (
+                        <div key={`img-${idx}`} className='rounded overflow-hidden'>
+                          <img
+                            src={block.url}
+                            alt={`Generated image ${idx + 1}`}
+                            className='max-w-full max-h-48 object-contain rounded'
+                          />
+                        </div>
+                      )
+                    }
+
+                    // Text block
+                    if (block.type === 'text' && block.text) {
+                      return (
+                        <div
+                          key={`text-${idx}`}
+                          className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-hidden ygg-line-clamp-8'
+                        >
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                          >
+                            {block.text}
+                          </ReactMarkdown>
+                        </div>
+                      )
+                    }
+
+                    // Tool use block
+                    if (block.type === 'tool_use' && block.name) {
+                      return (
+                        <div
+                          key={`tool-${idx}`}
+                          className='bg-amber-50 dark:bg-neutral-900/30 border border-amber-200 dark:border-neutral-900 rounded-lg p-2'
+                        >
+                          <div className='flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 mb-1'>
+                            <span>🔧</span>
+                            {block.name}
+                          </div>
+                          {block.input && (
+                            <pre className='text-xs bg-amber-100/50 dark:bg-neutral-900/20 rounded p-1.5 overflow-x-auto no-scrollbar max-h-24 overflow-y-auto'>
+                              {typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2)}
+                            </pre>
+                          )}
+                        </div>
+                      )
+                    }
+
+                    // Tool result block
+                    if (block.type === 'tool_result') {
+                      const resultContent =
+                        typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2)
+                      return (
+                        <div
+                          key={`result-${idx}`}
+                          className='bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 rounded-lg p-2'
+                        >
+                          <div className='flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-1'>
+                            <span>✓</span>
+                            Tool Result
+                          </div>
+                          <pre className='text-xs bg-emerald-100/50 dark:bg-emerald-900/20 rounded p-1.5 overflow-x-auto no-scrollbar max-h-24 overflow-y-auto whitespace-pre-wrap break-words'>
+                            {resultContent?.slice(0, 500)}
+                            {resultContent?.length > 500 ? '...' : ''}
+                          </pre>
+                        </div>
+                      )
+                    }
+
+                    // Thinking block
+                    if (block.type === 'thinking' && block.thinking) {
+                      return (
+                        <div
+                          key={`think-${idx}`}
+                          className='bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-2'
+                        >
+                          <div className='flex items-center gap-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 mb-1'>
+                            <span>💭</span>
+                            Thinking
+                          </div>
+                          <p className='text-xs text-purple-600 dark:text-purple-300 line-clamp-4'>{block.thinking}</p>
+                        </div>
+                      )
+                    }
+
+                    return null
+                  })}
+                  {/* Also show message content if present and no text blocks were rendered */}
+                  {selectedNode.message &&
+                    selectedNode.message.trim().length > 0 &&
+                    !contentBlocks.some((b: any) => b.type === 'text' && b.text) && (
+                      <div className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-hidden ygg-line-clamp-8'>
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                        >
+                          {selectedNode.message}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                 </div>
               )
             }
 
+            // Fallback to message content
             return (
               <div
                 className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${isMobile ? 'max-h-80 overflow-y-auto overflow-x-hidden thin-scrollbar' : 'overflow-hidden overflow-x-hidden ygg-line-clamp-15'}`}
               >
                 <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
-                  {selectedNode.message}
+                  {selectedNode.message || '...'}
                 </ReactMarkdown>
               </div>
             )
