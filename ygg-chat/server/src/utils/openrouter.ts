@@ -181,7 +181,10 @@ async function getOpenRouterClient() {
       throw new Error('OPENROUTER_API_KEY not found or failed to decrypt')
     }
 
-    const { OpenRouter } = await import('@openrouter/sdk')
+    // Use new Function to bypass TypeScript transpilation of dynamic imports in CommonJS
+    // This forces a native dynamic import at runtime, avoiding the "require() of ES Module" error
+    const dynamicImport = new Function('specifier', 'return import(specifier)')
+    const { OpenRouter } = await dynamicImport('@openrouter/sdk')
 
     openrouterApiKey = apiKey
     openrouterInstance = new OpenRouter({
@@ -190,6 +193,7 @@ async function getOpenRouterClient() {
       xTitle: process.env.OPENROUTER_TITLE || 'Yggdrasil',
     })
   }
+  if (!openrouterInstance) throw new Error('Failed to initialize OpenRouter client')
   return openrouterInstance
 }
 
