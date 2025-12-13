@@ -1902,7 +1902,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
                   // Check for image blocks in content_blocks
                   if (msg?.content_blocks && Array.isArray(msg.content_blocks)) {
-                    const imageBlocks = msg.content_blocks.filter((block) => block.type === 'image' && 'url' in block && !!block.url) as Array<{ type: 'image'; url: string }>
+                    const imageBlocks = msg.content_blocks.filter(
+                      block => block.type === 'image' && 'url' in block && !!block.url
+                    ) as Array<{ type: 'image'; url: string }>
                     if (imageBlocks.length > 0) {
                       // Display the first image as a thumbnail
                       const firstImage = imageBlocks[0]
@@ -2482,154 +2484,177 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         </div>
       )}
 
-      {selectedNode && (
-        <div
-          className={`absolute bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 ${compactMode ? 'border-2 border-gray-600' : ''}`}
-          style={{
-            left: Math.min(mousePosition.x + 10, dimensions.width - 400),
-            top: Math.max(mousePosition.y + 10, 10),
-            maxWidth: '320px',
-            maxHeight: '450px',
-            overflow: 'auto',
-          }}
-        >
-          <div className='text-sm text-stone-800 bg-neutral-50 dark:bg-neutral-800 dark:text-stone-200 mb-2 font-medium'>
-            {selectedNode.sender === 'user' ? 'User' : selectedNode.sender === 'ex_agent' ? 'Agent' : 'Assistant'}
-          </div>
-          {(() => {
-            const nodeIdParsed = parseId(selectedNode.id)
-            const msg =
-              (typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string'
-                ? getCurrentMessage(nodeIdParsed)
-                : null
+      {selectedNode &&
+        (() => {
+          const nodeIdParsed = parseId(selectedNode.id)
+          const msg =
+            (typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string'
+              ? getCurrentMessage(nodeIdParsed)
+              : null
 
-            const contentBlocks = msg?.content_blocks || []
-            const hasContentBlocks = Array.isArray(contentBlocks) && contentBlocks.length > 0
+          const contentBlocks = msg?.content_blocks || []
+          const hasImage =
+            Array.isArray(contentBlocks) && contentBlocks.some((block: any) => block.type === 'image' && block.url)
 
-            // If we have content_blocks, render them
-            if (hasContentBlocks) {
-              return (
-                <div className='space-y-2'>
-                  {contentBlocks.map((block: any, idx: number) => {
-                    // Image block
-                    if (block.type === 'image' && block.url) {
-                      return (
-                        <div key={`img-${idx}`} className='rounded overflow-hidden'>
-                          <img
-                            src={block.url}
-                            alt={`Generated image ${idx + 1}`}
-                            className='max-w-full max-h-48 object-contain rounded'
-                          />
-                        </div>
-                      )
-                    }
+          const popupWidth = hasImage ? 800 : 320
+          // Ensure popup fits in viewport horizontally, with some padding
+          const leftPos = Math.min(mousePosition.x + 10, dimensions.width - popupWidth - 20)
 
-                    // Text block
-                    if (block.type === 'text' && block.text) {
-                      return (
-                        <div
-                          key={`text-${idx}`}
-                          className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-hidden ygg-line-clamp-8'
-                        >
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                          >
-                            {block.text}
-                          </ReactMarkdown>
-                        </div>
-                      )
-                    }
-
-                    // Tool use block
-                    if (block.type === 'tool_use' && block.name) {
-                      return (
-                        <div
-                          key={`tool-${idx}`}
-                          className='bg-amber-50 dark:bg-neutral-900/30 border border-amber-200 dark:border-neutral-900 rounded-lg p-2'
-                        >
-                          <div className='flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 mb-1'>
-                            <span>🔧</span>
-                            {block.name}
-                          </div>
-                          {block.input && (
-                            <pre className='text-xs bg-amber-100/50 dark:bg-neutral-900/20 rounded p-1.5 overflow-x-auto no-scrollbar max-h-24 overflow-y-auto'>
-                              {typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2)}
-                            </pre>
-                          )}
-                        </div>
-                      )
-                    }
-
-                    // Tool result block
-                    if (block.type === 'tool_result') {
-                      const resultContent =
-                        typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2)
-                      return (
-                        <div
-                          key={`result-${idx}`}
-                          className='bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 rounded-lg p-2'
-                        >
-                          <div className='flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-1'>
-                            <span>✓</span>
-                            Tool Result
-                          </div>
-                          <pre className='text-xs bg-emerald-100/50 dark:bg-emerald-900/20 rounded p-1.5 overflow-x-auto no-scrollbar max-h-24 overflow-y-auto whitespace-pre-wrap break-words'>
-                            {resultContent?.slice(0, 500)}
-                            {resultContent?.length > 500 ? '...' : ''}
-                          </pre>
-                        </div>
-                      )
-                    }
-
-                    // Thinking block
-                    if (block.type === 'thinking' && block.thinking) {
-                      return (
-                        <div
-                          key={`think-${idx}`}
-                          className='bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-2'
-                        >
-                          <div className='flex items-center gap-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 mb-1'>
-                            <span>💭</span>
-                            Thinking
-                          </div>
-                          <p className='text-xs text-purple-600 dark:text-purple-300 line-clamp-4'>{block.thinking}</p>
-                        </div>
-                      )
-                    }
-
-                    return null
-                  })}
-                  {/* Also show message content if present and no text blocks were rendered */}
-                  {selectedNode.message &&
-                    selectedNode.message.trim().length > 0 &&
-                    !contentBlocks.some((b: any) => b.type === 'text' && b.text) && (
-                      <div className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-hidden ygg-line-clamp-8'>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
-                        >
-                          {selectedNode.message}
-                        </ReactMarkdown>
-                      </div>
-                    )}
-                </div>
-              )
-            }
-
-            // Fallback to message content
-            return (
-              <div
-                className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${isMobile ? 'max-h-80 overflow-y-auto overflow-x-hidden thin-scrollbar' : 'overflow-hidden overflow-x-hidden ygg-line-clamp-15'}`}
-              >
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
-                  {selectedNode.message || '...'}
-                </ReactMarkdown>
+          return (
+            <div
+              className={`absolute bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 no-scrollbar ${
+                compactMode ? 'border-2 border-gray-600' : ''
+              }`}
+              style={{
+                left: Math.max(10, leftPos),
+                top: Math.max(mousePosition.y + 10, 10),
+                maxWidth: `${popupWidth}px`,
+                maxHeight: hasImage ? '600px' : '450px',
+                overflow: 'auto',
+              }}
+            >
+              <div className='text-sm text-stone-800 bg-neutral-50 dark:bg-neutral-800 dark:text-stone-200 mb-2 font-medium'>
+                {selectedNode.sender === 'user' ? 'User' : selectedNode.sender === 'ex_agent' ? 'Agent' : 'Assistant'}
               </div>
-            )
-          })()}
-        </div>
-      )}
+              {(() => {
+                const hasContentBlocks = Array.isArray(contentBlocks) && contentBlocks.length > 0
+
+                // If we have content_blocks, render them
+                if (hasContentBlocks) {
+                  return (
+                    <div className='space-y-2'>
+                      {contentBlocks.map((block: any, idx: number) => {
+                        // Image block
+                        if (block.type === 'image' && block.url) {
+                          return (
+                            <div key={`img-${idx}`} className='rounded overflow-hidden'>
+                              <img
+                                src={block.url}
+                                alt={`Generated image ${idx + 1}`}
+                                className={`max-w-full object-contain rounded ${
+                                  hasImage ? 'max-h-[600px]' : 'max-h-48'
+                                }`}
+                              />
+                            </div>
+                          )
+                        }
+
+                        // Text block
+                        if (block.type === 'text' && block.text) {
+                          return (
+                            <div
+                              key={`text-${idx}`}
+                              className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-hidden ygg-line-clamp-8'
+                            >
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                              >
+                                {block.text}
+                              </ReactMarkdown>
+                            </div>
+                          )
+                        }
+
+                        // Tool use block
+                        if (block.type === 'tool_use' && block.name) {
+                          return (
+                            <div
+                              key={`tool-${idx}`}
+                              className='bg-amber-50 dark:bg-neutral-900/30 border border-amber-200 dark:border-neutral-900 rounded-lg p-2'
+                            >
+                              <div className='flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 mb-1'>
+                                <span>🔧</span>
+                                {block.name}
+                              </div>
+                              {block.input && (
+                                <pre className='text-xs bg-amber-100/50 dark:bg-neutral-900/20 rounded p-1.5 overflow-x-auto no-scrollbar max-h-24 overflow-y-auto'>
+                                  {typeof block.input === 'string' ? block.input : JSON.stringify(block.input, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          )
+                        }
+
+                        // Tool result block
+                        if (block.type === 'tool_result') {
+                          const resultContent =
+                            typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2)
+                          return (
+                            <div
+                              key={`result-${idx}`}
+                              className='bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 rounded-lg p-2'
+                            >
+                              <div className='flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-1'>
+                                <span>✓</span>
+                                Tool Result
+                              </div>
+                              <pre className='text-xs bg-emerald-100/50 dark:bg-emerald-900/20 rounded p-1.5 overflow-x-auto no-scrollbar max-h-24 overflow-y-auto whitespace-pre-wrap break-words'>
+                                {resultContent?.slice(0, 500)}
+                                {resultContent?.length > 500 ? '...' : ''}
+                              </pre>
+                            </div>
+                          )
+                        }
+
+                        // Thinking block
+                        if (block.type === 'thinking' && block.thinking) {
+                          return (
+                            <div
+                              key={`think-${idx}`}
+                              className='bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-2'
+                            >
+                              <div className='flex items-center gap-1.5 text-xs font-medium text-purple-700 dark:text-purple-300 mb-1'>
+                                <span>💭</span>
+                                Thinking
+                              </div>
+                              <p className='text-xs text-purple-600 dark:text-purple-300 line-clamp-4'>
+                                {block.thinking}
+                              </p>
+                            </div>
+                          )
+                        }
+
+                        return null
+                      })}
+                      {/* Also show message content if present and no text blocks were rendered */}
+                      {selectedNode.message &&
+                        selectedNode.message.trim().length > 0 &&
+                        !contentBlocks.some((b: any) => b.type === 'text' && b.text) && (
+                          <div className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-hidden ygg-line-clamp-8'>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                            >
+                              {selectedNode.message}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                    </div>
+                  )
+                }
+
+                // Fallback to message content
+                return (
+                  <div
+                    className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${
+                      isMobile
+                        ? 'max-h-80 overflow-y-auto overflow-x-hidden thin-scrollbar'
+                        : 'overflow-hidden overflow-x-hidden ygg-line-clamp-15'
+                    }`}
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+                    >
+                      {selectedNode.message || '...'}
+                    </ReactMarkdown>
+                  </div>
+                )
+              })()}
+            </div>
+          )
+        })()}
 
       {/* Note dialog */}
       {showNoteDialog && noteDialogPos && noteMessageId !== null && (
