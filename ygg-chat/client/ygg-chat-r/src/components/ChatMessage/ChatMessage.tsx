@@ -692,7 +692,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const hasContent = useMemo(() => {
       const hasSimpleContent = content && content.trim().length > 0
       const hasBlockContent =
-        contentBlocks && contentBlocks.some(b => b.type === 'text' && b.content && b.content.trim().length > 0)
+        contentBlocks &&
+        contentBlocks.some(b => (b.type === 'text' && b.content && b.content.trim().length > 0) || b.type === 'image')
 
       return hasSimpleContent || hasBlockContent
     }, [content, contentBlocks])
@@ -758,6 +759,56 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }
 
     const handleCopy = async () => {
+      // Check for image block first
+      const imageBlock = contentBlocks?.find(b => b.type === 'image')
+
+      if (imageBlock && imageBlock.type === 'image' && imageBlock.url) {
+        try {
+          // Fetch image as blob to ensure download (avoids cross-origin issues with download attribute)
+          const response = await fetch(imageBlock.url)
+          const blob = await response.blob()
+          const blobUrl = window.URL.createObjectURL(blob)
+
+          const link = document.createElement('a')
+          link.href = blobUrl
+
+          // Determine filename
+          let extension = 'png'
+          if (imageBlock.mimeType) {
+            const mimeParts = imageBlock.mimeType.split('/')
+            if (mimeParts.length > 1) {
+              extension = mimeParts[1]
+            }
+          } else if (blob.type) {
+            const parts = blob.type.split('/')
+            if (parts.length > 1) {
+              extension = parts[1]
+            }
+          }
+
+          const filename = `generated-image-${Date.now()}.${extension}`
+          link.download = filename
+
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(blobUrl)
+
+          // Show copied feedback
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+          return
+        } catch (err) {
+          console.error('Failed to download image:', err)
+          // Fallback to direct link if fetch fails
+          try {
+            window.open(imageBlock.url, '_blank')
+          } catch (e) {
+            console.error('Failed to open fallback link', e)
+          }
+        }
+      }
+
       if (onCopy) {
         onCopy(content)
       }
@@ -910,9 +961,23 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
 
       // Message actions - always shown
+      const hasImage = contentBlocks?.some(b => b.type === 'image')
+      const copyLabel = hasImage ? (copied ? 'Saved!' : 'Save image') : copied ? 'Copied!' : 'Copy message'
+      const copyIcon = hasImage ? (
+        copied ? (
+          <i className='bx bx-check' />
+        ) : (
+          <i className='bx bx-download' />
+        )
+      ) : copied ? (
+        <i className='bx bx-check' />
+      ) : (
+        <i className='bx bx-copy' />
+      )
+
       items.push({
-        label: copied ? 'Copied!' : 'Copy message',
-        icon: copied ? <i className='bx bx-check' /> : <i className='bx bx-copy' />,
+        label: copyLabel,
+        icon: copyIcon,
         onClick: handleCopy,
         disabled: false,
       })
