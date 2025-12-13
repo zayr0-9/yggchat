@@ -126,6 +126,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   const errorId = `${id}-error`
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [dragOver, setDragOver] = useState(false)
   const [showFileList, setShowFileList] = useState(false)
   const [selectedFileIndex, setSelectedFileIndex] = useState(0)
@@ -364,6 +365,43 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
       })
       .catch(err => console.error('Failed to read pasted images', err))
   }
+
+  const handleImageButtonClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleImageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (state === 'disabled') return
+
+    const files = Array.from(e.target.files || [])
+    const images = files.filter(f => f.type.startsWith('image/'))
+    if (images.length === 0) return
+
+    Promise.all(
+      images.map(async image => ({
+        dataUrl: await fileToDataUrl(image),
+        name: image.name,
+        type: image.type,
+        size: image.size,
+      }))
+    )
+      .then(drafts => {
+        dispatch(chatSliceActions.imageDraftsAppended(drafts))
+        if (focusedMessageId != null) {
+          dispatch(
+            chatSliceActions.messageArtifactsAppended({
+              messageId: focusedMessageId,
+              artifacts: drafts.map(d => d.dataUrl),
+            })
+          )
+        }
+      })
+      .catch(err => console.error('Failed to read selected images', err))
+
+    // Reset the input so the same file can be selected again
+    e.target.value = ''
+  }
+
 const handleFileSelection = async (file: { path: string; name: string; mention: string }) => {
   if (!activeMention) {
     setShowFileList(false)
@@ -635,6 +673,17 @@ const handleFileSelection = async (file: { path: string; name: string; mention: 
       )}
 
       <div className={`relative`}>
+        {/* Hidden file input for image selection */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleImageInputChange}
+          className="hidden"
+          aria-hidden="true"
+        />
+
         {/* Slash Command Autocomplete Dropdown */}
         {showSlashList && filteredSlashCommands.length > 0 && (
           <div
@@ -730,6 +779,32 @@ const handleFileSelection = async (file: { path: string; name: string; mention: 
             for new line
           </div>
         )}
+
+        {/* Image upload button */}
+        <button
+          type="button"
+          onClick={handleImageButtonClick}
+          disabled={state === 'disabled'}
+          className='absolute bottom-3 left-2 p-1.5 rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+          title="Attach images"
+          aria-label="Attach images"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <polyline points="21 15 16 10 5 21" />
+          </svg>
+        </button>
       </div>
 
       {/* Image draft previews (hidden while editing a branch) */}

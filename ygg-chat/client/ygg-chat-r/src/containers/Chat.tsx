@@ -2466,10 +2466,10 @@ function Chat() {
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   <div
-                    className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-28 dark:text-neutral-200 break-words line-clamp-2 text-right'
+                    className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 text-[14px] sm:text-[12px] md:text-[14px] lg:text-[12px] xl:text-[16px] 2xl:text-[16px] 3xl:text-[20px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
                     title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                   >
-                    {ideContext?.extensionConnected ? '' : ''}
+                    {ideContext?.extensionConnected ? '🟢 ' : '🔴 '}
                     {workspace?.name && `${workspace.name}`}
                   </div>
                   <Button
@@ -2507,7 +2507,7 @@ function Chat() {
                     placeholder='Select a model...'
                     blur='high'
                     disabled={filteredModels.length === 0}
-                    className='flex-1 max-w-42 sm:max-w-48 md:max-w-48 lg:max-w-xs transition-transform duration-60 active:scale-99 rounded-4xl'
+                    className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-54 transition-transform duration-60 active:scale-99 rounded-4xl'
                     searchBarVisible={true}
                     modelData={Object.fromEntries(filteredModels.map(m => [m.name, m]))}
                     onFavoritesChange={refreshFavorites}

@@ -229,8 +229,9 @@ export const Select: React.FC<SelectProps> = ({
         onClick={() => !disabled && setOpen(o => !o)}
         onKeyDown={onKeyDown}
         disabled={disabled}
+        title={selected.label}
       >
-        <span className='truncate text-left flex-1  3xl:text-[17px]'>
+        <span className='truncate overflow-left text-left flex-1  3xl:text-[17px]'>
           {selected ? selected.label : <span className='text-neutral-500 dark:text-neutral-400'>{placeholder}</span>}
         </span>
         <i className={`bx bx-chevron-down transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden='true' />
