@@ -10,8 +10,8 @@ import { getCachedAttachmentBase64 } from './attachmentCache'
 import { canAccessPaidModels } from './freeTier'
 import { moneyAdd, moneyFormat, moneyMax, moneyMultiply } from './money'
 import { isImageGenerationModel, streamImageGeneration } from './openrouterImageStream'
+import { getCachedModelById } from './openrouterModelsCache'
 import tools from './tools'
-
 // Helper function to convert Zod schema to JSON schema
 function zodToJsonSchema(zodSchema: any): any {
   // Basic Zod to JSON schema conversion
@@ -850,11 +850,32 @@ export async function generateResponse(
       // Check if this is an image generation model - use raw streaming to capture images
       if (isImageGenerationModel(model)) {
         console.log('[OPENROUTER] Detected image generation model, routing to raw streaming:', model)
+
+        // Convert messages from SDK format (camelCase imageUrl) to raw API format (snake_case image_url)
+        // This only affects image generation models using streamImageGeneration (raw fetch)
+        // The raw OpenRouter API expects standard OpenAI format with snake_case
+        const messagesForRawApi = formattedMessages.map((msg: any) => {
+          if (!Array.isArray(msg.content)) return msg
+          return {
+            ...msg,
+            content: msg.content.map((part: any) => {
+              if (part.type === 'image_url' && part.imageUrl && !part.image_url) {
+                // Convert camelCase imageUrl to snake_case image_url for raw API
+                return {
+                  type: 'image_url',
+                  image_url: part.imageUrl,
+                }
+              }
+              return part
+            }),
+          }
+        })
+
         await streamImageGeneration(
           {
             apiKey: openrouterApiKey!,
             model,
-            messages: formattedMessages,
+            messages: messagesForRawApi,
             maxTokens: 20000,
             abortSignal,
           },
@@ -922,6 +943,9 @@ export async function generateResponse(
       //   '📤 [openrouter] Full message payload:',
       //   JSON.stringify(formattedMessages, null, 2).substring(0, 5000)
       // )
+      const apiKey = process.env.OPENROUTER_API_KEY ?? ''
+      let modalities = await getCachedModelById(apiKey, model)
+      console.log('[modalities test]', JSON.stringify(modalities), apiKey, model)
 
       const stream: any = await openrouterClient.chat.send(
         {
@@ -940,7 +964,7 @@ export async function generateResponse(
           maxTokens: 20000,
           tools: openaiTools.length > 0 ? openaiTools : undefined,
           usage: { include: true },
-          modalities: ['image', 'text'],
+          modalities: modalities?.outputModalities,
           ...(think && { reasoning: { effort: 'high' } }),
         } as any,
         { signal: abortSignal }
@@ -1374,7 +1398,10 @@ export async function generateResponse(
 
       // Check if error is related to tool support and retry without tools
       const errorMsg = error?.message || String(error)
+      // Detect ZodError from SDK when model sends null in tool_calls delta (known SDK strict validation issue)
+      const isZodToolCallError = error?.name === 'ZodError' && errorMsg.includes('tool_calls')
       const isToolError =
+        isZodToolCallError ||
         (error?.status === 404 && errorMsg.includes('tool use')) ||
         (error?.status === 400 && errorMsg.includes('Provider returned error')) ||
         errorMsg.includes('No endpoints found that support tool use')
@@ -1711,9 +1738,9 @@ async function executeToolCall(toolName: string, args: string): Promise<string> 
 // Helper function to handle image attachments
 async function handleImageAttachments(
   formattedMessages: any[],
-  attachments?: Array<{ mimeType?: string; filePath?: string; sha256?: string }>
+  attachments?: Array<{ mimeType?: string; filePath?: string; sha256?: string; url?: string }>
 ) {
-  const imageAtts = (attachments || []).filter(a => a.filePath || a.sha256)
+  const imageAtts = (attachments || []).filter(a => a.filePath || a.sha256 || a.url)
   if (imageAtts.length === 0) return formattedMessages
 
   // Find last user message index
@@ -1736,6 +1763,15 @@ async function handleImageAttachments(
     try {
       let imageBuffer: Buffer | null = null
       let mediaType = att.mimeType || 'image/jpeg'
+
+      // Check if direct URL is available
+      if (att.url) {
+        // Only use direct URL if it's a data URI or a remote URL
+        if (att.url.startsWith('data:') || att.url.startsWith('http')) {
+          parts.push({ type: 'image_url', imageUrl: { url: att.url } })
+          continue
+        }
+      }
 
       // First, check Redis cache if sha256 is available
       if (att.sha256) {

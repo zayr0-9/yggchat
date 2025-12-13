@@ -28,6 +28,7 @@ import { modelService } from '../utils/modelService'
 import { generateResponse } from '../utils/provider'
 import { saveBase64ImageAttachmentsForMessage } from '../utils/supaAttachments'
 import { getToolByName, updateToolEnabled } from '../utils/tools/index'
+import { getCachedOpenRouterModels } from '../utils/openrouterModelsCache'
 
 console.error('[supaChat] 🚀 Router file loaded/executing')
 
@@ -187,6 +188,7 @@ router.get(
 )
 
 // Fetch openRouter models on the server to keep API key private
+// Uses Redis cache with 30 min TTL to avoid hitting OpenRouter API on every request
 router.get(
   '/models/openrouter',
   asyncHandler(async (req, res) => {
@@ -211,95 +213,8 @@ router.get(
         // Unauthenticated - show all models
       }
 
-      const response = await fetch('https://openrouter.ai/api/v1/models', {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        signal: AbortSignal.timeout(5000),
-      })
-
-      if (!response.ok) {
-        const text = await response.text()
-        return res.status(response.status).json({ error: text || response.statusText })
-      }
-
-      const data = (await response.json()) as { data?: any[]; models?: any[] }
-      const rawModels: any[] = Array.isArray(data?.data) ? data.data! : Array.isArray(data?.models) ? data.models! : []
-
-      const models = rawModels
-        .map(m => {
-          const rawId = String(m?.id || m?.name || '')
-          const name = rawId.replace(/^models\//, '')
-          if (!name) return null
-          const displayName = String(m?.display_name || m?.displayName || name)
-          const description = String(m?.description || '')
-          const inputTokenLimit = Number(m?.context_length ?? m?.context_length_tokens ?? 0)
-          const outputTokenLimit = Number(m?.output_token_limit ?? m?.max_output_tokens ?? 0)
-          const supportedParams: string[] = Array.isArray(m?.supported_parameters) ? m.supported_parameters : []
-          const capabilities = (m as any)?.capabilities || {}
-          const thinking =
-            supportedParams.includes('reasoning') ||
-            supportedParams.includes('include_reasoning') ||
-            !!capabilities?.reasoning ||
-            /thinking/i.test(name) ||
-            /thinking/i.test(displayName)
-
-          // Extract pricing information
-          const promptCost = Number(m?.pricing?.prompt ?? 0)
-          const completionCost = Number(m?.pricing?.completion ?? 0)
-          const requestCost = Number(m?.pricing?.request ?? 0)
-
-          // Extract modality support from architecture object
-          // OpenRouter API structure: architecture.input_modalities and architecture.output_modalities
-          const inputModalities: string[] = Array.isArray(m?.architecture?.input_modalities)
-            ? m.architecture.input_modalities
-            : m?.supports_vision
-              ? ['text', 'image']
-              : ['text']
-          const outputModalities: string[] = Array.isArray(m?.architecture?.output_modalities)
-            ? m.architecture.output_modalities
-            : m?.supports_vision
-              ? ['text', 'image']
-              : ['text']
-
-          // Extract default parameters
-          const defaultTemperature = m?.top_level_parameters?.temperature ?? null
-          const defaultTopP = m?.top_level_parameters?.top_p ?? null
-          const defaultFrequencyPenalty = m?.top_level_parameters?.frequency_penalty ?? null
-
-          // Extract context and completion limits
-          const contextLength = inputTokenLimit
-          const maxCompletionTokens = outputTokenLimit
-          const topProviderContextLength = Number(m?.top_provider?.context_length ?? null) || null
-
-          return {
-            id: rawId,
-            name,
-            version: String(m?.version || ''),
-            displayName,
-            description,
-            contextLength,
-            maxCompletionTokens,
-            inputTokenLimit,
-            outputTokenLimit,
-            promptCost,
-            completionCost,
-            requestCost,
-            thinking,
-            supportsImages: !!m?.supports_vision || inputModalities.includes('image'),
-            supportsWebSearch: !!capabilities?.web_search || supportedParams.includes('web_search'),
-            supportsStructuredOutputs:
-              !!capabilities?.structured_outputs || supportedParams.includes('structured_outputs'),
-            inputModalities,
-            outputModalities,
-            defaultTemperature,
-            defaultTopP,
-            defaultFrequencyPenalty,
-            topProviderContextLength,
-            supportedGenerationMethods: supportedParams,
-          }
-        })
-        .filter(Boolean) as any[]
+      // Get models from Redis cache (fetches from API if cache miss)
+      const models = await getCachedOpenRouterModels(apiKey)
 
       // Filter models based on tier
       let filteredModels = models
@@ -1275,9 +1190,24 @@ router.post(
     const baseHistory = Array.isArray(messages) ? messages : []
 
     const attachmentsBase64 = Array.isArray(req.body?.attachmentsBase64) ? req.body.attachmentsBase64 : null
-    const createdAttachments: Awaited<ReturnType<typeof AttachmentService.getById>>[] = attachmentsBase64
-      ? await saveBase64ImageAttachmentsForMessage(client, userMessage.id, attachmentsBase64, userId)
-      : []
+    // Only save attachments to Supabase if NOT in local mode
+    const savedAttachments: Awaited<ReturnType<typeof AttachmentService.getById>>[] =
+      attachmentsBase64 && !isLocalMode
+        ? await saveBase64ImageAttachmentsForMessage(client, userMessage.id, attachmentsBase64, userId)
+        : []
+
+    // For local mode, create attachment objects directly from base64 data URLs
+    const attachmentsForGeneration = isLocalMode && attachmentsBase64
+      ? attachmentsBase64.map((att: any) => ({
+          url: att.dataUrl,
+          mimeType: att.type || 'image/jpeg',
+        }))
+      : savedAttachments.map(a => ({
+          url: a?.url || undefined,
+          mimeType: (a as any)?.mime_type,
+          filePath: (a as any)?.storage_path,
+          sha256: (a as any)?.sha256,
+        }))
 
     try {
       const repeats = Math.max(1, typeof repeatNum === 'number' ? repeatNum : parseInt(String(repeatNum), 10) || 1)
@@ -1438,12 +1368,7 @@ router.post(
           },
           provider as 'ollama' | 'gemini' | 'anthropic' | 'openai' | 'openrouter' | 'lmstudio',
           selectedModel,
-          createdAttachments.map(a => ({
-            url: a?.url || undefined,
-            mimeType: (a as any)?.mime_type,
-            filePath: (a as any)?.storage_path,
-            sha256: (a as any)?.sha256,
-          })),
+          attachmentsForGeneration,
           systemPrompt,
           controller.signal,
           combinedContext ? combinedContext : null,
@@ -1777,10 +1702,24 @@ router.post(
     try {
       const attachmentsBase64 = Array.isArray(req.body?.attachmentsBase64) ? req.body.attachmentsBase64 : null
       // Only save attachments to Supabase if NOT in local mode
-      const createdAttachments: Awaited<ReturnType<typeof AttachmentService.getById>>[] =
+      const savedAttachments: Awaited<ReturnType<typeof AttachmentService.getById>>[] =
         attachmentsBase64 && !isLocalMode
           ? await saveBase64ImageAttachmentsForMessage(client, userMessage.id, attachmentsBase64, userId)
           : []
+
+      // For local mode, create attachment objects directly from base64 data URLs
+      // This ensures images are passed to generateResponse even without Supabase storage
+      const attachmentsForGeneration = isLocalMode && attachmentsBase64
+        ? attachmentsBase64.map((att: any) => ({
+            url: att.dataUrl,
+            mimeType: att.type || 'image/jpeg',
+          }))
+        : savedAttachments.map(a => ({
+            url: a?.url || undefined,
+            mimeType: (a as any)?.mime_type,
+            filePath: a?.url || (a as any)?.storage_path,
+            sha256: (a as any)?.sha256,
+          }))
 
       const userMessageForAI = { ...userMessage, content: processedContent }
 
@@ -1943,13 +1882,7 @@ router.post(
           },
           provider as 'ollama' | 'gemini' | 'anthropic' | 'openai' | 'openrouter' | 'lmstudio',
           selectedModel,
-          createdAttachments.map(a => ({
-            url: a?.url || undefined,
-            mimeType: (a as any)?.mime_type,
-            filePath: a?.url || (a as any)?.storage_path,
-            sha256: (a as any)?.sha256,
-          })),
-
+          attachmentsForGeneration,
           systemPrompt,
           controller.signal,
           combinedContext ? combinedContext : null,

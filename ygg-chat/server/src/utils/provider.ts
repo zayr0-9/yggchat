@@ -50,10 +50,14 @@ export async function generateResponse(
   const providerModel = getProviderModel(provider, model)
 
   // Build a simple textual note for attachments when providers are text-only in our current setup
+  // Note: Don't include the full data URL - just describe the image to avoid duplicating massive base64 data
   const attachmentNote =
     Array.isArray(attachments) && attachments.length > 0
       ? `Attached ${attachments.length} image(s):\n${attachments
-        .map((a, idx) => `  ${idx + 1}. ${a.url || '(inline image)'}${a.mimeType ? ` (${a.mimeType})` : ''}`)
+        .map((a, idx) => {
+          const urlDesc = a.url?.startsWith('data:') ? '(inline base64 image)' : (a.url || '(inline image)')
+          return `  ${idx + 1}. ${urlDesc}${a.mimeType ? ` (${a.mimeType})` : ''}`
+        })
         .join('\n')}`
       : ''
 
@@ -489,7 +493,7 @@ export async function generateResponse(
       return openaiGenerate(aiSdkForOpenAI, onChunk, providerModel)
     case 'openrouter': {
       // Forward attachments for OpenRouter (AI SDK OpenAI adapter will translate file parts)
-      const orAttachments = (attachments || []).map(a => ({ mimeType: a.mimeType, filePath: a.filePath }))
+      const orAttachments = (attachments || []).map(a => ({ mimeType: a.mimeType, filePath: a.filePath, url: a.url }))
       return openrouterGenerate(
         aiSdkForOpenAI,
         onChunk,

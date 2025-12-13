@@ -21,7 +21,9 @@ interface StreamCallbacks {
 export async function streamImageGeneration(options: ImageStreamOptions, callbacks: StreamCallbacks): Promise<void> {
   console.log('[IMAGE STREAM] Starting raw image generation stream for model:', options.model)
   console.log('[IMAGE STREAM] Messages count:', options.messages.length)
-  console.log('[IMAGE STREAM] Messages: ', JSON.stringify(options.messages))
+  console.log('[IMAGE STREAM] Messages: ', JSON.stringify(options.messages, (_, v) =>
+    typeof v === 'string' && v.length > 100 ? v.slice(0, 50) + '...[truncated]...' + v.slice(-50) : v
+  ))
   // Log each message structure to debug if images are included
   for (let i = 0; i < options.messages.length; i++) {
     const msg = options.messages[i]
