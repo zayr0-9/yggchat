@@ -286,6 +286,8 @@ function Chat() {
   const [visibleMessageId, setVisibleMessageId] = useState<MessageId | null>(null)
   // Ref for input area to measure its height dynamically
   const inputAreaRef = useRef<HTMLDivElement>(null)
+  // Ref for image file input
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   // Track if we already applied the URL hash-based path to avoid overriding user branch switches
   const hashAppliedRef = useRef<MessageId | null>(null)
@@ -1995,6 +1997,47 @@ function Chat() {
     [handleSend, multiReplyCount]
   )
 
+  // Handle image file selection from native file browser
+  const handleImageButtonClick = useCallback(() => {
+    imageInputRef.current?.click()
+  }, [])
+
+  const handleImageInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || [])
+      const images = files.filter(f => f.type.startsWith('image/'))
+      if (images.length === 0) return
+
+      Promise.all(
+        images.map(async image => {
+          const dataUrl = await blobToDataURL(image)
+          return {
+            dataUrl,
+            name: image.name,
+            type: image.type,
+            size: image.size,
+          }
+        })
+      )
+        .then(drafts => {
+          dispatch(chatSliceActions.imageDraftsAppended(drafts))
+          if (focusedChatMessageId != null) {
+            dispatch(
+              chatSliceActions.messageArtifactsAppended({
+                messageId: focusedChatMessageId,
+                artifacts: drafts.map(d => d.dataUrl),
+              })
+            )
+          }
+        })
+        .catch(err => console.error('Failed to read selected images', err))
+
+      // Reset the input so the same file can be selected again
+      e.target.value = ''
+    },
+    [dispatch, focusedChatMessageId]
+  )
+
   // const handleMultiReplyCountChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
   //   const value = e.target.value
   //   if (value === '' || !isNaN(Number(value))) {
@@ -2466,7 +2509,7 @@ function Chat() {
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   <div
-                    className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 text-[14px] sm:text-[12px] md:text-[14px] lg:text-[12px] xl:text-[16px] 2xl:text-[16px] 3xl:text-[20px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
+                    className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
                     title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                   >
                     {ideContext?.extensionConnected ? '🟢 ' : '🔴 '}
@@ -2634,6 +2677,40 @@ function Chat() {
                         />
                       </>
                     )}
+                  </Button>
+
+                  {/* Image upload button */}
+                  <input
+                    ref={imageInputRef}
+                    type='file'
+                    accept='image/*'
+                    multiple
+                    onChange={handleImageInputChange}
+                    className='hidden'
+                    aria-hidden='true'
+                  />
+                  <Button
+                    variant='outline2'
+                    className='rounded-full'
+                    size='large'
+                    onClick={handleImageButtonClick}
+                    title='Attach images'
+                  >
+                    <svg
+                      xmlns='http://www.w3.org/2000/svg'
+                      width='20'
+                      height='20'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      strokeWidth='2'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                    >
+                      <rect x='3' y='3' width='18' height='18' rx='2' ry='2' />
+                      <circle cx='8.5' cy='8.5' r='1.5' />
+                      <polyline points='21 15 16 10 5 21' />
+                    </svg>
                   </Button>
                 </div>
                 <div className='flex items-center justify-end gap-2 pl-2.5'>

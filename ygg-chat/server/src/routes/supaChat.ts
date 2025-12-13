@@ -25,10 +25,10 @@ import { canAccessPaidModels, canUserGenerate, decrementFreeGeneration, isFreeTi
 import { abortGeneration, clearGeneration, createGeneration } from '../utils/generationManager'
 import { extractJsonObjects } from '../utils/jsonExtractor'
 import { modelService } from '../utils/modelService'
+import { getCachedOpenRouterModels } from '../utils/openrouterModelsCache'
 import { generateResponse } from '../utils/provider'
 import { saveBase64ImageAttachmentsForMessage } from '../utils/supaAttachments'
 import { getToolByName, updateToolEnabled } from '../utils/tools/index'
-import { getCachedOpenRouterModels } from '../utils/openrouterModelsCache'
 
 console.error('[supaChat] 🚀 Router file loaded/executing')
 
@@ -214,7 +214,7 @@ router.get(
       }
 
       // Get models from Redis cache (fetches from API if cache miss)
-      const models = await getCachedOpenRouterModels(apiKey)
+      const models = await getCachedOpenRouterModels()
 
       // Filter models based on tier
       let filteredModels = models
@@ -1197,17 +1197,18 @@ router.post(
         : []
 
     // For local mode, create attachment objects directly from base64 data URLs
-    const attachmentsForGeneration = isLocalMode && attachmentsBase64
-      ? attachmentsBase64.map((att: any) => ({
-          url: att.dataUrl,
-          mimeType: att.type || 'image/jpeg',
-        }))
-      : savedAttachments.map(a => ({
-          url: a?.url || undefined,
-          mimeType: (a as any)?.mime_type,
-          filePath: (a as any)?.storage_path,
-          sha256: (a as any)?.sha256,
-        }))
+    const attachmentsForGeneration =
+      isLocalMode && attachmentsBase64
+        ? attachmentsBase64.map((att: any) => ({
+            url: att.dataUrl,
+            mimeType: att.type || 'image/jpeg',
+          }))
+        : savedAttachments.map(a => ({
+            url: a?.url || undefined,
+            mimeType: (a as any)?.mime_type,
+            filePath: (a as any)?.storage_path,
+            sha256: (a as any)?.sha256,
+          }))
 
     try {
       const repeats = Math.max(1, typeof repeatNum === 'number' ? repeatNum : parseInt(String(repeatNum), 10) || 1)
@@ -1277,9 +1278,7 @@ router.post(
                 // Handle image events from image generation models
                 const imageUrl = obj?.url || delta
                 // Check if we already have this image event
-                const exists = contentBlocksEvents.some(
-                  (e: any) => e.type === 'image' && e.url === imageUrl
-                )
+                const exists = contentBlocksEvents.some((e: any) => e.type === 'image' && e.url === imageUrl)
                 if (!exists) {
                   contentBlocksEvents.push({
                     type: 'image',
@@ -1463,7 +1462,7 @@ router.post(
     } finally {
       try {
         const { id: _ } = { id: '' }
-      } catch { }
+      } catch {}
     }
 
     res.end()
@@ -1709,17 +1708,18 @@ router.post(
 
       // For local mode, create attachment objects directly from base64 data URLs
       // This ensures images are passed to generateResponse even without Supabase storage
-      const attachmentsForGeneration = isLocalMode && attachmentsBase64
-        ? attachmentsBase64.map((att: any) => ({
-            url: att.dataUrl,
-            mimeType: att.type || 'image/jpeg',
-          }))
-        : savedAttachments.map(a => ({
-            url: a?.url || undefined,
-            mimeType: (a as any)?.mime_type,
-            filePath: a?.url || (a as any)?.storage_path,
-            sha256: (a as any)?.sha256,
-          }))
+      const attachmentsForGeneration =
+        isLocalMode && attachmentsBase64
+          ? attachmentsBase64.map((att: any) => ({
+              url: att.dataUrl,
+              mimeType: att.type || 'image/jpeg',
+            }))
+          : savedAttachments.map(a => ({
+              url: a?.url || undefined,
+              mimeType: (a as any)?.mime_type,
+              filePath: a?.url || (a as any)?.storage_path,
+              sha256: (a as any)?.sha256,
+            }))
 
       const userMessageForAI = { ...userMessage, content: processedContent }
 
@@ -1796,9 +1796,7 @@ router.post(
                 // Handle image events from image generation models
                 const imageUrl = obj?.url || delta
                 // Check if we already have this image event
-                const exists = contentBlocksEvents.some(
-                  (e: any) => e.type === 'image' && e.url === imageUrl
-                )
+                const exists = contentBlocksEvents.some((e: any) => e.type === 'image' && e.url === imageUrl)
                 if (!exists) {
                   contentBlocksEvents.push({
                     type: 'image',

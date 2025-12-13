@@ -1199,8 +1199,18 @@ export const editMessageWithBranching = createAsyncThunk<
       signal.addEventListener('abort', () => controller?.abort())
 
       const state = getState() as RootState
-      const originalMessage = state.chat.conversation.messages.find(m => m.id === originalMessageId)
-      const { messages: currentMessages } = state.chat.conversation
+
+      // Prioritize React Query cache for messages (source of truth)
+      const messagesCache = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>([
+        'conversations',
+        conversationId,
+        'messages',
+      ])
+      const cachedMessages = messagesCache?.messages || []
+      // Fallback to Redux if React Query cache is empty
+      const currentMessages = cachedMessages.length > 0 ? cachedMessages : state.chat.conversation.messages
+      const originalMessage = currentMessages.find(m => m.id === originalMessageId)
+
       const currentPathIds = state.chat.conversation.currentPath.filter(id => id !== 'root')
       // Truncate path to only include messages strictly before the originalMessageId
       const idxOriginal = currentPathIds.indexOf(originalMessageId)
@@ -1240,16 +1250,42 @@ export const editMessageWithBranching = createAsyncThunk<
         projectContext && conversationContextSource
           ? `${projectContext}\n\n${conversationContextSource}`
           : projectContext || conversationContextSource || null
+
+      // Gather image drafts (new images being added)
       const drafts = state.chat.composition.imageDrafts || []
-      // Build attachments: existing artifacts minus deleted (backup) + current drafts
-      const artifactsExisting: string[] = Array.isArray(originalMessage.artifacts)
+      const draftDataUrls = drafts.map(d => d.dataUrl)
+
+      // Build attachments: prioritize React Query cached artifacts, then Redux, plus new drafts
+      // React Query cache has artifacts set via messageArtifactsSet after images are fetched
+      const artifactsFromCache: string[] = Array.isArray(originalMessage?.artifacts)
         ? (originalMessage.artifacts as string[])
         : []
+      // Also check Redux state for artifacts (fallback)
+      const reduxMessage = state.chat.conversation.messages.find(m => m.id === originalMessageId)
+      const artifactsFromRedux: string[] = Array.isArray(reduxMessage?.artifacts)
+        ? (reduxMessage.artifacts as string[])
+        : []
+      // Use whichever has artifacts (prefer cache, fallback to Redux)
+      const artifactsExisting = artifactsFromCache.length > 0 ? artifactsFromCache : artifactsFromRedux
+
       const deletedBackup: string[] = state.chat.attachments.backup?.[originalMessageId] || []
       const existingMinusDeleted = artifactsExisting.filter(a => !deletedBackup.includes(a))
-      const draftDataUrls = drafts.map(d => d.dataUrl)
       const combinedArtifacts = [...existingMinusDeleted, ...draftDataUrls]
-      const attachmentsBase64 = combinedArtifacts.length ? combinedArtifacts.map(dataUrl => ({ dataUrl })) : null
+
+      // Build attachmentsBase64 with full metadata like sendMessage does
+      const attachmentsBase64 = combinedArtifacts.length
+        ? combinedArtifacts.map(dataUrl => {
+            // Try to find matching draft for full metadata
+            const matchingDraft = drafts.find(d => d.dataUrl === dataUrl)
+            if (matchingDraft) {
+              return { dataUrl, name: matchingDraft.name, type: matchingDraft.type, size: matchingDraft.size }
+            }
+            // For existing artifacts (data URLs), extract type from the data URL
+            const typeMatch = dataUrl.match(/^data:([^;]+);/)
+            const mimeType = typeMatch ? typeMatch[1] : 'image/png'
+            return { dataUrl, name: 'image', type: mimeType, size: 0 }
+          })
+        : null
 
       // Before sending, reflect current image drafts in the UI by appending them
       // to the artifacts of the message being branched from.

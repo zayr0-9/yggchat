@@ -2,9 +2,9 @@
 // Embedded local SQLite server for dual-sync in Electron mode
 // This server runs on port 3002 and handles sync operations from Railway to local SQLite
 
-import crypto from 'crypto'
 import Database from 'better-sqlite3'
 import cors from 'cors'
+import crypto from 'crypto'
 import express from 'express'
 import fs from 'fs'
 import path from 'path'
@@ -316,6 +316,7 @@ function initializeLocalDatabase(dbPath: string) {
         ORDER BY ma.created_at ASC
       `),
     getAttachmentById: db.prepare('SELECT * FROM message_attachments WHERE id = ?'),
+    getAttachmentBySha256: db.prepare('SELECT * FROM message_attachments WHERE sha256 = ?'),
 
     // Provider Cost
     upsertProviderCost: db.prepare(`
@@ -414,32 +415,48 @@ async function saveGeneratedImage(
       fs.mkdirSync(imagesDir, { recursive: true })
     }
 
-    // Write file
-    fs.writeFileSync(filePath, buffer)
+    // Write file (skip if already exists - deduplication)
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, buffer)
+    }
 
-    // Create attachment record
-    const attachmentId = uuidv4()
     const now = new Date().toISOString()
 
-    statements.upsertAttachment.run(
-      attachmentId,
-      messageId,
-      'image',
-      mimeType,
-      'file',
-      null, // url
-      filePath,
-      null, // width
-      null, // height
-      buffer.length,
-      sha256,
-      now
-    )
+    // Check if attachment with this sha256 already exists (deduplication)
+    const existingAttachment = statements.getAttachmentBySha256.get(sha256) as
+      | { id: string; file_path: string }
+      | undefined
 
-    // Link attachment to message
+    let attachmentId: string
+
+    if (existingAttachment) {
+      // Reuse existing attachment - just create a link to it
+      attachmentId = existingAttachment.id
+      console.log('[LocalServer] Reusing existing generated image attachment:', attachmentId)
+    } else {
+      // Create new attachment record
+      attachmentId = uuidv4()
+      statements.upsertAttachment.run(
+        attachmentId,
+        messageId,
+        'image',
+        mimeType,
+        'file',
+        null, // url
+        filePath,
+        null, // width
+        null, // height
+        buffer.length,
+        sha256,
+        now
+      )
+      console.log('[LocalServer] Created new generated image attachment:', attachmentId)
+    }
+
+    // Link attachment to message (INSERT OR IGNORE handles duplicate links gracefully)
     statements.linkAttachment.run(uuidv4(), messageId, attachmentId, now)
 
-    console.log('[LocalServer] Saved generated image:', filePath)
+    console.log('[LocalServer] Linked generated image to message:', messageId)
     return { filePath, attachmentId }
   } catch (error) {
     console.error('[LocalServer] Error saving generated image:', error)
@@ -953,29 +970,62 @@ function setupServer() {
         created_at,
       } = req.body
 
-      statements.upsertAttachment.run(
-        id,
-        message_id || null,
-        kind,
-        mime_type,
-        storage || 'url',
-        url || null,
-        file_path || null,
-        width || null,
-        height || null,
-        size_bytes || null,
-        sha256 || null,
-        created_at || new Date().toISOString()
-      )
+      let attachmentId = id
+
+      // Check if attachment with this sha256 already exists (deduplication)
+      if (sha256) {
+        const existingAttachment = statements.getAttachmentBySha256.get(sha256) as
+          | { id: string }
+          | undefined
+
+        if (existingAttachment && existingAttachment.id !== id) {
+          // Attachment with same content already exists - reuse it
+          attachmentId = existingAttachment.id
+          console.log('[LocalServer] Reusing existing attachment for sync:', attachmentId)
+        } else if (!existingAttachment) {
+          // Create new attachment
+          statements.upsertAttachment.run(
+            id,
+            message_id || null,
+            kind,
+            mime_type,
+            storage || 'url',
+            url || null,
+            file_path || null,
+            width || null,
+            height || null,
+            size_bytes || null,
+            sha256,
+            created_at || new Date().toISOString()
+          )
+        }
+        // If existingAttachment.id === id, do nothing (already exists with same ID)
+      } else {
+        // No sha256 provided, just upsert by ID
+        statements.upsertAttachment.run(
+          id,
+          message_id || null,
+          kind,
+          mime_type,
+          storage || 'url',
+          url || null,
+          file_path || null,
+          width || null,
+          height || null,
+          size_bytes || null,
+          sha256 || null,
+          created_at || new Date().toISOString()
+        )
+      }
 
       // Link attachment to message if message_id provided
       if (message_id) {
         const linkId = uuidv4()
-        statements.linkAttachment.run(linkId, message_id, id, new Date().toISOString())
+        statements.linkAttachment.run(linkId, message_id, attachmentId, new Date().toISOString())
       }
 
-      // console.log('[LocalServer] Synced attachment:', id)
-      res.json({ success: true, id })
+      // console.log('[LocalServer] Synced attachment:', attachmentId)
+      res.json({ success: true, id: attachmentId })
     } catch (error) {
       console.error('[LocalServer] Error syncing attachment:', error)
       res.status(500).json({ error: 'Failed to sync attachment' })
@@ -1041,30 +1091,44 @@ function setupServer() {
             fs.writeFileSync(filePath, buffer)
           }
 
-          // Create attachment record
-          const attachmentId = uuidv4()
           const now = new Date().toISOString()
 
-          statements.upsertAttachment.run(
-            attachmentId,
-            messageId,
-            'image',
-            mimeType,
-            'file',
-            null, // url
-            filePath,
-            null, // width
-            null, // height
-            buffer.length,
-            sha256,
-            now
-          )
+          // Check if attachment with this sha256 already exists (deduplication)
+          const existingAttachment = statements.getAttachmentBySha256.get(sha256) as
+            | { id: string; file_path: string }
+            | undefined
 
-          // Link attachment to message
+          let attachmentId: string
+
+          if (existingAttachment) {
+            // Reuse existing attachment - just create a link to it
+            attachmentId = existingAttachment.id
+            console.log('[LocalServer] Reusing existing attachment:', attachmentId, 'for message:', messageId)
+          } else {
+            // Create new attachment record
+            attachmentId = uuidv4()
+            statements.upsertAttachment.run(
+              attachmentId,
+              messageId,
+              'image',
+              mimeType,
+              'file',
+              null, // url
+              filePath,
+              null, // width
+              null, // height
+              buffer.length,
+              sha256,
+              now
+            )
+            console.log('[LocalServer] Created new attachment:', attachmentId)
+          }
+
+          // Link attachment to message (INSERT OR IGNORE handles duplicate links gracefully)
           statements.linkAttachment.run(uuidv4(), messageId, attachmentId, now)
 
           savedAttachments.push({ id: attachmentId, file_path: filePath })
-          console.log('[LocalServer] Saved user image attachment:', filePath)
+          console.log('[LocalServer] Linked attachment to message:', messageId)
         } catch (attachmentError) {
           console.error('[LocalServer] Error saving individual attachment:', attachmentError)
         }
@@ -1087,12 +1151,14 @@ function setupServer() {
         return
       }
 
-      const attachment = statements.getAttachmentById.get(id) as {
-        id: string
-        file_path: string | null
-        url: string | null
-        mime_type: string
-      } | undefined
+      const attachment = statements.getAttachmentById.get(id) as
+        | {
+            id: string
+            file_path: string | null
+            url: string | null
+            mime_type: string
+          }
+        | undefined
 
       if (!attachment) {
         res.status(404).json({ error: 'Attachment not found' })

@@ -1902,7 +1902,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
                   // Check for image blocks in content_blocks
                   if (msg?.content_blocks && Array.isArray(msg.content_blocks)) {
-                    const imageBlocks = msg.content_blocks.filter((block: any) => block.type === 'image' && block.url)
+                    const imageBlocks = msg.content_blocks.filter((block) => block.type === 'image' && 'url' in block && !!block.url) as Array<{ type: 'image'; url: string }>
                     if (imageBlocks.length > 0) {
                       // Display the first image as a thumbnail
                       const firstImage = imageBlocks[0]
