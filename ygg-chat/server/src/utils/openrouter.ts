@@ -1,4 +1,4 @@
-import { OpenRouter } from '@openrouter/sdk'
+import type { OpenRouter } from '@openrouter/sdk'
 import { randomUUID } from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -180,6 +180,8 @@ async function getOpenRouterClient() {
     if (!apiKey) {
       throw new Error('OPENROUTER_API_KEY not found or failed to decrypt')
     }
+
+    const { OpenRouter } = await import('@openrouter/sdk')
 
     openrouterApiKey = apiKey
     openrouterInstance = new OpenRouter({
