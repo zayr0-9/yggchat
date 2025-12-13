@@ -150,7 +150,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
 
           <div className='space-y-6'>
             <div>
-              <label className='block text-[12px] sm:text-[12px] md:text-[14px] lg:text-[14px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px] text-neutral-900 font-medium mb-2 dark:text-neutral-200'>
+              <label className='block pb-2 block text-[19px] sm:text-[19px] md:text-[19px] lg:text-[19px] xl:text-[19px] 2xl:text-[19px] 3xl:text-[19px] 4xl:text-[19px] text-neutral-900 font-medium mb-2 dark:text-neutral-200'>
                 Project Name
               </label>
               <TextField
@@ -192,11 +192,11 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
             {/* Storage Mode Selection (only in Electron) */}
             {isElectronMode && (
               <div>
-                <label className='block text-[12px] sm:text-[12px] md:text-[14px] lg:text-[14px] xl:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px] text-neutral-900 font-medium mb-2 dark:text-neutral-200'>
+                <label className='pb-2 block text-[19px] sm:text-[19px] md:text-[19px] lg:text-[19px] xl:text-[19px] 2xl:text-[19px] 3xl:text-[19px] 4xl:text-[19px] text-neutral-900 font-medium mb-2 dark:text-neutral-200'>
                   Storage Location
                 </label>
                 <div className='space-y-2'>
-                  <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                  <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/40'>
                     <input
                       type='radio'
                       value='cloud'
@@ -206,12 +206,12 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                     />
                     <div>
                       <div className='font-medium dark:text-neutral-100'>Cloud</div>
-                      <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                      <div className='text-[15px] pt-0.5 text-neutral-700 dark:text-neutral-300'>
                         Synced to Supabase (accessible anywhere) No Agent Support
                       </div>
                     </div>
                   </label>
-                  <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                  <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/40'>
                     <input
                       type='radio'
                       value='local'
@@ -221,7 +221,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                     />
                     <div>
                       <div className='font-medium dark:text-neutral-100'>Local Only</div>
-                      <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                      <div className='text-[15px] pt-0.5 text-neutral-700 dark:text-neutral-300'>
                         Stored on this device only (not synced) Supports Agent
                       </div>
                     </div>

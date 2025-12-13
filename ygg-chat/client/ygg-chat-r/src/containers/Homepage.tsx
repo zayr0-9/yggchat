@@ -75,9 +75,8 @@ const Homepage: React.FC = () => {
   })
 
   // Filter projects by storage mode
-  const filteredProjects = storageFilter === 'all'
-    ? allProjects
-    : allProjects.filter(p => p.storage_mode === storageFilter)
+  const filteredProjects =
+    storageFilter === 'all' ? allProjects : allProjects.filter(p => p.storage_mode === storageFilter)
   const projects = sortProjects(filteredProjects, sortBy, sortOrder === 'asc')
 
   // Apply theme immediately when user toggles preference
@@ -354,10 +353,11 @@ const Homepage: React.FC = () => {
                     size='small'
                     rounded='full'
                     onClick={() => setStorageFilter('all')}
-                    className={`transition-all duration-200 ${storageFilter === 'all'
-                      ? 'bg-blue-500 text-white dark:bg-blue-600'
-                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                      }`}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'all'
+                        ? 'bg-blue-500 text-white dark:bg-blue-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
                   >
                     <p className='text-xs px-1'>All</p>
                   </Button>
@@ -366,10 +366,11 @@ const Homepage: React.FC = () => {
                     size='small'
                     rounded='full'
                     onClick={() => setStorageFilter('cloud')}
-                    className={`transition-all duration-200 ${storageFilter === 'cloud'
-                      ? 'bg-blue-500 text-white dark:bg-blue-600'
-                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                      }`}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'cloud'
+                        ? 'bg-blue-500 text-white dark:bg-blue-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
                   >
                     <p className='text-xs px-1'>Cloud</p>
                   </Button>
@@ -378,10 +379,11 @@ const Homepage: React.FC = () => {
                     size='small'
                     rounded='full'
                     onClick={() => setStorageFilter('local')}
-                    className={`transition-all duration-200 ${storageFilter === 'local'
-                      ? 'bg-green-500 text-white dark:bg-green-600'
-                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-                      }`}
+                    className={`transition-all duration-200 ${
+                      storageFilter === 'local'
+                        ? 'bg-green-500 text-white dark:bg-green-600'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
+                    }`}
                   >
                     <p className='text-xs px-1'>Local</p>
                   </Button>
@@ -419,8 +421,9 @@ const Homepage: React.FC = () => {
                 title='Refresh projects from server'
               >
                 <i
-                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${isRefetching ? 'animate-spin' : ''
-                    }`}
+                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
+                    isRefetching ? 'animate-spin' : ''
+                  }`}
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -446,8 +449,13 @@ const Homepage: React.FC = () => {
                             {String(index + 1).padStart(2, '0')}. {project.name}
                           </p>
                           {project.storage_mode === 'local' && (
-                            <span className='text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-800 font-medium'>
+                            <span className='text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[12px] 4xl:text-[12px] px-1.5 py-0.5 rounded-full bg-green-100/50 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-600/40 dark:border-green-800 font-medium'>
                               Local
+                            </span>
+                          )}
+                          {project.storage_mode === 'cloud' && (
+                            <span className='text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[12px] 4xl:text-[12px] px-1.5 py-0.5 rounded-full bg-blue-100/50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium'>
+                              Cloud
                             </span>
                           )}
                         </span>
@@ -465,7 +473,7 @@ const Homepage: React.FC = () => {
                           className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
                           onClick={
                             (e => {
-                              ; (e as unknown as React.MouseEvent).stopPropagation()
+                              ;(e as unknown as React.MouseEvent).stopPropagation()
                               handleEditProject(project)
                             }) as unknown as () => void
                           }
@@ -483,7 +491,7 @@ const Homepage: React.FC = () => {
                             className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
                             onClick={
                               (e => {
-                                ; (e as unknown as React.MouseEvent).stopPropagation()
+                                ;(e as unknown as React.MouseEvent).stopPropagation()
                                 handleDeleteProject(project)
                               }) as unknown as () => void
                             }

@@ -362,7 +362,6 @@ const ConversationPage: React.FC = () => {
                   Project Settings
                 </p>
               </Button>
-
             </div>
           </div>
           {/* New Conversation + Sort Controls + Search inline row */}
@@ -415,8 +414,9 @@ const ConversationPage: React.FC = () => {
                 title='Refresh conversations from server'
               >
                 <i
-                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${isRefetching ? 'animate-spin' : ''
-                    }`}
+                  className={`bx bx-refresh text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none ${
+                    isRefetching ? 'animate-spin' : ''
+                  }`}
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -457,7 +457,7 @@ const ConversationPage: React.FC = () => {
                         className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0 ml-2'
                         onClick={
                           (e => {
-                            ; (e as unknown as React.MouseEvent).stopPropagation()
+                            ;(e as unknown as React.MouseEvent).stopPropagation()
                             handleDelete(conv)
                           }) as unknown as () => void
                         }
