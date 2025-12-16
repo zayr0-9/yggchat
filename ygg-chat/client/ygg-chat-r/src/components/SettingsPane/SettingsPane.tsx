@@ -377,7 +377,7 @@ ${block}`
                   className='flex items-center gap-1 text-sm text-blue-600 dark:text-blue-300 hover:underline'
                 >
                   <i className='bx bx-paperclip text-lg' aria-hidden='true'></i>
-                  Attach PDF
+                  Attach File
                 </button>
               </div>
               <InputTextArea
