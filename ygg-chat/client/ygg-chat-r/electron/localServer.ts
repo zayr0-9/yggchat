@@ -40,18 +40,28 @@ function validateAndResolvePath(
     return '.'
   }
 
+  // Detect if we should use POSIX logic (WSL paths on Windows)
+  // If on Windows, but paths start with '/', treat as WSL/Linux path
+  const usePosix =
+    process.platform === 'win32' &&
+    ((inputPath && inputPath.startsWith('/')) || (rootPath && rootPath.startsWith('/')))
+
+  const pathModule = usePosix ? path.posix : path
+
   // If no rootPath constraint, just resolve the path
   if (!rootPath) {
-    return path.isAbsolute(inputPath) ? path.normalize(inputPath) : path.resolve(inputPath)
+    return pathModule.isAbsolute(inputPath) ? pathModule.normalize(inputPath) : pathModule.resolve(inputPath)
   }
 
   // Resolve to absolute path
-  const resolvedPath = path.isAbsolute(inputPath) ? path.normalize(inputPath) : path.resolve(rootPath, inputPath)
+  const resolvedPath = pathModule.isAbsolute(inputPath)
+    ? pathModule.normalize(inputPath)
+    : pathModule.resolve(rootPath, inputPath)
 
-  const normalizedRoot = path.normalize(rootPath)
+  const normalizedRoot = pathModule.normalize(rootPath)
 
   // Security: Ensure resolved path is within rootPath scope
-  if (!resolvedPath.startsWith(normalizedRoot + path.sep) && resolvedPath !== normalizedRoot) {
+  if (!resolvedPath.startsWith(normalizedRoot + pathModule.sep) && resolvedPath !== normalizedRoot) {
     throw new Error(`Path must be within workspace: ${rootPath}`)
   }
 
@@ -1153,11 +1163,11 @@ function setupServer() {
 
       const attachment = statements.getAttachmentById.get(id) as
         | {
-            id: string
-            file_path: string | null
-            url: string | null
-            mime_type: string
-          }
+          id: string
+          file_path: string | null
+          url: string | null
+          mime_type: string
+        }
         | undefined
 
       if (!attachment) {

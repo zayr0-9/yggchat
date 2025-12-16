@@ -87,6 +87,7 @@ import { getPaymentProvider, type SubscriptionStatus } from '../lib/payments'
 import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
+import { extractTextFromPdf } from '../utils/pdfUtils'
 
 function Chat() {
   const dispatch = useAppDispatch()
@@ -286,8 +287,10 @@ function Chat() {
   const [visibleMessageId, setVisibleMessageId] = useState<MessageId | null>(null)
   // Ref for input area to measure its height dynamically
   const inputAreaRef = useRef<HTMLDivElement>(null)
-  // Ref for image file input
-  const imageInputRef = useRef<HTMLInputElement>(null)
+
+  const pdfInputRef = useRef<HTMLInputElement>(null)
+
+  const attachmentInputRef = useRef<HTMLInputElement>(null)
 
   // Track if we already applied the URL hash-based path to avoid overriding user branch switches
   const hashAppliedRef = useRef<MessageId | null>(null)
@@ -1997,42 +2000,53 @@ function Chat() {
     [handleSend, multiReplyCount]
   )
 
-  // Handle image file selection from native file browser
-  const handleImageButtonClick = useCallback(() => {
-    imageInputRef.current?.click()
-  }, [])
-
-  const handleImageInputChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentInputChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || [])
-      const images = files.filter(f => f.type.startsWith('image/'))
-      if (images.length === 0) return
+      if (files.length === 0) return
 
-      Promise.all(
-        images.map(async image => {
-          const dataUrl = await blobToDataURL(image)
-          return {
-            dataUrl,
-            name: image.name,
-            type: image.type,
-            size: image.size,
-          }
-        })
-      )
-        .then(drafts => {
-          dispatch(chatSliceActions.imageDraftsAppended(drafts))
-          if (focusedChatMessageId != null) {
-            dispatch(
-              chatSliceActions.messageArtifactsAppended({
-                messageId: focusedChatMessageId,
-                artifacts: drafts.map(d => d.dataUrl),
-              })
-            )
-          }
-        })
-        .catch(err => console.error('Failed to read selected images', err))
+      const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))
+      const imageFiles = files.filter(file => file.type.startsWith('image/'))
 
-      // Reset the input so the same file can be selected again
+      if (pdfFiles.length > 0) {
+        try {
+          const pdfTexts = await Promise.all(
+            pdfFiles.map(async file => {
+              const text = await extractTextFromPdf(file)
+              return `[Pdf Content for ${file.name}]:\n${text}`
+            })
+          )
+          setLocalInput(prev => {
+            const prefix = prev ? `${prev}\n\n` : ''
+            return prefix + '```\n' + pdfTexts + '\n``` \n\n'
+          })
+          inputAreaRef.current?.querySelector('textarea')?.focus()
+        } catch (err) {
+          console.error('Failed to extract PDF text(s)', err)
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        Promise.all(
+          imageFiles.map(async image => {
+            const dataUrl = await blobToDataURL(image)
+            return { dataUrl, name: image.name, type: image.type, size: image.size }
+          })
+        )
+          .then(drafts => {
+            dispatch(chatSliceActions.imageDraftsAppended(drafts))
+            if (focusedChatMessageId != null) {
+              dispatch(
+                chatSliceActions.messageArtifactsAppended({
+                  messageId: focusedChatMessageId,
+                  artifacts: drafts.map(d => d.dataUrl),
+                })
+              )
+            }
+          })
+          .catch(err => console.error('Failed to read selected images', err))
+      }
+
       e.target.value = ''
     },
     [dispatch, focusedChatMessageId]
@@ -2680,13 +2694,14 @@ function Chat() {
                       </>
                     )}
                   </Button>
-                  {/* Image upload button */}
+
+                  {/* Attachment upload button */}
                   <input
-                    ref={imageInputRef}
+                    ref={attachmentInputRef}
                     type='file'
-                    accept='image/*'
+                    accept='application/pdf,image/*'
                     multiple
-                    onChange={handleImageInputChange}
+                    onChange={handleAttachmentInputChange}
                     className='hidden'
                     aria-hidden='true'
                   />
@@ -2694,24 +2709,10 @@ function Chat() {
                     variant='outline2'
                     className='rounded-full'
                     size='large'
-                    onClick={handleImageButtonClick}
-                    title='Attach images'
+                    onClick={() => attachmentInputRef.current?.click()}
+                    title='Attach files'
                   >
-                    <svg
-                      xmlns='http://www.w3.org/2000/svg'
-                      width='20'
-                      height='20'
-                      viewBox='0 0 24 24'
-                      fill='none'
-                      stroke='currentColor'
-                      strokeWidth='2'
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                    >
-                      <rect x='3' y='3' width='18' height='18' rx='2' ry='2' />
-                      <circle cx='8.5' cy='8.5' r='1.5' />
-                      <polyline points='21 15 16 10 5 21' />
-                    </svg>
+                    <i className='bx bx-paperclip text-[22px]' aria-hidden='true'></i>
                   </Button>
                 </div>
                 <div className='flex items-center justify-end gap-2 pl-2.5'>

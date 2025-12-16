@@ -16,6 +16,7 @@ interface StreamCallbacks {
   onImage: (imageUrl: string, mimeType: string) => void
   onUsage: (usage: any) => void
   onError: (error: string) => void
+  onId?: (id: string) => void
 }
 
 export async function streamImageGeneration(options: ImageStreamOptions, callbacks: StreamCallbacks): Promise<void> {
@@ -40,7 +41,7 @@ export async function streamImageGeneration(options: ImageStreamOptions, callbac
     //       // console.log(`[IMAGE STREAM]   -> image_url found, starts with: ${urlPreview}...`)
     //     }
     //   }
-    // }
+    //   }
   }
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -113,6 +114,11 @@ export async function streamImageGeneration(options: ImageStreamOptions, callbac
         try {
           const parsed = JSON.parse(data)
           chunkCount++
+
+          // Extract Generation ID
+          if (parsed.id && callbacks.onId) {
+            callbacks.onId(parsed.id)
+          }
 
           // Log chunks (truncate large ones to avoid flooding logs)
           const logStr = JSON.stringify(parsed)

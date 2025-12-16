@@ -15,6 +15,7 @@ import { chatSliceActions } from '../../features/chats/chatSlice'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
 import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
+import { ImageModal } from '../ImageModal/ImageModal'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { TextArea } from '../TextArea/TextArea'
 type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
@@ -667,6 +668,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
     const [selectedText, setSelectedText] = useState<string>('')
+    const [selectedArtifactUrl, setSelectedArtifactUrl] = useState<string | null>(null)
     // Explain input states
     const streamToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromStream(streamEvents), [streamEvents])
     const contentToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromBlocks(contentBlocks), [contentBlocks])
@@ -837,6 +839,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       dispatch(chatSliceActions.messageArtifactDeleted({ messageId: id, index }))
     }
 
+    const handleArtifactClick = (url: string) => {
+      setSelectedArtifactUrl(url)
+    }
+
+    const handleCloseArtifactModal = () => {
+      setSelectedArtifactUrl(null)
+    }
+
     const handleContextMenu = (e: React.MouseEvent) => {
       e.preventDefault() // Always prevent default
 
@@ -879,7 +889,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const handleSendExplainInput = () => {
       if (onExplainFromSelection && selectedText && explainInputValue.trim()) {
         // Combine user's custom question with the selected text
-        const branchContent = `${explainInputValue.trim()}\n\nSelected text:\n${selectedText}`
+        const branchContent = `${explainInputValue.trim()}\n\nSelected text:\n\`\`\`\n${selectedText}\n\`\`\``
         onExplainFromSelection(id, branchContent)
         // Reset state
         setShowExplainInput(false)
@@ -1685,6 +1695,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       src={block.url}
                       alt='Generated image'
                       className='max-w-full max-h-96 object-contain rounded-lg shadow-md'
+                      onClick={() => handleArtifactClick(block.url)}
                       loading='lazy'
                     />
                   </div>
@@ -1811,7 +1822,42 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         {hasContent && modelName && role !== 'user' && (
           <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
         )}
-
+        {/* Artifacts (images) */}
+        {Array.isArray(artifacts) && artifacts.length > 0 && (
+          <div className='mt-3 mb-3 space-y-2 flex flex-col items-end'>
+            <h3 className='text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:text-neutral-400'>
+              Attachments
+            </h3>
+            <div className='flex flex-wrap gap-2 sm:gap-3 justify-end self-end'>
+              {artifacts.map((dataUrl, idx) => (
+                <div
+                  key={`${id}-artifact-${idx}`}
+                  className='relative rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 w-fit'
+                >
+                  <img
+                    src={dataUrl}
+                    alt={`attachment-${idx}`}
+                    className='h-20 w-20 sm:h-20 md:h-20 lg:h-20 object-contain bg-neutral-100 dark:bg-neutral-800 cursor-pointer'
+                    loading='lazy'
+                    onClick={() => handleArtifactClick(dataUrl)}
+                  />
+                  {editingState && editMode === 'branch' && (
+                    <button
+                      type='button'
+                      title='Remove image'
+                      onClick={() => handleDeleteArtifact(idx)}
+                      className='absolute top-2 right-2 z-10 p-1.5 rounded-md bg-neutral-800/70 text-white hover:bg-neutral-700'
+                    >
+                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {/* Actions row (at bottom) */}
         {hasContent && (
           <div className='flex items-center justify-end mt-3 mb-2'>
@@ -1889,40 +1935,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             </div>
           </div>
         )}
-        {role === 'user' && (
-          <div className='w-full border-t border-neutral-200 dark:border-neutral-800 my-4 mb-8'></div>
-        )}
 
-        {/* Artifacts (images) */}
-        {Array.isArray(artifacts) && artifacts.length > 0 && (
-          <div className='mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3'>
-            {artifacts.map((dataUrl, idx) => (
-              <div
-                key={`${id}-artifact-${idx}`}
-                className='relative rounded-lg overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900'
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={dataUrl}
-                  alt={`attachment-${idx}`}
-                  className='w-full h-40 sm:h-48 md:h-56 lg:h-64 object-contain bg-neutral-100 dark:bg-neutral-800'
-                  loading='lazy'
-                />
-                {editingState && editMode === 'branch' && (
-                  <button
-                    type='button'
-                    title='Remove image'
-                    onClick={() => handleDeleteArtifact(idx)}
-                    className='absolute top-2 right-2 z-10 p-1.5 rounded-md bg-neutral-800/70 text-white hover:bg-neutral-700'
-                  >
-                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
+        {role === 'user' && (
+          <div className='w-full border-t border-2 border-blue-400 dark:border-orange-600/30 my-4 mb-8 rounded-full'></div>
         )}
 
         {/* Edit instructions */}
@@ -2004,6 +2019,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             </motion.div>
           )}
         </AnimatePresence>
+        <ImageModal
+          isOpen={Boolean(selectedArtifactUrl)}
+          imageUrl={selectedArtifactUrl ?? ''}
+          onClose={handleCloseArtifactModal}
+        />
       </div>
     )
   }

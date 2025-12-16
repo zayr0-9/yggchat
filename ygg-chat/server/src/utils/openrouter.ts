@@ -902,10 +902,21 @@ export async function generateResponse(
             onError: error => {
               onChunk(JSON.stringify({ part: 'error', delta: error }))
             },
+            onId: async id => {
+              if (!generationIdCaptured && currentProviderRunId && currentReservationRefId) {
+                generationIdCaptured = true
+                await updateProviderRunWithGenerationId(currentProviderRunId, id, currentReservationRefId)
+              }
+            },
           }
         )
         // Image generation complete, exit the step loop
-        console.log('[OPENROUTER] Raw image streaming completed')
+        // console.log('[OPENROUTER] Raw image streaming completed')
+
+        // Mark provider run as succeeded
+        if (currentProviderRunId) {
+          await finishProviderRun(currentProviderRunId, 'succeeded', finalUsage)
+        }
         break
       }
 
