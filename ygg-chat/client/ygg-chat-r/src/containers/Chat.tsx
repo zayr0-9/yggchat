@@ -288,8 +288,6 @@ function Chat() {
   // Ref for input area to measure its height dynamically
   const inputAreaRef = useRef<HTMLDivElement>(null)
 
-  const pdfInputRef = useRef<HTMLInputElement>(null)
-
   const attachmentInputRef = useRef<HTMLInputElement>(null)
 
   // Track if we already applied the URL hash-based path to avoid overriding user branch switches
