@@ -27,7 +27,7 @@ process.on('unhandledRejection', (reason, promise) => {
   // Don't exit - keep the server running
 })
 
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', error => {
   console.error('🚨 Uncaught Exception:', error)
   console.error('🚨 Stack:', error.stack)
   // Don't exit immediately - give time to log and potentially recover
@@ -50,7 +50,7 @@ server.keepAliveTimeout = 120 * 1000
 server.headersTimeout = 120 * 1000
 
 // Low-level connection logging to verify if traffic reaches the node process
-server.on('connection', (socket) => {
+server.on('connection', socket => {
   console.log(`🔌 [TCP] New connection from ${socket.remoteAddress}:${socket.remotePort}`)
 })
 
@@ -260,13 +260,14 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }))
 if (env.VITE_ENVIRONMENT === 'web') {
   console.log('🔒 [RATE LIMITER] Applying global rate limiter')
   app.use((req, res, next) => {
-    console.log('🔒 [RATE LIMITER] Checking rate limit for:', req.ip)
-    globalRateLimiter(req, res, (err) => {
+    // console.log('🔒 [RATE LIMITER] Checking rate limit for:', req.ip)
+    globalRateLimiter(req, res, err => {
       if (err) {
         console.log('❌ [RATE LIMITER] Rate limit exceeded for:', req.ip)
-      } else {
-        console.log('✅ [RATE LIMITER] Rate limit check passed for:', req.ip)
       }
+      // else {
+      //   console.log('✅ [RATE LIMITER] Rate limit check passed for:', req.ip)
+      // }
       next(err)
     })
   })
@@ -295,8 +296,8 @@ if (env.VITE_ENVIRONMENT === 'web') {
 
     // OOB Auth routes: OAuth callback page + code exchange for Electron/CLI
     const oobAuth = require('./routes/oobAuth').default
-    app.use('/auth', oobAuth)        // For /auth/callback (callback page)
-    app.use('/api/auth', oobAuth)    // For /api/auth/oob/* endpoints
+    app.use('/auth', oobAuth) // For /auth/callback (callback page)
+    app.use('/api/auth', oobAuth) // For /api/auth/oob/* endpoints
     console.log('[Startup] OOB Auth routes loaded')
   } catch (err) {
     console.error('[Startup] ❌ Failed to load supaChat router:', err)
@@ -387,7 +388,7 @@ if (env.VITE_ENVIRONMENT === 'web') {
   console.log('⏭️  Skipping reconciliation worker (not in web mode)')
 }
 
-; (async () => {
+;(async () => {
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3001
 
   server.on('error', (error: any) => {
@@ -430,7 +431,7 @@ async function migratePlainTextAndFTS() {
       // If for some reason column is missing (shouldn't happen), add it
       try {
         db.exec(`ALTER TABLE messages ADD COLUMN plain_text_content TEXT`)
-      } catch { }
+      } catch {}
     }
 
     // Select messages missing plain_text_content
@@ -462,7 +463,7 @@ async function migratePlainTextAndFTS() {
 
 // Run migration in background after DB init (only for local/electron modes)
 if (env.VITE_ENVIRONMENT !== 'web') {
-  migratePlainTextAndFTS().catch((err) => {
+  migratePlainTextAndFTS().catch(err => {
     console.error('❌ Fatal error in migratePlainTextAndFTS:', err)
     // Don't crash - log and continue
   })

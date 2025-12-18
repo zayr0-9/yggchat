@@ -1823,7 +1823,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
         )}
         {/* Artifacts (images) */}
-        {Array.isArray(artifacts) && artifacts.length > 0 && (
+        {Array.isArray(artifacts) && artifacts.length > 0 && role !== 'assistant' && (
           <div className='mt-3 mb-3 space-y-2 flex flex-col items-end'>
             <h3 className='text-xs font-semibold uppercase tracking-wide text-neutral-600 dark:text-neutral-400'>
               Attachments

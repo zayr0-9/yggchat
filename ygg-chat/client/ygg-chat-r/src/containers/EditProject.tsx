@@ -207,7 +207,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                     <div>
                       <div className='font-medium dark:text-neutral-100'>Cloud</div>
                       <div className='text-[15px] pt-0.5 text-neutral-700 dark:text-neutral-300'>
-                        Synced to Supabase (accessible anywhere) No Agent Support
+                        Synced to cloud (accessible anywhere) No Agent Support
                       </div>
                     </div>
                   </label>

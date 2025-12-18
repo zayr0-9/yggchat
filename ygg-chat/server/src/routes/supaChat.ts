@@ -27,7 +27,7 @@ import { extractJsonObjects } from '../utils/jsonExtractor'
 import { modelService } from '../utils/modelService'
 import { getCachedOpenRouterModels } from '../utils/openrouterModelsCache'
 import { generateResponse } from '../utils/provider'
-import { saveBase64ImageAttachmentsForMessage } from '../utils/supaAttachments'
+import { saveBase64ImageAttachmentsForMessage, saveGeneratedImagesToStorage } from '../utils/supaAttachments'
 import { getToolByName, updateToolEnabled } from '../utils/tools/index'
 
 console.error('[supaChat] 🚀 Router file loaded/executing')
@@ -1399,7 +1399,7 @@ router.post(
 
           // Create assistant message with final content (not update placeholder)
           try {
-            const assistantMessage = await MessageService.create(
+            let assistantMessage = await MessageService.create(
               client,
               userId,
               conversationId,
@@ -1412,7 +1412,36 @@ router.post(
               undefined,
               accumulatedBlocks
             )
-            // console.log(assistantMessage)
+
+            // Process AI-generated images: save to storage bucket and update content_blocks
+            // Skip for local mode - images stay as external URLs
+            if (!isLocalMode) {
+              const hasImageBlocks = accumulatedBlocks.some((block: any) => block.type === 'image' && block.url)
+              if (hasImageBlocks) {
+                try {
+                  const updatedBlocks = await saveGeneratedImagesToStorage(
+                    client,
+                    accumulatedBlocks,
+                    assistantMessage.id,
+                    userId
+                  )
+                  // Update message with new content_blocks containing bucket URLs
+                  const { error: updateError } = await client
+                    .from('messages')
+                    .update({ content_blocks: updatedBlocks })
+                    .eq('id', assistantMessage.id)
+
+                  if (updateError) {
+                    console.error('[supaChat/repeat] Failed to update content_blocks with bucket URLs:', updateError)
+                  } else {
+                    assistantMessage = { ...assistantMessage, content_blocks: updatedBlocks }
+                    console.log('[supaChat/repeat] Successfully saved generated images to storage bucket')
+                  }
+                } catch (imageError) {
+                  console.error('[supaChat/repeat] Error saving generated images to storage:', imageError)
+                }
+              }
+            }
 
             const cleanedMessage = { ...assistantMessage, content: cleanedContent }
 
@@ -1509,10 +1538,10 @@ router.post(
       storageMode = 'cloud',
     } = req.body as SendMessageRequest
 
-    console.log(`[supaChat] Processing message request for conversation ${conversationId}`)
-    console.log(`[supaChat] Execution Mode: ${executionMode}`)
-    console.log(`[supaChat] Model: ${modelName}`)
-    console.log(`[supaChat] Provider: ${provider}`)
+    // console.log(`[supaChat] Processing message request for conversation ${conversationId}`)
+    // console.log(`[supaChat] Execution Mode: ${executionMode}`)
+    // console.log(`[supaChat] Model: ${modelName}`)
+    // console.log(`[supaChat] Provider: ${provider}`)
 
     const isContinuation = !content && Array.isArray(messages) && messages.length > 0
 
@@ -1963,6 +1992,35 @@ router.post(
               undefined,
               accumulatedBlocks
             )
+
+            // Process AI-generated images: save to storage bucket and update content_blocks
+            const hasImageBlocks = accumulatedBlocks.some((block: any) => block.type === 'image' && block.url)
+            if (hasImageBlocks) {
+              try {
+                const updatedBlocks = await saveGeneratedImagesToStorage(
+                  client,
+                  accumulatedBlocks,
+                  assistantMessage.id,
+                  userId
+                )
+                // Update message with new content_blocks containing bucket URLs
+                const { error: updateError } = await client
+                  .from('messages')
+                  .update({ content_blocks: updatedBlocks })
+                  .eq('id', assistantMessage.id)
+
+                if (updateError) {
+                  console.error('[supaChat] Failed to update content_blocks with bucket URLs:', updateError)
+                } else {
+                  // Update the assistantMessage object with new content_blocks
+                  assistantMessage = { ...assistantMessage, content_blocks: updatedBlocks }
+                  console.log('[supaChat] Successfully saved generated images to storage bucket')
+                }
+              } catch (imageError) {
+                console.error('[supaChat] Error saving generated images to storage:', imageError)
+                // Continue with original content_blocks - images will use external URLs
+              }
+            }
           }
           // console.log(assistantMessage)
           const cleanedMessage = { ...assistantMessage, content: cleanedContent }

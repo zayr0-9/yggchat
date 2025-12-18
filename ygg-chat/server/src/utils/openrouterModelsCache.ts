@@ -47,7 +47,7 @@ export async function getCachedOpenRouterModels(): Promise<OpenRouterModel[]> {
     //1. Check in memory cache
     let models = modelsMemoryCache.get(cacheKey)
     if (models) {
-      console.log(`[OpenRouter Models]🧠 Memory cache hit - ${models.length} models`)
+      // console.log(`[OpenRouter Models]🧠 Memory cache hit - ${models.length} models`)
       return models
     }
     // 2. Check Redis cache

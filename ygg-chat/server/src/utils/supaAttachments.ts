@@ -311,3 +311,193 @@ export async function listUserFiles(ownerId: string): Promise<any[]> {
     return []
   }
 }
+
+/**
+ * Content block types that may contain images
+ */
+export type ImageContentBlock = {
+  type: 'image'
+  url: string
+  mimeType?: string
+}
+
+export type ContentBlock =
+  | { type: 'text'; content: string }
+  | { type: 'thinking'; content: string }
+  | { type: 'tool_use'; id: string; name: string; input: any }
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
+  | ImageContentBlock
+
+/**
+ * Process AI-generated images in content_blocks and save them to Supabase Storage
+ * This ensures generated images are persisted in our own storage rather than relying on external URLs
+ *
+ * @param client - Authenticated Supabase client for RLS
+ * @param contentBlocks - Array of content blocks from AI response
+ * @param messageId - The assistant message ID to link attachments to
+ * @param ownerId - The owner/user ID for organizing files
+ * @returns Updated content_blocks array with bucket URLs replacing external/data URLs
+ */
+export async function saveGeneratedImagesToStorage(
+  client: SupabaseClient,
+  contentBlocks: ContentBlock[],
+  messageId: string,
+  ownerId: string
+): Promise<ContentBlock[]> {
+  if (!Array.isArray(contentBlocks) || contentBlocks.length === 0) {
+    return contentBlocks
+  }
+
+  // Ensure bucket exists before processing
+  await ensureBucketExists()
+
+  const updatedBlocks: ContentBlock[] = []
+
+  for (const block of contentBlocks) {
+    // Only process image blocks
+    if (block.type !== 'image' || !('url' in block)) {
+      updatedBlocks.push(block)
+      continue
+    }
+
+    const imageBlock = block as ImageContentBlock
+    const imageUrl = imageBlock.url
+
+    // Skip if no URL or already a Supabase URL
+    if (!imageUrl) {
+      updatedBlocks.push(block)
+      continue
+    }
+
+    // Check if already stored in our bucket (avoid re-processing)
+    if (imageUrl.includes(STORAGE_BUCKET) && imageUrl.includes('supabase')) {
+      updatedBlocks.push(block)
+      continue
+    }
+
+    try {
+      let buffer: Buffer | null = null
+      let mimeType = imageBlock.mimeType || 'image/png'
+
+      // Handle data URLs (base64 encoded)
+      if (imageUrl.startsWith('data:')) {
+        const match = /^data:(.*?);base64,(.*)$/.exec(imageUrl)
+        if (match) {
+          mimeType = match[1] || mimeType
+          const base64 = match[2]
+          buffer = Buffer.from(base64, 'base64')
+        }
+      }
+      // Handle external URLs (http/https)
+      else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+        try {
+          const response = await fetch(imageUrl, {
+            signal: AbortSignal.timeout(30000), // 30 second timeout
+          })
+
+          if (response.ok) {
+            const contentType = response.headers.get('content-type')
+            if (contentType && contentType.startsWith('image/')) {
+              mimeType = contentType.split(';')[0] // Remove charset if present
+            }
+            const arrayBuffer = await response.arrayBuffer()
+            buffer = Buffer.from(arrayBuffer)
+          } else {
+            console.warn(`[saveGeneratedImages] Failed to fetch image: ${response.status} ${imageUrl.substring(0, 100)}`)
+          }
+        } catch (fetchError) {
+          console.warn(`[saveGeneratedImages] Error fetching image: ${fetchError}`)
+        }
+      }
+
+      // If we couldn't get the image data, keep the original block
+      if (!buffer) {
+        console.warn(`[saveGeneratedImages] Could not extract image data, keeping original URL`)
+        updatedBlocks.push(block)
+        continue
+      }
+
+      // Calculate SHA256 for deduplication
+      const sha256 = crypto.createHash('sha256').update(buffer).digest('hex')
+
+      // Check for existing attachment with same hash
+      const existing = await AttachmentService.findBySha256(client, sha256)
+      if (existing && existing.url) {
+        console.log(`[saveGeneratedImages] Found existing image with same hash, reusing URL`)
+        // Link to this message
+        await AttachmentService.linkToMessage(client, existing.id, messageId, ownerId)
+        updatedBlocks.push({
+          type: 'image',
+          url: existing.url,
+          mimeType: mimeType,
+        })
+        continue
+      }
+
+      // Cache the base64 for future use
+      const base64ForCache = buffer.toString('base64')
+      cacheAttachmentBase64({ sha256, mimeType, base64: base64ForCache, sizeBytes: buffer.length })
+
+      // Generate unique filename
+      const ext = extFromMimeOrName(mimeType, undefined)
+      const timestamp = Date.now()
+      const filename = `${ownerId}/${timestamp}_generated${ext}`
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filename, buffer, {
+          contentType: mimeType,
+          upsert: false,
+          cacheControl: '3600',
+        })
+
+      if (uploadError) {
+        console.error('[saveGeneratedImages] Failed to upload:', uploadError)
+        updatedBlocks.push(block) // Keep original on failure
+        continue
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(filename)
+
+      const publicUrl = urlData?.publicUrl || null
+
+      if (!publicUrl) {
+        console.error('[saveGeneratedImages] Failed to get public URL')
+        updatedBlocks.push(block)
+        continue
+      }
+
+      // Create attachment record
+      await AttachmentService.create(client, ownerId, {
+        messageId,
+        kind: 'image',
+        mimeType,
+        storage: 'file',
+        url: publicUrl,
+        storagePath: uploadData.path,
+        width: null,
+        height: null,
+        sizeBytes: buffer.length,
+        sha256,
+      })
+
+      console.log(`[saveGeneratedImages] Saved generated image to bucket: ${filename}`)
+
+      // Update the block with the new URL
+      updatedBlocks.push({
+        type: 'image',
+        url: publicUrl,
+        mimeType: mimeType,
+      })
+    } catch (error) {
+      console.error('[saveGeneratedImages] Error processing image block:', error)
+      updatedBlocks.push(block) // Keep original on error
+    }
+  }
+
+  return updatedBlocks
+}

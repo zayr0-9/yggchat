@@ -518,7 +518,7 @@ const ConversationPage: React.FC = () => {
                   <div>
                     <div className='font-medium dark:text-neutral-100'>Cloud</div>
                     <div className='text-xs text-neutral-600 dark:text-neutral-400'>
-                      Synced to Supabase (accessible anywhere)
+                      Synced to cloud (accessible anywhere)
                     </div>
                   </div>
                 </label>
