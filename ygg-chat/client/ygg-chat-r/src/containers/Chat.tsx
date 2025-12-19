@@ -2182,7 +2182,7 @@ function Chat() {
   // and reducers update currentPath appropriately. This avoids race conditions and
   // incorrect parent linking that could break currentPath after branching.
 
-  // Token usage tracking - placeholder credits value
+  // TODO: Replace with actual credits from user state
   const current_credits = 400
 
   // Calculate token counts from displayed messages (current branch)
@@ -2192,7 +2192,7 @@ function Chat() {
 
     displayMessages.forEach(msg => {
       if (!msg || !msg.content) return
-      const tokens = estimateTokenCount(msg.content)
+      const tokens = estimateTokenCount(msg.content) + estimateTokenCount(JSON.stringify(msg.content_blocks))
       if (msg.role === 'user') {
         inputTokens += tokens
       } else if (msg.role === 'assistant' || msg.role === 'ex_agent') {
@@ -2203,20 +2203,50 @@ function Chat() {
     return { inputTokens, outputTokens }
   }, [displayMessages])
 
-  // Calculate max affordable tokens based on model pricing
+  // Calculate token limits: shared context budget between input and output
   const tokenLimits = useMemo(() => {
     const usdValue = current_credits / 100 // Convert credits to USD
 
-    // Default to safe values if model pricing not available
-    const promptCostPerMillion = selectedModel?.promptCost || 0.001
-    const completionCostPerMillion = selectedModel?.completionCost || 0.001
+    // Model context limit (shared between input + output)
+    const totalContextLimit = selectedModel?.contextLength || 128_000
+    // Hard cap on output tokens (some models have this limit regardless of context)
+    const maxCompletionCap = selectedModel?.maxCompletionTokens || totalContextLimit
 
-    // Calculate max tokens: (USD value) / (cost per token) = (USD) * 1,000,000 / (cost per million)
-    const maxInputTokens = promptCostPerMillion > 0 ? Math.floor(usdValue / promptCostPerMillion) : 1_000_000
-    const maxOutputTokens = completionCostPerMillion > 0 ? Math.floor(usdValue / completionCostPerMillion) : 1_000_000
+    // Cost is per 1K tokens: cost = (tokens / 1000) * costPer1K
+    // So: tokens = (usd * 1000) / costPer1K
+    const promptCostPer1K = selectedModel?.promptCost ?? 0
+    const completionCostPer1K = selectedModel?.completionCost ?? 0
 
-    return { maxInputTokens, maxOutputTokens }
-  }, [selectedModel?.promptCost, selectedModel?.completionCost, current_credits])
+    // Calculate credit-based limits
+    let creditInputLimit = Infinity
+    let creditOutputLimit = Infinity
+
+    if (promptCostPer1K > 0) {
+      creditInputLimit = Math.floor((usdValue * 1000) / promptCostPer1K)
+    }
+    if (completionCostPer1K > 0) {
+      creditOutputLimit = Math.floor((usdValue * 1000) / completionCostPer1K)
+    }
+
+    // Total budget is the minimum of context limit and credit-based limits
+    const totalBudget = Math.min(totalContextLimit, creditInputLimit, creditOutputLimit)
+
+    // Adaptive limits: as one grows, the other shrinks
+    // Input limit = total budget minus output tokens already used
+    // Output limit = total budget minus input tokens already used (capped by maxCompletionTokens)
+    const maxInputTokens = Math.max(0, totalBudget - tokenUsage.outputTokens)
+    const maxOutputTokens = Math.min(Math.max(0, totalBudget - tokenUsage.inputTokens), maxCompletionCap)
+
+    return { maxInputTokens, maxOutputTokens, totalBudget }
+  }, [
+    selectedModel?.promptCost,
+    selectedModel?.completionCost,
+    selectedModel?.contextLength,
+    selectedModel?.maxCompletionTokens,
+    current_credits,
+    tokenUsage.inputTokens,
+    tokenUsage.outputTokens,
+  ])
 
   // Calculate progress percentages
   const inputProgress = Math.min((tokenUsage.inputTokens / tokenLimits.maxInputTokens) * 100, 100)
@@ -2558,26 +2588,35 @@ function Chat() {
                 })}
               </div>
             )}
-            {/* Token Usage Progress Bars */}
-            <div className='ml-4 mr-6 my-0 space-y-0.25 group relative cursor-pointer'>
-              {/* Input Tokens Progress Bar */}
+            {/* Token Usage Progress Bar - Stacked */}
+            <div className='ml-4 mr-6 my-0 group relative cursor-pointer'>
               <div className='flex items-center gap-2'>
-                <span className='text-xs text-neutral-500 dark:text-neutral-400 w-14 shrink-0'>Input</span>
-                <div className='flex-1 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden'>
-                  <div
-                    className='h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300'
-                    style={{ width: `${inputProgress}%` }}
-                  />
-                </div>
-              </div>
-              {/* Output Tokens Progress Bar */}
-              <div className='flex items-center gap-2'>
-                <span className='text-xs text-neutral-500 dark:text-neutral-400 w-14 shrink-0'>Output</span>
-                <div className='flex-1 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden'>
-                  <div
-                    className='h-full bg-green-500 dark:bg-green-400 rounded-full transition-all duration-300'
-                    style={{ width: `${outputProgress}%` }}
-                  />
+                <div className='flex-1 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden relative'>
+                  {/* Render larger bar first (bottom), smaller bar second (top) */}
+                  {inputProgress >= outputProgress ? (
+                    <>
+                      <h1>I/O</h1>
+                      <div
+                        className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300'
+                        style={{ width: `${inputProgress}%` }}
+                      />
+                      <div
+                        className='absolute inset-0 h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-all duration-300'
+                        style={{ width: `${outputProgress}%` }}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className='absolute inset-0 h-full bg-emerald-500 dark:bg-emerald-600 rounded-full transition-all duration-300'
+                        style={{ width: `${outputProgress}%` }}
+                      />
+                      <div
+                        className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-600 rounded-full transition-all duration-300'
+                        style={{ width: `${inputProgress}%` }}
+                      />
+                    </>
+                  )}
                 </div>
               </div>
               {/* Hover Popup with Token Details */}
