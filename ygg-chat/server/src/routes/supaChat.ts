@@ -211,25 +211,26 @@ router.get(
         }
       } catch (authError) {
         // Unauthenticated - show all models
+        console.error(authError)
       }
 
       // Get models from Redis cache (fetches from API if cache miss)
       const models = await getCachedOpenRouterModels()
 
-      // Filter models based on tier
-      let filteredModels = models
-      if (!canAccessPaid && userId) {
-        filteredModels = models.filter(model => isFreeTierModel(model))
-        console.log(`[Models] Filtered to ${filteredModels.length} free tier models for user ${userId}`)
-      }
+      // Mark each model with isFreeTier flag instead of filtering
+      // This allows free users to see all models but UI will disable non-free ones
+      const modelsWithFreeTierFlag = models.map(model => ({
+        ...model,
+        isFreeTier: isFreeTierModel(model),
+      }))
 
       const preferredDefault = 'gpt-4o'
-      const defaultModel = filteredModels.find((m: any) => m.name === preferredDefault) || filteredModels[0] || null
+      const defaultModel = modelsWithFreeTierFlag.find((m: any) => m.name === preferredDefault) || modelsWithFreeTierFlag[0] || null
 
       res.json({
-        models: filteredModels,
+        models: modelsWithFreeTierFlag,
         default: defaultModel,
-        isFreeTier: !canAccessPaid,
+        userIsFreeTier: !canAccessPaid, // User's tier status for client-side logic
       })
     } catch (error) {
       console.error('Error fetching OpenRouter models:', error)

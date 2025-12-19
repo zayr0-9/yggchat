@@ -588,7 +588,7 @@ export function useModels(provider: string | null) {
           endpoint = '/models' // Ollama
       }
 
-      const response = await api.get<{ models: string[] | Model[]; default: string | Model }>(endpoint, accessToken)
+      const response = await api.get<{ models: string[] | Model[]; default: string | Model; userIsFreeTier?: boolean }>(endpoint, accessToken)
 
       // Handle both string[] and Model[] responses
       const isStringArray = Array.isArray(response.models) && typeof response.models[0] === 'string'
@@ -621,6 +621,7 @@ export function useModels(provider: string | null) {
         models,
         default: defaultModel,
         selected: selectedModel, // Always populated - either from localStorage (if valid) or from server default
+        userIsFreeTier: response.userIsFreeTier ?? false, // User's tier status for disabling non-free models
       }
     },
     enabled: !!provider && !!accessToken,

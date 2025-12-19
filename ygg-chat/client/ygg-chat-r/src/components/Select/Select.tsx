@@ -27,6 +27,8 @@ interface SelectProps {
   onFavoritesChange?: () => void
   modelSelect?: boolean
   footerContent?: React.ReactNode
+  /** Options that should be visually disabled (shown but not selectable) */
+  disabledOptions?: string[]
 }
 
 export const Select: React.FC<SelectProps> = ({
@@ -44,6 +46,7 @@ export const Select: React.FC<SelectProps> = ({
   onFavoritesChange,
   modelSelect = false,
   footerContent,
+  disabledOptions = [],
 }) => {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number>(-1)
@@ -211,8 +214,14 @@ export const Select: React.FC<SelectProps> = ({
     }
   }
 
+  // Check if a specific option is disabled
+  const isOptionDisabled = useCallback(
+    (optionValue: string) => disabledOptions.includes(optionValue),
+    [disabledOptions]
+  )
+
   const handleSelect = (val: string) => {
-    if (disabled) return
+    if (disabled || isOptionDisabled(val)) return
     onChange(val)
     setOpen(false)
   }
@@ -282,25 +291,29 @@ export const Select: React.FC<SelectProps> = ({
                 filteredOptions.map((opt, idx) => {
                   const isSelected = value === opt.value
                   const modelInfo = modelData?.[opt.value]
+                  const optDisabled = isOptionDisabled(opt.value)
                   return (
-                    <div key={opt.value} className='flex items-center gap-0'>
+                    <div key={opt.value} className={`flex items-center gap-0 ${optDisabled ? 'opacity-50' : ''}`}>
                       <Button
                         variant='outline2'
                         size='medium'
                         type='button'
                         role='option'
                         aria-selected={isSelected}
+                        aria-disabled={optDisabled}
                         onMouseEnter={() => setActiveIndex(idx)}
                         onMouseDown={e => {
                           // Select on mousedown to beat any outside click handlers and avoid losing the event
                           e.preventDefault()
                           e.stopPropagation()
-                          handleSelect(opt.value)
+                          if (!optDisabled) handleSelect(opt.value)
                         }}
-                        onClick={() => handleSelect(opt.value)}
-                        className={`flex-1 line-clamp-3 hover:bg-neutral-200 justify-start text-left ${isSelected ? 'font-medium' : ''}`}
+                        onClick={() => !optDisabled && handleSelect(opt.value)}
+                        className={`flex-1 line-clamp-3 justify-start text-left ${isSelected ? 'font-medium' : ''} ${optDisabled ? 'cursor-not-allowed' : 'hover:bg-neutral-200'}`}
+                        title={optDisabled ? 'Upgrade to access this model' : undefined}
                       >
                         {opt.label}
+                        {optDisabled && <i className='bx bx-lock-alt ml-1 text-xs' aria-hidden='true' />}
                       </Button>
                       {modelInfo && (
                         <>

@@ -436,8 +436,27 @@ function Chat() {
   const { filteredModels, filters, sortOptions, applyFilters, clearFilters, applySorting, refreshFavorites } =
     useFilteredModels(providers.currentProvider)
 
-  // Extract models array from React Query response
+  // Extract models array and user tier status from React Query response
   const models = modelsData?.models || []
+  const userIsFreeTier = modelsData?.userIsFreeTier ?? false
+
+  // Compute disabled model options for free tier users
+  // Free users can see all models but can only select free tier ones
+  const disabledModelOptions = useMemo(() => {
+    if (!userIsFreeTier) return [] // Paid users can select any model
+    return models.filter(m => !m.isFreeTier).map(m => m.name)
+  }, [userIsFreeTier, models])
+
+  // Sort filtered models: free tier models appear first when user is on free tier
+  const sortedFilteredModels = useMemo(() => {
+    if (!userIsFreeTier) return filteredModels // Paid users see default order
+
+    // Partition models into free and paid, preserving original order within each group
+    const freeModels = filteredModels.filter(m => m.isFreeTier)
+    const paidModels = filteredModels.filter(m => !m.isFreeTier)
+
+    return [...freeModels, ...paidModels]
+  }, [userIsFreeTier, filteredModels])
   // Conversation title editing
   const currentConversation = useAppSelector(
     currentConversationId ? makeSelectConversationById(currentConversationId) : () => null
@@ -2223,7 +2242,13 @@ function Chat() {
     })
 
     return { inputTokens, outputTokens }
-  }, [displayMessages, selectedProject?.system_prompt, selectedProject?.context, currentConversation?.system_prompt, currentConversation?.conversation_context])
+  }, [
+    displayMessages,
+    selectedProject?.system_prompt,
+    selectedProject?.context,
+    currentConversation?.system_prompt,
+    currentConversation?.conversation_context,
+  ])
 
   // Calculate token limits: shared context budget between input and output
   const tokenLimits = useMemo(() => {
@@ -2691,7 +2716,7 @@ function Chat() {
                   </div>
                   <div className='flex items-center gap-2 text-xs mt-1'>
                     <span className='text-neutral-900 dark:text-neutral-200'>Credits:</span>
-                    <span>{current_credits * 100}</span>
+                    <span>{(current_credits * 100).toFixed(3)}</span>
                   </div>
                   {/* Tooltip Arrow */}
                   <div className='absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800 dark:border-t-neutral-900' />
@@ -2741,13 +2766,14 @@ function Chat() {
                   <Select
                     value={selectedModel?.name || ''}
                     onChange={handleModelSelect}
-                    options={filteredModels.map(m => m.name)}
+                    options={sortedFilteredModels.map(m => m.name)}
                     placeholder='Select a model...'
                     blur='high'
-                    disabled={filteredModels.length === 0}
+                    disabled={sortedFilteredModels.length === 0}
+                    disabledOptions={disabledModelOptions}
                     className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-54 transition-transform duration-60 active:scale-99 rounded-4xl'
                     searchBarVisible={true}
-                    modelData={Object.fromEntries(filteredModels.map(m => [m.name, m]))}
+                    modelData={Object.fromEntries(sortedFilteredModels.map(m => [m.name, m]))}
                     onFavoritesChange={refreshFavorites}
                     filterUI={
                       <ModelFilterUI
