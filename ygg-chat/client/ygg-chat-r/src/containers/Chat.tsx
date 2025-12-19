@@ -2190,10 +2190,28 @@ function Chat() {
   const current_credits = currentUser?.cached_current_credits ?? 0
 
   // Calculate token counts from displayed messages (current branch)
+  // Includes system prompts and context from both project and conversation
   const tokenUsage = useMemo(() => {
     let inputTokens = 0
     let outputTokens = 0
 
+    // Include project system prompt and context (counted as input tokens)
+    if (selectedProject?.system_prompt) {
+      inputTokens += estimateTokenCount(selectedProject.system_prompt)
+    }
+    if (selectedProject?.context) {
+      inputTokens += estimateTokenCount(selectedProject.context)
+    }
+
+    // Include conversation system prompt and context (counted as input tokens)
+    if (currentConversation?.system_prompt) {
+      inputTokens += estimateTokenCount(currentConversation.system_prompt)
+    }
+    if (currentConversation?.conversation_context) {
+      inputTokens += estimateTokenCount(currentConversation.conversation_context)
+    }
+
+    // Count tokens from messages
     displayMessages.forEach(msg => {
       if (!msg || !msg.content) return
       const tokens = estimateTokenCount(msg.content) + estimateTokenCount(JSON.stringify(msg.content_blocks))
@@ -2205,7 +2223,7 @@ function Chat() {
     })
 
     return { inputTokens, outputTokens }
-  }, [displayMessages])
+  }, [displayMessages, selectedProject?.system_prompt, selectedProject?.context, currentConversation?.system_prompt, currentConversation?.conversation_context])
 
   // Calculate token limits: shared context budget between input and output
   const tokenLimits = useMemo(() => {

@@ -18,7 +18,7 @@ import { supabaseAdmin } from '../database/supamodels'
 import { moneyIsZero, moneySubtract } from '../utils/money'
 
 // Configuration
-const RECONCILE_BATCH_SIZE = 10 // Process 10 runs at a time
+const RECONCILE_BATCH_SIZE = 20 // Process 10 runs at a time
 const RECONCILE_INTERVAL_MS = 60 * 1000 // Poll every 1 minute
 const MAX_RETRIES = 10 // Give up after 10 attempts
 const INITIAL_BACKOFF_MS = 2 * 60 * 1000 // Start with 2 minute backoff
@@ -320,7 +320,7 @@ function calculateNextRetryTime(attemptCount: number): Date {
 async function cleanupStuckAbortedReservations(): Promise<void> {
   try {
     // Find aborted runs without generation_id that are older than 5 minutes
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    const fiveMinutesAgo = new Date(Date.now() - 500 * 60 * 1000).toISOString()
 
     const { data: stuckRuns, error } = await supabaseAdmin
       .from('provider_runs')
@@ -329,7 +329,7 @@ async function cleanupStuckAbortedReservations(): Promise<void> {
       .is('generation_id', null)
       .is('actual_credits', null)
       .lt('created_at', fiveMinutesAgo)
-      .limit(10)
+      .limit(20)
 
     if (error) {
       console.error('Error fetching stuck aborted reservations:', error)
@@ -361,8 +361,13 @@ async function cleanupStuckAbortedReservations(): Promise<void> {
         })
 
         if (refundError) {
-          console.error(`Error refunding stuck reservation ${run.id}:`, refundError)
-          continue
+          // If user was deleted, just mark as reconciled - no one to refund
+          if (refundError.message?.includes('profile_not_found')) {
+            console.log(`⚠️ User deleted, skipping refund for reservation ${run.id}`)
+          } else {
+            console.error(`Error refunding stuck reservation ${run.id}:`, refundError)
+            continue
+          }
         }
 
         // Mark as reconciled
@@ -397,13 +402,21 @@ async function runReconciliationBatch(): Promise<void> {
   isRunning = true
 
   try {
-    // First, cleanup any stuck aborted reservations without generation_id
+    // Cleanup any stuck aborted reservations without generation_id
     await cleanupStuckAbortedReservations()
 
-    // Fetch pending reconciliations from the view
+    // Fetch pending reconciliations - query directly to include 'running' status
+    // Runs with 'running' status + generation_id need reconciliation too
     const { data: pendingRuns, error } = await supabaseAdmin
-      .from('provider_runs_pending_reconciliation')
-      .select('*')
+      .from('provider_runs')
+      .select(
+        'id, user_id, generation_id, model, reserved_credits, reservation_ref_id, status, created_at, next_reconcile_at, reconciled_at, actual_credits, raw_usage'
+      )
+      .in('status', ['running', 'succeeded', 'aborted'])
+      .not('generation_id', 'is', null)
+      .is('actual_credits', null)
+      .or('next_reconcile_at.is.null,next_reconcile_at.lte.now()')
+      .order('next_reconcile_at', { nullsFirst: true })
       .limit(RECONCILE_BATCH_SIZE)
 
     if (error) {
