@@ -70,6 +70,7 @@ import { updateCwd } from '../features/conversations/conversationActions'
 import { removeSelectedFileForChat, updateIdeContext } from '../features/ideContext'
 import { selectSelectedFilesForChat, selectWorkspace } from '../features/ideContext/ideContextSelectors'
 import { selectSelectedProject } from '../features/projects/projectSelectors'
+import { selectCurrentUser } from '../features/users'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
@@ -161,6 +162,7 @@ function Chat() {
   const storageModeFromNav = location.state?.storageMode as 'local' | 'cloud' | undefined
 
   // Redux selectors
+  const currentUser = useAppSelector(selectCurrentUser)
   const providers = useAppSelector(selectProviderState)
   const messageInput = useAppSelector(selectMessageInput)
   const operationMode = useAppSelector(selectOperationMode)
@@ -2182,8 +2184,8 @@ function Chat() {
   // and reducers update currentPath appropriately. This avoids race conditions and
   // incorrect parent linking that could break currentPath after branching.
 
-  // TODO: Replace with actual credits from user state
-  const current_credits = 400
+  // Get current credits from user state (in USD cents)
+  const current_credits = currentUser?.cached_current_credits ?? 0
 
   // Calculate token counts from displayed messages (current branch)
   const tokenUsage = useMemo(() => {
