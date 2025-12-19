@@ -2559,7 +2559,7 @@ function Chat() {
               </div>
             )}
             {/* Token Usage Progress Bars */}
-            <div className='mx-2 my-2 space-y-1.5'>
+            <div className='ml-4 mr-6 my-0 space-y-0.25 group relative cursor-pointer'>
               {/* Input Tokens Progress Bar */}
               <div className='flex items-center gap-2'>
                 <span className='text-xs text-neutral-500 dark:text-neutral-400 w-14 shrink-0'>Input</span>
@@ -2569,9 +2569,6 @@ function Chat() {
                     style={{ width: `${inputProgress}%` }}
                   />
                 </div>
-                <span className='text-xs text-neutral-500 dark:text-neutral-400 w-28 text-right shrink-0'>
-                  {tokenUsage.inputTokens.toLocaleString()} / {tokenLimits.maxInputTokens.toLocaleString()}
-                </span>
               </div>
               {/* Output Tokens Progress Bar */}
               <div className='flex items-center gap-2'>
@@ -2582,9 +2579,25 @@ function Chat() {
                     style={{ width: `${outputProgress}%` }}
                   />
                 </div>
-                <span className='text-xs text-neutral-500 dark:text-neutral-400 w-28 text-right shrink-0'>
-                  {tokenUsage.outputTokens.toLocaleString()} / {tokenLimits.maxOutputTokens.toLocaleString()}
-                </span>
+              </div>
+              {/* Hover Popup with Token Details */}
+              <div className='absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50'>
+                <div className='bg-neutral-800 dark:bg-neutral-900 text-white rounded-lg shadow-lg px-3 py-2 whitespace-nowrap'>
+                  <div className='flex items-center gap-2 text-xs'>
+                    <span className='text-blue-400'>Input:</span>
+                    <span>
+                      {tokenUsage.inputTokens.toLocaleString()} / {tokenLimits.maxInputTokens.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className='flex items-center gap-2 text-xs mt-1'>
+                    <span className='text-green-400'>Output:</span>
+                    <span>
+                      {tokenUsage.outputTokens.toLocaleString()} / {tokenLimits.maxOutputTokens.toLocaleString()}
+                    </span>
+                  </div>
+                  {/* Tooltip Arrow */}
+                  <div className='absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800 dark:border-t-neutral-900' />
+                </div>
               </div>
             </div>
             <div className='bg-transparent rounded-b-4xl dark:bg-transparent flex flex-col items-end pt-3 md:pt-0'>
@@ -2610,7 +2623,7 @@ function Chat() {
                     title='Chat Settings'
                   >
                     <i
-                      className={`bx bx-cog text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
+                      className={`bx bx-cog ml-0.5 text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
                       aria-hidden='true'
                       onAnimationEnd={() => setSpinSettings(false)}
                     ></i>
