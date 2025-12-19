@@ -70,7 +70,7 @@ import { updateCwd } from '../features/conversations/conversationActions'
 import { removeSelectedFileForChat, updateIdeContext } from '../features/ideContext'
 import { selectSelectedFilesForChat, selectWorkspace } from '../features/ideContext/ideContextSelectors'
 import { selectSelectedProject } from '../features/projects/projectSelectors'
-import { selectCurrentUser } from '../features/users'
+import { refreshUserCredits, selectCurrentUser } from '../features/users'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
@@ -206,6 +206,8 @@ function Chat() {
   // Dynamic input area height for adaptive padding
   // const [inputAreaHeight, setInputAreaHeight] = useState(170)
   const [containerHeight, setContainerHeight] = useState(1100)
+  // Credits refresh loading state
+  const [isRefreshingCredits, setIsRefreshingCredits] = useState(false)
 
   const handleCloseExpandedPreview = useCallback(() => {
     if (!expandedFilePath) return
@@ -2254,6 +2256,19 @@ function Chat() {
   const inputProgress = Math.min((tokenUsage.inputTokens / tokenLimits.maxInputTokens) * 100, 100)
   const outputProgress = Math.min((tokenUsage.outputTokens / tokenLimits.maxOutputTokens) * 100, 100)
 
+  // Handler to refresh user credits
+  const handleRefreshCredits = useCallback(async () => {
+    if (!userId || !accessToken || isRefreshingCredits) return
+    setIsRefreshingCredits(true)
+    try {
+      await dispatch(refreshUserCredits({ userId, accessToken })).unwrap()
+    } catch (error) {
+      console.error('Failed to refresh credits:', error)
+    } finally {
+      setIsRefreshingCredits(false)
+    }
+  }, [dispatch, userId, accessToken, isRefreshingCredits])
+
   return (
     <div ref={containerRef} className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
       <div
@@ -2597,7 +2612,6 @@ function Chat() {
                   {/* Render larger bar first (bottom), smaller bar second (top) */}
                   {inputProgress >= outputProgress ? (
                     <>
-                      <h1>I/O</h1>
                       <div
                         className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300'
                         style={{ width: `${inputProgress}%` }}
@@ -2620,21 +2634,46 @@ function Chat() {
                     </>
                   )}
                 </div>
+                {/* Refresh credits button */}
+                <button
+                  onClick={handleRefreshCredits}
+                  disabled={isRefreshingCredits}
+                  className='p-1 rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50'
+                  title='Refresh credits'
+                >
+                  <svg
+                    className={`w-3 h-3 text-neutral-500 dark:text-neutral-400 ${isRefreshingCredits ? 'animate-spin' : ''}`}
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      strokeWidth={2}
+                      d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
+                    />
+                  </svg>
+                </button>
               </div>
               {/* Hover Popup with Token Details */}
               <div className='absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50'>
-                <div className='bg-neutral-800 dark:bg-neutral-900 text-white rounded-lg shadow-lg px-3 py-2 whitespace-nowrap'>
+                <div className='bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white rounded-lg shadow-lg px-3 py-2 whitespace-nowrap'>
                   <div className='flex items-center gap-2 text-xs'>
-                    <span className='text-blue-400'>Input:</span>
+                    <span className='text-blue-700 dark:text-blue-400'>Input:</span>
                     <span>
                       {tokenUsage.inputTokens.toLocaleString()} / {tokenLimits.maxInputTokens.toLocaleString()}
                     </span>
                   </div>
                   <div className='flex items-center gap-2 text-xs mt-1'>
-                    <span className='text-green-400'>Output:</span>
+                    <span className='text-emerald-600 dark:text-emerald-400'>Output:</span>
                     <span>
                       {tokenUsage.outputTokens.toLocaleString()} / {tokenLimits.maxOutputTokens.toLocaleString()}
                     </span>
+                  </div>
+                  <div className='flex items-center gap-2 text-xs mt-1'>
+                    <span className='text-neutral-900 dark:text-neutral-200'>Credits:</span>
+                    <span>{current_credits * 100}</span>
                   </div>
                   {/* Tooltip Arrow */}
                   <div className='absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800 dark:border-t-neutral-900' />
@@ -2642,7 +2681,7 @@ function Chat() {
               </div>
             </div>
             <div className='bg-transparent rounded-b-4xl dark:bg-transparent flex flex-col items-end pt-3 md:pt-0'>
-              <div className='flex justify-between w-full mb-1'>
+              <div className='flex justify-between w-full mb-0'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
                     <div

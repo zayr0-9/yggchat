@@ -1,6 +1,7 @@
 // import { ErrorResponse } from '@shared/types'
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import { saveUserToStorage } from '../../helpers/storageHandler'
+import { api } from '../../utils/api'
 import { User } from './usersTypes'
 
 // Async thunks
@@ -26,6 +27,19 @@ export const loginUser = createAsyncThunk<User, string>(
       return user
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Network error')
+    }
+  }
+)
+
+// Refresh user credits from server
+export const refreshUserCredits = createAsyncThunk<User, { userId: string; accessToken: string }>(
+  'users/refreshUserCredits',
+  async ({ userId, accessToken }, { rejectWithValue }) => {
+    try {
+      const user = await api.get<User>(`/users/${userId}`, accessToken)
+      return user
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Failed to refresh credits')
     }
   }
 )

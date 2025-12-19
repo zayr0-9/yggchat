@@ -1,7 +1,7 @@
 // features/users/usersSlice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 import { userInitialState } from '../initialStates'
-import { deleteUser, loginUser } from './usersActions'
+import { deleteUser, loginUser, refreshUserCredits } from './usersActions'
 import { User, UserState } from './usersTypes'
 // LocalStorage keys
 
@@ -52,6 +52,19 @@ const usersSlice = createSlice({
       .addCase(deleteUser.fulfilled, state => {
         state.currentUser = null
         state.error = null
+      })
+      // refreshUserCredits
+      .addCase(refreshUserCredits.pending, state => {
+        state.loading = true
+      })
+      .addCase(refreshUserCredits.fulfilled, (state, action) => {
+        state.loading = false
+        state.currentUser = action.payload
+        state.error = null
+      })
+      .addCase(refreshUserCredits.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload as string
       })
   },
 })

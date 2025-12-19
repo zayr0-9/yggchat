@@ -365,8 +365,8 @@ function estimateCreditsForGeneration(
   // Convert USD to credits (assuming 1:1 mapping, adjust if needed)
   const estimatedCredits = moneyMultiply(moneyAdd(estimatedPromptCost, estimatedCompletionCost), 2)
 
-  // Minimum reservation: 0.001 credits
-  return moneyMax(0.001, estimatedCredits)
+  // Minimum reservation: 0.01 credits
+  return moneyMax(0.01, estimatedCredits)
 }
 
 /**
