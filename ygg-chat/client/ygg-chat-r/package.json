@@ -70,6 +70,7 @@
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
     "strip-markdown": "^6.0.0",
+    "tokenx": "^1.2.1",
     "uint8array-extras": "^0.3.0",
     "unified": "^11.0.5",
     "unique-names-generator": "^4.7.1",

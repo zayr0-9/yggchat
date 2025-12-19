@@ -4,6 +4,7 @@ import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { estimateTokenCount } from 'tokenx'
 import { MessageId } from '../../../../shared/types'
 import {
   ActionPopover,
@@ -2181,6 +2182,46 @@ function Chat() {
   // and reducers update currentPath appropriately. This avoids race conditions and
   // incorrect parent linking that could break currentPath after branching.
 
+  // Token usage tracking - placeholder credits value
+  const current_credits = 400
+
+  // Calculate token counts from displayed messages (current branch)
+  const tokenUsage = useMemo(() => {
+    let inputTokens = 0
+    let outputTokens = 0
+
+    displayMessages.forEach(msg => {
+      if (!msg || !msg.content) return
+      const tokens = estimateTokenCount(msg.content)
+      if (msg.role === 'user') {
+        inputTokens += tokens
+      } else if (msg.role === 'assistant' || msg.role === 'ex_agent') {
+        outputTokens += tokens
+      }
+    })
+
+    return { inputTokens, outputTokens }
+  }, [displayMessages])
+
+  // Calculate max affordable tokens based on model pricing
+  const tokenLimits = useMemo(() => {
+    const usdValue = current_credits / 100 // Convert credits to USD
+
+    // Default to safe values if model pricing not available
+    const promptCostPerMillion = selectedModel?.promptCost || 0.001
+    const completionCostPerMillion = selectedModel?.completionCost || 0.001
+
+    // Calculate max tokens: (USD value) / (cost per token) = (USD) * 1,000,000 / (cost per million)
+    const maxInputTokens = promptCostPerMillion > 0 ? Math.floor(usdValue / promptCostPerMillion) : 1_000_000
+    const maxOutputTokens = completionCostPerMillion > 0 ? Math.floor(usdValue / completionCostPerMillion) : 1_000_000
+
+    return { maxInputTokens, maxOutputTokens }
+  }, [selectedModel?.promptCost, selectedModel?.completionCost, current_credits])
+
+  // Calculate progress percentages
+  const inputProgress = Math.min((tokenUsage.inputTokens / tokenLimits.maxInputTokens) * 100, 100)
+  const outputProgress = Math.min((tokenUsage.outputTokens / tokenLimits.maxOutputTokens) * 100, 100)
+
   return (
     <div ref={containerRef} className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
       <div
@@ -2517,6 +2558,35 @@ function Chat() {
                 })}
               </div>
             )}
+            {/* Token Usage Progress Bars */}
+            <div className='mx-2 my-2 space-y-1.5'>
+              {/* Input Tokens Progress Bar */}
+              <div className='flex items-center gap-2'>
+                <span className='text-xs text-neutral-500 dark:text-neutral-400 w-14 shrink-0'>Input</span>
+                <div className='flex-1 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden'>
+                  <div
+                    className='h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300'
+                    style={{ width: `${inputProgress}%` }}
+                  />
+                </div>
+                <span className='text-xs text-neutral-500 dark:text-neutral-400 w-28 text-right shrink-0'>
+                  {tokenUsage.inputTokens.toLocaleString()} / {tokenLimits.maxInputTokens.toLocaleString()}
+                </span>
+              </div>
+              {/* Output Tokens Progress Bar */}
+              <div className='flex items-center gap-2'>
+                <span className='text-xs text-neutral-500 dark:text-neutral-400 w-14 shrink-0'>Output</span>
+                <div className='flex-1 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden'>
+                  <div
+                    className='h-full bg-green-500 dark:bg-green-400 rounded-full transition-all duration-300'
+                    style={{ width: `${outputProgress}%` }}
+                  />
+                </div>
+                <span className='text-xs text-neutral-500 dark:text-neutral-400 w-28 text-right shrink-0'>
+                  {tokenUsage.outputTokens.toLocaleString()} / {tokenLimits.maxOutputTokens.toLocaleString()}
+                </span>
+              </div>
+            </div>
             <div className='bg-transparent rounded-b-4xl dark:bg-transparent flex flex-col items-end pt-3 md:pt-0'>
               <div className='flex justify-between w-full mb-1'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
