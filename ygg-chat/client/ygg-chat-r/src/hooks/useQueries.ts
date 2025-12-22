@@ -394,7 +394,6 @@ export function useConversationStorageMode(conversationId: ConversationId | null
   })
 }
 
-
 /**
  * Fetch messages and tree data for a conversation in a single request
  * Cache key: ['conversations', conversationId, 'messages']
@@ -588,7 +587,10 @@ export function useModels(provider: string | null) {
           endpoint = '/models' // Ollama
       }
 
-      const response = await api.get<{ models: string[] | Model[]; default: string | Model; userIsFreeTier?: boolean }>(endpoint, accessToken)
+      const response = await api.get<{ models: string[] | Model[]; default: string | Model; userIsFreeTier?: boolean }>(
+        endpoint,
+        accessToken
+      )
 
       // Handle both string[] and Model[] responses
       const isStringArray = Array.isArray(response.models) && typeof response.models[0] === 'string'
@@ -786,7 +788,7 @@ export function useMoveConversationToProject() {
   return useMutation({
     mutationFn: async ({
       conversationId,
-      sourceProjectId,
+      sourceProjectId: _sourceProjectId,
       destinationProjectId,
     }: {
       conversationId: ConversationId
@@ -808,7 +810,14 @@ export function useMoveConversationToProject() {
         }
       }
 
-      console.log('[useMoveConversationToProject] Moving conversation:', conversationId, 'storage_mode:', storageMode, 'to project:', destinationProjectId)
+      console.log(
+        '[useMoveConversationToProject] Moving conversation:',
+        conversationId,
+        'storage_mode:',
+        storageMode,
+        'to project:',
+        destinationProjectId
+      )
 
       // Route to appropriate API based on storage mode
       if (storageMode === 'local' && environment === 'electron') {
@@ -840,7 +849,7 @@ export function useMoveConversationToProject() {
         // Get full conversation from all conversations cache
         const allConversations = queryClient.getQueryData<Conversation[]>(['conversations'])
         const fullConversation = allConversations?.find(c => c.id === conversationId)
-        
+
         queryClient.setQueryData<Conversation[]>(['conversations', 'project', destinationProjectId], old => {
           if (!fullConversation) return old
           const updatedFullConversation = { ...fullConversation, project_id: destinationProjectId }
