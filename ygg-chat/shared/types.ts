@@ -62,6 +62,7 @@ export interface SendMessageRequest {
   isBranch?: boolean
   attachmentsBase64?: any[]
   storageMode?: StorageMode
+  isElectron?: boolean
 }
 
 export interface BaseModel {

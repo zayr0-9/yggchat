@@ -391,6 +391,81 @@ async function cleanupStuckAbortedReservations(): Promise<void> {
 }
 
 /**
+ * Cleanup failed runs without generation_id
+ * These are runs where the API call failed before getting a generation ID from OpenRouter
+ * The reserved credits should be refunded since no generation occurred
+ */
+async function cleanupFailedRunsWithoutGenerationId(): Promise<void> {
+  try {
+    // Find failed runs without generation_id that haven't been refunded
+    const { data: failedRuns, error } = await supabaseAdmin
+      .from('provider_runs')
+      .select('id, user_id, reserved_credits, reservation_ref_id, model, created_at')
+      .eq('status', 'failed')
+      .is('generation_id', null)
+      .is('actual_credits', null)
+      .limit(200)
+
+    if (error) {
+      console.error('Error fetching failed runs without generation_id:', error)
+      return
+    }
+
+    if (!failedRuns || failedRuns.length === 0) {
+      return // No failed runs to clean up
+    }
+
+    console.log(`🧹 Cleaning up ${failedRuns.length} failed runs without generation_id`)
+
+    for (const run of failedRuns) {
+      try {
+        // Refund the full reserved amount
+        const { error: refundError } = await supabaseAdmin.rpc('finance_adjust_credits', {
+          p_user_id: run.user_id,
+          p_ref_type: 'openrouter_gen_failed_cleanup',
+          p_ref_id: run.reservation_ref_id,
+          p_delta: run.reserved_credits,
+          p_kind: 'generation_refund',
+          p_metadata: {
+            model: run.model,
+            provider_run_id: run.id,
+            reason: 'Cleanup: Failed before generation started, refunding reservation',
+            cleaned_up_at: new Date().toISOString(),
+          },
+          p_allow_negative: false,
+        })
+
+        if (refundError) {
+          // If user was deleted, just mark with actual_credits to prevent retry
+          if (refundError.message?.includes('profile_not_found')) {
+            console.log(`⚠️ User deleted, skipping refund for failed run ${run.id}`)
+          } else {
+            console.error(`Error refunding failed run ${run.id}:`, refundError)
+            continue
+          }
+        }
+
+        // Mark as reconciled with actual_credits = 0
+        await supabaseAdmin
+          .from('provider_runs')
+          .update({
+            status: 'reconciled',
+            actual_credits: 0,
+            reconciled_at: new Date().toISOString(),
+          })
+          .eq('id', run.id)
+
+        console.log(`✅ Refunded failed run ${run.id}, credited ${run.reserved_credits} back to user`)
+      } catch (error) {
+        console.error(`Error processing failed run ${run.id}:`, error)
+      }
+    }
+  } catch (error) {
+    console.error('Error in cleanupFailedRunsWithoutGenerationId:', error)
+  }
+}
+
+/**
  * Main reconciliation worker loop
  */
 async function runReconciliationBatch(): Promise<void> {
@@ -404,6 +479,9 @@ async function runReconciliationBatch(): Promise<void> {
   try {
     // Cleanup any stuck aborted reservations without generation_id
     await cleanupStuckAbortedReservations()
+
+    // Cleanup failed runs without generation_id (these were charged but never used)
+    await cleanupFailedRunsWithoutGenerationId()
 
     // Fetch pending reconciliations - query directly to include 'running' status
     // Runs with 'running' status + generation_id need reconciliation too

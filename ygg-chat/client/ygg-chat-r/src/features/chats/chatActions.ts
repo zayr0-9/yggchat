@@ -534,6 +534,8 @@ export const sendMessage = createAsyncThunk<
 
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+      const isElectronMode = import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+        (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
       // For local tool execution support (GemTools), we prefer client mode even in web environment
       // This allows the client to intercept tool calls and execute them via the local server (3002)
       const executionMode = 'client'
@@ -602,6 +604,7 @@ export const sendMessage = createAsyncThunk<
               retrigger,
               executionMode,
               storageMode,
+              isElectron: isElectronMode,
             }),
             signal: controller.signal,
           })
@@ -643,6 +646,7 @@ export const sendMessage = createAsyncThunk<
               retrigger: turnCount === 1 ? retrigger : false,
               executionMode,
               storageMode,
+              isElectron: isElectronMode,
             }),
             signal: controller.signal,
           })
@@ -1318,6 +1322,8 @@ export const editMessageWithBranching = createAsyncThunk<
 
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+      const isElectronMode = import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+        (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
       const executionMode = 'client' // Prefer client execution for tools
 
       let currentTurnHistory = [...currentPathMessages]
@@ -1367,6 +1373,7 @@ export const editMessageWithBranching = createAsyncThunk<
             executionMode,
             isBranch: true,
             storageMode,
+            isElectron: isElectronMode,
           }),
           signal: controller.signal,
         })
@@ -1793,6 +1800,8 @@ export const sendMessageToBranch = createAsyncThunk<
       }
 
       // Determine execution mode
+      const isElectronMode = import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+        (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
       const executionMode = 'client'
 
       let currentTurnContent = content
@@ -1827,6 +1836,7 @@ export const sendMessageToBranch = createAsyncThunk<
             executionMode,
             isBranch: true,
             storageMode,
+            isElectron: isElectronMode,
           }),
           signal: controller.signal,
         })

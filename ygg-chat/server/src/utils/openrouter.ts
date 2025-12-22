@@ -8,6 +8,11 @@ import { supabaseAdmin } from '../database/supamodels'
 import { getApiKey } from './apiKeyManager'
 import { getCachedAttachmentBase64 } from './attachmentCache'
 import { canAccessPaidModels } from './freeTier'
+import {
+  hasReasoningDetails,
+  isGeminiModelRequiringReasoningDetails,
+  streamGeminiWithReasoningDetails,
+} from './geminiRawGeneration'
 import { moneyAdd, moneyFormat, moneyMax, moneyMultiply } from './money'
 import { isImageGenerationModel, streamImageGeneration } from './openrouterImageStream'
 import { getCachedModelById } from './openrouterModelsCache'
@@ -649,7 +654,8 @@ export async function generateResponse(
   tool_detail: boolean = true,
   conversationId?: string,
   executionMode: 'server' | 'client' = 'server',
-  storageMode: 'cloud' | 'local' = 'cloud'
+  storageMode: 'cloud' | 'local' = 'cloud',
+  isElectron: boolean = false
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
   let stepCount = 0
@@ -674,17 +680,19 @@ export async function generateResponse(
   let generationIdCaptured = false
 
   // Server-side tools allowed in cloud mode (require API keys on server)
-  const CLOUD_SERVER_TOOLS = ['brave_search', 'exa_search', 'exa_code_context']
+  const CLOUD_SERVER_TOOLS = ['brave_search']
 
   // Client-side tools allowed in cloud mode (execute on local machine via Electron)
   // These require local resources (browser, filesystem access) but no server API keys
+  // Only enabled when user is on Electron app, not the website
   const CLOUD_CLIENT_TOOLS = ['browse_web']
 
-  // All tools allowed in cloud mode
-  const CLOUD_ALLOWED_TOOLS = [...CLOUD_SERVER_TOOLS, ...CLOUD_CLIENT_TOOLS]
+  // All tools allowed in cloud mode - client tools only available in Electron
+  const CLOUD_ALLOWED_TOOLS = isElectron ? [...CLOUD_SERVER_TOOLS, ...CLOUD_CLIENT_TOOLS] : [...CLOUD_SERVER_TOOLS]
 
   // Convert tools to OpenAI format
   // In cloud mode, only allow server-side search tools (no agentic/local tools)
+  // Client tools (browse_web) only available when running in Electron app
   const openaiTools = tools
     .filter(tool => tool.enabled)
     .filter(tool => storageMode === 'local' || CLOUD_ALLOWED_TOOLS.includes(tool.name))
@@ -812,6 +820,14 @@ export async function generateResponse(
     if (isImageGenerationModel(model)) {
       formattedMessages = conversationMessages.map(msg => {
         const m = msg as any
+        // Extract reasoningDetails from content_blocks if present (for messages loaded from DB)
+        let extractedReasoningDetails = m.reasoningDetails || m.reasoning_details
+        if (!extractedReasoningDetails && Array.isArray(m.content_blocks)) {
+          const rdBlock = m.content_blocks.find((b: any) => b.type === 'reasoning_details' && b.reasoningDetails)
+          if (rdBlock) {
+            extractedReasoningDetails = rdBlock.reasoningDetails
+          }
+        }
         return {
           role: m.role,
           content: m.content,
@@ -819,11 +835,27 @@ export async function generateResponse(
           ...(m.toolCalls && { toolCalls: m.toolCalls }),
           ...(m.tool_call_id && { toolCallId: m.tool_call_id }),
           ...(m.toolCallId && { toolCallId: m.toolCallId }),
+          // Preserve reasoningDetails for Gemini models (required for thought_signature)
+          ...(extractedReasoningDetails && { reasoningDetails: extractedReasoningDetails }),
         }
       })
     } else {
       formattedMessages = conversationMessages.map(msg => {
         const m = msg as any
+        // Extract reasoningDetails from content_blocks if present (for messages loaded from DB)
+        // Only use non-empty arrays - empty arrays cause Gemini API errors for parallel tool calls
+        let extractedReasoningDetails = m.reasoningDetails || m.reasoning_details
+        if (!extractedReasoningDetails && Array.isArray(m.content_blocks)) {
+          const rdBlock = m.content_blocks.find((b: any) => b.type === 'reasoning_details' && b.reasoningDetails)
+          if (rdBlock) {
+            extractedReasoningDetails = rdBlock.reasoningDetails
+          }
+        }
+        // Filter out empty arrays
+        const validReasoningDetails =
+          extractedReasoningDetails && Array.isArray(extractedReasoningDetails) && extractedReasoningDetails.length > 0
+            ? extractedReasoningDetails
+            : undefined
         return {
           role: m.role,
           content: convertContentForOpenRouterSDK(m.content),
@@ -831,6 +863,8 @@ export async function generateResponse(
           ...(m.toolCalls && { toolCalls: m.toolCalls }),
           ...(m.tool_call_id && { toolCallId: m.tool_call_id }),
           ...(m.toolCallId && { toolCallId: m.toolCallId }),
+          // Preserve reasoningDetails for Gemini models (required for thought_signature)
+          ...(validReasoningDetails && { reasoningDetails: validReasoningDetails }),
         }
       })
     }
@@ -855,7 +889,7 @@ export async function generateResponse(
 
       // Check if this is an image generation model - use raw streaming to capture images
       if (isImageGenerationModel(model)) {
-        console.log('[OPENROUTER] Detected image generation model, routing to raw streaming:', model)
+        // console.log('[OPENROUTER] Detected image generation model, routing to raw streaming:', model)
 
         // Convert messages from SDK format (camelCase imageUrl) to raw API format (snake_case image_url)
         // This only affects image generation models using streamImageGeneration (raw fetch)
@@ -962,7 +996,282 @@ export async function generateResponse(
       // )
       const apiKey = process.env.OPENROUTER_API_KEY ?? ''
       let modalities = await getCachedModelById(apiKey, model)
-      console.log('[modalities test]', JSON.stringify(modalities), apiKey, model)
+
+      // Check if this is a Gemini 3 model - they require reasoning for tool calls
+      // to return thought_signature which must be preserved
+      const isGemini3Model = model.includes('gemini-3') || model.includes('gemini-2.5')
+      const hasTools = openaiTools.length > 0
+
+      // Determine reasoning configuration
+      // - If think is enabled, use high effort
+      // - If Gemini 3 with tools, use minimal effort to get thought_signature
+      let reasoningConfig: any = undefined
+      if (think) {
+        reasoningConfig = { effort: 'low' }
+      } else if (isGemini3Model && hasTools) {
+        // Gemini 3 requires reasoning to be enabled for tool calls to work
+        // Use 'low' effort to minimize token usage while still getting thought_signature
+        reasoningConfig = { effort: 'low' }
+        // console.log('🧠 [openrouter] Enabling reasoning for Gemini model with tools (required for thought_signature)')
+      }
+
+      // DEBUG: Log messages being sent to API (especially after tool calls)
+      // console.log('📤 [openrouter] Step', stepCount, '- Sending', formattedMessages.length, 'messages to API')
+      // console.log('📤 [openrouter] Messages structure:')
+      // formattedMessages.forEach((msg, idx) => {
+      //   const keys = Object.keys(msg)
+      //   console.log(`  [${idx}] role=${msg.role}, keys=[${keys.join(', ')}]`)
+      //   if (msg.toolCalls) {
+      //     console.log(`       toolCalls: ${msg.toolCalls.length} calls`)
+      //   }
+      //   if (msg.reasoning_details) {
+      //     console.log(`       reasoning_details: present`)
+      //   }
+      //   if (msg.reasoningDetails) {
+      //     console.log(`       reasoningDetails (camelCase): present, items: ${msg.reasoningDetails.length}`)
+      //   }
+      //   if (msg.role === 'tool') {
+      //     console.log(`       toolCallId: ${msg.toolCallId}`)
+      //   }
+      // })
+      // console.log(
+      //   '📤 [openrouter] Full messages payload:',
+      //   JSON.stringify(formattedMessages, null, 2).substring(0, 5000)
+      // )
+
+      // Check if we need to use raw Gemini streaming (bypasses SDK to preserve reasoning_details)
+      // Use raw streaming for Gemini 3/2.5 models when:
+      // 1. There are already reasoningDetails in messages (from previous iterations), OR
+      // 2. Tools are defined (which might trigger tool calls that require thought_signature)
+      // The SDK's Zod validation strips reasoning_details, so we must bypass it for Gemini models with tools
+      const needsRawGeminiStream =
+        isGeminiModelRequiringReasoningDetails(model) &&
+        (hasReasoningDetails(formattedMessages) || (tools && tools.length > 0))
+
+      if (needsRawGeminiStream) {
+        const hasExistingDetails = hasReasoningDetails(formattedMessages)
+        const hasToolsDefined = tools && tools.length > 0
+        // console.log(
+        //   `🧠 [openrouter] Using RAW Gemini streaming (hasReasoningDetails: ${hasExistingDetails}, hasTools: ${hasToolsDefined})`
+        // )
+
+        let toolCalls: Array<{ id: string; name: string; arguments: string }> = []
+        let reasoningDetails: any = null
+        let accumulatedReasoning = ''
+
+        await streamGeminiWithReasoningDetails(
+          {
+            apiKey: openrouterApiKey!,
+            model,
+            messages: formattedMessages,
+            tools: hasTools ? openaiTools : undefined,
+            maxTokens: 20000,
+            reasoning: reasoningConfig,
+            abortSignal,
+          },
+          {
+            onText: text => {
+              assistantContent += text
+              onChunk(JSON.stringify({ part: 'text', delta: text }))
+            },
+            onReasoning: text => {
+              accumulatedReasoning += text
+              if (think) {
+                onChunk(JSON.stringify({ part: 'reasoning', delta: text }))
+              }
+            },
+            onReasoningDetails: details => {
+              // Only store and stream non-empty reasoning_details arrays
+              // Empty arrays cause Gemini API errors for parallel tool calls
+              // For parallel tool calls, reasoning_details may come in multiple chunks - accumulate them
+              if (Array.isArray(details) && details.length > 0) {
+                if (!reasoningDetails) {
+                  reasoningDetails = details
+                } else {
+                  // Merge new entries, avoiding duplicates by id
+                  const existingIds = new Set(reasoningDetails.map((d: any) => d.id))
+                  for (const detail of details) {
+                    if (!existingIds.has(detail.id)) {
+                      reasoningDetails.push(detail)
+                      existingIds.add(detail.id)
+                    }
+                  }
+                }
+                // console.log('🧠 [geminiRaw] Captured reasoning_details (total entries:', reasoningDetails.length, '):', JSON.stringify(details).substring(0, 200))
+                onChunk(JSON.stringify({ part: 'reasoning_details', reasoningDetails: details }))
+              }
+            },
+            onToolCall: toolCall => {
+              // console.log('🔧 [geminiRaw] Tool call received:', toolCall.name)
+              toolCalls.push(toolCall)
+              onChunk(
+                JSON.stringify({
+                  part: 'tool_call',
+                  toolCall: {
+                    id: toolCall.id,
+                    name: toolCall.name,
+                    arguments: JSON.parse(toolCall.arguments),
+                  },
+                })
+              )
+            },
+            onUsage: usage => {
+              finalUsage = usage
+              if (usage.cost !== undefined) {
+                openrouterCreditsUsed = parseFloat(usage.cost) || 0
+              }
+            },
+            onError: error => {
+              console.error('[geminiRaw] Error:', error)
+              onChunk(JSON.stringify({ part: 'error', delta: error }))
+            },
+            onId: async id => {
+              if (!generationIdCaptured && currentProviderRunId && currentReservationRefId) {
+                generationIdCaptured = true
+                await updateProviderRunWithGenerationId(currentProviderRunId, id, currentReservationRefId)
+              }
+            },
+            // onFinish: reason => {
+            //   console.log('[geminiRaw] Finish reason:', reason)
+            // },
+          }
+        )
+
+        // Handle tool calls if any
+        if (toolCalls.length > 0) {
+          // Create assistant message with tool calls and reasoning_details
+          const assistantMessage: any = {
+            role: 'assistant',
+            content: assistantContent || null,
+            toolCalls: toolCalls.map(tc => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: {
+                name: tc.name,
+                arguments: tc.arguments,
+              },
+            })),
+          }
+
+          // Preserve reasoning_details for next iteration
+          // Only include if non-empty - empty arrays cause Gemini API errors for parallel tool calls
+          if (reasoningDetails && Array.isArray(reasoningDetails) && reasoningDetails.length > 0) {
+            assistantMessage.reasoningDetails = reasoningDetails
+            // console.log('🧠 [geminiRaw] Including reasoningDetails in assistant message')
+          }
+
+          conversationMessages.push(assistantMessage)
+
+          // Execute tools based on execution mode
+          if (executionMode === 'server') {
+            // Server mode: execute all tools on server
+            for (const toolCall of toolCalls) {
+              const result = await executeToolCall(toolCall.name, toolCall.arguments)
+              const isError = result.startsWith('Error')
+
+              onChunk(
+                JSON.stringify({
+                  part: 'tool_result',
+                  toolResult: {
+                    tool_use_id: toolCall.id,
+                    content: result,
+                    is_error: isError,
+                  },
+                })
+              )
+
+              conversationMessages.push({
+                role: 'tool',
+                toolCallId: toolCall.id,
+                content: result,
+              } as any)
+            }
+            // Continue to next iteration
+            continue
+          } else {
+            // Client execution mode - handle tool routing intelligently
+            // Tools that require server-side API keys or resources
+            const SERVER_ONLY_TOOLS = ['brave_search', 'exa_search', 'exa_code_context']
+
+            // Split tools into server-only and client-capable
+            const serverOnlyToolCalls = toolCalls.filter(tc => SERVER_ONLY_TOOLS.includes(tc.name))
+            const clientToolCalls = toolCalls.filter(tc => !SERVER_ONLY_TOOLS.includes(tc.name))
+
+            // Execute server-only tools immediately on the server
+            if (serverOnlyToolCalls.length > 0) {
+              // console.log(
+              //   '⚡ [geminiRaw] Executing server-only tools in client mode:',
+              //   serverOnlyToolCalls.map(t => t.name)
+              // )
+
+              for (const toolCall of serverOnlyToolCalls) {
+                const result = await executeToolCall(toolCall.name, toolCall.arguments)
+                const isError = result.startsWith('Error')
+
+                onChunk(
+                  JSON.stringify({
+                    part: 'tool_result',
+                    toolResult: {
+                      tool_use_id: toolCall.id,
+                      content: result,
+                      is_error: isError,
+                    },
+                  })
+                )
+
+                conversationMessages.push({
+                  role: 'tool',
+                  toolCallId: toolCall.id,
+                  content: result,
+                } as any)
+              }
+            }
+
+            // If there are client tools, halt and return for client execution
+            if (clientToolCalls.length > 0) {
+              // Remove the assistant message we just added (contains ALL tools)
+              conversationMessages.pop()
+
+              // Add new assistant message with ONLY client tools
+              const clientAssistantMessage: any = {
+                role: 'assistant',
+                content: assistantContent || null,
+                toolCalls: clientToolCalls.map(tc => ({
+                  id: tc.id,
+                  type: 'function' as const,
+                  function: {
+                    name: tc.name,
+                    arguments: tc.arguments,
+                  },
+                })),
+              }
+
+              // Preserve encrypted reasoningDetails for Gemini models
+              // Only include if non-empty - empty arrays cause Gemini API errors for parallel tool calls
+              if (reasoningDetails && Array.isArray(reasoningDetails) && reasoningDetails.length > 0) {
+                clientAssistantMessage.reasoningDetails = reasoningDetails
+                // console.log('🧠 [geminiRaw] Including reasoningDetails in client assistant message')
+              }
+
+              conversationMessages.push(clientAssistantMessage)
+
+              if (currentProviderRunId) {
+                await finishProviderRun(currentProviderRunId, 'succeeded', finalUsage)
+              }
+              return
+            }
+
+            // All tools were server-only and have been executed - continue to next iteration
+            continue
+          }
+        }
+
+        // No tool calls - generation complete
+        if (currentProviderRunId) {
+          await finishProviderRun(currentProviderRunId, 'succeeded', finalUsage)
+        }
+        break
+      }
 
       const stream: any = await openrouterClient.chat.send(
         {
@@ -979,10 +1288,10 @@ export async function generateResponse(
           messages: formattedMessages,
           stream: true,
           maxTokens: 20000,
-          tools: openaiTools.length > 0 ? openaiTools : undefined,
+          tools: hasTools ? openaiTools : undefined,
           usage: { include: true },
           modalities: modalities?.outputModalities,
-          ...(think && { reasoning: { effort: 'high' } }),
+          ...(reasoningConfig && { reasoning: reasoningConfig }),
         } as any,
         { signal: abortSignal }
       )
@@ -990,9 +1299,21 @@ export async function generateResponse(
       let toolCalls: Array<{ id: string; name: string; arguments: string }> = []
       let currentToolCall: any = null
       let toolCallBuffer = ''
+      let reasoningDetails: any = null // For Gemini thought_signature preservation
+      let accumulatedReasoning = '' // Accumulate reasoning content for preservation
 
       // Process the stream
       for await (const chunk of stream) {
+        // DEBUG: Log full chunk to check for thoughtSignature (Gemini models)
+        // console.log('🔍 [openrouter] Full chunk received:', JSON.stringify(chunk, null, 2))
+        // console.log('🔍 [openrouter] Chunk keys:', Object.keys(chunk))
+        // if (chunk.choices?.[0]) {
+        //   // console.log('🔍 [openrouter] Choice keys:', Object.keys(chunk.choices[0]))
+        //   // if (chunk.choices[0].delta) {
+        //   //   console.log('🔍 [openrouter] Delta keys:', Object.keys(chunk.choices[0].delta))
+        //   // }
+        // }
+
         // Check for abort FIRST - throw immediately to force exit the for-await loop
         if (abortRequested) {
           const error: any = new Error('Generation aborted by user')
@@ -1015,7 +1336,32 @@ export async function generateResponse(
           // OpenRouter provides cost in credits via chunk.usage.cost
           if (chunk.usage.cost !== undefined) {
             openrouterCreditsUsed = parseFloat(chunk.usage.cost) || 0
-            console.log(`💰 OpenRouter cost found in chunk: ${chunk.usage.cost} credits`)
+            // console.log(`💰 OpenRouter cost found in chunk: ${chunk.usage.cost} credits`)
+          }
+        }
+
+        // Capture reasoning_details for Gemini thought_signature preservation
+        // This is required for tool calls with Gemini 3 models
+        // Check both snake_case and camelCase
+        // Only capture non-empty arrays - empty arrays cause Gemini API errors for parallel tool calls
+        if ((chunk as any).reasoning_details) {
+          const details = (chunk as any).reasoning_details
+          if (Array.isArray(details) && details.length > 0) {
+            reasoningDetails = details
+            // console.log(
+            //   '🧠 [openrouter] Captured reasoning_details from chunk:',
+            //   JSON.stringify(reasoningDetails).substring(0, 200)
+            // )
+          }
+        }
+        if ((chunk as any).reasoningDetails) {
+          const details = (chunk as any).reasoningDetails
+          if (Array.isArray(details) && details.length > 0) {
+            reasoningDetails = details
+            // console.log(
+            //   '🧠 [openrouter] Captured reasoningDetails (camelCase) from chunk:',
+            //   JSON.stringify(reasoningDetails).substring(0, 200)
+            // )
           }
         }
 
@@ -1024,20 +1370,101 @@ export async function generateResponse(
         const choice = chunk.choices?.[0]
         if (!choice) continue
 
+        // DEBUG: Log full choice to check for thoughtSignature
+        // console.log('🔍 [openrouter] Full choice object:', JSON.stringify(choice, null, 2))
+
+        // Also check for reasoning_details at the choice level (both snake_case and camelCase)
+        // Only capture non-empty arrays - empty arrays cause Gemini API errors for parallel tool calls
+        if ((choice as any).reasoning_details) {
+          const details = (choice as any).reasoning_details
+          if (Array.isArray(details) && details.length > 0) {
+            reasoningDetails = details
+            // console.log(
+            //   '🧠 [openrouter] Captured reasoning_details from choice:',
+            //   JSON.stringify(reasoningDetails).substring(0, 200)
+            // )
+          }
+        }
+        if ((choice as any).reasoningDetails) {
+          const details = (choice as any).reasoningDetails
+          if (Array.isArray(details) && details.length > 0) {
+            reasoningDetails = details
+            // console.log(
+            //   '🧠 [openrouter] Captured reasoningDetails (camelCase) from choice:',
+            //   JSON.stringify(reasoningDetails).substring(0, 200)
+            // )
+          }
+        }
+
         const delta = choice.delta
         if (!delta) continue
 
+        // Check for reasoning_details in delta as well (both snake_case and camelCase)
+        // Only capture and stream non-empty arrays - empty arrays cause Gemini API errors for parallel tool calls
+        if ((delta as any).reasoning_details) {
+          const details = (delta as any).reasoning_details
+          if (Array.isArray(details) && details.length > 0) {
+            reasoningDetails = details
+            // console.log(
+            //   '🧠 [openrouter] Captured reasoning_details from delta:',
+            //   JSON.stringify(reasoningDetails).substring(0, 200)
+            // )
+            // Stream to client for storage in content_blocks
+            onChunk(JSON.stringify({ part: 'reasoning_details', reasoningDetails: reasoningDetails }))
+          }
+        }
+        if ((delta as any).reasoningDetails) {
+          const details = (delta as any).reasoningDetails
+          if (Array.isArray(details) && details.length > 0) {
+            reasoningDetails = details
+            // console.log(
+            //   '🧠 [openrouter] Captured reasoningDetails (camelCase) from delta:',
+            //   JSON.stringify(reasoningDetails).substring(0, 200)
+            // )
+            // Stream to client for storage in content_blocks
+            onChunk(JSON.stringify({ part: 'reasoning_details', reasoningDetails: reasoningDetails }))
+          }
+        }
+
         // Handle reasoning content (thinking mode)
-        if ((delta as any).reasoning && think) {
+        // Also accumulate reasoning for Gemini thought_signature preservation
+        if ((delta as any).reasoning) {
           const reasoningContent = (delta as any).reasoning
-          onChunk(JSON.stringify({ part: 'reasoning', delta: reasoningContent }))
-          continue
+          accumulatedReasoning += reasoningContent
+
+          // Only stream to client if think mode is enabled
+          if (think) {
+            onChunk(JSON.stringify({ part: 'reasoning', delta: reasoningContent }))
+          }
+          // Don't continue - we may also have tool calls in the same delta
         }
 
         // Handle tool calls
         if (delta.toolCalls) {
-          // console.log('🔧 [openrouter] Tool call delta received:', JSON.stringify(delta.toolCalls))
+          // console.log('🔧 [openrouter] Tool call delta received (full):', JSON.stringify(delta.toolCalls, null, 2))
+          // console.log('🔧 [openrouter] Full delta object:', JSON.stringify(delta, null, 2))
+
+          // Check for thought_signature at various levels (Gemini models)
+          // It could be in the delta, in each tool call, or elsewhere
+          if ((delta as any).thoughtSignature) {
+            reasoningDetails = { thoughtSignature: (delta as any).thoughtSignature }
+            // console.log('🧠 [openrouter] Found thoughtSignature in delta')
+          }
+          if ((delta as any).thought_signature) {
+            reasoningDetails = { thought_signature: (delta as any).thought_signature }
+            // console.log('🧠 [openrouter] Found thought_signature in delta')
+          }
+
           for (const toolCall of delta.toolCalls) {
+            // Check for thought_signature in individual tool calls
+            if ((toolCall as any).thoughtSignature) {
+              reasoningDetails = { thoughtSignature: (toolCall as any).thoughtSignature }
+              // console.log('🧠 [openrouter] Found thoughtSignature in toolCall')
+            }
+            if ((toolCall as any).thought_signature) {
+              reasoningDetails = { thought_signature: (toolCall as any).thought_signature }
+              // console.log('🧠 [openrouter] Found thought_signature in toolCall')
+            }
             if (toolCall.id && toolCall.function?.name) {
               // New tool call
               currentToolCall = {
@@ -1173,10 +1600,10 @@ export async function generateResponse(
           // Add OpenRouter credits to the final usage object
           if (openrouterCreditsUsed > 0) {
             finalUsage.cost = openrouterCreditsUsed // Ensure cost is in the final usage object
-            console.log(`🔹 OpenRouter credits captured from stream: ${openrouterCreditsUsed}`)
+            // console.log(`🔹 OpenRouter credits captured from stream: ${openrouterCreditsUsed}`)
           } else if (finalUsage.cost) {
             openrouterCreditsUsed = parseFloat(finalUsage.cost) || 0
-            console.log(`🔹 OpenRouter credits found in final usage: ${finalUsage.cost}`)
+            // console.log(`🔹 OpenRouter credits found in final usage: ${finalUsage.cost}`)
           }
 
           // ===================================================================
@@ -1204,7 +1631,8 @@ export async function generateResponse(
 
         // Add assistant message with tool calls to conversation
         // OpenRouter SDK uses camelCase (toolCalls)
-        conversationMessages.push({
+        // Include reasoning_details for Gemini thought_signature preservation
+        const assistantMessage: any = {
           role: 'assistant',
           content: assistantContent || null,
           toolCalls: uniqueToolCalls.map(tc => ({
@@ -1215,7 +1643,22 @@ export async function generateResponse(
               arguments: tc.arguments,
             },
           })),
-        } as any)
+        }
+
+        // Preserve reasoning for Gemini models (required for thought_signature)
+        // The encrypted reasoningDetails must be included in the assistant message for tool call continuation
+        // OpenRouter SDK uses camelCase (reasoningDetails) not snake_case
+        // Only include if non-empty - empty arrays cause Gemini API errors for parallel tool calls
+        if (reasoningDetails && Array.isArray(reasoningDetails) && reasoningDetails.length > 0) {
+          // Use camelCase as the SDK returns it in camelCase
+          assistantMessage.reasoningDetails = reasoningDetails
+          // console.log(
+          //   '🧠 [openrouter] Including reasoningDetails in assistant message for tool call continuation:',
+          //   JSON.stringify(reasoningDetails).substring(0, 200)
+          // )
+        }
+
+        conversationMessages.push(assistantMessage)
 
         // Check execution mode - if 'client', handle tool routing intelligently
         if (executionMode === 'client') {
@@ -1272,7 +1715,8 @@ export async function generateResponse(
 
             // Add new assistant message with ONLY client tools
             // OpenRouter SDK uses camelCase (toolCalls)
-            conversationMessages.push({
+            // Include reasoning_details for Gemini thought_signature preservation
+            const clientAssistantMessage: any = {
               role: 'assistant',
               content: assistantContent || null,
               toolCalls: clientToolCalls.map(tc => ({
@@ -1283,7 +1727,16 @@ export async function generateResponse(
                   arguments: tc.arguments,
                 },
               })),
-            } as any)
+            }
+
+            // Preserve encrypted reasoningDetails for Gemini models (required for thought_signature)
+            // Only include if non-empty - empty arrays cause Gemini API errors for parallel tool calls
+            if (reasoningDetails && Array.isArray(reasoningDetails) && reasoningDetails.length > 0) {
+              clientAssistantMessage.reasoningDetails = reasoningDetails
+              // console.log('🧠 [openrouter] Including reasoningDetails in client assistant message')
+            }
+
+            conversationMessages.push(clientAssistantMessage)
 
             // We still need to log cost for this partial run
             if (!finalUsage) {
@@ -1387,7 +1840,7 @@ export async function generateResponse(
         // Log partial usage or estimate before returning on abort
         if (!finalUsage) {
           finalUsage = createEstimatedUsage(formattedMessages, assistantContent)
-          console.log('⚠️ Generation aborted - using estimated usage for cost calculation')
+          // console.log('⚠️ Generation aborted - using estimated usage for cost calculation')
         }
         if (finalUsage && !costAlreadyLogged) {
           try {
@@ -1405,7 +1858,7 @@ export async function generateResponse(
             totalCostUSD = totals.totalCostUSD
             totalOpenRouterCredits = totals.totalOpenRouterCredits
             costAlreadyLogged = true
-            console.log(`📊 Logged partial cost on abort (error): $${moneyFormat(totals.totalCostUSD)}`)
+            // console.log(`📊 Logged partial cost on abort (error): $${moneyFormat(totals.totalCostUSD)}`)
           } catch (logError) {
             console.error('Error logging usage on abort error:', logError)
           }
@@ -1422,7 +1875,7 @@ export async function generateResponse(
         (error?.status === 404 && errorMsg.includes('tool use')) ||
         (error?.status === 400 && errorMsg.includes('Provider returned error')) ||
         errorMsg.includes('No endpoints found that support tool use')
-      console.log('provider error', error)
+      // console.log('provider error, please try again or another model', error)
 
       if (isToolError && openaiTools.length > 0) {
         try {
@@ -1454,7 +1907,7 @@ export async function generateResponse(
               // Capture cost from retry attempt as well
               if (chunk.usage.cost !== undefined) {
                 openrouterCreditsUsed = parseFloat(chunk.usage.cost) || 0
-                console.log(`💰 OpenRouter cost found in retry chunk: ${chunk.usage.cost} credits`)
+                // console.log(`💰 OpenRouter cost found in retry chunk: ${chunk.usage.cost} credits`)
               }
             }
 
@@ -1577,7 +2030,7 @@ export async function generateResponse(
         // If no usage data received but we have content, create estimate
         if (!finalUsage && assistantContent) {
           finalUsage = createEstimatedUsage(formattedMessages, assistantContent)
-          console.log('⚠️ No usage data received - using estimated usage for cost calculation')
+          // console.log('⚠️ No usage data received - using estimated usage for cost calculation')
         }
 
         if (finalUsage) {
@@ -1641,9 +2094,9 @@ export async function generateResponse(
         approxCost: totalCostUSD,
         apiCreditCost: totalOpenRouterCredits,
       })
-      console.log(
-        `💾 Saved final cost data for user ${userId}, message ${messageId}: $${moneyFormat(totalCostUSD)} USD`
-      )
+      // console.log(
+      //   `💾 Saved final cost data for user ${userId}, message ${messageId}: $${moneyFormat(totalCostUSD)} USD`
+      // )
     } catch (error) {
       console.error('Error saving final cost data to database:', error)
     }

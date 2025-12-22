@@ -97,6 +97,13 @@ function accumulateContentBlocks(events: any[]): any[] {
         mimeType: event.mimeType || 'image/png',
       })
       i++
+    } else if (event.type === 'reasoning_details' && event.reasoningDetails) {
+      // Encrypted reasoning details (Gemini thought_signature) - preserve as-is
+      accumulated.push({
+        type: 'reasoning_details',
+        reasoningDetails: event.reasoningDetails,
+      })
+      i++
     } else {
       i++
     }
@@ -225,7 +232,8 @@ router.get(
       }))
 
       const preferredDefault = 'gpt-4o'
-      const defaultModel = modelsWithFreeTierFlag.find((m: any) => m.name === preferredDefault) || modelsWithFreeTierFlag[0] || null
+      const defaultModel =
+        modelsWithFreeTierFlag.find((m: any) => m.name === preferredDefault) || modelsWithFreeTierFlag[0] || null
 
       res.json({
         models: modelsWithFreeTierFlag,
@@ -1229,7 +1237,14 @@ router.post(
           chunk => {
             try {
               const obj = JSON.parse(chunk)
-              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | 'image' | undefined
+              const part = obj?.part as
+                | 'text'
+                | 'reasoning'
+                | 'reasoning_details'
+                | 'tool_call'
+                | 'tool_result'
+                | 'image'
+                | undefined
               const delta = String(obj?.delta ?? '')
               if (part === 'reasoning') {
                 assistantThinking += delta
@@ -1238,6 +1253,12 @@ router.post(
                 res.write(
                   `data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '', iteration: i })}\n\n`
                 )
+              } else if (part === 'reasoning_details') {
+                // Handle encrypted reasoning details (Gemini thought_signature)
+                if (obj?.reasoningDetails) {
+                  console.log('🧠 [supaChat/repeat] Captured reasoning_details for storage')
+                  contentBlocksEvents.push({ type: 'reasoning_details', reasoningDetails: obj.reasoningDetails })
+                }
               } else if (part === 'tool_result') {
                 // Handle tool result events (from tool execution)
                 if (obj?.toolResult) {
@@ -1537,6 +1558,7 @@ router.post(
       executionMode = 'server',
       isBranch = false,
       storageMode = 'cloud',
+      isElectron = false,
     } = req.body as SendMessageRequest
 
     // console.log(`[supaChat] Processing message request for conversation ${conversationId}`)
@@ -1671,7 +1693,7 @@ router.post(
       // Check if local mode - skip Supabase saves
       if (isLocalMode) {
         // Create ephemeral user message object without saving to DB
-        console.log('[supaChat] Local mode - skipping Supabase save for user message')
+        // console.log('[supaChat] Local mode - skipping Supabase save for user message')
         userMessage = {
           id: crypto.randomUUID(),
           conversation_id: conversationId,
@@ -1778,13 +1800,26 @@ router.post(
             // console.log('[supaChat] Received chunk:', chunk.substring(0, 50) + '...')
             try {
               const obj = JSON.parse(chunk)
-              const part = obj?.part as 'text' | 'reasoning' | 'tool_call' | 'tool_result' | 'image' | undefined
+              const part = obj?.part as
+                | 'text'
+                | 'reasoning'
+                | 'reasoning_details'
+                | 'tool_call'
+                | 'tool_result'
+                | 'image'
+                | undefined
               const delta = String(obj?.delta ?? '')
               if (part === 'reasoning') {
                 assistantThinking += delta
                 // Log reasoning event
                 contentBlocksEvents.push({ type: 'reasoning', delta })
                 res.write(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta, content: '' })}\n\n`)
+              } else if (part === 'reasoning_details') {
+                // Handle encrypted reasoning details (Gemini thought_signature)
+                if (obj?.reasoningDetails) {
+                  console.log('🧠 [supaChat] Captured reasoning_details for storage')
+                  contentBlocksEvents.push({ type: 'reasoning_details', reasoningDetails: obj.reasoningDetails })
+                }
               } else if (part === 'tool_result') {
                 // Handle tool result events (from tool execution)
                 if (obj?.toolResult) {
@@ -1919,7 +1954,8 @@ router.post(
           userId,
           conversationId,
           executionMode,
-          storageMode
+          storageMode,
+          isElectron
         )
 
         // Clean up content and extract tool calls after streaming completes
@@ -1967,7 +2003,7 @@ router.post(
           // Check if local mode - skip Supabase saves
           if (isLocalMode) {
             // Create ephemeral assistant message object without saving to DB
-            console.log('[supaChat] Local mode - skipping Supabase save for assistant message')
+            // console.log('[supaChat] Local mode - skipping Supabase save for assistant message')
             assistantMessage = {
               id: crypto.randomUUID(),
               conversation_id: conversationId,
@@ -2015,7 +2051,7 @@ router.post(
                 } else {
                   // Update the assistantMessage object with new content_blocks
                   assistantMessage = { ...assistantMessage, content_blocks: updatedBlocks }
-                  console.log('[supaChat] Successfully saved generated images to storage bucket')
+                  // console.log('[supaChat] Successfully saved generated images to storage bucket')
                 }
               } catch (imageError) {
                 console.error('[supaChat] Error saving generated images to storage:', imageError)

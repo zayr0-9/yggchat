@@ -2731,8 +2731,8 @@ function Chat() {
                       className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
                       title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                     >
-                      {ideContext?.extensionConnected ? '🟢 ' : ''}
-                      {workspace?.name && `${workspace.name}`}
+                      {/* {ideContext?.extensionConnected ? '' : ''} */}
+                      {workspace?.name && `'🟢 ' + ${workspace.name}`}
                     </div>
                   )}
                   <Button

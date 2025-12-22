@@ -45,7 +45,8 @@ export async function generateResponse(
   userId?: string,
   conversationId?: string,
   executionMode: 'server' | 'client' = 'server',
-  storageMode: 'cloud' | 'local' = 'cloud'
+  storageMode: 'cloud' | 'local' = 'cloud',
+  isElectron: boolean = false
 ): Promise<void> {
   const providerModel = getProviderModel(provider, model)
 
@@ -116,6 +117,7 @@ export async function generateResponse(
     let currentImages: Array<{ url: string; mimeType?: string }> = [] // Track images for multipart content
     let currentToolCalls: any[] = []
     let pendingToolResults: any[] = []
+    let currentReasoningDetails: any[] = [] // Track reasoning_details for Gemini models
 
     for (let i = 0; i < contentBlocks.length; i++) {
       const block = contentBlocks[i]
@@ -140,11 +142,18 @@ export async function generateResponse(
           // We have tool calls but haven't flushed them yet
           // This shouldn't happen (tool_result should come before next text)
           // But handle it by flushing the tool calls first
-          result.push({
+          const assistantMsg: any = {
             role: 'assistant',
             content: currentText || null,
             tool_calls: currentToolCalls,
-          })
+          }
+          // Attach reasoning_details if present (required by Gemini for parallel tool calls)
+          if (currentReasoningDetails.length > 0) {
+            assistantMsg.reasoningDetails = currentReasoningDetails
+            console.log('🧠 [provider] Attached reasoningDetails to assistant message:', currentReasoningDetails.length, 'entries')
+            currentReasoningDetails = []
+          }
+          result.push(assistantMsg)
           currentText = textContent
           currentToolCalls = []
         } else {
@@ -171,6 +180,13 @@ export async function generateResponse(
       } else if (block.type === 'thinking') {
         // Skip thinking blocks for OpenAI format (handled via reasoning param)
         // Could optionally prepend to text as a note
+      } else if (block.type === 'reasoning_details') {
+        // Extract reasoning_details (Gemini thought_signature) - required for parallel tool calls
+        const details = block.reasoningDetails || block.reasoning_details
+        if (Array.isArray(details) && details.length > 0) {
+          currentReasoningDetails.push(...details)
+          console.log('🧠 [provider] Extracted reasoning_details from content_blocks:', details.length, 'entries')
+        }
       } else if (block.type === 'tool_use') {
         // Skip invalid tool_use blocks that are missing required fields
         if (!block.id || !block.name) {
@@ -204,11 +220,18 @@ export async function generateResponse(
         // If we have accumulated tool calls, flush them first
         if (currentToolCalls.length > 0) {
           // console.log(`🔄 [provider] Flushing ${currentToolCalls.length} tool calls before tool_result`)
-          result.push({
+          const assistantMsg: any = {
             role: 'assistant',
             content: currentText || null,
             tool_calls: currentToolCalls,
-          })
+          }
+          // Attach reasoning_details if present (required by Gemini for parallel tool calls)
+          if (currentReasoningDetails.length > 0) {
+            assistantMsg.reasoningDetails = currentReasoningDetails
+            console.log('🧠 [provider] Attached reasoningDetails to assistant message:', currentReasoningDetails.length, 'entries')
+            currentReasoningDetails = []
+          }
+          result.push(assistantMsg)
           currentText = ''
           currentToolCalls = []
         }
@@ -239,11 +262,18 @@ export async function generateResponse(
         toolCallContent = contentParts
         currentImages = []
       }
-      result.push({
+      const assistantMsg: any = {
         role: 'assistant',
         content: toolCallContent,
         tool_calls: currentToolCalls,
-      })
+      }
+      // Attach reasoning_details if present (required by Gemini for parallel tool calls)
+      if (currentReasoningDetails.length > 0) {
+        assistantMsg.reasoningDetails = currentReasoningDetails
+        console.log('🧠 [provider] Attached reasoningDetails to final assistant message:', currentReasoningDetails.length, 'entries')
+        currentReasoningDetails = []
+      }
+      result.push(assistantMsg)
       currentText = ''
     }
 
@@ -376,11 +406,18 @@ export async function generateResponse(
         }
 
         if (parsedToolCalls.length > 0) {
-          result.push({
+          const assistantMsg: any = {
             role: 'assistant',
             content: msg.content || null,
             tool_calls: parsedToolCalls,
-          })
+          }
+          // Preserve reasoning_details if present on the message (required by Gemini for parallel tool calls)
+          const msgReasoningDetails = (msg as any).reasoningDetails || (msg as any).reasoning_details
+          if (Array.isArray(msgReasoningDetails) && msgReasoningDetails.length > 0) {
+            assistantMsg.reasoningDetails = msgReasoningDetails
+            console.log('🧠 [provider] Attached reasoningDetails from message:', msgReasoningDetails.length, 'entries')
+          }
+          result.push(assistantMsg)
         } else if (msg.content && msg.content.trim()) {
           result.push({
             role: 'assistant',
@@ -506,7 +543,8 @@ export async function generateResponse(
         true,
         conversationId,
         executionMode,
-        storageMode
+        storageMode,
+        isElectron
       )
     }
     case 'lmstudio': {

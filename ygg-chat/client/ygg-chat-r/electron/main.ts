@@ -21,8 +21,7 @@ let localServerStarted = false
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat'
 const UPDATE_FEED_BASE_URL =
-  process.env.SUPABASE_UPDATE_FEED_BASE_URL ||
-  'https://awvlmkkdnwmpgomsuneb.supabase.co/storage/v1/object/public/updates/updates'
+  process.env.SUPABASE_UPDATE_FEED_BASE_URL || 'https://auth.yggchat.com/storage/v1/object/public/updates/updates'
 let autoUpdaterConfigured = false
 
 // Set App User Model ID for Windows taskbar icon

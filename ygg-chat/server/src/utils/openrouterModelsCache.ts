@@ -210,9 +210,7 @@ async function fetchModelsFromAPI(apiKey: string): Promise<OpenRouterModel[]> {
  */
 export async function getCachedModelById(apiKey: string, modelId: string): Promise<OpenRouterModel | null> {
   const models = await getCachedOpenRouterModels()
-  console.log('[OPENROUTERCACHE]', apiKey, modelId)
   let found = models.find(m => m.id === modelId || m.name === modelId) || null
-  console.log('[OPENROUTERCACHE] found = ', found)
   return found
 }
 
