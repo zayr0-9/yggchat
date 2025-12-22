@@ -2799,7 +2799,7 @@ function Chat() {
                     modelSelect={true}
                     footerContent={modelSelectFooter}
                   />
-                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                  {
                     <ActionPopover
                       isActive={
                         toolAutoApprove ||
@@ -2810,14 +2810,16 @@ function Chat() {
                       }
                       footer={
                         <div className='flex flex-col gap-2'>
-                          <input
-                            type='text'
-                            value={ccCwd}
-                            onChange={e => setCcCwd(e.target.value)}
-                            placeholder='Working directory (optional)'
-                            className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                            title='Specify the working directory for Claude Code agent'
-                          />
+                          {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                            <input
+                              type='text'
+                              value={ccCwd}
+                              onChange={e => setCcCwd(e.target.value)}
+                              placeholder='Working directory (optional)'
+                              className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                              title='Specify the working directory for Claude Code agent'
+                            />
+                          )}
                           {/* Image Generation Options - shown only for image generation models */}
                           {isImageGenerationModel && (
                             <>
@@ -2869,67 +2871,71 @@ function Chat() {
                         </div>
                       }
                     >
+                      {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                        <>
+                          <Button
+                            variant={ccMode ? 'outline2' : 'outline2'}
+                            size='medium'
+                            onClick={() => setCCMode(!ccMode)}
+                            title='Toggle Claude Code Agent Mode'
+                          >
+                            <i
+                              className={`bx bx-terminal mr-1 ${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
+                              aria-hidden='true'
+                            ></i>
+                            <div
+                              className={`${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
+                            >
+                              {ccMode ? 'CC On' : 'CC Off'}
+                            </div>
+                          </Button>
+
+                          {/* Allow All / Ask toggle */}
+                          <Button
+                            variant='outline2'
+                            size='medium'
+                            onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
+                            className={
+                              toolAutoApprove
+                                ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
+                                : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
+                            }
+                            title={
+                              toolAutoApprove
+                                ? 'Auto-approving tools (click to disable)'
+                                : 'Asking for permission (click to auto-approve)'
+                            }
+                            aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
+                          >
+                            <i className='bx bx-shield-quarter mr-1'></i>
+                            {toolAutoApprove ? 'Allow all' : 'Ask'}
+                          </Button>
+
+                          {/* Chat / Agent toggle */}
+                          <Button
+                            variant='outline2'
+                            size='medium'
+                            onClick={() => dispatch(chatSliceActions.operationModeToggled())}
+                            className={
+                              operationMode === 'plan'
+                                ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
+                                : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
+                            }
+                            title={
+                              operationMode === 'plan'
+                                ? 'Plan mode enabled (tools will be blocked)'
+                                : 'Execution mode enabled (tools may modify files)'
+                            }
+                            aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
+                          >
+                            <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
+                            {operationMode === 'plan' ? 'Chat' : 'Agent'}
+                          </Button>
+                        </>
+                      )}
                       {/* Claude Code toggle */}
-                      <Button
-                        variant={ccMode ? 'outline2' : 'outline2'}
-                        size='medium'
-                        onClick={() => setCCMode(!ccMode)}
-                        title='Toggle Claude Code Agent Mode'
-                      >
-                        <i
-                          className={`bx bx-terminal mr-1 ${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
-                          aria-hidden='true'
-                        ></i>
-                        <div
-                          className={`${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
-                        >
-                          {ccMode ? 'CC On' : 'CC Off'}
-                        </div>
-                      </Button>
-
-                      {/* Allow All / Ask toggle */}
-                      <Button
-                        variant='outline2'
-                        size='medium'
-                        onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
-                        className={
-                          toolAutoApprove
-                            ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
-                            : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
-                        }
-                        title={
-                          toolAutoApprove
-                            ? 'Auto-approving tools (click to disable)'
-                            : 'Asking for permission (click to auto-approve)'
-                        }
-                        aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
-                      >
-                        <i className='bx bx-shield-quarter mr-1'></i>
-                        {toolAutoApprove ? 'Allow all' : 'Ask'}
-                      </Button>
-
-                      {/* Chat / Agent toggle */}
-                      <Button
-                        variant='outline2'
-                        size='medium'
-                        onClick={() => dispatch(chatSliceActions.operationModeToggled())}
-                        className={
-                          operationMode === 'plan'
-                            ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
-                            : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
-                        }
-                        title={
-                          operationMode === 'plan'
-                            ? 'Plan mode enabled (tools will be blocked)'
-                            : 'Execution mode enabled (tools may modify files)'
-                        }
-                        aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
-                      >
-                        <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
-                        {operationMode === 'plan' ? 'Chat' : 'Agent'}
-                      </Button>
                     </ActionPopover>
-                  )}
+                  }
                   {/* Thinking toggle - next to popover, disabled when not supported */}
                   <Button
                     variant='outline2'
