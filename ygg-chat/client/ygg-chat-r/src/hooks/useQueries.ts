@@ -191,7 +191,7 @@ export interface PaginatedConversationsResponse {
   hasMore: boolean
 }
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 50
 
 /**
  * Fetch conversations with infinite scroll pagination
@@ -1340,5 +1340,147 @@ export function useFilteredModels(provider: string | null) {
     applySorting,
     sortByField,
     refreshFavorites: () => setFavoritedModels(getFavoritedModels()),
+  }
+}
+
+/**
+ * Hook for searching conversations with local-first optimization
+ * First searches cached conversations by title, falls back to server if no local results
+ *
+ * @param projectId - Optional project ID to scope search
+ * @returns Search function and state (results, isSearching, searchFromServer)
+ */
+export function useSearchConversations(projectId?: string | null) {
+  const queryClient = useQueryClient()
+  const { accessToken } = useAuth()
+  const [searchResults, setSearchResults] = useState<Conversation[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchedFromServer, setSearchedFromServer] = useState(false)
+
+  // Search local cache first
+  const searchLocalCache = useCallback(
+    (query: string): Conversation[] => {
+      if (!query.trim()) return []
+
+      const lowerQuery = query.toLowerCase()
+      const results: Conversation[] = []
+      const seenIds = new Set<string>()
+
+      // Search all cached conversation lists
+      const allConversationQueries = queryClient.getQueriesData<
+        Conversation[] | { pages: PaginatedConversationsResponse[] }
+      >({ queryKey: ['conversations'] })
+
+      for (const [, data] of allConversationQueries) {
+        let conversations: Conversation[] = []
+
+        // Handle both flat arrays and infinite query pages
+        if (Array.isArray(data)) {
+          conversations = data
+        } else if (data && typeof data === 'object' && 'pages' in data) {
+          conversations = data.pages.flatMap(page => page.conversations)
+        }
+
+        for (const conv of conversations) {
+          // Skip if already seen or if filtering by project and doesn't match
+          if (seenIds.has(String(conv.id))) continue
+          if (projectId && conv.project_id !== projectId) continue
+
+          // Case-insensitive title search
+          const title = conv.title || ''
+          if (title.toLowerCase().includes(lowerQuery)) {
+            results.push(conv)
+            seenIds.add(String(conv.id))
+          }
+        }
+      }
+
+      // Sort by updated_at descending
+      return results.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    },
+    [queryClient, projectId]
+  )
+
+  // Search server (fallback)
+  const searchServer = useCallback(
+    async (query: string): Promise<Conversation[]> => {
+      console.log('[useSearchConversations] searchServer() called, accessToken:', accessToken ? 'present' : 'null')
+      if (!query.trim()) return []
+      if (!accessToken) {
+        console.warn('[useSearchConversations] No accessToken available, skipping server search')
+        return []
+      }
+
+      const params = new URLSearchParams({ q: query, limit: '20' })
+      const endpoint = projectId
+        ? `/search/project?${params.toString()}&projectId=${projectId}`
+        : `/search?${params.toString()}`
+
+      console.log('[useSearchConversations] Making API call to:', endpoint)
+      try {
+        const results = await api.get<Conversation[]>(endpoint, accessToken)
+        console.log('[useSearchConversations] API response:', results)
+        return results || []
+      } catch (error) {
+        console.error('Server search failed:', error)
+        return []
+      }
+    },
+    [accessToken, projectId]
+  )
+
+  // Main search function with local-first optimization
+  const search = useCallback(
+    async (query: string) => {
+      console.log('[useSearchConversations] search() called with query:', query)
+      if (!query.trim()) {
+        setSearchResults([])
+        setSearchedFromServer(false)
+        return
+      }
+
+      setIsSearching(true)
+
+      try {
+        // Step 1: Search local cache
+        const localResults = searchLocalCache(query)
+        console.log('[useSearchConversations] Local cache results:', localResults.length)
+
+        if (localResults.length > 0) {
+          // Found in local cache, use these results
+          setSearchResults(localResults)
+          setSearchedFromServer(false)
+          return
+        }
+
+        // Step 2: Nothing in local cache, search server
+        console.log('[useSearchConversations] No local results, searching server...')
+        const serverResults = await searchServer(query)
+        console.log('[useSearchConversations] Server results:', serverResults.length)
+        setSearchResults(serverResults)
+        setSearchedFromServer(true)
+      } catch (error) {
+        console.error('Search failed:', error)
+        setSearchResults([])
+        setSearchedFromServer(false)
+      } finally {
+        setIsSearching(false)
+      }
+    },
+    [searchLocalCache, searchServer]
+  )
+
+  // Clear search results
+  const clearSearch = useCallback(() => {
+    setSearchResults([])
+    setSearchedFromServer(false)
+  }, [])
+
+  return {
+    search,
+    clearSearch,
+    searchResults,
+    isSearching,
+    searchedFromServer,
   }
 }

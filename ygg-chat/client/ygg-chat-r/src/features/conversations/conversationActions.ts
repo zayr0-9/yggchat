@@ -399,3 +399,31 @@ export const updateCwd = createAsyncThunk<
     return rejectWithValue(message) as any
   }
 })
+
+// Search conversations by title from the server
+// Used as fallback when local cache search returns no results
+export const searchConversations = createAsyncThunk<
+  Conversation[],
+  { query: string; projectId?: ProjectId | null; limit?: number },
+  { extra: ThunkExtraArgument }
+>('conversations/search', async ({ query, projectId, limit = 20 }, { extra, rejectWithValue }) => {
+  try {
+    const { auth } = extra
+
+    if (!auth.accessToken) {
+      throw new Error('User not authenticated')
+    }
+
+    const params = new URLSearchParams({ q: query, limit: String(limit) })
+
+    // Use project-specific search if projectId is provided
+    const endpoint = projectId
+      ? `/search/project?${params.toString()}&projectId=${projectId}`
+      : `/search?${params.toString()}`
+
+    const results = await api.get<Conversation[]>(endpoint, auth.accessToken)
+    return results
+  } catch (err) {
+    return rejectWithValue(err instanceof Error ? err.message : 'Failed to search conversations')
+  }
+})

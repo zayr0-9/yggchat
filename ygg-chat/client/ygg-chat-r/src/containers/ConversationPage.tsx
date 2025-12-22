@@ -7,6 +7,7 @@ import type { StorageMode } from '../../../../shared/types'
 import { Button } from '../components'
 import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
+import { TextField } from '../components/TextField/TextField'
 import { chatSliceActions } from '../features/chats'
 import {
   activeConversationIdSet,
@@ -29,6 +30,7 @@ import {
   useProject,
   useProjects,
   useResearchNotes,
+  useSearchConversations,
 } from '../hooks/useQueries'
 import { parseId } from '../utils/helpers'
 import { DownloadAppModal } from './downloadApp'
@@ -149,6 +151,32 @@ const ConversationPage: React.FC = () => {
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'name'>('updated')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Search hook with local-first optimization
+  const { search, clearSearch, searchResults, isSearching } = useSearchConversations(projectId)
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Debounced search effect
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    if (searchQuery.trim()) {
+      searchTimeoutRef.current = setTimeout(() => {
+        search(searchQuery)
+      }, 300) // 300ms debounce delay
+    } else {
+      clearSearch()
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [searchQuery, search, clearSearch])
   const [showNewConversationModal, setShowNewConversationModal] = useState(false)
   const [newConvTitle, setNewConvTitle] = useState('')
   const [storageMode, setStorageMode] = useState<StorageMode>('cloud')
@@ -198,6 +226,10 @@ const ConversationPage: React.FC = () => {
 
   // Sort conversations
   const sortedConversations = sortConversations(conversations, sortBy, sortOrder === 'asc')
+
+  // Use search results if searching, otherwise use sorted conversations
+  const displayedConversations = searchQuery.trim() ? searchResults : sortedConversations
+  const isShowingSearchResults = searchQuery.trim().length > 0
 
   // Search dropdown is handled inside SearchList component
 
@@ -515,6 +547,20 @@ const ConversationPage: React.FC = () => {
             </div>
 
             <div className='flex items-center gap-1'>
+              <div className='w-40 md:w-48 lg:w-56'>
+                <TextField
+                  placeholder='Search chats...'
+                  value={searchQuery}
+                  onChange={setSearchQuery}
+                  size='small'
+                  showSearchIcon
+                  onSearchClick={() => {
+                    if (searchQuery.trim()) {
+                      search(searchQuery)
+                    }
+                  }}
+                />
+              </div>
               <Select
                 value={sortBy}
                 onChange={value => setSortBy(value as 'updated' | 'created' | 'name')}
@@ -562,7 +608,34 @@ const ConversationPage: React.FC = () => {
           <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <div ref={scrollContainerRef} className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
               <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
-                {sortedConversations.map((conv, index) => (
+                {/* Show search indicator when searching */}
+                {isShowingSearchResults && (
+                  <li className='flex items-center gap-2 text-neutral-500 dark:text-neutral-400 text-sm mb-2'>
+                    {isSearching ? (
+                      <>
+                        <i className='bx bx-loader-alt animate-spin' aria-hidden='true'></i>
+                        <span>Searching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className='bx bx-search' aria-hidden='true'></i>
+                        <span>
+                          {searchResults.length} result{searchResults.length !== 1 ? 's' : ''} for "{searchQuery}"
+                        </span>
+                        <button
+                          onClick={() => {
+                            setSearchQuery('')
+                            clearSearch()
+                          }}
+                          className='ml-2 text-xs underline hover:text-neutral-700 dark:hover:text-neutral-200'
+                        >
+                          Clear
+                        </button>
+                      </>
+                    )}
+                  </li>
+                )}
+                {displayedConversations.map((conv, index) => (
                   <li
                     key={conv.id}
                     className='rounded-4xl px-3 py-3 sm:p-2 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 cursor-pointer border-indigo-100 dark:border-neutral-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-800 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-700 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
@@ -620,12 +693,14 @@ const ConversationPage: React.FC = () => {
                     )}
                   </li>
                 ))}
-                {sortedConversations.length === 0 && !loading && (
-                  <p className='dark:text-neutral-300 rounded-3xl p-4 acrylic-light'>No conversations yet.</p>
+                {displayedConversations.length === 0 && !loading && !isSearching && (
+                  <p className='dark:text-neutral-300 rounded-3xl p-4 acrylic-light'>
+                    {isShowingSearchResults ? `No conversations found for "${searchQuery}"` : 'No conversations yet.'}
+                  </p>
                 )}
 
-                {/* Loading more indicator */}
-                {isFetchingNextPage && (
+                {/* Loading more indicator - hide when searching */}
+                {isFetchingNextPage && !isShowingSearchResults && (
                   <li className='flex justify-center py-4'>
                     <div className='flex items-center gap-2 text-neutral-500 dark:text-neutral-400'>
                       <i className='bx bx-loader-alt animate-spin text-xl' aria-hidden='true'></i>
@@ -634,13 +709,13 @@ const ConversationPage: React.FC = () => {
                   </li>
                 )}
 
-                {/* Sentinel element for infinite scroll - triggers loading when visible */}
-                {hasNextPage && !isFetchingNextPage && (
+                {/* Sentinel element for infinite scroll - triggers loading when visible, hide when searching */}
+                {hasNextPage && !isFetchingNextPage && !isShowingSearchResults && (
                   <li ref={loadMoreRef} className='h-4' aria-hidden='true' />
                 )}
 
-                {/* End of list indicator */}
-                {!hasNextPage && conversations.length > 0 && !loading && (
+                {/* End of list indicator - hide when searching */}
+                {!hasNextPage && conversations.length > 0 && !loading && !isShowingSearchResults && (
                   <li className='text-center py-4 text-neutral-400 dark:text-neutral-500 text-sm'>
                     All conversations loaded
                   </li>

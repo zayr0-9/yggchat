@@ -112,32 +112,43 @@ function accumulateContentBlocks(events: any[]): any[] {
   return accumulated
 }
 
-// Global search endpoint - Placeholder for future chat title search
-// TODO: Replace with search_conversations or similar when implementing chat title search
+// Global search endpoint - Search conversations by title
 router.get(
   '/search',
   expensiveOperationsRateLimiter, // Apply expensive operations rate limiter
   asyncHandler(async (req, res) => {
     const { client } = await verifyAuth(req) // ✅ Use user's JWT, not service_role
     const q = (req.query.q as string) || ''
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50)
 
     if (!q.trim()) {
       return res.status(400).json({ error: 'Missing q parameter' })
     }
 
-    // Message search has been removed. Search functionality now uses SQLite FTS5 locally.
-    // This endpoint is preserved for future use (chat title search, etc.)
-    res.json([])
+    // Search conversations by title using ILIKE (uses GIN trigram index)
+    const { data, error } = await client
+      .from('conversations')
+      .select('id, title, model_name, project_id, created_at, updated_at')
+      .ilike('title', `%${q}%`)
+      .order('updated_at', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      console.error('Search conversations error:', error)
+      return res.status(500).json({ error: 'Failed to search conversations' })
+    }
+
+    res.json(data || [])
   })
 )
 
-// Search by project - Placeholder for future chat title search
-// TODO: Replace with project-specific chat title search when implementing
+// Search conversations by title within a specific project
 router.get(
   '/search/project',
   asyncHandler(async (req, res) => {
     const { client } = await verifyAuth(req) // ✅ Use user's JWT
     const q = (req.query.q as string) || ''
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50)
 
     if (!q.trim()) {
       return res.status(400).json({ error: 'Missing q parameter' })
@@ -148,9 +159,21 @@ router.get(
       return res.status(400).json({ error: 'Missing projectId parameter' })
     }
 
-    // Message search has been removed. Search functionality now uses SQLite FTS5 locally.
-    // This endpoint is preserved for future use (project-specific chat title search, etc.)
-    res.json([])
+    // Search conversations by title within project using ILIKE (uses GIN trigram index)
+    const { data, error } = await client
+      .from('conversations')
+      .select('id, title, model_name, project_id, created_at, updated_at')
+      .eq('project_id', projectId)
+      .ilike('title', `%${q}%`)
+      .order('updated_at', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      console.error('Search conversations by project error:', error)
+      return res.status(500).json({ error: 'Failed to search conversations' })
+    }
+
+    res.json(data || [])
   })
 )
 
