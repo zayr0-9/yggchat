@@ -610,7 +610,7 @@ const ConversationPage: React.FC = () => {
               <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
                 {/* Show search indicator when searching */}
                 {isShowingSearchResults && (
-                  <li className='flex items-center gap-2 text-neutral-500 dark:text-neutral-400 text-sm mb-2'>
+                  <li className='flex items-center gap-2 bg-transparent text-neutral-800 dark:text-neutral-300 rounded-full acrylic-subtle p-2 text-[16px] mb-4'>
                     {isSearching ? (
                       <>
                         <i className='bx bx-loader-alt animate-spin' aria-hidden='true'></i>

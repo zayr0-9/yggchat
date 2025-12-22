@@ -55,12 +55,12 @@ export const TextField: React.FC<TextFieldProps> = ({
 
   // Base input styles that apply to all text fields
   const baseInputStyles =
-    'w-full px-4 md:px-3.5 lg:px-3 xl:px-2.5 py-3 md:py-2 lg:py-2 xl:py-2.5 2xl:py-3 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-neutral-900 bg-gray-800 text-stone-800 dark:text-stone-200 placeholder-neutral-700 dark:placeholder-neutral-200 border-1 border-gray-300 outline-none focus:border-gray-400 dark:border-neutral-600 dark:focus:border-neutral-500'
+    'w-full px-4 md:px-3.5 lg:px-3 xl:px-2.5 py-1.75 sm:py-1.5 md:py-1.75 lg:py-2 xl:py-2.5 2xl:py-2.25 rounded-xl transition-all duration-200 overflow-hidden acrylic-ultra-light bg-gray-800 text-black dark:text-stone-200 placeholder-black dark:placeholder-neutral-200 border-1 border-gray-300 outline-none focus:border-gray-400 dark:border-neutral-600 dark:focus:border-neutral-500 shadow-md'
 
   // Size variants control padding and text size
   const sizeStyles = {
     small:
-      'px-3 md:px-2.5 lg:px-2 xl:px-1.5 py-1.5 md:py-1 lg:py-2 xl:py-0.5 text-[14px] md:text-[14px] lg:text-[14px] xl:text-[14px] 2xl:text-[14px]',
+      'px-3 md:px-2.5 lg:px-2 xl:px-1.5 py-1.5 md:py-1 lg:py-2 xl:py-0.5 text-[14px] md:text-[14px] lg:text-[14px] xl:text-[14px] 2xl:text-[16px]',
     medium:
       'px-4 sm:py-3 md:px-3.5 lg:px-4 xl:px-2.5 py-2 md:py-3 lg:py-1 xl:py-3 text-[14px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[18px] ',
     large:
