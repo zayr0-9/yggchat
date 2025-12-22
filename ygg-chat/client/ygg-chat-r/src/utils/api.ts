@@ -1,6 +1,6 @@
 // utils/api.ts
 import { ConversationId, StorageMode } from '../../../../shared/types'
-import { getSessionFromStorage, getTokenExpirationTime, refreshTokenIfNeeded } from '../lib/jwtUtils'
+import { clearClaimsCache, getSessionFromStorage, getTokenExpirationTime, refreshTokenIfNeeded } from '../lib/jwtUtils'
 
 // Base configuration
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
@@ -121,9 +121,45 @@ async function ensureValidToken(): Promise<string | null> {
   return session.access_token
 }
 
+// Flag to prevent multiple concurrent redirects
+let isRedirectingToLogin = false
+
 // Helper function to handle login redirection based on environment
 const redirectToLogin = () => {
-  // console.log('[api] Redirecting to login...')
+  // Check if already on login page
+  const currentPath = environment === 'electron' 
+    ? window.location.hash.replace('#', '')
+    : window.location.pathname
+  
+  if (currentPath === '/login' || currentPath.startsWith('/login')) {
+    // console.log('[api] Already on login page, skipping redirect')
+    return
+  }
+
+  // Prevent multiple concurrent redirects
+  if (isRedirectingToLogin) {
+    // console.log('[api] Redirect already in progress, skipping')
+    return
+  }
+
+  isRedirectingToLogin = true
+  console.log('[api] Redirecting to login...')
+
+  // Clear cached auth state to stop queries from firing with stale tokens
+  clearClaimsCache()
+  
+  if (typeof window !== 'undefined') {
+    // Clear the cached Electron session
+    (window as any)._cachedElectronSession = null
+    
+    // Clear Supabase localStorage to prevent stale tokens
+    try {
+      localStorage.removeItem('supabase-auth-token')
+    } catch (e) {
+      // Ignore localStorage errors
+    }
+  }
+
   if (environment === 'electron') {
     // In Electron with HashRouter, we need to update the hash
     window.location.hash = '/login'
@@ -131,6 +167,11 @@ const redirectToLogin = () => {
     // In Web with BrowserRouter, we can use href (or assign to origin + /login)
     window.location.href = '/login'
   }
+
+  // Reset the flag after a short delay to allow for page transition
+  setTimeout(() => {
+    isRedirectingToLogin = false
+  }, 2000)
 }
 
 // Core API utility function - now accepts accessToken as parameter
@@ -352,6 +393,12 @@ export const patchConversationResearchNote = (
 
 export const patchConversationCwd = (conversationId: ConversationId, cwd: string | null, accessToken: string | null) =>
   api.patch<ConversationPatchResponse>(`/conversations/${conversationId}/cwd`, accessToken, { cwd })
+
+export const patchConversationProject = (
+  conversationId: ConversationId,
+  projectId: string | null,
+  accessToken: string | null
+) => api.patch<ConversationPatchResponse>(`/conversations/${conversationId}/project`, accessToken, { projectId })
 
 export const cloneConversation = (conversationId: ConversationId, accessToken: string | null) =>
   api.post<{ id: ConversationId; title: string; project_id: ConversationId | null }>(

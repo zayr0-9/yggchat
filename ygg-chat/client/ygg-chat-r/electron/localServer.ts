@@ -285,6 +285,9 @@ function initializeLocalDatabase(dbPath: string) {
     updateConversationTitle: db.prepare(
       'UPDATE conversations SET title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ),
+    updateConversationProjectId: db.prepare(
+      'UPDATE conversations SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ),
 
     // Messages
     upsertMessage: db.prepare(`
@@ -1632,6 +1635,49 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Error updating cwd:', error)
       res.status(500).json({ error: 'Failed to update cwd' })
+    }
+  })
+
+  // Update conversation project
+  app.patch('/api/conversations/:id/project', (req, res) => {
+    try {
+      const { id } = req.params
+      const { projectId } = req.body
+
+      // Require projectId to be explicitly provided (can be null to unassign, but must be present)
+      if (!('projectId' in req.body)) {
+        res.status(400).json({ error: 'projectId is required in request body' })
+        return
+      }
+
+      // projectId can be null (unassign from project) or a valid project UUID string
+      if (projectId !== null && typeof projectId !== 'string') {
+        res.status(400).json({ error: 'projectId must be a string or null' })
+        return
+      }
+
+      const existing = statements.getConversationById.get(id)
+      if (!existing) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+
+      // If projectId is provided (not null), verify the project exists
+      if (projectId !== null) {
+        const project = statements.getProjectById.get(projectId)
+        if (!project) {
+          res.status(404).json({ error: 'Destination project not found' })
+          return
+        }
+      }
+
+      statements.updateConversationProjectId.run(projectId, id)
+      const updated = statements.getConversationById.get(id)
+
+      res.json(updated)
+    } catch (error) {
+      console.error('[LocalServer] Error updating project:', error)
+      res.status(500).json({ error: 'Failed to update project' })
     }
   })
 

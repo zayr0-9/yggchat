@@ -23,6 +23,7 @@ import { useIsMobile } from '../hooks/useMediaQuery'
 import {
   useConversations,
   useConversationsByProject,
+  useMoveConversationToProject,
   useProject,
   useProjects,
   useResearchNotes,
@@ -116,6 +117,14 @@ const ConversationPage: React.FC = () => {
   const [storageMode, setStorageMode] = useState<StorageMode>('cloud')
   // Download app modal state
   const [showDownloadModal, setShowDownloadModal] = useState(false)
+  // Move project modal state
+  const [showMoveModal, setShowMoveModal] = useState(false)
+  const [conversationToMove, setConversationToMove] = useState<Conversation | null>(null)
+  // Move confirmation state
+  const [showMoveConfirm, setShowMoveConfirm] = useState(false)
+  const [destinationProject, setDestinationProject] = useState<{ id: string; name: string } | null>(null)
+  // Move mutation
+  const moveConversationMutation = useMoveConversationToProject()
   // Sorting function for conversations
   const sortConversations = (
     convs: Conversation[],
@@ -174,6 +183,44 @@ const ConversationPage: React.FC = () => {
   const handleDelete = (conversation: Conversation) => {
     setConversationToDelete(conversation)
     setShowDeleteConfirm(true)
+  }
+
+  const handleEditClick = (e: React.MouseEvent, conv: Conversation) => {
+    e.stopPropagation()
+    setConversationToMove(conv)
+    setShowMoveModal(true)
+  }
+
+  const handleSelectDestinationProject = (project: { id: string; name: string }) => {
+    setDestinationProject(project)
+    setShowMoveModal(false)
+    setShowMoveConfirm(true)
+  }
+
+  const confirmMoveProject = async () => {
+    if (!conversationToMove || !destinationProject) return
+
+    const sourceProjectId = conversationToMove.project_id || null
+    await moveConversationMutation.mutateAsync({
+      conversationId: conversationToMove.id,
+      sourceProjectId,
+      destinationProjectId: destinationProject.id,
+    })
+
+    setShowMoveConfirm(false)
+    setConversationToMove(null)
+    setDestinationProject(null)
+  }
+
+  const cancelMoveProject = () => {
+    setShowMoveConfirm(false)
+    setDestinationProject(null)
+  }
+
+  const getProjectName = (projectId: string | null | undefined): string => {
+    if (!projectId) return 'No Project'
+    const project = allProjects.find(p => p.id === projectId)
+    return project?.name || 'Unknown Project'
   }
 
   useEffect(() => {
@@ -450,20 +497,34 @@ const ConversationPage: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <Button
-                        variant='outline2'
-                        size='circle'
-                        rounded='full'
-                        className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0 ml-2'
-                        onClick={
-                          (e => {
-                            ;(e as unknown as React.MouseEvent).stopPropagation()
-                            handleDelete(conv)
-                          }) as unknown as () => void
-                        }
-                      >
-                        <i className='bx bx-trash-alt text-lg' aria-hidden='true'></i>
-                      </Button>
+                      <div className='flex items-center gap-1 relative'>
+                        {/* Edit Button */}
+                        <Button
+                          variant='outline2'
+                          size='circle'
+                          rounded='full'
+                          className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
+                          onClick={e => handleEditClick(e, conv)}
+                        >
+                          <i className='bx bx-edit text-lg' aria-hidden='true'></i>
+                        </Button>
+
+                        {/* Delete Button */}
+                        <Button
+                          variant='outline2'
+                          size='circle'
+                          rounded='full'
+                          className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
+                          onClick={
+                            (e => {
+                              ;(e as unknown as React.MouseEvent).stopPropagation()
+                              handleDelete(conv)
+                            }) as unknown as () => void
+                          }
+                        >
+                          <i className='bx bx-trash-alt text-lg' aria-hidden='true'></i>
+                        </Button>
+                      </div>
                     </div>
                     {conv.created_at && (
                       <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[11px] md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[16px]'>
@@ -588,6 +649,121 @@ const ConversationPage: React.FC = () => {
                 onClick={confirmDelete}
               >
                 <p className='transition-transform duration-100 group-active:scale-95'>Delete</p>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move Project Modal */}
+      {showMoveModal && conversationToMove && (
+        <div
+          className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4'
+          onClick={() => setShowMoveModal(false)}
+        >
+          <div
+            className='bg-neutral-100 text-neutral-900 mica-medium dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className='text-xl font-semibold mb-2 dark:text-neutral-100'>Conversation Actions</h3>
+            <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-4'>
+              Choose an action for "
+              <span className='font-medium'>{conversationToMove.title || `Conversation ${conversationToMove.id}`}</span>
+              ".
+            </p>
+
+            <h4 className='text-sm font-semibold mb-2 dark:text-neutral-200'>
+              Move to Project
+              <span className='ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400'>
+                ({conversationToMove.storage_mode === 'local' ? 'Local' : 'Cloud'} projects only)
+              </span>
+            </h4>
+            <div className='max-h-[400px] overflow-y-auto space-y-2 thin-scrollbar'>
+              {allProjects
+                .filter(p => {
+                  const convMode = conversationToMove.storage_mode || 'cloud'
+                  const projMode = p.storage_mode || 'cloud'
+                  return p.id !== conversationToMove.project_id && projMode === convMode
+                })
+                .map(project => (
+                  <button
+                    key={project.id}
+                    className='w-full text-left px-4 py-3 rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors flex items-center justify-between'
+                    onClick={() => handleSelectDestinationProject({ id: project.id, name: project.name })}
+                  >
+                    <span className='font-medium dark:text-neutral-100'>{project.name}</span>
+                    <i className='bx bx-chevron-right text-lg text-neutral-400' aria-hidden='true'></i>
+                  </button>
+                ))}
+              {allProjects.filter(p => {
+                const convMode = conversationToMove.storage_mode || 'cloud'
+                const projMode = p.storage_mode || 'cloud'
+                return p.id !== conversationToMove.project_id && projMode === convMode
+              }).length === 0 && (
+                <p className='text-sm text-neutral-500 dark:text-neutral-400 text-center py-4'>
+                  No other {conversationToMove.storage_mode === 'local' ? 'local' : 'cloud'} projects available.
+                </p>
+              )}
+            </div>
+            <div className='flex gap-3 justify-end mt-4'>
+              <Button
+                variant='outline2'
+                size='circle'
+                rounded='full'
+                className='group'
+                onClick={() => setShowMoveModal(false)}
+              >
+                <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Move Confirmation Dialog */}
+      {showMoveConfirm && conversationToMove && destinationProject && (
+        <div
+          className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4'
+          onClick={cancelMoveProject}
+        >
+          <div
+            className='bg-neutral-100 text-neutral-900 mica-medium dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className='text-[24px] font-semibold mb-2 dark:text-neutral-100'>Confirm Move</h3>
+            <p className='text-[18px] text-neutral-800 dark:text-neutral-400 mb-4'>
+              Move "
+              <span className='font-medium'>{conversationToMove.title || `Conversation ${conversationToMove.id}`}</span>
+              " to a new project?
+            </p>
+            <div className='flex items-center justify-center gap-3 py-4 px-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl mb-4'>
+              <div className='text-center'>
+                <div className='text-[16px] text-neutral-500 dark:text-neutral-400 mb-1'>From</div>
+                <div className='font-medium dark:text-neutral-100 text-[16px]'>
+                  {getProjectName(conversationToMove.project_id)}
+                </div>
+              </div>
+              <i className='bx bx-right-arrow-alt text-2xl text-neutral-400' aria-hidden='true'></i>
+              <div className='text-center'>
+                <div className='text-[16px] text-neutral-500 dark:text-neutral-400 mb-1'>To</div>
+                <div className='font-medium dark:text-neutral-100 text-[16px]'>{destinationProject.name}</div>
+              </div>
+            </div>
+            <div className='flex gap-3 pt-2 justify-end'>
+              <Button variant='outline2' size='circle' rounded='full' className='group' onClick={cancelMoveProject}>
+                <p className='transition-transform duration-100 group-active:scale-95'>Cancel</p>
+              </Button>
+              <Button
+                variant='outline2'
+                size='circle'
+                rounded='full'
+                className='group bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 hover:text-black dark:hover:bg-blue-700 text-white border-blue-600 dark:border-blue-700'
+                onClick={confirmMoveProject}
+                disabled={moveConversationMutation.isPending}
+              >
+                <p className='transition-transform duration-100 group-active:scale-95'>
+                  {moveConversationMutation.isPending ? 'Moving...' : 'Move'}
+                </p>
               </Button>
             </div>
           </div>

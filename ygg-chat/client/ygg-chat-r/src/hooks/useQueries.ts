@@ -772,6 +772,95 @@ export function useRefreshModels() {
 }
 
 /**
+ * Mutation hook for moving a conversation to a different project
+ * Updates React Query caches for both source and destination project conversations
+ *
+ * Usage:
+ * const moveConversationMutation = useMoveConversationToProject()
+ * moveConversationMutation.mutate({ conversationId, sourceProjectId, destinationProjectId })
+ */
+export function useMoveConversationToProject() {
+  const queryClient = useQueryClient()
+  const { accessToken } = useAuth()
+
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      sourceProjectId,
+      destinationProjectId,
+    }: {
+      conversationId: ConversationId
+      sourceProjectId: ProjectId | null
+      destinationProjectId: ProjectId | null
+    }) => {
+      // Determine storage mode from cached conversation data
+      let storageMode: 'local' | 'cloud' = 'cloud'
+
+      // Search all cached conversation lists to find the storage mode
+      const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
+      for (const [_, data] of allConversationQueries) {
+        if (Array.isArray(data)) {
+          const match = data.find(c => String(c.id) === String(conversationId))
+          if (match?.storage_mode) {
+            storageMode = match.storage_mode
+            break
+          }
+        }
+      }
+
+      console.log('[useMoveConversationToProject] Moving conversation:', conversationId, 'storage_mode:', storageMode, 'to project:', destinationProjectId)
+
+      // Route to appropriate API based on storage mode
+      if (storageMode === 'local' && environment === 'electron') {
+        // Use local API for local conversations
+        return localApi.patch<any>(`/conversations/${conversationId}/project`, { projectId: destinationProjectId })
+      }
+
+      // Use cloud API for cloud conversations
+      const { patchConversationProject } = await import('../utils/api')
+      return patchConversationProject(conversationId, destinationProjectId, accessToken)
+    },
+    onSuccess: (_updatedConversation, { conversationId, sourceProjectId, destinationProjectId }) => {
+      // Update all conversations cache
+      queryClient.setQueryData<Conversation[]>(['conversations'], old => {
+        if (!old) return old
+        return old.map(c => (c.id === conversationId ? { ...c, project_id: destinationProjectId } : c))
+      })
+
+      // Remove from source project cache
+      if (sourceProjectId) {
+        queryClient.setQueryData<Conversation[]>(['conversations', 'project', sourceProjectId], old => {
+          if (!old) return old
+          return old.filter(c => c.id !== conversationId)
+        })
+      }
+
+      // Add to destination project cache
+      if (destinationProjectId) {
+        // Get full conversation from all conversations cache
+        const allConversations = queryClient.getQueryData<Conversation[]>(['conversations'])
+        const fullConversation = allConversations?.find(c => c.id === conversationId)
+        
+        queryClient.setQueryData<Conversation[]>(['conversations', 'project', destinationProjectId], old => {
+          if (!fullConversation) return old
+          const updatedFullConversation = { ...fullConversation, project_id: destinationProjectId }
+          if (!old) return [updatedFullConversation]
+          // Avoid duplicates and add at beginning
+          const filtered = old.filter(c => c.id !== conversationId)
+          return [updatedFullConversation, ...filtered]
+        })
+      }
+
+      // Update recent conversations cache
+      queryClient.setQueryData<Conversation[]>(['conversations', 'recent'], old => {
+        if (!old) return old
+        return old.map(c => (c.id === conversationId ? { ...c, project_id: destinationProjectId } : c))
+      })
+    },
+  })
+}
+
+/**
  * Mutation hook for selecting a model for the current provider
  * Updates both React Query cache and localStorage
  *

@@ -845,6 +845,29 @@ router.patch(
   })
 )
 
+// Move conversation to different project
+router.patch(
+  '/conversations/:id/project',
+  asyncHandler(async (req, res) => {
+    const conversationId = req.params.id
+    const { projectId } = req.body as { projectId?: string | null }
+    const { client } = await verifyAuth(req)
+
+    const existing = await ConversationService.getById(client, conversationId)
+    if (!existing) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+
+    // projectId can be null (unassign from project) or a valid project UUID
+    if (projectId !== undefined && projectId !== null && typeof projectId !== 'string') {
+      return res.status(400).json({ error: 'projectId must be a string or null' })
+    }
+
+    const updated = await ConversationService.updateProjectId(client, conversationId, projectId ?? null)
+    res.json(updated)
+  })
+)
+
 // Clone conversation
 router.post(
   '/conversations/:id/clone',

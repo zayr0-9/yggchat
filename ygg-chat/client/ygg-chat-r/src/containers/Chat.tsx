@@ -2744,7 +2744,7 @@ function Chat() {
                       title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                     >
                       {/* {ideContext?.extensionConnected ? '' : ''} */}
-                      {workspace?.name && `'🟢 ' + ${workspace.name}`}
+                      {workspace?.name && ` ${'🟢 ' + workspace.name}`}
                     </div>
                   )}
                   <Button
@@ -2801,7 +2801,13 @@ function Chat() {
                   />
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
                     <ActionPopover
-                      isActive={toolAutoApprove || operationMode === 'plan' || ccMode || !!imageConfig.aspectRatio || !!imageConfig.imageSize}
+                      isActive={
+                        toolAutoApprove ||
+                        operationMode === 'plan' ||
+                        ccMode ||
+                        !!imageConfig.aspectRatio ||
+                        !!imageConfig.imageSize
+                      }
                       footer={
                         <div className='flex flex-col gap-2'>
                           <input

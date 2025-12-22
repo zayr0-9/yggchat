@@ -722,6 +722,21 @@ export class ConversationService {
     return data || undefined
   }
 
+  static async updateProjectId(
+    client: SupabaseClient,
+    id: string,
+    projectId: string | null
+  ): Promise<Conversation | undefined> {
+    const { data } = await client
+      .from('conversations')
+      .update({ project_id: projectId, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single()
+
+    return data || undefined
+  }
+
   static async touch(client: SupabaseClient, id: string): Promise<void> {
     await client.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', id)
   }
