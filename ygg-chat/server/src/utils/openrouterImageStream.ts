@@ -3,12 +3,18 @@
  * Bypasses the SDK to get access to delta.images in SSE stream
  */
 
+export interface ImageConfig {
+  aspectRatio?: '1:1' | '2:3' | '3:2' | '3:4' | '4:3' | '4:5' | '5:4' | '9:16' | '16:9' | '21:9'
+  imageSize?: '1K' | '2K' | '4K'
+}
+
 interface ImageStreamOptions {
   apiKey: string
   model: string
   messages: any[]
   maxTokens?: number
   abortSignal?: AbortSignal
+  imageConfig?: ImageConfig
 }
 
 interface StreamCallbacks {
@@ -58,6 +64,12 @@ export async function streamImageGeneration(options: ImageStreamOptions, callbac
       modalities: ['image', 'text'],
       stream: true,
       max_tokens: options.maxTokens || 20000,
+      ...(options.imageConfig && {
+        image_config: {
+          ...(options.imageConfig.aspectRatio && { aspect_ratio: options.imageConfig.aspectRatio }),
+          ...(options.imageConfig.imageSize && { image_size: options.imageConfig.imageSize }),
+        },
+      }),
     }),
     signal: options.abortSignal,
   })

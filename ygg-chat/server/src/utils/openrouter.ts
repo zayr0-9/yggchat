@@ -14,7 +14,7 @@ import {
   streamGeminiWithReasoningDetails,
 } from './geminiRawGeneration'
 import { moneyAdd, moneyFormat, moneyMax, moneyMultiply } from './money'
-import { isImageGenerationModel, streamImageGeneration } from './openrouterImageStream'
+import { ImageConfig, isImageGenerationModel, streamImageGeneration } from './openrouterImageStream'
 import { getCachedModelById } from './openrouterModelsCache'
 import tools from './tools'
 // Helper function to convert Zod schema to JSON schema
@@ -655,7 +655,8 @@ export async function generateResponse(
   conversationId?: string,
   executionMode: 'server' | 'client' = 'server',
   storageMode: 'cloud' | 'local' = 'cloud',
-  isElectron: boolean = false
+  isElectron: boolean = false,
+  imageConfig?: ImageConfig
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
   let stepCount = 0
@@ -918,6 +919,7 @@ export async function generateResponse(
             messages: messagesForRawApi,
             maxTokens: 20000,
             abortSignal,
+            imageConfig,
           },
           {
             onText: text => {

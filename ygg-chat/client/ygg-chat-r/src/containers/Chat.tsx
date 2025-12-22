@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { estimateTokenCount } from 'tokenx'
-import { MessageId } from '../../../../shared/types'
+import { ImageConfig, MessageId } from '../../../../shared/types'
 import {
   ActionPopover,
   Button,
@@ -147,6 +147,9 @@ function Chat() {
 
   // Claude Code working directory input (disabled in web mode)
   const [ccCwd, setCcCwd] = useState('')
+
+  // Image generation configuration (aspect ratio and size for Gemini image models)
+  const [imageConfig, setImageConfig] = useState<ImageConfig>({})
 
   // Check if CC mode should be available
   const ccModeAvailable = import.meta.env.VITE_ENVIRONMENT !== 'web'
@@ -431,6 +434,12 @@ function Chat() {
   // const refreshModelsMutation = useRefreshModels()
   const selectModelMutation = useSelectModel()
   const selectedModel = useSelectedModel(providers.currentProvider)
+
+  // Helper to check if selected model is an image generation model
+  const isImageGenerationModel = useMemo(() => {
+    const modelName = selectedModel?.name?.toLowerCase() || ''
+    return modelName.includes('gemini-3-pro-image-preview') || modelName.includes('gemini-2.5-flash-image')
+  }, [selectedModel?.name])
 
   // Filtered models hook for local filtering and sorting
   const { filteredModels, filters, sortOptions, applyFilters, clearFilters, applySorting, refreshFavorites } =
@@ -1383,6 +1392,7 @@ function Chat() {
                 repeatNum: value,
                 think: think,
                 retrigger: true,
+                imageConfig: isImageGenerationModel ? imageConfig : undefined,
               })
             )
               .unwrap()
@@ -1490,6 +1500,7 @@ function Chat() {
                 parent,
                 repeatNum: value,
                 think: think,
+                imageConfig: isImageGenerationModel ? imageConfig : undefined,
               })
             )
               .unwrap()
@@ -1708,6 +1719,7 @@ function Chat() {
               parent: parsedId,
               repeatNum: 1,
               think: think,
+              imageConfig: isImageGenerationModel ? imageConfig : undefined,
             })
           )
             .unwrap()
@@ -2789,16 +2801,66 @@ function Chat() {
                   />
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
                     <ActionPopover
-                      isActive={toolAutoApprove || operationMode === 'plan' || ccMode}
+                      isActive={toolAutoApprove || operationMode === 'plan' || ccMode || !!imageConfig.aspectRatio || !!imageConfig.imageSize}
                       footer={
-                        <input
-                          type='text'
-                          value={ccCwd}
-                          onChange={e => setCcCwd(e.target.value)}
-                          placeholder='Working directory (optional)'
-                          className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                          title='Specify the working directory for Claude Code agent'
-                        />
+                        <div className='flex flex-col gap-2'>
+                          <input
+                            type='text'
+                            value={ccCwd}
+                            onChange={e => setCcCwd(e.target.value)}
+                            placeholder='Working directory (optional)'
+                            className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                            title='Specify the working directory for Claude Code agent'
+                          />
+                          {/* Image Generation Options - shown only for image generation models */}
+                          {isImageGenerationModel && (
+                            <>
+                              <div className='flex flex-col gap-1'>
+                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Aspect Ratio</label>
+                                <select
+                                  value={imageConfig.aspectRatio || ''}
+                                  onChange={e =>
+                                    setImageConfig(prev => ({
+                                      ...prev,
+                                      aspectRatio: (e.target.value as ImageConfig['aspectRatio']) || undefined,
+                                    }))
+                                  }
+                                  className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                >
+                                  <option value=''>Default</option>
+                                  <option value='1:1'>1:1 (Square)</option>
+                                  <option value='16:9'>16:9 (Landscape)</option>
+                                  <option value='9:16'>9:16 (Portrait)</option>
+                                  <option value='4:3'>4:3</option>
+                                  <option value='3:4'>3:4</option>
+                                  <option value='3:2'>3:2</option>
+                                  <option value='2:3'>2:3</option>
+                                  <option value='4:5'>4:5</option>
+                                  <option value='5:4'>5:4</option>
+                                  <option value='21:9'>21:9 (Ultrawide)</option>
+                                </select>
+                              </div>
+                              <div className='flex flex-col gap-1'>
+                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Image Size</label>
+                                <select
+                                  value={imageConfig.imageSize || ''}
+                                  onChange={e =>
+                                    setImageConfig(prev => ({
+                                      ...prev,
+                                      imageSize: (e.target.value as ImageConfig['imageSize']) || undefined,
+                                    }))
+                                  }
+                                  className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                >
+                                  <option value=''>Default</option>
+                                  <option value='1K'>1K</option>
+                                  <option value='2K'>2K</option>
+                                  <option value='4K'>4K</option>
+                                </select>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       }
                     >
                       {/* Claude Code toggle */}

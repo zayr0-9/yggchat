@@ -467,7 +467,7 @@ export const sendMessage = createAsyncThunk<
 >(
   'chat/sendMessage',
   async (
-    { conversationId, input, parent, repeatNum, think, retrigger = false },
+    { conversationId, input, parent, repeatNum, think, retrigger = false, imageConfig },
     { dispatch, getState, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
@@ -605,6 +605,7 @@ export const sendMessage = createAsyncThunk<
               executionMode,
               storageMode,
               isElectron: isElectronMode,
+              imageConfig,
             }),
             signal: controller.signal,
           })
@@ -647,6 +648,7 @@ export const sendMessage = createAsyncThunk<
               executionMode,
               storageMode,
               isElectron: isElectronMode,
+              imageConfig,
             }),
             signal: controller.signal,
           })

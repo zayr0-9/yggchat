@@ -8,7 +8,7 @@ import { generateResponse as lmstudioGenerate } from './lmstudio'
 import { generateResponse as ollamaGenerate } from './ollama'
 import { generateResponse as openaiGenerate } from './openai'
 import { generateResponse as openrouterGenerate } from './openrouter'
-import { isImageGenerationModel } from './openrouterImageStream'
+import { ImageConfig, isImageGenerationModel } from './openrouterImageStream'
 
 export type ProviderType = 'ollama' | 'gemini' | 'anthropic' | 'openai' | 'openrouter' | 'lmstudio'
 
@@ -46,7 +46,8 @@ export async function generateResponse(
   conversationId?: string,
   executionMode: 'server' | 'client' = 'server',
   storageMode: 'cloud' | 'local' = 'cloud',
-  isElectron: boolean = false
+  isElectron: boolean = false,
+  imageConfig?: ImageConfig
 ): Promise<void> {
   const providerModel = getProviderModel(provider, model)
 
@@ -544,7 +545,8 @@ export async function generateResponse(
         conversationId,
         executionMode,
         storageMode,
-        isElectron
+        isElectron,
+        imageConfig
       )
     }
     case 'lmstudio': {

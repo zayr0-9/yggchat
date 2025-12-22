@@ -1,4 +1,4 @@
-import { BaseMessage, BaseModel, ConversationId, MessageId } from '../../../../../shared/types'
+import { BaseMessage, BaseModel, ConversationId, ImageConfig, MessageId } from '../../../../../shared/types'
 
 // Message types (shared with conversations)
 export interface Message extends BaseMessage {
@@ -256,6 +256,7 @@ export interface SendMessagePayload {
   repeatNum: number
   think: boolean
   retrigger?: boolean
+  imageConfig?: ImageConfig
 }
 
 export interface EditMessagePayload {
