@@ -190,7 +190,7 @@ export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive
               opacity: popoverPosition.measured ? 1 : 0,
             }}
           >
-            <div className='flex items-center gap-1 p-2'>{children}</div>
+            <div className='flex items-center gap-1 px-1 py-0.5'>{children}</div>
             {footer && <div className='px-2 pb-2'>{footer}</div>}
           </div>,
           document.body
