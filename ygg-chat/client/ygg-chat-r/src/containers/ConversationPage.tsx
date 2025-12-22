@@ -666,7 +666,7 @@ const ConversationPage: React.FC = () => {
                           className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
                           onClick={e => handleEditClick(e, conv)}
                         >
-                          <i className='bx bx-edit text-lg' aria-hidden='true'></i>
+                          <i className='bx bx-dots-horizontal-rounded text-lg' aria-hidden='true'></i>
                         </Button>
 
                         {/* Delete Button */}
