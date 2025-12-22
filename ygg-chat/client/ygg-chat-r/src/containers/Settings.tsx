@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
 import {
-  CustomVideoEntry,
   addCustomVideo,
   clearCustomVideoLibrary,
+  CustomVideoEntry,
   loadActiveCustomVideoId,
   loadSavedVideos,
   persistActiveCustomVideoId,
@@ -150,7 +150,7 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className='h-full overflow-y-auto bg-neutral-100 mica min-h-full dark:bg-yBlack-900'>
+    <div className='h-full overflow-y-auto bg-neutral-100 min-h-full'>
       <div className='mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8'>
         <header className='flex flex-wrap items-center justify-between gap-4'>
           <div>
@@ -160,30 +160,32 @@ const Settings: React.FC = () => {
               Upload up to 8MB MP4/WebM clips and switch between them in one place.
             </p>
           </div>
-          <Button variant='secondary' onClick={() => navigate('/homepage')} className='group'>
+          <Button variant='acrylic' onClick={() => navigate('/homepage')} className='group'>
             <p className='transition-transform duration-100 group-active:scale-95'>Back to Home</p>
           </Button>
         </header>
 
         {renderStatus()}
 
-        <section className='rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:bg-zinc-900 dark:shadow-black/20'>
+        <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
           <div className='flex flex-col gap-1'>
-            <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100'>Custom Upload</h2>
-            <p className='text-sm text-stone-500 dark:text-stone-400'>
+            <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Custom Upload</h2>
+            <p className='text-sm text-stone-500 dark:text-stone-200'>
               Drag in an MP4 or WebM and we’ll keep it ready for whenever you want that motion.
             </p>
           </div>
 
-          <div className='mt-4 flex flex-col gap-4 lg:flex-row lg:items-center'>
+          <div className='mt-2 flex flex-col gap-4 lg:flex-row lg:items-center'>
             <div className='flex-1 space-y-1 py-2'>
-              <p className='text-sm text-stone-500 dark:text-stone-400'>Accepted formats: MP4, WebM · Max size 8MB.</p>
+              <p className='text-sm mb-4 text-stone-500 dark:text-stone-200'>
+                Accepted formats: MP4, WebM · Max size 8MB.
+              </p>
               <div className='rounded-xl border border-dashed border-stone-200 bg-stone-50/80 p-4 text-sm text-stone-500 dark:border-stone-700 dark:bg-zinc-800/60 dark:text-stone-200'>
                 <p>Uploaded wallpapers appear below. You can switch between them at any time.</p>
               </div>
             </div>
 
-            <div className='flex gap-3'>
+            <div className='flex gap-3 lg:pt-8'>
               <input
                 ref={fileInputRef}
                 type='file'
@@ -191,7 +193,13 @@ const Settings: React.FC = () => {
                 className='hidden'
                 onChange={handleFileChange}
               />
-              <Button variant='primary' onClick={() => fileInputRef.current?.click()} disabled={uploading} className='group'>
+              <Button
+                variant='acrylic'
+                size='large'
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className='group'
+              >
                 <p className='transition-transform duration-100 group-active:scale-95'>
                   {uploading ? 'Processing…' : 'Browse for video'}
                 </p>
@@ -229,18 +237,23 @@ const Settings: React.FC = () => {
                 return (
                   <div
                     key={video.id}
-                    className={`flex flex-col gap-3 rounded-xl border p-4 transition ${isActive
+                    className={`flex flex-col gap-3 rounded-xl border p-4 transition ${
+                      isActive
                         ? 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-500/60 dark:bg-emerald-900/40'
                         : 'border-stone-200 bg-stone-50/70 hover:border-indigo-400 hover:bg-white dark:border-stone-700 dark:bg-zinc-900/70 dark:hover:border-sky-600'
-                      }`}
+                    }`}
                   >
                     <div className='flex items-start justify-between gap-3'>
                       <div>
-                        <p className='text-base font-semibold text-stone-900 dark:text-stone-100'>{video.name || 'Uploaded wallpaper'}</p>
+                        <p className='text-base font-semibold text-stone-900 dark:text-stone-100'>
+                          {video.name || 'Uploaded wallpaper'}
+                        </p>
                         <p className='text-xs text-stone-500 dark:text-stone-400'>
                           {video.mimeType} · {formatSize(video.size)}
                         </p>
-                        <p className='text-xs text-stone-400 dark:text-stone-500'>Added {new Date(video.createdAt).toLocaleString()}</p>
+                        <p className='text-xs text-stone-400 dark:text-stone-500'>
+                          Added {new Date(video.createdAt).toLocaleString()}
+                        </p>
                       </div>
                       {isActive && (
                         <span className='rounded-full border border-emerald-300 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:border-emerald-500/60 dark:text-emerald-200'>

@@ -862,7 +862,7 @@ const ConversationPage: React.FC = () => {
                 ({conversationToMove.storage_mode === 'local' ? 'Local' : 'Cloud'} projects only)
               </span>
             </h4>
-            <div className='max-h-[400px] overflow-y-auto space-y-2 thin-scrollbar'>
+            <div className='max-h-[400px] overflow-y-auto space-y-3 thin-scrollbar'>
               {allProjects
                 .filter(p => {
                   const convMode = conversationToMove.storage_mode || 'cloud'
@@ -872,7 +872,7 @@ const ConversationPage: React.FC = () => {
                 .map(project => (
                   <button
                     key={project.id}
-                    className='w-full text-left px-4 py-3 rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors flex items-center justify-between'
+                    className='w-full text-left px-4 py-3 rounded-xl border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors flex items-center justify-between'
                     onClick={() => handleSelectDestinationProject({ id: project.id, name: project.name })}
                   >
                     <span className='font-medium dark:text-neutral-100'>{project.name}</span>
@@ -911,7 +911,7 @@ const ConversationPage: React.FC = () => {
           onClick={cancelMoveProject}
         >
           <div
-            className='bg-neutral-100 text-neutral-900 mica-medium dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
+            className='bg-neutral-100 text-neutral-900 mica-medium rounded-3xl border border-gray-200 dark:border-zinc-700 w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.3)]'
             onClick={e => e.stopPropagation()}
           >
             <h3 className='text-[24px] font-semibold mb-2 dark:text-neutral-100'>Confirm Move</h3>
@@ -920,7 +920,7 @@ const ConversationPage: React.FC = () => {
               <span className='font-medium'>{conversationToMove.title || `Conversation ${conversationToMove.id}`}</span>
               " to a new project?
             </p>
-            <div className='flex items-center justify-center gap-3 py-4 px-2 bg-neutral-50 dark:bg-neutral-800 rounded-xl mb-4'>
+            <div className='flex items-center justify-center gap-3 py-4 px-2 acrylic rounded-xl mb-4'>
               <div className='text-center'>
                 <div className='text-[16px] text-neutral-500 dark:text-neutral-400 mb-1'>From</div>
                 <div className='font-medium dark:text-neutral-100 text-[16px]'>

@@ -492,19 +492,19 @@ const PaymentPage: React.FC = () => {
           <h2 className='text-2xl font-bold mb-4 dark:text-neutral-100'>How Credits Work</h2>
           <ul className='space-y-2 dark:text-neutral-200'>
             <li className='flex items-start'>
-              <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600'></i>
+              <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600 dark:text-indigo-200'></i>
               Credits are consumed with each AI generation based on the model and token usage
             </li>
             <li className='flex items-start'>
-              <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600'></i>
+              <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600 dark:text-indigo-200'></i>
               Your credits replenish automatically each month on your subscription renewal date
             </li>
             <li className='flex items-start'>
-              <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600'></i>
+              <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600 dark:text-indigo-200'></i>
               If payment fails, you can continue using the service until your current period ends
             </li>
             <li className='flex items-start'>
-              <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600'></i>
+              <i className='bx bx-info-circle mr-2 mt-0.5 text-indigo-600 dark:text-indigo-200'></i>
               More expensive models (like GPT-5, Claude Sonnet 4.5) use more credits per generation
             </li>
           </ul>
