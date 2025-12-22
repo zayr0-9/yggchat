@@ -693,11 +693,11 @@ const ConversationPage: React.FC = () => {
                     )}
                   </li>
                 ))}
-                {displayedConversations.length === 0 && !loading && !isSearching && (
+                {/* {displayedConversations.length === 0 && !loading && !isSearching && (
                   <p className='dark:text-neutral-300 rounded-3xl p-4 acrylic-light'>
                     {isShowingSearchResults ? `No conversations found for "${searchQuery}"` : 'No conversations yet.'}
                   </p>
-                )}
+                )} */}
 
                 {/* Loading more indicator - hide when searching */}
                 {isFetchingNextPage && !isShowingSearchResults && (
