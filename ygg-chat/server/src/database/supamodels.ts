@@ -623,6 +623,48 @@ export class ConversationService {
     return data || []
   }
 
+  /**
+   * Paginated conversations for a user with cursor-based pagination
+   * @param client - Supabase client with user context
+   * @param limit - Number of items per page (default 50, max 100)
+   * @param cursor - ISO timestamp for cursor (exclusive, fetch items older than this)
+   * @returns { conversations, nextCursor, hasMore }
+   */
+  static async getByUserPaginated(
+    client: SupabaseClient,
+    limit: number = 50,
+    cursor?: string
+  ): Promise<{ conversations: Conversation[]; nextCursor: string | null; hasMore: boolean }> {
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50))
+
+    let query = client
+      .from('conversations')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(safeLimit + 1) // Fetch one extra to determine hasMore
+
+    // If cursor provided, fetch items with updated_at < cursor
+    if (cursor) {
+      query = query.lt('updated_at', cursor)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+
+    const conversations = data || []
+    const hasMore = conversations.length > safeLimit
+
+    // Remove the extra item used to check hasMore
+    if (hasMore) {
+      conversations.pop()
+    }
+
+    const nextCursor = hasMore && conversations.length > 0 ? conversations[conversations.length - 1].updated_at : null
+
+    return { conversations, nextCursor, hasMore }
+  }
+
   static async getResearchNotesByUser(
     client: SupabaseClient
   ): Promise<
@@ -652,6 +694,49 @@ export class ConversationService {
     // console.log('🔴 Stack:', new Error().stack)
     const { data } = await client.from('conversations').select('*').eq('project_id', id)
     return data || []
+  }
+
+  /**
+   * Paginated conversations for a specific project with cursor-based pagination
+   * @param client - Supabase client with user context
+   * @param projectId - Project ID to filter by
+   * @param limit - Number of items per page (default 50, max 100)
+   * @param cursor - ISO timestamp for cursor (exclusive, fetch items older than this)
+   * @returns { conversations, nextCursor, hasMore }
+   */
+  static async getByProjectIdPaginated(
+    client: SupabaseClient,
+    projectId: string,
+    limit: number = 50,
+    cursor?: string
+  ): Promise<{ conversations: Conversation[]; nextCursor: string | null; hasMore: boolean }> {
+    const safeLimit = Math.max(1, Math.min(100, Number(limit) || 50))
+
+    let query = client
+      .from('conversations')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('updated_at', { ascending: false })
+      .limit(safeLimit + 1)
+
+    if (cursor) {
+      query = query.lt('updated_at', cursor)
+    }
+
+    const { data, error } = await query
+
+    if (error) throw error
+
+    const conversations = data || []
+    const hasMore = conversations.length > safeLimit
+
+    if (hasMore) {
+      conversations.pop()
+    }
+
+    const nextCursor = hasMore && conversations.length > 0 ? conversations[conversations.length - 1].updated_at : null
+
+    return { conversations, nextCursor, hasMore }
   }
 
   static async getById(

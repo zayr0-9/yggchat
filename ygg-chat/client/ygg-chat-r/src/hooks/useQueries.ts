@@ -1,5 +1,5 @@
 // React Query hooks for data fetching with automatic caching and deduplication
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import type { BaseModel, Project } from '../../../../shared/types'
@@ -183,6 +183,92 @@ export function useConversations(enabled: boolean = true) {
 }
 
 /**
+ * Paginated response shape from server
+ */
+export interface PaginatedConversationsResponse {
+  conversations: Conversation[]
+  nextCursor: string | null
+  hasMore: boolean
+}
+
+const PAGE_SIZE = 20
+
+/**
+ * Fetch conversations with infinite scroll pagination
+ * Cache key: ['conversations', 'infinite']
+ *
+ * Uses cursor-based pagination for stable scrolling experience.
+ * New conversations created during session are prepended to first page.
+ *
+ * @param enabled - Optional flag to control whether the query runs
+ * @returns InfiniteQuery result with pages, fetchNextPage, hasNextPage, isFetchingNextPage
+ */
+export function useConversationsInfinite(enabled: boolean = true) {
+  const { accessToken, userId: authUserId } = useAuth()
+  const userId = authUserId
+
+  return useInfiniteQuery({
+    queryKey: ['conversations', 'infinite'],
+    queryFn: async ({ pageParam }) => {
+      if (!userId) throw new Error('User not authenticated')
+
+      // Build query string
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+      if (pageParam) {
+        params.set('cursor', pageParam)
+      }
+
+      // In Electron mode, fetch both cloud and local conversations
+      if (environment === 'electron') {
+        const [cloudResult, localConversations] = await Promise.all([
+          api
+            .get<PaginatedConversationsResponse>(
+              `/users/${userId}/conversations/paginated?${params.toString()}`,
+              accessToken
+            )
+            .catch(err => {
+              console.error('Failed to fetch cloud conversations:', err)
+              return { conversations: [], nextCursor: null, hasMore: false }
+            }),
+          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`).catch(err => {
+            console.error('Failed to fetch local conversations:', err)
+            return []
+          }),
+        ])
+
+        // For first page, merge local conversations
+        // Local conversations are only included on first page since they're not paginated
+        if (!pageParam) {
+          const merged = [...localConversations, ...cloudResult.conversations].sort(
+            (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          )
+          return {
+            conversations: merged.slice(0, PAGE_SIZE),
+            nextCursor: cloudResult.nextCursor,
+            hasMore: cloudResult.hasMore || merged.length > PAGE_SIZE,
+          }
+        }
+
+        return cloudResult
+      }
+
+      // Web mode: cloud only
+      return api.get<PaginatedConversationsResponse>(
+        `/users/${userId}/conversations/paginated?${params.toString()}`,
+        accessToken
+      )
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: lastPage => (lastPage.hasMore ? lastPage.nextCursor : undefined),
+    enabled: enabled && !!userId && !!accessToken,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+/**
  * Fetch conversations for a specific project
  * Cache key: ['conversations', 'project', projectId]
  *
@@ -244,6 +330,76 @@ export function useConversationsByProject(projectId: ProjectId | null) {
     refetch: query.refetch,
     isRefetching: query.isRefetching,
   }
+}
+
+/**
+ * Fetch project conversations with infinite scroll pagination
+ * Cache key: ['conversations', 'project', projectId, 'infinite']
+ *
+ * @param projectId - Project ID to filter by
+ * @returns InfiniteQuery result with pages, fetchNextPage, hasNextPage, isFetchingNextPage
+ */
+export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
+  const { accessToken, userId } = useAuth()
+
+  return useInfiniteQuery({
+    queryKey: ['conversations', 'project', projectId, 'infinite'],
+    queryFn: async ({ pageParam }) => {
+      if (!projectId) throw new Error('Project ID is required')
+
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE) })
+      if (pageParam) {
+        params.set('cursor', pageParam)
+      }
+
+      // Electron mode with local project conversations
+      if (environment === 'electron') {
+        const [cloudResult, localConversations] = await Promise.all([
+          api
+            .get<PaginatedConversationsResponse>(
+              `/conversations/project/${projectId}/paginated?${params.toString()}`,
+              accessToken
+            )
+            .catch(err => {
+              console.error('Failed to fetch cloud project conversations:', err)
+              return { conversations: [], nextCursor: null, hasMore: false }
+            }),
+          localApi
+            .get<Conversation[]>(`/local/conversations?userId=${userId}`)
+            .then(convs => convs.filter(c => c.project_id === projectId))
+            .catch(err => {
+              console.error('Failed to fetch local project conversations:', err)
+              return []
+            }),
+        ])
+
+        if (!pageParam) {
+          const merged = [...localConversations, ...cloudResult.conversations].sort(
+            (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          )
+          return {
+            conversations: merged.slice(0, PAGE_SIZE),
+            nextCursor: cloudResult.nextCursor,
+            hasMore: cloudResult.hasMore || merged.length > PAGE_SIZE,
+          }
+        }
+
+        return cloudResult
+      }
+
+      return api.get<PaginatedConversationsResponse>(
+        `/conversations/project/${projectId}/paginated?${params.toString()}`,
+        accessToken
+      )
+    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: lastPage => (lastPage.hasMore ? lastPage.nextCursor : undefined),
+    enabled: !!projectId && !!accessToken,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: true,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
 }
 
 /**
@@ -830,13 +986,82 @@ export function useMoveConversationToProject() {
       return patchConversationProject(conversationId, destinationProjectId, accessToken)
     },
     onSuccess: (_updatedConversation, { conversationId, sourceProjectId, destinationProjectId }) => {
-      // Update all conversations cache
+      // Helper to update conversation in infinite pages
+      const updateInPages = (pages: PaginatedConversationsResponse[]) =>
+        pages.map(page => ({
+          ...page,
+          conversations: page.conversations.map(c =>
+            c.id === conversationId ? { ...c, project_id: destinationProjectId } : c
+          ),
+        }))
+
+      const removeFromPages = (pages: PaginatedConversationsResponse[]) =>
+        pages.map(page => ({
+          ...page,
+          conversations: page.conversations.filter(c => c.id !== conversationId),
+        }))
+
+      // Update infinite query cache - update project_id in place
+      queryClient.setQueryData(
+        ['conversations', 'infinite'],
+        (old: { pages: PaginatedConversationsResponse[]; pageParams: unknown[] } | undefined) => {
+          if (!old) return old
+          return { ...old, pages: updateInPages(old.pages) }
+        }
+      )
+
+      // Remove from source project infinite cache
+      if (sourceProjectId) {
+        queryClient.setQueryData(
+          ['conversations', 'project', sourceProjectId, 'infinite'],
+          (old: { pages: PaginatedConversationsResponse[]; pageParams: unknown[] } | undefined) => {
+            if (!old) return old
+            return { ...old, pages: removeFromPages(old.pages) }
+          }
+        )
+      }
+
+      // Add to destination project infinite cache
+      if (destinationProjectId) {
+        // Get full conversation from infinite cache
+        const allData = queryClient.getQueryData<{ pages: PaginatedConversationsResponse[]; pageParams: unknown[] }>([
+          'conversations',
+          'infinite',
+        ])
+        const fullConversation = allData?.pages.flatMap(p => p.conversations).find(c => c.id === conversationId)
+
+        if (fullConversation) {
+          const updatedConv = { ...fullConversation, project_id: destinationProjectId }
+          queryClient.setQueryData(
+            ['conversations', 'project', destinationProjectId, 'infinite'],
+            (old: { pages: PaginatedConversationsResponse[]; pageParams: unknown[] } | undefined) => {
+              if (!old || old.pages.length === 0) {
+                return {
+                  pages: [{ conversations: [updatedConv], nextCursor: null, hasMore: false }],
+                  pageParams: [undefined],
+                }
+              }
+              return {
+                ...old,
+                pages: [
+                  {
+                    ...old.pages[0],
+                    conversations: [updatedConv, ...old.pages[0].conversations.filter(c => c.id !== conversationId)],
+                  },
+                  ...old.pages.slice(1),
+                ],
+              }
+            }
+          )
+        }
+      }
+
+      // Keep flat array caches updated for backward compatibility
       queryClient.setQueryData<Conversation[]>(['conversations'], old => {
         if (!old) return old
         return old.map(c => (c.id === conversationId ? { ...c, project_id: destinationProjectId } : c))
       })
 
-      // Remove from source project cache
       if (sourceProjectId) {
         queryClient.setQueryData<Conversation[]>(['conversations', 'project', sourceProjectId], old => {
           if (!old) return old
@@ -844,9 +1069,7 @@ export function useMoveConversationToProject() {
         })
       }
 
-      // Add to destination project cache
       if (destinationProjectId) {
-        // Get full conversation from all conversations cache
         const allConversations = queryClient.getQueryData<Conversation[]>(['conversations'])
         const fullConversation = allConversations?.find(c => c.id === conversationId)
 
@@ -854,13 +1077,11 @@ export function useMoveConversationToProject() {
           if (!fullConversation) return old
           const updatedFullConversation = { ...fullConversation, project_id: destinationProjectId }
           if (!old) return [updatedFullConversation]
-          // Avoid duplicates and add at beginning
           const filtered = old.filter(c => c.id !== conversationId)
           return [updatedFullConversation, ...filtered]
         })
       }
 
-      // Update recent conversations cache
       queryClient.setQueryData<Conversation[]>(['conversations', 'recent'], old => {
         if (!old) return old
         return old.map(c => (c.id === conversationId ? { ...c, project_id: destinationProjectId } : c))

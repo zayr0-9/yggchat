@@ -579,6 +579,20 @@ router.get(
   })
 )
 
+// Get paginated user conversations with cursor-based pagination
+router.get(
+  '/users/:userId/conversations/paginated',
+  authenticatedRateLimiter,
+  asyncHandler(async (req, res) => {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50
+    const cursor = req.query.cursor as string | undefined
+
+    const { client } = await verifyAuth(req)
+    const result = await ConversationService.getByUserPaginated(client, limit, cursor)
+    res.json(result)
+  })
+)
+
 // Get all research notes for user
 router.get(
   '/users/:userId/research-notes',
@@ -606,6 +620,20 @@ router.get(
     const { client } = await verifyAuth(req)
     const conversations = await ConversationService.getByProjectId(client, projectId)
     res.json(conversations)
+  })
+)
+
+// Get paginated project conversations with cursor-based pagination
+router.get(
+  '/conversations/project/:projectId/paginated',
+  asyncHandler(async (req, res) => {
+    const projectId = req.params.projectId
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50
+    const cursor = req.query.cursor as string | undefined
+
+    const { client } = await verifyAuth(req)
+    const result = await ConversationService.getByProjectIdPaginated(client, projectId, limit, cursor)
+    res.json(result)
   })
 )
 

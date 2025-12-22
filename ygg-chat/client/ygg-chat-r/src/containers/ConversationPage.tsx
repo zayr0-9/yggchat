@@ -1,7 +1,7 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { InfiniteData, useQueryClient } from '@tanstack/react-query'
 import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { StorageMode } from '../../../../shared/types'
 import { Button } from '../components'
@@ -19,10 +19,12 @@ import {
 import { clearSelectedProject, projectsLoaded, selectSelectedProject, setSelectedProject } from '../features/projects'
 
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
+import { useIntersectionObserver } from '../hooks/useIntersectionObserver'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import {
-  useConversations,
-  useConversationsByProject,
+  PaginatedConversationsResponse,
+  useConversationsByProjectInfinite,
+  useConversationsInfinite,
   useMoveConversationToProject,
   useProject,
   useProjects,
@@ -47,22 +49,28 @@ const ConversationPage: React.FC = () => {
     import.meta.env.VITE_ENVIRONMENT === 'electron' ||
     (typeof process !== 'undefined' && process.env?.VITE_ENVIRONMENT === 'electron')
 
-  // Use React Query for data fetching
+  // Use React Query with infinite scroll for data fetching
   // Fetch project-specific conversations OR all conversations (not both)
-  // The enabled flags ensure only one query runs at a time
   const {
-    data: projectConversations = [],
+    data: projectConversationsData,
     isLoading: projectConvsLoading,
     isRefetching: projectConvsRefetching,
     refetch: refetchProjectConversations,
-  } = useConversationsByProject(projectId)
+    fetchNextPage: fetchNextProjectPage,
+    hasNextPage: hasNextProjectPage,
+    isFetchingNextPage: isFetchingNextProjectPage,
+  } = useConversationsByProjectInfinite(projectId)
+
   // Only fetch all conversations when NOT viewing a specific project
   const {
-    data: allConversations = [],
+    data: allConversationsData,
     isLoading: allConvsLoading,
     isRefetching: allConvsRefetching,
     refetch: refetchAllConversations,
-  } = useConversations(!projectId)
+    fetchNextPage: fetchNextAllPage,
+    hasNextPage: hasNextAllPage,
+    isFetchingNextPage: isFetchingNextAllPage,
+  } = useConversationsInfinite(!projectId)
 
   // Project data is fetched but not directly used - populates React Query cache
   useProject(projectId)
@@ -71,11 +79,40 @@ const ConversationPage: React.FC = () => {
   // Fetch research notes for display in LowBar
   const { data: researchNotes = [], isLoading: notesLoading } = useResearchNotes()
 
-  // Use project conversations if we have a projectId, otherwise use all conversations
+  // Flatten pages into single array for rendering
+  const projectConversations = useMemo(
+    () => projectConversationsData?.pages.flatMap(page => page.conversations) ?? [],
+    [projectConversationsData]
+  )
+
+  const allConversations = useMemo(
+    () => allConversationsData?.pages.flatMap(page => page.conversations) ?? [],
+    [allConversationsData]
+  )
+
+  // Select appropriate data based on context
   const conversations = projectId ? projectConversations : allConversations
   const loading = projectId ? projectConvsLoading : allConvsLoading
   const isRefetching = projectId ? projectConvsRefetching : allConvsRefetching
   const refetchConversations = projectId ? refetchProjectConversations : refetchAllConversations
+  const fetchNextPage = projectId ? fetchNextProjectPage : fetchNextAllPage
+  const hasNextPage = projectId ? hasNextProjectPage : hasNextAllPage
+  const isFetchingNextPage = projectId ? isFetchingNextProjectPage : isFetchingNextAllPage
+
+  // Intersection observer for infinite scroll
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const { ref: loadMoreRef, isIntersecting } = useIntersectionObserver<HTMLLIElement>({
+    root: scrollContainerRef.current,
+    rootMargin: '100px', // Trigger 100px before reaching the bottom
+    enabled: hasNextPage && !isFetchingNextPage,
+  })
+
+  // Trigger load more when sentinel is visible
+  useEffect(() => {
+    if (isIntersecting && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage()
+    }
+  }, [isIntersecting, hasNextPage, isFetchingNextPage, fetchNextPage])
 
   // Sync React Query data to Redux
   // Simple approach: just load the conversations from React Query
@@ -236,20 +273,43 @@ const ConversationPage: React.FC = () => {
     const id = conversationToDelete.id
     await dispatch(deleteConversation({ id }))
 
-    // Optimistically update React Query caches to remove the deleted conversation
-    // Update all conversations cache
+    // Update infinite query caches
+    queryClient.setQueryData(
+      ['conversations', 'infinite'],
+      (old: InfiniteData<PaginatedConversationsResponse> | undefined) => {
+        if (!old) return old
+        return {
+          ...old,
+          pages: old.pages.map(page => ({
+            ...page,
+            conversations: page.conversations.filter(c => c.id !== id),
+          })),
+        }
+      }
+    )
+
+    // Update project-specific infinite cache
+    if (projectId) {
+      queryClient.setQueryData(
+        ['conversations', 'project', projectId, 'infinite'],
+        (old: InfiniteData<PaginatedConversationsResponse> | undefined) => {
+          if (!old) return old
+          return {
+            ...old,
+            pages: old.pages.map(page => ({
+              ...page,
+              conversations: page.conversations.filter(c => c.id !== id),
+            })),
+          }
+        }
+      )
+    }
+
+    // Keep flat array caches updated for backward compatibility (SideBar, other components)
     queryClient.setQueryData(['conversations'], (old: Conversation[] | undefined) => {
       return old ? old.filter(c => c.id !== id) : []
     })
 
-    // Update project-specific conversations cache
-    if (projectId) {
-      queryClient.setQueryData(['conversations', 'project', projectId], (old: Conversation[] | undefined) => {
-        return old ? old.filter(c => c.id !== id) : []
-      })
-    }
-
-    // Update recent conversations cache (used by SideBar)
     queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
       return old ? old.filter(c => c.id !== id) : []
     })
@@ -290,20 +350,47 @@ const ConversationPage: React.FC = () => {
     }
     const result = await dispatch(createConversation(payload)).unwrap()
 
-    // Optimistically update React Query cache to avoid refetch (scales better)
-    // Update all conversations cache - prepend new conversation (newest first)
+    // Prepend new conversation to first page of infinite query
+    queryClient.setQueryData(
+      ['conversations', 'infinite'],
+      (old: InfiniteData<PaginatedConversationsResponse> | undefined) => {
+        if (!old || old.pages.length === 0) {
+          return {
+            pages: [{ conversations: [result], nextCursor: null, hasMore: false }],
+            pageParams: [undefined],
+          }
+        }
+        return {
+          ...old,
+          pages: [{ ...old.pages[0], conversations: [result, ...old.pages[0].conversations] }, ...old.pages.slice(1)],
+        }
+      }
+    )
+
+    // Update project-specific infinite cache
+    if (result.project_id) {
+      queryClient.setQueryData(
+        ['conversations', 'project', result.project_id, 'infinite'],
+        (old: InfiniteData<PaginatedConversationsResponse> | undefined) => {
+          if (!old || old.pages.length === 0) {
+            return {
+              pages: [{ conversations: [result], nextCursor: null, hasMore: false }],
+              pageParams: [undefined],
+            }
+          }
+          return {
+            ...old,
+            pages: [{ ...old.pages[0], conversations: [result, ...old.pages[0].conversations] }, ...old.pages.slice(1)],
+          }
+        }
+      )
+    }
+
+    // Keep flat caches updated for backward compatibility (SideBar, other components)
     queryClient.setQueryData(['conversations'], (old: Conversation[] | undefined) => {
       return old ? [result, ...old] : [result]
     })
 
-    // Update project-specific conversations cache
-    if (result.project_id) {
-      queryClient.setQueryData(['conversations', 'project', result.project_id], (old: Conversation[] | undefined) => {
-        return old ? [result, ...old] : [result]
-      })
-    }
-
-    // Update recent conversations cache (used by SideBar) - prepend new conversation
     queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
       return old ? [result, ...old] : [result]
     })
@@ -473,7 +560,7 @@ const ConversationPage: React.FC = () => {
           {loading && <p>Loading...</p>}
           {error && <p className='text-red-500'>{error}</p>}
           <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
-            <div className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
+            <div ref={scrollContainerRef} className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
               <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
                 {sortedConversations.map((conv, index) => (
                   <li
@@ -535,6 +622,28 @@ const ConversationPage: React.FC = () => {
                 ))}
                 {sortedConversations.length === 0 && !loading && (
                   <p className='dark:text-neutral-300 rounded-3xl p-4 acrylic-light'>No conversations yet.</p>
+                )}
+
+                {/* Loading more indicator */}
+                {isFetchingNextPage && (
+                  <li className='flex justify-center py-4'>
+                    <div className='flex items-center gap-2 text-neutral-500 dark:text-neutral-400'>
+                      <i className='bx bx-loader-alt animate-spin text-xl' aria-hidden='true'></i>
+                      <span>Loading more...</span>
+                    </div>
+                  </li>
+                )}
+
+                {/* Sentinel element for infinite scroll - triggers loading when visible */}
+                {hasNextPage && !isFetchingNextPage && (
+                  <li ref={loadMoreRef} className='h-4' aria-hidden='true' />
+                )}
+
+                {/* End of list indicator */}
+                {!hasNextPage && conversations.length > 0 && !loading && (
+                  <li className='text-center py-4 text-neutral-400 dark:text-neutral-500 text-sm'>
+                    All conversations loaded
+                  </li>
                 )}
               </ul>
             </div>
