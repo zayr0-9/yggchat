@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { BaseModel } from '../../../../../shared/types'
 import { useIsMobile } from '../../hooks/useMediaQuery'
@@ -60,6 +60,25 @@ export const Select: React.FC<SelectProps> = ({
   const [listMaxHeight, setListMaxHeight] = useState<number | undefined>(undefined)
   const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null)
   const isMobile = useIsMobile()
+
+  const computeDropdownMetrics = useCallback(() => {
+    const btn = btnRef.current
+    if (!btn || typeof window === 'undefined') return
+    const rect = btn.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    const shouldOpenUp = spaceBelow < 200 && spaceAbove > spaceBelow
+    const available = (shouldOpenUp ? spaceAbove : spaceBelow) - 8
+    const maxH = Math.max(160, Math.min(460, available))
+    setListMaxHeight(Number.isFinite(maxH) ? maxH : 280)
+
+    setDropdownPosition({
+      top: shouldOpenUp ? undefined : rect.bottom + 4,
+      bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
+      left: modelSelect ? rect.left - 5 : rect.left,
+      width: modelSelect ? rect.width + 80 : rect.width,
+    })
+  }, [modelSelect])
 
   // Toggle favorite status and persist to localStorage
   const toggleFavorite = useCallback(
@@ -140,45 +159,23 @@ export const Select: React.FC<SelectProps> = ({
   }, [open])
 
   // Compute dropdown placement and size
-  useEffect(() => {
-    const compute = () => {
-      const btn = btnRef.current
-      if (!btn || typeof window === 'undefined') return
-      const rect = btn.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - rect.bottom
-      const spaceAbove = rect.top
-      // Decide direction: prefer up if below space is tight and above has more room
-      const shouldOpenUp = spaceBelow < 200 && spaceAbove > spaceBelow
-      const available = (shouldOpenUp ? spaceAbove : spaceBelow) - 8 // 8px margin
-      // Cap to a reasonable range for usability
-      const maxH = Math.max(160, Math.min(460, available))
-      setListMaxHeight(Number.isFinite(maxH) ? maxH : 280)
-
-      // Calculate fixed position based on button rect
-      // When opening upward, use bottom positioning to anchor the dropdown above the button
-      setDropdownPosition({
-        top: shouldOpenUp ? undefined : rect.bottom + 4,
-        bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
-        left: modelSelect ? rect.left - 5 : rect.left,
-        width: modelSelect ? rect.width + 80 : rect.width,
-      })
-    }
-    // Always compute once on mount and whenever `open` changes
-    compute()
+  useLayoutEffect(() => {
+    computeDropdownMetrics()
     if (!open) return
-    window.addEventListener('resize', compute)
-    window.addEventListener('scroll', compute, true) // capture scrolls from ancestors
+    window.addEventListener('resize', computeDropdownMetrics)
+    window.addEventListener('scroll', computeDropdownMetrics, true)
     return () => {
-      window.removeEventListener('resize', compute)
-      window.removeEventListener('scroll', compute, true)
+      window.removeEventListener('resize', computeDropdownMetrics)
+      window.removeEventListener('scroll', computeDropdownMetrics, true)
     }
-  }, [open])
+  }, [open, computeDropdownMetrics])
 
   // Keyboard navigation
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return
     if (!open && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault()
+      computeDropdownMetrics()
       setOpen(true)
       setActiveIndex(
         Math.max(
@@ -237,7 +234,11 @@ export const Select: React.FC<SelectProps> = ({
         className={`w-full justify-between ${sizeClass}`}
         aria-haspopup='listbox'
         aria-expanded={open}
-        onClick={() => !disabled && setOpen(o => !o)}
+        onClick={() => {
+          if (disabled) return
+          computeDropdownMetrics()
+          setOpen(o => !o)
+        }}
         onKeyDown={onKeyDown}
         disabled={disabled}
         title={selected?.label}
