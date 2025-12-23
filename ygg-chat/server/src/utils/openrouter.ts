@@ -1345,26 +1345,19 @@ export async function generateResponse(
 
         // Capture reasoning_details for Gemini thought_signature preservation
         // This is required for tool calls with Gemini 3 models
-        // Check both snake_case and camelCase
-        // Only capture non-empty arrays - empty arrays cause Gemini API errors for parallel tool calls
-        if ((chunk as any).reasoning_details) {
-          const details = (chunk as any).reasoning_details
-          if (Array.isArray(details) && details.length > 0) {
-            reasoningDetails = details
-            // console.log(
-            //   '🧠 [openrouter] Captured reasoning_details from chunk:',
-            //   JSON.stringify(reasoningDetails).substring(0, 200)
-            // )
+        // Only capture for Gemini models - other models send redundant data
+        if (isGemini3Model) {
+          if ((chunk as any).reasoning_details) {
+            const details = (chunk as any).reasoning_details
+            if (Array.isArray(details) && details.length > 0) {
+              reasoningDetails = details
+            }
           }
-        }
-        if ((chunk as any).reasoningDetails) {
-          const details = (chunk as any).reasoningDetails
-          if (Array.isArray(details) && details.length > 0) {
-            reasoningDetails = details
-            // console.log(
-            //   '🧠 [openrouter] Captured reasoningDetails (camelCase) from chunk:',
-            //   JSON.stringify(reasoningDetails).substring(0, 200)
-            // )
+          if ((chunk as any).reasoningDetails) {
+            const details = (chunk as any).reasoningDetails
+            if (Array.isArray(details) && details.length > 0) {
+              reasoningDetails = details
+            }
           }
         }
 
@@ -1376,26 +1369,19 @@ export async function generateResponse(
         // DEBUG: Log full choice to check for thoughtSignature
         // console.log('🔍 [openrouter] Full choice object:', JSON.stringify(choice, null, 2))
 
-        // Also check for reasoning_details at the choice level (both snake_case and camelCase)
-        // Only capture non-empty arrays - empty arrays cause Gemini API errors for parallel tool calls
-        if ((choice as any).reasoning_details) {
-          const details = (choice as any).reasoning_details
-          if (Array.isArray(details) && details.length > 0) {
-            reasoningDetails = details
-            // console.log(
-            //   '🧠 [openrouter] Captured reasoning_details from choice:',
-            //   JSON.stringify(reasoningDetails).substring(0, 200)
-            // )
+        // Also check for reasoning_details at the choice level (Gemini only)
+        if (isGemini3Model) {
+          if ((choice as any).reasoning_details) {
+            const details = (choice as any).reasoning_details
+            if (Array.isArray(details) && details.length > 0) {
+              reasoningDetails = details
+            }
           }
-        }
-        if ((choice as any).reasoningDetails) {
-          const details = (choice as any).reasoningDetails
-          if (Array.isArray(details) && details.length > 0) {
-            reasoningDetails = details
-            // console.log(
-            //   '🧠 [openrouter] Captured reasoningDetails (camelCase) from choice:',
-            //   JSON.stringify(reasoningDetails).substring(0, 200)
-            // )
+          if ((choice as any).reasoningDetails) {
+            const details = (choice as any).reasoningDetails
+            if (Array.isArray(details) && details.length > 0) {
+              reasoningDetails = details
+            }
           }
         }
 
@@ -1403,29 +1389,24 @@ export async function generateResponse(
         if (!delta) continue
 
         // Check for reasoning_details in delta as well (both snake_case and camelCase)
-        // Only capture and stream non-empty arrays - empty arrays cause Gemini API errors for parallel tool calls
-        if ((delta as any).reasoning_details) {
-          const details = (delta as any).reasoning_details
-          if (Array.isArray(details) && details.length > 0) {
-            reasoningDetails = details
-            // console.log(
-            //   '🧠 [openrouter] Captured reasoning_details from delta:',
-            //   JSON.stringify(reasoningDetails).substring(0, 200)
-            // )
-            // Stream to client for storage in content_blocks
-            onChunk(JSON.stringify({ part: 'reasoning_details', reasoningDetails: reasoningDetails }))
+        // Only capture for Gemini models - other models (like GLM) send redundant reasoning_details
+        // that duplicate the reasoning content. Gemini needs these for thought_signature preservation.
+        if (isGemini3Model) {
+          if ((delta as any).reasoning_details) {
+            const details = (delta as any).reasoning_details
+            if (Array.isArray(details) && details.length > 0) {
+              reasoningDetails = details
+              // Stream to client for storage in content_blocks (Gemini only)
+              onChunk(JSON.stringify({ part: 'reasoning_details', reasoningDetails: reasoningDetails }))
+            }
           }
-        }
-        if ((delta as any).reasoningDetails) {
-          const details = (delta as any).reasoningDetails
-          if (Array.isArray(details) && details.length > 0) {
-            reasoningDetails = details
-            // console.log(
-            //   '🧠 [openrouter] Captured reasoningDetails (camelCase) from delta:',
-            //   JSON.stringify(reasoningDetails).substring(0, 200)
-            // )
-            // Stream to client for storage in content_blocks
-            onChunk(JSON.stringify({ part: 'reasoning_details', reasoningDetails: reasoningDetails }))
+          if ((delta as any).reasoningDetails) {
+            const details = (delta as any).reasoningDetails
+            if (Array.isArray(details) && details.length > 0) {
+              reasoningDetails = details
+              // Stream to client for storage in content_blocks (Gemini only)
+              onChunk(JSON.stringify({ part: 'reasoning_details', reasoningDetails: reasoningDetails }))
+            }
           }
         }
 
