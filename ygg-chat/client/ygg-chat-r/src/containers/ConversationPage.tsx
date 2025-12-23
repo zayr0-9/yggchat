@@ -607,7 +607,7 @@ const ConversationPage: React.FC = () => {
           {error && <p className='text-red-500'>{error}</p>}
           <div className='gap-2 sm:gap-1 md:gap-2 px-3 items-start w-full max-w-full lg:max-w-full flex-1 overflow-hidden flex flex-col'>
             <div ref={scrollContainerRef} className='scroll-fade-container w-full overflow-y-auto thin-scrollbar '>
-              <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
+              <ul className='project-list no-scrollbar space-y-4 px-1 sm:px-2 py-8 pb-50 sm:pb-50 md:pb-50 lg:pb-50 xl:pb-50 2xl:pb-52 sm:py-6 2xl:py-12 3xl:py-14 rounded flex-1 pr-2 w-full'>
                 {/* Show search indicator when searching */}
                 {isShowingSearchResults && (
                   <li className='flex items-center gap-2 bg-transparent text-neutral-800 dark:text-neutral-300 rounded-full acrylic-subtle p-2 text-[16px] mb-4'>
@@ -716,8 +716,8 @@ const ConversationPage: React.FC = () => {
 
                 {/* End of list indicator - hide when searching */}
                 {!hasNextPage && conversations.length > 0 && !loading && !isShowingSearchResults && (
-                  <li className='text-center py-4 text-neutral-400 dark:text-neutral-500 text-sm'>
-                    All conversations loaded
+                  <li className='w-fit mx-auto text-center mt-2 py-1 text-neutral-800 dark:text-neutral-500 text-[15px] rounded-full px-2 acrylic-light'>
+                    All chats loaded
                   </li>
                 )}
               </ul>
