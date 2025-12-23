@@ -51,6 +51,10 @@ export interface ImageConfig {
   imageSize?: '1K' | '2K' | '4K'
 }
 
+export interface ReasoningConfig {
+  effort: 'low' | 'medium' | 'high' | 'xhigh'
+}
+
 export interface SendMessageRequest {
   content: string
   messages?: any[]
@@ -69,10 +73,10 @@ export interface SendMessageRequest {
   storageMode?: StorageMode
   isElectron?: boolean
   imageConfig?: ImageConfig
+  reasoningConfig?: ReasoningConfig
 }
 
 export interface BaseModel {
-
   // Basic identification
   id: string
   name: string

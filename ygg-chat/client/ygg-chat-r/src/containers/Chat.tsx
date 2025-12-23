@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { estimateTokenCount } from 'tokenx'
-import { ImageConfig, MessageId } from '../../../../shared/types'
+import { ImageConfig, MessageId, ReasoningConfig } from '../../../../shared/types'
 import {
   ActionPopover,
   Button,
@@ -150,6 +150,9 @@ function Chat() {
 
   // Image generation configuration (aspect ratio and size for Gemini image models)
   const [imageConfig, setImageConfig] = useState<ImageConfig>({})
+
+  // Reasoning configuration (effort level for extended thinking models)
+  const [reasoningConfig, setReasoningConfig] = useState<ReasoningConfig>({ effort: 'medium' })
 
   // Check if CC mode should be available
   const ccModeAvailable = import.meta.env.VITE_ENVIRONMENT !== 'web'
@@ -786,30 +789,36 @@ function Chat() {
   }, [currentConversationId, projectConversations])
 
   // Auto-sync cwd from IDE extension when connected
+  // Only sync once when workspace connects - don't include ccCwd in deps to avoid infinite loop
+  const hasAutoSyncedCwd = useRef<string | null>(null)
   useEffect(() => {
     // Only run if:
     // 1. IDE extension is connected
     // 2. workspace.rootPath is available
     // 3. There's an active conversation
-    // 4. rootPath differs from current ccCwd (avoid redundant updates)
+    // 4. Haven't already synced this workspace path for this conversation
     if (
       ideContext?.extensionConnected &&
       workspace?.rootPath &&
       currentConversationId &&
-      workspace.rootPath !== ccCwd
+      hasAutoSyncedCwd.current !== `${currentConversationId}:${workspace.rootPath}`
     ) {
+      // Mark as synced to prevent re-running
+      hasAutoSyncedCwd.current = `${currentConversationId}:${workspace.rootPath}`
+
       // Update local state
       setCcCwd(workspace.rootPath)
 
-      // Persist to database
+      // Persist to local database (cwd is Electron-only feature)
       dispatch(
         updateCwd({
           id: currentConversationId,
           cwd: workspace.rootPath,
+          storageMode: 'local',
         })
       )
     }
-  }, [ideContext?.extensionConnected, workspace?.rootPath, currentConversationId, ccCwd, dispatch])
+  }, [ideContext?.extensionConnected, workspace?.rootPath, currentConversationId, dispatch])
 
   // Debounce cwd updates to save manual input to database
   // Similar pattern to title update debounce (lines 503-556)
@@ -832,6 +841,7 @@ function Chat() {
         updateCwd({
           id: currentConversationId,
           cwd: normalizedCcCwd || null, // Convert empty string to null
+          storageMode: 'local', // cwd is Electron-only feature
         })
       )
         .unwrap()
@@ -1393,6 +1403,7 @@ function Chat() {
                 think: think,
                 retrigger: true,
                 imageConfig: isImageGenerationModel ? imageConfig : undefined,
+                reasoningConfig: think ? reasoningConfig : undefined,
               })
             )
               .unwrap()
@@ -1501,6 +1512,7 @@ function Chat() {
                 repeatNum: value,
                 think: think,
                 imageConfig: isImageGenerationModel ? imageConfig : undefined,
+                reasoningConfig: think ? reasoningConfig : undefined,
               })
             )
               .unwrap()
@@ -1720,6 +1732,7 @@ function Chat() {
               repeatNum: 1,
               think: think,
               imageConfig: isImageGenerationModel ? imageConfig : undefined,
+              reasoningConfig: think ? reasoningConfig : undefined,
             })
           )
             .unwrap()
@@ -2800,146 +2813,176 @@ function Chat() {
                     footerContent={modelSelectFooter}
                   />
                   {(isImageGenerationModel ||
+                    think ||
                     (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl)) && (
-                      <ActionPopover
-                        isActive={
-                          toolAutoApprove ||
-                          operationMode === 'plan' ||
-                          ccMode ||
-                          !!imageConfig.aspectRatio ||
-                          !!imageConfig.imageSize
-                        }
-                        footer={
-                          <div className='flex flex-col gap-2'>
-                            {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
-                              <input
-                                type='text'
-                                value={ccCwd}
-                                onChange={e => setCcCwd(e.target.value)}
-                                placeholder='Working directory (optional)'
-                                className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                                title='Specify the working directory for Claude Code agent'
-                              />
-                            )}
-                            {/* Image Generation Options - shown only for image generation models */}
-                            {isImageGenerationModel && (
-                              <>
-                                <h1 className='text-black dark:text-neutral-200 text-[16px]'>Image Options</h1>
-                                <div className='flex flex-col gap-1'>
-                                  <label className='text-xs text-neutral-500 dark:text-neutral-400'>Aspect Ratio</label>
-                                  <select
-                                    value={imageConfig.aspectRatio || ''}
-                                    onChange={e =>
-                                      setImageConfig(prev => ({
-                                        ...prev,
-                                        aspectRatio: (e.target.value as ImageConfig['aspectRatio']) || undefined,
-                                      }))
-                                    }
-                                    className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                                  >
-                                    <option value=''>Default</option>
-                                    <option value='1:1'>1:1 (Square)</option>
-                                    <option value='16:9'>16:9 (Landscape)</option>
-                                    <option value='9:16'>9:16 (Portrait)</option>
-                                    <option value='4:3'>4:3</option>
-                                    <option value='3:4'>3:4</option>
-                                    <option value='3:2'>3:2</option>
-                                    <option value='2:3'>2:3</option>
-                                    <option value='4:5'>4:5</option>
-                                    <option value='5:4'>5:4</option>
-                                    <option value='21:9'>21:9 (Ultrawide)</option>
-                                  </select>
-                                </div>
-                                <div className='flex flex-col gap-1'>
-                                  <label className='text-xs text-neutral-500 dark:text-neutral-400'>Image Size</label>
-                                  <select
-                                    value={imageConfig.imageSize || ''}
-                                    onChange={e =>
-                                      setImageConfig(prev => ({
-                                        ...prev,
-                                        imageSize: (e.target.value as ImageConfig['imageSize']) || undefined,
-                                      }))
-                                    }
-                                    className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                                  >
-                                    <option value=''>Default</option>
-                                    <option value='1K'>1K</option>
-                                    <option value='2K'>2K</option>
-                                    <option value='4K'>4K</option>
-                                  </select>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        }
-                      >
-                        {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
-                          <>
-                            <Button
-                              variant={ccMode ? 'outline2' : 'outline2'}
-                              size='medium'
-                              onClick={() => setCCMode(!ccMode)}
-                              title='Toggle Claude Code Agent Mode'
-                            >
-                              <i
-                                className={`bx bx-terminal mr-1 ${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
-                                aria-hidden='true'
-                              ></i>
-                              <div
-                                className={`${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
-                              >
-                                {ccMode ? 'CC On' : 'CC Off'}
+                    <ActionPopover
+                      isActive={
+                        toolAutoApprove ||
+                        operationMode === 'plan' ||
+                        ccMode ||
+                        !!imageConfig.aspectRatio ||
+                        !!imageConfig.imageSize ||
+                        (think && reasoningConfig.effort !== 'medium')
+                      }
+                      footer={
+                        <div className='flex flex-col gap-2'>
+                          {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                            <input
+                              type='text'
+                              value={ccCwd}
+                              onChange={e => setCcCwd(e.target.value)}
+                              placeholder='Working directory (optional)'
+                              className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                              title='Specify the working directory for Claude Code agent'
+                            />
+                          )}
+                          {/* Image Generation Options - shown only for image generation models */}
+                          {isImageGenerationModel && (
+                            <>
+                              <h1 className='text-black dark:text-neutral-200 text-[16px]'>Image Options</h1>
+                              <div className='flex flex-col gap-1'>
+                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Aspect Ratio</label>
+                                <Select
+                                  value={imageConfig.aspectRatio || ''}
+                                  options={[
+                                    { value: '', label: 'Default' },
+                                    { value: '1:1', label: '1:1 (Square)' },
+                                    { value: '16:9', label: '16:9 (Landscape)' },
+                                    { value: '9:16', label: '9:16 (Portrait)' },
+                                    { value: '4:3', label: '4:3' },
+                                    { value: '3:4', label: '3:4' },
+                                    { value: '3:2', label: '3:2' },
+                                    { value: '2:3', label: '2:3' },
+                                    { value: '4:5', label: '4:5' },
+                                    { value: '5:4', label: '5:4' },
+                                    { value: '21:9', label: '21:9 (Ultrawide)' },
+                                  ]}
+                                  onChange={value =>
+                                    setImageConfig(prev => ({
+                                      ...prev,
+                                      aspectRatio: (value as ImageConfig['aspectRatio']) || undefined,
+                                    }))
+                                  }
+                                  placeholder='Select aspect ratio'
+                                  size='small'
+                                />
                               </div>
-                            </Button>
-
-                            {/* Allow All / Ask toggle */}
-                            <Button
-                              variant='outline2'
-                              size='medium'
-                              onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
-                              className={
-                                toolAutoApprove
-                                  ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
-                                  : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
-                              }
-                              title={
-                                toolAutoApprove
-                                  ? 'Auto-approving tools (click to disable)'
-                                  : 'Asking for permission (click to auto-approve)'
-                              }
-                              aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
+                              <div className='flex flex-col gap-1'>
+                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Image Size</label>
+                                <Select
+                                  value={imageConfig.imageSize || ''}
+                                  options={[
+                                    { value: '', label: 'Default' },
+                                    { value: '1K', label: '1K' },
+                                    { value: '2K', label: '2K' },
+                                    { value: '4K', label: '4K' },
+                                  ]}
+                                  onChange={value =>
+                                    setImageConfig(prev => ({
+                                      ...prev,
+                                      imageSize: (value as ImageConfig['imageSize']) || undefined,
+                                    }))
+                                  }
+                                  placeholder='Select image size'
+                                  size='small'
+                                />
+                              </div>
+                            </>
+                          )}
+                          {/* Reasoning Effort Options - shown when thinking is enabled */}
+                          {selectedModel?.thinking && (
+                            <>
+                              <h1 className='text-black dark:text-neutral-200 text-[16px]'>Reasoning Options</h1>
+                              <div className='flex flex-col gap-1'>
+                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Effort Level</label>
+                                <Select
+                                  value={reasoningConfig.effort}
+                                  options={[
+                                    { value: 'low', label: 'Low' },
+                                    { value: 'medium', label: 'Medium (Default)' },
+                                    { value: 'high', label: 'High' },
+                                    { value: 'xhigh', label: 'X-High' },
+                                  ]}
+                                  onChange={value =>
+                                    setReasoningConfig(prev => ({
+                                      ...prev,
+                                      effort: value as ReasoningConfig['effort'],
+                                    }))
+                                  }
+                                  placeholder='Select effort level'
+                                  size='small'
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      }
+                    >
+                      {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                        <>
+                          <Button
+                            variant={ccMode ? 'outline2' : 'outline2'}
+                            size='medium'
+                            onClick={() => setCCMode(!ccMode)}
+                            title='Toggle Claude Code Agent Mode'
+                          >
+                            <i
+                              className={`bx bx-terminal mr-1 ${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
+                              aria-hidden='true'
+                            ></i>
+                            <div
+                              className={`${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
                             >
-                              <i className='bx bx-shield-quarter mr-1'></i>
-                              {toolAutoApprove ? 'Allow all' : 'Ask'}
-                            </Button>
+                              {ccMode ? 'CC On' : 'CC Off'}
+                            </div>
+                          </Button>
 
-                            {/* Chat / Agent toggle */}
-                            <Button
-                              variant='outline2'
-                              size='medium'
-                              onClick={() => dispatch(chatSliceActions.operationModeToggled())}
-                              className={
-                                operationMode === 'plan'
-                                  ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
-                                  : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
-                              }
-                              title={
-                                operationMode === 'plan'
-                                  ? 'Plan mode enabled (tools will be blocked)'
-                                  : 'Execution mode enabled (tools may modify files)'
-                              }
-                              aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
-                            >
-                              <i
-                                className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}
-                              ></i>
-                              {operationMode === 'plan' ? 'Chat' : 'Agent'}
-                            </Button>
-                          </>
-                        )}
-                        {/* Claude Code toggle */}
-                      </ActionPopover>
-                    )}
+                          {/* Allow All / Ask toggle */}
+                          <Button
+                            variant='outline2'
+                            size='medium'
+                            onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
+                            className={
+                              toolAutoApprove
+                                ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
+                                : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
+                            }
+                            title={
+                              toolAutoApprove
+                                ? 'Auto-approving tools (click to disable)'
+                                : 'Asking for permission (click to auto-approve)'
+                            }
+                            aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
+                          >
+                            <i className='bx bx-shield-quarter mr-1'></i>
+                            {toolAutoApprove ? 'Allow all' : 'Ask'}
+                          </Button>
+
+                          {/* Chat / Agent toggle */}
+                          <Button
+                            variant='outline2'
+                            size='medium'
+                            onClick={() => dispatch(chatSliceActions.operationModeToggled())}
+                            className={
+                              operationMode === 'plan'
+                                ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
+                                : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
+                            }
+                            title={
+                              operationMode === 'plan'
+                                ? 'Plan mode enabled (tools will be blocked)'
+                                : 'Execution mode enabled (tools may modify files)'
+                            }
+                            aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
+                          >
+                            <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
+                            {operationMode === 'plan' ? 'Chat' : 'Agent'}
+                          </Button>
+                        </>
+                      )}
+                      {/* Claude Code toggle */}
+                    </ActionPopover>
+                  )}
                   {/* Thinking toggle - next to popover, disabled when not supported */}
                   <Button
                     variant='outline2'

@@ -1,5 +1,5 @@
 // server/src/utils/provider.ts
-import { MessageId } from '../../../shared/types'
+import { MessageId, ReasoningConfig } from '../../../shared/types'
 import { Message } from '../database/models'
 
 import { generateResponse as anthropicGenerate } from './anthropic'
@@ -47,7 +47,8 @@ export async function generateResponse(
   executionMode: 'server' | 'client' = 'server',
   storageMode: 'cloud' | 'local' = 'cloud',
   isElectron: boolean = false,
-  imageConfig?: ImageConfig
+  imageConfig?: ImageConfig,
+  reasoningConfig?: ReasoningConfig
 ): Promise<void> {
   const providerModel = getProviderModel(provider, model)
 
@@ -56,11 +57,11 @@ export async function generateResponse(
   const attachmentNote =
     Array.isArray(attachments) && attachments.length > 0
       ? `Attached ${attachments.length} image(s):\n${attachments
-        .map((a, idx) => {
-          const urlDesc = a.url?.startsWith('data:') ? '(inline base64 image)' : (a.url || '(inline image)')
-          return `  ${idx + 1}. ${urlDesc}${a.mimeType ? ` (${a.mimeType})` : ''}`
-        })
-        .join('\n')}`
+          .map((a, idx) => {
+            const urlDesc = a.url?.startsWith('data:') ? '(inline base64 image)' : a.url || '(inline image)'
+            return `  ${idx + 1}. ${urlDesc}${a.mimeType ? ` (${a.mimeType})` : ''}`
+          })
+          .join('\n')}`
       : ''
 
   // Auto-attach logic for OpenRouter image editing
@@ -151,7 +152,7 @@ export async function generateResponse(
           // Attach reasoning_details if present (required by Gemini for parallel tool calls)
           if (currentReasoningDetails.length > 0) {
             assistantMsg.reasoningDetails = currentReasoningDetails
-            console.log('🧠 [provider] Attached reasoningDetails to assistant message:', currentReasoningDetails.length, 'entries')
+            // console.log('🧠 [provider] Attached reasoningDetails to assistant message:', currentReasoningDetails.length, 'entries')
             currentReasoningDetails = []
           }
           result.push(assistantMsg)
@@ -186,7 +187,7 @@ export async function generateResponse(
         const details = block.reasoningDetails || block.reasoning_details
         if (Array.isArray(details) && details.length > 0) {
           currentReasoningDetails.push(...details)
-          console.log('🧠 [provider] Extracted reasoning_details from content_blocks:', details.length, 'entries')
+          // console.log('🧠 [provider] Extracted reasoning_details from content_blocks:', details.length, 'entries')
         }
       } else if (block.type === 'tool_use') {
         // Skip invalid tool_use blocks that are missing required fields
@@ -229,7 +230,7 @@ export async function generateResponse(
           // Attach reasoning_details if present (required by Gemini for parallel tool calls)
           if (currentReasoningDetails.length > 0) {
             assistantMsg.reasoningDetails = currentReasoningDetails
-            console.log('🧠 [provider] Attached reasoningDetails to assistant message:', currentReasoningDetails.length, 'entries')
+            // console.log('🧠 [provider] Attached reasoningDetails to assistant message:', currentReasoningDetails.length, 'entries')
             currentReasoningDetails = []
           }
           result.push(assistantMsg)
@@ -271,7 +272,7 @@ export async function generateResponse(
       // Attach reasoning_details if present (required by Gemini for parallel tool calls)
       if (currentReasoningDetails.length > 0) {
         assistantMsg.reasoningDetails = currentReasoningDetails
-        console.log('🧠 [provider] Attached reasoningDetails to final assistant message:', currentReasoningDetails.length, 'entries')
+        // console.log('🧠 [provider] Attached reasoningDetails to final assistant message:', currentReasoningDetails.length, 'entries')
         currentReasoningDetails = []
       }
       result.push(assistantMsg)
@@ -346,8 +347,9 @@ export async function generateResponse(
             .map((block: any) => block.content || block.text || '')
             .join('')
 
-          const imageBlocks = msg.content_blocks
-            .filter((block: any) => block.type === 'image' || block.type === 'image_url')
+          const imageBlocks = msg.content_blocks.filter(
+            (block: any) => block.type === 'image' || block.type === 'image_url'
+          )
 
           const mergedText = (textBlocks || '') + (msg.content || '')
 
@@ -416,7 +418,7 @@ export async function generateResponse(
           const msgReasoningDetails = (msg as any).reasoningDetails || (msg as any).reasoning_details
           if (Array.isArray(msgReasoningDetails) && msgReasoningDetails.length > 0) {
             assistantMsg.reasoningDetails = msgReasoningDetails
-            console.log('🧠 [provider] Attached reasoningDetails from message:', msgReasoningDetails.length, 'entries')
+            // console.log('🧠 [provider] Attached reasoningDetails from message:', msgReasoningDetails.length, 'entries')
           }
           result.push(assistantMsg)
         } else if (msg.content && msg.content.trim()) {
@@ -546,7 +548,8 @@ export async function generateResponse(
         executionMode,
         storageMode,
         isElectron,
-        imageConfig
+        imageConfig,
+        reasoningConfig
       )
     }
     case 'lmstudio': {

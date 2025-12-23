@@ -1,4 +1,4 @@
-import { BaseMessage, BaseModel, ConversationId, ImageConfig, MessageId } from '../../../../../shared/types'
+import { BaseMessage, BaseModel, ConversationId, ImageConfig, MessageId, ReasoningConfig } from '../../../../../shared/types'
 
 // Message types (shared with conversations)
 export interface Message extends BaseMessage {
@@ -8,7 +8,7 @@ export interface Message extends BaseMessage {
   //should write a function which extracts text content
   //when user drags and drops it on the input component
   // Content blocks for ex_agent messages (Claude Code responses stored chronologically)
-  content_blocks?: (ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock | ImageBlock)[]
+  content_blocks?: (ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock | ImageBlock | ReasoningDetailsBlock)[]
 }
 
 export interface miniMessage {
@@ -52,7 +52,18 @@ export interface ImageBlock {
   mimeType: string
 }
 
-export type ContentBlock = ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock | ImageBlock
+export interface ReasoningDetailsBlock {
+  type: 'reasoning_details'
+  index?: number
+  reasoningDetails: Array<{
+    text?: string
+    type?: string
+    index?: number
+    format?: string
+  }>
+}
+
+export type ContentBlock = ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock | ImageBlock | ReasoningDetailsBlock
 
 // Tool call types
 export interface ToolCall {
@@ -257,6 +268,7 @@ export interface SendMessagePayload {
   think: boolean
   retrigger?: boolean
   imageConfig?: ImageConfig
+  reasoningConfig?: ReasoningConfig
 }
 
 export interface EditMessagePayload {

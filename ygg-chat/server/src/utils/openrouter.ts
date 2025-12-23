@@ -2,7 +2,7 @@ import type { OpenRouter } from '@openrouter/sdk'
 import { randomUUID } from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { MessageId } from '../../../shared/types'
+import { MessageId, ReasoningConfig } from '../../../shared/types'
 import { ProviderCostService } from '../database/models'
 import { supabaseAdmin } from '../database/supamodels'
 import { getApiKey } from './apiKeyManager'
@@ -656,7 +656,8 @@ export async function generateResponse(
   executionMode: 'server' | 'client' = 'server',
   storageMode: 'cloud' | 'local' = 'cloud',
   isElectron: boolean = false,
-  imageConfig?: ImageConfig
+  imageConfig?: ImageConfig,
+  reasoningConfig?: ReasoningConfig
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
   let stepCount = 0
@@ -1005,15 +1006,15 @@ export async function generateResponse(
       const hasTools = openaiTools.length > 0
 
       // Determine reasoning configuration
-      // - If think is enabled, use high effort
+      // - If think is enabled, use passed reasoningConfig or default to 'medium' effort
       // - If Gemini 3 with tools, use minimal effort to get thought_signature
-      let reasoningConfig: any = undefined
+      let effectiveReasoningConfig: ReasoningConfig | undefined = undefined
       if (think) {
-        reasoningConfig = { effort: 'low' }
+        effectiveReasoningConfig = reasoningConfig || { effort: 'medium' }
       } else if (isGemini3Model && hasTools) {
         // Gemini 3 requires reasoning to be enabled for tool calls to work
-        // Use 'low' effort to minimize token usage while still getting thought_signature
-        reasoningConfig = { effort: 'low' }
+        // Use 'medium' effort by default, or passed config if available
+        effectiveReasoningConfig = reasoningConfig || { effort: 'medium' }
         // console.log('🧠 [openrouter] Enabling reasoning for Gemini model with tools (required for thought_signature)')
       }
 
@@ -1068,7 +1069,7 @@ export async function generateResponse(
             messages: formattedMessages,
             tools: hasTools ? openaiTools : undefined,
             maxTokens: 20000,
-            reasoning: reasoningConfig,
+            reasoning: effectiveReasoningConfig,
             abortSignal,
           },
           {
@@ -1293,7 +1294,7 @@ export async function generateResponse(
           tools: hasTools ? openaiTools : undefined,
           usage: { include: true },
           modalities: modalities?.outputModalities,
-          ...(reasoningConfig && { reasoning: reasoningConfig }),
+          ...(effectiveReasoningConfig && { reasoning: effectiveReasoningConfig }),
         } as any,
         { signal: abortSignal }
       )

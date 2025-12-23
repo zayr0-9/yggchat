@@ -181,7 +181,7 @@ export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive
         createPortal(
           <div
             ref={popoverRef}
-            className='fixed z-10 rounded-2xl p-1 overflow-hidden border border-neutral-200 dark:border-neutral-700 bg-white/90 dark:bg-neutral-800/60 backdrop-blur-md shadow-xl'
+            className='fixed z-10 rounded-2xl p-1 overflow-hidden border-2 border-blue-100 dark:border-orange-700/40 bg-white/90 dark:bg-neutral-900/60 backdrop-blur-md shadow-xl'
             style={{
               top: `${popoverPosition.top}px`,
               left: `${popoverPosition.left}px`,

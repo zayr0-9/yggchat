@@ -1640,8 +1640,33 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   </div>
                 )
               } else if (block.type === 'thinking') {
+                // Accumulate consecutive thinking blocks into one (same logic as streaming)
+                // Skip if this is not the first thinking block in a sequence
+                // Need to look back past reasoning_details blocks to find previous thinking block
+                let prevIdx = idx - 1
+                while (prevIdx >= 0 && contentBlocks[prevIdx]?.type === 'reasoning_details') {
+                  prevIdx--
+                }
+                if (prevIdx >= 0 && contentBlocks[prevIdx]?.type === 'thinking') {
+                  return null
+                }
+
+                // Accumulate all consecutive thinking blocks (skipping interleaved reasoning_details)
+                let accumulatedThinking = block.content || ''
+                for (let i = idx + 1; i < contentBlocks.length; i++) {
+                  const nextBlock = contentBlocks[i]
+                  if (nextBlock.type === 'thinking') {
+                    accumulatedThinking += nextBlock.content || ''
+                  } else if (nextBlock.type === 'reasoning_details') {
+                    // Skip reasoning_details blocks that are interspersed with thinking blocks
+                    continue
+                  } else {
+                    break
+                  }
+                }
+
                 const isExpanded = expandedBlocks.reasoning.has(block.index)
-                const reasoningSummary = truncateWords(block.content)
+                const reasoningSummary = truncateWords(accumulatedThinking)
                 return (
                   <div
                     key={`thinking-${block.index}-${idx}`}
@@ -1682,12 +1707,16 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                           rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
                           components={{ pre: PreRenderer, a: MarkdownLink }}
                         >
-                          {block.content}
+                          {accumulatedThinking}
                         </ReactMarkdown>
                       </div>
                     )}
                   </div>
                 )
+              } else if (block.type === 'reasoning_details') {
+                // Skip reasoning_details blocks - they are handled together with thinking blocks
+                // and should not be rendered separately
+                return null
               } else if (block.type === 'image' && block.url) {
                 return (
                   <div key={`image-${block.index}-${idx}`} className='my-3 mx-1'>

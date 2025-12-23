@@ -10,7 +10,7 @@ interface GeminiStreamOptions {
   messages: any[]
   tools?: any[]
   maxTokens?: number
-  reasoning?: { effort: 'low' | 'medium' | 'high' }
+  reasoning?: { effort: 'low' | 'medium' | 'high' | 'xhigh' }
   abortSignal?: AbortSignal
 }
 

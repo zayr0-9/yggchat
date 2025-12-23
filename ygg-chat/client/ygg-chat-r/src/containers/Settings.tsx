@@ -194,11 +194,11 @@ const Settings: React.FC = () => {
                 onChange={handleFileChange}
               />
               <Button
-                variant='acrylic'
+                variant='outline2'
                 size='large'
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className='group'
+                className='group shadow-md'
               >
                 <p className='transition-transform duration-100 group-active:scale-95'>
                   {uploading ? 'Processing…' : 'Browse for video'}
@@ -208,7 +208,7 @@ const Settings: React.FC = () => {
           </div>
         </section>
 
-        <section className='rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:bg-zinc-900 dark:shadow-black/20'>
+        <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:bg-zinc-900 dark:shadow-black/20'>
           <div className='flex flex-col gap-1'>
             <div className='flex flex-wrap items-center justify-between gap-3'>
               <div>
@@ -240,7 +240,7 @@ const Settings: React.FC = () => {
                     className={`flex flex-col gap-3 rounded-xl border p-4 transition ${
                       isActive
                         ? 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-500/60 dark:bg-emerald-900/40'
-                        : 'border-stone-200 bg-stone-50/70 hover:border-indigo-400 hover:bg-white dark:border-stone-700 dark:bg-zinc-900/70 dark:hover:border-sky-600'
+                        : 'border-stone-200 bg-stone-50/70 hover:border-indigo-400 dark:hover:bg-neutral-700/40 dark:border-stone-700 dark:bg-zinc-900/70 dark:hover:border-sky-600'
                     }`}
                   >
                     <div className='flex items-start justify-between gap-3'>

@@ -1204,6 +1204,7 @@ router.post(
       isBranch = false,
       storageMode = 'cloud',
       imageConfig,
+      reasoningConfig,
     } = req.body as SendMessageRequest & { repeatNum?: number }
 
     if (!content && !retrigger) {
@@ -1475,7 +1476,8 @@ router.post(
           undefined, // executionMode defaults to 'server'
           storageMode,
           false, // isElectron defaults to false
-          imageConfig
+          imageConfig,
+          reasoningConfig
         )
 
         if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
@@ -1637,6 +1639,7 @@ router.post(
       storageMode = 'cloud',
       isElectron = false,
       imageConfig,
+      reasoningConfig,
     } = req.body as SendMessageRequest
 
     // console.log(`[supaChat] Processing message request for conversation ${conversationId}`)
@@ -1895,7 +1898,7 @@ router.post(
               } else if (part === 'reasoning_details') {
                 // Handle encrypted reasoning details (Gemini thought_signature)
                 if (obj?.reasoningDetails) {
-                  console.log('🧠 [supaChat] Captured reasoning_details for storage')
+                  // console.log('🧠 [supaChat] Captured reasoning_details for storage')
                   contentBlocksEvents.push({ type: 'reasoning_details', reasoningDetails: obj.reasoningDetails })
                 }
               } else if (part === 'tool_result') {
@@ -2034,7 +2037,8 @@ router.post(
           executionMode,
           storageMode,
           isElectron,
-          imageConfig
+          imageConfig,
+          reasoningConfig
         )
 
         // Clean up content and extract tool calls after streaming completes

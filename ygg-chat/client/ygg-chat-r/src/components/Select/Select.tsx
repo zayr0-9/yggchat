@@ -58,7 +58,7 @@ export const Select: React.FC<SelectProps> = ({
   const listRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
   const [listMaxHeight, setListMaxHeight] = useState<number | undefined>(undefined)
-  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null)
   const isMobile = useIsMobile()
 
   // Toggle favorite status and persist to localStorage
@@ -155,8 +155,10 @@ export const Select: React.FC<SelectProps> = ({
       setListMaxHeight(Number.isFinite(maxH) ? maxH : 280)
 
       // Calculate fixed position based on button rect
+      // When opening upward, use bottom positioning to anchor the dropdown above the button
       setDropdownPosition({
-        top: shouldOpenUp ? rect.top - (maxH + 4) : rect.bottom + 4,
+        top: shouldOpenUp ? undefined : rect.bottom + 4,
+        bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
         left: modelSelect ? rect.left - 5 : rect.left,
         width: modelSelect ? rect.width + 80 : rect.width,
       })
@@ -256,7 +258,8 @@ export const Select: React.FC<SelectProps> = ({
             className={`fixed z-[100] rounded-2xl overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent shadow-xl flex flex-col`}
             style={{
               maxHeight: listMaxHeight,
-              top: `${dropdownPosition.top}px`,
+              top: dropdownPosition.top !== undefined ? `${dropdownPosition.top}px` : undefined,
+              bottom: dropdownPosition.bottom !== undefined ? `${dropdownPosition.bottom}px` : undefined,
               left: `${dropdownPosition.left}px`,
               width: `${dropdownPosition.width}px`,
             }}

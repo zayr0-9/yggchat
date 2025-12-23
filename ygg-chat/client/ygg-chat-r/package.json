@@ -1,7 +1,7 @@
 {
   "name": "yggdrasil",
   "private": true,
-  "version": "0.0.14",
+  "version": "0.0.15",
   "type": "module",
   "main": "electron/main.mjs",
   "scripts": {
@@ -36,6 +36,7 @@
     "@tanstack/react-query": "^5.90.2",
     "@tanstack/react-query-devtools": "^5.90.2",
     "@tanstack/react-query-persist-client": "^5.90.2",
+    "@types/three": "^0.182.0",
     "@vercel/analytics": "^1.6.1",
     "@xyflow/react": "^12.8.2",
     "ajv": "^8.17.1",
@@ -70,6 +71,7 @@
     "remark-parse": "^11.0.0",
     "remark-stringify": "^11.0.0",
     "strip-markdown": "^6.0.0",
+    "three": "^0.182.0",
     "tokenx": "^1.2.1",
     "uint8array-extras": "^0.3.0",
     "unified": "^11.0.5",
