@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { ConversationId } from '../../../../../shared/types'
@@ -8,6 +9,7 @@ import { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { ResearchNoteItem } from '../../hooks/useQueries'
+import { Button } from '../Button/button'
 import { QuickInput } from '../QuickInput/QuickInput'
 import { TextArea } from '../TextArea/TextArea'
 import { ResearchNotesList } from './ResearchNotesList'
@@ -178,7 +180,7 @@ export const LowBar: React.FC<LowBarProps> = ({
 
   return (
     <div
-      className={`${enableTabs ? 'fixed bottom-12 right-10 z-50 transition-all duration-300 ease-in-out' : 'absolute z-10 bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4'} ${
+      className={`${enableTabs ? 'fixed bottom-12 right-10 z-50 flex flex-col transition-all duration-300 ease-in-out' : 'absolute z-10 bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4'} ${
         enableTabs
           ? isExpanded
             ? isMobile
@@ -196,26 +198,28 @@ export const LowBar: React.FC<LowBarProps> = ({
       > */}
       <>
         {/* Header bar (always visible) */}
-        {/* <Button
-          onClick={() => setIsExpanded(!isExpanded)}
-          variant='outline2'
-          rounded='full'
-          className={`w-full flex  px-4 ${isExpanded ? 'mt-3 mx-2 py-2' : 'py-3 no-scrollbar'} bg-neutral-50 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200`}
-        >
-          <div className='text-sm 2xl:text-[14px] 3xl:text-[16px] font-medium text-stone-800 dark:text-stone-200 '>
-            Notes
-          </div>
-          {isExpanded ? (
-            <ChevronDown className='w-4 h-4 text-stone-600 dark:text-stone-300' />
-          ) : (
-            <ChevronUp className='w-4 h-4 text-stone-600 dark:text-stone-300' />
-          )}
-        </Button> */}
+        {enableTabs && (
+          <Button
+            onClick={() => setIsExpanded(!isExpanded)}
+            variant='outline2'
+            rounded='full'
+            className={`w-full flex px-4 ${isExpanded ? 'mt-3 mx-2 py-2' : 'py-3 no-scrollbar'} bg-neutral-50 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200`}
+          >
+            <div className='text-sm 2xl:text-[14px] 3xl:text-[16px] font-medium text-stone-800 dark:text-stone-200 '>
+              Notes
+            </div>
+            {isExpanded ? (
+              <ChevronDown className='w-4 h-4 text-stone-600 dark:text-stone-300' />
+            ) : (
+              <ChevronUp className='w-4 h-4 text-stone-600 dark:text-stone-300' />
+            )}
+          </Button>
+        )}
         {!isExpanded && !enableTabs && <QuickInput />}
       </>
       {/* Expanded content */}
       {isExpanded && (
-        <div className='flex-1 flex flex-col overflow-hidden'>
+        <div className='flex-1 min-h-0 flex flex-col overflow-hidden'>
           {/* Tab buttons - only show when enableTabs is true */}
           {enableTabs && (
             <div className='flex gap-2 px-3 pt-3 pb-2'>
@@ -244,20 +248,20 @@ export const LowBar: React.FC<LowBarProps> = ({
 
           {/* Content area based on active tab */}
           <div
-            className='flex-1 flex flex-col p-3 pb-4 overflow-hidden thin-scrollbar'
+            className='flex-1 min-h-0 flex flex-col p-3 pb-4'
             data-heimdall-wheel-exempt='true'
             data-heimdall-contextmenu-exempt='true'
           >
             {enableTabs && activeTab === 'list' ? (
-              <div className='h-full flex flex-col overflow-hidden'>
-                <div className='flex-1 overflow-y-auto thin-scrollbar'>
+              <div className='flex-1 min-h-0 flex flex-col overflow-hidden'>
+                <div className='flex-1 min-h-0 overflow-y-auto thin-scrollbar'>
                   <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
                 </div>
                 {showInput && <QuickInput />}
               </div>
             ) : mode === 'list' ? (
-              <div className='h-full flex flex-col overflow-hidden'>
-                <div className='flex-1 overflow-y-auto thin-scrollbar'>
+              <div className='flex-1 min-h-0 flex flex-col overflow-hidden'>
+                <div className='flex-1 min-h-0 overflow-y-auto thin-scrollbar'>
                   <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
                 </div>
                 {/* <QuickInput /> */}
