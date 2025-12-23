@@ -13,12 +13,12 @@ import {
   FreeGenerationsModal,
   Heimdall,
   InputTextArea,
+  ModelSelectControl,
   Select,
   SettingsPane,
   TextField,
   ToolPermissionDialog,
 } from '../components'
-import { ModelFilterUI } from '../components/ModelFilterUI/ModelFilterUI'
 import {
   abortStreaming,
   blobToDataURL,
@@ -80,7 +80,6 @@ import {
   useConversationMessages,
   useConversationsByProject,
   useConversationStorageMode,
-  useFilteredModels,
   useModels,
   useSelectedModel,
   useSelectModel,
@@ -437,38 +436,13 @@ function Chat() {
   // const refreshModelsMutation = useRefreshModels()
   const selectModelMutation = useSelectModel()
   const selectedModel = useSelectedModel(providers.currentProvider)
+  const models = modelsData?.models || []
 
   // Helper to check if selected model is an image generation model
   const isImageGenerationModel = useMemo(() => {
     const modelName = selectedModel?.name?.toLowerCase() || ''
     return modelName.includes('gemini-3-pro-image-preview') || modelName.includes('gemini-2.5-flash-image')
   }, [selectedModel?.name])
-
-  // Filtered models hook for local filtering and sorting
-  const { filteredModels, filters, sortOptions, applyFilters, clearFilters, applySorting, refreshFavorites } =
-    useFilteredModels(providers.currentProvider)
-
-  // Extract models array and user tier status from React Query response
-  const models = modelsData?.models || []
-  const userIsFreeTier = modelsData?.userIsFreeTier ?? false
-
-  // Compute disabled model options for free tier users
-  // Free users can see all models but can only select free tier ones
-  const disabledModelOptions = useMemo(() => {
-    if (!userIsFreeTier) return [] // Paid users can select any model
-    return models.filter(m => !m.isFreeTier).map(m => m.name)
-  }, [userIsFreeTier, models])
-
-  // Sort filtered models: free tier models appear first when user is on free tier
-  const sortedFilteredModels = useMemo(() => {
-    if (!userIsFreeTier) return filteredModels // Paid users see default order
-
-    // Partition models into free and paid, preserving original order within each group
-    const freeModels = filteredModels.filter(m => m.isFreeTier)
-    const paidModels = filteredModels.filter(m => !m.isFreeTier)
-
-    return [...freeModels, ...paidModels]
-  }, [userIsFreeTier, filteredModels])
   // Conversation title editing
   const currentConversation = useAppSelector(
     currentConversationId ? makeSelectConversationById(currentConversationId) : () => null
@@ -2788,28 +2762,14 @@ function Chat() {
                     searchBarVisible={true}
                   /> */}
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
-                  <Select
-                    value={selectedModel?.name || ''}
+                  <ModelSelectControl
+                    provider={providers.currentProvider}
+                    selectedModelName={selectedModel?.name || ''}
                     onChange={handleModelSelect}
-                    options={sortedFilteredModels.map(m => m.name)}
                     placeholder='Select a model...'
                     blur='high'
-                    disabled={sortedFilteredModels.length === 0}
-                    disabledOptions={disabledModelOptions}
                     className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-54 transition-transform duration-60 active:scale-99 rounded-4xl'
-                    searchBarVisible={true}
-                    modelData={Object.fromEntries(sortedFilteredModels.map(m => [m.name, m]))}
-                    onFavoritesChange={refreshFavorites}
-                    filterUI={
-                      <ModelFilterUI
-                        filters={filters}
-                        sortOptions={sortOptions}
-                        onFiltersChange={applyFilters}
-                        onSortChange={applySorting}
-                        onClearFilters={clearFilters}
-                      />
-                    }
-                    modelSelect={true}
+                    showFilters={true}
                     footerContent={modelSelectFooter}
                   />
                   {(isImageGenerationModel ||

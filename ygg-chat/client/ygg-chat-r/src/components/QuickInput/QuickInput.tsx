@@ -1,17 +1,17 @@
+import { getAssetPath } from '@/utils/assetPath'
 import { useQueryClient } from '@tanstack/react-query'
 import React, { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { chatSliceActions, Model, sendMessage } from '../../features/chats'
+import { chatSliceActions, sendMessage } from '../../features/chats'
 import { Conversation, createConversation } from '../../features/conversations'
 import { convContextSet, systemPromptSet } from '../../features/conversations/conversationSlice'
 import { fetchProjectById } from '../../features/projects'
 import { selectCurrentUser } from '../../features/users'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
-import { useModels, useSelectModel } from '../../hooks/useQueries'
+import { useModels, useSelectModel, useSelectedModel } from '../../hooks/useQueries'
 import { Button } from '../Button/button'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
-import { Select } from '../Select/Select'
-
+import { ModelSelectControl } from '../ModelSelectControl/ModelSelectControl'
 export const QuickInput: React.FC = () => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
@@ -21,7 +21,6 @@ export const QuickInput: React.FC = () => {
 
   // Local state
   const [quickChatInput, setQuickChatInput] = useState('')
-  const [selectedModel, setSelectedModel] = useState<Model | null>(null)
   const [think, setThink] = useState(false)
   // const [spinRefresh, setSpinRefresh] = useState(false)
   const [currentProvider] = useState('openrouter') // Default provider
@@ -30,21 +29,14 @@ export const QuickInput: React.FC = () => {
   const { data: modelsData } = useModels(currentProvider)
   const selectModelMutation = useSelectModel()
   const models = modelsData?.models || []
+  const selectedModel = useSelectedModel(currentProvider)
   // const refreshModelsMutation = useRefreshModels()
-
-  // Set default model when models load
-  React.useEffect(() => {
-    if (models.length > 0 && !selectedModel) {
-      setSelectedModel(models[0])
-    }
-  }, [models, selectedModel])
 
   // Handle model selection
   const handleModelSelect = useCallback(
     (modelName: string) => {
       const model = models.find(m => m.name === modelName)
       if (model) {
-        setSelectedModel(model)
         selectModelMutation.mutate({ provider: currentProvider, model })
       }
     },
@@ -147,16 +139,15 @@ export const QuickInput: React.FC = () => {
       <div className='bg-transparent rounded-b-4xl flex flex-col items-end pt-3 md:pt-0'>
         <div className='flex justify-between w-full mb-1'>
           <div className='flex items-center justify-start gap-1 flex-wrap flex-1'>
-            <Select
-              value={selectedModel?.name || ''}
+            <ModelSelectControl
+              provider={currentProvider}
+              selectedModelName={selectedModel?.name || ''}
               onChange={handleModelSelect}
               size='small'
-              options={models.map(m => m.name)}
               placeholder='Select model...'
-              disabled={models.length === 0}
               className='flex-1 ml-2 max-w-28 sm:max-w-28 md:max-w-28 lg:max-w-40 transition-transform duration-60 active:scale-99'
-              searchBarVisible={true}
-              modelSelect={true}
+              showFilters={true}
+              blur='high'
             />
             {/* <Button
               variant='outline2'
@@ -182,17 +173,31 @@ export const QuickInput: React.FC = () => {
                 title='Enable thinking'
               >
                 {think ? (
-                  <img
-                    src='/img/thinking active.svg'
-                    alt='Thinking active'
-                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
-                  />
+                  <>
+                    <img
+                      src={getAssetPath('img/thinkingonlightmode.svg')}
+                      alt='Thinking active'
+                      className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                    />
+                    <img
+                      src={getAssetPath('img/thinkingondarkmode.svg')}
+                      alt='Thinking active'
+                      className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                    />
+                  </>
                 ) : (
-                  <img
-                    src='/img/thinking.svg'
-                    alt='Show Thinking'
-                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[22px] md:h-[22px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px]'
-                  />
+                  <>
+                    <img
+                      src={getAssetPath('img/thinkingofflightmode.svg')}
+                      alt='Thinking'
+                      className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
+                    />
+                    <img
+                      src={getAssetPath('img/thinkingoffdarkmode.svg')}
+                      alt='Thinking'
+                      className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                    />
+                  </>
                 )}
               </Button>
             )}
