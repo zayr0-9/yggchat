@@ -310,8 +310,8 @@ function createWindow() {
     mainWindow.loadFile(indexPath)
 
     // DEBUG: Force DevTools to open after a delay
-    // if (!app.isPackaged) {
-    if (true) {
+    if (!app.isPackaged) {
+      // if (true) {
       setTimeout(() => {
         console.log('[Electron] Force opening DevTools...')
         mainWindow?.webContents.openDevTools({ mode: 'detach' })
