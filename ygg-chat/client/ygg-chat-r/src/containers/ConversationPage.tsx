@@ -716,7 +716,7 @@ const ConversationPage: React.FC = () => {
 
                 {/* End of list indicator - hide when searching */}
                 {!hasNextPage && conversations.length > 0 && !loading && !isShowingSearchResults && (
-                  <li className='w-fit mx-auto text-center mt-2 py-1 text-neutral-800 dark:text-neutral-500 text-[15px] rounded-full px-2 acrylic-light'>
+                  <li className='w-fit mx-auto text-center mt-2 py-1 text-neutral-800 dark:text-neutral-300 text-[15px] rounded-full px-2 acrylic-light'>
                     All chats loaded
                   </li>
                 )}
