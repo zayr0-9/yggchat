@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp } from 'lucide-react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { ConversationId } from '../../../../../shared/types'
@@ -9,11 +8,9 @@ import { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { ResearchNoteItem } from '../../hooks/useQueries'
-import { Button } from '../Button/button'
 import { QuickInput } from '../QuickInput/QuickInput'
 import { TextArea } from '../TextArea/TextArea'
 import { ResearchNotesList } from './ResearchNotesList'
-
 interface LowBarProps {
   conversationId: ConversationId | null
   mode?: 'single' | 'list'
@@ -181,24 +178,27 @@ export const LowBar: React.FC<LowBarProps> = ({
 
   return (
     <div
-      className={`fixed bottom-12 right-4 z-50 transition-all duration-300 ease-in-out ${
-        isExpanded
-          ? isMobile
-            ? 'w-[95%] h-[75%]'
-            : 'w-[55%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[55%] 2xl:w-[35%]'
-          : isMobile
-            ? 'w-[40%] h-[48px]'
-            : 'w-[23%] h-[48px] lg:w-[15%] xl:w-[15%] 2xl:w-[15%]'
+      className={`${enableTabs ? 'fixed bottom-12 right-10 z-50 transition-all duration-300 ease-in-out' : 'absolute z-10 bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4'} ${
+        enableTabs
+          ? isExpanded
+            ? isMobile
+              ? 'w-[95%] h-[75%]'
+              : 'w-[55%] lg:w-[35%] h-[50%] lg:h-[60%] 2xl:h-[55%] 2xl:w-[35%]'
+            : isMobile
+              ? 'w-[40%] h-[48px]'
+              : 'w-[23%] h-[48px] lg:w-[15%] xl:w-[15%] 2xl:w-[15%]'
+          : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl'
       }`}
     >
       {/* Container with shadow and border */}
-      <div
+      {/* <div
         className={`h-full flex flex-col ${isExpanded ? 'bg-neutral-50/30 dark:bg-transparent' : 'bg-transparent dark:bg-transparent'} rounded-3xl overflow-hidden shadow-[0px_0px_3px_-2px_rgba(0,0,0,0)] dark:shadow-[0px_0px_4px_2px_rgba(0,0,0,0.25)] dark:outline-1 dark:outline-neutral-700/60`}
-      >
+      > */}
+      <>
         {/* Header bar (always visible) */}
-        <Button
+        {/* <Button
           onClick={() => setIsExpanded(!isExpanded)}
-          variant='acrylic'
+          variant='outline2'
           rounded='full'
           className={`w-full flex  px-4 ${isExpanded ? 'mt-3 mx-2 py-2' : 'py-3 no-scrollbar'} bg-neutral-50 dark:bg-neutral-900 dark:outline-0 rounded-2xl dark:hover:bg-neutral-800 transition-all hover:scale-99 duration-200`}
         >
@@ -210,73 +210,74 @@ export const LowBar: React.FC<LowBarProps> = ({
           ) : (
             <ChevronUp className='w-4 h-4 text-stone-600 dark:text-stone-300' />
           )}
-        </Button>
-
-        {/* Expanded content */}
-        {isExpanded && (
-          <div className='flex-1 flex flex-col overflow-hidden'>
-            {/* Tab buttons - only show when enableTabs is true */}
-            {enableTabs && (
-              <div className='flex gap-2 px-3 pt-3 pb-2'>
-                <button
-                  onClick={() => setActiveTab('note')}
-                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
-                    activeTab === 'note'
-                      ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)] dark:outline-neutral-800'
-                      : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
-                  }`}
-                >
-                  Note
-                </button>
-                <button
-                  onClick={() => setActiveTab('list')}
-                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
-                    activeTab === 'list'
-                      ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)] dark:outline-neutral-800'
-                      : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
-                  }`}
-                >
-                  List
-                </button>
-              </div>
-            )}
-
-            {/* Content area based on active tab */}
-            <div
-              className='flex-1 flex flex-col p-3 pb-4 overflow-hidden thin-scrollbar'
-              data-heimdall-wheel-exempt='true'
-              data-heimdall-contextmenu-exempt='true'
-            >
-              {enableTabs && activeTab === 'list' ? (
-                <div className='h-full flex flex-col overflow-hidden'>
-                  <div className='flex-1 overflow-y-auto thin-scrollbar'>
-                    <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
-                  </div>
-                  {showInput && <QuickInput />}
-                </div>
-              ) : mode === 'list' ? (
-                <div className='h-full flex flex-col overflow-hidden'>
-                  <div className='flex-1 overflow-y-auto thin-scrollbar'>
-                    <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
-                  </div>
-                  <QuickInput />
-                </div>
-              ) : (
-                <TextArea
-                  value={localNote}
-                  onChange={handleNoteChange}
-                  placeholder='Enter research notes for this conversation...'
-                  className='w-full resize-none'
-                  minRows={undefined}
-                  maxRows={undefined}
-                  fillAvailableHeight={true}
-                  autoFocus={false}
-                />
-              )}
+        </Button> */}
+        {!isExpanded && !enableTabs && <QuickInput />}
+      </>
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className='flex-1 flex flex-col overflow-hidden'>
+          {/* Tab buttons - only show when enableTabs is true */}
+          {enableTabs && (
+            <div className='flex gap-2 px-3 pt-3 pb-2'>
+              <button
+                onClick={() => setActiveTab('note')}
+                className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+                  activeTab === 'note'
+                    ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)] dark:outline-neutral-800'
+                    : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+                }`}
+              >
+                Note
+              </button>
+              <button
+                onClick={() => setActiveTab('list')}
+                className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+                  activeTab === 'list'
+                    ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)] dark:outline-neutral-800'
+                    : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+                }`}
+              >
+                List
+              </button>
             </div>
+          )}
+
+          {/* Content area based on active tab */}
+          <div
+            className='flex-1 flex flex-col p-3 pb-4 overflow-hidden thin-scrollbar'
+            data-heimdall-wheel-exempt='true'
+            data-heimdall-contextmenu-exempt='true'
+          >
+            {enableTabs && activeTab === 'list' ? (
+              <div className='h-full flex flex-col overflow-hidden'>
+                <div className='flex-1 overflow-y-auto thin-scrollbar'>
+                  <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
+                </div>
+                {showInput && <QuickInput />}
+              </div>
+            ) : mode === 'list' ? (
+              <div className='h-full flex flex-col overflow-hidden'>
+                <div className='flex-1 overflow-y-auto thin-scrollbar'>
+                  <ResearchNotesList notes={notes} isLoading={isLoadingNotes} isEmbedded={true} />
+                </div>
+                {/* <QuickInput /> */}
+              </div>
+            ) : (
+              <TextArea
+                value={localNote}
+                onChange={handleNoteChange}
+                placeholder='Enter research notes for this conversation...'
+                className='w-full resize-none'
+                minRows={undefined}
+                maxRows={undefined}
+                fillAvailableHeight={true}
+                autoFocus={false}
+              />
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
+    // </div>
   )
 }

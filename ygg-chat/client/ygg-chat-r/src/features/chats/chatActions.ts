@@ -470,7 +470,9 @@ export const sendMessage = createAsyncThunk<
     { conversationId, input, parent, repeatNum, think, retrigger = false, imageConfig, reasoningConfig },
     { dispatch, getState, extra, rejectWithValue, signal }
   ) => {
+    console.log('[sendMessage] Thunk started with conversationId:', conversationId)
     const { auth } = extra
+    console.log('[sendMessage] auth.accessToken exists:', !!auth?.accessToken, 'userId:', auth?.userId)
     dispatch(chatSliceActions.sendingStarted())
 
     let controller: AbortController | undefined
@@ -480,20 +482,27 @@ export const sendMessage = createAsyncThunk<
       signal.addEventListener('abort', () => controller?.abort())
 
       const state = getState() as RootState
+      console.log('[sendMessage] Got state, currentConversationId:', state.chat.conversation.currentConversationId)
       const { messages: currentMessages } = state.chat.conversation
       const currentPathIds = state.chat.conversation.currentPath.filter(id => id !== 'root')
       const currentPathMessages = currentPathIds.map(id => currentMessages.find(m => m.id === id))
       const isFirstMessage = (currentMessages?.length || 0) === 0
+      console.log('[sendMessage] isFirstMessage:', isFirstMessage, 'currentMessages.length:', currentMessages?.length)
 
       // Read selected model from React Query cache
+      // Normalize provider to lowercase for cache lookup (React Query keys are case-sensitive)
       const provider = state.chat.providerState.currentProvider
+      const providerLower = provider?.toLowerCase()
+      console.log('[sendMessage] provider:', provider, 'providerLower:', providerLower)
       const modelsData = extra.queryClient?.getQueryData<{
         models: Model[]
         default: Model
         selected: Model
-      }>(['models', provider])
+      }>(['models', providerLower])
+      console.log('[sendMessage] modelsData from cache:', !!modelsData, 'selected:', modelsData?.selected?.name)
       const selectedName = modelsData?.selected?.name || modelsData?.default?.name
       const modelName = input.modelOverride || selectedName
+      console.log('[sendMessage] modelName:', modelName)
       // Map UI provider to server provider id
       const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
       const serverProvider = appProvider === 'google' ? 'gemini' : appProvider
@@ -549,12 +558,17 @@ export const sendMessage = createAsyncThunk<
       let messageId: MessageId | null = null
       let userMessage: any = null
 
+      console.log('[sendMessage] Entering message loop, MAX_TURNS:', MAX_TURNS)
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false // Default to stop unless tool calls occur
+        console.log('[sendMessage] Turn', turnCount)
 
         // Check if streaming was aborted by user
-        if (!getState().chat.streaming.active) {
+        const streamingActive = getState().chat.streaming.active
+        console.log('[sendMessage] streaming.active check:', streamingActive)
+        if (!streamingActive) {
+          console.log('[sendMessage] BREAKING - streaming.active is false!')
           controller?.abort()
           break
         }
@@ -562,8 +576,10 @@ export const sendMessage = createAsyncThunk<
         let response = null
 
         if (!modelName) {
+          console.log('[sendMessage] ERROR - No model selected!')
           throw new Error('No model selected')
         }
+        console.log('[sendMessage] Making API request with model:', modelName)
 
         if (repeatNum > 1 && turnCount === 1) {
           // Always use cloud endpoint - server handles local/cloud logic
