@@ -164,7 +164,7 @@ export const QuickInput: React.FC = () => {
   const canSend = quickChatInput.trim().length > 0 && selectedModel !== null
 
   return (
-    <div className='bg-transparent acrylic-subtle pb-1 mx-4 my-2 pt-3 2xl:pt-2 outline-1 dark:outline-1 dark:outline-neutral-700 outline-neutral-300/50 rounded-2xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)]'>
+    <div className='bg-transparent acrylic-subtle pb-1 mx-4 my-2 pt-3 2xl:pt-2 outline-1 dark:outline-1 dark:outline-neutral-700 outline-neutral-100/50 rounded-2xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)]'>
       {/* Project selection pills */}
       {projects && projects.length > 0 && (
         <div
