@@ -127,10 +127,8 @@ let isRedirectingToLogin = false
 // Helper function to handle login redirection based on environment
 const redirectToLogin = () => {
   // Check if already on login page
-  const currentPath = environment === 'electron' 
-    ? window.location.hash.replace('#', '')
-    : window.location.pathname
-  
+  const currentPath = environment === 'electron' ? window.location.hash.replace('#', '') : window.location.pathname
+
   if (currentPath === '/login' || currentPath.startsWith('/login')) {
     // console.log('[api] Already on login page, skipping redirect')
     return
@@ -143,15 +141,14 @@ const redirectToLogin = () => {
   }
 
   isRedirectingToLogin = true
-  console.log('[api] Redirecting to login...')
 
   // Clear cached auth state to stop queries from firing with stale tokens
   clearClaimsCache()
-  
+
   if (typeof window !== 'undefined') {
     // Clear the cached Electron session
-    (window as any)._cachedElectronSession = null
-    
+    ;(window as any)._cachedElectronSession = null
+
     // Clear Supabase localStorage to prevent stale tokens
     try {
       localStorage.removeItem('supabase-auth-token')
@@ -282,6 +279,8 @@ export const api = {
 }
 
 // Helper for streaming requests
+// Note: Streaming requests always go to cloud server for LLM generation
+// The storageMode parameter in the request body tells the server whether to save to cloud DB or not
 export const createStreamingRequest = async (
   endpoint: string,
   accessToken: string | null,
@@ -300,7 +299,7 @@ export const createStreamingRequest = async (
     const headers = {
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...optionsHeaders, // Spread the headers from options
-      ...(token && (environment === 'web' || environment === 'electron') ? { Authorization: `Bearer ${token}` } : {}), // Add Authorization header with JWT in web/electron mode
+      ...(token && (environment === 'web' || environment === 'electron') ? { Authorization: `Bearer ${token}` } : {}),
     }
 
     return fetch(`${API_BASE}${endpoint}`, {

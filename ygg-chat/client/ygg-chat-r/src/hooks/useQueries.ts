@@ -716,6 +716,11 @@ export function useModels(provider: string | null) {
   return useQuery({
     queryKey: ['models', provider],
     queryFn: async () => {
+      console.log(
+        '[useModels] queryFn EXECUTING for provider:',
+        provider,
+        '- This indicates a refetch/fetch is happening'
+      )
       if (!provider) throw new Error('Provider is required')
 
       const normalizedProvider = provider.toLowerCase()
@@ -966,15 +971,6 @@ export function useMoveConversationToProject() {
         }
       }
 
-      console.log(
-        '[useMoveConversationToProject] Moving conversation:',
-        conversationId,
-        'storage_mode:',
-        storageMode,
-        'to project:',
-        destinationProjectId
-      )
-
       // Route to appropriate API based on storage mode
       if (storageMode === 'local' && environment === 'electron') {
         // Use local API for local conversations
@@ -1108,14 +1104,20 @@ export function useSelectModel() {
       return { provider, model }
     },
     onSuccess: ({ provider, model }) => {
+      console.log('[useSelectModel] onSuccess - Updating cache for provider:', provider, 'with model:', model.name)
       // Update the React Query cache with selected model
+
       queryClient.setQueryData(['models', provider], (oldData: any) => {
-        if (!oldData) return oldData
+        if (!oldData) {
+          return oldData
+        }
         return {
           ...oldData,
           selected: model,
         }
       })
+
+      // Verify the update
     },
   })
 }
@@ -1404,7 +1406,6 @@ export function useSearchConversations(projectId?: string | null) {
   // Search server (fallback)
   const searchServer = useCallback(
     async (query: string): Promise<Conversation[]> => {
-      console.log('[useSearchConversations] searchServer() called, accessToken:', accessToken ? 'present' : 'null')
       if (!query.trim()) return []
       if (!accessToken) {
         console.warn('[useSearchConversations] No accessToken available, skipping server search')
@@ -1416,10 +1417,8 @@ export function useSearchConversations(projectId?: string | null) {
         ? `/search/project?${params.toString()}&projectId=${projectId}`
         : `/search?${params.toString()}`
 
-      console.log('[useSearchConversations] Making API call to:', endpoint)
       try {
         const results = await api.get<Conversation[]>(endpoint, accessToken)
-        console.log('[useSearchConversations] API response:', results)
         return results || []
       } catch (error) {
         console.error('Server search failed:', error)
@@ -1432,7 +1431,6 @@ export function useSearchConversations(projectId?: string | null) {
   // Main search function with local-first optimization
   const search = useCallback(
     async (query: string) => {
-      console.log('[useSearchConversations] search() called with query:', query)
       if (!query.trim()) {
         setSearchResults([])
         setSearchedFromServer(false)
@@ -1444,7 +1442,6 @@ export function useSearchConversations(projectId?: string | null) {
       try {
         // Step 1: Search local cache
         const localResults = searchLocalCache(query)
-        console.log('[useSearchConversations] Local cache results:', localResults.length)
 
         if (localResults.length > 0) {
           // Found in local cache, use these results
@@ -1454,9 +1451,7 @@ export function useSearchConversations(projectId?: string | null) {
         }
 
         // Step 2: Nothing in local cache, search server
-        console.log('[useSearchConversations] No local results, searching server...')
         const serverResults = await searchServer(query)
-        console.log('[useSearchConversations] Server results:', serverResults.length)
         setSearchResults(serverResults)
         setSearchedFromServer(true)
       } catch (error) {

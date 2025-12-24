@@ -34,10 +34,27 @@ export const fetchProjects = createAsyncThunk<Project[], void, { extra: ThunkExt
 )
 
 // Fetch project by ID
-export const fetchProjectById = createAsyncThunk<Project, number | string, { extra: ThunkExtraArgument }>(
+export const fetchProjectById = createAsyncThunk<
+  Project,
+  { id: number | string; storageMode?: StorageMode },
+  { extra: ThunkExtraArgument; state: RootState }
+>(
   'projects/fetchProjectById',
-  async (projectId, { extra }) => {
+  async ({ id: projectId, storageMode }, { extra, getState }) => {
     const { auth } = extra
+
+    // Infer storage mode from state if not provided
+    let effectiveMode = storageMode
+    if (!effectiveMode) {
+      const project = getState().projects.projects.find(p => p.id === projectId)
+      effectiveMode = project?.storage_mode || 'cloud'
+    }
+
+    // Route to local or cloud API
+    if (shouldUseLocalApi(effectiveMode, environment)) {
+      return await localApi.get<Project>(`/local/projects/${projectId}`)
+    }
+
     const response = await apiCall(`/projects/${projectId}`, auth.accessToken, {
       method: 'GET',
     })

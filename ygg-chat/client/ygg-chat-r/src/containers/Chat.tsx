@@ -520,7 +520,13 @@ function Chat() {
     // No-op if unchanged
     if (trimmed === currentTrimmed) return
     const handle = setTimeout(() => {
-      dispatch(updateConversationTitle({ id: currentConversationId, title: trimmed }))
+      dispatch(
+        updateConversationTitle({
+          id: currentConversationId,
+          title: trimmed,
+          storageMode: currentConversation?.storage_mode,
+        })
+      )
         .unwrap()
         .then(() => {
           // Update React Query caches to reflect the new title
@@ -1235,7 +1241,7 @@ function Chat() {
         console.warn('Selected model not found:', modelName)
       }
     },
-    [models, selectModelMutation, providers.currentProvider]
+    [models, selectModelMutation, providers.currentProvider, selectedModel?.name]
   )
   // Commented out - provider selection removed from UI, defaulting to OpenRouter
   // const handleProviderSelect = useCallback(

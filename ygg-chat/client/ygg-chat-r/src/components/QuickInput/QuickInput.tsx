@@ -73,37 +73,34 @@ export const QuickInput: React.FC = () => {
 
   // Handle quick chat send
   const handleQuickChatSend = useCallback(async () => {
-    console.log('[QuickInput] handleQuickChatSend called')
     const trimmedInput = quickChatInput.trim()
-    console.log('[QuickInput] trimmedInput:', trimmedInput, 'selectedModel:', selectedModel?.name)
     if (!trimmedInput || !selectedModel) {
-      console.log('[QuickInput] Early return - no input or model')
       return
     }
 
     // Use selected project if user picked one, otherwise fall back to quick chat default
     const targetProjectId = selectedProjectId || quickChatProjectId
-    console.log('[QuickInput] targetProjectId:', targetProjectId)
+
+    // Determine storage mode from the selected project
+    const targetProject = projects?.find(p => p.id === targetProjectId)
+    const storageMode = targetProject?.storage_mode || 'cloud'
 
     try {
       // 1. Fetch and set project in Redux (if we have one)
       if (targetProjectId) {
-        console.log('[QuickInput] Fetching project:', targetProjectId)
-        await dispatch(fetchProjectById(targetProjectId)).unwrap()
-        console.log('[QuickInput] Project fetched successfully')
+        await dispatch(fetchProjectById({ id: targetProjectId, storageMode })).unwrap()
       }
 
       // 2. Create conversation with target project
-      console.log('[QuickInput] Creating conversation...')
       const result = await dispatch(
         createConversation({
           title: trimmedInput.slice(0, 50), // First 50 chars as title
           projectId: targetProjectId, // Use selected project or default quick chat project
           systemPrompt: null,
           conversationContext: null,
+          storageMode, // Route to local or cloud based on project's storage_mode
         })
       ).unwrap()
-      console.log('[QuickInput] Conversation created:', result.id)
 
       // 3. Update React Query caches
       queryClient.setQueryData(['conversations'], (old: Conversation[] | undefined) => {
@@ -113,22 +110,18 @@ export const QuickInput: React.FC = () => {
       queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
         return old ? [result, ...old] : [result]
       })
-      console.log('[QuickInput] React Query caches updated')
 
       // 4. Set conversation in Redux BEFORE navigation (critical for sendMessage)
-      console.log('[QuickInput] Setting conversation in Redux:', result.id)
       dispatch(chatSliceActions.conversationSet(result.id))
       // 5. Clear conversation-level system prompt and context for quick chats
       dispatch(systemPromptSet(null))
       dispatch(convContextSet(null))
-      console.log('[QuickInput] Redux state updated')
 
       // 6. Clear input and reset selected project
       setQuickChatInput('')
       setSelectedProjectId(null)
 
       // 7. Send message BEFORE navigation - we have the conversation ID, no need to wait
-      console.log('[QuickInput] Dispatching sendMessage with conversationId:', result.id, 'think:', think)
       const sendMessageResult = dispatch(
         sendMessage({
           conversationId: result.id,
@@ -139,16 +132,23 @@ export const QuickInput: React.FC = () => {
           retrigger: false,
         })
       )
-      console.log('[QuickInput] sendMessage dispatched, result:', sendMessageResult)
 
       // 8. Navigate to new conversation AFTER sendMessage is dispatched
-      console.log('[QuickInput] Navigating to:', `/chat/${targetProjectId || 'null'}/${result.id}`)
       navigate(`/chat/${targetProjectId || 'null'}/${result.id}`)
-      console.log('[QuickInput] Navigation complete')
     } catch (error) {
       console.error('[QuickInput] Failed to create quick chat:', error)
     }
-  }, [quickChatInput, selectedModel, think, dispatch, queryClient, navigate, selectedProjectId, quickChatProjectId])
+  }, [
+    quickChatInput,
+    selectedModel,
+    think,
+    dispatch,
+    queryClient,
+    navigate,
+    selectedProjectId,
+    quickChatProjectId,
+    projects,
+  ])
 
   // Handle Enter key press
   const handleKeyDown = useCallback(
