@@ -23,7 +23,7 @@ export const QuickInput: React.FC = () => {
   const [quickChatInput, setQuickChatInput] = useState('')
   const [think, setThink] = useState(false)
   // const [spinRefresh, setSpinRefresh] = useState(false)
-  const [currentProvider] = useState('openrouter') // Default provider
+  const [currentProvider] = useState('OpenRouter') // Default provider
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const projectsScrollRef = useRef<HTMLDivElement>(null)
 
