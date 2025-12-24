@@ -122,7 +122,7 @@ export const QuickInput: React.FC = () => {
       setSelectedProjectId(null)
 
       // 7. Send message BEFORE navigation - we have the conversation ID, no need to wait
-      const sendMessageResult = dispatch(
+      dispatch(
         sendMessage({
           conversationId: result.id,
           input: { content: trimmedInput, modelOverride: null },
