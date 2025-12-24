@@ -75,6 +75,7 @@ import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
 import { useIsMobile } from '../hooks/useMediaQuery'
+import { useSubscriptionStatus } from '../hooks/useSubscriptionStatus'
 import {
   ResearchNoteItem,
   useConversationMessages,
@@ -84,7 +85,6 @@ import {
   useSelectedModel,
   useSelectModel,
 } from '../hooks/useQueries'
-import { getPaymentProvider, type SubscriptionStatus } from '../lib/payments'
 import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
@@ -101,37 +101,7 @@ function Chat() {
   const [localInput, setLocalInput] = useState('')
 
   // Subscription status for free/paid detection
-  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null)
-  useEffect(() => {
-    let cancelled = false
-    const loadStatus = async () => {
-      try {
-        const provider = await getPaymentProvider()
-        if (!userId) return
-        const status = await provider.getSubscriptionStatus(userId)
-        if (!cancelled) setSubscriptionStatus(status)
-      } catch (err) {
-        console.warn('[Chat] Failed to fetch subscription status', err)
-      }
-    }
-    loadStatus()
-    return () => {
-      cancelled = true
-    }
-  }, [userId])
-
-  const hasActiveAccess = useMemo(() => {
-    if (!subscriptionStatus || !subscriptionStatus.tier) return false
-    const status = subscriptionStatus.status
-    if (status === 'active') return true
-    if ((status === 'past_due' || status === 'canceled') && subscriptionStatus.currentPeriodEnd) {
-      const periodEnd = new Date(subscriptionStatus.currentPeriodEnd)
-      return new Date() < periodEnd
-    }
-    return false
-  }, [subscriptionStatus])
-
-  const isFreeUser = !hasActiveAccess
+  const { isFreeUser } = useSubscriptionStatus(userId)
   const modelSelectFooter = isFreeUser ? (
     <div className='p-1 space-y-2'>
       {/* <div className='text-sm text-neutral-700 dark:text-neutral-200'>Subscribe now for access to all 400+ models</div> */}

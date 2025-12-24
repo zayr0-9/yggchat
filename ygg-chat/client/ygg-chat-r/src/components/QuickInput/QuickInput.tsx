@@ -8,7 +8,9 @@ import { convContextSet, systemPromptSet } from '../../features/conversations/co
 import { fetchProjectById } from '../../features/projects'
 import { selectCurrentUser } from '../../features/users'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
+import { useAuth } from '../../hooks/useAuth'
 import { useModels, useProjects, useSelectModel, useSelectedModel } from '../../hooks/useQueries'
+import { useSubscriptionStatus } from '../../hooks/useSubscriptionStatus'
 import { Button } from '../Button/button'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { ModelSelectControl } from '../ModelSelectControl/ModelSelectControl'
@@ -18,6 +20,19 @@ export const QuickInput: React.FC = () => {
   const queryClient = useQueryClient()
   const currentUser = useAppSelector(selectCurrentUser)
   const quickChatProjectId = currentUser?.quick_chat_project_id || null
+
+  // Subscription status for free/paid detection
+  const { userId } = useAuth()
+  const { isFreeUser } = useSubscriptionStatus(userId)
+  const modelSelectFooter = isFreeUser ? (
+    <div className='p-1 space-y-2'>
+      <Button variant='outline2' size='medium' className='w-full' onClick={() => navigate('/payment')}>
+        Subscribe now for access to all 400+ models
+      </Button>
+    </div>
+  ) : (
+    <></>
+  )
 
   // Local state
   const [quickChatInput, setQuickChatInput] = useState('')
@@ -214,6 +229,7 @@ export const QuickInput: React.FC = () => {
               className='flex-1 ml-2 max-w-28 sm:max-w-28 md:max-w-28 lg:max-w-40 transition-transform duration-60 active:scale-99'
               showFilters={true}
               blur='high'
+              footerContent={modelSelectFooter}
             />
             {/* <Button
               variant='outline2'
