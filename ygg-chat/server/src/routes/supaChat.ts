@@ -295,16 +295,23 @@ router.get(
       const data = (await response.json()) as { data?: any[] }
       const endpoints: any[] = Array.isArray(data?.data) ? data.data! : []
 
-      const normalized = endpoints.map(endpoint => ({
-        id: String(endpoint?.name || endpoint?.id || ''),
-        displayName: String(endpoint?.model_name || endpoint?.name || endpoint?.id || ''),
-        providerName: String(endpoint?.provider_name || endpoint?.provider || ''),
-        contextLength: Number(endpoint?.context_length ?? 0),
-        supportsImplicitCaching: Boolean(endpoint?.supports_implicit_caching),
-        pricing: endpoint?.pricing || {},
-        supportedParameters: Array.isArray(endpoint?.supported_parameters) ? endpoint.supported_parameters : [],
-        raw: endpoint,
-      }))
+      const normalized = endpoints.map(endpoint => {
+        // name format is "Provider | model/id" (e.g., "Groq | qwen/qwen3-32b-04-28")
+        // Extract the actual model ID from after the " | " separator
+        const nameStr = String(endpoint?.name || '')
+        const modelId = nameStr.includes(' | ') ? nameStr.split(' | ')[1] : nameStr
+
+        return {
+          id: modelId || '',  // Extracted model ID for API calls (e.g., "qwen/qwen3-32b-04-28")
+          displayName: String(endpoint?.model_name || nameStr || ''),  // Human-readable name (e.g., "Qwen: Qwen3 32B")
+          providerName: String(endpoint?.provider_name || endpoint?.provider || ''),
+          contextLength: Number(endpoint?.context_length ?? 0),
+          supportsImplicitCaching: Boolean(endpoint?.supports_implicit_caching),
+          pricing: endpoint?.pricing || {},
+          supportedParameters: Array.isArray(endpoint?.supported_parameters) ? endpoint.supported_parameters : [],
+          raw: endpoint,
+        }
+      })
 
       res.json({ endpoints: normalized })
     } catch (error) {

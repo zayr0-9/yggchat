@@ -58,7 +58,12 @@ export const Select: React.FC<SelectProps> = ({
   const listRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
   const [listMaxHeight, setListMaxHeight] = useState<number | undefined>(undefined)
-  const [dropdownPosition, setDropdownPosition] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null)
+  const [dropdownPosition, setDropdownPosition] = useState<{
+    top?: number
+    bottom?: number
+    left: number
+    width: number
+  } | null>(null)
   const isMobile = useIsMobile()
 
   const computeDropdownMetrics = useCallback(() => {
@@ -313,7 +318,7 @@ export const Select: React.FC<SelectProps> = ({
                           if (!optDisabled) handleSelect(opt.value)
                         }}
                         onClick={() => !optDisabled && handleSelect(opt.value)}
-                        className={`flex-1 line-clamp-3 justify-start text-left ${isSelected ? 'font-medium' : ''} ${optDisabled ? 'cursor-not-allowed' : 'hover:bg-neutral-200'}`}
+                        className={`flex-1 hover:scale-103 transition-all line-clamp-3 justify-start text-left ${isSelected ? 'font-medium' : ''} ${optDisabled ? 'cursor-not-allowed' : 'hover:bg-neutral-200'}`}
                         title={optDisabled ? 'Upgrade to access this model' : undefined}
                       >
                         {opt.label}

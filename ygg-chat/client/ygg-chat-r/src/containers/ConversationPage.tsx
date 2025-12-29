@@ -455,7 +455,7 @@ const ConversationPage: React.FC = () => {
   }
 
   return (
-    <div className='bg-zinc-50 dark:bg-zinc-900 flex overflow-hidden h-full'>
+    <div className='flex overflow-hidden h-full'>
       {/* Dark Overlay */}
       <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/30 z-0' />
       {/* Recent conversations sidebar */}

@@ -1282,7 +1282,7 @@ export async function generateResponse(
           provider: {
             // Ask OpenRouter to route to the lowest-latency provider for this model
             sort: 'latency',
-
+            // zdr: true,
             // Optional: only use some providers (or remove this if you want all)
             // allow: ['openai', 'anthropic', 'deepinfra'],
             // Or explicitly avoid known slow ones:

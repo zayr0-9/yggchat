@@ -75,7 +75,6 @@ import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
 import { useIsMobile } from '../hooks/useMediaQuery'
-import { useSubscriptionStatus } from '../hooks/useSubscriptionStatus'
 import {
   ResearchNoteItem,
   useConversationMessages,
@@ -85,6 +84,7 @@ import {
   useSelectedModel,
   useSelectModel,
 } from '../hooks/useQueries'
+import { useSubscriptionStatus } from '../hooks/useSubscriptionStatus'
 import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
@@ -2288,7 +2288,14 @@ function Chat() {
   }, [dispatch, userId, accessToken, isRefreshingCredits])
 
   return (
-    <div ref={containerRef} className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'>
+    <motion.div
+      initial={{ opacity: 0, x: 10 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -10 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      ref={containerRef}
+      className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'
+    >
       <div
         className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden'
         style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : '100%' }}
@@ -3240,7 +3247,7 @@ function Chat() {
         isOpen={showFreeTierModal}
         onClose={() => dispatch(chatSliceActions.freeTierLimitModalHidden())}
       />
-    </div>
+    </motion.div>
   )
 }
 

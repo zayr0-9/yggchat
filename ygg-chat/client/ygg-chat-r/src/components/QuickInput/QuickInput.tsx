@@ -9,7 +9,7 @@ import { fetchProjectById } from '../../features/projects'
 import { selectCurrentUser } from '../../features/users'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { useAuth } from '../../hooks/useAuth'
-import { useModels, useProjects, useSelectModel, useSelectedModel } from '../../hooks/useQueries'
+import { useModels, useProjects, useSelectModel, useSelectedModel, useToggleSecretMode } from '../../hooks/useQueries'
 import { useSubscriptionStatus } from '../../hooks/useSubscriptionStatus'
 import { Button } from '../Button/button'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
@@ -24,15 +24,11 @@ export const QuickInput: React.FC = () => {
   // Subscription status for free/paid detection
   const { userId } = useAuth()
   const { isFreeUser } = useSubscriptionStatus(userId)
-  const modelSelectFooter = isFreeUser ? (
-    <div className='p-1 space-y-2'>
-      <Button variant='outline2' size='medium' className='w-full' onClick={() => navigate('/payment')}>
-        Subscribe now for access to all 400+ models
-      </Button>
-    </div>
-  ) : (
-    <></>
-  )
+
+  // Check if user has credits (in USD cents) - users with credits get paid features
+  const currentCredits = currentUser?.cached_current_credits ?? 0
+  const hasCredits = currentCredits > 0
+  const showSecretMode = !isFreeUser || hasCredits
 
   // Local state
   const [quickChatInput, setQuickChatInput] = useState('')
@@ -40,7 +36,39 @@ export const QuickInput: React.FC = () => {
   // const [spinRefresh, setSpinRefresh] = useState(false)
   const [currentProvider] = useState('OpenRouter') // Default provider
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [secretMode, setSecretMode] = useState(false)
   const projectsScrollRef = useRef<HTMLDivElement>(null)
+
+  // Secret mode toggle (ZDR models)
+  const toggleSecretModeMutation = useToggleSecretMode()
+
+  // Handle secret mode toggle
+  const handleSecretModeToggle = useCallback(() => {
+    const newSecretMode = !secretMode
+    setSecretMode(newSecretMode)
+    toggleSecretModeMutation.mutate({ enabled: newSecretMode })
+  }, [secretMode, toggleSecretModeMutation])
+
+  const modelSelectFooter = showSecretMode ? (
+    <div className='p-1'>
+      <Button
+        variant={secretMode ? 'primary' : 'outline2'}
+        size='small'
+        className='w-full'
+        onClick={handleSecretModeToggle}
+        disabled={toggleSecretModeMutation.isPending}
+      >
+        <i className={`bx ${secretMode ? 'bxs-lock' : 'bx-lock-open'} mr-1`} aria-hidden='true'></i>
+        {toggleSecretModeMutation.isPending ? 'Loading...' : secretMode ? 'Secret Mode On' : 'Secret Mode'}
+      </Button>
+    </div>
+  ) : (
+    <div className='p-1 space-y-2'>
+      <Button variant='outline2' size='medium' className='w-full' onClick={() => navigate('/payment')}>
+        Subscribe now for access to all 400+ models
+      </Button>
+    </div>
+  )
 
   // Fetch projects for quick selection
   const { data: projects } = useProjects()
@@ -67,6 +95,14 @@ export const QuickInput: React.FC = () => {
   const models = modelsData?.models || []
   const selectedModel = useSelectedModel(currentProvider)
   // const refreshModelsMutation = useRefreshModels()
+
+  // Sync secretMode state with React Query cache (handles navigation back to page)
+  useEffect(() => {
+    const cachedSecretMode = (modelsData as any)?.isSecretMode ?? false
+    if (cachedSecretMode !== secretMode) {
+      setSecretMode(cachedSecretMode)
+    }
+  }, [(modelsData as any)?.isSecretMode])
 
   // Handle model selection
   const handleModelSelect = useCallback(

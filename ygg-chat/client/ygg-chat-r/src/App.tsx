@@ -1,4 +1,6 @@
-import { BrowserRouter, HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
+import { AnimatePresence } from 'framer-motion'
+import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './App.css'
 import { LiquidGlassSVG } from './components/LiquidGlassSVG'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -8,9 +10,9 @@ import VideoBackground from './components/VideoBackground'
 import {
   Chat,
   ConversationPage,
+  FAQPage,
   Homepage,
   LandingPage,
-  FAQPage,
   Login,
   PaymentPage,
   PaymentPlans,
@@ -19,7 +21,6 @@ import {
   Settings,
   TermsOfService,
 } from './containers'
-import { Analytics } from '@vercel/analytics/react'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
@@ -28,6 +29,76 @@ const isElectron =
   (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
 
 const Router = isElectron ? HashRouter : BrowserRouter
+
+function AnimatedRoutes() {
+  const location = useLocation()
+
+  return (
+    <AnimatePresence mode='popLayout'>
+      <Routes location={location} key={location.pathname}>
+        {/* Public route */}
+        <Route path='/landingpage' element={<LandingPage />} />
+        {/* Public route */}
+        <Route path='/faq' element={<FAQPage />} />
+        {/* Public route */}
+        <Route path='/login' element={<Login />} />
+        {/* Public route */}
+        <Route path='/paymentplan' element={<PaymentPlans />} />
+        {/* Public route */}
+        <Route path='/terms' element={<TermsOfService />} />
+        {/* Public route */}
+        <Route path='/refund-policy' element={<RefundPolicy />} />
+        {/* Public route */}
+        <Route path='/privacy' element={<PrivacyPolicy />} />
+        {/* Protected routes */}
+        <Route
+          path='/conversationPage'
+          element={
+            <ProtectedRoute>
+              <ConversationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path='/' element={isElectron ? <Navigate to='/login' replace /> : <LandingPage />} />
+        <Route
+          path='/homepage'
+          element={
+            <ProtectedRoute>
+              <Homepage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path='/chat/:projectId/:id'
+          element={
+            <ProtectedRoute>
+              <Chat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path='/settings'
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path='/payment'
+          element={
+            <ProtectedRoute>
+              <PaymentPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Fallback */}
+        <Route path='*' element={<Navigate to='/' replace />} />
+      </Routes>
+    </AnimatePresence>
+  )
+}
 
 function App() {
   return (
@@ -44,67 +115,7 @@ function App() {
         {/* Global update modal for Electron auto-updates */}
         <UpdateModal />
         <div className='app-content'>
-          <Routes>
-            {/* Public route */}
-            <Route path='/landingpage' element={<LandingPage />} />
-            {/* Public route */}
-            <Route path='/faq' element={<FAQPage />} />
-            {/* Public route */}
-            <Route path='/login' element={<Login />} />
-            {/* Public route */}
-            <Route path='/paymentplan' element={<PaymentPlans />} />
-            {/* Public route */}
-            <Route path='/terms' element={<TermsOfService />} />
-            {/* Public route */}
-            <Route path='/refund-policy' element={<RefundPolicy />} />
-            {/* Public route */}
-            <Route path='/privacy' element={<PrivacyPolicy />} />
-            {/* Protected routes */}
-            <Route
-              path='/conversationPage'
-              element={
-                <ProtectedRoute>
-                  <ConversationPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route path='/' element={isElectron ? <Navigate to='/login' replace /> : <LandingPage />} />
-            <Route
-              path='/homepage'
-              element={
-                <ProtectedRoute>
-                  <Homepage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path='/chat/:projectId/:id'
-              element={
-                <ProtectedRoute>
-                  <Chat />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path='/settings'
-              element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path='/payment'
-              element={
-                <ProtectedRoute>
-                  <PaymentPage />
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Fallback */}
-            <Route path='*' element={<Navigate to='/' replace />} />
-          </Routes>
+          <AnimatedRoutes />
         </div>
       </Router>
       {!isElectron && <Analytics />}

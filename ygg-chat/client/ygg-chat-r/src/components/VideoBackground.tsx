@@ -82,7 +82,8 @@ const VideoBackground: React.FC = () => {
         autoPlay
         loop
         muted
-        className='fixed inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:dark:blur-[1px] object-cover z-0 dark:hidden'
+        className='fixed inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:dark:blur-[1px] object-cover pointer-events-none -z-10 dark:hidden'
+        aria-hidden='true'
       >
         <source src={lightSource.src} type={lightSource.type} />
       </video>
@@ -91,7 +92,8 @@ const VideoBackground: React.FC = () => {
         autoPlay
         loop
         muted
-        className='fixed w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:dark:blur-[1px] object-cover z-0 hidden dark:block'
+        className='fixed w-full h-full blur-[1px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:dark:blur-[1px] object-cover pointer-events-none -z-10 hidden dark:block'
+        aria-hidden='true'
       >
         <source src={darkSource.src} type={darkSource.type} />
       </video>

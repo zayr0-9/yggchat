@@ -848,6 +848,153 @@ export function useRecentModels(limit: number = 5) {
 }
 
 /**
+ * ZDR (Zero Data Retention) endpoint model shape from OpenRouter
+ */
+export interface ZdrModel {
+  id: string
+  displayName: string
+  providerName: string
+  contextLength: number
+  supportsImplicitCaching: boolean
+  pricing: Record<string, unknown>
+  supportedParameters: string[]
+  raw: Record<string, unknown>
+}
+
+/**
+ * Fetch ZDR-capable models from OpenRouter
+ * Cache key: ['models', 'openrouter', 'zdr']
+ *
+ * These are Zero Data Retention endpoints for privacy-focused usage
+ * Returns: { endpoints: ZdrModel[] }
+ */
+export function useZdrModels() {
+  const { accessToken } = useAuth()
+
+  return useQuery({
+    queryKey: ['models', 'openrouter', 'zdr'],
+    queryFn: async () => {
+      const response = await api.get<{ endpoints: ZdrModel[] }>('/models/openrouter/zdr', accessToken)
+      return response.endpoints || []
+    },
+    enabled: !!accessToken,
+    staleTime: 5 * 60 * 1000, // 5 minutes - ZDR endpoints don't change frequently
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+/**
+ * Mutation hook for toggling "Secret Mode" (ZDR models)
+ * When enabled, replaces the OpenRouter models cache with ZDR models
+ * When disabled, restores normal OpenRouter models
+ *
+ * Usage:
+ * const toggleSecretMode = useToggleSecretMode()
+ * toggleSecretMode.mutate({ enabled: true }) // Switch to ZDR models
+ * toggleSecretMode.mutate({ enabled: false }) // Switch back to normal models
+ */
+export function useToggleSecretMode() {
+  const queryClient = useQueryClient()
+  const { accessToken } = useAuth()
+
+  return useMutation({
+    mutationFn: async ({ enabled }: { enabled: boolean }) => {
+      if (enabled) {
+        // Fetch ZDR models
+        const response = await api.get<{ endpoints: ZdrModel[] }>('/models/openrouter/zdr', accessToken)
+        const zdrEndpoints = response.endpoints || []
+
+        // Deduplicate endpoints by model id (same model can have multiple ZDR providers)
+        // Keep the first occurrence (usually the primary provider)
+        const seenIds = new Set<string>()
+        const uniqueEndpoints = zdrEndpoints.filter(endpoint => {
+          if (seenIds.has(endpoint.id)) {
+            return false
+          }
+          seenIds.add(endpoint.id)
+          return true
+        })
+
+        // Convert ZDR endpoints to Model format for compatibility
+        const models: Model[] = uniqueEndpoints.map(endpoint => ({
+          id: endpoint.id,
+          name: endpoint.id,
+          version: '',
+          displayName: endpoint.displayName,
+          description: `${endpoint.providerName} - ZDR`,
+          contextLength: endpoint.contextLength,
+          maxCompletionTokens: 0,
+          inputTokenLimit: endpoint.contextLength,
+          outputTokenLimit: 0,
+          promptCost: 0,
+          completionCost: 0,
+          requestCost: 0,
+          thinking: false,
+          supportsImages: false,
+          supportsWebSearch: false,
+          supportsStructuredOutputs: false,
+          inputModalities: ['text'],
+          outputModalities: ['text'],
+          defaultTemperature: null,
+          defaultTopP: null,
+          defaultFrequencyPenalty: null,
+          topProviderContextLength: endpoint.contextLength,
+          isZdr: true, // Mark as ZDR model
+        }))
+
+        return { models, enabled: true }
+      } else {
+        // Fetch normal OpenRouter models
+        const response = await api.get<{ models: Model[]; default: Model; userIsFreeTier?: boolean }>(
+          '/models/openrouter',
+          accessToken
+        )
+        return { models: response.models, default: response.default, enabled: false }
+      }
+    },
+    onSuccess: (data, { enabled }) => {
+      const provider = 'OpenRouter'
+
+      if (enabled) {
+        // Replace OpenRouter models cache with ZDR models
+        queryClient.setQueryData(['models', provider], (oldData: any) => {
+          if (!oldData) return oldData
+          const defaultModel = data.models[0] || oldData.default
+          return {
+            ...oldData,
+            models: data.models,
+            default: defaultModel,
+            selected: defaultModel,
+            isSecretMode: true,
+          }
+        })
+      } else {
+        // Restore normal OpenRouter models
+        const storedSelection = getStoredSelectedModel()
+        const defaultModel = (data as any).default || data.models[0]
+        let selectedModel = defaultModel
+
+        if (storedSelection) {
+          const matchedModel = data.models.find(m => m.name === storedSelection.name)
+          if (matchedModel) {
+            selectedModel = matchedModel
+          }
+        }
+
+        queryClient.setQueryData(['models', provider], {
+          models: data.models,
+          default: defaultModel,
+          selected: selectedModel,
+          isSecretMode: false,
+        })
+      }
+    },
+  })
+}
+
+/**
  * Research note item returned from API
  */
 export interface ResearchNoteItem {
@@ -1181,7 +1328,6 @@ export interface ModelSortOptions {
 
 export function useFilteredModels(provider: string | null) {
   const { data: modelsData } = useModels(provider)
-  const [localModels, setLocalModels] = useState<BaseModel[]>([])
   const [filters, setFilters] = useState<ModelFilters>({})
   const [sortOptions, setSortOptions] = useState<ModelSortOptions>({})
   const [favoritedModels, setFavoritedModels] = useState<string[]>(() => getFavoritedModels())
@@ -1198,16 +1344,22 @@ export function useFilteredModels(provider: string | null) {
     }
   }, [])
 
-  // Initialize local copy when models data changes
-  useEffect(() => {
-    if (modelsData?.models) {
-      setLocalModels([...modelsData.models])
-    }
-  }, [modelsData?.models])
+  // Use models directly from cache - no local copy needed
+  // This ensures we always have the latest data when cache updates (e.g., ZDR toggle)
+  const rawModels = modelsData?.models
+  const sourceModels = useMemo(() => {
+    if (!rawModels) return [] // Avoid ?? [] which creates new ref
+    const seen = new Set<string>()
+    return rawModels.filter(m => {
+      if (seen.has(m.name)) return false
+      seen.add(m.name)
+      return true
+    })
+  }, [rawModels]) // Only depends on the actual array, not a fallback
 
-  // Apply filters and sorting to local copy
+  // Apply filters and sorting directly to source models
   const filteredModels = useMemo(() => {
-    let result = localModels.filter(model => {
+    let result = sourceModels.filter(model => {
       // Filter by thinking capability
       if (filters.thinking !== undefined && model.thinking !== filters.thinking) {
         return false
@@ -1297,7 +1449,7 @@ export function useFilteredModels(provider: string | null) {
     }
 
     return result
-  }, [localModels, filters, sortOptions, modelsData?.selected, favoritedModels])
+  }, [sourceModels, filters, sortOptions, modelsData?.selected, favoritedModels])
 
   const applyFilters = useCallback((newFilters: ModelFilters) => {
     setFilters(newFilters)
@@ -1312,35 +1464,16 @@ export function useFilteredModels(provider: string | null) {
     setSortOptions(sortOpts)
   }, [])
 
-  const sortByField = useCallback((field: keyof BaseModel, ascending = true) => {
-    setLocalModels(prev => {
-      const sorted = [...prev].sort((a, b) => {
-        const aVal = a[field]
-        const bVal = b[field]
-
-        if (typeof aVal === 'number' && typeof bVal === 'number') {
-          return ascending ? aVal - bVal : bVal - aVal
-        }
-
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          return ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal)
-        }
-
-        return 0
-      })
-      return sorted
-    })
-  }, [])
+  // sortByField removed - use applySorting with sortOptions instead
 
   return {
     filteredModels,
-    allModels: localModels,
+    allModels: sourceModels,
     filters,
     sortOptions,
     applyFilters,
     clearFilters,
     applySorting,
-    sortByField,
     refreshFavorites: () => setFavoritedModels(getFavoritedModels()),
   }
 }

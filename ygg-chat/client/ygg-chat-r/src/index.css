@@ -75,7 +75,7 @@
 
   /* Transparent body background to let page backgrounds show through */
   body {
-    background-color: black;
+    background-color: transparent;
   }
 
   /* Pixel density normalization for high-DPI displays */
