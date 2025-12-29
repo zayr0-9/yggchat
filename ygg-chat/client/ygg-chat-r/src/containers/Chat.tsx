@@ -81,6 +81,7 @@ import {
   useConversationsByProject,
   useConversationStorageMode,
   useModels,
+  useProjects,
   useSelectedModel,
   useSelectModel,
 } from '../hooks/useQueries'
@@ -89,6 +90,7 @@ import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
 import { extractTextFromPdf } from '../utils/pdfUtils'
+import SideBar from './sideBar'
 
 function Chat() {
   const dispatch = useAppDispatch()
@@ -422,6 +424,9 @@ function Chat() {
   const { data: projectConversations = [] } = useConversationsByProject(
     projectIdFromUrl || selectedProject?.id || currentConversation?.project_id || null
   )
+
+  // Fetch all projects for SideBar
+  const { data: allProjects = [] } = useProjects()
 
   // Fetch storage mode using the robust hook
   const { data: storageModeFromHook } = useConversationStorageMode(conversationIdFromUrl)
@@ -2296,6 +2301,9 @@ function Chat() {
       ref={containerRef}
       className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'
     >
+      {/* Recent conversations sidebar */}
+      {!isMobile && <SideBar limit={12} projects={allProjects} activeConversationId={currentConversationId} />}
+
       <div
         className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden'
         style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : '100%' }}

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ConversationId, Project } from '../../../../shared/types'
 import { Button } from '../components'
 import { chatSliceActions } from '../features/chats'
 import { activeConversationIdSet } from '../features/conversations'
 // import { searchActions, selectSearchLoading, selectSearchQuery, selectSearchResults } from '../features/search'
 import { useAppDispatch } from '../hooks/redux'
-import { useRecentConversations } from '../hooks/useQueries'
+import { useProjects, useRecentConversations } from '../hooks/useQueries'
 
 interface SideBarProps {
   limit?: number
@@ -18,11 +18,21 @@ interface SideBarProps {
 const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects = [], activeConversationId = null }) => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
+  const location = useLocation()
   const isWeb = import.meta.env.VITE_ENVIRONMENT === 'web'
 
+  // Detect if on Chat page - show projects instead of conversations
+  const isChatPage = location.pathname.startsWith('/chat')
+
+  // Fetch projects using React Query
+  const { data: fetchedProjects = [], isLoading: projectsLoading, error: projectsError } = useProjects()
+
   // Fetch recent conversations using React Query (cached for 5 minutes)
-  const { data: conversations = [], isLoading: loading, error: queryError } = useRecentConversations(limit)
-  const error = queryError ? String(queryError) : null
+  const { data: conversations = [], isLoading: conversationsLoading, error: queryError } = useRecentConversations(limit)
+
+  // Use appropriate loading/error state based on page
+  const loading = isChatPage ? projectsLoading : conversationsLoading
+  const error = isChatPage ? (projectsError ? String(projectsError) : null) : (queryError ? String(queryError) : null)
 
   // Search functionality
   // const searchLoading = useAppSelector(selectSearchLoading)
@@ -93,6 +103,10 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
     navigate(`/chat/${conversation?.project_id || 'unknown'}/${id}`)
   }
 
+  const handleProjectSelect = (projectId: string) => {
+    navigate(`/conversationPage?projectId=${projectId}`)
+  }
+
   const toggleCollapse = () => {
     setIsCollapsed(prev => !prev)
   }
@@ -116,13 +130,13 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
   return (
     <aside
       className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-lg rounded-r-xl border-r border-neutral-200 dark:border-neutral-700 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/50 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-16 ' : 'w-64 md:w-72 lg:w-80 xl:w-90 '} ${className}`}
-      aria-label='Recent conversations'
+      aria-label={isChatPage ? 'Projects' : 'Recent conversations'}
     >
       {/* Toggle Button */}
       <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
         {!isCollapsed && (
           <h2 className='text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] pl-2 font-semibold text-neutral-700 dark:text-neutral-200 truncate'>
-            Recent Chats
+            {isChatPage ? 'Projects' : 'Recent Chats'}
           </h2>
         )}
         <Button
@@ -172,73 +186,145 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
             {isCollapsed ? '!' : error}
           </div>
         )}
-        {conversations.map(conv => {
-          const isActive = activeConversationId === conv.id
-          const projectName = conv.project_id ? projects.find(p => p.id === conv.project_id)?.name : undefined
+        {isChatPage ? (
+          // Projects List
+          <>
+            {fetchedProjects.map(project => (
+              <div key={project.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
+                <div
+                  role='button'
+                  tabIndex={0}
+                  onClick={() => handleProjectSelect(project.id)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleProjectSelect(project.id)
+                    }
+                  }}
+                  className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
+                    isCollapsed
+                      ? 'py-2 flex items-center hover:scale-90 justify-center'
+                      : 'hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
+                  }`}
+                  title={isCollapsed ? project.name : undefined}
+                >
+                  {isCollapsed ? (
+                    <Button
+                      variant='outline2'
+                      size='circle'
+                      rounded='full'
+                      className='h-10 w-10 text-md font-semibold text-lg md:text-base lg:text-sm xl:text-sm 2xl:text-lg'
+                    >
+                      {project.name ? project.name.charAt(0).toUpperCase() : '#'}
+                    </Button>
+                  ) : (
+                    <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
+                      <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
+                        {project.name}
+                      </span>
+                      {project.description && (
+                        <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
+                          {project.description}
+                        </span>
+                      )}
+                      {project.latest_conversation_updated_at && (
+                        <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-500 dark:text-neutral-400 text-right'>
+                          {new Date(project.latest_conversation_updated_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-          return (
-            <div key={conv.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
-              <div
-                role='button'
-                tabIndex={0}
-                onClick={() => handleSelect(conv.id)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    handleSelect(conv.id)
-                  }
-                }}
-                className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
-                  isCollapsed
-                    ? 'py-2 flex items-center hover:scale-90 justify-center'
-                    : 'hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
-                } ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
-                title={isCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
-              >
-                {isCollapsed ? (
-                  <Button
-                    variant='outline2'
-                    size='circle'
-                    rounded='full'
-                    className='h-10 w-10 text-md font-semibold text-lg md:text-base lg:text-sm xl:text-sm 2xl:text-lg'
-                  >
-                    {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
-                  </Button>
-                ) : (
-                  <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
-                    <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
-                      {conv.title || `Conversation ${conv.id}`}
-                    </span>
-                    {projectName && (
-                      <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
-                        Project: {projectName}
-                      </span>
-                    )}
-                    {conv.updated_at && (
-                      <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-500 dark:text-neutral-400 text-right'>
-                        {new Date(conv.updated_at).toLocaleDateString()}
-                      </span>
-                    )}
+                {/* Tooltip for collapsed state */}
+                {isCollapsed && (
+                  <div className='absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50'>
+                    <div className='bg-neutral-900 dark:bg-neutral-700 text-white dark:text-neutral-100 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap max-w-xs'>
+                      <div className='font-medium'>{project.name}</div>
+                      {project.description && <div className='text-xs opacity-80 mt-1'>{project.description}</div>}
+                    </div>
                   </div>
                 )}
               </div>
+            ))}
+            {fetchedProjects.length === 0 && !loading && !error && (
+              <div className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${isCollapsed ? 'hidden' : ''}`}>
+                No projects
+              </div>
+            )}
+          </>
+        ) : (
+          // Recent Conversations List
+          <>
+            {conversations.map(conv => {
+              const isActive = activeConversationId === conv.id
+              const projectName = conv.project_id ? projects.find(p => p.id === conv.project_id)?.name : undefined
 
-              {/* Tooltip for collapsed state */}
-              {isCollapsed && (
-                <div className='absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50'>
-                  <div className='bg-neutral-900 dark:bg-neutral-700 text-white dark:text-neutral-100 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap max-w-xs'>
-                    <div className='font-medium'>{conv.title || `Conversation ${conv.id}`}</div>
-                    {projectName && <div className='text-xs opacity-80 mt-1'>Project: {projectName}</div>}
+              return (
+                <div key={conv.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
+                  <div
+                    role='button'
+                    tabIndex={0}
+                    onClick={() => handleSelect(conv.id)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleSelect(conv.id)
+                      }
+                    }}
+                    className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
+                      isCollapsed
+                        ? 'py-2 flex items-center hover:scale-90 justify-center'
+                        : 'hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
+                    } ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
+                    title={isCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
+                  >
+                    {isCollapsed ? (
+                      <Button
+                        variant='outline2'
+                        size='circle'
+                        rounded='full'
+                        className='h-10 w-10 text-md font-semibold text-lg md:text-base lg:text-sm xl:text-sm 2xl:text-lg'
+                      >
+                        {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
+                      </Button>
+                    ) : (
+                      <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
+                        <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
+                          {conv.title || `Conversation ${conv.id}`}
+                        </span>
+                        {projectName && (
+                          <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
+                            Project: {projectName}
+                          </span>
+                        )}
+                        {conv.updated_at && (
+                          <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-500 dark:text-neutral-400 text-right'>
+                            {new Date(conv.updated_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Tooltip for collapsed state */}
+                  {isCollapsed && (
+                    <div className='absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50'>
+                      <div className='bg-neutral-900 dark:bg-neutral-700 text-white dark:text-neutral-100 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap max-w-xs'>
+                        <div className='font-medium'>{conv.title || `Conversation ${conv.id}`}</div>
+                        {projectName && <div className='text-xs opacity-80 mt-1'>Project: {projectName}</div>}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )
-        })}
-        {conversations.length === 0 && !loading && !error && (
-          <div className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${isCollapsed ? 'hidden' : ''}`}>
-            No recent conversations
-          </div>
+              )
+            })}
+            {conversations.length === 0 && !loading && !error && (
+              <div className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${isCollapsed ? 'hidden' : ''}`}>
+                No recent conversations
+              </div>
+            )}
+          </>
         )}
       </div>
       <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
