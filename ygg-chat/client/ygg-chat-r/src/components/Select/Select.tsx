@@ -29,7 +29,15 @@ interface SelectProps {
   footerContent?: React.ReactNode
   /** Options that should be visually disabled (shown but not selectable) */
   disabledOptions?: string[]
+  /** Show "View All" button when there are more options than displayed */
+  showExpandButton?: boolean
+  /** Callback when expand button is clicked */
+  onExpandClick?: () => void
+  /** Total count of all options (for display in expand button) */
+  totalOptionsCount?: number
 }
+
+const DROPDOWN_LIMIT = 25
 
 export const Select: React.FC<SelectProps> = ({
   value,
@@ -47,6 +55,9 @@ export const Select: React.FC<SelectProps> = ({
   modelSelect = false,
   footerContent,
   disabledOptions = [],
+  showExpandButton = false,
+  onExpandClick,
+  totalOptionsCount,
 }) => {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number>(-1)
@@ -120,12 +131,26 @@ export const Select: React.FC<SelectProps> = ({
   }, [options])
 
   const filteredOptions: SelectOption[] = useMemo(() => {
+    let result = normOptions
+    if (searchBarVisible && searchTerm.trim()) {
+      const term = searchTerm.toLowerCase()
+      result = normOptions.filter(opt => opt.label.toLowerCase().includes(term) || opt.value.toLowerCase().includes(term))
+    }
+    // Limit dropdown to DROPDOWN_LIMIT items for modelSelect (performance optimization)
+    if (modelSelect && showExpandButton && result.length > DROPDOWN_LIMIT) {
+      return result.slice(0, DROPDOWN_LIMIT)
+    }
+    return result
+  }, [normOptions, searchTerm, searchBarVisible, modelSelect, showExpandButton])
+
+  // Count of all filtered options before limiting (for "View All" button)
+  const allFilteredCount = useMemo(() => {
     if (!searchBarVisible || !searchTerm.trim()) {
-      return normOptions
+      return totalOptionsCount ?? normOptions.length
     }
     const term = searchTerm.toLowerCase()
-    return normOptions.filter(opt => opt.label.toLowerCase().includes(term) || opt.value.toLowerCase().includes(term))
-  }, [normOptions, searchTerm, searchBarVisible])
+    return normOptions.filter(opt => opt.label.toLowerCase().includes(term) || opt.value.toLowerCase().includes(term)).length
+  }, [normOptions, searchTerm, searchBarVisible, totalOptionsCount])
 
   const selected = useMemo(() => normOptions.find(o => o.value === value) || null, [normOptions, value])
 
@@ -360,8 +385,27 @@ export const Select: React.FC<SelectProps> = ({
                 })
               )}
             </div>
+            {/* View All Models button */}
+            {showExpandButton && allFilteredCount > DROPDOWN_LIMIT && (
+              <div className='px-2 py-2 border-t border-neutral-200 dark:border-neutral-700 acrylic-medium dark:bg-transparent'>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  className='w-full'
+                  onClick={e => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onExpandClick?.()
+                    setOpen(false)
+                  }}
+                >
+                  <i className='bx bx-expand-alt mr-1' />
+                  View All Models ({allFilteredCount})
+                </Button>
+              </div>
+            )}
             {footerContent && (
-              <div className='border-t border-neutral-800 dark:border-neutral-200 acrylic-medium dark:bg-transparent'>
+              <div className='border-t border-neutral-200 dark:border-neutral-700 acrylic-medium dark:bg-transparent'>
                 {footerContent}
               </div>
             )}

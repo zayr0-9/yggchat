@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 
 import { useFilteredModels, useModels } from '../../hooks/useQueries'
+import { ExpandedModelView } from '../ExpandedModelView/ExpandedModelView'
 import { ModelFilterUI } from '../ModelFilterUI/ModelFilterUI'
 import { Select } from '../Select/Select'
 
@@ -31,6 +32,9 @@ export const ModelSelectControl: React.FC<ModelSelectControlProps> = ({
   const { filteredModels, filters, sortOptions, applyFilters, clearFilters, applySorting, refreshFavorites } =
     useFilteredModels(provider)
 
+  // State for expanded model view modal
+  const [expandedViewOpen, setExpandedViewOpen] = useState(false)
+
   const models = modelsData?.models || []
   const userIsFreeTier = modelsData?.userIsFreeTier ?? false
 
@@ -53,32 +57,46 @@ export const ModelSelectControl: React.FC<ModelSelectControlProps> = ({
   )
 
   return (
-    <Select
-      value={selectedModelName || ''}
-      onChange={onChange}
-      options={sortedFilteredModels.map(m => m.name)}
-      placeholder={placeholder}
-      blur={blur}
-      disabled={sortedFilteredModels.length === 0}
-      disabledOptions={disabledModelOptions}
-      className={className}
-      searchBarVisible={true}
-      modelData={modelData}
-      onFavoritesChange={refreshFavorites}
-      filterUI={
-        showFilters === false ? undefined : (
-          <ModelFilterUI
-            filters={filters}
-            sortOptions={sortOptions}
-            onFiltersChange={applyFilters}
-            onSortChange={applySorting}
-            onClearFilters={clearFilters}
-          />
-        )
-      }
-      modelSelect={true}
-      footerContent={footerContent}
-      size={size}
-    />
+    <>
+      <Select
+        value={selectedModelName || ''}
+        onChange={onChange}
+        options={sortedFilteredModels.map(m => m.name)}
+        placeholder={placeholder}
+        blur={blur}
+        disabled={sortedFilteredModels.length === 0}
+        disabledOptions={disabledModelOptions}
+        className={className}
+        searchBarVisible={true}
+        modelData={modelData}
+        onFavoritesChange={refreshFavorites}
+        filterUI={
+          showFilters === false ? undefined : (
+            <ModelFilterUI
+              filters={filters}
+              sortOptions={sortOptions}
+              onFiltersChange={applyFilters}
+              onSortChange={applySorting}
+              onClearFilters={clearFilters}
+            />
+          )
+        }
+        modelSelect={true}
+        footerContent={footerContent}
+        size={size}
+        showExpandButton={true}
+        onExpandClick={() => setExpandedViewOpen(true)}
+        totalOptionsCount={sortedFilteredModels.length}
+      />
+
+      <ExpandedModelView
+        isOpen={expandedViewOpen}
+        onClose={() => setExpandedViewOpen(false)}
+        models={sortedFilteredModels}
+        selectedModelName={selectedModelName}
+        onSelect={onChange}
+        disabledOptions={disabledModelOptions}
+      />
+    </>
   )
 }
