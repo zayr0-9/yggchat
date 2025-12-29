@@ -1,7 +1,14 @@
 import React, { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { BaseModel } from '../../../../../shared/types'
-import { COMPANY_PREFIXES, COMPANY_TAB_ORDER, NEW_MODELS, TOP_MODELS } from '../../config/modelLists'
+import {
+  CODING_MODELS,
+  COMPANY_PREFIXES,
+  COMPANY_TAB_ORDER,
+  NEW_MODELS,
+  RESEARCH_MODELS,
+  TOP_MODELS,
+} from '../../config/modelLists'
 import { Button } from '../Button/button'
 
 interface ExpandedModelViewProps {
@@ -13,7 +20,7 @@ interface ExpandedModelViewProps {
   disabledOptions?: string[]
 }
 
-type TabId = 'top' | 'new' | 'image-gen' | 'all' | string // string for company names
+type TabId = 'top' | 'new' | 'coding' | 'research' | 'image-gen' | 'all' | string // string for company names
 
 interface Tab {
   id: TabId
@@ -35,7 +42,9 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
   const tabs: Tab[] = useMemo(() => {
     const baseTabs: Tab[] = [
       { id: 'top', label: 'Top' },
-      { id: 'new', label: 'New' },
+      // { id: 'new', label: 'New' },
+      { id: 'coding', label: 'Coding' },
+      { id: 'research', label: 'Research' },
       { id: 'image-gen', label: 'Image Gen' },
     ]
 
@@ -45,7 +54,7 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
       label: company,
     }))
 
-    return [...baseTabs, ...companyTabs, { id: 'all', label: 'All' }]
+    return [...baseTabs, { id: 'all', label: 'All' }, ...companyTabs]
   }, [])
 
   // Filter models based on active tab and search
@@ -60,6 +69,14 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
       case 'new':
         // Show models in NEW_MODELS list, preserving order
         result = NEW_MODELS.map(name => models.find(m => m.name === name)).filter(Boolean) as BaseModel[]
+        break
+      case 'coding':
+        // Show models optimized for coding
+        result = CODING_MODELS.map(name => models.find(m => m.name === name)).filter(Boolean) as BaseModel[]
+        break
+      case 'research':
+        // Show models optimized for research
+        result = RESEARCH_MODELS.map(name => models.find(m => m.name === name)).filter(Boolean) as BaseModel[]
         break
       case 'image-gen':
         // Show models that can generate images (outputModalities includes 'image')
@@ -99,6 +116,35 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
     return String(length)
   }
 
+  // Base costs for relative pricing (in credits per 1M tokens)
+  const BASE_PROMPT_COST = 1.25
+  // const BASE_COMPLETION_COST = 10.0
+
+  // Format pricing as I/O multipliers relative to base cost
+  const formatPricing = (promptCost: number, completionCost: number): string | null => {
+    if (!promptCost && !completionCost) return null
+
+    // Convert to per-1M-tokens cost (costs are stored as per-token)
+    const promptPer1M = promptCost * 1000000
+    // const completionPer1M = completionCost * 1000000
+
+    // Calculate multipliers relative to base
+    const inputMultiplier = promptPer1M / BASE_PROMPT_COST
+    // const outputMultiplier = completionPer1M / BASE_COMPLETION_COST
+
+    // Format multipliers (show 1 decimal if needed, otherwise whole number)
+    const formatMultiplier = (m: number): string => {
+      if (m === 0) return '0'
+      if (m < 0.1) return m.toFixed(2)
+      if (m < 1) return m.toFixed(1)
+      if (m >= 100) return Math.round(m).toString()
+      return m % 1 === 0 ? m.toString() : m.toFixed(1)
+    }
+
+    return `${formatMultiplier(inputMultiplier)}`
+    // return `${formatMultiplier(inputMultiplier)}/${formatMultiplier(outputMultiplier)}`
+  }
+
   const handleModelSelect = (modelName: string) => {
     if (disabledOptions.includes(modelName)) return
     onSelect(modelName)
@@ -129,7 +175,7 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
         </div>
 
         {/* Tabs */}
-        <div className='shrink-0 border-b border-neutral-200 dark:border-neutral-800 px-4 overflow-x-auto no-scrollbar'>
+        <div className='shrink-0 border-b border-neutral-200 dark:border-neutral-800 px-4 overflow-x-auto thin-scrollbar'>
           <div className='flex gap-1 py-2'>
             {tabs.map(tab => (
               <button
@@ -156,7 +202,7 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               placeholder='Search models...'
-              className='w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-neutral-600'
+              className='w-full pl-10 pr-4 py-2 text-sm rounded-lg text-stone-800 dark:text-neutral-200 border border-neutral-300 dark:border-neutral-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:focus:ring-neutral-600'
               autoFocus
             />
           </div>
@@ -170,9 +216,13 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
                 ? 'No new models configured. Edit config/modelLists.ts to add models.'
                 : activeTab === 'top' && TOP_MODELS.length === 0
                   ? 'No top models configured. Edit config/modelLists.ts to add models.'
-                  : activeTab === 'image-gen'
-                    ? 'No image generation models available.'
-                    : 'No models found'}
+                  : activeTab === 'coding' && CODING_MODELS.length === 0
+                    ? 'No coding models configured. Edit config/modelLists.ts to add models.'
+                    : activeTab === 'research' && RESEARCH_MODELS.length === 0
+                      ? 'No research models configured. Edit config/modelLists.ts to add models.'
+                      : activeTab === 'image-gen'
+                        ? 'No image generation models available.'
+                        : 'No models found'}
             </div>
           ) : (
             <div className='space-y-1'>
@@ -214,50 +264,45 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
                       </div>
 
                       {/* Capabilities & Context */}
-                      <div className='flex items-center gap-3 shrink-0'>
+                      <div className='flex items-center gap-2 shrink-0'>
                         {/* Capability icons */}
-                        <div className='flex items-center gap-1.5'>
+                        <div className='flex items-center gap-3'>
                           {model.thinking && (
-                            <span
-                              className='text-purple-600 dark:text-purple-400'
-                              title='Thinking/Reasoning'
-                            >
-                              <i className='bx bx-brain text-lg' />
+                            <span className='text-purple-600 dark:text-purple-400' title='Thinking/Reasoning'>
+                              <i className='bx bx-brain text-2xl' />
                             </span>
                           )}
                           {model.supportsImages && (
-                            <span
-                              className='text-blue-600 dark:text-blue-400'
-                              title='Image Support'
-                            >
-                              <i className='bx bx-image text-lg' />
+                            <span className='text-blue-600 dark:text-blue-400' title='Image Support'>
+                              <i className='bx bx-image text-2xl' />
                             </span>
                           )}
                           {model.supportsWebSearch && (
-                            <span
-                              className='text-green-600 dark:text-green-400'
-                              title='Web Search'
-                            >
-                              <i className='bx bx-globe text-lg' />
+                            <span className='text-green-600 dark:text-green-400' title='Web Search'>
+                              <i className='bx bx-globe text-2xl' />
                             </span>
                           )}
                           {model.supportsStructuredOutputs && (
-                            <span
-                              className='text-orange-600 dark:text-orange-400'
-                              title='Structured Outputs'
-                            >
-                              <i className='bx bx-code-block text-lg' />
+                            <span className='text-orange-600 dark:text-orange-400' title='Structured Outputs'>
+                              <i className='bx bx-code-block text-2xl' />
                             </span>
                           )}
                           {model.outputModalities?.includes('image') && (
-                            <span
-                              className='text-pink-600 dark:text-pink-400'
-                              title='Image Generation'
-                            >
-                              <i className='bx bx-palette text-lg' />
+                            <span className='text-pink-600 dark:text-pink-400' title='Image Generation'>
+                              <i className='bx bx-palette text-2xl' />
                             </span>
                           )}
                         </div>
+
+                        {/* Pricing badge (I/O multiplier) */}
+                        {formatPricing(model.promptCost, model.completionCost) && (
+                          <span
+                            className='text-xs px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
+                            title='Input/Output cost multiplier'
+                          >
+                            {formatPricing(model.promptCost, model.completionCost)}x
+                          </span>
+                        )}
 
                         {/* Context length badge */}
                         {model.contextLength > 0 && (

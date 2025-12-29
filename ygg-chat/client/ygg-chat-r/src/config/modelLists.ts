@@ -37,6 +37,24 @@ export const NEW_MODELS: string[] = [
   // Add new models as they're released
 ]
 
+// Models optimized for coding tasks
+export const CODING_MODELS: string[] = [
+  'openai/gpt-5.1-codex-max',
+  'anthropic/claude-opus-4.5',
+  'anthropic/claude-sonnet-4.5',
+  'openai/gpt-5.1-codex-mini',
+  'google/gemini-3-flash-preview',
+  'google/gemini-3-pro-preview',
+]
+
+// Models optimized for research tasks
+export const RESEARCH_MODELS: string[] = [
+  'openai/gpt-5.2-pro',
+  'openai/gpt-5.2',
+  'google/gemini-3-flash-preview',
+  'google/gemini-3-pro-preview',
+]
+
 // Company prefixes for grouping models by provider
 // Key: Display name, Value: Model ID prefix
 export const COMPANY_PREFIXES: Record<string, string> = {
