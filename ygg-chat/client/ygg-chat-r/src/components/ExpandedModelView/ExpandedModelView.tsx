@@ -10,6 +10,7 @@ import {
   TOP_MODELS,
 } from '../../config/modelLists'
 import { Button } from '../Button/button'
+import { ModelInfoModal } from '../ModelInfoModal/ModelInfoModal'
 
 interface ExpandedModelViewProps {
   isOpen: boolean
@@ -37,6 +38,8 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabId>('top')
   const [searchTerm, setSearchTerm] = useState('')
+  const [showModelInfo, setShowModelInfo] = useState(false)
+  const [selectedModelForInfo, setSelectedModelForInfo] = useState<BaseModel | null>(null)
 
   // Build tabs: Top, New, Image Gen, Companies..., All
   const tabs: Tab[] = useMemo(() => {
@@ -153,7 +156,9 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
 
   if (!isOpen) return null
 
-  return createPortal(
+  return (
+    <>
+    {createPortal(
     <div
       className='fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-sm'
       onClick={onClose}
@@ -208,6 +213,25 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
           </div>
         </div>
 
+        {/* Table Header */}
+        <div className='shrink-0 px-4 py-2 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/50'>
+          <div className='flex items-center gap-2 text-xs font-medium text-neutral-500 dark:text-neutral-400 uppercase tracking-wide'>
+            <div className='flex-1 min-w-0 pl-4'>Name</div>
+            <div className='w-10 text-center pr-13' title='Reasoning/Thinking'>
+              Think
+            </div>
+            <div className='w-10 text-center pr-13' title='Image Support'>
+              Image Input
+            </div>
+            {/* <div className='w-10 text-center' title='Structured Outputs'>
+              Structured Output
+            </div> */}
+            <div className='w-16 text-center pr-13'>Cost</div>
+            <div className='w-16 text-center pr-13'>Context</div>
+            <div className='w-8'></div>
+          </div>
+        </div>
+
         {/* Model List */}
         <div className='flex-1 overflow-y-auto thin-scrollbar px-4 py-2'>
           {filteredModels.length === 0 ? (
@@ -235,7 +259,7 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
                     key={model.name}
                     onClick={() => handleModelSelect(model.name)}
                     disabled={isDisabled}
-                    className={`w-full text-left px-4 py-3 rounded-xl transition-all ${
+                    className={`w-full text-left px-4 py-2.5 rounded-xl transition-all ${
                       isSelected
                         ? 'bg-neutral-200 dark:bg-neutral-700'
                         : isDisabled
@@ -243,9 +267,9 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
                           : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
                     }`}
                   >
-                    <div className='flex items-start justify-between gap-4'>
+                    <div className='flex items-center gap-2'>
+                      {/* Name column */}
                       <div className='flex-1 min-w-0'>
-                        {/* Model name */}
                         <div className='flex items-center gap-2'>
                           <span className='font-medium text-neutral-900 dark:text-neutral-100 truncate'>
                             {model.displayName || model.name}
@@ -257,59 +281,74 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
                           )}
                           {isDisabled && <i className='bx bx-lock-alt text-neutral-400' />}
                         </div>
-                        {/* Model ID */}
-                        <div className='text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5'>
-                          {model.name}
-                        </div>
+                        <div className='text-xs text-neutral-500 dark:text-neutral-400 truncate'>{model.name}</div>
                       </div>
 
-                      {/* Capabilities & Context */}
-                      <div className='flex items-center gap-2 shrink-0'>
-                        {/* Capability icons */}
-                        <div className='flex items-center gap-3'>
-                          {model.thinking && (
-                            <span className='text-purple-600 dark:text-purple-400' title='Thinking/Reasoning'>
-                              <i className='bx bx-brain text-2xl' />
-                            </span>
-                          )}
-                          {model.supportsImages && (
-                            <span className='text-blue-600 dark:text-blue-400' title='Image Support'>
-                              <i className='bx bx-image text-2xl' />
-                            </span>
-                          )}
-                          {model.supportsWebSearch && (
-                            <span className='text-green-600 dark:text-green-400' title='Web Search'>
-                              <i className='bx bx-globe text-2xl' />
-                            </span>
-                          )}
-                          {model.supportsStructuredOutputs && (
-                            <span className='text-orange-600 dark:text-orange-400' title='Structured Outputs'>
-                              <i className='bx bx-code-block text-2xl' />
-                            </span>
-                          )}
-                          {model.outputModalities?.includes('image') && (
-                            <span className='text-pink-600 dark:text-pink-400' title='Image Generation'>
-                              <i className='bx bx-palette text-2xl' />
-                            </span>
-                          )}
-                        </div>
+                      {/* Reasoning column */}
+                      <div className='w-10 text-center'>
+                        {model.thinking ? (
+                          <i className='bx bx-brain text-xl text-purple-600 dark:text-purple-400' />
+                        ) : (
+                          <span className='text-neutral-300 dark:text-neutral-600'>-</span>
+                        )}
+                      </div>
 
-                        {/* Pricing badge (I/O multiplier) */}
-                        {formatPricing(model.promptCost, model.completionCost) && (
-                          <span
-                            className='text-xs px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                            title='Input/Output cost multiplier'
-                          >
+                      {/* Image column */}
+                      <div className='w-10 text-center'>
+                        {model.supportsImages ? (
+                          <i className='bx bx-image text-xl text-blue-600 dark:text-blue-400' />
+                        ) : (
+                          <span className='text-neutral-300 dark:text-neutral-600'>-</span>
+                        )}
+                      </div>
+
+                      {/* Structured Outputs column */}
+                      {/* <div className='w-10 text-center'>
+                        {model.supportsStructuredOutputs ? (
+                          <i className='bx bx-code-block text-xl text-orange-600 dark:text-orange-400' />
+                        ) : (
+                          <span className='text-neutral-300 dark:text-neutral-600'>-</span>
+                        )}
+                      </div> */}
+
+                      {/* Cost column */}
+                      <div className='w-16 text-center'>
+                        {formatPricing(model.promptCost, model.completionCost) ? (
+                          <span className='text-xs px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'>
                             {formatPricing(model.promptCost, model.completionCost)}x
                           </span>
+                        ) : (
+                          <span className='text-neutral-300 dark:text-neutral-600'>-</span>
                         )}
+                      </div>
 
-                        {/* Context length badge */}
-                        {model.contextLength > 0 && (
-                          <span className='text-xs px-2 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'>
+                      {/* Context column */}
+                      <div className='w-16 text-center'>
+                        {model.contextLength > 0 ? (
+                          <span className='text-xs px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'>
                             {formatContextLength(model.contextLength)}
                           </span>
+                        ) : (
+                          <span className='text-neutral-300 dark:text-neutral-600'>-</span>
                         )}
+                      </div>
+
+                      {/* Info button */}
+                      <div
+                        className='w-8 text-center'
+                        onClick={e => {
+                          e.stopPropagation()
+                          setSelectedModelForInfo(model)
+                          setShowModelInfo(true)
+                        }}
+                      >
+                        <button
+                          type='button'
+                          className='p-1 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-lg transition-colors'
+                          aria-label='View model details'
+                        >
+                          <i className='bx bx-dots-vertical-rounded text-neutral-600 dark:text-neutral-400' />
+                        </button>
                       </div>
                     </div>
                   </button>
@@ -331,5 +370,12 @@ export const ExpandedModelView: React.FC<ExpandedModelViewProps> = ({
       </div>
     </div>,
     document.body
+  )}
+  <ModelInfoModal
+    model={selectedModelForInfo}
+    isOpen={showModelInfo}
+    onClose={() => setShowModelInfo(false)}
+  />
+  </>
   )
 }

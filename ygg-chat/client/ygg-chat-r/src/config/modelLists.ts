@@ -66,6 +66,7 @@ export const COMPANY_PREFIXES: Record<string, string> = {
   Cohere: 'cohere/',
   DeepSeek: 'deepseek/',
   Qwen: 'qwen/',
+  'Z-AI': 'z-ai/',
 }
 
 // Order of company tabs in the expanded view
