@@ -814,7 +814,19 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       if (onCopy) {
         onCopy(content)
       }
-      const ok = await copyPlainText(content)
+
+      // Get rendered HTML from the message element for rich paste support
+      let html: string | undefined
+      const messageEl = document.getElementById(`message-${id}`)
+      if (messageEl) {
+        // Find the prose content div which contains the rendered markdown
+        const proseEl = messageEl.querySelector('.prose')
+        if (proseEl) {
+          html = proseEl.innerHTML
+        }
+      }
+
+      const ok = await copyRichText(content, html)
       if (ok) {
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
@@ -869,7 +881,16 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
     const handleCopySelectedText = async () => {
       if (selectedText) {
-        await copyPlainText(selectedText)
+        // Try to get HTML from selection for rich paste support
+        let html: string | undefined
+        const selection = window.getSelection()
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0)
+          const container = document.createElement('div')
+          container.appendChild(range.cloneContents())
+          html = container.innerHTML
+        }
+        await copyRichText(selectedText, html)
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
       }
@@ -1128,21 +1149,37 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
     }, [showMoreMenu])
 
-    const copyPlainText = async (text: string) => {
-      // Try async clipboard API first
+    const copyRichText = async (plainText: string, html?: string) => {
+      // Try copying both HTML and plain text for rich paste support (Word, etc.)
       try {
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-          await navigator.clipboard.writeText(text)
+        if (navigator.clipboard && typeof navigator.clipboard.write === 'function' && html) {
+          const htmlBlob = new Blob([html], { type: 'text/html' })
+          const textBlob = new Blob([plainText], { type: 'text/plain' })
+          const clipboardItem = new ClipboardItem({
+            'text/html': htmlBlob,
+            'text/plain': textBlob,
+          })
+          await navigator.clipboard.write([clipboardItem])
           return true
         }
       } catch (_) {
-        // fall through to fallback
+        // Fall through to plain text copy
+      }
+
+      // Fallback to plain text copy
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(plainText)
+          return true
+        }
+      } catch (_) {
+        // fall through to execCommand fallback
       }
 
       // Fallback for non-secure contexts or older browsers
       try {
         const textarea = document.createElement('textarea')
-        textarea.value = text
+        textarea.value = plainText
         textarea.style.position = 'fixed'
         textarea.style.opacity = '0'
         textarea.style.left = '-9999px'
