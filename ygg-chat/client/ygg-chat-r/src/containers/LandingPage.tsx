@@ -236,7 +236,7 @@ const LandingPage: React.FC = () => {
   }
 
   return (
-    <div ref={scrollContainerRef} className='w-full h-full overflow-y-auto dark:bg-blue-900 bg-blue-200 min-h-screen'>
+    <div ref={scrollContainerRef} className='w-full h-full overflow-y-auto min-h-screen'>
       {/* Header Navigation */}
       <nav className='sticky top-0 rounded-b-2xl z-30 flex items-center justify-between px-6 sm:px-4 md:px-8 py-2 md:py-3 bg-transparent dark:bg-transparent transition-all duration-300'>
         {/* Logo */}
