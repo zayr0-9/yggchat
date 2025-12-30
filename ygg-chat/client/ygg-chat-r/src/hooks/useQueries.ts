@@ -1,5 +1,5 @@
 // React Query hooks for data fetching with automatic caching and deduplication
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import type { BaseModel, Project } from '../../../../shared/types'
