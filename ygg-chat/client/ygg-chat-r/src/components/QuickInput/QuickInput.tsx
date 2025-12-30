@@ -173,10 +173,12 @@ export const QuickInput: React.FC = () => {
       setSelectedProjectId(null)
 
       // 7. Send message BEFORE navigation - we have the conversation ID, no need to wait
+      // Pass modelOverride explicitly to avoid relying on Redux provider state
+      // which may be null on fresh sign-in (before localStorage is populated)
       dispatch(
         sendMessage({
           conversationId: result.id,
-          input: { content: trimmedInput, modelOverride: null },
+          input: { content: trimmedInput, modelOverride: selectedModel?.name || null },
           parent: null, // First message has no parent
           repeatNum: 1,
           think: think,
