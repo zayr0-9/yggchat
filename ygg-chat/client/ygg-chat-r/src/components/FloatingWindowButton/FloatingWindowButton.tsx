@@ -1,6 +1,6 @@
 import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
-import { useEffect } from 'react'
+
 import { useFloatingWindow } from '../../hooks/useFloatingWindow'
 
 interface FloatingWindowButtonProps {
