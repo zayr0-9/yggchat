@@ -104,8 +104,11 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     savingPrompt,
     saveError,
     isExistingPrompt,
+    matchingPrompt,
+    makingDefault,
     handleSelectPrompt,
     handleSaveAsPrompt,
+    handleMakeDefault,
     resetSaveUI,
   } = useUserSystemPrompts({
     currentPromptContent: systemPrompt,
@@ -418,54 +421,72 @@ ${block}`
                 className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
               />
 
-              {/* Save as Prompt button and inline input - only show if content doesn't match existing prompt */}
-              {systemPrompt.trim() && !isExistingPrompt && (
+              {/* Save as Prompt / Make Default button */}
+              {systemPrompt.trim() && (
                 <div className='mt-3'>
-                  {!showSavePromptInput ? (
-                    <button
-                      type='button'
-                      onClick={() => setShowSavePromptInput(true)}
-                      className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
-                    >
-                      <i className='bx bx-save text-base'></i>
-                      Save as Prompt
-                    </button>
+                  {isExistingPrompt ? (
+                    // Show "Make Default" button when prompt already exists
+                    matchingPrompt && !matchingPrompt.is_default && (
+                      <button
+                        type='button'
+                        onClick={handleMakeDefault}
+                        disabled={makingDefault}
+                        className='flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors disabled:opacity-50'
+                      >
+                        <i className='bx bx-star text-base'></i>
+                        {makingDefault ? 'Setting...' : 'Make Default'}
+                      </button>
+                    )
                   ) : (
-                    <div className='space-y-2'>
-                      <div className='flex items-center gap-2'>
-                        <input
-                          type='text'
-                          value={savePromptName}
-                          onChange={e => setSavePromptName(e.target.value)}
-                          placeholder='Enter prompt name...'
-                          maxLength={100}
-                          className='flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-transparent'
-                          autoFocus
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleSaveAsPrompt()
-                            if (e.key === 'Escape') resetSaveUI()
-                          }}
-                        />
+                    // Show "Save as Prompt" when content doesn't match existing prompt
+                    <>
+                      {!showSavePromptInput ? (
                         <button
                           type='button'
-                          onClick={handleSaveAsPrompt}
-                          disabled={!savePromptName.trim() || savingPrompt}
-                          className='px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                          onClick={() => setShowSavePromptInput(true)}
+                          className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
                         >
-                          {savingPrompt ? 'Saving...' : 'Save'}
+                          <i className='bx bx-save text-base'></i>
+                          Save as Prompt
                         </button>
-                        <button
-                          type='button'
-                          onClick={resetSaveUI}
-                          className='px-2 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
-                        >
-                          <i className='bx bx-x text-lg'></i>
-                        </button>
-                      </div>
-                      {saveError && (
-                        <p className='text-sm text-red-500 dark:text-red-400'>{saveError}</p>
+                      ) : (
+                        <div className='space-y-2'>
+                          <div className='flex items-center gap-2'>
+                            <input
+                              type='text'
+                              value={savePromptName}
+                              onChange={e => setSavePromptName(e.target.value)}
+                              placeholder='Enter prompt name...'
+                              maxLength={100}
+                              className='flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-transparent'
+                              autoFocus
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') handleSaveAsPrompt()
+                                if (e.key === 'Escape') resetSaveUI()
+                              }}
+                            />
+                            <button
+                              type='button'
+                              onClick={handleSaveAsPrompt}
+                              disabled={!savePromptName.trim() || savingPrompt}
+                              className='px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                            >
+                              {savingPrompt ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              type='button'
+                              onClick={resetSaveUI}
+                              className='px-2 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
+                            >
+                              <i className='bx bx-x text-lg'></i>
+                            </button>
+                          </div>
+                          {saveError && (
+                            <p className='text-sm text-red-500 dark:text-red-400'>{saveError}</p>
+                          )}
+                        </div>
                       )}
-                    </div>
+                    </>
                   )}
                 </div>
               )}

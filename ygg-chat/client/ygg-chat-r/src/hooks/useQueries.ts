@@ -1612,3 +1612,80 @@ export function useSearchConversations(projectId?: string | null) {
     searchedFromServer,
   }
 }
+
+/**
+ * User System Prompt type (mirrors server response)
+ */
+export interface UserSystemPromptCached {
+  id: string
+  owner_id: string
+  name: string
+  content: string
+  description?: string | null
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Fetch user system prompts with React Query caching
+ * Cache key: ['userSystemPrompts', userId]
+ *
+ * This enables system prompts to be available globally without requiring
+ * SettingsPane or EditProject to be opened first.
+ *
+ * @returns Query result with prompts, default prompt, and utility functions
+ */
+export function useUserSystemPromptsQuery() {
+  const { accessToken, userId } = useAuth()
+
+  const query = useQuery({
+    queryKey: ['userSystemPrompts', userId],
+    queryFn: async () => {
+      if (!userId || !accessToken) return []
+      const response = await api.get<UserSystemPromptCached[]>('/system-prompts', accessToken)
+      return response || []
+    },
+    enabled: !!userId && !!accessToken,
+    staleTime: 5 * 60 * 1000, // 5 minutes - prompts don't change often
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+
+  // Find the default prompt from the cached data
+  const defaultPrompt = useMemo(() => {
+    if (!query.data) return null
+    return query.data.find(p => p.is_default) || null
+  }, [query.data])
+
+  return {
+    ...query,
+    prompts: query.data || [],
+    defaultPrompt,
+  }
+}
+
+/**
+ * Helper function to get user system prompts from React Query cache
+ * Used by thunks that need to access prompts without a hook
+ */
+export const getUserSystemPromptsFromCache = (
+  queryClient: QueryClient | null,
+  userId: string | null
+): UserSystemPromptCached[] => {
+  if (!queryClient || !userId) return []
+  return queryClient.getQueryData<UserSystemPromptCached[]>(['userSystemPrompts', userId]) || []
+}
+
+/**
+ * Helper function to get the default user system prompt from React Query cache
+ * Used by thunks to automatically attach the default prompt to messages
+ */
+export const getDefaultUserSystemPromptFromCache = (
+  queryClient: QueryClient | null,
+  userId: string | null
+): UserSystemPromptCached | null => {
+  const prompts = getUserSystemPromptsFromCache(queryClient, userId)
+  return prompts.find(p => p.is_default) || null
+}

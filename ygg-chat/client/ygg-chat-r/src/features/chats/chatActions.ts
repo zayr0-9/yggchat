@@ -1,6 +1,7 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import type { QueryClient } from '@tanstack/react-query'
 import { ConversationId, MessageId } from '../../../../../shared/types'
+import { getDefaultUserSystemPromptFromCache } from '../../hooks/useQueries'
 import { dualSync } from '../../lib/sync/dualSyncManager'
 import type { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
@@ -504,12 +505,23 @@ export const sendMessage = createAsyncThunk<
         ? drafts.map(d => ({ dataUrl: d.dataUrl, name: d.name, type: d.type, size: d.size }))
         : null
 
-      // Combine project and conversation system prompts (project first)
+      // Combine system prompts in order: user default > project > conversation
       const selectedProject = selectSelectedProject(state)
       let systemPrompt = ''
-      if (selectedProject?.system_prompt) {
-        systemPrompt = selectedProject.system_prompt
+
+      // 1. First, check for default user system prompt from React Query cache
+      const defaultUserPrompt = getDefaultUserSystemPromptFromCache(extra.queryClient, auth.userId)
+      if (defaultUserPrompt?.content) {
+        systemPrompt = defaultUserPrompt.content
       }
+
+      // 2. Then add project system prompt
+      if (selectedProject?.system_prompt) {
+        if (systemPrompt) systemPrompt += '\n\n'
+        systemPrompt += selectedProject.system_prompt
+      }
+
+      // 3. Finally add conversation-specific system prompt
       if (state.conversations.systemPrompt) {
         if (systemPrompt) systemPrompt += '\n\n'
         systemPrompt += state.conversations.systemPrompt
@@ -1245,12 +1257,23 @@ export const editMessageWithBranching = createAsyncThunk<
       const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
       const serverProvider = appProvider === 'google' ? 'gemini' : appProvider
 
-      // Combine project and conversation system prompts (project first)
+      // Combine system prompts in order: user default > project > conversation
       const selectedProject = selectSelectedProject(state)
       let systemPrompt = ''
-      if (selectedProject?.system_prompt) {
-        systemPrompt = selectedProject.system_prompt
+
+      // 1. First, check for default user system prompt from React Query cache
+      const defaultUserPrompt = getDefaultUserSystemPromptFromCache(extra.queryClient, auth.userId)
+      if (defaultUserPrompt?.content) {
+        systemPrompt = defaultUserPrompt.content
       }
+
+      // 2. Then add project system prompt
+      if (selectedProject?.system_prompt) {
+        if (systemPrompt) systemPrompt += '\n\n'
+        systemPrompt += selectedProject.system_prompt
+      }
+
+      // 3. Finally add conversation-specific system prompt
       if (state.conversations.systemPrompt) {
         if (systemPrompt) systemPrompt += '\n\n'
         systemPrompt += state.conversations.systemPrompt
