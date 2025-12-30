@@ -43,6 +43,8 @@ interface ElectronAPI {
     closeFloating: () => Promise<{ success: boolean; error?: string }>
     toggleFloating: () => Promise<{ success: boolean; error?: string; isOpen: boolean }>
     isFloatingOpen: () => Promise<boolean>
+    toggleCompact: () => Promise<{ success: boolean; error?: string; compact: boolean }>
+    isCompact: () => Promise<boolean>
   }
   theme: {
     update: (isDark: boolean) => Promise<void>

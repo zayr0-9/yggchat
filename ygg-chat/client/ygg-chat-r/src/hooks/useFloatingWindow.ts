@@ -4,72 +4,29 @@ interface FloatingWindowHookReturn {
   isOpen: boolean
   isLoading: boolean
   error: string | null
-  openFloatingWindow: () => Promise<void>
-  closeFloatingWindow: () => Promise<void>
-  toggleFloatingWindow: () => Promise<void>
+  toggleCompact: () => Promise<void>
 }
 
 /**
- * Hook to manage the floating popup window in Electron
- * Returns controls to open, close, and toggle the floating window
+ * Hook to manage compact mode (mini popup) on the main window in Electron
  */
 export const useFloatingWindow = (): FloatingWindowHookReturn => {
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const openFloatingWindow = async () => {
+  const toggleCompact = async () => {
     if (!window.electronAPI?.window) return
 
     setIsLoading(true)
     setError(null)
 
     try {
-      const result = await window.electronAPI.window.openFloating()
+      const result = await window.electronAPI.window.toggleCompact()
       if (result.success) {
-        setIsOpen(true)
+        setIsOpen(result.compact)
       } else {
-        setError(result.error || 'Failed to open floating window')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const closeFloatingWindow = async () => {
-    if (!window.electronAPI?.window) return
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const result = await window.electronAPI.window.closeFloating()
-      if (result.success) {
-        setIsOpen(false)
-      } else {
-        setError(result.error || 'Failed to close floating window')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const toggleFloatingWindow = async () => {
-    if (!window.electronAPI?.window) return
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const result = await window.electronAPI.window.toggleFloating()
-      if (result.success) {
-        setIsOpen(result.isOpen)
-      } else {
-        setError(result.error || 'Failed to toggle floating window')
+        setError(result.error || 'Failed to toggle compact mode')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
@@ -81,12 +38,12 @@ export const useFloatingWindow = (): FloatingWindowHookReturn => {
   // Check initial state on mount
   useEffect(() => {
     const checkInitialState = async () => {
-      if (window.electronAPI?.window?.isFloatingOpen) {
+      if (window.electronAPI?.window?.isCompact) {
         try {
-          const open = await window.electronAPI.window.isFloatingOpen()
-          setIsOpen(open)
+          const compact = await window.electronAPI.window.isCompact()
+          setIsOpen(compact)
         } catch (err) {
-          console.error('Failed to check floating window state:', err)
+          console.error('Failed to check compact mode state:', err)
         }
       }
     }
@@ -98,8 +55,6 @@ export const useFloatingWindow = (): FloatingWindowHookReturn => {
     isOpen,
     isLoading,
     error,
-    openFloatingWindow,
-    closeFloatingWindow,
-    toggleFloatingWindow,
+    toggleCompact,
   }
 }

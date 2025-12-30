@@ -12,7 +12,7 @@ export const FloatingWindowButton: React.FC<FloatingWindowButtonProps> = ({
   className = '',
   position = 'bottom-right',
 }) => {
-  const { isOpen, isLoading, toggleFloatingWindow } = useFloatingWindow()
+  const { isOpen, isLoading, toggleCompact } = useFloatingWindow()
 
   // Position styles
   const positionStyles = {
@@ -29,17 +29,17 @@ export const FloatingWindowButton: React.FC<FloatingWindowButtonProps> = ({
 
   return (
     <button
-      onClick={toggleFloatingWindow}
+      onClick={toggleCompact}
       disabled={isLoading}
       className={`fixed z-50 p-3 rounded-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-600 text-white shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 ${positionStyles[position]} ${className}`}
-      title={isOpen ? 'Close floating window' : 'Open floating window'}
-      aria-label={isOpen ? 'Close floating window' : 'Open floating window'}
+      title={isOpen ? 'Exit compact mode' : 'Enter compact mode'}
+      aria-label={isOpen ? 'Exit compact mode' : 'Enter compact mode'}
     >
       {isLoading ? (
         <i className="bx bx-loader-alt animate-spin text-xl" aria-hidden="true" />
       ) : (
         <i
-          className={`bx ${isOpen ? 'bx-x' : 'bx-window'} text-xl`}
+          className={`bx ${isOpen ? 'bx-exit-fullscreen' : 'bx-window'} text-xl`}
           aria-hidden="true"
         />
       )}

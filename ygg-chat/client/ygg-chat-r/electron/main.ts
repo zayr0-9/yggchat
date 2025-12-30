@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'child_process'
 import Conf from 'conf'
-import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, screen, shell } from 'electron'
 import autoUpdaterPkg from 'electron-updater'
 import fs from 'fs'
 import os from 'os'
@@ -16,6 +16,8 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
 let floatingWindow: BrowserWindow | null = null
+let compactMode = false
+let savedBounds: Electron.Rectangle | null = null
 let serverProcess: ChildProcess | null = null
 let localServerStarted = false
 
@@ -681,6 +683,22 @@ ipcMain.handle('window:isFloatingOpen', async () => {
   return floatingWindow !== null
 })
 
+// Compact mode controls (uses main window instead of spawning a new one)
+ipcMain.handle('window:toggleCompact', async () => {
+  console.log('[Electron IPC] Toggling compact mode')
+  try {
+    const compact = toggleCompactMode()
+    return { success: true, compact }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to toggle compact mode:', error)
+    return { success: false, error: String(error), compact: compactMode }
+  }
+})
+
+ipcMain.handle('window:isCompact', async () => {
+  return compactMode
+})
+
 // Open OAuth URL in a new BrowserWindow (for WSL/Linux compatibility)
 ipcMain.handle('auth:openOAuthWindow', async (_event, url: string) => {
   console.log('[Electron IPC] Opening OAuth window:', url)
@@ -865,4 +883,55 @@ function configureAutoUpdater() {
         console.error('[Electron] Failed to check for updates:', error)
       })
   }, 3000)
+}
+
+function enterCompactMode() {
+  if (!mainWindow) return
+
+  // Save current bounds to restore later
+  savedBounds = mainWindow.getBounds()
+
+  // Remove fullscreen if active and prevent entering fullscreen
+  mainWindow.setFullScreen(false)
+  mainWindow.setFullScreenable(false)
+
+  // Always on top over fullscreen apps
+  mainWindow.setAlwaysOnTop(true, 'floating', 1)
+  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+  // Compute a compact size and position (bottom-right of primary display)
+  const display = screen.getPrimaryDisplay()
+  const workArea = display.workArea
+  const width = Math.min(Math.max(360, workArea.width * 0.32), 520)
+  const height = Math.min(Math.max(480, workArea.height * 0.6), 760)
+  const x = Math.floor(workArea.x + workArea.width - width - 16)
+  const y = Math.floor(workArea.y + workArea.height - height - 16)
+
+  mainWindow.setBounds({ x, y, width, height })
+
+  compactMode = true
+}
+
+function exitCompactMode() {
+  if (!mainWindow) return
+
+  // Restore previous bounds if available
+  if (savedBounds) {
+    mainWindow.setBounds(savedBounds)
+  }
+
+  mainWindow.setAlwaysOnTop(false)
+  mainWindow.setVisibleOnAllWorkspaces(false)
+  mainWindow.setFullScreenable(true)
+
+  compactMode = false
+}
+
+function toggleCompactMode() {
+  if (compactMode) {
+    exitCompactMode()
+  } else {
+    enterCompactMode()
+  }
+  return compactMode
 }
