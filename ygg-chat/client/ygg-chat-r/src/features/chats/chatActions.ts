@@ -3336,3 +3336,24 @@ export const respondToToolPermissionAndEnableAll = createAsyncThunk<
   // Clear the permission dialog
   dispatch(chatSliceActions.toolPermissionResponded())
 })
+
+/**
+ * Fetch all user system prompts for the current user
+ */
+export const fetchUserSystemPrompts = createAsyncThunk<
+  void,
+  { accessToken: string | null },
+  { state: RootState; extra: ThunkExtraArgument }
+>('chat/fetchUserSystemPrompts', async ({ accessToken }, { dispatch, rejectWithValue }) => {
+  dispatch(chatSliceActions.userSystemPromptsLoadingStarted())
+
+  try {
+    const prompts = await apiCall<any[]>('/system-prompts', accessToken)
+    dispatch(chatSliceActions.userSystemPromptsLoaded(prompts))
+    return
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch user system prompts'
+    dispatch(chatSliceActions.userSystemPromptsError(message))
+    return rejectWithValue(message)
+  }
+})

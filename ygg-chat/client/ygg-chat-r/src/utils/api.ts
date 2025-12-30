@@ -405,6 +405,53 @@ export const cloneConversation = (conversationId: ConversationId, accessToken: s
     accessToken
   )
 
+// User System Prompts API
+export interface UserSystemPrompt {
+  id: string
+  owner_id: string
+  name: string
+  content: string
+  description?: string | null
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateUserSystemPromptPayload {
+  name: string
+  content: string
+  description?: string | null
+  isDefault?: boolean
+}
+
+export interface UpdateUserSystemPromptPayload {
+  name?: string
+  content?: string
+  description?: string | null
+  isDefault?: boolean
+}
+
+export const getUserSystemPrompts = (accessToken: string | null) =>
+  api.get<UserSystemPrompt[]>('/system-prompts', accessToken)
+
+export const getUserSystemPromptById = (id: string, accessToken: string | null) =>
+  api.get<UserSystemPrompt>(`/system-prompts/${id}`, accessToken)
+
+export const getDefaultUserSystemPrompt = (accessToken: string | null) =>
+  api.get<UserSystemPrompt | null>('/system-prompts/default', accessToken)
+
+export const createUserSystemPrompt = (data: CreateUserSystemPromptPayload, accessToken: string | null) =>
+  api.post<UserSystemPrompt>('/system-prompts', accessToken, data)
+
+export const updateUserSystemPrompt = (id: string, data: UpdateUserSystemPromptPayload, accessToken: string | null) =>
+  api.put<UserSystemPrompt>(`/system-prompts/${id}`, accessToken, data)
+
+export const setDefaultUserSystemPrompt = (id: string, accessToken: string | null) =>
+  api.patch<UserSystemPrompt>(`/system-prompts/${id}/default`, accessToken)
+
+export const deleteUserSystemPrompt = (id: string, accessToken: string | null) =>
+  api.delete<{ message: string; id: string }>(`/system-prompts/${id}`, accessToken)
+
 // Stripe Payment API functions
 export interface SubscriptionStatus {
   tier: 'high' | 'mid' | 'low' | null

@@ -134,6 +134,17 @@ export interface ProviderCost {
   created_at: string
 }
 
+export interface UserSystemPrompt {
+  id: string // uuid
+  owner_id: string
+  name: string
+  content: string
+  description?: string | null
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface ProviderCostWithMessage {
   id: string
   owner_id: string
@@ -1282,6 +1293,118 @@ export class ProviderCostService {
     const { count } = await client.from('provider_cost').delete({ count: 'exact' }).eq('message_id', messageId)
 
     return count || 0
+  }
+}
+
+export class UserSystemPromptService {
+  static async create(
+    client: SupabaseClient,
+    ownerId: string,
+    params: {
+      name: string
+      content: string
+      description?: string | null
+      isDefault?: boolean
+    }
+  ): Promise<UserSystemPrompt> {
+    const { name, content, description = null, isDefault = false } = params
+
+    const { data: created, error } = await client
+      .from('user_system_prompts')
+      .insert({
+        owner_id: ownerId,
+        name,
+        content,
+        description,
+        is_default: isDefault,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return created as UserSystemPrompt
+  }
+
+  static async getAll(client: SupabaseClient): Promise<UserSystemPrompt[]> {
+    const { data, error } = await client
+      .from('user_system_prompts')
+      .select('*')
+      .order('updated_at', { ascending: false })
+
+    if (error) throw error
+    return (data || []) as UserSystemPrompt[]
+  }
+
+  static async getById(client: SupabaseClient, id: string): Promise<UserSystemPrompt | undefined> {
+    const { data, error } = await client.from('user_system_prompts').select('*').eq('id', id).single()
+
+    if (error) {
+      if (error.code === 'PGRST116') return undefined // No rows returned
+      throw error
+    }
+    return data as UserSystemPrompt
+  }
+
+  static async getDefault(client: SupabaseClient): Promise<UserSystemPrompt | undefined> {
+    const { data, error } = await client
+      .from('user_system_prompts')
+      .select('*')
+      .eq('is_default', true)
+      .limit(1)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') return undefined // No rows returned
+      throw error
+    }
+    return data as UserSystemPrompt
+  }
+
+  static async update(
+    client: SupabaseClient,
+    id: string,
+    params: {
+      name?: string
+      content?: string
+      description?: string | null
+      isDefault?: boolean
+    }
+  ): Promise<UserSystemPrompt | undefined> {
+    const updateData: any = { updated_at: new Date().toISOString() }
+
+    if (params.name !== undefined) updateData.name = params.name
+    if (params.content !== undefined) updateData.content = params.content
+    if (params.description !== undefined) updateData.description = params.description
+    if (params.isDefault !== undefined) updateData.is_default = params.isDefault
+
+    const { data, error } = await client.from('user_system_prompts').update(updateData).eq('id', id).select().single()
+
+    if (error) {
+      if (error.code === 'PGRST116') return undefined // No rows returned
+      throw error
+    }
+    return data as UserSystemPrompt
+  }
+
+  static async delete(client: SupabaseClient, id: string): Promise<boolean> {
+    const { count, error } = await client.from('user_system_prompts').delete({ count: 'exact' }).eq('id', id)
+
+    if (error) throw error
+    return (count ?? 0) > 0
+  }
+
+  static async setDefault(client: SupabaseClient, id: string): Promise<UserSystemPrompt | undefined> {
+    // The database trigger will automatically unset other defaults
+    return this.update(client, id, { isDefault: true })
+  }
+
+  static async clearDefault(client: SupabaseClient): Promise<void> {
+    const { error } = await client
+      .from('user_system_prompts')
+      .update({ is_default: false, updated_at: new Date().toISOString() })
+      .eq('is_default', true)
+
+    if (error) throw error
   }
 }
 

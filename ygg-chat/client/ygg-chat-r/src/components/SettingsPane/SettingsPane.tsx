@@ -6,6 +6,7 @@ import { convContextSet, systemPromptSet, updateContext, updateSystemPrompt } fr
 import type { Conversation } from '../../features/conversations/conversationTypes'
 import { selectSelectedProject } from '../../features/projects'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
+import { useUserSystemPrompts } from '../../hooks/useUserSystemPrompts'
 import { extractTextFromPdf } from '../../utils/pdfUtils'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { ToolsSettings } from './ToolsSettings'
@@ -89,6 +90,28 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
 
   const [attachmentTarget, setAttachmentTarget] = useState<'system' | 'context'>('system')
   const attachmentInputRef = useRef<HTMLInputElement>(null)
+
+  // Use the custom hook for system prompt management
+  const {
+    prompts: userSystemPrompts,
+    loading: promptsLoading,
+    selectedPromptId,
+    setSelectedPromptId,
+    showSavePromptInput,
+    setShowSavePromptInput,
+    savePromptName,
+    setSavePromptName,
+    savingPrompt,
+    saveError,
+    isExistingPrompt,
+    handleSelectPrompt,
+    handleSaveAsPrompt,
+    resetSaveUI,
+  } = useUserSystemPrompts({
+    currentPromptContent: systemPrompt,
+    isOpen: open,
+    onPromptSelect: content => dispatch(systemPromptSet(content)),
+  })
 
   // Track initial values when modal opens to detect changes
   const initialSystemPromptRef = useRef<string | null>(null)
@@ -349,10 +372,42 @@ ${block}`
                   Attach File
                 </button>
               </div>
+
+              {/* User System Prompts horizontal scrolling list */}
+              {userSystemPrompts.length > 0 && (
+                <div className='mb-2'>
+                  <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-2'>Select a saved prompt:</p>
+                  <div className='flex gap-2 overflow-x-auto pb-2 thin-scrollbar'>
+                    {userSystemPrompts.map(prompt => (
+                      <button
+                        key={prompt.id}
+                        onClick={() => handleSelectPrompt(prompt)}
+                        className={`flex items-center justify-center gap-2 flex-shrink-0 h-10 px-4 rounded-xl border transition-all duration-150 ${
+                          selectedPromptId === prompt.id
+                            ? 'bg-sky-600/70 text-white border-transparent'
+                            : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-transparent dark:border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                        }`}
+                        title={prompt.description || prompt.content.substring(0, 100)}
+                      >
+                        <span className='font-medium text-sm whitespace-nowrap'>{prompt.name}</span>
+                        {prompt.is_default && <span className='ml-2 text-xs opacity-70'>(default)</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {promptsLoading && (
+                <div className='mb-2 text-sm text-neutral-500 dark:text-neutral-400'>Loading saved prompts...</div>
+              )}
+
               <InputTextArea
                 placeholder='Enter a system prompt to guide the assistant...'
                 value={systemPrompt}
-                onChange={handleChange}
+                onChange={value => {
+                  handleChange(value)
+                  // Clear selection if user manually edits the prompt
+                  if (selectedPromptId) setSelectedPromptId(null)
+                }}
                 minRows={10}
                 maxRows={16}
                 width='w-full'
@@ -362,6 +417,58 @@ ${block}`
                 variant='outline'
                 className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
               />
+
+              {/* Save as Prompt button and inline input - only show if content doesn't match existing prompt */}
+              {systemPrompt.trim() && !isExistingPrompt && (
+                <div className='mt-3'>
+                  {!showSavePromptInput ? (
+                    <button
+                      type='button'
+                      onClick={() => setShowSavePromptInput(true)}
+                      className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
+                    >
+                      <i className='bx bx-save text-base'></i>
+                      Save as Prompt
+                    </button>
+                  ) : (
+                    <div className='space-y-2'>
+                      <div className='flex items-center gap-2'>
+                        <input
+                          type='text'
+                          value={savePromptName}
+                          onChange={e => setSavePromptName(e.target.value)}
+                          placeholder='Enter prompt name...'
+                          maxLength={100}
+                          className='flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-transparent'
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleSaveAsPrompt()
+                            if (e.key === 'Escape') resetSaveUI()
+                          }}
+                        />
+                        <button
+                          type='button'
+                          onClick={handleSaveAsPrompt}
+                          disabled={!savePromptName.trim() || savingPrompt}
+                          className='px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                        >
+                          {savingPrompt ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          type='button'
+                          onClick={resetSaveUI}
+                          className='px-2 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
+                        >
+                          <i className='bx bx-x text-lg'></i>
+                        </button>
+                      </div>
+                      {saveError && (
+                        <p className='text-sm text-red-500 dark:text-red-400'>{saveError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Context Section */}

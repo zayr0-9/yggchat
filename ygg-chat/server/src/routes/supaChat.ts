@@ -13,6 +13,7 @@ import {
   MessageService,
   ProjectService,
   UserService,
+  UserSystemPromptService,
 } from '../database/supamodels'
 import {
   authEndpointsRateLimiter,
@@ -1161,6 +1162,151 @@ router.delete(
     if (error) throw error
 
     res.json({ message: 'Project deleted', id: projectId })
+  })
+)
+
+// USER SYSTEM PROMPTS
+
+// Get all user system prompts
+router.get(
+  '/system-prompts',
+  asyncHandler(async (req, res) => {
+    const { client } = await verifyAuth(req)
+    const prompts = await UserSystemPromptService.getAll(client)
+    res.json(prompts)
+  })
+)
+
+// Get user's default system prompt
+router.get(
+  '/system-prompts/default',
+  asyncHandler(async (req, res) => {
+    const { client } = await verifyAuth(req)
+    const prompt = await UserSystemPromptService.getDefault(client)
+    res.json(prompt || null)
+  })
+)
+
+// Get specific system prompt by id
+router.get(
+  '/system-prompts/:id',
+  asyncHandler(async (req, res) => {
+    const { client } = await verifyAuth(req)
+    const promptId = req.params.id
+
+    const prompt = await UserSystemPromptService.getById(client, promptId)
+    if (!prompt) {
+      return res.status(404).json({ error: 'System prompt not found' })
+    }
+
+    res.json(prompt)
+  })
+)
+
+// Create new system prompt
+router.post(
+  '/system-prompts',
+  asyncHandler(async (req, res) => {
+    const { client, userId } = await verifyAuth(req)
+    const { name, content, description, isDefault } = req.body
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' })
+    }
+    if (!content || typeof content !== 'string') {
+      return res.status(400).json({ error: 'Content is required' })
+    }
+
+    const prompt = await UserSystemPromptService.create(client, userId, {
+      name: name.trim(),
+      content,
+      description: description || null,
+      isDefault: isDefault === true,
+    })
+
+    res.status(201).json(prompt)
+  })
+)
+
+// Update system prompt
+router.put(
+  '/system-prompts/:id',
+  asyncHandler(async (req, res) => {
+    const { client } = await verifyAuth(req)
+    const promptId = req.params.id
+    const { name, content, description, isDefault } = req.body
+
+    const existing = await UserSystemPromptService.getById(client, promptId)
+    if (!existing) {
+      return res.status(404).json({ error: 'System prompt not found' })
+    }
+
+    const updateParams: { name?: string; content?: string; description?: string | null; isDefault?: boolean } = {}
+
+    if (name !== undefined) {
+      if (typeof name !== 'string' || !name.trim()) {
+        return res.status(400).json({ error: 'Name cannot be empty' })
+      }
+      updateParams.name = name.trim()
+    }
+    if (content !== undefined) {
+      if (typeof content !== 'string') {
+        return res.status(400).json({ error: 'Content must be a string' })
+      }
+      updateParams.content = content
+    }
+    if (description !== undefined) {
+      updateParams.description = description
+    }
+    if (isDefault !== undefined) {
+      updateParams.isDefault = isDefault === true
+    }
+
+    const updated = await UserSystemPromptService.update(client, promptId, updateParams)
+    res.json(updated)
+  })
+)
+
+// Set system prompt as default
+router.patch(
+  '/system-prompts/:id/default',
+  asyncHandler(async (req, res) => {
+    const { client } = await verifyAuth(req)
+    const promptId = req.params.id
+
+    const existing = await UserSystemPromptService.getById(client, promptId)
+    if (!existing) {
+      return res.status(404).json({ error: 'System prompt not found' })
+    }
+
+    const updated = await UserSystemPromptService.setDefault(client, promptId)
+    res.json(updated)
+  })
+)
+
+// Clear default system prompt (no prompt will be default)
+router.delete(
+  '/system-prompts/default',
+  asyncHandler(async (req, res) => {
+    const { client } = await verifyAuth(req)
+    await UserSystemPromptService.clearDefault(client)
+    res.json({ message: 'Default system prompt cleared' })
+  })
+)
+
+// Delete system prompt
+router.delete(
+  '/system-prompts/:id',
+  asyncHandler(async (req, res) => {
+    const { client } = await verifyAuth(req)
+    const promptId = req.params.id
+
+    const deleted = await UserSystemPromptService.delete(client, promptId)
+    if (!deleted) {
+      return res.status(404).json({ error: 'System prompt not found' })
+    }
+
+    res.json({ message: 'System prompt deleted', id: promptId })
   })
 )
 

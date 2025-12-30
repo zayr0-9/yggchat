@@ -12,6 +12,7 @@ import {
   OperationMode,
   StreamChunk,
   ToolCallPermissionRequest,
+  UserSystemPrompt,
 } from './chatTypes'
 
 const makeInitialState = (): ChatState => ({
@@ -86,6 +87,11 @@ const makeInitialState = (): ChatState => ({
     freeGenerationsRemaining: null,
     showLimitModal: false,
     isFreeTierUser: false,
+  },
+  userSystemPrompts: {
+    prompts: [],
+    loading: false,
+    error: null,
   },
 })
 
@@ -641,6 +647,33 @@ export const chatSlice = createSlice({
     },
     freeTierLimitModalHidden: state => {
       state.freeTier.showLimitModal = false
+    },
+
+    /* User System Prompts reducers */
+    userSystemPromptsLoadingStarted: state => {
+      state.userSystemPrompts.loading = true
+      state.userSystemPrompts.error = null
+    },
+    userSystemPromptsLoaded: (state, action: PayloadAction<UserSystemPrompt[]>) => {
+      state.userSystemPrompts.prompts = action.payload
+      state.userSystemPrompts.loading = false
+      state.userSystemPrompts.error = null
+    },
+    userSystemPromptsError: (state, action: PayloadAction<string>) => {
+      state.userSystemPrompts.loading = false
+      state.userSystemPrompts.error = action.payload
+    },
+    userSystemPromptAdded: (state, action: PayloadAction<UserSystemPrompt>) => {
+      state.userSystemPrompts.prompts.push(action.payload)
+    },
+    userSystemPromptUpdated: (state, action: PayloadAction<UserSystemPrompt>) => {
+      const index = state.userSystemPrompts.prompts.findIndex(p => p.id === action.payload.id)
+      if (index >= 0) {
+        state.userSystemPrompts.prompts[index] = action.payload
+      }
+    },
+    userSystemPromptDeleted: (state, action: PayloadAction<string>) => {
+      state.userSystemPrompts.prompts = state.userSystemPrompts.prompts.filter(p => p.id !== action.payload)
     },
 
     stateReset: () => makeInitialState(),

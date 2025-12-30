@@ -6,6 +6,7 @@ import { InputTextArea } from '../components/InputTextArea/InputTextArea'
 import { createProject, CreateProjectPayload, updateProject, UpdateProjectPayload } from '../features/projects'
 import { useAppDispatch } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
+import { useUserSystemPrompts } from '../hooks/useUserSystemPrompts'
 
 interface EditProjectProps {
   isOpen: boolean
@@ -31,12 +32,35 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
 
   const isEditing = editingProject !== null
 
+  // Use the custom hook for system prompt management
+  const {
+    prompts: userSystemPrompts,
+    loading: promptsLoading,
+    selectedPromptId,
+    setSelectedPromptId,
+    showSavePromptInput,
+    setShowSavePromptInput,
+    savePromptName,
+    setSavePromptName,
+    savingPrompt,
+    saveError,
+    isExistingPrompt,
+    handleSelectPrompt,
+    handleSaveAsPrompt,
+    resetSaveUI,
+  } = useUserSystemPrompts({
+    currentPromptContent: newProjectSystemPrompt,
+    isOpen,
+    onPromptSelect: content => setNewProjectSystemPrompt(content),
+  })
+
   useEffect(() => {
     if (editingProject) {
       setNewProjectName(editingProject.name)
       setNewProjectContext(editingProject.context || '')
       setNewProjectSystemPrompt(editingProject.system_prompt || '')
       setStorageMode(editingProject.storage_mode || 'cloud')
+      setSelectedPromptId(null)
     } else if (isOpen) {
       // Only reset form when opening modal for creating new project
       resetForm()
@@ -123,6 +147,8 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
     setNewProjectContext('')
     setNewProjectSystemPrompt('')
     setStorageMode('cloud')
+    setSelectedPromptId(null)
+    resetSaveUI()
   }
 
   const handleCancel = () => {
@@ -160,7 +186,104 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                 className='text-lg'
               />
             </div>
+            {/* User System Prompts horizontal scrolling list */}
+            {userSystemPrompts.length > 0 && (
+              <div className='mb-4'>
+                <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-4'>Select a saved prompt:</p>
+                <div className='flex gap-2 overflow-x-auto pb-2 thin-scrollbar'>
+                  {userSystemPrompts.map(prompt => (
+                    <button
+                      key={prompt.id}
+                      onClick={() => handleSelectPrompt(prompt)}
+                      className={`flex items-center justify-center gap-2 flex-shrink-0 h-10 px-4 rounded-xl border transition-all duration-150 ${
+                        selectedPromptId === prompt.id
+                          ? 'bg-sky-600/70 text-white border-transparent'
+                          : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-transparent dark:border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                      }`}
+                      title={prompt.description || prompt.content.substring(0, 100)}
+                    >
+                      <span className='font-medium text-sm whitespace-nowrap'>{prompt.name}</span>
+                      {prompt.is_default && <span className='ml-2 text-xs opacity-70'>(default)</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className=''>
+              <InputTextArea
+                placeholder='System prompt for this project...'
+                label='System Prompt (Optional)'
+                value={newProjectSystemPrompt}
+                onChange={val => {
+                  setNewProjectSystemPrompt(val)
+                  // Clear selection if user manually edits the prompt
+                  if (selectedPromptId) setSelectedPromptId(null)
+                }}
+                minRows={11}
+                maxRows={11}
+                width='w-full'
+                variant='outline'
+                outline={true}
+                className='drop-shadow-xl shadow-[0_0px_8px_3px_rgba(0,0,0,0.03),0_0px_2px_0px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0.1)]'
+              />
+
+              {/* Save as Prompt button and inline input - only show if content doesn't match existing prompt */}
+              {newProjectSystemPrompt.trim() && !isExistingPrompt && (
+                <div className='mt-3'>
+                  {!showSavePromptInput ? (
+                    <button
+                      type='button'
+                      onClick={() => setShowSavePromptInput(true)}
+                      className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
+                    >
+                      <i className='bx bx-save text-base'></i>
+                      Save as Prompt
+                    </button>
+                  ) : (
+                    <div className='space-y-2'>
+                      <div className='flex items-center gap-2'>
+                        <input
+                          type='text'
+                          value={savePromptName}
+                          onChange={e => setSavePromptName(e.target.value)}
+                          placeholder='Enter prompt name...'
+                          maxLength={100}
+                          className='flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-transparent'
+                          autoFocus
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') handleSaveAsPrompt()
+                            if (e.key === 'Escape') resetSaveUI()
+                          }}
+                        />
+                        <button
+                          type='button'
+                          onClick={handleSaveAsPrompt}
+                          disabled={!savePromptName.trim() || savingPrompt}
+                          className='px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                        >
+                          {savingPrompt ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          type='button'
+                          onClick={resetSaveUI}
+                          className='px-2 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
+                        >
+                          <i className='bx bx-x text-lg'></i>
+                        </button>
+                      </div>
+                      {saveError && (
+                        <p className='text-sm text-red-500 dark:text-red-400'>{saveError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div>
+              {/* <label className='block pb-2 text-[19px] text-neutral-900 font-medium mb-2 dark:text-neutral-200'>
+                System Prompt (Optional)
+              </label> */}
+
               <InputTextArea
                 label='Context (Optional)'
                 placeholder='Project context or description...'
@@ -173,20 +296,9 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                 outline={true}
                 className='drop-shadow-xl shadow-[0_0px_8px_3px_rgba(0,0,0,0.03),0_0px_2px_0px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
               />
-            </div>
-            <div>
-              <InputTextArea
-                label='System Prompt (Optional)'
-                placeholder='System prompt for this project...'
-                value={newProjectSystemPrompt}
-                onChange={setNewProjectSystemPrompt}
-                minRows={11}
-                maxRows={11}
-                width='w-full'
-                variant='outline'
-                outline={true}
-                className='drop-shadow-xl shadow-[0_0px_8px_3px_rgba(0,0,0,0.03),0_0px_2px_0px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0.1)]'
-              />
+              {promptsLoading && (
+                <div className='mb-4 text-sm text-neutral-500 dark:text-neutral-400'>Loading saved prompts...</div>
+              )}
             </div>
 
             {/* Storage Mode Selection (only in Electron) */}

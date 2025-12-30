@@ -257,6 +257,7 @@ export interface ChatState {
     showLimitModal: boolean
     isFreeTierUser: boolean
   }
+  userSystemPrompts: UserSystemPromptsState
 }
 
 // Action payloads
@@ -360,4 +361,22 @@ export interface tools {
     inputSchema: any
     execute: any
   }
+}
+
+// User System Prompt types
+export interface UserSystemPrompt {
+  id: string
+  owner_id: string
+  name: string
+  content: string
+  description?: string | null
+  is_default: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface UserSystemPromptsState {
+  prompts: UserSystemPrompt[]
+  loading: boolean
+  error: string | null
 }
