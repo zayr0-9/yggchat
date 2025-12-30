@@ -150,7 +150,7 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className='h-full overflow-y-auto bg-neutral-100 min-h-full'>
+    <div className='h-full overflow-y-auto bg-transparent min-h-full'>
       <div className='mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8'>
         <header className='flex flex-wrap items-center justify-between gap-4'>
           <div>
