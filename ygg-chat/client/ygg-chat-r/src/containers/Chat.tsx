@@ -10,6 +10,7 @@ import {
   ActionPopover,
   Button,
   ChatMessage,
+  FloatingWindowButton,
   FreeGenerationsModal,
   Heimdall,
   InputTextArea,
@@ -3255,6 +3256,9 @@ function Chat() {
         isOpen={showFreeTierModal}
         onClose={() => dispatch(chatSliceActions.freeTierLimitModalHidden())}
       />
+
+      {/* Floating Window Toggle Button - Only visible in Electron */}
+      <FloatingWindowButton position="bottom-right" />
     </motion.div>
   )
 }

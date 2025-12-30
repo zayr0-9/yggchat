@@ -15,6 +15,7 @@ const { autoUpdater } = autoUpdaterPkg
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
+let floatingWindow: BrowserWindow | null = null
 let serverProcess: ChildProcess | null = null
 let localServerStarted = false
 
@@ -324,6 +325,75 @@ function createWindow() {
   })
 }
 
+// Create a floating popup window (like picture-in-picture)
+function createFloatingWindow() {
+  if (floatingWindow) {
+    floatingWindow.focus()
+    return
+  }
+
+  const iconPath = getIconPath(nativeTheme.shouldUseDarkColors)
+
+  floatingWindow = new BrowserWindow({
+    title: 'Yggdrasil - Floating',
+    icon: iconPath,
+    width: 600,
+    height: 400,
+    minWidth: 300,
+    minHeight: 200,
+    alwaysOnTop: true,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    skipTaskbar: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  // Set floating level for better visibility over fullscreen apps
+  floatingWindow.setAlwaysOnTop(true, 'floating', 1)
+  
+  // Make window visible on all workspaces (including fullscreen apps)
+  floatingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  
+  // Disable fullscreen to keep it as a floating window
+  floatingWindow.setFullScreenable(false)
+
+  // Show window when ready to avoid flicker
+  floatingWindow.once('ready-to-show', () => {
+    floatingWindow?.show()
+  })
+
+  // Load the app - use the same URL as main window
+  const isDev = !app.isPackaged
+
+  if (isDev) {
+    floatingWindow.loadURL('http://localhost:5173')
+  } else {
+    const indexPath = path.join(__dirname, '../dist-electron/index.html')
+    floatingWindow.loadFile(indexPath)
+  }
+
+  floatingWindow.on('closed', () => {
+    floatingWindow = null
+  })
+}
+
+// Toggle floating window on/off
+function toggleFloatingWindow() {
+  if (floatingWindow) {
+    floatingWindow.close()
+    floatingWindow = null
+  } else {
+    createFloatingWindow()
+  }
+}
+
 // Register protocol handler for OAuth callbacks
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
@@ -567,6 +637,48 @@ ipcMain.handle('auth:openExternal', async (_event, url: string) => {
     console.error('[Electron IPC] Failed to open external URL:', error)
     return { success: false, error: String(error) }
   }
+})
+
+// Floating window controls
+ipcMain.handle('window:openFloating', async () => {
+  console.log('[Electron IPC] Opening floating window')
+  try {
+    createFloatingWindow()
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to open floating window:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('window:closeFloating', async () => {
+  console.log('[Electron IPC] Closing floating window')
+  try {
+    if (floatingWindow) {
+      floatingWindow.close()
+      floatingWindow = null
+      return { success: true }
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to close floating window:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('window:toggleFloating', async () => {
+  console.log('[Electron IPC] Toggling floating window')
+  try {
+    toggleFloatingWindow()
+    return { success: true, isOpen: floatingWindow !== null }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to toggle floating window:', error)
+    return { success: false, error: String(error), isOpen: false }
+  }
+})
+
+ipcMain.handle('window:isFloatingOpen', async () => {
+  return floatingWindow !== null
 })
 
 // Open OAuth URL in a new BrowserWindow (for WSL/Linux compatibility)
