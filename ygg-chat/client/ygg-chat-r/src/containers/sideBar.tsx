@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ConversationId, Project } from '../../../../shared/types'
-import { Button } from '../components'
+import { Button, TextField } from '../components'
 import { chatSliceActions } from '../features/chats'
 import { activeConversationIdSet } from '../features/conversations'
 // import { searchActions, selectSearchLoading, selectSearchQuery, selectSearchResults } from '../features/search'
@@ -24,8 +24,23 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
   // Detect if on Chat page - show projects instead of conversations
   const isChatPage = location.pathname.startsWith('/chat')
 
+  // Search state for filtering projects
+  const [searchQuery, setSearchQuery] = useState('')
+
   // Fetch projects using React Query
   const { data: fetchedProjects = [], isLoading: projectsLoading, error: projectsError } = useProjects()
+
+  // Filter projects based on search query (only when on Chat page)
+  const filteredProjects = useMemo(() => {
+    if (!searchQuery.trim()) return fetchedProjects
+    const query = searchQuery.toLowerCase()
+    return fetchedProjects.filter(
+      project =>
+        project.name?.toLowerCase().includes(query) ||
+        project.description?.toLowerCase().includes(query) ||
+        project.context?.toLowerCase().includes(query)
+    )
+  }, [fetchedProjects, searchQuery])
 
   // Fetch recent conversations using React Query (cached for 5 minutes)
   const { data: conversations = [], isLoading: conversationsLoading, error: queryError } = useRecentConversations(limit)
@@ -152,6 +167,17 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
       </div>
 
       {/* Search Section */}
+      {!isCollapsed && isChatPage && (
+        <div className='px-2 pb-2'>
+          <TextField
+            placeholder='Search projects...'
+            value={searchQuery}
+            onChange={setSearchQuery}
+            showSearchIcon={true}
+            size='small'
+          />
+        </div>
+      )}
       {/* {!isCollapsed && (
         <div className='px-2 relative z-50'>
           <SearchList
@@ -189,7 +215,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
         {isChatPage ? (
           // Projects List
           <>
-            {fetchedProjects.map(project => (
+            {filteredProjects.map(project => (
               <div key={project.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
                 <div
                   role='button'
@@ -247,9 +273,9 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                 )}
               </div>
             ))}
-            {fetchedProjects.length === 0 && !loading && !error && (
+            {filteredProjects.length === 0 && !loading && !error && (
               <div className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${isCollapsed ? 'hidden' : ''}`}>
-                No projects
+                {searchQuery ? 'No matching projects' : 'No projects'}
               </div>
             )}
           </>
