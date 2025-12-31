@@ -5,7 +5,7 @@ import { getAuthProvider, type AuthProvider as IAuthProvider } from '../lib/auth
 import { dualSync } from '../lib/sync/dualSyncManager'
 import { store } from '../store/store'
 import { updateThunkExtraAuth } from '../store/thunkExtra'
-import { API_BASE } from '../utils/api'
+import { API_BASE, FORCE_LOGOUT_EVENT } from '../utils/api'
 
 export interface AuthContextType {
   user: User | null
@@ -104,6 +104,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('[AuthContext] Error fetching user profile:', error)
     }
+  }, [])
+
+  // Listen for force logout events from API layer (when token refresh fails)
+  useEffect(() => {
+    const handleForceLogout = () => {
+      console.log('[AuthContext] Force logout event received, clearing auth state')
+      setAuthState({
+        user: null,
+        session: null,
+        accessToken: null,
+        userId: null,
+        loading: false,
+      })
+      updateThunkExtraAuth(null, null)
+      store.dispatch(clearUser())
+    }
+
+    window.addEventListener(FORCE_LOGOUT_EVENT, handleForceLogout)
+    return () => window.removeEventListener(FORCE_LOGOUT_EVENT, handleForceLogout)
   }, [])
 
   // Initialize auth provider on mount

@@ -332,7 +332,7 @@ ${block}`
       />
 
       {/* Modal */}
-      <div className='py-2 w-5xl'>
+      <div className='py-2 w-full max-w-5xl'>
         <div
           className={`relative z-50 mx-4 rounded-3xl px-12 py-4 lg:py-6 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${
             tools.some(tool => tool.enabled) ? 'h-[80vh]' : 'h-[58vh]'
@@ -393,7 +393,11 @@ ${block}`
                         title={prompt.description || prompt.content.substring(0, 100)}
                       >
                         <span className='font-medium text-sm whitespace-nowrap'>{prompt.name}</span>
-                        {prompt.is_default && <span className='ml-2 text-xs opacity-70'>(default)</span>}
+                        {prompt.is_default && (
+                          <span className=' pt-0.5 text-xs opacity-70'>
+                            <i className='bx bxs-star text-base'></i>
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>

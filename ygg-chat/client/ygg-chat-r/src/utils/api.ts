@@ -124,6 +124,9 @@ async function ensureValidToken(): Promise<string | null> {
 // Flag to prevent multiple concurrent redirects
 let isRedirectingToLogin = false
 
+// Custom event name for force logout - AuthContext should listen for this
+export const FORCE_LOGOUT_EVENT = 'force-logout'
+
 // Helper function to handle login redirection based on environment
 const redirectToLogin = () => {
   // Check if already on login page
@@ -155,6 +158,10 @@ const redirectToLogin = () => {
     } catch (e) {
       // Ignore localStorage errors
     }
+
+    // Dispatch force logout event so AuthContext can clear its React state
+    // This prevents the redirect loop where Login.tsx sees stale user state
+    window.dispatchEvent(new CustomEvent(FORCE_LOGOUT_EVENT))
   }
 
   if (environment === 'electron') {
