@@ -716,11 +716,11 @@ export function useModels(provider: string | null) {
   return useQuery({
     queryKey: ['models', provider],
     queryFn: async () => {
-      console.log(
-        '[useModels] queryFn EXECUTING for provider:',
-        provider,
-        '- This indicates a refetch/fetch is happening'
-      )
+      // console.log(
+      //   '[useModels] queryFn EXECUTING for provider:',
+      //   provider,
+      //   '- This indicates a refetch/fetch is happening'
+      // )
       if (!provider) throw new Error('Provider is required')
 
       const normalizedProvider = provider.toLowerCase()

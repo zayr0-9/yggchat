@@ -29,6 +29,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),
     close: () => ipcRenderer.invoke('window:close'),
+    // Floating window controls
+    openFloating: () => ipcRenderer.invoke('window:openFloating'),
+    closeFloating: () => ipcRenderer.invoke('window:closeFloating'),
+    toggleFloating: () => ipcRenderer.invoke('window:toggleFloating'),
+    isFloatingOpen: () => ipcRenderer.invoke('window:isFloatingOpen'),
+    // Compact mode controls
+    toggleCompact: () => ipcRenderer.invoke('window:toggleCompact'),
+    isCompact: () => ipcRenderer.invoke('window:isCompact'),
   },
   theme: {
     update: (isDark: boolean) => ipcRenderer.invoke('theme:update', isDark),

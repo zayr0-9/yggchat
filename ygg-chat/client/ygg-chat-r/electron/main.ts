@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'child_process'
 import Conf from 'conf'
-import { app, BrowserWindow, ipcMain, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, screen, shell } from 'electron'
 import autoUpdaterPkg from 'electron-updater'
 import fs from 'fs'
 import os from 'os'
@@ -15,6 +15,9 @@ const { autoUpdater } = autoUpdaterPkg
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
+let floatingWindow: BrowserWindow | null = null
+let compactMode = false
+let savedBounds: Electron.Rectangle | null = null
 let serverProcess: ChildProcess | null = null
 let localServerStarted = false
 
@@ -324,6 +327,75 @@ function createWindow() {
   })
 }
 
+// Create a floating popup window (like picture-in-picture)
+function createFloatingWindow() {
+  if (floatingWindow) {
+    floatingWindow.focus()
+    return
+  }
+
+  const iconPath = getIconPath(nativeTheme.shouldUseDarkColors)
+
+  floatingWindow = new BrowserWindow({
+    title: 'Yggdrasil - Floating',
+    icon: iconPath,
+    width: 600,
+    height: 400,
+    minWidth: 300,
+    minHeight: 200,
+    alwaysOnTop: true,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    skipTaskbar: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  // Set floating level for better visibility over fullscreen apps
+  floatingWindow.setAlwaysOnTop(true, 'floating', 1)
+  
+  // Make window visible on all workspaces (including fullscreen apps)
+  floatingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  
+  // Disable fullscreen to keep it as a floating window
+  floatingWindow.setFullScreenable(false)
+
+  // Show window when ready to avoid flicker
+  floatingWindow.once('ready-to-show', () => {
+    floatingWindow?.show()
+  })
+
+  // Load the app - use the same URL as main window
+  const isDev = !app.isPackaged
+
+  if (isDev) {
+    floatingWindow.loadURL('http://localhost:5173')
+  } else {
+    const indexPath = path.join(__dirname, '../dist-electron/index.html')
+    floatingWindow.loadFile(indexPath)
+  }
+
+  floatingWindow.on('closed', () => {
+    floatingWindow = null
+  })
+}
+
+// Toggle floating window on/off
+function toggleFloatingWindow() {
+  if (floatingWindow) {
+    floatingWindow.close()
+    floatingWindow = null
+  } else {
+    createFloatingWindow()
+  }
+}
+
 // Register protocol handler for OAuth callbacks
 if (process.defaultApp) {
   if (process.argv.length >= 2) {
@@ -569,6 +641,64 @@ ipcMain.handle('auth:openExternal', async (_event, url: string) => {
   }
 })
 
+// Floating window controls
+ipcMain.handle('window:openFloating', async () => {
+  console.log('[Electron IPC] Opening floating window')
+  try {
+    createFloatingWindow()
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to open floating window:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('window:closeFloating', async () => {
+  console.log('[Electron IPC] Closing floating window')
+  try {
+    if (floatingWindow) {
+      floatingWindow.close()
+      floatingWindow = null
+      return { success: true }
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to close floating window:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('window:toggleFloating', async () => {
+  console.log('[Electron IPC] Toggling floating window')
+  try {
+    toggleFloatingWindow()
+    return { success: true, isOpen: floatingWindow !== null }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to toggle floating window:', error)
+    return { success: false, error: String(error), isOpen: false }
+  }
+})
+
+ipcMain.handle('window:isFloatingOpen', async () => {
+  return floatingWindow !== null
+})
+
+// Compact mode controls (uses main window instead of spawning a new one)
+ipcMain.handle('window:toggleCompact', async () => {
+  console.log('[Electron IPC] Toggling compact mode')
+  try {
+    const compact = toggleCompactMode()
+    return { success: true, compact }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to toggle compact mode:', error)
+    return { success: false, error: String(error), compact: compactMode }
+  }
+})
+
+ipcMain.handle('window:isCompact', async () => {
+  return compactMode
+})
+
 // Open OAuth URL in a new BrowserWindow (for WSL/Linux compatibility)
 ipcMain.handle('auth:openOAuthWindow', async (_event, url: string) => {
   console.log('[Electron IPC] Opening OAuth window:', url)
@@ -753,4 +883,61 @@ function configureAutoUpdater() {
         console.error('[Electron] Failed to check for updates:', error)
       })
   }, 3000)
+}
+
+function enterCompactMode() {
+  if (!mainWindow) return
+
+  // Save current bounds to restore later
+  savedBounds = mainWindow.getBounds()
+
+  // Remove fullscreen if active and prevent entering fullscreen
+  mainWindow.setFullScreen(false)
+  mainWindow.setFullScreenable(false)
+
+  // Always on top over fullscreen apps
+  mainWindow.setAlwaysOnTop(true, 'floating', 1)
+  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+  // Reduce minimum size constraints for compact mode
+  mainWindow.setMinimumSize(280, 200)
+
+  // Compute a compact size and position (bottom-right of primary display)
+  const display = screen.getPrimaryDisplay()
+  const workArea = display.workArea
+  const width = Math.min(Math.max(360, workArea.width * 0.32), 520)
+  const height = Math.min(Math.max(480, workArea.height * 0.6), 760)
+  const x = Math.floor(workArea.x + workArea.width - width - 16)
+  const y = Math.floor(workArea.y + workArea.height - height - 16)
+
+  mainWindow.setBounds({ x, y, width, height })
+
+  compactMode = true
+}
+
+function exitCompactMode() {
+  if (!mainWindow) return
+
+  // Restore original minimum size constraints
+  mainWindow.setMinimumSize(800, 600)
+
+  // Restore previous bounds if available
+  if (savedBounds) {
+    mainWindow.setBounds(savedBounds)
+  }
+
+  mainWindow.setAlwaysOnTop(false)
+  mainWindow.setVisibleOnAllWorkspaces(false)
+  mainWindow.setFullScreenable(true)
+
+  compactMode = false
+}
+
+function toggleCompactMode() {
+  if (compactMode) {
+    exitCompactMode()
+  } else {
+    enterCompactMode()
+  }
+  return compactMode
 }
