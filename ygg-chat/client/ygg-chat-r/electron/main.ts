@@ -899,6 +899,9 @@ function enterCompactMode() {
   mainWindow.setAlwaysOnTop(true, 'floating', 1)
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
+  // Reduce minimum size constraints for compact mode
+  mainWindow.setMinimumSize(280, 200)
+
   // Compute a compact size and position (bottom-right of primary display)
   const display = screen.getPrimaryDisplay()
   const workArea = display.workArea
@@ -914,6 +917,9 @@ function enterCompactMode() {
 
 function exitCompactMode() {
   if (!mainWindow) return
+
+  // Restore original minimum size constraints
+  mainWindow.setMinimumSize(800, 600)
 
   // Restore previous bounds if available
   if (savedBounds) {
