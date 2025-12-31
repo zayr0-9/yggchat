@@ -87,6 +87,19 @@
   color: white;
 }
 
+.titlebar-compact:hover {
+  background-color: rgba(59, 130, 246, 0.2);
+}
+
+.dark .titlebar-compact:hover {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+.titlebar-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .titlebar-button:active {
   opacity: 0.7;
 }
@@ -110,4 +123,18 @@ body.has-titlebar {
 body.has-titlebar .app-content {
   padding-top: var(--titlebar-height);
   box-sizing: border-box;
+}
+
+/* Spin animation for loading state */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }
