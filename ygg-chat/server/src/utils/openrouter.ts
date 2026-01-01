@@ -818,9 +818,39 @@ export async function generateResponse(
         return part
       })
     }
+    // Extract tool_result blocks from content_blocks and inject as proper tool messages
+    // This is needed because when client executes tools locally, it stores results in content_blocks
+    // but the LLM expects them as separate role: 'tool' messages
+    const expandedMessages: any[] = []
+    for (const msg of conversationMessages) {
+      const m = msg as any
+      expandedMessages.push(m)
+
+      // Check if this assistant message has tool_result blocks in content_blocks
+      if (m.role === 'assistant' && Array.isArray(m.content_blocks)) {
+        const toolResultBlocks = m.content_blocks.filter(
+          (block: any) => block.type === 'tool_result' && block.tool_use_id
+        )
+
+        // Create tool messages for each tool_result block
+        for (const toolResult of toolResultBlocks) {
+          expandedMessages.push({
+            role: 'tool',
+            toolCallId: toolResult.tool_use_id,
+            content: typeof toolResult.content === 'string'
+              ? toolResult.content
+              : JSON.stringify(toolResult.content),
+          })
+        }
+      }
+    }
+
+    // Use expanded messages instead of original
+    const messagesToFormat = expandedMessages
+
     let formattedMessages: any[]
     if (isImageGenerationModel(model)) {
-      formattedMessages = conversationMessages.map(msg => {
+      formattedMessages = messagesToFormat.map(msg => {
         const m = msg as any
         // Extract reasoningDetails from content_blocks if present (for messages loaded from DB)
         let extractedReasoningDetails = m.reasoningDetails || m.reasoning_details
@@ -842,7 +872,7 @@ export async function generateResponse(
         }
       })
     } else {
-      formattedMessages = conversationMessages.map(msg => {
+      formattedMessages = messagesToFormat.map(msg => {
         const m = msg as any
         // Extract reasoningDetails from content_blocks if present (for messages loaded from DB)
         // Only use non-empty arrays - empty arrays cause Gemini API errors for parallel tool calls

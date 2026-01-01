@@ -201,23 +201,23 @@ app.use(
 
       // Allow requests with no origin (like mobile apps, Postman, or server-to-server)
       if (!origin) {
-        console.log('✅ CORS: No origin (allowed)')
+        // console.log('✅ CORS: No origin (allowed)')
         return callback(null, true)
       }
 
       // In development, allow all origins for flexibility
       if (env.NODE_ENV !== 'production') {
-        console.log('✅ CORS: Development mode (allowed)')
+        // console.log('✅ CORS: Development mode (allowed)')
         return callback(null, true)
       }
 
       // In production, check against whitelist
       if (allowedOrigins.includes(origin)) {
-        console.log('✅ CORS: Origin in whitelist (allowed)')
+        // console.log('✅ CORS: Origin in whitelist (allowed)')
         callback(null, true)
       } else {
-        console.log('❌ CORS: Origin NOT in whitelist (blocked)')
-        console.log('   Checked against:', allowedOrigins)
+        // console.log('❌ CORS: Origin NOT in whitelist (blocked)')
+        // console.log('   Checked against:', allowedOrigins)
         console.warn(`⚠️ CORS blocked origin: ${origin}`)
         callback(new Error('Not allowed by CORS'))
       }
@@ -298,7 +298,7 @@ if (env.VITE_ENVIRONMENT === 'web') {
     const oobAuth = require('./routes/oobAuth').default
     app.use('/auth', oobAuth) // For /auth/callback (callback page)
     app.use('/api/auth', oobAuth) // For /api/auth/oob/* endpoints
-    console.log('[Startup] OOB Auth routes loaded')
+    // console.log('[Startup] OOB Auth routes loaded')
   } catch (err) {
     console.error('[Startup] ❌ Failed to load supaChat router:', err)
   }

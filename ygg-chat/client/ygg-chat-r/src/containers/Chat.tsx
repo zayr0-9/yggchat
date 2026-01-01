@@ -2305,13 +2305,13 @@ function Chat() {
       {!isMobile && <SideBar limit={12} projects={allProjects} activeConversationId={currentConversationId} />}
 
       <div
-        className='relative flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden'
+        className='relative  flex flex-col flex-none min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden'
         style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : '100%' }}
       >
         {/* Messages Display */}
 
         <div
-          className={`relative ml-2 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-transparent flex-1 min-h-0 transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-0 md:px-0 lg:px-12 xl:px-20' : ''}`}
+          className={`relative mx-4 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-transparent flex-1 min-h-0 min-w-0 overflow-hidden transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-0 md:pr-12 ' : ''}`}
           style={{ paddingBottom: `0px` }}
         >
           {/* Conversation Title Editor */}
@@ -2461,7 +2461,7 @@ function Chat() {
 
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col pt-20 gap-2 px-0 ease-in-out  dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900 flex-1 min-h-0`}
+            className={`flex flex-col dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
             style={{
               ['overflowAnchor' as any]: 'none',
               // transform: 'translateZ(0)',
