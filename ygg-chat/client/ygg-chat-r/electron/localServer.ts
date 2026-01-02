@@ -1797,6 +1797,38 @@ function setupServer() {
     }
   })
 
+  // PATCH /api/projects/:id/touch - Update project updated_at timestamp (for any project)
+  // Called when a message is added to a conversation belonging to this project
+  app.patch('/api/projects/:id/touch', (req, res) => {
+    try {
+      const { id } = req.params
+
+      const existing = statements.getProjectById.get(id) as any
+      if (!existing) {
+        // Project doesn't exist locally - this is fine for cloud-only projects
+        res.json({ success: true, id, touched: false, reason: 'project_not_found_locally' })
+        return
+      }
+
+      // Update only the updated_at timestamp
+      db!
+        .prepare(
+          `
+        UPDATE projects SET
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `
+        )
+        .run(id)
+
+      // console.log('[LocalServer] Touched project timestamp:', id)
+      res.json({ success: true, id, touched: true })
+    } catch (error) {
+      console.error('[LocalServer] Error touching project timestamp:', error)
+      res.status(500).json({ error: 'Failed to touch project timestamp' })
+    }
+  })
+
   // GET /api/local/conversations?userId=xxx
   app.get('/api/local/conversations', (req, res) => {
     try {

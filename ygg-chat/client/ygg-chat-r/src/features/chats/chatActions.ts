@@ -315,6 +315,47 @@ const updateMessageArtifactsInCache = (
   }
 }
 
+/**
+ * Updates a project's updated_at timestamp in React Query cache
+ * Called when a message is added to a conversation in this project
+ * This ensures the project list reflects recent activity immediately
+ */
+const touchProjectTimestampInCache = (
+  queryClient: QueryClient | null,
+  projectId: string | null,
+  userId: string | null
+) => {
+  if (!queryClient || !projectId) return
+
+  const now = new Date().toISOString()
+
+  // Update projects list cache (main list with all projects)
+  const projectsCacheKey = ['projects', userId]
+  const projectsData = queryClient.getQueryData<any[]>(projectsCacheKey)
+
+  if (projectsData) {
+    queryClient.setQueryData(
+      projectsCacheKey,
+      projectsData.map(project =>
+        String(project.id) === String(projectId)
+          ? { ...project, updated_at: now, latest_conversation_updated_at: now }
+          : project
+      )
+    )
+  }
+
+  // Update individual project cache if it exists
+  const projectCacheKey = ['projects', projectId]
+  const projectData = queryClient.getQueryData<any>(projectCacheKey)
+
+  if (projectData) {
+    queryClient.setQueryData(projectCacheKey, {
+      ...projectData,
+      updated_at: now,
+    })
+  }
+}
+
 // Utility function for API calls
 // const apiCall = async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
 //   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -737,6 +778,13 @@ export const sendMessage = createAsyncThunk<
                     user_id: auth.userId,
                     project_id: selectedProject?.id || null,
                   })
+
+                  // Touch project timestamp to reflect recent activity
+                  if (selectedProject?.id) {
+                    dualSync.touchProjectTimestamp(selectedProject.id)
+                    // Update React Query cache immediately for instant UI update
+                    touchProjectTimestampInCache(extra.queryClient, selectedProject.id, auth.userId)
+                  }
 
                   // Save image attachments to local DB when in local mode
                   if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
@@ -1473,6 +1521,13 @@ export const editMessageWithBranching = createAsyncThunk<
                     project_id: selectedProject?.id || null,
                   })
 
+                  // Touch project timestamp to reflect recent activity
+                  if (selectedProject?.id) {
+                    dualSync.touchProjectTimestamp(selectedProject.id)
+                    // Update React Query cache immediately for instant UI update
+                    touchProjectTimestampInCache(extra.queryClient, selectedProject.id, auth.userId)
+                  }
+
                   // Save image attachments to local DB when in local mode
                   if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
                     localApi
@@ -1930,6 +1985,13 @@ export const sendMessageToBranch = createAsyncThunk<
                     user_id: auth.userId,
                     project_id: selectedProject?.id || null,
                   })
+
+                  // Touch project timestamp to reflect recent activity
+                  if (selectedProject?.id) {
+                    dualSync.touchProjectTimestamp(selectedProject.id)
+                    // Update React Query cache immediately for instant UI update
+                    touchProjectTimestampInCache(extra.queryClient, selectedProject.id, auth.userId)
+                  }
 
                   // Save image attachments to local DB when in local mode
                   if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {

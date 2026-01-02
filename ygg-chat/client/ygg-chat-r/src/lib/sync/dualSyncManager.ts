@@ -16,6 +16,7 @@ export interface SyncOperation {
     | 'provider_cost'
     | 'research_note_update'
     | 'cwd_update'
+    | 'project_timestamp_touch'
   action: 'create' | 'update' | 'delete'
   data: any
   retryCount: number
@@ -236,6 +237,10 @@ class DualSyncManager {
         endpoint = `/conversations/${operation.data.id}/cwd`
         method = 'PATCH'
         break
+      case 'project_timestamp_touch':
+        endpoint = `/projects/${operation.data.id}/touch`
+        method = 'PATCH'
+        break
       default:
         throw new Error(`Unknown operation type: ${operation.type}`)
     }
@@ -334,6 +339,17 @@ class DualSyncManager {
       type: 'cwd_update',
       action: 'update',
       data,
+    })
+  }
+
+  // Touch project timestamp (called when a message is added to a conversation in this project)
+  touchProjectTimestamp(projectId: string): void {
+    if (!projectId) return
+
+    this.enqueue({
+      type: 'project_timestamp_touch',
+      action: 'update',
+      data: { id: projectId },
     })
   }
 
@@ -473,6 +489,7 @@ export const dualSync = {
   syncProviderCost: (data: any) => getDualSyncManager().syncProviderCost(data),
   syncResearchNote: (data: { id: string; researchNote: string | null }) => getDualSyncManager().syncResearchNote(data),
   syncCwd: (data: { id: string; cwd: string | null }) => getDualSyncManager().syncCwd(data),
+  touchProjectTimestamp: (projectId: string) => getDualSyncManager().touchProjectTimestamp(projectId),
   syncBatch: (operations: Array<{ type: string; action: string; data: any }>) =>
     getDualSyncManager().syncBatch(operations),
   checkConversationExists: (id: string) => getDualSyncManager().checkConversationExists(id),
