@@ -509,12 +509,13 @@ const executeToolWithPermissionCheck = async (
     pendingPermissionResolve = resolve
   })
 
-  // Execute or Fake response
+  // Execute or bail based on user decision
   if (allowed) {
     return await executeLocalTool(toolCall, rootPath, operationMode)
-  } else {
-    return 'User cancelled tool call'
   }
+
+  // User explicitly denied the tool execution — surface as an error to halt generation
+  throw new Error('Tool execution denied by user')
 }
 
 // Model operations have been fully migrated to React Query

@@ -2469,7 +2469,7 @@ function Chat() {
 
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
+            className={`flex flex-col pt-20 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
             style={{
               ['overflowAnchor' as any]: 'none',
               // transform: 'translateZ(0)',
