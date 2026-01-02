@@ -165,7 +165,7 @@ export const ToolsSettings: React.FC = () => {
                     <div className='font-medium text-stone-800 dark:text-stone-200'>
                       {tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                     </div>
-                    <div className='text-sm text-gray-600 dark:text-gray-400 mt-1'>{tool.tool.description}</div>
+                    <div className='text-sm text-gray-600 dark:text-gray-400 mt-1'>{tool.description}</div>
                   </div>
 
                   <Button

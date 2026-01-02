@@ -270,6 +270,7 @@ export interface SendMessagePayload {
   retrigger?: boolean
   imageConfig?: ImageConfig
   reasoningConfig?: ReasoningConfig
+  cwd?: string | null
 }
 
 export interface EditMessagePayload {
@@ -279,6 +280,7 @@ export interface EditMessagePayload {
   modelOverride?: string
   systemPrompt?: string
   think: boolean
+  cwd?: string | null
 }
 
 export interface BranchMessagePayload {
@@ -288,6 +290,7 @@ export interface BranchMessagePayload {
   modelOverride?: string
   systemPrompt?: string
   think: boolean
+  cwd?: string | null
 }
 
 export interface CCSessionInfo {
@@ -353,15 +356,21 @@ export interface AttachmentsState {
   backup: Record<string, string[]>
 }
 
-export interface tools {
+// Tool definitions - now defined locally in toolDefinitions.ts
+// Sent with each message to the server for AI API calls
+export interface ToolDefinition {
   name: string
   enabled: boolean
-  tool: {
-    description: string
-    inputSchema: any
-    execute: any
+  description: string
+  inputSchema: {
+    type: 'object'
+    properties: Record<string, any>
+    required?: string[]
   }
 }
+
+// Alias for backwards compatibility
+export type tools = ToolDefinition
 
 // User System Prompt types
 export interface UserSystemPrompt {

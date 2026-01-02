@@ -20,8 +20,9 @@ import {
   SendCCBranchPayload,
   SendCCMessagePayload,
   SendMessagePayload,
-  tools,
+  ToolDefinition,
 } from './chatTypes'
+import { getEnabledTools } from './toolDefinitions'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -528,7 +529,7 @@ export const sendMessage = createAsyncThunk<
 >(
   'chat/sendMessage',
   async (
-    { conversationId, input, parent, repeatNum, think, retrigger = false, imageConfig, reasoningConfig },
+    { conversationId, input, parent, repeatNum, think, retrigger = false, imageConfig, reasoningConfig, cwd },
     { dispatch, getState, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
@@ -600,9 +601,11 @@ export const sendMessage = createAsyncThunk<
       // Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
       const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
 
-      // Prepend cwd to system prompt if it exists
-      if (conversationMeta?.cwd) {
-        const cwdPrefix = `Current working directory: ${conversationMeta.cwd}\n\n`
+      // Prepend cwd to system prompt if provided or stored on the conversation
+      const payloadCwd = typeof cwd === 'string' ? cwd.trim() : cwd ?? null
+      const effectiveCwd = payloadCwd || conversationMeta?.cwd || null
+      if (effectiveCwd) {
+        const cwdPrefix = `Current working directory: ${effectiveCwd}\n\n`
         systemPrompt = cwdPrefix + systemPrompt
       }
 
@@ -682,6 +685,7 @@ export const sendMessage = createAsyncThunk<
               isElectron: isElectronMode,
               imageConfig,
               reasoningConfig,
+              tools: getEnabledTools(),
             }),
             signal: controller.signal,
           })
@@ -726,6 +730,7 @@ export const sendMessage = createAsyncThunk<
               isElectron: isElectronMode,
               imageConfig,
               reasoningConfig,
+              tools: getEnabledTools(),
             }),
             signal: controller.signal,
           })
@@ -1276,7 +1281,7 @@ export const editMessageWithBranching = createAsyncThunk<
 >(
   'chat/editMessageWithBranching',
   async (
-    { conversationId, originalMessageId, newContent, modelOverride, think },
+    { conversationId, originalMessageId, newContent, modelOverride, think, cwd },
     { dispatch, getState, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
@@ -1412,9 +1417,11 @@ export const editMessageWithBranching = createAsyncThunk<
       // Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
       const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
 
-      // Prepend cwd to system prompt if it exists
-      if (conversationMeta?.cwd) {
-        const cwdPrefix = `Current working directory: ${conversationMeta.cwd}\n\n`
+      // Prepend cwd to system prompt if provided or stored on the conversation
+      const payloadCwd = typeof cwd === 'string' ? cwd.trim() : cwd ?? null
+      const effectiveCwd = payloadCwd || conversationMeta?.cwd || null
+      if (effectiveCwd) {
+        const cwdPrefix = `Current working directory: ${effectiveCwd}\n\n`
         systemPrompt = cwdPrefix + systemPrompt
       }
 
@@ -1472,6 +1479,7 @@ export const editMessageWithBranching = createAsyncThunk<
             isBranch: true,
             storageMode,
             isElectron: isElectronMode,
+            tools: getEnabledTools(),
           }),
           signal: controller.signal,
         })
@@ -1847,7 +1855,7 @@ export const sendMessageToBranch = createAsyncThunk<
 >(
   'chat/sendMessageToBranch',
   async (
-    { conversationId, parentId, content, modelOverride, systemPrompt, think },
+    { conversationId, parentId, content, modelOverride, systemPrompt, think, cwd },
     { dispatch, getState, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
@@ -1894,11 +1902,13 @@ export const sendMessageToBranch = createAsyncThunk<
       // Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
       const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
 
-      // Prepend cwd to system prompt if it exists
+      // Prepend cwd to system prompt if provided or stored on the conversation
       let effectiveSystemPrompt = systemPrompt
-      if (conversationMeta?.cwd) {
-        const cwdPrefix = `Current working directory: ${conversationMeta.cwd}\n\n`
-        effectiveSystemPrompt = cwdPrefix + (systemPrompt || '')
+      const payloadCwd = typeof cwd === 'string' ? cwd.trim() : cwd ?? null
+      const effectiveCwd = payloadCwd || conversationMeta?.cwd || null
+      if (effectiveCwd) {
+        const cwdPrefix = `Current working directory: ${effectiveCwd}\n\n`
+        effectiveSystemPrompt = cwdPrefix + (effectiveSystemPrompt || '')
       }
 
       if (!modelName) {
@@ -1943,6 +1953,7 @@ export const sendMessageToBranch = createAsyncThunk<
             isBranch: true,
             storageMode,
             isElectron: isElectronMode,
+            tools: getEnabledTools(),
           }),
           signal: controller.signal,
         })
@@ -2896,48 +2907,28 @@ export const abortStreaming = createAsyncThunk<
   }
 })
 
-// Fetch available tools
-export const fetchTools = createAsyncThunk<tools[], void, { extra: ThunkExtraArgument }>(
+// Fetch available tools - now returns local tool definitions
+// Tools are defined locally in toolDefinitions.ts, not fetched from server
+export const fetchTools = createAsyncThunk<ToolDefinition[], void, { state: RootState }>(
   'chat/fetchTools',
-  async (_, { dispatch, extra, rejectWithValue }) => {
-    const { auth } = extra
-    try {
-      const response = await apiCall<{ tools: tools[] }>('/tools', auth.accessToken)
-      dispatch(chatSliceActions.toolsLoaded(response.tools))
-      return response.tools
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch tools'
-      dispatch(chatSliceActions.toolsError(message))
-      return rejectWithValue(message)
-    }
+  async (_, { getState }) => {
+    // Return tools from local state (already initialized from toolDefinitions.ts)
+    const state = getState()
+    return state.chat.tools
   }
 )
 
-// Update tool enabled status
+// Update tool enabled status - now updates local state only
 export const updateToolEnabled = createAsyncThunk<
-  { success: boolean; tool: tools; message: string },
+  { success: boolean; toolName: string; enabled: boolean },
   { toolName: string; enabled: boolean },
-  { extra: ThunkExtraArgument }
->('chat/updateToolEnabled', async ({ toolName, enabled }, { dispatch, extra, rejectWithValue }) => {
-  const { auth } = extra
-  try {
-    const response = await apiCall<{ success: boolean; tool: tools; message: string }>(
-      `/tools/${toolName}`,
-      auth.accessToken,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ enabled }),
-      }
-    )
+  { state: RootState }
+>('chat/updateToolEnabled', async ({ toolName, enabled }, { dispatch }) => {
+  // Update local state
+  dispatch(chatSliceActions.toolEnabledUpdated({ toolName, enabled }))
 
-    // Refresh tools list to get updated state
-    dispatch(fetchTools())
-
-    return response
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to update tool'
-    return rejectWithValue(message)
-  }
+  // Return the updated status
+  return { success: true, toolName, enabled }
 })
 
 // Bulk insert messages (for copying message chains to new conversation)

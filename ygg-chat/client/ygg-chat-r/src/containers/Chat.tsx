@@ -1359,6 +1359,7 @@ function Chat() {
                 retrigger: true,
                 imageConfig: isImageGenerationModel ? imageConfig : undefined,
                 reasoningConfig: think ? reasoningConfig : undefined,
+                cwd: ccCwd || undefined,
               })
             )
               .unwrap()
@@ -1468,6 +1469,7 @@ function Chat() {
                 think: think,
                 imageConfig: isImageGenerationModel ? imageConfig : undefined,
                 reasoningConfig: think ? reasoningConfig : undefined,
+                cwd: ccCwd || undefined,
               })
             )
               .unwrap()
@@ -1601,6 +1603,7 @@ function Chat() {
               newContent: processed,
               modelOverride: selectedModel?.name,
               think: think,
+              cwd: ccCwd || undefined,
             })
           )
             .unwrap()
@@ -1688,6 +1691,7 @@ function Chat() {
               think: think,
               imageConfig: isImageGenerationModel ? imageConfig : undefined,
               reasoningConfig: think ? reasoningConfig : undefined,
+              cwd: ccCwd || undefined,
             })
           )
             .unwrap()
@@ -1734,6 +1738,7 @@ function Chat() {
               newContent: processed,
               modelOverride: selectedModel?.name,
               think: think,
+              cwd: ccCwd || undefined,
             })
           )
             .unwrap()
@@ -1762,6 +1767,9 @@ function Chat() {
       replaceFileMentionsWithPath,
       conversationMessages,
       queryClient,
+      ccCwd,
+      isImageGenerationModel,
+      imageConfig,
     ]
   )
 

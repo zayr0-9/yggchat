@@ -1,0 +1,508 @@
+// src/features/chats/toolDefinitions.ts
+// Tool definitions sent from client to server with each message request
+// Tools execute locally via electron/localServer.ts, definitions are sent to AI API
+// This allows users to customize their own tools in the future
+
+export interface ToolDefinition {
+  name: string
+  enabled: boolean
+  description: string
+  inputSchema: {
+    type: 'object'
+    properties: Record<string, any>
+    required?: string[]
+  }
+}
+
+const toolDefinitions: ToolDefinition[] = [
+  {
+    name: 'directory',
+    enabled: false,
+    description:
+      'Get the directory structure of a specified path. Useful for understanding project organization, finding files, or exploring codebases.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'The directory path to analyze (absolute or relative)' },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'todo_list',
+    enabled: true,
+    description:
+      'Manage disk-backed Markdown todo lists stored per user. Each list is a human-readable `.md` file (id = noun-noun-noun). When creating a new todo, the tool automatically generates the file name/id and returns it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'read', 'write', 'generate_id', 'directory'],
+          description:
+            'Requested todo list operation. list -> return ids; read -> require id; write -> accepts content and auto-generates a file; generate_id -> no id needed; directory -> returns storage folder.',
+        },
+        id: {
+          type: 'string',
+          description: 'Hyphenated noun id used when reading an existing todo. Example: ember-aurora-sage.',
+        },
+        content: {
+          type: 'string',
+          description:
+            'Markdown payload to write for the todo list (required for write action). The tool ignores any provided id and generates the filename itself.',
+        },
+      },
+      required: ['action'],
+    },
+  },
+  {
+    name: 'read_file',
+    enabled: true,
+    description:
+      'Read the contents of a text file (code, config, docs). Supports reading full files, single ranges, or multiple disjoint ranges. Returns file metadata (line endings, encoding, modification time) and optional content hash for validation. Range info is in metadata only - content returned matches exactly what is in the file. Rejects likely-binary files and truncates large files for safety.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'The file path to read (absolute or relative)' },
+        maxBytes: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 5242880,
+          description: 'Optional safety limit on bytes to read (1 to 5MB); defaults to 204800 (200KB)',
+        },
+        startLine: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'Optional 1-based line number to start reading from (inclusive). Use for single range reads. Ignored if ranges is provided.',
+        },
+        endLine: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'Optional 1-based line number to stop reading at (inclusive). Use with startLine for single range. Ignored if ranges is provided.',
+        },
+        ranges: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              startLine: { type: 'integer', minimum: 1, description: '1-based start line (inclusive)' },
+              endLine: { type: 'integer', minimum: 1, description: '1-based end line (inclusive)' },
+            },
+            required: ['startLine', 'endLine'],
+          },
+          description:
+            'Array of line range objects to read multiple disjoint sections. Format: [{"startLine": 10, "endLine": 50}, {"startLine": 100, "endLine": 150}]. Range details are returned in metadata.ranges field. Takes precedence over startLine/endLine params.',
+        },
+        includeHash: {
+          type: 'boolean',
+          description: 'Calculate SHA256 content hash for validation with edit_file (default true)',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'read_files',
+    enabled: true,
+    description:
+      "Read multiple text/code/config files and return a single concatenated string, separated by each file's relative path header.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        paths: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          description:
+            'Array of file paths to read. Example: ["src/index.ts", "src/utils.ts", "/absolute/path/file.js"]',
+        },
+        baseDir: {
+          type: 'string',
+          description: 'Optional base directory used to compute the relative path header.',
+        },
+        maxBytes: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 5242880,
+          description: 'Optional per-file safety limit on bytes to read (1 to 5MB); defaults to 204800 (200KB)',
+        },
+        startLine: {
+          type: 'integer',
+          minimum: 1,
+          description: 'Optional 1-based line number to start reading from (inclusive). Applies to all files.',
+        },
+        endLine: {
+          type: 'integer',
+          minimum: 1,
+          description: 'Optional 1-based line number to stop reading at (inclusive). Applies to all files.',
+        },
+      },
+      required: ['paths'],
+    },
+  },
+  {
+    name: 'read_file_continuation',
+    enabled: true,
+    description:
+      'Read the next chunk of a file after a specific line number. Designed for pagination to avoid duplicate reads. Use this when you previously read a file up to line N and want to continue reading from line N+1. Returns file metadata and content hash for validation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'The file path to read (absolute or relative)' },
+        afterLine: {
+          type: 'integer',
+          minimum: 0,
+          description: '1-based line number to start reading after (exclusive). Use 0 to read from the beginning.',
+        },
+        numLines: {
+          type: 'integer',
+          minimum: 1,
+          description: 'Number of lines to read after the specified line',
+        },
+        maxBytes: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 5242880,
+          description: 'Optional safety limit on bytes to read (1 to 5MB); defaults to 204800 (200KB)',
+        },
+        includeHash: {
+          type: 'boolean',
+          description: 'Calculate SHA256 content hash for validation with edit_file (default true)',
+        },
+      },
+      required: ['path', 'afterLine', 'numLines'],
+    },
+  },
+  {
+    name: 'create_file',
+    enabled: true,
+    description: 'Create a new text file with optional parent directory creation and overwrite support.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path to create (absolute or relative).' },
+        content: { type: 'string', description: 'Initial content to write to the file; defaults to empty.' },
+        directory: { type: 'string', description: 'Optional base directory; resolved when path is relative.' },
+        createParentDirs: {
+          type: 'boolean',
+          description: 'If true, create parent directories as needed (default true).',
+        },
+        overwrite: { type: 'boolean', description: 'If true, overwrite existing file (default false).' },
+        executable: { type: 'boolean', description: 'If true, make the file executable on POSIX systems.' },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'delete_file',
+    enabled: true,
+    description: 'Delete a file at the specified path. Optionally restrict deletions to specific file extensions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path to delete (absolute or relative).' },
+        allowedExtensions: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Restrict deletions to specific extensions. Example: [".txt", ".json", ".log"]. Include the dot prefix.',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'edit_file',
+    enabled: true,
+    description:
+      'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy. Escape sequences like \\n, \\t, \\r in search patterns are interpreted by default (disable with interpretEscapeSequences: false). Supports content validation using hash and metadata from read_file to prevent editing stale content.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'The path to the file to edit' },
+        operation: {
+          type: 'string',
+          enum: ['replace', 'replace_first', 'append'],
+          description: 'Type of edit operation',
+        },
+        searchPattern: {
+          type: 'string',
+          description:
+            'REQUIRED for replace/replace_first operations. The exact text pattern to find in the file. Escape sequences like \\n (newline), \\t (tab), \\r (carriage return) are interpreted by default.',
+        },
+        replacement: {
+          type: 'string',
+          description:
+            'REQUIRED for replace/replace_first operations. The text to replace the search pattern with. Supports escape sequences.',
+        },
+        content: {
+          type: 'string',
+          description: 'REQUIRED for append operation. The content to append to the end of the file.',
+        },
+        createBackup: { type: 'boolean', description: 'Whether to create a backup before editing (default false)' },
+        encoding: { type: 'string', description: 'File encoding (default utf8)' },
+        interpretEscapeSequences: {
+          type: 'boolean',
+          description: 'Interpret escape sequences (\\n, \\t, \\r, etc.) in search and replacement strings (default true)',
+        },
+        validateContent: {
+          type: 'boolean',
+          description: 'Validate file has not changed since read using hash/metadata (default true)',
+        },
+        expectedHash: {
+          type: 'string',
+          description: 'Expected SHA256 content hash from read_file for validation. Prevents editing if file changed.',
+        },
+        expectedMetadata: {
+          type: 'object',
+          properties: {
+            lineEnding: { type: 'string', enum: ['\n', '\r\n', 'mixed'] },
+            hasBOM: { type: 'boolean' },
+            encoding: { type: 'string' },
+            lastModified: { type: 'string' },
+            inode: { type: 'number' },
+          },
+          description: 'Expected file metadata from read_file for validation',
+        },
+      },
+      required: ['path', 'operation'],
+    },
+  },
+  {
+    name: 'search_history',
+    enabled: false,
+    description: 'Search chat history across user, project, or conversation using the DB FTS utilities.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query to run' },
+        userId: {
+          type: 'integer',
+          description: 'User ID to scope search. Pass null or omit to search all users.',
+        },
+        projectId: {
+          type: 'integer',
+          description: 'Project ID to scope search. Pass null or omit to search all projects.',
+        },
+        conversationId: {
+          type: 'integer',
+          description: 'Conversation ID to scope search. Pass null or omit to search all conversations.',
+        },
+        limit: { type: 'integer', description: 'Optional result limit (default 10)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'brave_search',
+    enabled: true,
+    description:
+      'Search the web using Brave Search API. Returns web search results with titles, URLs, and descriptions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'The search query to execute' },
+        count: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 20,
+          description: 'Number of results to return (default 10, max 20)',
+        },
+        offset: { type: 'integer', minimum: 0, description: 'Number of results to skip (default 0)' },
+        safesearch: {
+          type: 'string',
+          enum: ['strict', 'moderate', 'off'],
+          description: 'Safe search setting (default moderate)',
+        },
+        country: { type: 'string', description: 'Country code for localized results (e.g., "US", "GB")' },
+        search_lang: {
+          type: 'string',
+          description:
+            "Language for search results using Brave-supported codes (e.g., \"en\", \"es\", \"pt-br\", \"zh-hant\"). Must be one of Brave Search API's allowed values.",
+        },
+        extra_snippets: { type: 'boolean', description: 'Include extra snippets in results' },
+        summary: { type: 'boolean', description: 'Include AI-generated summary' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'ripgrep',
+    enabled: true,
+    description:
+      'Search files using ripgrep (rg). Supports regex, file filtering, context lines. Limits: max 500 matches, 5000 total chars, 500 chars/line. Use glob filter (e.g., "*.ts"), maxCount, or narrower patterns if limits exceeded.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Search pattern (regex or literal string)' },
+        searchPath: {
+          type: 'string',
+          description: 'Directory or file path to search (defaults to current directory ".")',
+        },
+        caseSensitive: { type: 'boolean', description: 'Case-sensitive search (default false for case-insensitive)' },
+        lineNumbers: { type: 'boolean', description: 'Include line numbers in results (default true)' },
+        count: { type: 'boolean', description: 'Count matches per file instead of showing line content (default false)' },
+        filesWithMatches: { type: 'boolean', description: 'List only filenames with matches (default false)' },
+        maxCount: { type: 'integer', minimum: 1, description: 'Maximum matches per file' },
+        glob: { type: 'string', description: 'File pattern glob (e.g., "*.ts", "src/**/*.js")' },
+        hidden: { type: 'boolean', description: 'Search hidden files and directories (default false)' },
+        noIgnore: { type: 'boolean', description: 'Ignore .gitignore rules (default false)' },
+        contextLines: {
+          type: 'integer',
+          minimum: 0,
+          description: 'Show N lines of context before and after matches',
+        },
+      },
+      required: ['pattern'],
+    },
+  },
+  {
+    name: 'bash',
+    enabled: true,
+    description:
+      'Run bash commands inside the workspace. On Windows/Electron, paths are automatically converted to the default WSL distribution for compatibility.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Shell command to execute' },
+        cwd: { type: 'string', description: 'Working directory for the command' },
+        env: {
+          type: 'object',
+          additionalProperties: { type: 'string' },
+          description:
+            'Environment variables as key-value object. Example: {"NODE_ENV": "production", "DEBUG": "true"}',
+        },
+        timeoutMs: {
+          type: 'integer',
+          minimum: 100,
+          maximum: 120000,
+          description: 'Optional timeout in milliseconds (default 0 meaning no timeout)',
+        },
+        maxOutputChars: {
+          type: 'integer',
+          minimum: 100,
+          maximum: 500000,
+          description: 'Optional limit on total captured output characters (default 20000)',
+        },
+      },
+      required: ['command'],
+    },
+  },
+  {
+    name: 'glob',
+    enabled: true,
+    description: 'Search for files using glob patterns with flexible matching and filtering options',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        pattern: { type: 'string', description: 'Glob pattern to match files (e.g., "*.ts", "src/**/*.js")' },
+        cwd: { type: 'string', description: 'Current working directory to search from' },
+        ignore: {
+          oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+          description: 'Patterns to exclude. String or array. Example: ["node_modules/**", "*.test.ts"] or "dist/**"',
+        },
+        dot: { type: 'boolean', description: 'Include dotfiles (default: false)' },
+        absolute: { type: 'boolean', description: 'Return absolute paths (default: false)' },
+        mark: { type: 'boolean', description: 'Add / suffix to directories (default: false)' },
+        nosort: { type: 'boolean', description: 'Do not sort results (default: false)' },
+        nocase: { type: 'boolean', description: 'Case-insensitive matching on Windows (default: false)' },
+        nodir: { type: 'boolean', description: 'Do not match directories (default: false)' },
+        follow: { type: 'boolean', description: 'Follow symbolic links (default: false)' },
+        realpath: { type: 'boolean', description: 'Return resolved absolute paths (default: false)' },
+        stat: { type: 'boolean', description: 'Call stat() on all results (default: false)' },
+        withFileTypes: { type: 'boolean', description: 'Return file type objects instead of paths (default: false)' },
+      },
+      required: ['pattern'],
+    },
+  },
+  {
+    name: 'browse_web',
+    enabled: true,
+    description:
+      'Browse a web page and extract its content, including text, headings, links, images, and metadata. Uses Playwright to handle JavaScript-rendered content. Supports both headless and non-headless modes for bot detection avoidance. Use headless mode as default unless specified by user.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', format: 'uri', description: 'The URL to browse and extract content from' },
+        waitForSelector: {
+          type: 'string',
+          description: 'Optional CSS selector to wait for before extracting content',
+        },
+        timeout: {
+          type: 'integer',
+          minimum: 5000,
+          maximum: 60000,
+          description: 'Timeout in milliseconds (default 30000)',
+        },
+        waitForNetworkIdle: {
+          type: 'boolean',
+          description: 'Wait for network to be idle before extracting (default true)',
+        },
+        extractImages: { type: 'boolean', description: 'Extract image information (default true)' },
+        extractLinks: { type: 'boolean', description: 'Extract link information (default true)' },
+        extractMetadata: { type: 'boolean', description: 'Extract page metadata (default true)' },
+        headless: {
+          type: 'boolean',
+          description: 'Run browser in headless mode (default true). Set to false to avoid bot detection.',
+        },
+        useUserProfile: {
+          type: 'boolean',
+          description:
+            'Use existing browser profile with your cookies and extensions (default false). Only works with headless=false.',
+        },
+        userDataDir: {
+          type: 'string',
+          description:
+            'Browser profile path for useUserProfile=true. Linux: "~/.config/google-chrome", Windows: "%LOCALAPPDATA%\\Google\\Chrome\\User Data", macOS: "~/Library/Application Support/Google/Chrome"',
+        },
+        retries: {
+          type: 'integer',
+          minimum: 0,
+          maximum: 5,
+          description: 'Number of retry attempts if browsing fails (default 2)',
+        },
+        retryDelay: {
+          type: 'integer',
+          minimum: 100,
+          maximum: 10000,
+          description: 'Delay between retries in milliseconds (default 1000)',
+        },
+        useBrave: { type: 'boolean', description: 'Use Brave browser instead of Chromium (default false)' },
+        executablePath: {
+          type: 'string',
+          description: 'Custom path to browser executable (overrides useBrave)',
+        },
+      },
+      required: ['url'],
+    },
+  },
+]
+
+// Get all tool definitions
+export const getAllTools = (): ToolDefinition[] => {
+  return toolDefinitions
+}
+
+// Get only enabled tools
+export const getEnabledTools = (): ToolDefinition[] => {
+  return toolDefinitions.filter(t => t.enabled)
+}
+
+// Get tool by name
+export const getToolByName = (name: string): ToolDefinition | undefined => {
+  return toolDefinitions.find(t => t.name === name)
+}
+
+// Update tool enabled status (for future user customization)
+export const updateToolEnabled = (name: string, enabled: boolean): boolean => {
+  const tool = toolDefinitions.find(t => t.name === name)
+  if (tool) {
+    tool.enabled = enabled
+    return true
+  }
+  return false
+}
+
+export default toolDefinitions

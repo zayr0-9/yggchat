@@ -14,6 +14,7 @@ import {
   ToolCallPermissionRequest,
   UserSystemPrompt,
 } from './chatTypes'
+import toolDefinitions from './toolDefinitions'
 
 const makeInitialState = (): ChatState => ({
   providerState: {
@@ -78,7 +79,7 @@ const makeInitialState = (): ChatState => ({
     byMessage: {},
     backup: {},
   },
-  tools: [],
+  tools: toolDefinitions,
   toolCallPermissionRequest: null,
   toolAutoApprove: false,
   operationMode: 'plan',
@@ -598,6 +599,12 @@ export const chatSlice = createSlice({
     },
     toolsError: (_state, action: PayloadAction<string>) => {
       console.error('Tools error:', action.payload)
+    },
+    toolEnabledUpdated: (state, action: PayloadAction<{ toolName: string; enabled: boolean }>) => {
+      const tool = state.tools.find(t => t.name === action.payload.toolName)
+      if (tool) {
+        tool.enabled = action.payload.enabled
+      }
     },
 
     toolPermissionRequested: (state, action: PayloadAction<ToolCallPermissionRequest>) => {

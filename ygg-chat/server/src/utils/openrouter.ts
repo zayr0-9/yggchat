@@ -2,7 +2,7 @@ import type { OpenRouter } from '@openrouter/sdk'
 import { randomUUID } from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { MessageId, ReasoningConfig } from '../../../shared/types'
+import { MessageId, ReasoningConfig, ToolDefinition } from '../../../shared/types'
 import { ProviderCostService } from '../database/models'
 import { supabaseAdmin } from '../database/supamodels'
 import { getApiKey } from './apiKeyManager'
@@ -194,8 +194,8 @@ async function getOpenRouterClient() {
     openrouterApiKey = apiKey
     openrouterInstance = new OpenRouter({
       apiKey,
-      httpReferer: process.env.OPENROUTER_REFERER || 'https://yggchat.com',
-      xTitle: process.env.OPENROUTER_TITLE || 'Yggdrasil',
+      httpReferer: 'https://yggchat.com',
+      xTitle: 'Yggdrasil',
     })
   }
   if (!openrouterInstance) throw new Error('Failed to initialize OpenRouter client')
@@ -657,7 +657,8 @@ export async function generateResponse(
   storageMode: 'cloud' | 'local' = 'cloud',
   isElectron: boolean = false,
   imageConfig?: ImageConfig,
-  reasoningConfig?: ReasoningConfig
+  reasoningConfig?: ReasoningConfig,
+  toolsFromClient?: ToolDefinition[]
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
   let stepCount = 0
@@ -692,24 +693,32 @@ export async function generateResponse(
   // All tools allowed in cloud mode - client tools only available in Electron
   const CLOUD_ALLOWED_TOOLS = isElectron ? [...CLOUD_SERVER_TOOLS, ...CLOUD_CLIENT_TOOLS] : [...CLOUD_SERVER_TOOLS]
 
-  // Convert tools to OpenAI format
-  // In cloud mode, only allow server-side search tools (no agentic/local tools)
-  // Client tools (browse_web) only available when running in Electron app
-  const openaiTools = tools
-    .filter(tool => tool.enabled)
+  const effectiveTools = Array.isArray(toolsFromClient) && toolsFromClient.length > 0 ? toolsFromClient : tools
+
+  const normalizeParameters = (inputSchema: any): any => {
+    if (!inputSchema) return { type: 'object', properties: {} }
+
+    // If inputSchema has a _def property, it's likely Zod
+    if (inputSchema._def && typeof inputSchema._def === 'object') {
+      return zodToJsonSchema(inputSchema)
+    }
+
+    // If wrapped with { schema }
+    if (inputSchema.schema) return inputSchema.schema
+
+    return inputSchema
+  }
+
+  const openaiTools = effectiveTools
+    .filter(tool => tool && tool.enabled)
     .filter(tool => storageMode === 'local' || CLOUD_ALLOWED_TOOLS.includes(tool.name))
     .map(tool => {
-      // Convert Zod schema to JSON schema
+      const description = (tool as any).tool?.description ?? (tool as any).description ?? ''
+      const inputSchema = (tool as any).tool?.inputSchema ?? (tool as any).inputSchema
+
       let parameters: any
       try {
-        // If inputSchema has a _def property, it's a Zod schema
-        if (tool.tool.inputSchema && typeof tool.tool.inputSchema._def === 'object') {
-          // Convert Zod schema to JSON schema format
-          parameters = zodToJsonSchema(tool.tool.inputSchema)
-        } else {
-          // Already in JSON schema format
-          parameters = tool.tool.inputSchema.schema || tool.tool.inputSchema
-        }
+        parameters = normalizeParameters(inputSchema)
       } catch (error) {
         console.error(`Failed to convert schema for tool ${tool.name}:`, error)
         parameters = { type: 'object', properties: {} }
@@ -719,7 +728,7 @@ export async function generateResponse(
         type: 'function' as const,
         function: {
           name: tool.name,
-          description: tool.tool.description,
+          description,
           parameters,
         },
       }
@@ -837,9 +846,7 @@ export async function generateResponse(
           expandedMessages.push({
             role: 'tool',
             toolCallId: toolResult.tool_use_id,
-            content: typeof toolResult.content === 'string'
-              ? toolResult.content
-              : JSON.stringify(toolResult.content),
+            content: typeof toolResult.content === 'string' ? toolResult.content : JSON.stringify(toolResult.content),
           })
         }
       }
@@ -1079,11 +1086,11 @@ export async function generateResponse(
       // The SDK's Zod validation strips reasoning_details, so we must bypass it for Gemini models with tools
       const needsRawGeminiStream =
         isGeminiModelRequiringReasoningDetails(model) &&
-        (hasReasoningDetails(formattedMessages) || (tools && tools.length > 0))
+        (hasReasoningDetails(formattedMessages) || hasTools)
 
       if (needsRawGeminiStream) {
         const hasExistingDetails = hasReasoningDetails(formattedMessages)
-        const hasToolsDefined = tools && tools.length > 0
+        const hasToolsDefined = hasTools
         // console.log(
         //   `🧠 [openrouter] Using RAW Gemini streaming (hasReasoningDetails: ${hasExistingDetails}, hasTools: ${hasToolsDefined})`
         // )

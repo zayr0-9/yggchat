@@ -1,5 +1,5 @@
 // server/src/utils/provider.ts
-import { MessageId, ReasoningConfig } from '../../../shared/types'
+import { MessageId, ReasoningConfig, ToolDefinition } from '../../../shared/types'
 import { Message } from '../database/models'
 
 import { generateResponse as anthropicGenerate } from './anthropic'
@@ -48,7 +48,8 @@ export async function generateResponse(
   storageMode: 'cloud' | 'local' = 'cloud',
   isElectron: boolean = false,
   imageConfig?: ImageConfig,
-  reasoningConfig?: ReasoningConfig
+  reasoningConfig?: ReasoningConfig,
+  tools?: ToolDefinition[]
 ): Promise<void> {
   const providerModel = getProviderModel(provider, model)
 
@@ -549,7 +550,8 @@ export async function generateResponse(
         storageMode,
         isElectron,
         imageConfig,
-        reasoningConfig
+        reasoningConfig,
+        tools
       )
     }
     case 'lmstudio': {

@@ -1358,6 +1358,7 @@ router.post(
       storageMode = 'cloud',
       imageConfig,
       reasoningConfig,
+      tools: clientTools,
     } = req.body as SendMessageRequest & { repeatNum?: number }
 
     if (!content && !retrigger) {
@@ -1630,7 +1631,8 @@ router.post(
           storageMode,
           false, // isElectron defaults to false
           imageConfig,
-          reasoningConfig
+          reasoningConfig,
+          clientTools
         )
 
         if (!assistantToolCalls.trim() && assistantContent.includes('{')) {
@@ -1793,6 +1795,7 @@ router.post(
       isElectron = false,
       imageConfig,
       reasoningConfig,
+      tools: clientTools,
     } = req.body as SendMessageRequest
 
     // console.log(`[supaChat] Processing message request for conversation ${conversationId}`)
@@ -2191,7 +2194,8 @@ router.post(
           storageMode,
           isElectron,
           imageConfig,
-          reasoningConfig
+          reasoningConfig,
+          clientTools
         )
 
         // Clean up content and extract tool calls after streaming completes

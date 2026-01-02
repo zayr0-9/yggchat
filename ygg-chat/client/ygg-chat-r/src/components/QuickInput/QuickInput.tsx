@@ -1,6 +1,6 @@
 import { getAssetPath } from '@/utils/assetPath'
 import { useQueryClient } from '@tanstack/react-query'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { chatSliceActions, sendMessage } from '../../features/chats'
 import { Conversation, createConversation } from '../../features/conversations'
@@ -72,6 +72,32 @@ export const QuickInput: React.FC = () => {
 
   // Fetch projects for quick selection
   const { data: projects } = useProjects()
+
+  // Memoize filtered and sorted projects: local projects first, then sorted by updated_at
+  const filteredAndSortedProjects = useMemo(() => {
+    if (!projects || projects.length === 0) return []
+
+    // Separate local and cloud projects
+    const localProjects = projects.filter(p => p.storage_mode === 'local')
+    const cloudProjects = projects.filter(p => p.storage_mode !== 'local')
+
+    // Sort local projects by updated_at (most recent first)
+    localProjects.sort((a, b) => {
+      const dateA = new Date(a.updated_at).getTime()
+      const dateB = new Date(b.updated_at).getTime()
+      return dateB - dateA
+    })
+
+    // Sort cloud projects by updated_at (most recent first)
+    cloudProjects.sort((a, b) => {
+      const dateA = new Date(a.updated_at).getTime()
+      const dateB = new Date(b.updated_at).getTime()
+      return dateB - dateA
+    })
+
+    // Return local projects first, then cloud projects
+    return [...localProjects, ...cloudProjects]
+  }, [projects])
 
   // Handle horizontal scroll with vertical mouse wheel using native event listener
   useEffect(() => {
@@ -200,7 +226,7 @@ export const QuickInput: React.FC = () => {
     navigate,
     selectedProjectId,
     quickChatProjectId,
-    projects,
+    filteredAndSortedProjects,
   ])
 
   // Handle Enter key press
@@ -219,29 +245,35 @@ export const QuickInput: React.FC = () => {
   return (
     <div className='bg-transparent acrylic-subtle pb-1 mx-4 my-2 pt-3 2xl:pt-2 outline-1 dark:outline-1 dark:outline-neutral-700 outline-neutral-100/50 rounded-2xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)]'>
       {/* Project selection pills */}
-      {projects && projects.length > 0 && (
+      {filteredAndSortedProjects && filteredAndSortedProjects.length > 0 && (
         <div
           ref={projectsScrollRef}
           className={`flex gap-2 px-3 py-1 overflow-x-auto no-scrollbar rounded-2xl transition-all duration-300 ${
             quickChatInput.trim().length > 0 ? 'max-h-40 opacity-100 pt-3 md:pt-0' : 'max-h-0 opacity-0 pt-0'
           }`}
         >
-          {projects.map(project => (
-            <Button
-              key={project.id}
-              variant='outline2'
-              size='smaller'
-              rounded='full'
-              onClick={() => setSelectedProjectId(prev => (prev === project.id ? null : project.id))}
-              className={`whitespace-nowrap flex-shrink-0 transition-all duration-200 text-[14px] ${
-                selectedProjectId === project.id
-                  ? 'bg-neutral-100 dark:bg-transparent text-sky-700 dark:text-orange-200'
-                  : 'hover:scale-105'
-              }`}
-            >
-              {project.name}
-            </Button>
-          ))}
+          {filteredAndSortedProjects.map(project => {
+            const isLocalProject = project.storage_mode === 'local'
+            const isSelectedProject = selectedProjectId === project.id
+
+            return (
+              <button
+                key={project.id}
+                onClick={() => setSelectedProjectId(prev => (prev === project.id ? null : project.id))}
+                className='bg-neutral-100/20  px-1.25 py-0.25  dark:bg-neutral-800/30 rounded-xl'
+              >
+                <p
+                  className={`whitespace-nowrap flex-shrink-0  transition-all duration-200 text-[14px] ${
+                    isSelectedProject
+                      ? 'bg-neutral-100 dark:bg-transparent text-sky-700 dark:text-orange-200'
+                      : `hover:scale-103 text-emerald-500 dark:text-emerald-500 ${isLocalProject ? '' : 'text-neutral-800 dark:text-neutral-300'}`
+                  }`}
+                >
+                  {project.name}
+                </p>
+              </button>
+            )
+          })}
         </div>
       )}
       <InputTextArea

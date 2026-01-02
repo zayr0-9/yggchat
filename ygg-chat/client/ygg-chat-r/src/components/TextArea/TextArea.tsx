@@ -28,6 +28,31 @@ interface TextAreaProps {
   fillAvailableHeight?: boolean
 }
 
+const allowedMentionChar = /[A-Za-z0-9._\/\-]/
+
+function findActiveMention(value: string, cursorPos: number) {
+  const beforeCursor = value.slice(0, cursorPos)
+  const atIndex = beforeCursor.lastIndexOf('@')
+  if (atIndex === -1) return null
+
+  const prevChar = atIndex > 0 ? beforeCursor[atIndex - 1] : ''
+  if (prevChar && allowedMentionChar.test(prevChar)) return null
+
+  const afterAt = beforeCursor.slice(atIndex + 1)
+  let mentionLength = 0
+  while (mentionLength < afterAt.length && allowedMentionChar.test(afterAt[mentionLength])) {
+    mentionLength += 1
+  }
+
+  // Cursor must still be inside the mention (no spaces/newlines/other chars between @ and cursor)
+  // Allow empty term when cursor is immediately after @ (for discoverability)
+  if (mentionLength !== afterAt.length) return null
+
+  const term = afterAt.slice(0, mentionLength)
+  return { start: atIndex, term }
+}
+
+
 export const TextArea: React.FC<TextAreaProps> = ({
   label,
   placeholder = 'Type your message...',
@@ -51,17 +76,14 @@ export const TextArea: React.FC<TextAreaProps> = ({
   const focusedMessageId = useSelector(selectFocusedChatMessageId)
   const imageDrafts = useSelector((s: RootState) => s.chat.composition.imageDrafts)
   const mentionableFiles = useSelector(selectMentionableFiles)
+  const selectedFilesForChat = useSelector((s: RootState) => s.ideContext.selectedFilesForChat)
   // Local copy of mentionable files to prevent re-selecting the same file locally
   const [localMentionableFiles, setLocalMentionableFiles] = useState(mentionableFiles)
-  // Merge in new files from the selector while preserving local removals
+  // Merge in new files from the selector while preserving local removals and excluding already selected files
   useEffect(() => {
-    setLocalMentionableFiles(prev => {
-      if (prev.length === 0 && mentionableFiles.length > 0) return mentionableFiles
-      const prevPaths = new Set(prev.map(f => f.path))
-      const additions = mentionableFiles.filter(f => !prevPaths.has(f.path))
-      return additions.length > 0 ? [...prev, ...additions] : prev
-    })
-  }, [mentionableFiles])
+    const selectedPaths = new Set(selectedFilesForChat.map(f => f.path))
+    setLocalMentionableFiles(mentionableFiles.filter(f => !selectedPaths.has(f.path)))
+  }, [mentionableFiles, selectedFilesForChat])
   const { requestFileContent } = useIdeContext()
   const id = useId()
   const errorId = `${id}-error`
@@ -71,40 +93,21 @@ export const TextArea: React.FC<TextAreaProps> = ({
   const [showFileList, setShowFileList] = useState(false)
   const [selectedFileIndex, setSelectedFileIndex] = useState(0)
   const [filteredFiles, setFilteredFiles] = useState<Array<{ path: string; name: string; mention: string }>>([])
+  const [activeMention, setActiveMention] = useState<{ start: number; term: string } | null>(null)
   const [dropdownDirection, setDropdownDirection] = useState<'up' | 'down'>('up')
   const [dropdownMaxHeight, setDropdownMaxHeight] = useState<number | undefined>(undefined)
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (state !== 'disabled') {
-      const newValue = e.target.value
-      onChange?.(newValue)
+    if (state === 'disabled') return
+    const newValue = e.target.value
+    onChange?.(newValue)
 
-      // Check if last character is '@' to show file list
-      const lastChar = newValue.slice(-1)
-      if (lastChar === '@') {
-        setFilteredFiles(localMentionableFiles)
-        setSelectedFileIndex(0)
-        setShowFileList(true)
-      } else if (showFileList && newValue.endsWith(' ')) {
-        // Hide list when space is typed after @
-        setShowFileList(false)
-      } else if (showFileList) {
-        // Filter files based on text after @
-        const atIndex = newValue.lastIndexOf('@')
-        if (atIndex !== -1) {
-          const searchTerm = newValue.slice(atIndex + 1).toLowerCase()
-          const filtered = localMentionableFiles.filter(
-            file => file.name.toLowerCase().includes(searchTerm) || file.path.toLowerCase().includes(searchTerm)
-          )
-          setFilteredFiles(filtered)
-          setSelectedFileIndex(0)
-          if (filtered.length === 0) {
-            setShowFileList(false)
-          }
-        } else {
-          setShowFileList(false)
-        }
-      }
+    const cursorPos = e.target.selectionStart ?? newValue.length
+    const mention = findActiveMention(newValue, cursorPos)
+    if (mention) {
+      setActiveMention(mention)
+    } else {
+      setActiveMention(null)
     }
   }
 
@@ -144,9 +147,14 @@ export const TextArea: React.FC<TextAreaProps> = ({
           e.preventDefault()
           handleFileSelection(filteredFiles[selectedFileIndex])
           return
+        case 'Tab':
+          e.preventDefault()
+          handleFileSelection(filteredFiles[selectedFileIndex])
+          return
         case 'Escape':
           e.preventDefault()
           setShowFileList(false)
+          setActiveMention(null)
           return
       }
     }
@@ -258,33 +266,35 @@ export const TextArea: React.FC<TextAreaProps> = ({
   }
 
   const handleFileSelection = async (file: { path: string; name: string; mention: string }) => {
+    if (!activeMention) {
+      setShowFileList(false)
+      return
+    }
+
     try {
       await requestFileContent(file.path)
-      // Remove the selected file from local mentionable list and current filtered list
       setLocalMentionableFiles(prev => prev.filter(f => f.path !== file.path))
       setFilteredFiles(prev => prev.filter(f => f.path !== file.path))
 
-      // Replace the @ mention with just the filename
       if (textareaRef.current) {
         const currentValue = textareaRef.current.value
-        const atIndex = currentValue.lastIndexOf('@')
-        if (atIndex !== -1) {
-          const beforeAt = currentValue.slice(0, atIndex)
-          const newValue = beforeAt + `@${file.name} `
-          onChange?.(newValue)
+        const before = currentValue.slice(0, activeMention.start)
+        const after = currentValue.slice(activeMention.start + 1 + activeMention.term.length)
+        const newValue = `${before}@${file.name} ${after}`
+        onChange?.(newValue)
 
-          // Focus back to textarea and position cursor after the mention
-          setTimeout(() => {
-            if (textareaRef.current) {
-              textareaRef.current.focus()
-              textareaRef.current.setSelectionRange(newValue.length, newValue.length)
-            }
-          }, 0)
-        }
+        setTimeout(() => {
+          if (textareaRef.current) {
+            const cursorPos = before.length + file.name.length + 2 // include @ and trailing space
+            textareaRef.current.focus()
+            textareaRef.current.setSelectionRange(cursorPos, cursorPos)
+          }
+        }, 0)
       }
     } catch (error) {
       console.error('Failed to request file content:', error)
     } finally {
+      setActiveMention(null)
       setShowFileList(false)
     }
   }
@@ -354,6 +364,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
         !textareaRef.current.contains(event.target as Node)
       ) {
         setShowFileList(false)
+        setActiveMention(null)
       }
     }
 
@@ -362,6 +373,24 @@ export const TextArea: React.FC<TextAreaProps> = ({
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [showFileList])
+
+  // Re-filter when mention state or available files change
+  useEffect(() => {
+    if (!activeMention) {
+      setFilteredFiles([])
+      setSelectedFileIndex(0)
+      setShowFileList(false)
+      return
+    }
+
+    const term = activeMention.term.toLowerCase()
+    const filtered = localMentionableFiles.filter(
+      file => file.name.toLowerCase().includes(term) || file.path.toLowerCase().includes(term)
+    )
+    setFilteredFiles(filtered)
+    setSelectedFileIndex(0)
+    setShowFileList(filtered.length > 0)
+  }, [activeMention, localMentionableFiles])
 
   // Compute dropdown placement and size (up or down) based on viewport space
   useEffect(() => {

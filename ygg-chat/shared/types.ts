@@ -7,6 +7,19 @@ export type ProjectId = string
 
 export type StorageMode = 'cloud' | 'local'
 
+export interface ToolInputSchema {
+  type: 'object'
+  properties: Record<string, any>
+  required?: string[]
+}
+
+export interface ToolDefinition {
+  name: string
+  enabled: boolean
+  description: string
+  inputSchema: ToolInputSchema
+}
+
 export interface SelectedFileContent {
   path: string
   relativePath: string
@@ -74,6 +87,7 @@ export interface SendMessageRequest {
   isElectron?: boolean
   imageConfig?: ImageConfig
   reasoningConfig?: ReasoningConfig
+  tools?: ToolDefinition[]
 }
 
 export interface BaseModel {
