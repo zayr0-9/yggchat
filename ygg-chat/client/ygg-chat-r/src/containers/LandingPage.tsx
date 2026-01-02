@@ -478,7 +478,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
         /> */}
 
         {/* Hero Section */}
-        <div className='relative z-10 h-full grid grid-cols-1 md:grid-cols-2 px-4 sm:px-6 lg:px-12'>
+        <div className='relative z-10 md:h-full grid grid-cols-1 md:grid-cols-2 px-4 sm:px-6 lg:px-12'>
           {/* Left Side - Logo, Heading, Subheading */}
           <div className='flex flex-col sm:mt-7 2xl:mt-25 items-start md:pt-16 md:pt-0'>
             <div className='flex items-center gap-4 lg:gap-6'>
@@ -498,11 +498,11 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
             </p>
 
             <p className='text-[16px] acrylic-ultra-light-nolight rounded-4xl mt-6 py-5 pr-20 pl-6 sm:text-lg md:text-xl lg:text-[26px] text-white dark:text-gray-100 max-w-2xl leading-[2.5rem] 2xl:leading-[3.5rem] font-light'>
-              Parallel Branching First Interface <br />
+              Parallel Branching Conversations <br />
               Upto 80% Context Cost Reduction <br />
               400+ Models <br />
-              13 million 5.1 codex max tokens <br />
-              Safe And Private Local Storage <br />
+              13 million tokens with GPT-5.1 codex max <br />
+              Private Local-First Storage <br />
               <a
                 href='https://marketplace.visualstudio.com/items?itemName=YggdrasilAI97.yggdrasil-extension'
                 target='_blank' // open in a new tab
@@ -518,7 +518,7 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
           </div>
 
           {/* Right Side - Animated SVG with GSAP */}
-          <div className='flex items-start w-full max-w-md md:max-w-full pt-45'>
+          <div className='flex items-start w-full max-w-md md:max-w-full pt-12 2xl:pt-45'>
             <svg
               ref={heroSvgRef}
               viewBox='-50 0 800 600'
@@ -592,8 +592,8 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
           </div>
 
           {/* Scroll Indicator */}
-          <div className='absolute bottom-6 mb-20 md:bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-2 animate-bounce'>
-            <span className='text-white dark:text-gray-300 text-xs md:text-sm font-medium'>Scroll to explore</span>
+          <div className='absolute -bottom-20 2xl:mb-20 md:bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-2 animate-bounce'>
+            <span className='text-white dark:text-gray-300 text-xs md:text-sm font-medium '>Scroll to explore</span>
             <i className='bx bx-chevron-down text-white dark:text-gray-300 text-2xl'></i>
           </div>
         </div>

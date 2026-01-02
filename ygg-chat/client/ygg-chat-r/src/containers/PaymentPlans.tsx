@@ -24,6 +24,15 @@ const PaymentPlans: React.FC = () => {
   return (
     <div className='h-full overflow-y-auto min-h-screen text-neutral-900 dark:text-neutral-100 py-12 px-6'>
       <div className='max-w-7xl mx-auto'>
+        {/* Back Button */}
+        <button
+          onClick={() => navigate('/')}
+          className='mb-6 flex items-center gap-2 text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors duration-200'
+        >
+          <i className='bx bx-arrow-back text-xl'></i>
+          <span className='font-medium'>Back</span>
+        </button>
+
         {/* Header */}
         <div className='text-center mb-12 acrylic-light rounded-2xl p-2'>
           <h1 className='text-4xl md:text-5xl mt-4 font-medium text-stone-800 dark:text-neutral-100 mb-4 '>
@@ -91,7 +100,9 @@ const PaymentPlans: React.FC = () => {
         {/* Features Comparison Table */}
         <div className='bg-transparent acrylic-light rounded-2xl overflow-hidden'>
           <div className='py-6 px-4'>
-            <h1 className='text-2xl font-bold text-neutral-900 dark:text-neutral-100'>Yggdrasil Plans</h1>
+            <h1 className='text-2xl font-bold text-neutral-900 dark:text-neutral-100'>
+              Compare Plans — Billed Monthly
+            </h1>
           </div>
 
           <div className='overflow-x-auto'>
