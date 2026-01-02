@@ -389,12 +389,26 @@ export const resolveAttachmentUrl = (
 ): string | null => {
   const origin = API_BASE.replace(/\/?api\/?$/, '')
 
+  // Helper to detect absolute paths (Unix: /path or Windows: C:/path, D:/path, etc.)
+  const isAbsoluteLocalPath = (p: string): boolean => {
+    // Unix absolute path (but not server paths like /uploads or /data)
+    if (p.startsWith('/') && !p.startsWith('/uploads') && !p.startsWith('/data/')) {
+      return true
+    }
+    // Windows absolute path (C:/, D:/, etc.)
+    if (/^[A-Za-z]:\//.test(p)) {
+      return true
+    }
+    return false
+  }
+
   // For local mode with attachment ID, use the local file serving endpoint
   // This handles absolute paths like /home/user/.config/yggdrasil/user_images/...
+  // or Windows paths like C:/Users/rajka/AppData/Roaming/yggdrasil/user_images/...
   if (attachmentId && environment === 'electron' && filePath) {
     const fp = filePath.replace(/\\/g, '/')
     // Check if it's an absolute path (not a relative server path)
-    if (fp.startsWith('/') && !fp.startsWith('/uploads') && !fp.startsWith('/data/')) {
+    if (isAbsoluteLocalPath(fp)) {
       return `http://127.0.0.1:3002/api/local/attachments/${attachmentId}/file`
     }
   }
@@ -409,13 +423,18 @@ export const resolveAttachmentUrl = (
       const filename = fp.split('/').pop() || ''
       if (filename) return `${origin}/uploads/${filename}`
     }
-    // For electron with absolute paths but no attachment ID, still try local endpoint by path
-    if (environment === 'electron' && fp.startsWith('/') && !fp.startsWith('/uploads') && !fp.startsWith('/data/')) {
+    // For electron with absolute local paths but no attachment ID, we can't serve them
+    if (environment === 'electron' && isAbsoluteLocalPath(fp)) {
       // Can't serve without ID, return null to indicate unavailable
       console.warn('[resolveAttachmentUrl] Local file path without attachment ID:', fp)
       return null
     }
-    // Fallbacks for relative paths
+    // Fallbacks for relative server paths only
+    // Don't append absolute local paths to origin - they're not server paths
+    if (isAbsoluteLocalPath(fp)) {
+      console.warn('[resolveAttachmentUrl] Absolute local path in non-electron environment:', fp)
+      return null
+    }
     if (fp.startsWith('/')) return `${origin}${fp}`
     return `${origin}/${fp}`
   }
