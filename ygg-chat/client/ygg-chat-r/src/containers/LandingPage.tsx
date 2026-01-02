@@ -172,17 +172,47 @@ const LandingPage: React.FC = () => {
 
     paths.forEach((pathEl, idx) => {
       const duration = pathEl.getTotalLength() / DOT_SPEED_PX_PER_SEC
-      tl.to(dotGroupRef.current, {
-        motionPath: {
-          path: pathEl,
-          align: pathEl,
-          alignOrigin: [0.5, 0.85],
-          autoRotate: false,
+      const fadeDuration = 0.5
+
+      // Update highlighted path at the start
+      tl.add(() => setHighlightedPath(PATH_IDS[idx]))
+
+      // Fade in
+      tl.fromTo(
+        dotGroupRef.current,
+        { opacity: 0 },
+        {
+          opacity: 1,
+          duration: fadeDuration,
+          ease: 'power2.out',
+        }
+      )
+
+      // Travel along the path - starts at same time as fade-in (overlapped)
+      tl.to(
+        dotGroupRef.current,
+        {
+          motionPath: {
+            path: pathEl,
+            align: pathEl,
+            alignOrigin: [0.5, 0.85],
+            autoRotate: false,
+          },
+          duration,
         },
-        duration,
-        onStart: () => setHighlightedPath(PATH_IDS[idx]),
-      })
-      tl.to({}, { duration: 0.4 })
+        `-=${fadeDuration}`
+      )
+
+      // Fade out - starts before travel ends (overlapped)
+      tl.to(
+        dotGroupRef.current,
+        {
+          opacity: 0,
+          duration: fadeDuration,
+          ease: 'power2.in',
+        },
+        `-=${fadeDuration}`
+      )
     })
 
     timelineRef.current = tl
