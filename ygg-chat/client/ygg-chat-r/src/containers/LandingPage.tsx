@@ -1,9 +1,12 @@
 import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
+import gsap from 'gsap'
+import { MotionPathPlugin } from 'gsap/MotionPathPlugin'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '../components/Button/button'
 import { getAssetPath } from '../utils/assetPath'
+gsap.registerPlugin(MotionPathPlugin)
 
 interface Feature {
   id: number
@@ -12,6 +15,25 @@ interface Feature {
   description: string[]
   videoSrc?: string
 }
+
+const PATH_IDS = [1, 2, 3, 4, 5, 6] as const
+const PATH_DEFS: Record<(typeof PATH_IDS)[number], string> = {
+  1: 'M 100 300 L 210 100 L 330 100 L 450 40 L 590 40',
+  2: 'M 100 300 L 210 100 L 330 100 L 450 160 L 590 160',
+  3: 'M 100 300 L 210 300 L 330 300 L 450 250 L 590 250',
+  4: 'M 100 300 L 210 300 L 330 300 L 450 350 L 590 350',
+  5: 'M 100 300 L 210 500 L 330 500 L 450 440 L 590 440',
+  6: 'M 100 300 L 210 500 L 330 500 L 450 560 L 590 560',
+}
+const FALLBACK_PATH_LENGTHS: Record<(typeof PATH_IDS)[number], number> = {
+  1: 623, // p1: steep climb to top
+  2: 557, // p2: climb to upper-middle
+  3: 500, // p3: mostly horizontal, slight rise
+  4: 500, // p4: mostly horizontal, slight drop
+  5: 557, // p5: drop to lower-middle
+  6: 623, // p6: steep drop to bottom
+}
+const DOT_SPEED_PX_PER_SEC = 100
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate()
@@ -79,6 +101,97 @@ const LandingPage: React.FC = () => {
   const prevLoadedVideosRef = useRef<boolean[]>(new Array(features.length).fill(false))
   const observerRef = useRef<IntersectionObserver | null>(null)
   const [expandedVideoSrc, setExpandedVideoSrc] = useState<string | null>(null)
+  const [highlightedPath, setHighlightedPath] = useState<number>(1)
+  const pathLengthsRef = useRef<Record<number, number>>(FALLBACK_PATH_LENGTHS)
+  const [pathLengthsVersion, setPathLengthsVersion] = useState(0)
+  const heroSvgRef = useRef<SVGSVGElement | null>(null)
+  const dotRef = useRef<SVGCircleElement | null>(null)
+  const dotGroupRef = useRef<SVGGElement | null>(null)
+  const pathRefs = useRef<(SVGPathElement | null)[]>([])
+  const timelineRef = useRef<gsap.core.Timeline | null>(null)
+
+  // Text labels for each path
+  const pathLabels = useMemo(
+    () => ({
+      1: 'Should I use REST or GraphQL?',
+      2: 'How does GraphQL work?',
+      3: 'How does JWT auth work?',
+      4: 'Compare JWT vs OAuth2',
+      5: 'Handle token expiration',
+      6: 'Deploy auth to production',
+    }),
+    []
+  )
+
+  // Path data derived from measured lengths (fallback to constants)
+  // const pathData = useMemo(() => {
+  //   const lengths = pathLengthsRef.current
+  //   return Object.fromEntries(
+  //     Object.entries(lengths).map(([id, length]) => [
+  //       Number(id),
+  //       { length, duration: (length / DOT_SPEED_PX_PER_SEC) * 1000 }, // duration in ms
+  //     ])
+  //   ) as Record<number, { length: number; duration: number }>
+  // }, [pathLengthsVersion])
+
+  // Measure path lengths once SVG is in the DOM
+  useEffect(() => {
+    if (!heroSvgRef.current) return
+
+    const paths = pathRefs.current.filter(Boolean) as SVGPathElement[]
+    if (!paths.length) return
+
+    const measured: Record<number, number> = { ...FALLBACK_PATH_LENGTHS }
+    paths.forEach((pathEl, idx) => {
+      if (pathEl && typeof pathEl.getTotalLength === 'function') {
+        measured[idx + 1] = pathEl.getTotalLength()
+      }
+    })
+
+    pathLengthsRef.current = measured
+    setPathLengthsVersion(v => v + 1)
+  }, [])
+
+  // Build GSAP timeline once paths are measured
+  useEffect(() => {
+    if (!heroSvgRef.current) return
+    if (timelineRef.current) {
+      timelineRef.current.kill()
+      timelineRef.current = null
+    }
+
+    const paths: SVGPathElement[] = PATH_IDS.map((id, idx) => {
+      const p = heroSvgRef.current?.querySelector(`#p${id}`) as SVGPathElement | null
+      pathRefs.current[idx] = p
+      return p
+    }).filter(Boolean) as SVGPathElement[]
+
+    if (!paths.length || !dotGroupRef.current) return
+
+    const tl = gsap.timeline({ repeat: -1, defaults: { ease: 'power1.inOut' } })
+
+    paths.forEach((pathEl, idx) => {
+      const duration = pathEl.getTotalLength() / DOT_SPEED_PX_PER_SEC
+      tl.to(dotGroupRef.current, {
+        motionPath: {
+          path: pathEl,
+          align: pathEl,
+          alignOrigin: [0.5, 0.85],
+          autoRotate: false,
+        },
+        duration,
+        onStart: () => setHighlightedPath(PATH_IDS[idx]),
+      })
+      tl.to({}, { duration: 0.4 })
+    })
+
+    timelineRef.current = tl
+
+    return () => {
+      tl.kill()
+      timelineRef.current = null
+    }
+  }, [pathLengthsVersion])
 
   // Initialize theme
   useEffect(() => {
@@ -169,7 +282,7 @@ const LandingPage: React.FC = () => {
     })
 
     return () => observer.disconnect()
-  }, [features.length])
+  }, [features])
 
   useEffect(() => {
     const nextPrev = [...prevLoadedVideosRef.current]
@@ -238,10 +351,10 @@ const LandingPage: React.FC = () => {
   return (
     <div
       ref={scrollContainerRef}
-      className='w-full h-full bg-neutral-400/40 dark:bg-black/40 overflow-y-auto min-h-screen'
+      className='w-full h-full dark:bg-black/40 dark:bg-black/40 overflow-y-auto min-h-screen'
     >
       {/* Header Navigation */}
-      <nav className='sticky top-0 rounded-b-2xl z-30 flex items-center justify-between px-6 sm:px-4 md:px-8 py-2 md:py-3 bg-transparent dark:bg-transparent transition-all duration-300'>
+      <nav className='sticky top-0 rounded-b-2xl z-30 flex items-center justify-end sm:justify-between px-6 sm:px-4 md:px-8 py-2 md:py-3 bg-transparent dark:bg-transparent transition-all duration-300'>
         {/* Logo */}
         {/* <div className='flex items-center flex-wrap gap-3 rounded-full'>
           <img
@@ -335,25 +448,118 @@ ${isDarkMode ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}
         /> */}
 
         {/* Hero Section */}
-        <div className='relative z-10 h-full flex flex-col items-center justify-center px-4 sm:px-6'>
-          {/* Main Title */}
+        <div className='relative z-10 h-full grid grid-cols-1 md:grid-cols-2 px-4 sm:px-6 lg:px-12'>
+          {/* Left Side - Logo, Heading, Subheading */}
+          <div className='flex flex-col sm:mt-7 2xl:mt-25 items-start md:pt-16 md:pt-0'>
+            <div className='flex items-center gap-4 lg:gap-6'>
+              <img
+                src={getAssetPath('img/logo-l-thick.svg')}
+                alt='Yggdrasil Logo'
+                className='acrylic-light-dark w-22 h-22 sm:w-16 sm:h-16 md:w-18 md:h-18 lg:w-24 lg:h-24 xl:w-28 xl:h-28 2xl:w-32 2xl:h-32 dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
+              />
+              <h1 className='text-5xl pb-3 2xl:pb-7 sm:text-6xl md:text-6xl lg:text-7xl xl:text-8xl 2xl:text-[104px] text-white dark:text-white drop-shadow-lg'>
+                yggdrasil
+              </h1>
+            </div>
 
-          <div className='mr-2 lg:mr-6 flex items-center flex-wrap gap-6 lg:gap-10 rounded-full'>
-            <img
-              src={getAssetPath('img/logo-l-thick.svg')}
-              alt='Yggdrasil Logo'
-              className='acrylic-light-dark w-18 h-18 sm:w-14 sm:h-14 md:w-18 md:h-18 lg:w-26 lg:h-26 xl:w-28 xl:h-28 2xl:w-36 2xl:h-36 dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
-            />
-            <h1 className='pb-2 2xl:pb-1 text-[64px] sm:text-6xl md:text-7xl lg:text-[104px] text-white dark:text-white text-center mb-4 md:mb-6 drop-shadow-lg'>
-              yggdrasil
-            </h1>
+            {/* Tagline */}
+            <p className='text-[24px] mt-8 pl-2 sm:text-lg md:text-xl lg:text-[42px] text-white dark:text-gray-100 max-w-xl leading-relaxed drop-shadow-md font-light'>
+              AI Chat / Agent / Workflow Builder
+            </p>
+
+            <p className='text-[16px] acrylic-ultra-light-nolight rounded-4xl mt-6 py-5 pr-20 pl-6 sm:text-lg md:text-xl lg:text-[26px] text-white dark:text-gray-100 max-w-2xl leading-[2.5rem] 2xl:leading-[3.5rem] font-light'>
+              Parallel Branching First Interface <br />
+              Upto 80% Context Cost Reduction <br />
+              400+ Models <br />
+              13 million 5.1 codex max tokens <br />
+              Safe And Private Local Storage <br />
+              <a
+                href='https://marketplace.visualstudio.com/items?itemName=YggdrasilAI97.yggdrasil-extension'
+                target='_blank' // open in a new tab
+                rel='noopener noreferrer' // security best‑practice
+                className='text-blue-400 hover:underline'
+              >
+                Code Context With IDE Extension{' '}
+                <i className='bx bx-link-external text-sm relative right-1.5 -top-3'></i>
+              </a>{' '}
+              <br />
+              Claude Code Support
+            </p>
           </div>
 
-          {/* Tagline */}
-          <p className='text-base mt-6 sm:text-lg md:text-xl lg:text-2xl text-white dark:text-gray-100 text-center max-w-2xl leading-relaxed drop-shadow-md font-light'>
-            The most advanced AGI interface on the planet.
-            <br />
-          </p>
+          {/* Right Side - Animated SVG with GSAP */}
+          <div className='flex items-start w-full max-w-md md:max-w-full pt-45'>
+            <svg
+              ref={heroSvgRef}
+              viewBox='-50 0 800 600'
+              xmlns='http://www.w3.org/2000/svg'
+              className='acrylic-ultra-light-nolight rounded-4xl w-full h-auto'
+            >
+              <defs>
+                <filter id='glow' x='-50%' y='-50%' width='200%' height='200%'>
+                  <feGaussianBlur stdDeviation='5' result='coloredBlur' />
+                  <feMerge>
+                    <feMergeNode in='coloredBlur' />
+                    <feMergeNode in='SourceGraphic' />
+                  </feMerge>
+                </filter>
+                <filter id='glowBright' x='-100%' y='-100%' width='300%' height='300%'>
+                  <feGaussianBlur stdDeviation='8' result='coloredBlur' />
+                  <feMerge>
+                    <feMergeNode in='coloredBlur' />
+                    <feMergeNode in='coloredBlur' />
+                    <feMergeNode in='SourceGraphic' />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              {/* All paths as dotted lines */}
+              <g
+                fill='none'
+                stroke='rgba(255, 255, 255, 0.27)'
+                strokeWidth='2'
+                strokeDasharray='4,4'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+              >
+                {PATH_IDS.map(i => (
+                  <path
+                    key={`path-${i}`}
+                    id={`p${i}`}
+                    ref={el => {
+                      pathRefs.current[i - 1] = el
+                    }}
+                    d={PATH_DEFS[i]}
+                  />
+                ))}
+              </g>
+
+              {/* Active path highlight */}
+              <path
+                d={PATH_DEFS[highlightedPath]}
+                fill='none'
+                stroke='rgba(255,255,255,0.8)'
+                strokeWidth='3'
+                strokeLinecap='round'
+                strokeLinejoin='round'
+                filter='url(#glow)'
+              />
+
+              {/* Traveling dot controlled by GSAP */}
+              <g id='dot-group' ref={dotGroupRef}>
+                <circle ref={dotRef} r='7' fill='#ff6600ff' fillOpacity='0.9' filter='url(#glowBright)' />
+                <text
+                  transform='translate(0, -20)'
+                  textAnchor='middle'
+                  fontFamily='system-ui, sans-serif'
+                  fontSize='12'
+                  fill='#fff'
+                >
+                  {pathLabels[highlightedPath as keyof typeof pathLabels] || pathLabels[1]}
+                </text>
+              </g>
+            </svg>
+          </div>
 
           {/* Scroll Indicator */}
           <div className='absolute bottom-6 mb-20 md:bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center gap-2 animate-bounce'>

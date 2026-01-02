@@ -1,0 +1,179 @@
+<svg viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Glow filters -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="glowBright" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Path definitions -->
+    <path id="p1" d="M 50 300 L 160 100 L 280 100 L 400 40 L 540 40" />
+    <path id="p2" d="M 50 300 L 160 100 L 280 100 L 400 160 L 540 160" />
+    <path id="p3" d="M 50 300 L 160 300 L 280 300 L 400 250 L 540 250" />
+    <path id="p4" d="M 50 300 L 160 300 L 280 300 L 400 350 L 540 350" />
+    <path id="p5" d="M 50 300 L 160 500 L 280 500 L 400 440 L 540 440" />
+    <path id="p6" d="M 50 300 L 160 500 L 280 500 L 400 560 L 540 560" />
+  </defs>
+
+  <!-- All paths as dotted lines (base layer) -->
+  <g fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1" stroke-dasharray="4,4">
+    <use href="#p1" />
+    <use href="#p2" />
+    <use href="#p3" />
+    <use href="#p4" />
+    <use href="#p5" />
+    <use href="#p6" />
+  </g>
+
+  <!--
+    Path sequence: 1, 3, 5, 6, 2, 4
+    Durations (at 100px/s):
+    - p1: 623px = 6.23s
+    - p3: 500px = 5.00s
+    - p5: 557px = 5.57s
+    - p6: 623px = 6.23s
+    - p2: 557px = 5.57s
+    - p4: 500px = 5.00s
+  -->
+
+  <!-- Regular animated dots (dim, always running) -->
+  <g fill="#ff6600" fill-opacity="0.25" filter="url(#glow)">
+    <circle r="5">
+      <animateMotion dur="6.23s" repeatCount="indefinite">
+        <mpath href="#p1" />
+      </animateMotion>
+    </circle>
+    <circle r="5">
+      <animateMotion dur="5.57s" repeatCount="indefinite">
+        <mpath href="#p2" />
+      </animateMotion>
+    </circle>
+    <circle r="5">
+      <animateMotion dur="5s" repeatCount="indefinite">
+        <mpath href="#p3" />
+      </animateMotion>
+    </circle>
+    <circle r="5">
+      <animateMotion dur="5s" repeatCount="indefinite">
+        <mpath href="#p4" />
+      </animateMotion>
+    </circle>
+    <circle r="5">
+      <animateMotion dur="5.57s" repeatCount="indefinite">
+        <mpath href="#p5" />
+      </animateMotion>
+    </circle>
+    <circle r="5">
+      <animateMotion dur="6.23s" repeatCount="indefinite">
+        <mpath href="#p6" />
+      </animateMotion>
+    </circle>
+  </g>
+
+  <!-- Path 1: Solid line + Bright dot (starts first, loops back from p4) -->
+  <use href="#p1" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"
+       stroke-dasharray="623" stroke-dashoffset="623">
+    <animate id="line-p1" attributeName="stroke-dashoffset"
+             from="623" to="0" dur="6.23s" fill="freeze"
+             begin="0s; line-p4.end" />
+    <set attributeName="stroke-dashoffset" to="623" begin="line-p1.end" />
+  </use>
+  <circle r="7" fill="#ff6600" fill-opacity="0.6" filter="url(#glowBright)">
+    <animateMotion id="dot-p1" dur="6.23s" fill="freeze" begin="0s; dot-p4.end">
+      <mpath href="#p1" />
+    </animateMotion>
+    <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.9;1" dur="6.23s" fill="freeze" begin="0s; dot-p4.end" />
+    <set attributeName="opacity" to="1" begin="dot-p1.end" />
+  </circle>
+
+  <!-- Path 3: Solid line + Bright dot -->
+  <use href="#p3" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"
+       stroke-dasharray="500" stroke-dashoffset="500">
+    <animate id="line-p3" attributeName="stroke-dashoffset"
+             from="500" to="0" dur="5s" fill="freeze"
+             begin="line-p1.end" />
+    <set attributeName="stroke-dashoffset" to="500" begin="line-p3.end" />
+  </use>
+  <circle r="7" fill="#ff6600" fill-opacity="0.6" filter="url(#glowBright)">
+    <animateMotion id="dot-p3" dur="5s" fill="freeze" begin="dot-p1.end">
+      <mpath href="#p3" />
+    </animateMotion>
+    <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.9;1" dur="5s" fill="freeze" begin="dot-p1.end" />
+    <set attributeName="opacity" to="1" begin="dot-p3.end" />
+  </circle>
+
+  <!-- Path 5: Solid line + Bright dot -->
+  <use href="#p5" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"
+       stroke-dasharray="557" stroke-dashoffset="557">
+    <animate id="line-p5" attributeName="stroke-dashoffset"
+             from="557" to="0" dur="5.57s" fill="freeze"
+             begin="line-p3.end" />
+    <set attributeName="stroke-dashoffset" to="557" begin="line-p5.end" />
+  </use>
+  <circle r="7" fill="#ff6600" fill-opacity="0.6" filter="url(#glowBright)">
+    <animateMotion id="dot-p5" dur="5.57s" fill="freeze" begin="dot-p3.end">
+      <mpath href="#p5" />
+    </animateMotion>
+    <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.9;1" dur="5.57s" fill="freeze" begin="dot-p3.end" />
+    <set attributeName="opacity" to="1" begin="dot-p5.end" />
+  </circle>
+
+  <!-- Path 6: Solid line + Bright dot -->
+  <use href="#p6" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"
+       stroke-dasharray="623" stroke-dashoffset="623">
+    <animate id="line-p6" attributeName="stroke-dashoffset"
+             from="623" to="0" dur="6.23s" fill="freeze"
+             begin="line-p5.end" />
+    <set attributeName="stroke-dashoffset" to="623" begin="line-p6.end" />
+  </use>
+  <circle r="7" fill="#ff6600" fill-opacity="0.6" filter="url(#glowBright)">
+    <animateMotion id="dot-p6" dur="6.23s" fill="freeze" begin="dot-p5.end">
+      <mpath href="#p6" />
+    </animateMotion>
+    <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.9;1" dur="6.23s" fill="freeze" begin="dot-p5.end" />
+    <set attributeName="opacity" to="1" begin="dot-p6.end" />
+  </circle>
+
+  <!-- Path 2: Solid line + Bright dot -->
+  <use href="#p2" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"
+       stroke-dasharray="557" stroke-dashoffset="557">
+    <animate id="line-p2" attributeName="stroke-dashoffset"
+             from="557" to="0" dur="5.57s" fill="freeze"
+             begin="line-p6.end" />
+    <set attributeName="stroke-dashoffset" to="557" begin="line-p2.end" />
+  </use>
+  <circle r="7" fill="#ff6600" fill-opacity="0.6" filter="url(#glowBright)">
+    <animateMotion id="dot-p2" dur="5.57s" fill="freeze" begin="dot-p6.end">
+      <mpath href="#p2" />
+    </animateMotion>
+    <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.9;1" dur="5.57s" fill="freeze" begin="dot-p6.end" />
+    <set attributeName="opacity" to="1" begin="dot-p2.end" />
+  </circle>
+
+  <!-- Path 4: Solid line + Bright dot (last in sequence, loops back to p1) -->
+  <use href="#p4" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"
+       stroke-dasharray="500" stroke-dashoffset="500">
+    <animate id="line-p4" attributeName="stroke-dashoffset"
+             from="500" to="0" dur="5s" fill="freeze"
+             begin="line-p2.end" />
+    <set attributeName="stroke-dashoffset" to="500" begin="line-p4.end" />
+  </use>
+  <circle r="7" fill="#ff6600" fill-opacity="0.6" filter="url(#glowBright)">
+    <animateMotion id="dot-p4" dur="5s" fill="freeze" begin="dot-p2.end">
+      <mpath href="#p4" />
+    </animateMotion>
+    <animate attributeName="opacity" values="1;1;0" keyTimes="0;0.9;1" dur="5s" fill="freeze" begin="dot-p2.end" />
+    <set attributeName="opacity" to="1" begin="dot-p4.end" />
+  </circle>
+</svg>

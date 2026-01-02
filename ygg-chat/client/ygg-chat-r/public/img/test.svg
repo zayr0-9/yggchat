@@ -1,0 +1,75 @@
+<svg width="900" height="600" viewBox="0 0 900 600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Glow filter for regular dots -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Stronger glow filter for highlighted dot -->
+    <filter id="glowBright" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur" />
+      <feMerge>
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="coloredBlur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Full paths from root to endpoints (root + 3 levels) -->
+    <!-- Root at x=50, Level 1 at x=280, Level 2 at x=540, Level 3 (end) at x=800 -->
+
+    <!-- Top branch (y=100) splits -->
+    <path id="p1" d="M 50 300 L 160 100 L 280 100 L 400 40 L 540 40 L 670 20 L 800 20"/>
+    <path id="p2" d="M 50 300 L 160 100 L 280 100 L 400 40 L 540 40 L 670 60 L 800 60"/>
+    <path id="p3" d="M 50 300 L 160 100 L 280 100 L 400 160 L 540 160 L 670 130 L 800 130"/>
+    <path id="p4" d="M 50 300 L 160 100 L 280 100 L 400 160 L 540 160 L 670 190 L 800 190"/>
+
+    <!-- Middle branch (y=300) splits -->
+    <path id="p5" d="M 50 300 L 160 300 L 280 300 L 400 250 L 540 250 L 670 220 L 800 220"/>
+    <path id="p6" d="M 50 300 L 160 300 L 280 300 L 400 250 L 540 250 L 670 280 L 800 280"/>
+    <path id="p7" d="M 50 300 L 160 300 L 280 300 L 400 350 L 540 350 L 670 320 L 800 320"/>
+    <path id="p8" d="M 50 300 L 160 300 L 280 300 L 400 350 L 540 350 L 670 380 L 800 380"/>
+
+    <!-- Bottom branch (y=500) splits -->
+    <path id="p9" d="M 50 300 L 160 500 L 280 500 L 400 440 L 540 440 L 670 410 L 800 410"/>
+    <path id="p10" d="M 50 300 L 160 500 L 280 500 L 400 440 L 540 440 L 670 470 L 800 470"/>
+    <path id="p11" d="M 50 300 L 160 500 L 280 500 L 400 560 L 540 560 L 670 530 L 800 530"/>
+    <path id="p12" d="M 50 300 L 160 500 L 280 500 L 400 560 L 540 560 L 670 590 L 800 590"/>
+  </defs>
+
+  <!-- Regular Dotted Paths (excluding p6) -->
+  <g fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1" stroke-dasharray="4,4">
+    <use href="#p1"/><use href="#p2"/><use href="#p3"/><use href="#p4"/>
+    <use href="#p5"/><use href="#p7"/><use href="#p8"/>
+    <use href="#p9"/><use href="#p10"/><use href="#p11"/><use href="#p12"/>
+  </g>
+
+  <!-- Highlighted Solid Path (p6) -->
+  <use href="#p6" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="1.5"/>
+
+  <!-- Regular Animated Dots (excluding p6) -->
+  <g fill="#ff6600" fill-opacity="0.25" filter="url(#glow)">
+    <circle r="5"><animateMotion dur="6s" repeatCount="indefinite"><mpath href="#p1"/></animateMotion></circle>
+    <circle r="5"><animateMotion dur="7s" repeatCount="indefinite"><mpath href="#p2"/></animateMotion></circle>
+    <circle r="5"><animateMotion dur="6.5s" repeatCount="indefinite"><mpath href="#p3"/></animateMotion></circle>
+    <circle r="5"><animateMotion dur="7.5s" repeatCount="indefinite"><mpath href="#p4"/></animateMotion></circle>
+
+    <circle r="5"><animateMotion dur="5.5s" repeatCount="indefinite"><mpath href="#p5"/></animateMotion></circle>
+    <circle r="5"><animateMotion dur="6s" repeatCount="indefinite"><mpath href="#p7"/></animateMotion></circle>
+    <circle r="5"><animateMotion dur="7s" repeatCount="indefinite"><mpath href="#p8"/></animateMotion></circle>
+
+    <circle r="5"><animateMotion dur="6s" repeatCount="indefinite"><mpath href="#p9"/></animateMotion></circle>
+    <circle r="5"><animateMotion dur="5.5s" repeatCount="indefinite"><mpath href="#p10"/></animateMotion></circle>
+    <circle r="5"><animateMotion dur="7s" repeatCount="indefinite"><mpath href="#p11"/></animateMotion></circle>
+    <circle r="5"><animateMotion dur="6.5s" repeatCount="indefinite"><mpath href="#p12"/></animateMotion></circle>
+  </g>
+
+  <!-- Highlighted Bright Dot (p6) -->
+  <circle r="7" fill="#ff6600" fill-opacity="0.9" filter="url(#glowBright)">
+    <animateMotion dur="6s" repeatCount="indefinite"><mpath href="#p6"/></animateMotion>
+  </circle>
+</svg>

@@ -3,6 +3,7 @@ import {
   CustomVideoEntry,
   DEFAULT_DARK_VIDEO,
   DEFAULT_LIGHT_VIDEO,
+  getActiveTextColorMode,
   loadActiveCustomVideo,
   loadActiveCustomVideoId,
   loadCustomVideoBlobUrl,
@@ -60,6 +61,37 @@ const VideoBackground: React.FC = () => {
       }
     }
   }, [activeVideoId])
+
+  // Set CSS class on document root based on video's text color mode
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    const updateTextColorClass = () => {
+      const root = document.documentElement
+      const textColorMode = getActiveTextColorMode()
+
+      // Remove existing video text color classes
+      root.classList.remove('video-text-light', 'video-text-dark')
+
+      // Add class based on text color mode (only if not 'auto')
+      if (textColorMode === 'light') {
+        root.classList.add('video-text-light')
+      } else if (textColorMode === 'dark') {
+        root.classList.add('video-text-dark')
+      }
+    }
+
+    // Set initial class on mount
+    updateTextColorClass()
+
+    // Also update when background changes
+    window.addEventListener(VIDEO_BACKGROUND_CHANGE_EVENT, updateTextColorClass)
+
+    return () => {
+      document.documentElement.classList.remove('video-text-light', 'video-text-dark')
+      window.removeEventListener(VIDEO_BACKGROUND_CHANGE_EVENT, updateTextColorClass)
+    }
+  }, [])
 
   const sourceForMode = (
     customUrl: string | null,

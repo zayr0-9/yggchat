@@ -62,7 +62,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       liquid: 'button-liquid bg-transparent text-neutral-700 dark:text-neutral-300',
       mica: 'mica-medium text-neutral-700 dark:text-neutral-300',
       acrylic:
-        'acrylic-subtle text-neutral-700 dark:text-neutral-300 bg-transparent dark:bg-transparent dark:outline-1 dark:outline-neutral-400/15',
+        'acrylic-light text-neutral-700 dark:text-neutral-300 bg-transparent dark:bg-transparent dark:outline-1 dark:outline-neutral-400/15',
       acrylicul: 'acrylic-ultra-light text-neutral-700 dark:text-neutral-300 bg-transparent dark:bg-transparent',
     }
 

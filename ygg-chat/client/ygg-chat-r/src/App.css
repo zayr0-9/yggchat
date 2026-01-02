@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Video background text color variants - allows text to react to custom video brightness */
+@custom-variant video-light (&:where(.video-text-light, .video-text-light *));
+@custom-variant video-dark (&:where(.video-text-dark, .video-text-dark *));
 /* Reset any conflicting styles */
 #root {
   width: 100%;

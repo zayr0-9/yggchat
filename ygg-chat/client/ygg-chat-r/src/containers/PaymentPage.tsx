@@ -272,11 +272,11 @@ const PaymentPage: React.FC = () => {
   */
 
   return (
-    <div className='h-full overflow-y-auto min-h-full bg-zinc-50 dark:bg-yBlack-500'>
+    <div className='h-full overflow-y-auto min-h-full'>
       <div className='max-w-7xl mx-auto px-4 py-8'>
         {/* Header */}
         <div className='flex items-center justify-between mb-8'>
-          <h1 className='relative z-10 text-4xl font-bold text-neutral-900 dark:text-neutral-100'>
+          <h1 className='relative z-10 text-4xl font-bold video-light:text-neutral-100 video-dark:text-neutral-900'>
             Subscription & Credits
           </h1>
           <div className='flex items-center gap-4'>
@@ -380,7 +380,7 @@ const PaymentPage: React.FC = () => {
         {/* Pricing Tiers - Only show if user doesn't have active subscription */}
         {!hasActiveAccess() ? (
           <>
-            <h2 className='relative z-10 text-3xl font-bold mb-6 text-neutral-900 dark:text-neutral-100'>
+            <h2 className='relative z-10 text-3xl font-bold mb-6 video-light:text-neutral-100 video-dark:text-neutral-900'>
               Choose Your Plan
             </h2>
 

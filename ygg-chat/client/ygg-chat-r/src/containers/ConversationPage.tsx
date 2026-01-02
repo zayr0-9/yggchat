@@ -457,7 +457,8 @@ const ConversationPage: React.FC = () => {
   return (
     <div className='flex overflow-hidden h-full'>
       {/* Dark Overlay */}
-      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/30 z-0' />
+      {/* bg-neutral-200/15 dark:bg-black/30 */}
+      <div className='absolute inset-0 w-full h-full  z-0' />
       {/* Recent conversations sidebar */}
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
@@ -470,15 +471,15 @@ const ConversationPage: React.FC = () => {
                 rounded='full'
                 size='circle'
                 onClick={() => navigate('/homepage')}
-                className='group border-2 hover:bg-pureWhite-100 dark:hover:bg-neutral-900 border-pureWhite-200 dark:border-neutral-800 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.5)] dark:shadow-[0_1px_22px_1px_rgba(0,0,0,0.45)]'
+                className='group border-2 hover:bg-pureWhite-100 dark:hover:bg-neutral-900 dark:border-neutral-800 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.5)] dark:shadow-[0_1px_22px_1px_rgba(0,0,0,0.45)]'
               >
                 <i
                   className='bx bx-home text-[24px] sm:text-[14px] md:text-[25px] lg:text-[30px] 2xl:text-[38px] 3xl:text-[28px] 4xl:text-[32px] pb-0.75 transition-transform group-hover:scale-101 duration-100 group-active:scale-93 pointer-events-none'
                   aria-hidden='true'
                 ></i>
               </Button>
-              <h1 className='text-[26px] pl-1 sm:text-[28px] lg:text-[28px] xl:text-[34px] 2xl:text-[34px] 3xl:text-[44px] 4xl:text-[44px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100'>
-                {selectedProject ? `${selectedProject.name}` : 'Conversations'}
+              <h1 className='text-[26px] pl-1 sm:text-[28px] lg:text-[28px] xl:text-[34px] 2xl:text-[34px] 3xl:text-[44px] 4xl:text-[44px] xl:p-2 lg:p-1 md:p-2 sm:p-2 font-bold dark:text-neutral-100 video-light:text-neutral-100 video-dark:text-neutral-900'>
+                {selectedProject ? `${selectedProject.name}` : 'Chats'}
               </h1>
               {/* {selectedProject && (
                 <Button variant='secondary' size='small' onClick={handleEditProject}>
@@ -497,7 +498,7 @@ const ConversationPage: React.FC = () => {
         </div>
         <div className='px-1 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 overflow-hidden flex flex-col'>
           <div className='mb-4 flex items-center justify-between max-w-full '>
-            <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[38px] 4xl:text-[38px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100'>
+            <h2 className='text-[20px] md:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[38px] 4xl:text-[38px] xl:py-2 lg:py-1 md:py-2 sm:py-2 font-bold dark:text-neutral-100 video-light:text-neutral-100 video-dark:text-neutral-900'>
               Chats
             </h2>
             <div className='flex items-center gap-2 my-1 p-0 lg:p-1 '>

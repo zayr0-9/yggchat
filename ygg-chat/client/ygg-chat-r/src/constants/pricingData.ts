@@ -49,7 +49,7 @@ export const PLANS: Plan[] = [
 
 export const PRICING_FEATURES: Feature[] = [
     { name: 'Multiple Models', plans: { basic: '400+', pro: '400+', ultra: '400+' } },
-    { name: 'Credits', plans: { basic: '400', pro: '800', ultra: '2200' } },
+    { name: 'Credits', plans: { basic: '700', pro: '1600', ultra: '4200' } },
     { name: 'Cloud Sync', plans: { basic: 'Limited', pro: 'Unlimited', ultra: 'Unlimited' } },
     { name: 'Database', plans: { basic: 'Cloud + Local', pro: 'Cloud + Local', ultra: 'Cloud + Local' } },
     { name: 'Agents', plans: { basic: 'Yes', pro: 'Yes', ultra: 'Yes' } },

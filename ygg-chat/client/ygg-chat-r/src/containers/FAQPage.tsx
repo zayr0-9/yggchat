@@ -321,7 +321,7 @@ const FAQPage: React.FC = () => {
   }
 
   return (
-    <div className='h-full overflow-y-auto min-h-screen w-full bg-blue-200 dark:bg-blue-900 text-gray-900 dark:text-gray-100'>
+    <div className='h-full overflow-y-auto min-h-screen w-full text-gray-900 dark:text-gray-100'>
       <header className='sticky top-0 z-30 flex items-center justify-between px-6 sm:px-8 py-3 bg-transparent dark:bg-transparent backdrop-blur-sm'>
         <div className='flex items-center gap-3'>
           <Link to='/' className='text-white font-semibold tracking-wide text-lg hover:text-gray-200'>
@@ -337,7 +337,7 @@ const FAQPage: React.FC = () => {
         </div>
       </header>
 
-      <section className='max-w-6xl rounded-4xl mica mx-4 md:mx-6 lg:mx-auto px-4 sm:px-8 pt-16 pb-8 my-12'>
+      <section className='max-w-6xl rounded-4xl acrylic mx-4 md:mx-6 lg:mx-auto px-4 sm:px-8 pt-16 pb-8 my-12'>
         <p className='text-sm uppercase tracking-[0.2em] text-gray-800 dark:text-gray-300 mb-2'>Support</p>
         <h1 className='text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-6'>Yggdrasil FAQ</h1>
         <p className='text-lg text-gray-700 dark:text-gray-200 max-w-3xl mb-6'>
@@ -362,7 +362,7 @@ const FAQPage: React.FC = () => {
         </div>
       </section>
 
-      <section className='max-w-6xl rounded-4xl mica mx-4 md:mx-6 lg:mx-auto px-4 sm:px-6 md:px-8 lg:px-10 pt-16 pb-8 my-12'>
+      <section className='max-w-6xl rounded-4xl acrylic-light mx-4 md:mx-6 lg:mx-auto px-4 sm:px-6 md:px-8 lg:px-10 pt-16 pb-8 my-12'>
         <div className='space-y-6'>
           {filteredSections.map(section => (
             <div
@@ -384,8 +384,9 @@ const FAQPage: React.FC = () => {
               </button>
 
               <div
-                className={`px-6 pb-6 divide-y divide-gray-200/60 dark:divide-white/10 overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${openSections[section.title] ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-                  }`}
+                className={`px-6 pb-6 divide-y divide-gray-200/60 dark:divide-white/10 overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
+                  openSections[section.title] ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+                }`}
                 aria-hidden={!openSections[section.title]}
               >
                 <div className={openSections[section.title] ? 'pt-6' : 'pt-0'}>

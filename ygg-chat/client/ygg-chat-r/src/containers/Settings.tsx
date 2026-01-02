@@ -9,6 +9,7 @@ import {
   loadSavedVideos,
   persistActiveCustomVideoId,
   removeCustomVideo,
+  updateCustomVideoTextColorMode,
   VIDEO_BACKGROUND_CHANGE_EVENT,
 } from '../helpers/videoBackgroundStorage'
 
@@ -134,6 +135,12 @@ const Settings: React.FC = () => {
     showStatus({ type: 'success', text: 'Reverted to the built-in defaults.' })
   }
 
+  const handleTextColorModeChange = (id: string, mode: 'light' | 'dark' | 'auto') => {
+    updateCustomVideoTextColorMode(id, mode)
+    setVideos(loadSavedVideos())
+    showStatus({ type: 'success', text: `Text color mode set to "${mode}".` })
+  }
+
   const renderStatus = () => {
     if (!statusMessage) return null
 
@@ -154,9 +161,13 @@ const Settings: React.FC = () => {
       <div className='mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8'>
         <header className='flex flex-wrap items-center justify-between gap-4'>
           <div>
-            <p className='text-sm uppercase tracking-[0.3em] text-stone-400 dark:text-stone-500'>Background</p>
-            <h1 className='text-3xl font-semibold text-stone-800 dark:text-stone-100'>Video Wallpaper Studio</h1>
-            <p className='mt-1 text-sm text-stone-500 dark:text-stone-400'>
+            <p className='text-sm uppercase tracking-[0.3em] video-light:text-neutral-100 video-dark:text-neutral-900'>
+              Background
+            </p>
+            <h1 className='text-3xl font-semibold video-light:text-neutral-100 video-dark:text-neutral-900 '>
+              Custom Wallpaper
+            </h1>
+            <p className='mt-1 text-sm video-light:text-neutral-100 video-dark:text-neutral-900'>
               Upload up to 8MB MP4/WebM clips and switch between them in one place.
             </p>
           </div>
@@ -261,7 +272,7 @@ const Settings: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <div className='flex flex-wrap gap-2'>
+                    <div className='flex flex-wrap items-center gap-2'>
                       <Button
                         variant={isActive ? 'primary' : 'outline2'}
                         size='small'
@@ -280,6 +291,33 @@ const Settings: React.FC = () => {
                       >
                         <p className='transition-transform duration-100 group-active:scale-95'>Remove</p>
                       </Button>
+                      <div className='ml-auto flex items-center gap-1'>
+                        <span className='text-xs text-stone-500 dark:text-stone-400 mr-1'>Text:</span>
+                        {(['auto', 'light', 'dark'] as const).map(mode => {
+                          const currentMode = video.textColorMode ?? 'auto'
+                          const isSelected = currentMode === mode
+                          return (
+                            <button
+                              key={mode}
+                              onClick={() => handleTextColorModeChange(video.id, mode)}
+                              className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                                isSelected
+                                  ? 'bg-indigo-500 text-white dark:bg-indigo-600'
+                                  : 'bg-stone-200 text-stone-600 hover:bg-stone-300 dark:bg-zinc-700 dark:text-stone-300 dark:hover:bg-zinc-600'
+                              }`}
+                              title={
+                                mode === 'auto'
+                                  ? 'Follow system theme'
+                                  : mode === 'light'
+                                    ? 'Light text (for dark videos)'
+                                    : 'Dark text (for light videos)'
+                              }
+                            >
+                              {mode === 'auto' ? 'Auto' : mode === 'light' ? 'Light' : 'Dark'}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
                   </div>
                 )

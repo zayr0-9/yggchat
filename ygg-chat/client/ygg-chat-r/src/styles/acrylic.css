@@ -7,6 +7,7 @@
  */
 
 /* Base Acrylic styles - shared properties */
+.acrylic-ultra-light-nolight,
 .acrylic-ultra-light-nb,
 .acrylic-ultra-light-nb-2,
 .acrylic-ultra-light,
@@ -34,6 +35,7 @@
 .acrylic-subtle,
 .acrylic-light,
 .acrylic-light-dark,
+.acrylic-ultra-light-nolight,
 .acrylic,
 .acrylic-strong,
 .acrylic-extreme {
@@ -91,7 +93,9 @@
 .dark .acrylic-ultra-light-nb-2 {
   background-color: rgba(24, 24, 24, 0.15);
 }
-
+.acrylic-ultra-light-nolight {
+  background-color: rgba(24, 24, 24, 0.15);
+}
 /* Acrylic Ultra Light - Extremely transparent */
 .acrylic-ultra-light {
   background-color: rgba(247, 247, 247, 0.15); /* 15% opacity */
@@ -196,7 +200,9 @@
 .dark .acrylic-medium:hover {
   background-color: rgba(24, 24, 24, 0.515);
 }
-
+.acrylic-ultra-light-nolight:hover {
+  background-color: rgba(19, 19, 19, 0.215);
+}
 .dark .acrylic-light:hover {
   background-color: rgba(24, 24, 24, 0.215);
 }
@@ -237,6 +243,10 @@
   }
 
   .acrylic-light {
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  .acrylic-ultra-light-nolight {
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
   }

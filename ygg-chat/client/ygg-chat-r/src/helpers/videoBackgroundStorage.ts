@@ -8,6 +8,8 @@ export interface CustomVideoEntry {
   size?: number
   lastModified?: number
   createdAt: number
+  /** Whether this video requires light text (dark video) or dark text (light video). Defaults to 'auto' (follows system theme). */
+  textColorMode?: 'light' | 'dark' | 'auto'
 }
 
 export interface VideoSource {
@@ -20,12 +22,12 @@ const CUSTOM_VIDEO_ACTIVE_KEY = 'yggdrasil_custom_video_active'
 const VIDEO_BACKGROUND_EVENT = 'yggdrasil:video-background-change'
 
 export const DEFAULT_LIGHT_VIDEO: VideoSource = {
-  path: getAssetPath('video/l3.webm'),
+  path: getAssetPath('video/gfish.webm'),
   type: 'video/webm',
 }
 
 export const DEFAULT_DARK_VIDEO: VideoSource = {
-  path: getAssetPath('video/d2.webm'),
+  path: getAssetPath('video/gfish.webm'),
   type: 'video/webm',
 }
 
@@ -154,5 +156,33 @@ export const loadCustomVideoBlobUrl = async (id: string): Promise<string | null>
   } catch (error) {
     console.error('Failed to load video blob', error)
     return null
+  }
+}
+
+/**
+ * Gets the current text color mode based on active custom video.
+ * Returns 'light' if text should be light (dark video), 'dark' if text should be dark (light video),
+ * or 'auto' to follow system theme.
+ */
+export const getActiveTextColorMode = (): 'light' | 'dark' | 'auto' => {
+  const activeVideo = loadActiveCustomVideo()
+  // Default to 'light' text for the built-in gfish wallpaper (dark video)
+  return activeVideo?.textColorMode ?? 'light'
+}
+
+/**
+ * Updates a custom video's text color mode.
+ */
+export const updateCustomVideoTextColorMode = (id: string, textColorMode: 'light' | 'dark' | 'auto') => {
+  const videos = loadSavedVideos()
+  const updated = videos.map(video => (video.id === id ? { ...video, textColorMode } : video))
+
+  if (typeof window === 'undefined') return
+
+  try {
+    window.localStorage.setItem(CUSTOM_VIDEO_LIBRARY_KEY, JSON.stringify(updated))
+    dispatchBackgroundChange()
+  } catch (error) {
+    console.error('Failed to update video text color mode', error)
   }
 }

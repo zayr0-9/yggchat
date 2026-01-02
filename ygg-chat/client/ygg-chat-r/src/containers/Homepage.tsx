@@ -219,7 +219,8 @@ const Homepage: React.FC = () => {
   return (
     <div className=' h-full flex'>
       {/* Dark Overlay */}
-      <div className='absolute inset-0 w-full h-full bg-neutral-200/15 dark:bg-black/30 z-0' />
+      {/* bg-neutral-200/15 dark:bg-black/30 */}
+      <div className='absolute inset-0 w-full h-full  z-0' />
       {!isMobile && <SideBar limit={12} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='relative z-10 flex-1 h-full flex flex-col w-full mr-2 ml-2 overflow-hidden sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
@@ -230,15 +231,15 @@ const Homepage: React.FC = () => {
                 <img
                   src={getAssetPath('img/logo-d.svg')}
                   alt='Yggdrasil Logo'
-                  className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  dark:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)] acrylic-ultra-light-nb'
+                  className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22 dark:hidden video-light:hidden rounded-full shadow-[0_2px_16px_3px_rgba(0,0,0,0.05)] acrylic-ultra-light-nb'
                 />
                 <img
                   src={getAssetPath('img/logo-l-thick.svg')}
                   alt='Yggdrasil Logo'
-                  className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22  hidden dark:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
+                  className='w-14 h-14 sm:w-14 sm:h-14 md:w-16 md:h-16 lg:w-18 lg:h-18 xl:w-20 xl:h-20 2xl:w-22 2xl:h-22 dark:block video-light:block rounded-full dark:shadow-[0_2px_16px_3px_rgba(0,0,0,0.25)]'
                 />
               </div>
-              <h1 className='junicode-bold tracking-wide pt-0 2xl:pb-2 text-[28px] sm:text-[40px] lg:text-[44px] xl:text-[48px] 2xl:text-[70px] 3xl:text-[70px] 4xl:text-[44px] px-1 dark:text-neutral-100 '>
+              <h1 className='junicode-bold tracking-wide pt-0 2xl:pb-2 text-[28px] sm:text-[40px] lg:text-[44px] xl:text-[48px] 2xl:text-[70px] 3xl:text-[70px] 4xl:text-[44px] px-1 dark:text-neutral-100 video-light:text-neutral-100 video-dark:text-neutral-900'>
                 Yggdrasil
               </h1>
             </div>
@@ -246,7 +247,7 @@ const Homepage: React.FC = () => {
         </div>
         <div className='px-2 sm:px-4 md:px-6 w-full max-w-full md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-6xl 3xl:max-w-7xl 4xl:max-w-[2400px] mx-auto flex-1 flex flex-col min-h-0'>
           <div className='mb-4 flex items-center justify-between'>
-            <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[38px] 4xl:text-[38px] py-2 font-bold dark:text-neutral-100'>
+            <h2 className='text-[22px] sm:text-[22px] lg:text-[22px] xl:text-[22px] 2xl:text-[38px] 3xl:text-[38px] 4xl:text-[38px] py-2 font-bold video-light:text-neutral-100 video-dark:text-neutral-900'>
               Projects
             </h2>
             <div className='flex items-center gap-3 my-1 mr-1 rounded-4xl '>
