@@ -72,6 +72,23 @@ export const localApi = {
     }
   },
 
+  put: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, {
+        ...options,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...options?.headers },
+        body: data ? JSON.stringify(data) : undefined,
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+      }
+      return (await response.json()) as T
+    } catch (error) {
+      return handleLocalApiError(error, endpoint)
+    }
+  },
+
   delete: async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
     try {
       const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, { ...options, method: 'DELETE' })

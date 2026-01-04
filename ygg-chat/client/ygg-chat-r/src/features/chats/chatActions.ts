@@ -1173,23 +1173,21 @@ export const updateMessage = createAsyncThunk<
       const currentState = getState() as RootState
       const currentConversationId = currentState.chat.conversation.currentConversationId
       const conversation = currentState.conversations.items.find(c => c.id === currentConversationId)
-      const isLocalMode = conversation?.storage_mode === 'local'
+      // Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
+      const storageMode =
+        conversation?.storage_mode || getStorageModeFromCache(extra.queryClient, currentConversationId!)
+      const isLocalMode = shouldUseLocalApi(storageMode)
 
       let updated: Message
 
       if (isLocalMode) {
-        // In local mode, the message doesn't exist on server, so we construct the update locally
-        const existingMessage = currentState.chat.conversation.messages.find(m => m.id === id)
-        if (!existingMessage) {
-          throw new Error('Message not found locally')
+        // In local mode, persist to local SQLite via localApi
+        const body: any = { content, note }
+        if (content_blocks) {
+          body.content_blocks = content_blocks
         }
 
-        updated = {
-          ...existingMessage,
-          content,
-          note: note !== undefined ? note : existingMessage.note,
-          content_blocks: content_blocks !== undefined ? content_blocks : existingMessage.content_blocks,
-        }
+        updated = await localApi.put<Message>(`/local/messages/${id}`, body)
       } else {
         const body: any = { content, note }
         if (content_blocks) {
