@@ -391,6 +391,24 @@ const toolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: 'html_renderer',
+    enabled: true,
+    description:
+      'Render and sanitize an HTML snippet. Returns sanitized HTML suitable for embedding as a content block. Always treat output as untrusted; client will re-sanitize before rendering.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        html: { type: 'string', description: 'Raw HTML to sanitize and return' },
+        allowUnsafe: {
+          type: 'boolean',
+          description:
+            'If true, skip sanitization (not recommended). Defaults to false. Output is still re-sanitized client-side.',
+        },
+      },
+      required: ['html'],
+    },
+  },
+  {
     name: 'glob',
     enabled: true,
     description: 'Search for files using glob patterns with flexible matching and filtering options',

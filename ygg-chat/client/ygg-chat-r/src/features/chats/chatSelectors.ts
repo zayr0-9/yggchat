@@ -161,7 +161,7 @@ export const selectStreamCountByType = createSelector([selectStreamingRoot], str
 export const selectCurrentViewStream = createSelector(
   [selectStreamingRoot, (state: RootState) => state.chat.conversation.currentPath],
   (streaming, currentPath) => {
-    const lastMessageInPath = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null
+    // const lastMessageInPath = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null
     const activeStreams = Object.entries(streaming.byId).filter(([, s]) => s.active)
 
     // Only log when there are active streams

@@ -63,7 +63,13 @@ export interface ReasoningDetailsBlock {
   }>
 }
 
-export type ContentBlock = ThinkingBlock | ToolUseBlock | TextBlock | ToolResultBlock | ImageBlock | ReasoningDetailsBlock
+export type ContentBlock =
+  | ThinkingBlock
+  | ToolUseBlock
+  | TextBlock
+  | ToolResultBlock
+  | ImageBlock
+  | ReasoningDetailsBlock
 
 // Tool call types
 export interface ToolCall {

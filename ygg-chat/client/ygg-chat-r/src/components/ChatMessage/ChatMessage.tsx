@@ -616,6 +616,36 @@ const todoActionLabel = (action: string) => {
   }
 }
 
+// Component to render HTML in an iframe using document.write for full CSS support
+const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fullHeight = false }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    // Debug: log the raw HTML structure
+    console.log('HtmlIframe raw html length:', html.length)
+    console.log('HtmlIframe has <style>:', html.includes('<style'))
+    console.log('HtmlIframe has class=:', html.includes('class='))
+
+    // Use document.write for most reliable rendering with full CSS support
+    if (iframeRef.current) {
+      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
+      if (doc) {
+        doc.open()
+        doc.write(html)
+        doc.close()
+      }
+    }
+  }, [html])
+
+  return (
+    <iframe
+      ref={iframeRef}
+      className={fullHeight ? 'w-full h-full bg-white' : 'w-full min-h-[800px] rounded-lg bg-white'}
+      style={{ border: 'none' }}
+    />
+  )
+}
+
 const ChatMessage: React.FC<ChatMessageProps> = React.memo(
   ({
     id,
@@ -669,6 +699,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
     const [selectedText, setSelectedText] = useState<string>('')
     const [selectedArtifactUrl, setSelectedArtifactUrl] = useState<string | null>(null)
+    const [fullScreenHtml, setFullScreenHtml] = useState<string | null>(null)
     // Explain input states
     const streamToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromStream(streamEvents), [streamEvents])
     const contentToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromBlocks(contentBlocks), [contentBlocks])
@@ -1112,6 +1143,22 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
     }, [showExplainInput])
 
+    useEffect(() => {
+      if (!fullScreenHtml) return
+
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          setFullScreenHtml(null)
+        }
+      }
+
+      document.addEventListener('keydown', handleKeyDown)
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown)
+      }
+    }, [fullScreenHtml])
+
     // Close More menu when context menu opens to avoid conflicts
     useEffect(() => {
       if (contextMenuOpen) {
@@ -1351,6 +1398,76 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
       const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
 
+      // Special handling for html_renderer tool - always show rendered HTML
+      const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
+      const extractedHtml = (() => {
+        if (!isHtmlRenderer) return null
+        // Use the INPUT html directly (group.args.html) - it has the full CSS
+        // The tool result gets processed and loses styling
+        if (group.args && typeof group.args.html === 'string') {
+          return group.args.html
+        }
+        return null
+      })()
+
+      // Render html_renderer tool with always-visible HTML
+      if (isHtmlRenderer && typeof extractedHtml === 'string') {
+        // Debug: log to see if HTML is already stripped at this point
+        console.log('extractedHtml preview:', extractedHtml.substring(0, 500))
+        return (
+          <div
+            key={toggleKey}
+            className='tool-call-card relative p-2 mb-0 mx-3 rounded-xl border border-neutral-200/70 bg-blue-50/40 dark:border-neutral-900/40 dark:bg-neutral-900/70 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'
+          >
+            <div className='flex items-start justify-between gap-4 mb-2'>
+              <p className='text-base font-semibold text-blue-900 dark:text-blue-100'>{group.name}</p>
+              <div className='flex items-center gap-2'>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={() => setFullScreenHtml(extractedHtml)}
+                  title='Open full screen'
+                >
+                  <i className='bx bx-fullscreen text-lg' aria-hidden='true'></i>
+                </Button>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={() => toggleBlock('toolCalls', toggleKey)}
+                  title={isExpanded ? 'Hide inputs' : 'Show inputs'}
+                >
+                  {isExpanded ? (
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                    </svg>
+                  ) : (
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                    </svg>
+                  )}
+                </Button>
+              </div>
+            </div>
+            {/* Always render the HTML output in an iframe using blob URL for proper rendering */}
+            <HtmlIframe html={extractedHtml} />
+            {/* Only show inputs when expanded */}
+            {isExpanded && group.args && Object.keys(group.args).length > 0 && (
+              <div className='mt-3 rounded-xl border border-neutral-200/60 dark:border-neutral-900/40 bg-white dark:bg-yBlack-900/70 p-3 space-y-1 text-xs'>
+                <p className='text-[11px] uppercase font-semibold text-blue-500 dark:text-blue-300'>Inputs</p>
+                {Object.entries(group.args).map(([argKey, value]) => (
+                  <div key={argKey} className='flex gap-2'>
+                    <span className='font-medium text-gray-600 dark:text-gray-300'>{argKey}:</span>
+                    <span className='text-gray-800 dark:text-gray-100 break-all'>
+                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      }
+
       const pathParam = extractPathParam(group.args)
       const resultSummary = group.results.length > 0 ? formatToolResultSummary(group.results[0].content) : null
       const pathContent = pathParam || null
@@ -1426,21 +1543,59 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
               {group.results.length > 0 && (
                 <div className='space-y-2'>
-                  {group.results.map((result, resultIdx) => (
-                    <div
-                      key={`${group.id}-result-${resultIdx}`}
-                      className={`rounded-xl border p-3 whitespace-pre-wrap leading-relaxed ${
-                        result.is_error
-                          ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
-                          : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
-                      }`}
-                    >
-                      <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
-                        <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
+                  {group.results.map((result, resultIdx) => {
+                    // Extract HTML from tool result - handles both object and JSON string content
+                    const maybeHtml = (() => {
+                      if (!result) return null
+
+                      let content = result.content
+
+                      // If content is a string, try to parse it as JSON
+                      if (typeof content === 'string') {
+                        try {
+                          content = JSON.parse(content)
+                        } catch {
+                          return null
+                        }
+                      }
+
+                      // Check if parsed/original content has an html property
+                      if (typeof content === 'object' && content !== null && 'html' in content) {
+                        return (content as any).html
+                      }
+
+                      return null
+                    })()
+
+                    const renderedBody = (() => {
+                      if (typeof maybeHtml === 'string') {
+                        // Render HTML content (already sanitized server-side by htmlRenderer tool)
+                        return (
+                          <div
+                            className='prose max-w-none dark:prose-invert'
+                            dangerouslySetInnerHTML={{ __html: maybeHtml }}
+                          />
+                        )
+                      }
+                      return formatToolResultContent(result.content)
+                    })()
+
+                    return (
+                      <div
+                        key={`${group.id}-result-${resultIdx}`}
+                        className={`rounded-xl border p-3 whitespace-pre-wrap leading-relaxed ${
+                          result.is_error
+                            ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
+                            : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
+                        }`}
+                      >
+                        <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
+                          <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
+                        </div>
+                        {renderedBody}
                       </div>
-                      {formatToolResultContent(result.content)}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -2090,6 +2245,47 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           imageUrl={selectedArtifactUrl ?? ''}
           onClose={handleCloseArtifactModal}
         />
+
+        <AnimatePresence>
+          {fullScreenHtml && (
+            <motion.div
+              key='html-fullscreen-overlay'
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className='fixed inset-0 z-[1300] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm'
+              onClick={() => setFullScreenHtml(null)}
+              role='dialog'
+              aria-modal='true'
+              aria-label='HTML preview'
+            >
+              <motion.div
+                initial={{ scale: 0.98, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.98, opacity: 0 }}
+                transition={{ duration: 0.15 }}
+                className='relative w-[95vw] h-[95vh] overflow-hidden rounded-2xl border border-neutral-200/60 dark:border-neutral-700 bg-white dark:bg-yBlack-900 shadow-[0_10px_30px_rgba(0,0,0,0.35)]'
+                onClick={e => e.stopPropagation()}
+              >
+                <div className='absolute right-2 top-2 z-20'>
+                  <Button
+                    variant='outline'
+                    size='large'
+                    rounded='full'
+                    className='border border-white/30 bg-black/50 text-white shadow-lg shadow-black/40 hover:bg-black/60 focus:ring-0'
+                    onClick={() => setFullScreenHtml(null)}
+                    aria-label='Close HTML preview'
+                  >
+                    <i className='bx bx-x text-3xl' aria-hidden='true'></i>
+                  </Button>
+                </div>
+                <div className='h-full w-full'>
+                  <HtmlIframe html={fullScreenHtml} fullHeight />
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     )
   }

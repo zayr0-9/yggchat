@@ -24,6 +24,7 @@ import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { generateTodoId, getTodoStorageDirectory, listTodoIds, readTodoList, writeTodoList } from './tools/todoMd.js'
+import htmlRenderer from './tools/htmlRenderer.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -1368,6 +1369,13 @@ function setupServer() {
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
 
       switch (toolName) {
+        case 'html_renderer': {
+          const { html, allowUnsafe } = parsedArgs
+          if (!html) throw new Error('html is required')
+          const rendered = await htmlRenderer.run({ html, allowUnsafe })
+          result = rendered
+          break
+        }
         case 'read_file': {
           const { path: filePath, maxBytes, startLine, endLine, ranges } = parsedArgs
           if (!filePath) throw new Error('path is required')
