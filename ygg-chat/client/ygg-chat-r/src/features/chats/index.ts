@@ -64,9 +64,19 @@ export {
   selectSendingState,
   selectStreamBuffer,
   selectStreamError,
+  selectStreamEvents,
   selectStreamState,
+  selectThinkingBuffer,
   selectValidationError,
   selectCCSlashCommands,
+  // Multi-stream selectors
+  selectActiveStreamIds,
+  selectAllActiveStreams,
+  selectCurrentViewStream,
+  selectIsAnyStreaming,
+  selectPrimaryStreamId,
+  selectPrimaryStreamState,
+  selectStreamingRoot,
 } from './chatSelectors'
 
 // Convenience re-exports

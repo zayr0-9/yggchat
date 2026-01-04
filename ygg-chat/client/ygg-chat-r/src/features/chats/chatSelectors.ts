@@ -24,19 +24,195 @@ export const selectInputValid = createSelector(
 )
 export const selectValidationError = createSelector([selectChatState], chat => chat.composition.validationError)
 
-// Streaming selectors
-export const selectStreamState = createSelector([selectChatState], chat => chat.streaming)
-export const selectStreamBuffer = createSelector([selectStreamState], stream => stream.buffer)
-export const selectThinkingBuffer = createSelector([selectStreamState], stream => stream.thinkingBuffer)
-export const selectStreamError = createSelector([selectStreamState], stream => stream.error)
-export const selectStreamEvents = createSelector([selectStreamState], stream => stream.events)
-export const selectIsStreaming = createSelector([selectStreamState], stream => stream.active)
+// ============================================================================
+// Multi-Stream Selectors
+// ============================================================================
 
-export const selectSendingState = createSelector([selectChatState], chat => ({
+// Base streaming root state selector
+export const selectStreamingRoot = createSelector([selectChatState], chat => chat.streaming)
+
+// All active stream IDs
+export const selectActiveStreamIds = createSelector([selectStreamingRoot], streaming => streaming.activeIds)
+
+// Check if any stream is active
+export const selectIsAnyStreaming = createSelector([selectActiveStreamIds], activeIds => activeIds.length > 0)
+
+// Get the primary stream ID
+export const selectPrimaryStreamId = createSelector([selectStreamingRoot], streaming => streaming.primaryStreamId)
+
+// Get stream state by ID (returns null if not found)
+export const selectStreamStateById = (state: RootState, streamId: string) => state.chat.streaming.byId[streamId] ?? null
+
+// Get primary stream state
+export const selectPrimaryStreamState = createSelector(
+  [selectStreamingRoot, selectPrimaryStreamId],
+  (streaming, primaryId) => (primaryId ? streaming.byId[primaryId] : null)
+)
+
+// ============================================================================
+// Per-Stream Selector Factories (for use with specific streamIds)
+// ============================================================================
+
+// Factory for creating per-stream buffer selector
+export const makeSelectStreamBuffer = (streamId: string) =>
+  createSelector([selectStreamingRoot], streaming => streaming.byId[streamId]?.buffer ?? '')
+
+// Factory for creating per-stream thinking buffer selector
+export const makeSelectThinkingBuffer = (streamId: string) =>
+  createSelector([selectStreamingRoot], streaming => streaming.byId[streamId]?.thinkingBuffer ?? '')
+
+// Factory for creating per-stream events selector
+export const makeSelectStreamEvents = (streamId: string) =>
+  createSelector([selectStreamingRoot], streaming => streaming.byId[streamId]?.events ?? [])
+
+// Factory for creating per-stream error selector
+export const makeSelectStreamError = (streamId: string) =>
+  createSelector([selectStreamingRoot], streaming => streaming.byId[streamId]?.error ?? null)
+
+// Factory for creating per-stream active status selector
+export const makeSelectIsStreaming = (streamId: string) =>
+  createSelector([selectStreamingRoot], streaming => streaming.byId[streamId]?.active ?? false)
+
+// Factory for creating per-stream tool calls selector
+export const makeSelectStreamToolCalls = (streamId: string) =>
+  createSelector([selectStreamingRoot], streaming => streaming.byId[streamId]?.toolCalls ?? [])
+
+// Factory for creating per-stream message ID selector
+export const makeSelectStreamMessageId = (streamId: string) =>
+  createSelector([selectStreamingRoot], streaming => streaming.byId[streamId]?.messageId ?? null)
+
+// ============================================================================
+// Legacy Selectors (backward compatibility - look at primary stream)
+// ============================================================================
+
+// Legacy: selectStreamState now returns the root streaming state
+export const selectStreamState = selectStreamingRoot
+
+// Legacy: buffer from primary stream
+export const selectStreamBuffer = createSelector([selectPrimaryStreamState], stream => stream?.buffer ?? '')
+
+// Legacy: thinking buffer from primary stream
+export const selectThinkingBuffer = createSelector([selectPrimaryStreamState], stream => stream?.thinkingBuffer ?? '')
+
+// Legacy: error from primary stream
+export const selectStreamError = createSelector([selectPrimaryStreamState], stream => stream?.error ?? null)
+
+// Legacy: events from primary stream
+export const selectStreamEvents = createSelector([selectPrimaryStreamState], stream => stream?.events ?? [])
+
+// Legacy: active status from primary stream
+export const selectIsStreaming = createSelector([selectPrimaryStreamState], stream => stream?.active ?? false)
+
+// Legacy: sending state - now checks if ANY stream is active
+export const selectSendingState = createSelector([selectChatState, selectActiveStreamIds], (chat, activeIds) => ({
   sending: chat.composition.sending,
-  streaming: chat.streaming.active,
-  error: chat.streaming.error,
+  streaming: activeIds.length > 0,
+  error: null, // Error now per-stream, use selectStreamError for specific stream
 }))
+
+// ============================================================================
+// Subagent/Hierarchy Selectors
+// ============================================================================
+
+// Get all streams that are children of a parent stream
+export const selectChildStreams = (parentStreamId: string) =>
+  createSelector([selectStreamingRoot], streaming =>
+    Object.entries(streaming.byId)
+      .filter(([, state]) => state.lineage.parentStreamId === parentStreamId)
+      .map(([id, state]) => ({ id, ...state }))
+  )
+
+// Get all streams originating from a specific message
+export const selectStreamsByOriginMessage = (messageId: MessageId) =>
+  createSelector([selectStreamingRoot], streaming =>
+    Object.entries(streaming.byId)
+      .filter(([, state]) => state.lineage.originMessageId === messageId)
+      .map(([id, state]) => ({ id, ...state }))
+  )
+
+// Get all streams belonging to a specific branch root
+export const selectStreamsByBranchRoot = (rootMessageId: MessageId) =>
+  createSelector([selectStreamingRoot], streaming =>
+    Object.entries(streaming.byId)
+      .filter(([, state]) => state.lineage.rootMessageId === rootMessageId)
+      .map(([id, state]) => ({ id, ...state }))
+  )
+
+// Get all active subagent streams
+export const selectActiveSubagentStreams = createSelector([selectStreamingRoot], streaming =>
+  Object.entries(streaming.byId)
+    .filter(([, state]) => state.active && state.streamType === 'subagent')
+    .map(([id, state]) => ({ id, ...state }))
+)
+
+// Get stream count by type
+export const selectStreamCountByType = createSelector([selectStreamingRoot], streaming => {
+  const counts = { primary: 0, subagent: 0, tool: 0, branch: 0 }
+  for (const stream of Object.values(streaming.byId)) {
+    if (stream.active) {
+      counts[stream.streamType]++
+    }
+  }
+  return counts
+})
+
+// Get the stream that should be displayed for the current view
+// This considers the current path and returns the most relevant active stream
+export const selectCurrentViewStream = createSelector(
+  [selectStreamingRoot, (state: RootState) => state.chat.conversation.currentPath],
+  (streaming, currentPath) => {
+    const lastMessageInPath = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null
+    const activeStreams = Object.entries(streaming.byId).filter(([, s]) => s.active)
+
+    // Only log when there are active streams
+    if (activeStreams.length > 0) {
+      // console.log('[StreamSelector] lastInPath:', lastMessageInPath, 'activeStreams:', activeStreams.map(([id, s]) => ({
+      //   id: id.slice(-8),
+      //   root: s.lineage.rootMessageId?.slice(0, 8),
+      // })))
+    }
+
+    // First, try to find an active stream whose rootMessageId (target parent) matches the current path
+    // rootMessageId is the parent of the streaming message - updated when user message is created
+    for (const [id, stream] of Object.entries(streaming.byId)) {
+      if (!stream.active) continue
+
+      const rootMsgId = stream.lineage.rootMessageId
+
+      // Match ONLY if rootMessageId is in current path (streaming msg is on this branch)
+      if (rootMsgId && currentPath.includes(rootMsgId)) {
+        console.log('[StreamSelector] MATCHED by root in path:', id.slice(-8), 'root:', String(rootMsgId).slice(0, 8))
+        return { id, ...stream }
+      }
+    }
+
+    // If no branch-specific stream found, return primary stream if active
+    if (streaming.primaryStreamId) {
+      const primaryStream = streaming.byId[streaming.primaryStreamId]
+      if (primaryStream?.active) {
+        // console.log('[StreamSelector] fallback to primary')
+        return { id: streaming.primaryStreamId, ...primaryStream }
+      }
+    }
+
+    // Return any active stream as fallback
+    for (const [id, stream] of Object.entries(streaming.byId)) {
+      if (stream.active) {
+        // console.log('[StreamSelector] fallback to any:', id.slice(-8))
+        return { id, ...stream }
+      }
+    }
+
+    return null
+  }
+)
+
+// Get all active streams with their IDs (for multi-stream UI)
+export const selectAllActiveStreams = createSelector([selectStreamingRoot], streaming =>
+  Object.entries(streaming.byId)
+    .filter(([, state]) => state.active)
+    .map(([id, state]) => ({ id, ...state }))
+)
 
 // Heimdall selectors
 export const selectHeimdallState = createSelector([selectChatState], chat => chat.heimdall)

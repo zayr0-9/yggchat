@@ -44,11 +44,11 @@ import {
   selectHeimdallLoading,
   selectMessageInput,
   // Chat selectors
+  selectCurrentViewStream,
   selectMultiReplyCount,
   selectOperationMode,
   selectProviderState,
   selectSendingState,
-  selectStreamState,
   sendCCBranch,
   sendCCMessage,
   sendMessage,
@@ -145,7 +145,24 @@ function Chat() {
   const operationMode = useAppSelector(selectOperationMode)
   // const canSendFromRedux = useAppSelector(selectCanSend)
   const sendingState = useAppSelector(selectSendingState)
-  const streamState = useAppSelector(selectStreamState)
+  // Current view stream - automatically selects the relevant stream based on currentPath
+  const currentViewStream = useAppSelector(selectCurrentViewStream)
+  const streamingRoot = useAppSelector(state => state.chat.streaming)
+  // Derived streamState object for compatibility (combines current view stream data)
+  const streamState = useMemo(
+    () => ({
+      active: currentViewStream?.active ?? false,
+      buffer: currentViewStream?.buffer ?? '',
+      thinkingBuffer: currentViewStream?.thinkingBuffer ?? '',
+      toolCalls: currentViewStream?.toolCalls ?? [],
+      events: currentViewStream?.events ?? [],
+      messageId: currentViewStream?.messageId ?? null,
+      error: currentViewStream?.error ?? null,
+      finished: currentViewStream?.finished ?? false,
+      streamingMessageId: currentViewStream?.streamingMessageId ?? null,
+    }),
+    [currentViewStream]
+  )
   const conversationMessages = useAppSelector(selectConversationMessages)
   const displayMessages = useAppSelector(selectDisplayMessages)
   const currentConversationId = useAppSelector(selectCurrentConversationId)
@@ -163,6 +180,15 @@ function Chat() {
   const selectedPath = useAppSelector(selectCurrentPath)
   const multiReplyCount = useAppSelector(selectMultiReplyCount)
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
+  
+  // Debug logging for stream switching - only when streams are active
+  useEffect(() => {
+    if (streamingRoot.activeIds.length > 0) {
+      console.log('[Chat] activeStreams:', streamingRoot.activeIds.length, 
+        'displaying:', currentViewStream?.id?.slice(-8) || 'none',
+        'pathEnd:', selectedPath?.slice(-1)?.[0]?.slice(0, 8))
+    }
+  }, [streamingRoot.activeIds, currentViewStream?.id, selectedPath])
   // const ideContext = useAppSelector(selectIdeContext)
   const workspace = useAppSelector(selectWorkspace)
   // const isIdeConnected = useAppSelector(selectIsIdeConnected)
@@ -1519,8 +1545,12 @@ function Chat() {
   )
 
   const handleStopGeneration = useCallback(() => {
+    // Stop the current view's stream
     if (streamState.streamingMessageId) {
+      console.log('[handleStopGeneration] stopping stream for messageId:', streamState.streamingMessageId)
       dispatch(abortStreaming({ messageId: streamState.streamingMessageId }))
+    } else {
+      console.log('[handleStopGeneration] no streamingMessageId in current view stream')
     }
   }, [streamState.streamingMessageId, dispatch])
 
@@ -3008,8 +3038,8 @@ function Chat() {
                       variant='outline2'
                       onClick={handleStopGeneration}
                       size='large'
-                      disabled={!streamState.streamingMessageId}
-                      title='Stop generation'
+                      disabled={!streamState.active}
+                      title={streamState.active ? 'Stop generation' : 'Switch to active stream branch to stop'}
                     >
                       <i className='bx bx-stop-circle text-[18px]' aria-hidden='true'></i>
                     </Button>

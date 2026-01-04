@@ -22,6 +22,7 @@ import {
   SendMessagePayload,
   ToolDefinition,
 } from './chatTypes'
+import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
 import { getEnabledTools } from './toolDefinitions'
 
 // TODO: Import when conversations feature is available
@@ -524,17 +525,40 @@ const executeToolWithPermissionCheck = async (
 
 // Streaming message sending with proper error handling
 export const sendMessage = createAsyncThunk<
-  { messageId: MessageId | null; userMessage: any },
-  SendMessagePayload,
+  { messageId: MessageId | null; userMessage: any; streamId: string },
+  SendMessagePayload & { streamId?: string },
   { state: RootState; extra: ThunkExtraArgument }
 >(
   'chat/sendMessage',
   async (
-    { conversationId, input, parent, repeatNum, think, retrigger = false, imageConfig, reasoningConfig, cwd },
+    {
+      conversationId,
+      input,
+      parent,
+      repeatNum,
+      think,
+      retrigger = false,
+      imageConfig,
+      reasoningConfig,
+      cwd,
+      streamId: providedStreamId,
+    },
     { dispatch, getState, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
-    dispatch(chatSliceActions.sendingStarted())
+
+    // Generate or use provided stream ID
+    const streamId = providedStreamId ?? generateStreamId('primary')
+
+    dispatch(
+      chatSliceActions.sendingStarted({
+        streamId,
+        streamType: 'primary',
+        lineage: {
+          rootMessageId: parent,
+        },
+      })
+    )
 
     let controller: AbortController | undefined
 
@@ -631,8 +655,8 @@ export const sendMessage = createAsyncThunk<
         turnCount++
         continueTurn = false // Default to stop unless tool calls occur
 
-        // Check if streaming was aborted by user
-        const streamingActive = getState().chat.streaming.active
+        // Check if streaming was aborted by user (check this specific stream)
+        const streamingActive = getState().chat.streaming.byId[streamId]?.active ?? false
         if (!streamingActive) {
           controller?.abort()
           break
@@ -854,17 +878,18 @@ export const sendMessage = createAsyncThunk<
 
                 // Handle tool results (accumulated server-side into content_blocks)
                 if (chunk.part === 'tool_result' && chunk.toolResult) {
-                  // console.log(`✅ [chatActions] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`)
-
                   // Mark this tool call as processed by server
                   processedToolCallIds.add(chunk.toolResult.tool_use_id)
 
                   // Dispatch structured tool result data for proper rendering in streaming events
                   dispatch(
                     chatSliceActions.streamChunkReceived({
-                      type: 'chunk',
-                      part: 'tool_result',
-                      toolResult: chunk.toolResult,
+                      streamId,
+                      chunk: {
+                        type: 'chunk',
+                        part: 'tool_result',
+                        toolResult: chunk.toolResult,
+                      },
                     })
                   )
                   // Skip generic chunk handler to prevent duplicate dispatch
@@ -879,20 +904,23 @@ export const sendMessage = createAsyncThunk<
 
                   dispatch(
                     chatSliceActions.streamChunkReceived({
-                      type: 'chunk',
-                      part: 'tool_call',
-                      toolCall: chunk.toolCall,
+                      streamId,
+                      chunk: {
+                        type: 'chunk',
+                        part: 'tool_call',
+                        toolCall: chunk.toolCall,
+                      },
                     })
                   )
                 } else if (chunk.type === 'generation_started') {
-                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   if (chunk.messageId) {
                     turnAssistantMessageId = chunk.messageId
                     // If this is the first assistant message (not continuation), it might not be in history yet
                     // But we usually get 'complete' event later
                   }
                 } else if (chunk.type === 'chunk') {
-                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   // Accumulate text/reasoning for local reconstruction if needed
                   if (chunk.part === 'text' && chunk.content) {
                     assistantMessageContent += chunk.content // Note: chunk.content is delta usually, verify
@@ -926,7 +954,7 @@ export const sendMessage = createAsyncThunk<
                     })
                   }
                   // Reset streaming buffer for next iteration
-                  dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
                   messageId = chunk.message.id
                 } else if (chunk.type === 'free_generations_update') {
                   // Update free generations remaining count
@@ -938,9 +966,11 @@ export const sendMessage = createAsyncThunk<
                   )
                 } else if (chunk.type === 'aborted') {
                   // Server deleted the empty assistant message, no need to keep it in client state
-                  dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: 'Generation aborted' } })
+                  )
                 } else if (chunk.type === 'error') {
-                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   throw new Error(chunk.error || 'Stream error')
                 }
               } catch (parseError) {
@@ -958,7 +988,8 @@ export const sendMessage = createAsyncThunk<
 
         // End of stream for this turn. Check if we have pending tool calls to execute locally.
         // Also check if streaming is still active (user didn't click Stop)
-        if (assistantToolCalls.length > 0 && executionMode === 'client' && getState().chat.streaming.active) {
+        const isStreamActive = getState().chat.streaming.byId[streamId]?.active ?? false
+        if (assistantToolCalls.length > 0 && executionMode === 'client' && isStreamActive) {
           // Filter out tool calls that were already processed by server
           const pendingToolCalls = assistantToolCalls.filter(tc => !processedToolCallIds.has(tc.id))
 
@@ -1032,12 +1063,15 @@ export const sendMessage = createAsyncThunk<
               // Inform UI of tool result for real-time display
               dispatch(
                 chatSliceActions.streamChunkReceived({
-                  type: 'chunk',
-                  part: 'tool_result',
-                  toolResult: {
-                    tool_use_id: toolCall.id,
-                    content: toolResultBlock.content,
-                    is_error: false,
+                  streamId,
+                  chunk: {
+                    type: 'chunk',
+                    part: 'tool_result',
+                    toolResult: {
+                      tool_use_id: toolCall.id,
+                      content: toolResultBlock.content,
+                      is_error: false,
+                    },
                   },
                 })
               )
@@ -1101,22 +1135,27 @@ export const sendMessage = createAsyncThunk<
       } // end while loop
 
       if (messageId) {
-        dispatch(chatSliceActions.streamCompleted({ messageId }))
+        dispatch(chatSliceActions.streamCompleted({ streamId, messageId, updatePath: true }))
       }
 
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
       dispatch(chatSliceActions.inputCleared())
-      // console.log('returning messageId and userMessage', { messageId, userMessage })
-      return { messageId, userMessage }
+
+      // Schedule stream cleanup after delay
+      setTimeout(() => {
+        dispatch(chatSliceActions.streamPruned({ streamId }))
+      }, STREAM_PRUNE_DELAY)
+
+      return { messageId, userMessage, streamId }
     } catch (error) {
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
 
       if (error instanceof Error && error.name === 'AbortError') {
         return rejectWithValue('Message cancelled')
       }
 
       const message = error instanceof Error ? error.message : 'Failed to send message'
-      dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: message }))
+      dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
     }
   }
@@ -1276,36 +1315,50 @@ export const deleteMessage = createAsyncThunk<
 
 // Branch message when editing - creates new branch while preserving original
 export const editMessageWithBranching = createAsyncThunk<
-  { messageId: MessageId | null; userMessage: any; originalMessageId: MessageId },
-  EditMessagePayload,
+  { messageId: MessageId | null; userMessage: any; originalMessageId: MessageId; streamId: string },
+  EditMessagePayload & { streamId?: string },
   { state: RootState; extra: ThunkExtraArgument }
 >(
   'chat/editMessageWithBranching',
   async (
-    { conversationId, originalMessageId, newContent, modelOverride, think, cwd },
+    { conversationId, originalMessageId, newContent, modelOverride, think, cwd, streamId: providedStreamId },
     { dispatch, getState, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
-    dispatch(chatSliceActions.sendingStarted())
+
+    // Generate or use provided stream ID
+    const streamId = providedStreamId ?? generateStreamId('branch')
+
+    // Get state early to find parent message ID for lineage
+    const state = getState() as RootState
+    const messagesCache = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>([
+      'conversations',
+      conversationId,
+      'messages',
+    ])
+    const cachedMessages = messagesCache?.messages || []
+    const currentMessages = cachedMessages.length > 0 ? cachedMessages : state.chat.conversation.messages
+    const originalMessage = currentMessages.find(m => m.id === originalMessageId)
+    const parentMessageId = originalMessage?.parent_id
+
+    console.log('[editMessageWithBranching] originalMessageId:', originalMessageId, 'parentMessageId:', parentMessageId, 'messagesCount:', currentMessages.length)
+
+    dispatch(
+      chatSliceActions.sendingStarted({
+        streamId,
+        streamType: 'branch',
+        lineage: {
+          originMessageId: originalMessageId,
+          rootMessageId: parentMessageId, // Parent where new branch attaches
+        },
+      })
+    )
 
     let controller: AbortController | undefined
 
     try {
       controller = new AbortController()
       signal.addEventListener('abort', () => controller?.abort())
-
-      const state = getState() as RootState
-
-      // Prioritize React Query cache for messages (source of truth)
-      const messagesCache = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>([
-        'conversations',
-        conversationId,
-        'messages',
-      ])
-      const cachedMessages = messagesCache?.messages || []
-      // Fallback to Redux if React Query cache is empty
-      const currentMessages = cachedMessages.length > 0 ? cachedMessages : state.chat.conversation.messages
-      const originalMessage = currentMessages.find(m => m.id === originalMessageId)
 
       const currentPathIds = state.chat.conversation.currentPath.filter(id => id !== 'root')
       // Truncate path to only include messages strictly before the originalMessageId
@@ -1540,6 +1593,8 @@ export const editMessageWithBranching = createAsyncThunk<
                   dispatch(chatSliceActions.messageAdded(chunk.message))
                   // And update currentPath to this new user branch node
                   dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  // Update stream lineage: assistant response will be child of this user message
+                  dispatch(chatSliceActions.streamLineageUpdated({ streamId, targetParentId: chunk.message.id }))
                   // Sync to React Query cache immediately
                   updateMessageCache(extra.queryClient, conversationId, chunk.message)
                   // Sync user message to local SQLite (fire-and-forget)
@@ -1610,9 +1665,12 @@ export const editMessageWithBranching = createAsyncThunk<
                   // Dispatch structured tool result data for proper rendering in streaming events
                   dispatch(
                     chatSliceActions.streamChunkReceived({
-                      type: 'chunk',
-                      part: 'tool_result',
-                      toolResult: chunk.toolResult,
+                      streamId,
+                      chunk: {
+                        type: 'chunk',
+                        part: 'tool_result',
+                        toolResult: chunk.toolResult,
+                      },
                     })
                   )
                   // Skip generic chunk handler to prevent duplicate dispatch
@@ -1624,18 +1682,21 @@ export const editMessageWithBranching = createAsyncThunk<
                   }
                   dispatch(
                     chatSliceActions.streamChunkReceived({
-                      type: 'chunk',
-                      part: 'tool_call',
-                      toolCall: chunk.toolCall,
+                      streamId,
+                      chunk: {
+                        type: 'chunk',
+                        part: 'tool_call',
+                        toolCall: chunk.toolCall,
+                      },
                     })
                   )
                 } else if (chunk.type === 'generation_started') {
-                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   if (chunk.messageId) {
                     turnAssistantMessageId = chunk.messageId
                   }
                 } else if (chunk.type === 'chunk') {
-                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   if (chunk.part === 'text' && chunk.content) {
                     assistantMessageContent += chunk.content
                   } else if (chunk.part === 'text' && chunk.delta) {
@@ -1669,7 +1730,7 @@ export const editMessageWithBranching = createAsyncThunk<
                     })
                   }
                   // Reset streaming buffer for next iteration
-                  dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
                 } else if (chunk.type === 'free_generations_update') {
                   // Update free generations remaining count
                   dispatch(
@@ -1680,7 +1741,9 @@ export const editMessageWithBranching = createAsyncThunk<
                   )
                 } else if (chunk.type === 'aborted') {
                   // Server deleted the empty assistant message, no need to keep it in client state
-                  dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: 'Generation aborted' } })
+                  )
                 } else if (chunk.type === 'error') {
                   throw new Error(chunk.error || 'Stream error')
                 }
@@ -1827,22 +1890,28 @@ export const editMessageWithBranching = createAsyncThunk<
       } // end while loop
 
       if (messageId) {
-        dispatch(chatSliceActions.streamCompleted({ messageId }))
+        dispatch(chatSliceActions.streamCompleted({ streamId, messageId, updatePath: true }))
         // Clear backup after successfully creating the branch
         dispatch(chatSliceActions.messageArtifactsBackupCleared({ messageId: originalMessageId }))
       }
 
-      dispatch(chatSliceActions.sendingCompleted())
-      return { messageId, userMessage, originalMessageId }
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
+
+      // Schedule stream cleanup after delay
+      setTimeout(() => {
+        dispatch(chatSliceActions.streamPruned({ streamId }))
+      }, STREAM_PRUNE_DELAY)
+
+      return { messageId, userMessage, originalMessageId, streamId }
     } catch (error) {
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
 
       if (error instanceof Error && error.name === 'AbortError') {
         return rejectWithValue('Message cancelled')
       }
 
       const message = error instanceof Error ? error.message : 'Failed to edit message'
-      dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: message }))
+      dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
     }
   }
@@ -1850,17 +1919,31 @@ export const editMessageWithBranching = createAsyncThunk<
 
 // Send message to specific branch
 export const sendMessageToBranch = createAsyncThunk<
-  { messageId: MessageId | null; userMessage: any },
-  BranchMessagePayload,
+  { messageId: MessageId | null; userMessage: any; streamId: string },
+  BranchMessagePayload & { streamId?: string },
   { state: RootState; extra: ThunkExtraArgument }
 >(
   'chat/sendMessageToBranch',
   async (
-    { conversationId, parentId, content, modelOverride, systemPrompt, think, cwd },
+    { conversationId, parentId, content, modelOverride, systemPrompt, think, cwd, streamId: providedStreamId },
     { dispatch, getState, extra, rejectWithValue, signal }
   ) => {
     const { auth } = extra
-    dispatch(chatSliceActions.sendingStarted())
+
+    // Generate or use provided stream ID
+    const streamId = providedStreamId ?? generateStreamId('branch')
+
+    console.log('[sendMessageToBranch] parentId:', parentId)
+
+    dispatch(
+      chatSliceActions.sendingStarted({
+        streamId,
+        streamType: 'branch',
+        lineage: {
+          rootMessageId: parentId,
+        },
+      })
+    )
 
     let controller: AbortController | undefined
 
@@ -2037,19 +2120,18 @@ export const sendMessageToBranch = createAsyncThunk<
 
                 // Handle tool results (accumulated server-side into content_blocks)
                 if (chunk.part === 'tool_result' && chunk.toolResult) {
-                  // console.log(
-                  //   `✅ [sendMessageToBranch] Received tool_result for tool_use_id: ${chunk.toolResult.tool_use_id}`
-                  // )
-
                   // Mark this tool call as processed by server
                   processedToolCallIds.add(chunk.toolResult.tool_use_id)
 
                   // Dispatch structured tool result data for proper rendering in streaming events
                   dispatch(
                     chatSliceActions.streamChunkReceived({
-                      type: 'chunk',
-                      part: 'tool_result',
-                      toolResult: chunk.toolResult,
+                      streamId,
+                      chunk: {
+                        type: 'chunk',
+                        part: 'tool_result',
+                        toolResult: chunk.toolResult,
+                      },
                     })
                   )
                   // Skip generic chunk handler to prevent duplicate dispatch
@@ -2061,18 +2143,21 @@ export const sendMessageToBranch = createAsyncThunk<
                   }
                   dispatch(
                     chatSliceActions.streamChunkReceived({
-                      type: 'chunk',
-                      part: 'tool_call',
-                      toolCall: chunk.toolCall,
+                      streamId,
+                      chunk: {
+                        type: 'chunk',
+                        part: 'tool_call',
+                        toolCall: chunk.toolCall,
+                      },
                     })
                   )
                 } else if (chunk.type === 'generation_started') {
-                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   if (chunk.messageId) {
                     turnAssistantMessageId = chunk.messageId
                   }
                 } else if (chunk.type === 'chunk') {
-                  dispatch(chatSliceActions.streamChunkReceived(chunk))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   if (chunk.part === 'text' && chunk.content) {
                     assistantMessageContent += chunk.content
                   } else if (chunk.part === 'text' && chunk.delta) {
@@ -2099,7 +2184,7 @@ export const sendMessageToBranch = createAsyncThunk<
                     })
                   }
                   // Reset streaming buffer for next iteration
-                  dispatch(chatSliceActions.streamChunkReceived({ type: 'reset' } as any))
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
                 } else if (chunk.type === 'free_generations_update') {
                   // Update free generations remaining count
                   dispatch(
@@ -2110,7 +2195,9 @@ export const sendMessageToBranch = createAsyncThunk<
                   )
                 } else if (chunk.type === 'aborted') {
                   // Server deleted the empty assistant message, no need to keep it in client state
-                  dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: 'Generation aborted' }))
+                  dispatch(
+                    chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: 'Generation aborted' } })
+                  )
                 } else if (chunk.type === 'error') {
                   throw new Error(chunk.error || 'Stream error')
                 }
@@ -2271,21 +2358,27 @@ export const sendMessageToBranch = createAsyncThunk<
       } // end while loop
 
       if (messageId) {
-        dispatch(chatSliceActions.streamCompleted({ messageId }))
+        dispatch(chatSliceActions.streamCompleted({ streamId, messageId, updatePath: true }))
       }
 
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
       dispatch(chatSliceActions.inputCleared())
-      return { messageId, userMessage }
+
+      // Schedule stream cleanup after delay
+      setTimeout(() => {
+        dispatch(chatSliceActions.streamPruned({ streamId }))
+      }, STREAM_PRUNE_DELAY)
+
+      return { messageId, userMessage, streamId }
     } catch (error) {
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
 
       if (error instanceof Error && error.name === 'AbortError') {
         return rejectWithValue('Message cancelled')
       }
 
       const message = error instanceof Error ? error.message : 'Failed to send message'
-      dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: message }))
+      dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
     }
   }
@@ -3040,16 +3133,33 @@ export const fetchCCSlashCommands = createAsyncThunk<
  * Always uses local server - CC is local-only.
  */
 export const sendCCMessage = createAsyncThunk<
-  { sessionId: string; messageCount: number; userMessageId?: MessageId },
-  SendCCMessagePayload,
+  { sessionId: string; messageCount: number; userMessageId?: MessageId; streamId: string },
+  SendCCMessagePayload & { streamId?: string },
   { state: RootState; extra: ThunkExtraArgument }
 >(
   'chat/sendCCMessage',
   async (
-    { conversationId, message, cwd, permissionMode = 'default', resume, sessionId: resumeSessionId, forkSession },
+    {
+      conversationId,
+      message,
+      cwd,
+      permissionMode = 'default',
+      resume,
+      sessionId: resumeSessionId,
+      forkSession,
+      streamId: providedStreamId,
+    },
     { dispatch, extra, rejectWithValue, signal }
   ) => {
-    dispatch(chatSliceActions.sendingStarted())
+    // Generate or use provided stream ID
+    const streamId = providedStreamId ?? generateStreamId('primary')
+
+    dispatch(
+      chatSliceActions.sendingStarted({
+        streamId,
+        streamType: 'primary',
+      })
+    )
 
     let controller: AbortController | undefined
 
@@ -3187,19 +3297,24 @@ export const sendCCMessage = createAsyncThunk<
         throw new Error('No session ID received from CC')
       }
 
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
       dispatch(chatSliceActions.inputCleared())
 
-      return { sessionId, messageCount, userMessageId }
+      // Schedule stream cleanup after delay
+      setTimeout(() => {
+        dispatch(chatSliceActions.streamPruned({ streamId }))
+      }, STREAM_PRUNE_DELAY)
+
+      return { sessionId, messageCount, userMessageId, streamId }
     } catch (error) {
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
 
       if (error instanceof Error && error.name === 'AbortError') {
         return rejectWithValue('CC message cancelled')
       }
 
       const message = error instanceof Error ? error.message : 'Failed to send CC message'
-      dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: message }))
+      dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
     }
   }
@@ -3210,8 +3325,8 @@ export const sendCCMessage = createAsyncThunk<
  * Always uses local server - CC is local-only.
  */
 export const sendCCBranch = createAsyncThunk<
-  { sessionId: string; messageCount: number; userMessageId?: MessageId },
-  SendCCBranchPayload,
+  { sessionId: string; messageCount: number; userMessageId?: MessageId; streamId: string },
+  SendCCBranchPayload & { streamId?: string },
   { state: RootState; extra: ThunkExtraArgument }
 >(
   'chat/sendCCBranch',
@@ -3225,10 +3340,22 @@ export const sendCCBranch = createAsyncThunk<
       parentId,
       sessionId: resumeSessionId,
       forkSession,
+      streamId: providedStreamId,
     },
     { dispatch, extra, rejectWithValue, signal }
   ) => {
-    dispatch(chatSliceActions.sendingStarted())
+    // Generate or use provided stream ID
+    const streamId = providedStreamId ?? generateStreamId('branch')
+
+    dispatch(
+      chatSliceActions.sendingStarted({
+        streamId,
+        streamType: 'branch',
+        lineage: {
+          rootMessageId: parentId,
+        },
+      })
+    )
 
     let controller: AbortController | undefined
 
@@ -3369,19 +3496,24 @@ export const sendCCBranch = createAsyncThunk<
         throw new Error('No session ID received from CC branch')
       }
 
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
       dispatch(chatSliceActions.inputCleared())
 
-      return { sessionId, messageCount, userMessageId }
+      // Schedule stream cleanup after delay
+      setTimeout(() => {
+        dispatch(chatSliceActions.streamPruned({ streamId }))
+      }, STREAM_PRUNE_DELAY)
+
+      return { sessionId, messageCount, userMessageId, streamId }
     } catch (error) {
-      dispatch(chatSliceActions.sendingCompleted())
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
 
       if (error instanceof Error && error.name === 'AbortError') {
         return rejectWithValue('CC branch message cancelled')
       }
 
       const message = error instanceof Error ? error.message : 'Failed to send CC branch message'
-      dispatch(chatSliceActions.streamChunkReceived({ type: 'error', error: message }))
+      dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
     }
   }

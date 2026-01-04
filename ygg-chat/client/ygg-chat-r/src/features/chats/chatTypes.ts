@@ -139,6 +139,17 @@ export interface StreamEvent {
   complete?: boolean
 }
 
+// Stream type classification for multi-stream support
+export type StreamType = 'primary' | 'subagent' | 'tool' | 'branch'
+
+// Lineage metadata for tracking stream hierarchy (subagents, tool-spawned streams)
+export interface StreamLineage {
+  parentStreamId?: string        // If spawned from another stream
+  rootMessageId?: MessageId      // The message whose branch this stream belongs to
+  originMessageId?: MessageId    // The message that triggered this subagent/tool-run
+  branchId?: string              // Optional disambiguator for branches sharing a root
+}
+
 export interface StreamState {
   active: boolean
   buffer: string
@@ -152,6 +163,51 @@ export interface StreamState {
   error: string | null
   finished: boolean
   streamingMessageId: MessageId | null
+  // Lineage metadata for subagent/parallel stream support
+  lineage: StreamLineage
+  // Stream metadata
+  createdAt: string
+  streamType: StreamType
+}
+
+// Map of stream states keyed by streamId
+export interface StreamStateById {
+  [streamId: string]: StreamState
+}
+
+// Root state container for multi-stream support
+export interface StreamingRootState {
+  // Active stream IDs (in-flight)
+  activeIds: string[]
+  // All stream states keyed by ID
+  byId: StreamStateById
+  // Tracks the "primary" stream for the current view
+  primaryStreamId: string | null
+  // Last completed stream for bookkeeping
+  lastCompletedId: string | null
+}
+
+// Action payloads for streaming actions
+export interface SendingStartedPayload {
+  streamId: string
+  streamType?: StreamType
+  lineage?: StreamLineage
+}
+
+export interface StreamChunkPayload {
+  streamId: string
+  chunk: StreamChunk
+}
+
+export interface StreamCompletedPayload {
+  streamId: string
+  messageId: MessageId
+  updatePath?: boolean  // Controls whether to update currentPath
+}
+
+export interface StreamingAbortedPayload {
+  streamId: string
+  error?: string
 }
 
 export interface Model extends BaseModel {}
@@ -238,7 +294,7 @@ export type OperationMode = 'plan' | 'execute'
 export interface ChatState {
   providerState: ProviderState
   composition: CompositionState
-  streaming: StreamState
+  streaming: StreamingRootState
   ui: {
     modelSelectorOpen: boolean
   }

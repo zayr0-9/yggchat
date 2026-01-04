@@ -10,11 +10,48 @@ import {
   Message,
   MessageInput,
   OperationMode,
-  StreamChunk,
+  SendingStartedPayload,
+  StreamChunkPayload,
+  StreamCompletedPayload,
+  StreamingAbortedPayload,
+  StreamState,
   ToolCallPermissionRequest,
   UserSystemPrompt,
 } from './chatTypes'
+import { createEmptyStreamState, DEFAULT_STREAM_ID } from './streamHelpers'
 import toolDefinitions from './toolDefinitions'
+
+// Helper function to build path from root to a message
+const buildPathToMessage = (messages: Message[], messageId: MessageId): MessageId[] => {
+  const path: MessageId[] = []
+  let currentId: MessageId | null = messageId
+  while (currentId !== null) {
+    path.unshift(currentId)
+    const message = messages.find(m => m.id === currentId)
+    currentId = message?.parent_id ?? null
+  }
+  return path
+}
+
+// Helper to check if a message is on the current branch
+const isOnCurrentBranch = (currentPath: MessageId[], messages: Message[], messageId: MessageId): boolean => {
+  if (currentPath.length === 0) return true
+  const messagePath = buildPathToMessage(messages, messageId)
+  // Check if the message's path shares the same prefix as current path
+  const minLen = Math.min(currentPath.length, messagePath.length)
+  for (let i = 0; i < minLen; i++) {
+    if (currentPath[i] !== messagePath[i]) return false
+  }
+  return true
+}
+
+// Helper to get or create stream state with fallback
+const getOrCreateStream = (state: ChatState, streamId: string): StreamState => {
+  if (!state.streaming.byId[streamId]) {
+    state.streaming.byId[streamId] = createEmptyStreamState('primary')
+  }
+  return state.streaming.byId[streamId]
+}
 
 const makeInitialState = (): ChatState => ({
   providerState: {
@@ -37,17 +74,12 @@ const makeInitialState = (): ChatState => ({
     optimisticMessage: null,
     optimisticBranchMessage: null,
   },
-  // activeChat:{},
+  // Multi-stream state container
   streaming: {
-    active: false,
-    buffer: '',
-    thinkingBuffer: '',
-    toolCalls: [],
-    events: [],
-    messageId: null,
-    error: null,
-    finished: false,
-    streamingMessageId: null,
+    activeIds: [],
+    byId: {},
+    primaryStreamId: null,
+    lastCompletedId: null,
   },
   ui: {
     modelSelectorOpen: false,
@@ -152,79 +184,161 @@ export const chatSlice = createSlice({
       state.composition.editingBranch = action.payload
     },
 
-    sendingStarted: state => {
-      state.composition.sending = true
-      state.streaming.active = true
-      state.streaming.buffer = ''
-      state.streaming.thinkingBuffer = ''
-      state.streaming.toolCalls = []
-      state.composition.input.content = ''
-      state.streaming.error = null
-      state.streaming.finished = false
-      state.streaming.streamingMessageId = null
+    sendingStarted: (state, action: PayloadAction<SendingStartedPayload | undefined>) => {
+      const streamId = action.payload?.streamId ?? DEFAULT_STREAM_ID
+      const streamType = action.payload?.streamType ?? 'primary'
+      const lineage = action.payload?.lineage ?? {}
+
+      console.log('[sendingStarted] streamId:', streamId, 'lineage:', JSON.stringify(lineage))
+
+      // Create new stream state
+      state.streaming.byId[streamId] = {
+        ...createEmptyStreamState(streamType, lineage),
+        active: true,
+      }
+
+      // Add to active list (dedupe)
+      if (!state.streaming.activeIds.includes(streamId)) {
+        state.streaming.activeIds.push(streamId)
+      }
+
+      // Set as primary if it's the main stream
+      if (streamType === 'primary') {
+        state.streaming.primaryStreamId = streamId
+      }
+
+      // Legacy: Keep composition.sending in sync for primary streams
+      if (streamType === 'primary') {
+        state.composition.sending = true
+        state.composition.input.content = ''
+      }
     },
 
-    sendingCompleted: state => {
-      state.composition.sending = false
-      state.streaming.active = false
-      state.composition.input.content = ''
-      state.composition.imageDrafts = []
-      state.streaming.finished = true
-      state.streaming.streamingMessageId = null
+    sendingCompleted: (state, action: PayloadAction<{ streamId: string } | undefined>) => {
+      const streamId = action.payload?.streamId ?? DEFAULT_STREAM_ID
+      const stream = state.streaming.byId[streamId]
+
+      if (stream) {
+        stream.active = false
+        stream.finished = true
+        stream.streamingMessageId = null
+
+        // Remove from active list
+        state.streaming.activeIds = state.streaming.activeIds.filter(id => id !== streamId)
+
+        // Legacy sync for primary streams
+        if (stream.streamType === 'primary') {
+          state.composition.sending = false
+          state.composition.imageDrafts = []
+        }
+
+        // Clear primary if this was the primary stream
+        if (state.streaming.primaryStreamId === streamId) {
+          state.streaming.primaryStreamId = null
+        }
+      } else {
+        // Fallback for backward compatibility when no stream exists
+        state.composition.sending = false
+        state.composition.imageDrafts = []
+      }
     },
 
-    streamingAborted: state => {
+    streamingAborted: (state, action: PayloadAction<StreamingAbortedPayload | undefined>) => {
+      const streamId = action.payload?.streamId ?? DEFAULT_STREAM_ID
+      const error = action.payload?.error ?? 'Generation aborted'
+      const stream = state.streaming.byId[streamId]
+
+      if (stream) {
+        stream.active = false
+        stream.error = error
+        stream.streamingMessageId = null
+
+        // Remove from active list
+        state.streaming.activeIds = state.streaming.activeIds.filter(id => id !== streamId)
+
+        // Legacy sync for primary streams
+        if (stream.streamType === 'primary') {
+          state.composition.sending = false
+        }
+
+        // Clear primary if this was the primary stream
+        if (state.streaming.primaryStreamId === streamId) {
+          state.streaming.primaryStreamId = null
+        }
+      } else {
+        // Fallback for backward compatibility
+        state.composition.sending = false
+      }
+    },
+
+    // Abort all active streams at once
+    allStreamsAborted: state => {
+      for (const streamId of state.streaming.activeIds) {
+        const stream = state.streaming.byId[streamId]
+        if (stream) {
+          stream.active = false
+          stream.error = 'Generation aborted'
+          stream.streamingMessageId = null
+        }
+      }
+      state.streaming.activeIds = []
+      state.streaming.primaryStreamId = null
       state.composition.sending = false
-      state.streaming.active = false
-      state.streaming.error = 'Generation aborted'
-      state.streaming.streamingMessageId = null
     },
 
     // Streaming - optimized buffer management with sequential event logging
-    streamChunkReceived: (state, action: PayloadAction<StreamChunk>) => {
-      const chunk = action.payload
+    // Supports both legacy (StreamChunk) and new (StreamChunkPayload with streamId) formats
+    streamChunkReceived: (state, action: PayloadAction<StreamChunkPayload | any>) => {
+      // Handle both old format (just chunk) and new format (with streamId)
+      const hasStreamId = action.payload && 'streamId' in action.payload && 'chunk' in action.payload
+      const streamId = hasStreamId ? action.payload.streamId : DEFAULT_STREAM_ID
+      const chunk = hasStreamId ? action.payload.chunk : action.payload
+
+      // Get or create the target stream
+      const stream = getOrCreateStream(state, streamId)
+
       if (chunk.type === 'reset') {
-        state.streaming.buffer = ''
-        state.streaming.thinkingBuffer = ''
-        state.streaming.toolCalls = []
-        state.streaming.events = []
-        state.streaming.error = null
+        stream.buffer = ''
+        stream.thinkingBuffer = ''
+        stream.toolCalls = []
+        stream.events = []
+        stream.error = null
         return
       }
 
       if (chunk.type === 'generation_started') {
-        state.streaming.streamingMessageId = chunk.messageId || null
+        stream.streamingMessageId = chunk.messageId || null
         // Clear previous streaming events when starting new generation
-        state.streaming.events = []
-        state.streaming.buffer = ''
-        state.streaming.thinkingBuffer = ''
-        state.streaming.toolCalls = []
+        stream.events = []
+        stream.buffer = ''
+        stream.thinkingBuffer = ''
+        stream.toolCalls = []
       } else if (chunk.type === 'chunk') {
         if (chunk.part === 'reasoning') {
           const delta = chunk.delta ?? chunk.content ?? ''
-          state.streaming.thinkingBuffer += delta
+          stream.thinkingBuffer += delta
           // Log reasoning delta immediately so it appears during streaming
-          state.streaming.events.push({
+          stream.events.push({
             type: 'reasoning',
             delta,
           })
         } else if (chunk.part === 'tool_call') {
           // Handle structured tool call data (supports both legacy and new formats)
           if (chunk.toolCall) {
-            const existingIndex = state.streaming.toolCalls.findIndex(tc => tc.id === chunk.toolCall!.id)
+            const existingIndex = stream.toolCalls.findIndex(tc => tc.id === chunk.toolCall!.id)
             if (existingIndex >= 0) {
-              state.streaming.toolCalls[existingIndex] = chunk.toolCall
+              stream.toolCalls[existingIndex] = chunk.toolCall
             } else {
-              state.streaming.toolCalls.push(chunk.toolCall)
+              stream.toolCalls.push(chunk.toolCall)
             }
 
             // Only add to events if this tool call ID hasn't been logged yet (deduplication)
-            const eventExists = state.streaming.events.some(
+            const eventExists = stream.events.some(
               e => e.type === 'tool_call' && e.toolCall?.id === chunk.toolCall!.id
             )
 
             if (!eventExists) {
-              state.streaming.events.push({
+              stream.events.push({
                 type: 'tool_call',
                 toolCall: chunk.toolCall,
                 complete: true,
@@ -235,12 +349,12 @@ export const chatSlice = createSlice({
           // Handle tool result events during streaming
           if (chunk.toolResult) {
             // Only add to events if this tool_use_id hasn't been logged yet (deduplication)
-            const resultExists = state.streaming.events.some(
+            const resultExists = stream.events.some(
               e => e.type === 'tool_result' && e.toolResult?.tool_use_id === chunk.toolResult!.tool_use_id
             )
 
             if (!resultExists) {
-              state.streaming.events.push({
+              stream.events.push({
                 type: 'tool_result',
                 toolResult: chunk.toolResult,
                 complete: true,
@@ -250,12 +364,10 @@ export const chatSlice = createSlice({
         } else if (chunk.part === 'image') {
           // Handle image events from image generation models
           // Check for duplicates before adding
-          const imageExists = state.streaming.events.some(
-            e => e.type === 'image' && e.url === chunk.url
-          )
+          const imageExists = stream.events.some(e => e.type === 'image' && e.url === chunk.url)
 
           if (!imageExists) {
-            state.streaming.events.push({
+            stream.events.push({
               type: 'image',
               url: chunk.url,
               mimeType: chunk.mimeType || 'image/png',
@@ -264,9 +376,9 @@ export const chatSlice = createSlice({
           }
         } else {
           const delta = chunk.delta ?? chunk.content ?? ''
-          state.streaming.buffer += delta
+          stream.buffer += delta
           // Log text deltas as they come (text is typically streamed token by token)
-          state.streaming.events.push({
+          stream.events.push({
             type: 'text',
             delta,
           })
@@ -274,20 +386,20 @@ export const chatSlice = createSlice({
       } else if (chunk.type === 'tool_call') {
         // Handle legacy tool_call format (chunk.type === 'tool_call' directly)
         if (chunk.toolCall) {
-          const existingIndex = state.streaming.toolCalls.findIndex(tc => tc.id === chunk.toolCall!.id)
+          const existingIndex = stream.toolCalls.findIndex(tc => tc.id === chunk.toolCall!.id)
           if (existingIndex >= 0) {
-            state.streaming.toolCalls[existingIndex] = chunk.toolCall
+            stream.toolCalls[existingIndex] = chunk.toolCall
           } else {
-            state.streaming.toolCalls.push(chunk.toolCall)
+            stream.toolCalls.push(chunk.toolCall)
           }
 
           // Only add to events if this tool call ID hasn't been logged yet (deduplication)
-          const eventExists = state.streaming.events.some(
+          const eventExists = stream.events.some(
             e => e.type === 'tool_call' && e.toolCall?.id === chunk.toolCall!.id
           )
 
           if (!eventExists) {
-            state.streaming.events.push({
+            stream.events.push({
               type: 'tool_call',
               toolCall: chunk.toolCall,
               complete: true,
@@ -295,35 +407,102 @@ export const chatSlice = createSlice({
           }
         }
       } else if (chunk.type === 'complete') {
-        state.streaming.messageId = chunk.message?.id || null
+        stream.messageId = chunk.message?.id || null
         // Do NOT set active=false here. Wait for explicit streamCompleted action.
         // This is crucial for multi-turn loops where 'complete' chunks arrive per turn.
       } else if (chunk.type === 'error') {
-        state.streaming.error = chunk.error || 'Unknown stream error'
-        state.streaming.active = false
-        state.streaming.streamingMessageId = null
+        stream.error = chunk.error || 'Unknown stream error'
+        stream.active = false
+        stream.streamingMessageId = null
+
+        // Remove from active list
+        state.streaming.activeIds = state.streaming.activeIds.filter(id => id !== streamId)
+
+        // Clear primary if this was the primary stream
+        if (state.streaming.primaryStreamId === streamId) {
+          state.streaming.primaryStreamId = null
+        }
       }
     },
 
-    streamCompleted: (state, action: PayloadAction<{ messageId: MessageId }>) => {
-      state.streaming.active = false
-      state.streaming.finished = true
-      state.streaming.messageId = action.payload.messageId
-      // Fallback: ensure currentPath points to the completed assistant message
-      const targetId = action.payload.messageId
-      const exists = state.conversation.messages.some(m => m.id === targetId)
-      if (exists) {
-        const buildPathToMessage = (messageId: MessageId): MessageId[] => {
-          const path: MessageId[] = []
-          let currentId: MessageId | null = messageId
-          while (currentId !== null) {
-            path.unshift(currentId)
-            const message = state.conversation.messages.find(m => m.id === currentId)
-            currentId = message?.parent_id ?? null
+    streamCompleted: (state, action: PayloadAction<StreamCompletedPayload | { messageId: MessageId }>) => {
+      // Handle both old format (just messageId) and new format (with streamId and updatePath)
+      const hasStreamId = 'streamId' in action.payload
+      const streamId = hasStreamId ? (action.payload as StreamCompletedPayload).streamId : DEFAULT_STREAM_ID
+      const messageId = action.payload.messageId
+      const updatePath = hasStreamId ? (action.payload as StreamCompletedPayload).updatePath ?? true : true
+
+      const stream = state.streaming.byId[streamId]
+
+      if (stream) {
+        // Mark stream as complete
+        stream.active = false
+        stream.finished = true
+        stream.messageId = messageId
+
+        // Remove from active list
+        state.streaming.activeIds = state.streaming.activeIds.filter(id => id !== streamId)
+
+        // Update last completed
+        state.streaming.lastCompletedId = streamId
+
+        // CRITICAL: Only update currentPath if explicitly requested AND conditions are met
+        if (updatePath) {
+          const shouldUpdatePath =
+            state.conversation.currentPath.length === 0 ||
+            isOnCurrentBranch(state.conversation.currentPath, state.conversation.messages, messageId)
+
+          if (shouldUpdatePath) {
+            const exists = state.conversation.messages.some(m => m.id === messageId)
+            if (exists) {
+              state.conversation.currentPath = buildPathToMessage(state.conversation.messages, messageId)
+            }
           }
-          return path
         }
-        state.conversation.currentPath = buildPathToMessage(targetId)
+
+        // Clear primary if this was the primary stream
+        if (state.streaming.primaryStreamId === streamId) {
+          state.streaming.primaryStreamId = null
+        }
+
+        // Legacy: Keep composition.sending in sync for primary streams
+        if (stream.streamType === 'primary') {
+          state.composition.sending = false
+        }
+      } else {
+        // Fallback for backward compatibility when using old format without stream
+        const exists = state.conversation.messages.some(m => m.id === messageId)
+        if (exists && updatePath) {
+          state.conversation.currentPath = buildPathToMessage(state.conversation.messages, messageId)
+        }
+        state.composition.sending = false
+      }
+    },
+
+    // Garbage collection: remove a finished stream from byId
+    streamPruned: (state, action: PayloadAction<{ streamId: string }>) => {
+      const { streamId } = action.payload
+
+      // Remove from byId
+      delete state.streaming.byId[streamId]
+
+      // Clean up activeIds (should already be removed, but safety)
+      state.streaming.activeIds = state.streaming.activeIds.filter(id => id !== streamId)
+
+      // Clear lastCompletedId if it matches
+      if (state.streaming.lastCompletedId === streamId) {
+        state.streaming.lastCompletedId = null
+      }
+    },
+
+    // Update stream lineage after getting target parent ID
+    // This is called when we know the actual parent of the streaming message
+    streamLineageUpdated: (state, action: PayloadAction<{ streamId: string; targetParentId: MessageId }>) => {
+      const { streamId, targetParentId } = action.payload
+      const stream = state.streaming.byId[streamId]
+      if (stream) {
+        stream.lineage.rootMessageId = targetParentId
+        console.log('[streamLineageUpdated] streamId:', streamId.slice(-8), 'targetParentId:', String(targetParentId).slice(0, 8))
       }
     },
 
