@@ -32,24 +32,35 @@ const toolDefinitions: ToolDefinition[] = [
     name: 'todo_list',
     enabled: true,
     description:
-      'Manage disk-backed Markdown todo lists stored per user. Each list is a human-readable `.md` file (id = noun-noun-noun). When creating a new todo, the tool automatically generates the file name/id and returns it.',
+      'Manage Markdown todo lists stored as .md files. Names are auto-generated (e.g., "goku-sage-ember"). Four actions: create, list, read, edit.',
     inputSchema: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'read', 'write', 'generate_id', 'directory'],
+          enum: ['create', 'list', 'read', 'edit'],
           description:
-            'Requested todo list operation. list -> return ids; read -> require id; write -> accepts content and auto-generates a file; generate_id -> no id needed; directory -> returns storage folder.',
+            'Action to perform: "create" = create a new todo list (name auto-generated, returns the generated name); "list" = show 5 most recent todo lists; "read" = get contents of a specific list by name; "edit" = find and replace a line in an existing list.',
         },
-        id: {
+        name: {
           type: 'string',
-          description: 'Hyphenated noun id used when reading an existing todo. Example: ember-aurora-sage.',
+          description:
+            'Todo list name (required for read, edit). Use the auto-generated name returned from "create" or shown in "list".',
         },
         content: {
           type: 'string',
           description:
-            'Markdown payload to write for the todo list (required for write action). The tool ignores any provided id and generates the filename itself.',
+            'Full Markdown content for "create" action. Use standard Markdown checkbox format: "- [ ] Task" for pending, "- [x] Task" for completed.',
+        },
+        search: {
+          type: 'string',
+          description:
+            'For "edit" action: text to search for. Matches any line containing this text. Example: "Buy milk" will match line "- [ ] Buy milk".',
+        },
+        replacement: {
+          type: 'string',
+          description:
+            'For "edit" action: the full replacement line. Example: to mark done, use "- [x] Buy milk". To update text, use "- [ ] Buy 2% milk".',
         },
       },
       required: ['action'],

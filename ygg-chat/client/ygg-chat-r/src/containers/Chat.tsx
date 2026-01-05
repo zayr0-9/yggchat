@@ -36,6 +36,8 @@ import {
   selectConversationMessages,
   selectCurrentConversationId,
   selectCurrentPath,
+  // Chat selectors
+  selectCurrentViewStream,
   selectDisplayMessages,
   selectFocusedChatMessageId,
   selectHeimdallCompactMode,
@@ -43,8 +45,6 @@ import {
   selectHeimdallError,
   selectHeimdallLoading,
   selectMessageInput,
-  // Chat selectors
-  selectCurrentViewStream,
   selectMultiReplyCount,
   selectOperationMode,
   selectProviderState,
@@ -185,13 +185,18 @@ function Chat() {
   const selectedPath = useAppSelector(selectCurrentPath)
   const multiReplyCount = useAppSelector(selectMultiReplyCount)
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
-  
+
   // Debug logging for stream switching - only when streams are active
   useEffect(() => {
     if (streamingRoot.activeIds.length > 0) {
-      console.log('[Chat] activeStreams:', streamingRoot.activeIds.length, 
-        'displaying:', currentViewStream?.id?.slice(-8) || 'none',
-        'pathEnd:', selectedPath?.slice(-1)?.[0]?.slice(0, 8))
+      console.log(
+        '[Chat] activeStreams:',
+        streamingRoot.activeIds.length,
+        'displaying:',
+        currentViewStream?.id?.slice(-8) || 'none',
+        'pathEnd:',
+        selectedPath?.slice(-1)?.[0]?.slice(0, 8)
+      )
     }
   }, [streamingRoot.activeIds, currentViewStream?.id, selectedPath])
   // const ideContext = useAppSelector(selectIdeContext)
@@ -218,6 +223,8 @@ function Chat() {
   const [containerHeight, setContainerHeight] = useState(1100)
   // Credits refresh loading state
   const [isRefreshingCredits, setIsRefreshingCredits] = useState(false)
+  // Todo list collapsed state
+  const [todoListCollapsed, setTodoListCollapsed] = useState(false)
 
   const handleCloseExpandedPreview = useCallback(() => {
     if (!expandedFilePath) return
@@ -2225,6 +2232,94 @@ function Chat() {
     handleExplainFromSelection,
   ])
 
+  // Helper: Parse todo items from markdown content
+  const TODO_ITEM_REGEX = /^\s*[-*]\s*\[(x|X| )\]\s*(.*)$/
+  const parseTodoItems = (markdownContent: string): { text: string; done: boolean }[] => {
+    const items: { text: string; done: boolean }[] = []
+    const lines = markdownContent.split('\n')
+    for (const line of lines) {
+      const match = TODO_ITEM_REGEX.exec(line)
+      if (match) {
+        items.push({
+          done: match[1].toLowerCase() === 'x',
+          text: match[2].trim(),
+        })
+      }
+    }
+    return items
+  }
+
+  // Extract the most recent todo_list tool result from displayMessages
+  // This finds the latest tool_use block for 'todo_list' and its corresponding result
+  const latestTodoList = useMemo(() => {
+    // Iterate from most recent to oldest
+    for (let i = displayMessages.length - 1; i >= 0; i--) {
+      const msg = displayMessages[i]
+      if ((msg.role === 'assistant' || msg.role === 'ex_agent') && msg.content_blocks) {
+        let blocks: ContentBlock[] = []
+        try {
+          if (typeof msg.content_blocks === 'object') {
+            blocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [msg.content_blocks]
+          } else if (typeof msg.content_blocks === 'string') {
+            const parsed = JSON.parse(msg.content_blocks)
+            blocks = Array.isArray(parsed) ? parsed : [parsed]
+          }
+        } catch {
+          continue
+        }
+
+        // Look for tool_use blocks for todo_list and find corresponding tool_result
+        for (const block of blocks) {
+          if (block.type === 'tool_use' && (block as any).name === 'todo_list') {
+            const toolUseBlock = block as any
+            // Find the corresponding tool_result
+            const resultBlock = blocks.find(
+              b => b.type === 'tool_result' && (b as any).tool_use_id === toolUseBlock.id
+            ) as any
+            if (resultBlock && !resultBlock.is_error) {
+              const action = toolUseBlock.input?.action
+              if (action === 'create' || action === 'read' || action === 'edit') {
+                // Parse the result content to extract the markdown content
+                let resultData: any = resultBlock.content
+
+                // If content is a string, try to parse it as JSON
+                if (typeof resultData === 'string') {
+                  try {
+                    resultData = JSON.parse(resultData)
+                  } catch {
+                    // If parsing fails, use the string as-is (might be raw markdown)
+                  }
+                }
+
+                // Extract the markdown content from the result object
+                let markdownContent = ''
+                if (typeof resultData === 'object' && resultData !== null && 'content' in resultData) {
+                  markdownContent = resultData.content || ''
+                } else if (typeof resultData === 'string') {
+                  markdownContent = resultData
+                }
+
+                // Parse the markdown into todo items
+                const items = parseTodoItems(markdownContent)
+
+                // Only return if there are actual todo items
+                if (items.length > 0) {
+                  return {
+                    name: resultData?.name || toolUseBlock.input?.name || 'Todo List',
+                    action,
+                    items,
+                    messageId: msg.id,
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return null
+  }, [displayMessages])
+
   // Removed obsolete streaming completion effect that synthesized assistant messages.
   // The streaming thunks now dispatch messageAdded and messageBranchCreated directly,
   // and reducers update currentPath appropriately. This avoids race conditions and
@@ -2609,6 +2704,59 @@ function Chat() {
                 onDeny={() => dispatch(respondToToolPermission(false))}
                 onAllowAll={() => dispatch(respondToToolPermissionAndEnableAll())}
               />
+            )}
+            {/* Todo List Display - shows latest todo_list tool result */}
+            {latestTodoList && latestTodoList.items && latestTodoList.items.length > 0 && (
+              <div className='mx-2 mt-2 mb-1 px-2 py-0.5 rounded-[16px] bg-neutral-100/80 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700'>
+                <div className='flex items-center justify-between'>
+                  <span className='text-xs font-medium text-neutral-600 dark:text-neutral-400 flex items-center gap-1.5'>
+                    <i className='bx bx-list-check text-2xl'></i>
+                    <span className='text-[12px]'>{latestTodoList.name || 'Todo List'}</span>
+                    {todoListCollapsed && (
+                      <span className='text-[10px] text-neutral-400 dark:text-neutral-500 ml-1'>
+                        ({latestTodoList.items.filter(i => i.done).length}/{latestTodoList.items.length})
+                      </span>
+                    )}
+                  </span>
+                  <div className='flex items-center gap-2'>
+                    <span className='text-[10px] text-neutral-400 dark:text-neutral-500'>
+                      {latestTodoList.action === 'create'
+                        ? 'Created'
+                        : latestTodoList.action === 'edit'
+                          ? 'Updated'
+                          : ''}
+                    </span>
+                    <button
+                      onClick={() => setTodoListCollapsed(!todoListCollapsed)}
+                      className='py-0.5 mt-1 px-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors'
+                      title={todoListCollapsed ? 'Expand todo list' : 'Collapse todo list'}
+                    >
+                      <i
+                        className={`bx ${todoListCollapsed ? 'bx-chevron-down' : 'bx-chevron-up'} text-sm text-neutral-500`}
+                      ></i>
+                    </button>
+                  </div>
+                </div>
+                {!todoListCollapsed && (
+                  <ul className='space-y-1 pb-2 mt-1.5 max-h-40 overflow-y-auto thin-scrollbar'>
+                    {latestTodoList.items.map((item, idx) => (
+                      <li
+                        key={`todo-item-${idx}`}
+                        className={`flex items-center gap-2 text-xs ${
+                          item.done
+                            ? 'text-neutral-500 dark:text-neutral-400'
+                            : 'text-neutral-800 dark:text-neutral-200'
+                        }`}
+                      >
+                        <span className={item.done ? 'text-green-600 dark:text-green-400' : 'text-neutral-400'}>
+                          {item.done ? '[✓]' : '[ ]'}
+                        </span>
+                        <span className={item.done ? 'line-through opacity-80' : ''}>{item.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
             <InputTextArea
               value={localInput}

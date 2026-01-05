@@ -1,55 +1,134 @@
-# TODO List Utility: `server/src/utils/tools/core/todoList.ts`
+# TODO List Tool: `electron/tools/todoMd.ts`
 
-This utility provides file-backed TODO storage for the CLI/agents in the repository. It keeps markdown-based TODO items under a directory that is easy to locate and sandbox for local workflows.
+This tool provides file-backed TODO storage as Markdown files. Names are **auto-generated** using a dictionary of fun words (e.g., "goku-sage-ember"). Four actions: create, list, read, edit.
 
-## Configuration & storage location
+## Storage Location
 
-- `YGG_TODO_DIRECTORY` (optional): if set, the utility resolves the provided path and uses it as the root directory for TODO storage.
-- When the environment variable is not provided, the utility defaults to `${process.cwd()}/.ygg-chat-todos`.
-- Inside the root directory, all TODO files live in a `todos/` subfolder and use the `.md` extension.
+- `YGG_TODO_DIRECTORY` (optional): Override the storage directory via environment variable.
+- Default: Electron's `userData` directory, or `${process.cwd()}/.ygg-chat-r/todos-storage` as fallback.
+- All TODO files are stored in a `todos/` subfolder with `.md` extension.
 
-## Key constants
+## Actions
 
-- `TODO_FOLDER_NAME`: `todos`, the subfolder under the base directory.
-- `TODO_FILE_EXTENSION`: `.md`, meaning each TODO is a Markdown document.
-- `ID_DICTIONARY`: a curated list of friendly words used by the random ID generator.
-- `MAX_ID_ATTEMPTS`: 12 attempts to find a unique ID before failing.
+### `create`
+Create a new todo list with auto-generated name. The name uses the ID_DICTIONARY to generate unique 3-word combinations.
 
-## Helper functions
+**Parameters:**
+- `content` (required): Full Markdown content for the todo list
 
-- `resolveBaseDirectory()`: returns the root storage directory by checking `YGG_TODO_DIRECTORY`; if not set, it defaults to `${process.cwd()}/.ygg-chat-todos`.
-- `getTodoDirectory()`: constructs the final directory path by joining the base directory with `todos/`.
-- `normalizeId(raw)`: trims and lowercases an ID, ensuring it only contains `[a-z0-9-]` characters and neither starts nor ends with a dash. Throws an error if the ID violates the rules.
-- `ensureDirectoryExists()`: creates the `todos/` directory recursively and returns its path.
+**Returns:**
+```json
+{
+  "success": true,
+  "name": "goku-sage-ember",
+  "path": "/path/to/todos/goku-sage-ember.md",
+  "created": true
+}
+```
 
-## API
+### `list`
+Returns the 5 most recently modified todo lists, sorted by modification time (newest first).
 
-### `listTodoIds(): Promise<string[]>`
-Reads the `todos/` directory and returns all filenames without the `.md` extension. If the directory does not exist, it safely returns an empty list.
+**Parameters:** None
 
-### `readTodoList(id: string): Promise<ReadTodoResult>`
-- Sanitizes the given `id` through `normalizeId`.
-- Builds the file path `todos/{id}.md`.
-- Attempts to `readFile` the content and returns `{ id, path, exists: true, content }` on success.
-- If the file is missing (`ENOENT`), returns `{ id, path, exists: false, content: null }`, allowing callers to distinguish missing files from other errors.
+**Returns:**
+```json
+{
+  "success": true,
+  "lists": [
+    { "name": "goku-sage-ember", "path": "/path/to/todos/goku-sage-ember.md", "modifiedAt": "2024-01-15T10:30:00.000Z" }
+  ]
+}
+```
 
-### `writeTodoList(id: string, content: string): Promise<WriteTodoResult>`
-- Sanitizes the ID, ensures the directory exists, and writes the provided content as UTF-8.
-- Constructs the path `todos/{id}.md` and writes the data.
-- Returns `{ id, path }` for reference.
+### `read`
+Read the contents of a specific todo list.
 
-### `generateTodoId(): Promise<string>`
-- Fetches existing IDs to avoid collisions.
-- Uses `unique-names-generator` to create a three-word, lowercase, dash-separated ID from `ID_DICTIONARY`.
-- Makes up to `MAX_ID_ATTEMPTS` attempts to find an unused ID.
-- If no unique candidate is found, throws an error.
+**Parameters:**
+- `name` (required): The auto-generated todo list name (e.g., "goku-sage-ember")
 
-### `getTodoStorageDirectory(): string`
-Convenience helper that exposes the resolved `todos/` directory for callers that need to know where files are stored without manipulating paths.
+**Returns:**
+```json
+{
+  "success": true,
+  "name": "goku-sage-ember",
+  "path": "/path/to/todos/goku-sage-ember.md",
+  "exists": true,
+  "content": "# Tasks\n- [ ] Task 1\n- [x] Task 2"
+}
+```
 
-## Usage notes
+### `edit`
+Find and replace a line in an existing todo list. Useful for marking items complete or updating text.
 
-- File names follow the pattern `{id}.md`, and IDs must be dash-separated, lowercase strings with no invalid characters.
-- `normalizeId` enforces consistent validation for reads and writes.
-- For new TODOs, use `generateTodoId()` to avoid collisions before calling `writeTodoList`.
-- The utility is intentionally filesystem-based, so it remains isolated from databases; storing data under `.ygg-chat-todos` keeps it local to the repo and easy to clean.
+**Parameters:**
+- `name` (required): The todo list name
+- `search` (required): Text to search for (matches any line containing this text)
+- `replacement` (required): The full replacement line
+
+**Returns:**
+```json
+{
+  "name": "goku-sage-ember",
+  "path": "/path/to/todos/goku-sage-ember.md",
+  "success": true,
+  "linesMatched": 1,
+  "message": "Replaced 1 line(s) containing \"Buy milk\""
+}
+```
+
+## Usage Examples
+
+### Create a shopping list (name auto-generated)
+```json
+{
+  "action": "create",
+  "content": "# Shopping List\n- [ ] Buy milk\n- [ ] Buy bread\n- [ ] Buy eggs"
+}
+```
+Returns: `{ "name": "vegeta-aurora-drift", ... }`
+
+### Mark an item as complete
+```json
+{
+  "action": "edit",
+  "name": "vegeta-aurora-drift",
+  "search": "Buy milk",
+  "replacement": "- [x] Buy milk"
+}
+```
+
+### Update item text
+```json
+{
+  "action": "edit",
+  "name": "vegeta-aurora-drift",
+  "search": "Buy bread",
+  "replacement": "- [ ] Buy sourdough bread"
+}
+```
+
+### List recent todo lists
+```json
+{
+  "action": "list"
+}
+```
+
+### Read a specific list
+```json
+{
+  "action": "read",
+  "name": "vegeta-aurora-drift"
+}
+```
+
+## ID Dictionary
+
+Names are generated from this dictionary of words:
+- ember, atlas, sage, haven, lumen, quill, cinder, aurora
+- drift, marble, pioneer, fern, opal, orbit, spark, basil
+- cascade, north, horizon, goku, vegeta, piccolo, gohan
+- freeza, cell, bulma, trunks, broly, gurren, lagann
+
+Example names: `goku-sage-ember`, `vegeta-aurora-drift`, `piccolo-cascade-north`

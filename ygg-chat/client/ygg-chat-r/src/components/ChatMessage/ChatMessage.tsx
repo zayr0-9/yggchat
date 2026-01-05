@@ -580,24 +580,42 @@ const extractTodoTitleFromMarkdown = (content?: string): string | null => {
 
 const getTodoContentForAction = (group: ToolCallRenderGroup, action: string): string | null => {
   const normalizedAction = action.toLowerCase()
-  if (normalizedAction === 'write') {
+  // For 'create' action, content is in the input args
+  if (normalizedAction === 'create') {
     if (typeof group.args?.content === 'string' && group.args.content.trim().length > 0) {
       return group.args.content
     }
   }
 
+  // For 'read' action, content is in the result
   if (group.results.length > 0) {
-    const primary = group.results[0].content
+    let primary = group.results[0].content
+
+    // If primary is a JSON string, try to parse it
     if (typeof primary === 'string') {
-      return primary
+      try {
+        const parsed = JSON.parse(primary)
+        if (typeof parsed === 'object' && parsed !== null && 'content' in parsed) {
+          return parsed.content
+        }
+      } catch {
+        // Not JSON, might be raw markdown content - return as is
+        return primary
+      }
     }
+
+    // Handle object result with content property (from readTodoList)
+    if (typeof primary === 'object' && primary !== null && 'content' in primary) {
+      return (primary as any).content
+    }
+
     return formatToolResultContent(primary)
   }
 
   return null
 }
 
-const TODO_TOOL_ACTIONS_WITH_CARD = new Set(['read', 'write'])
+const TODO_TOOL_ACTIONS_WITH_CARD = new Set(['read', 'create'])
 
 const isTodoListGroup = (group: ToolCallRenderGroup): boolean => {
   const action = typeof group.args?.action === 'string' ? group.args.action.toLowerCase() : ''
@@ -609,8 +627,8 @@ const todoActionLabel = (action: string) => {
   switch (normalized) {
     case 'read':
       return 'Current Todo List'
-    case 'write':
-      return 'Updated Todo List'
+    case 'create':
+      return 'New Todo List'
     default:
       return 'Todo List'
   }
@@ -2346,13 +2364,13 @@ const TodoListView: React.FC<{
               {todoItems.map((item, idx) => (
                 <li
                   key={`todo-item-${idx}`}
-                  className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
+                  className={`flex items-center gap-3 rounded-xl text-[12px] xl:text-[16px]  ${
                     item.done
-                      ? 'border-neutral-200 bg-neutral-50/40 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                      ? ' bg-neutral-50/40 text-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
                       : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
                   }`}
                 >
-                  <span className='text-lg'>{item.done ? '[✔️]' : '[ ]'}</span>
+                  <span className='text-sm xl:text-[18px]'> {item.done ? '[✓]' : `[  \u00A0 ]`}</span>
                   <span className={`${item.done ? 'line-through opacity-80' : ''}`}>{item.text}</span>
                 </li>
               ))}

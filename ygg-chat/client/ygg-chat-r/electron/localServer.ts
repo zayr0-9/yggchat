@@ -24,7 +24,7 @@ import htmlRenderer from './tools/htmlRenderer.js'
 import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
-import { generateTodoId, getTodoStorageDirectory, listTodoIds, readTodoList, writeTodoList } from './tools/todoMd.js'
+import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -1630,33 +1630,31 @@ function setupServer() {
           break
         }
         case 'todo_list': {
-          const { action, id, content } = parsedArgs
+          const { action, name, content, search, replacement } = parsedArgs
           switch (action) {
             case 'list': {
-              const ids = await listTodoIds()
-              result = { success: true, ids }
+              const lists = await listTodoLists()
+              result = { success: true, lists }
               break
             }
             case 'read': {
-              if (!id) throw new Error('id is required for todo_list read')
-              const data = await readTodoList(id)
+              if (!name) throw new Error('name is required for todo_list read')
+              const data = await readTodoList(name)
               result = { success: true, ...data }
               break
             }
-            case 'write': {
-              if (content === undefined) throw new Error('content is required for todo_list write')
-              const written = await writeTodoList(content)
-              result = { success: true, ...written }
+            case 'create': {
+              if (content === undefined) throw new Error('content is required for todo_list create')
+              const created = await createTodoList(content)
+              result = { success: true, ...created }
               break
             }
-            case 'generate_id': {
-              const newId = await generateTodoId()
-              result = { success: true, id: newId }
-              break
-            }
-            case 'directory': {
-              const dir = getTodoStorageDirectory()
-              result = { success: true, directory: dir }
+            case 'edit': {
+              if (!name) throw new Error('name is required for todo_list edit')
+              if (!search) throw new Error('search is required for todo_list edit')
+              if (replacement === undefined) throw new Error('replacement is required for todo_list edit')
+              const edited = await editTodoList(name, search, replacement)
+              result = edited
               break
             }
             default:
