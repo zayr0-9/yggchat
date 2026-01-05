@@ -2906,11 +2906,12 @@ function Chat() {
                 </div>
               </div>
             </div>
+            {/* Extension menu */}
             <div className='bg-transparent rounded-b-4xl dark:bg-transparent flex flex-col items-end pt-3 md:pt-0'>
               <div className='flex justify-between w-full mb-0'>
-                <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
+                <div className='flex items-center justify-start gap-2 xl:gap-3 flex-wrap flex-1'>
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
-                    <div className='flex items-center gap-2'>
+                    <div className='flex items-center gap-2 transition-transform duration-300'>
                       <Select
                         value={selectedExtensionId || ''}
                         onChange={val => {
@@ -2918,6 +2919,7 @@ function Chat() {
                           // Immediately request context for the chosen extension
                           requestContext(val || null)
                         }}
+                        blur='low'
                         options={
                           extensions.length > 0
                             ? extensions.map(ext => ({
@@ -2928,15 +2930,15 @@ function Chat() {
                         }
                         placeholder='Select extension'
                         disabled={extensions.length === 0}
-                        className='min-w-[140px] max-w-[220px] text-xs sm:text-sm'
+                        className=' min-w-[70px] max-w-[120px] lg:max-w-[200px] ml-2 text-xs sm:text-sm text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
                         size='small'
                       />
-                      <div
+                      {/* <div
                         className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
                         title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                       >
                         {workspace?.name && ` ${'🟢 ' + workspace.name}`}
-                      </div>
+                      </div> */}
                     </div>
                   )}
                   <Button
@@ -2972,7 +2974,7 @@ function Chat() {
                     selectedModelName={selectedModel?.name || ''}
                     onChange={handleModelSelect}
                     placeholder='Select a model...'
-                    blur='high'
+                    blur='low'
                     className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-54 transition-transform duration-60 active:scale-99 rounded-4xl'
                     showFilters={true}
                     footerContent={modelSelectFooter}

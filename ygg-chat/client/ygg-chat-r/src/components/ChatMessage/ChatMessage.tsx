@@ -1600,7 +1600,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     return (
                       <div
                         key={`${group.id}-result-${resultIdx}`}
-                        className={`rounded-xl border p-3 whitespace-pre-wrap leading-relaxed ${
+                        className={`rounded-xl border p-3 whitespace-pre-wrap break-words overflow-hidden leading-relaxed ${
                           result.is_error
                             ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
                             : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'

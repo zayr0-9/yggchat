@@ -134,7 +134,9 @@ export const Select: React.FC<SelectProps> = ({
     let result = normOptions
     if (searchBarVisible && searchTerm.trim()) {
       const term = searchTerm.toLowerCase()
-      result = normOptions.filter(opt => opt.label.toLowerCase().includes(term) || opt.value.toLowerCase().includes(term))
+      result = normOptions.filter(
+        opt => opt.label.toLowerCase().includes(term) || opt.value.toLowerCase().includes(term)
+      )
     }
     // Limit dropdown to DROPDOWN_LIMIT items for modelSelect (performance optimization)
     if (modelSelect && showExpandButton && result.length > DROPDOWN_LIMIT) {
@@ -149,7 +151,8 @@ export const Select: React.FC<SelectProps> = ({
       return totalOptionsCount ?? normOptions.length
     }
     const term = searchTerm.toLowerCase()
-    return normOptions.filter(opt => opt.label.toLowerCase().includes(term) || opt.value.toLowerCase().includes(term)).length
+    return normOptions.filter(opt => opt.label.toLowerCase().includes(term) || opt.value.toLowerCase().includes(term))
+      .length
   }, [normOptions, searchTerm, searchBarVisible, totalOptionsCount])
 
   const selected = useMemo(() => normOptions.find(o => o.value === value) || null, [normOptions, value])
@@ -286,7 +289,7 @@ export const Select: React.FC<SelectProps> = ({
             ref={listRef}
             role='listbox'
             tabIndex={-1}
-            className={`fixed z-[100] rounded-2xl overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent shadow-xl flex flex-col`}
+            className={`fixed z-[100] rounded-2xl overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent flex flex-col`}
             style={{
               maxHeight: listMaxHeight,
               top: dropdownPosition.top !== undefined ? `${dropdownPosition.top}px` : undefined,
@@ -387,10 +390,10 @@ export const Select: React.FC<SelectProps> = ({
             </div>
             {/* View All Models button */}
             {showExpandButton && allFilteredCount > DROPDOWN_LIMIT && (
-              <div className='px-2 py-2 border-t border-neutral-200 dark:border-neutral-700 acrylic-medium dark:bg-transparent'>
+              <div className='px-2 py-2 acrylic border-t border-neutral-200 dark:border-neutral-700 dark:bg-transparent'>
                 <Button
                   variant='outline2'
-                  size='small'
+                  size='large'
                   className='w-full'
                   onClick={e => {
                     e.preventDefault()
