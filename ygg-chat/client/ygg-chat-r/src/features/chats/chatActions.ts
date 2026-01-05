@@ -23,7 +23,7 @@ import {
   ToolDefinition,
 } from './chatTypes'
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
-import { getEnabledTools } from './toolDefinitions'
+import { getEnabledTools, getAllTools, setCustomTools } from './toolDefinitions'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -3021,6 +3021,82 @@ export const updateToolEnabled = createAsyncThunk<
 
   // Return the updated status
   return { success: true, toolName, enabled }
+})
+
+// Fetch and merge custom tools from local server (Electron only)
+// This fetches user-defined tools from userData/custom-tools/ directory
+export const fetchCustomTools = createAsyncThunk<void, void, { state: RootState }>(
+  'chat/fetchCustomTools',
+  async (_, { dispatch }) => {
+    // Check if we're in Electron mode
+    const isElectronMode =
+      import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+      (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
+      (typeof window !== 'undefined' && (window as any).electronAPI)
+
+    if (!isElectronMode) {
+      // Custom tools only available in Electron mode
+      console.log('[CustomTools] Skipping - not in Electron mode')
+      return
+    }
+
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}/custom-tools`)
+      if (!response.ok) {
+        console.warn('[CustomTools] Failed to fetch custom tools:', response.statusText)
+        return
+      }
+
+      const data = await response.json()
+      if (data.success && Array.isArray(data.tools)) {
+        // Merge custom tools with built-in tools
+        setCustomTools(data.tools)
+
+        // Update Redux state with merged tools
+        dispatch(chatSliceActions.setTools(getAllTools()))
+
+        console.log(`[CustomTools] Loaded ${data.tools.length} custom tools`)
+      }
+    } catch (error) {
+      // Silently fail - custom tools are optional
+      console.warn('[CustomTools] Failed to load custom tools:', error)
+    }
+  }
+)
+
+// Reload custom tools from disk (useful after user adds new tools)
+export const reloadCustomTools = createAsyncThunk<
+  { success: boolean; count: number },
+  void,
+  { state: RootState }
+>('chat/reloadCustomTools', async (_, { dispatch }) => {
+  try {
+    // Tell the server to reload tools from disk
+    const reloadResponse = await fetch(`${LOCAL_API_BASE}/custom-tools/reload`, {
+      method: 'POST',
+    })
+
+    if (!reloadResponse.ok) {
+      throw new Error('Failed to reload custom tools')
+    }
+
+    const reloadData = await reloadResponse.json()
+
+    if (reloadData.success && Array.isArray(reloadData.tools)) {
+      // Merge reloaded custom tools with built-in tools
+      setCustomTools(reloadData.tools)
+
+      // Update Redux state with merged tools
+      dispatch(chatSliceActions.setTools(getAllTools()))
+
+      return { success: true, count: reloadData.tools.length }
+    }
+
+    return { success: false, count: 0 }
+  } catch (error) {
+    console.error('[CustomTools] Failed to reload custom tools:', error)
+    return { success: false, count: 0 }
+  }
 })
 
 // Bulk insert messages (for copying message chains to new conversation)

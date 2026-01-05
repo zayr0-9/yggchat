@@ -19,7 +19,7 @@ import {
   UserSystemPrompt,
 } from './chatTypes'
 import { createEmptyStreamState, DEFAULT_STREAM_ID } from './streamHelpers'
-import toolDefinitions from './toolDefinitions'
+import toolDefinitions, { ToolDefinition } from './toolDefinitions'
 
 // Helper function to build path from root to a message
 const buildPathToMessage = (messages: Message[], messageId: MessageId): MessageId[] => {
@@ -784,6 +784,10 @@ export const chatSlice = createSlice({
       if (tool) {
         tool.enabled = action.payload.enabled
       }
+    },
+    // Set entire tools array (used when merging with custom tools)
+    setTools: (state, action: PayloadAction<ToolDefinition[]>) => {
+      state.tools = action.payload
     },
 
     toolPermissionRequested: (state, action: PayloadAction<ToolCallPermissionRequest>) => {

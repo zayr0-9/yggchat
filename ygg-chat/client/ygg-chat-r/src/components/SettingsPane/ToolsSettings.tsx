@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { fetchTools, updateToolEnabled } from '../../features/chats/chatActions'
+import { fetchCustomTools, fetchTools, updateToolEnabled } from '../../features/chats/chatActions'
 import { selectTools } from '../../features/chats/chatSelectors'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { Button } from '../Button/button'
+
+const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
 
 export const ToolsSettings: React.FC = () => {
   const dispatch = useAppDispatch()
   const tools = useAppSelector(selectTools)
   const [updatingTools, setUpdatingTools] = useState<Set<string>>(new Set())
   const [showDesktopModal, setShowDesktopModal] = useState(false)
+  const [showCustomToolsHelp, setShowCustomToolsHelp] = useState(false)
+  const [customToolsPath, setCustomToolsPath] = useState<string | null>(null)
   const wslDistro = localStorage.getItem('ygg_wsl_distro') || ''
 
   const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
@@ -19,9 +23,25 @@ export const ToolsSettings: React.FC = () => {
   }, [wslDistro])
 
   useEffect(() => {
-    // Fetch tools when component mounts
-    dispatch(fetchTools())
-  }, [dispatch])
+    // Fetch custom tools first (merges with built-in), then fetch all tools
+    dispatch(fetchCustomTools()).then(() => {
+      dispatch(fetchTools())
+    })
+
+    // Fetch custom tools directory path
+    if (!isWebMode) {
+      fetch(`${LOCAL_API_BASE}/custom-tools/directory`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.path) {
+            setCustomToolsPath(data.path)
+          }
+        })
+        .catch(() => {
+          // Silently fail
+        })
+    }
+  }, [dispatch, isWebMode])
 
   const handleToggle = async (toolName: string, currentEnabled: boolean) => {
     setUpdatingTools(prev => new Set(prev).add(toolName))
@@ -80,6 +100,15 @@ export const ToolsSettings: React.FC = () => {
   const someToolsEnabled = tools.some(tool => tool.enabled)
   const isUpdatingAny = updatingTools.size > 0
   const valkyrieActive = someToolsEnabled
+
+  const handleOpenCustomToolsFolder = async () => {
+    if (customToolsPath && window.electronAPI?.auth?.openExternal) {
+      // Convert path to file:// URL
+      const fileUrl = `file://${customToolsPath.replace(/\\/g, '/')}`
+      await window.electronAPI.auth.openExternal(fileUrl)
+    }
+    setShowCustomToolsHelp(true)
+  }
 
   if (!tools || tools.length === 0) {
     return <div className='text-gray-500 dark:text-gray-400 text-sm'>Loading tools...</div>
@@ -153,17 +182,104 @@ export const ToolsSettings: React.FC = () => {
           }`}
         >
           <div className='space-y-4'>
-            <h3 className='text-md mt-3 font-medium text-stone-700 dark:text-stone-300 mb-3'>Individual Tools</h3>
+            <div className='flex items-center justify-between mt-3 mb-3'>
+              <h3 className='text-md font-medium text-stone-700 dark:text-stone-300'>Individual Tools</h3>
+              <Button
+                variant='outline2'
+                size='small'
+                onClick={handleOpenCustomToolsFolder}
+                className='flex items-center gap-1.5 text-sm'
+              >
+                <i className='bx bx-folder-plus text-base'></i>
+                Custom Tools
+              </Button>
+            </div>
+
+            {/* Custom Tools Help View */}
+            {showCustomToolsHelp && (
+              <div className='bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700/50 rounded-lg p-4 mb-4'>
+                <div className='flex items-start justify-between mb-3'>
+                  <h4 className='font-medium text-orange-800 dark:text-orange-200 flex items-center gap-2'>
+                    <i className='bx bx-info-circle text-lg'></i>
+                    Creating Custom Tools
+                  </h4>
+                  <button
+                    onClick={() => setShowCustomToolsHelp(false)}
+                    className='text-orange-600 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-200'
+                  >
+                    <i className='bx bx-x text-xl'></i>
+                  </button>
+                </div>
+
+                <div className='text-sm text-orange-700 dark:text-orange-300 space-y-3'>
+                  <p>
+                    Custom tools let you extend the AI's capabilities with your own functionality.
+                  </p>
+
+                  <div>
+                    <p className='font-medium mb-1'>Directory Structure:</p>
+                    <code className='block bg-orange-100 dark:bg-orange-900/40 rounded px-2 py-1 text-xs font-mono'>
+                      {customToolsPath || 'custom-tools/'}<br />
+                      &nbsp;&nbsp;my_tool/<br />
+                      &nbsp;&nbsp;&nbsp;&nbsp;definition.json<br />
+                      &nbsp;&nbsp;&nbsp;&nbsp;index.js
+                    </code>
+                  </div>
+
+                  <div>
+                    <p className='font-medium mb-1'>definition.json:</p>
+                    <code className='block bg-orange-100 dark:bg-orange-900/40 rounded px-2 py-1 text-xs font-mono whitespace-pre'>
+{`{
+  "name": "my_tool",
+  "enabled": true,
+  "description": "What this tool does",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "param1": { "type": "string" }
+    },
+    "required": ["param1"]
+  }
+}`}
+                    </code>
+                  </div>
+
+                  <div>
+                    <p className='font-medium mb-1'>index.js:</p>
+                    <code className='block bg-orange-100 dark:bg-orange-900/40 rounded px-2 py-1 text-xs font-mono whitespace-pre'>
+{`export async function execute(args, options) {
+  // Your tool logic here
+  return { success: true, result: "..." };
+}`}
+                    </code>
+                  </div>
+
+                  <div className='bg-orange-200/50 dark:bg-orange-800/30 rounded px-3 py-2 flex items-center gap-2'>
+                    <i className='bx bx-revision text-lg'></i>
+                    <span className='font-medium'>Restart the app after adding or modifying custom tools.</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className='space-y-4 px-2 bg-transparent'>
               {tools.map(tool => (
                 <div
                   key={tool.name}
-                  className='flex items-center justify-between p-3 rounded-lg border-1 border-gray-300 dark:border-neutral-600 drop-shadow-xl shadow-[0_6px_12px_1px_rgba(0,0,0,0.05),0_0px_2px_1px_rgba(0,0,0,0.02)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)] '
+                  className={`flex items-center justify-between p-3 rounded-lg border-1 drop-shadow-xl shadow-[0_6px_12px_1px_rgba(0,0,0,0.05),0_0px_2px_1px_rgba(0,0,0,0.02)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)] ${
+                    tool.isCustom
+                      ? 'border-orange-400 dark:border-orange-600/70'
+                      : 'border-gray-300 dark:border-neutral-600'
+                  }`}
                 >
                   <div className='flex-1'>
-                    <div className='font-medium text-stone-800 dark:text-stone-200'>
+                    <div className='font-medium text-stone-800 dark:text-stone-200 flex items-center gap-2'>
                       {tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      {tool.isCustom && (
+                        <span className='text-xs px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300'>
+                          Custom
+                        </span>
+                      )}
                     </div>
                     <div className='text-sm text-gray-600 dark:text-gray-400 mt-1'>{tool.description}</div>
                   </div>

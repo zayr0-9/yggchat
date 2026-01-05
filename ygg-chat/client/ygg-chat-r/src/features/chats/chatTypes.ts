@@ -429,6 +429,11 @@ export interface ToolDefinition {
     properties: Record<string, any>
     required?: string[]
   }
+  // Custom tool metadata (set for user-defined tools)
+  isCustom?: boolean
+  sourcePath?: string
+  version?: string
+  author?: string
 }
 
 // Alias for backwards compatibility

@@ -25,6 +25,7 @@ import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
+import { customToolRegistry, ToolResult } from './tools/customToolLoader.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -66,6 +67,199 @@ function validateAndResolvePath(
   }
 
   return resolvedPath
+}
+
+// Built-in tool handler type
+type BuiltInToolHandler = (
+  args: any,
+  options: { rootPath?: string; operationMode?: 'plan' | 'execute' }
+) => Promise<ToolResult>
+
+// Registry for built-in tools (initialized in setupServer)
+const builtInTools: Map<string, BuiltInToolHandler> = new Map()
+
+// Initialize built-in tools registry
+function initializeBuiltInToolRegistry() {
+  builtInTools.set('html_renderer', async (args) => {
+    const { html, allowUnsafe } = args
+    if (!html) throw new Error('html is required')
+    const rendered = await htmlRenderer.run({ html, allowUnsafe })
+    return rendered
+  })
+
+  builtInTools.set('read_file', async (args, { rootPath }) => {
+    const { path: filePath, maxBytes, startLine, endLine, ranges } = args
+    if (!filePath) throw new Error('path is required')
+    const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges, cwd: rootPath })
+    return { success: true, ...fileRes }
+  })
+
+  builtInTools.set('read_file_continuation', async (args, { rootPath }) => {
+    const { path: filePath, afterLine, numLines, maxBytes } = args
+    if (!filePath) throw new Error('path is required')
+    if (afterLine === undefined) throw new Error('afterLine is required')
+    if (!numLines) throw new Error('numLines is required')
+    const fileRes = await readFileContinuation(filePath, afterLine, numLines, { maxBytes, cwd: rootPath })
+    return { success: true, ...fileRes }
+  })
+
+  builtInTools.set('read_files', async (args, { rootPath }) => {
+    const { paths, baseDir, maxBytes, startLine, endLine } = args
+    if (!paths) throw new Error('paths are required')
+    const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine, cwd: rootPath })
+    return { success: true, files: filesRes }
+  })
+
+  builtInTools.set('create_file', async (args, { rootPath, operationMode }) => {
+    const { path: filePath, content, directory, createParentDirs, overwrite, executable } = args
+    if (!filePath) throw new Error('path is required')
+    return await createTextFile(filePath, content, {
+      directory,
+      createParentDirs,
+      overwrite,
+      executable,
+      operationMode,
+      cwd: rootPath,
+    })
+  })
+
+  builtInTools.set('edit_file', async (args, { rootPath, operationMode }) => {
+    const {
+      path: filePath,
+      operation,
+      searchPattern,
+      replacement,
+      content,
+      createBackup,
+      encoding,
+      enableFuzzyMatching,
+      fuzzyThreshold,
+      preserveIndentation,
+    } = args
+    if (!filePath) throw new Error('path is required')
+    return await editFile(filePath, operation, {
+      searchPattern,
+      replacement,
+      content,
+      createBackup,
+      encoding,
+      enableFuzzyMatching,
+      fuzzyThreshold,
+      preserveIndentation,
+      operationMode,
+      cwd: rootPath,
+    })
+  })
+
+  builtInTools.set('delete_file', async (args, { rootPath, operationMode }) => {
+    const { path: filePath, allowedExtensions } = args
+    if (!filePath) throw new Error('path is required')
+    if (allowedExtensions) {
+      await safeDeleteFile(filePath, allowedExtensions, operationMode, rootPath)
+    } else {
+      await deleteFile(filePath, operationMode, rootPath)
+    }
+    return { success: true, path: filePath }
+  })
+
+  builtInTools.set('directory', async (args, { rootPath }) => {
+    const { path: dirPath, maxDepth, includeHidden, includeSizes } = args
+    const finalDirPath = validateAndResolvePath(dirPath, rootPath)
+    const structure = await extractDirectoryStructure(finalDirPath, {
+      maxDepth,
+      includeHidden,
+      includeSizes,
+    })
+    return { success: true, structure, path: dirPath }
+  })
+
+  builtInTools.set('glob', async (args, { rootPath }) => {
+    const { pattern, cwd, ignore, dot, absolute } = args
+    if (!pattern) throw new Error('pattern is required')
+    const actualCwd = validateAndResolvePath(cwd, rootPath)
+    return await globSearch(pattern, { cwd: actualCwd, ignore, dot, absolute })
+  })
+
+  builtInTools.set('ripgrep', async (args, { rootPath }) => {
+    const {
+      regex,
+      pattern,
+      path: dirPath,
+      searchPath: altSearchPath,
+      glob: globPattern,
+      case_insensitive,
+      lineNumbers,
+      count,
+      filesWithMatches,
+      maxCount,
+      hidden,
+      noIgnore,
+      contextLines,
+    } = args
+    const query = regex || pattern
+    if (!query) throw new Error('pattern or regex is required')
+    const finalSearchPath = validateAndResolvePath(dirPath || altSearchPath, rootPath)
+    return await ripgrepSearch(query, finalSearchPath, {
+      caseSensitive: !case_insensitive,
+      glob: globPattern,
+      lineNumbers,
+      count,
+      filesWithMatches,
+      maxCount,
+      hidden,
+      noIgnore,
+      contextLines,
+    })
+  })
+
+  builtInTools.set('browse_web', async (args) => {
+    const { url, ...options } = args
+    if (!url) throw new Error('url is required')
+    return await browseWeb(url, options)
+  })
+
+  builtInTools.set('bash', async (args, { rootPath }) => {
+    const { command, cwd, env, timeoutMs, maxOutputChars } = args
+    if (!command) throw new Error('command is required')
+    const finalCwd = validateAndResolvePath(cwd, rootPath)
+    return await runBashCommand(command, {
+      cwd: finalCwd,
+      env,
+      timeoutMs,
+      maxOutputChars,
+    })
+  })
+
+  builtInTools.set('todo_list', async (args) => {
+    const { action, name, content, search, replacement } = args
+    switch (action) {
+      case 'list': {
+        const lists = await listTodoLists()
+        return { success: true, lists }
+      }
+      case 'read': {
+        if (!name) throw new Error('name is required for todo_list read')
+        const data = await readTodoList(name)
+        return { success: true, ...data }
+      }
+      case 'create': {
+        if (content === undefined) throw new Error('content is required for todo_list create')
+        const created = await createTodoList(content)
+        return { success: true, ...created }
+      }
+      case 'edit': {
+        if (!name) throw new Error('name is required for todo_list edit')
+        if (!search) throw new Error('search is required for todo_list edit')
+        if (replacement === undefined) throw new Error('replacement is required for todo_list edit')
+        const edited = await editTodoList(name, search, replacement)
+        return edited
+      }
+      default:
+        throw new Error(`Unsupported todo_list action: ${action}`)
+    }
+  })
+
+  console.log(`[LocalServer] Initialized ${builtInTools.size} built-in tools`)
 }
 
 const app = express()
@@ -1451,227 +1645,81 @@ function setupServer() {
     }
   })
 
-  // Tool Execution Endpoint
+  // Tool Execution Endpoint (uses built-in and custom tool registries)
   app.post('/api/tools/execute', async (req, res) => {
     try {
       const { toolName, args, rootPath, operationMode } = req.body
       // console.log(`[LocalServer] Executing tool: ${toolName} (operationMode: ${operationMode || 'execute'})`)
 
-      let result: any = `Tool ${toolName} not implemented on local server`
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
+      const toolOptions = { rootPath, operationMode: operationMode as 'plan' | 'execute' | undefined }
 
-      switch (toolName) {
-        case 'html_renderer': {
-          const { html, allowUnsafe } = parsedArgs
-          if (!html) throw new Error('html is required')
-          const rendered = await htmlRenderer.run({ html, allowUnsafe })
-          result = rendered
-          break
-        }
-        case 'read_file': {
-          const { path: filePath, maxBytes, startLine, endLine, ranges } = parsedArgs
-          if (!filePath) throw new Error('path is required')
+      let result: ToolResult
 
-          const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges, cwd: rootPath })
-          result = { success: true, ...fileRes }
-          break
-        }
-        case 'read_file_continuation': {
-          const { path: filePath, afterLine, numLines, maxBytes } = parsedArgs
-          if (!filePath) throw new Error('path is required')
-          if (afterLine === undefined) throw new Error('afterLine is required')
-          if (!numLines) throw new Error('numLines is required')
-
-          const fileRes = await readFileContinuation(filePath, afterLine, numLines, { maxBytes, cwd: rootPath })
-          result = { success: true, ...fileRes }
-          break
-        }
-        case 'read_files': {
-          const { paths, baseDir, maxBytes, startLine, endLine } = parsedArgs
-          if (!paths) throw new Error('paths are required')
-
-          const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine, cwd: rootPath })
-          result = { success: true, files: filesRes }
-          break
-        }
-        case 'create_file': {
-          const { path: filePath, content, directory, createParentDirs, overwrite, executable } = parsedArgs
-          if (!filePath) throw new Error('path is required')
-
-          result = await createTextFile(filePath, content, {
-            directory,
-            createParentDirs,
-            overwrite,
-            executable,
-            operationMode,
-            cwd: rootPath,
-          })
-          break
-        }
-        case 'edit_file': {
-          const {
-            path: filePath,
-            operation,
-            searchPattern,
-            replacement,
-            content,
-            createBackup,
-            encoding,
-            enableFuzzyMatching,
-            fuzzyThreshold,
-            preserveIndentation,
-          } = parsedArgs
-          if (!filePath) throw new Error('path is required')
-
-          result = await editFile(filePath, operation, {
-            searchPattern,
-            replacement,
-            content,
-            createBackup,
-            encoding,
-            enableFuzzyMatching,
-            fuzzyThreshold,
-            preserveIndentation,
-            operationMode,
-            cwd: rootPath,
-          })
-          break
-        }
-        case 'delete_file': {
-          const { path: filePath, allowedExtensions } = parsedArgs
-          if (!filePath) throw new Error('path is required')
-
-          if (allowedExtensions) {
-            await safeDeleteFile(filePath, allowedExtensions, operationMode, rootPath)
-          } else {
-            await deleteFile(filePath, operationMode, rootPath)
-          }
-          result = { success: true, path: filePath }
-          break
-        }
-        case 'directory': {
-          const { path: dirPath, maxDepth, includeHidden, includeSizes } = parsedArgs
-
-          // Validate and resolve path (security: must be within rootPath)
-          const finalDirPath = validateAndResolvePath(dirPath, rootPath)
-
-          const structure = await extractDirectoryStructure(finalDirPath, {
-            maxDepth,
-            includeHidden,
-            includeSizes,
-          })
-          result = { success: true, structure, path: dirPath }
-          break
-        }
-        case 'glob': {
-          const { pattern, cwd, ignore, dot, absolute } = parsedArgs
-          if (!pattern) throw new Error('pattern is required')
-
-          // Validate cwd (security: must be within rootPath)
-          const actualCwd = validateAndResolvePath(cwd, rootPath)
-          result = await globSearch(pattern, { cwd: actualCwd, ignore, dot, absolute })
-          break
-        }
-        case 'ripgrep': {
-          const {
-            regex,
-            pattern,
-            path: dirPath,
-            searchPath: altSearchPath, // Accept searchPath as alias for path
-            glob: globPattern,
-            case_insensitive,
-            lineNumbers,
-            count,
-            filesWithMatches,
-            maxCount,
-            hidden,
-            noIgnore,
-            contextLines,
-          } = parsedArgs
-
-          const query = regex || pattern
-          if (!query) throw new Error('pattern or regex is required')
-
-          // Validate and resolve path (security: must be within rootPath)
-          const finalSearchPath = validateAndResolvePath(dirPath || altSearchPath, rootPath)
-
-          result = await ripgrepSearch(query, finalSearchPath, {
-            caseSensitive: !case_insensitive,
-            glob: globPattern,
-            lineNumbers,
-            count,
-            filesWithMatches,
-            maxCount,
-            hidden,
-            noIgnore,
-            contextLines,
-          })
-          break
-        }
-        case 'browse_web': {
-          const { url, ...options } = parsedArgs
-          if (!url) throw new Error('url is required')
-          result = await browseWeb(url, options)
-          break
-        }
-        case 'bash': {
-          const { command, cwd, env, timeoutMs, maxOutputChars } = parsedArgs
-          if (!command) throw new Error('command is required')
-
-          // Validate cwd (security: must be within rootPath)
-          const finalCwd = validateAndResolvePath(cwd, rootPath)
-
-          result = await runBashCommand(command, {
-            cwd: finalCwd,
-            env,
-            timeoutMs,
-            maxOutputChars,
-          })
-          break
-        }
-        case 'todo_list': {
-          const { action, name, content, search, replacement } = parsedArgs
-          switch (action) {
-            case 'list': {
-              const lists = await listTodoLists()
-              result = { success: true, lists }
-              break
-            }
-            case 'read': {
-              if (!name) throw new Error('name is required for todo_list read')
-              const data = await readTodoList(name)
-              result = { success: true, ...data }
-              break
-            }
-            case 'create': {
-              if (content === undefined) throw new Error('content is required for todo_list create')
-              const created = await createTodoList(content)
-              result = { success: true, ...created }
-              break
-            }
-            case 'edit': {
-              if (!name) throw new Error('name is required for todo_list edit')
-              if (!search) throw new Error('search is required for todo_list edit')
-              if (replacement === undefined) throw new Error('replacement is required for todo_list edit')
-              const edited = await editTodoList(name, search, replacement)
-              result = edited
-              break
-            }
-            default:
-              throw new Error(`Unsupported todo_list action: ${action}`)
-          }
-          break
-        }
-        default:
-          console.warn(`[LocalServer] Unknown tool: ${toolName}`)
-          result = { success: false, error: `Unknown tool: ${toolName}` }
+      // Check built-in tools first
+      const builtInHandler = builtInTools.get(toolName)
+      if (builtInHandler) {
+        result = await builtInHandler(parsedArgs, toolOptions)
+      }
+      // Then check custom tools
+      else if (customToolRegistry.hasCustomTool(toolName)) {
+        result = await customToolRegistry.executeTool(toolName, parsedArgs, {
+          rootPath,
+          operationMode: operationMode as 'plan' | 'execute' | undefined,
+          cwd: rootPath,
+        })
+      }
+      // Unknown tool
+      else {
+        console.warn(`[LocalServer] Unknown tool: ${toolName}`)
+        result = { success: false, error: `Unknown tool: ${toolName}` }
       }
 
       res.json({ result })
     } catch (error) {
       console.error('[LocalServer] Tool execution error:', error)
       const msg = error instanceof Error ? error.message : String(error)
-      res.json({ result: { success: false, error: msg } }) // Consistent error format?
+      res.json({ result: { success: false, error: msg } })
+    }
+  })
+
+  // Custom Tools API Endpoints
+
+  // GET /api/custom-tools - List all custom tool definitions
+  app.get('/api/custom-tools', async (_req, res) => {
+    try {
+      const definitions = customToolRegistry.getDefinitions()
+      res.json({ success: true, tools: definitions })
+    } catch (error) {
+      console.error('[LocalServer] Error getting custom tools:', error)
+      res.status(500).json({ success: false, error: 'Failed to get custom tools' })
+    }
+  })
+
+  // GET /api/custom-tools/directory - Get custom tools directory path
+  app.get('/api/custom-tools/directory', (_req, res) => {
+    try {
+      const directory = customToolRegistry.getCustomToolsDirectoryPath()
+      res.json({ success: true, directory })
+    } catch (error) {
+      console.error('[LocalServer] Error getting custom tools directory:', error)
+      res.status(500).json({ success: false, error: 'Failed to get directory' })
+    }
+  })
+
+  // POST /api/custom-tools/reload - Reload all custom tools from disk
+  app.post('/api/custom-tools/reload', async (_req, res) => {
+    try {
+      await customToolRegistry.reload()
+      const definitions = customToolRegistry.getDefinitions()
+      res.json({
+        success: true,
+        tools: definitions,
+        message: `Reloaded ${definitions.length} custom tools`,
+      })
+    } catch (error) {
+      console.error('[LocalServer] Error reloading custom tools:', error)
+      res.status(500).json({ success: false, error: 'Failed to reload custom tools' })
     }
   })
 
@@ -3053,13 +3101,18 @@ function setupServer() {
 }
 
 // Start the server
-export function startLocalServer(port: number = 3002, dbPath?: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    try {
-      const actualDbPath = dbPath || path.join(process.cwd(), 'data', 'local-sync.db')
-      initializeLocalDatabase(actualDbPath)
-      setupServer()
+export async function startLocalServer(port: number = 3002, dbPath?: string): Promise<void> {
+  try {
+    const actualDbPath = dbPath || path.join(process.cwd(), 'data', 'local-sync.db')
+    initializeLocalDatabase(actualDbPath)
 
+    // Initialize tool registries
+    initializeBuiltInToolRegistry()
+    await customToolRegistry.initialize()
+
+    setupServer()
+
+    return new Promise((resolve, reject) => {
       server = app.listen(port, '0.0.0.0', () => {
         // console.log(`[LocalServer] Local sync server running on http://0.0.0.0:${port}`)
         // console.log(`[LocalServer] Database path: ${actualDbPath}`)
@@ -3079,11 +3132,11 @@ export function startLocalServer(port: number = 3002, dbPath?: string): Promise<
           reject(err)
         }
       })
-    } catch (error) {
-      console.error('[LocalServer] Failed to start:', error)
-      reject(error)
-    }
-  })
+    })
+  } catch (error) {
+    console.error('[LocalServer] Failed to start:', error)
+    throw error
+  }
 }
 
 // Stop the server

@@ -1,7 +1,7 @@
 // src/features/chats/toolDefinitions.ts
 // Tool definitions sent from client to server with each message request
 // Tools execute locally via electron/localServer.ts, definitions are sent to AI API
-// This allows users to customize their own tools in the future
+// Supports both built-in tools and user-defined custom tools
 
 export interface ToolDefinition {
   name: string
@@ -12,9 +12,15 @@ export interface ToolDefinition {
     properties: Record<string, any>
     required?: string[]
   }
+  // Custom tool metadata (set for user-defined tools)
+  isCustom?: boolean
+  sourcePath?: string
+  version?: string
+  author?: string
 }
 
-const toolDefinitions: ToolDefinition[] = [
+// Built-in tool definitions (static)
+const builtInToolDefinitions: ToolDefinition[] = [
   {
     name: 'directory',
     enabled: false,
@@ -509,29 +515,75 @@ const toolDefinitions: ToolDefinition[] = [
   },
 ]
 
-// Get all tool definitions
-export const getAllTools = (): ToolDefinition[] => {
-  return toolDefinitions
+// Mutable array that holds merged tools (built-in + custom)
+let mergedToolDefinitions: ToolDefinition[] = [...builtInToolDefinitions]
+
+/**
+ * Set custom tools from the local server.
+ * Custom tools are merged with built-in tools.
+ * Custom tools cannot override built-in tools with the same name.
+ */
+export const setCustomTools = (customTools: ToolDefinition[]): void => {
+  // Filter out any custom tools that would override built-ins
+  const builtInNames = new Set(builtInToolDefinitions.map(t => t.name))
+  const safeCustomTools = customTools.filter(ct => {
+    if (builtInNames.has(ct.name)) {
+      console.warn(`[ToolDefinitions] Custom tool "${ct.name}" ignored: conflicts with built-in tool`)
+      return false
+    }
+    return true
+  })
+
+  // Merge built-in and custom tools
+  mergedToolDefinitions = [...builtInToolDefinitions, ...safeCustomTools]
+  console.log(`[ToolDefinitions] Merged ${builtInToolDefinitions.length} built-in + ${safeCustomTools.length} custom tools`)
 }
 
-// Get only enabled tools
+/**
+ * Clear all custom tools (reset to built-in only)
+ */
+export const clearCustomTools = (): void => {
+  mergedToolDefinitions = [...builtInToolDefinitions]
+}
+
+// Get all tool definitions (built-in + custom)
+export const getAllTools = (): ToolDefinition[] => {
+  return mergedToolDefinitions
+}
+
+// Get only enabled tools (built-in + custom)
 export const getEnabledTools = (): ToolDefinition[] => {
-  return toolDefinitions.filter(t => t.enabled)
+  return mergedToolDefinitions.filter(t => t.enabled)
+}
+
+// Get built-in tools only
+export const getBuiltInTools = (): ToolDefinition[] => {
+  return builtInToolDefinitions
+}
+
+// Get custom tools only
+export const getCustomTools = (): ToolDefinition[] => {
+  return mergedToolDefinitions.filter(t => t.isCustom)
 }
 
 // Get tool by name
 export const getToolByName = (name: string): ToolDefinition | undefined => {
-  return toolDefinitions.find(t => t.name === name)
+  return mergedToolDefinitions.find(t => t.name === name)
 }
 
-// Update tool enabled status (for future user customization)
+// Update tool enabled status (works for both built-in and custom tools)
 export const updateToolEnabled = (name: string, enabled: boolean): boolean => {
-  const tool = toolDefinitions.find(t => t.name === name)
+  const tool = mergedToolDefinitions.find(t => t.name === name)
   if (tool) {
     tool.enabled = enabled
+    // Also update in built-in array if it's a built-in tool
+    const builtInTool = builtInToolDefinitions.find(t => t.name === name)
+    if (builtInTool) {
+      builtInTool.enabled = enabled
+    }
     return true
   }
   return false
 }
 
-export default toolDefinitions
+export default builtInToolDefinitions
