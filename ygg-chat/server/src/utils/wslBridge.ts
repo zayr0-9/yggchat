@@ -15,6 +15,34 @@ export function isWindows(): boolean {
   return process.platform === 'win32'
 }
 
+// ============================================================================
+// Cross-platform path type detection
+// ============================================================================
+
+export type PathType = 'linux' | 'windows' | 'relative'
+
+/**
+ * Detect path type by format (platform-agnostic)
+ * - 'linux': Absolute Linux/POSIX path (starts with /)
+ * - 'windows': Windows path (drive letter C:\ or UNC \\wsl$\...)
+ * - 'relative': Relative path (./foo, foo/bar, etc.)
+ */
+export function detectPathType(filePath: string): PathType {
+  const trimmed = filePath.trim()
+  if (!trimmed) return 'relative'
+
+  // Windows drive letter (C:\, D:/, etc.)
+  if (/^[a-zA-Z]:[\\/]/.test(trimmed)) return 'windows'
+
+  // Windows UNC path (\\wsl$\..., \\server\...)
+  if (/^[\\/]{2}/.test(trimmed)) return 'windows'
+
+  // Absolute Linux/POSIX path
+  if (trimmed.startsWith('/')) return 'linux'
+
+  return 'relative'
+}
+
 /**
  * Check if a path is a WSL path (starts with /)
  */

@@ -1,8 +1,10 @@
 import { spawn } from 'child_process'
 import path from 'path'
-import { getWSLCommandArgs, isWindows, toWslPath } from '../utils/wslBridge.js'
+import { detectPathType, getWSLCommandArgs, isWindows, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_OUTPUT_CHARS = 20000
+
+type ShellMode = 'bash' | 'wsl' | 'powershell'
 
 // Commands that return exit code 1 for "no matches" (not an error)
 const EXIT_1_NO_MATCH_COMMANDS = ['grep', 'egrep', 'fgrep', 'diff', 'cmp', 'awk']
@@ -40,40 +42,69 @@ export interface BashResult {
 
 type CwdResolution = {
   display: string // what we return to the caller (windows stays windows)
-  forSpawn?: string // what we pass to WSL/bash (converted when on windows)
-  type: 'windows' | 'posix'
+  forSpawn?: string // what we pass to WSL/bash/powershell (converted when needed)
+  shellMode: ShellMode
 }
 
+/**
+ * Determine which shell to use based on platform and path type:
+ * - Linux/Mac: always 'bash'
+ * - Windows + Linux path (/home/...): 'wsl'
+ * - Windows + Windows path (C:\...): 'powershell'
+ */
 function resolveCwd(inputCwd?: string): CwdResolution {
   const cwdCandidate = (inputCwd?.trim() || process.cwd()).trim()
   if (!cwdCandidate) {
     const fallback = process.cwd()
-    return { display: fallback, forSpawn: fallback, type: isWindows() ? 'windows' : 'posix' }
+    return { display: fallback, forSpawn: fallback, shellMode: isWindows() ? 'powershell' : 'bash' }
   }
 
-  if (isWindows()) {
-    const normalizedWin = path.win32.isAbsolute(cwdCandidate)
-      ? path.win32.normalize(cwdCandidate)
-      : path.win32.resolve(cwdCandidate)
-    return { display: normalizedWin, forSpawn: toWslPath(normalizedWin), type: 'windows' }
+  if (!isWindows()) {
+    // Linux/Mac: always use bash natively
+    const posix = path.isAbsolute(cwdCandidate) ? cwdCandidate : path.resolve(cwdCandidate)
+    return { display: posix, forSpawn: posix, shellMode: 'bash' }
   }
 
-  const posix = path.isAbsolute(cwdCandidate) ? cwdCandidate : path.resolve(cwdCandidate)
-  return { display: posix, forSpawn: posix, type: 'posix' }
+  // On Windows: determine shell based on path type
+  const pathType = detectPathType(cwdCandidate)
+
+  if (pathType === 'linux') {
+    // Linux path on Windows → use WSL
+    return { display: cwdCandidate, forSpawn: cwdCandidate, shellMode: 'wsl' }
+  }
+
+  // Windows path or relative path → use PowerShell natively
+  const normalizedWin = path.win32.isAbsolute(cwdCandidate)
+    ? path.win32.normalize(cwdCandidate)
+    : path.win32.resolve(cwdCandidate)
+  return { display: normalizedWin, forSpawn: normalizedWin, shellMode: 'powershell' }
 }
 
 async function buildCommand(
   command: string,
   spawnCwd?: string,
-  type: 'windows' | 'posix' = 'posix'
-): Promise<{ cmd: string; args: string[]; wslCwd?: string }> {
-  const args = ['-lc', command]
-  if (type === 'posix') {
-    return { cmd: 'bash', args, wslCwd: spawnCwd }
-  }
+  shellMode: ShellMode = 'bash'
+): Promise<{ cmd: string; args: string[]; displayCwd?: string }> {
+  switch (shellMode) {
+    case 'bash':
+      // Native bash on Linux/Mac
+      return { cmd: 'bash', args: ['-lc', command], displayCwd: spawnCwd }
 
-  const [cmd, wslArgs] = await getWSLCommandArgs('bash', args, spawnCwd)
-  return { cmd, args: wslArgs, wslCwd: spawnCwd }
+    case 'wsl':
+      // WSL bash on Windows for Linux paths
+      const [wslCmd, wslArgs] = await getWSLCommandArgs('bash', ['-lc', command], spawnCwd)
+      return { cmd: wslCmd, args: wslArgs, displayCwd: spawnCwd }
+
+    case 'powershell':
+      // Native PowerShell on Windows for Windows paths
+      // Use -NoProfile for faster startup, -NonInteractive for non-interactive mode
+      // -Command executes the command string
+      return {
+        cmd: 'powershell.exe',
+        args: ['-NoProfile', '-NonInteractive', '-Command', command],
+        displayCwd: spawnCwd,
+      }
+  }
 }
 
 function filterStderr(stderr: string): string {
@@ -96,9 +127,9 @@ function clampMaxOutput(max?: number): number {
 export async function runBashCommand(command: string, options: BashOptions = {}): Promise<BashResult> {
   // const startTime = Date.now()
   const maxOutputChars = clampMaxOutput(options.maxOutputChars)
-  const { display: displayCwd, forSpawn: spawnCwd, type: cwdType } = resolveCwd(options.cwd)
+  const { display: displayCwd, forSpawn: spawnCwd, shellMode } = resolveCwd(options.cwd)
 
-  const { cmd, args, wslCwd } = await buildCommand(command, spawnCwd, cwdType)
+  const { cmd, args, displayCwd: resultCwd } = await buildCommand(command, spawnCwd, shellMode)
 
   const spawnOptions: { cwd?: string; env: NodeJS.ProcessEnv } = {
     env: {
@@ -109,7 +140,8 @@ export async function runBashCommand(command: string, options: BashOptions = {})
     },
   }
 
-  if (cwdType === 'posix') {
+  // Set cwd for native shells (bash and powershell), WSL handles cwd via --cd flag
+  if (shellMode === 'bash' || shellMode === 'powershell') {
     spawnOptions.cwd = spawnCwd
   }
 
@@ -170,7 +202,7 @@ export async function runBashCommand(command: string, options: BashOptions = {})
     child.on('error', error => {
       finalize({
         success: false,
-        cwd: wslCwd ?? displayCwd,
+        cwd: resultCwd ?? displayCwd,
         stdout,
         stderr: filterStderr(stderr),
         error: error instanceof Error ? error.message : String(error),
@@ -181,7 +213,7 @@ export async function runBashCommand(command: string, options: BashOptions = {})
       const successCodes = new Set(options.successCodes ?? getDefaultSuccessCodes(command))
       finalize({
         success: !timedOut && code !== null && successCodes.has(code),
-        cwd: wslCwd ?? displayCwd,
+        cwd: resultCwd ?? displayCwd,
         stdout,
         stderr: filterStderr(stderr),
       })
