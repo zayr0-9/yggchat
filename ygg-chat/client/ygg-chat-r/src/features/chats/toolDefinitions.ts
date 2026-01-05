@@ -262,7 +262,8 @@ const builtInToolDefinitions: ToolDefinition[] = [
         encoding: { type: 'string', description: 'File encoding (default utf8)' },
         interpretEscapeSequences: {
           type: 'boolean',
-          description: 'Interpret escape sequences (\\n, \\t, \\r, etc.) in search and replacement strings (default true)',
+          description:
+            'Interpret escape sequences (\\n, \\t, \\r, etc.) in search and replacement strings (default true)',
         },
         validateContent: {
           type: 'boolean',
@@ -337,7 +338,7 @@ const builtInToolDefinitions: ToolDefinition[] = [
         search_lang: {
           type: 'string',
           description:
-            "Language for search results using Brave-supported codes (e.g., \"en\", \"es\", \"pt-br\", \"zh-hant\"). Must be one of Brave Search API's allowed values.",
+            'Language for search results using Brave-supported codes (e.g., "en", "es", "pt-br", "zh-hant"). Must be one of Brave Search API\'s allowed values.',
         },
         extra_snippets: { type: 'boolean', description: 'Include extra snippets in results' },
         summary: { type: 'boolean', description: 'Include AI-generated summary' },
@@ -360,7 +361,10 @@ const builtInToolDefinitions: ToolDefinition[] = [
         },
         caseSensitive: { type: 'boolean', description: 'Case-sensitive search (default false for case-insensitive)' },
         lineNumbers: { type: 'boolean', description: 'Include line numbers in results (default true)' },
-        count: { type: 'boolean', description: 'Count matches per file instead of showing line content (default false)' },
+        count: {
+          type: 'boolean',
+          description: 'Count matches per file instead of showing line content (default false)',
+        },
         filesWithMatches: { type: 'boolean', description: 'List only filenames with matches (default false)' },
         maxCount: { type: 'integer', minimum: 1, description: 'Maximum matches per file' },
         glob: { type: 'string', description: 'File pattern glob (e.g., "*.ts", "src/**/*.js")' },
@@ -536,7 +540,6 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
 
   // Merge built-in and custom tools
   mergedToolDefinitions = [...builtInToolDefinitions, ...safeCustomTools]
-  console.log(`[ToolDefinitions] Merged ${builtInToolDefinitions.length} built-in + ${safeCustomTools.length} custom tools`)
 }
 
 /**

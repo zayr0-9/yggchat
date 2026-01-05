@@ -520,28 +520,39 @@ export function useConversationStorageMode(conversationId: ConversationId | null
   return useQuery({
     queryKey: ['conversations', conversationId, 'storage_mode'],
     queryFn: async () => {
+      console.log('[useConversationStorageMode] queryFn START', { conversationId, environment })
       if (!conversationId) return 'cloud'
 
       // 1. Check all cached conversation lists
       const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
+      console.log('[useConversationStorageMode] checking caches, found queries:', allConversationQueries.length)
       for (const [_, data] of allConversationQueries) {
         if (Array.isArray(data)) {
           const match = data.find(c => String(c.id) === String(conversationId))
-          if (match?.storage_mode) return match.storage_mode
+          if (match?.storage_mode) {
+            console.log('[useConversationStorageMode] FOUND in cache:', match.storage_mode)
+            return match.storage_mode
+          }
         }
       }
 
       // 2. If in Electron, try fetching from local server first (fastest for local)
       if (environment === 'electron') {
+        console.log('[useConversationStorageMode] trying local API...')
         try {
           const localConv = await localApi.get<Conversation>(`/local/conversations/${conversationId}`)
-          if (localConv) return localConv.storage_mode || 'local'
-        } catch {
+          if (localConv) {
+            console.log('[useConversationStorageMode] LOCAL found, storage_mode:', localConv.storage_mode || 'local')
+            return localConv.storage_mode || 'local'
+          }
+        } catch (err) {
           // Not found locally, proceed to cloud check
+          console.log('[useConversationStorageMode] local fetch failed:', err)
         }
       }
 
       // 3. Default to cloud (or could fetch from cloud to be sure, but 'cloud' is safe default)
+      console.log('[useConversationStorageMode] defaulting to cloud')
       return 'cloud' as const
     },
     enabled: !!conversationId,
@@ -567,14 +578,17 @@ export function useConversationMessages(conversationId: ConversationId | null, s
   const query = useQuery({
     queryKey: ['conversations', conversationId, 'messages'],
     queryFn: async () => {
+      console.log('[useConversationMessages] queryFn START', { conversationId, storageMode, environment })
       if (!conversationId) throw new Error('Conversation ID is required')
 
       // Determine storage mode: use parameter if provided, otherwise check cached conversations
       let effectiveStorageMode = storageMode
+      console.log('[useConversationMessages] initial effectiveStorageMode from param:', effectiveStorageMode)
       if (!effectiveStorageMode) {
         // Search ALL cached conversation lists (main list, project lists, recent lists)
         // This finds the conversation even if it's only loaded in a specific project view
         const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
+        console.log('[useConversationMessages] checking caches, found queries:', allConversationQueries.length)
 
         for (const [data] of allConversationQueries) {
           if (Array.isArray(data)) {
@@ -610,21 +624,40 @@ export function useConversationMessages(conversationId: ConversationId | null, s
           }
         }
 
+        // In Electron mode with unknown storage mode, try local first (handles page reload scenario)
+        if (!effectiveStorageMode && environment === 'electron') {
+          console.log('[useConversationMessages] storage mode unknown in Electron, trying local first...')
+          try {
+            const localResult = await localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
+              `/local/conversations/${conversationId}/messages/tree`
+            )
+            // If local API succeeds, return it
+            if (localResult) {
+              console.log('[useConversationMessages] LOCAL SUCCESS - returning local data')
+              return localResult
+            }
+          } catch (err) {
+            // Local not found, fall through to cloud
+            console.log('[useConversationMessages] local try failed, falling back to cloud', err)
+          }
+          effectiveStorageMode = 'cloud'
+        }
+
         if (!effectiveStorageMode) effectiveStorageMode = 'cloud'
       }
 
-      // console.log('[useConversationMessages] Fetching messages for conversation:', conversationId, 'storage_mode:', effectiveStorageMode)
+      console.log('[useConversationMessages] FINAL effectiveStorageMode:', effectiveStorageMode)
 
       // Route to appropriate API based on storage mode
       if (effectiveStorageMode === 'local' && environment === 'electron') {
-        // console.log('[useConversationMessages] Using local API for conversation:', conversationId)
+        console.log('[useConversationMessages] Using LOCAL API for conversation:', conversationId)
         return localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
           `/local/conversations/${conversationId}/messages/tree`
         )
       }
 
       // Default to cloud API
-      // console.log('[useConversationMessages] Using cloud API for conversation:', conversationId)
+      console.log('[useConversationMessages] Using CLOUD API for conversation:', conversationId)
       return api.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
         `/conversations/${conversationId}/messages/tree`,
         accessToken

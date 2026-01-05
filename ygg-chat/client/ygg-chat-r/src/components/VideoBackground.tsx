@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import {
   CustomVideoEntry,
-  DEFAULT_DARK_VIDEO,
   DEFAULT_LIGHT_VIDEO,
   getActiveTextColorMode,
   loadActiveCustomVideo,
@@ -96,7 +95,7 @@ const VideoBackground: React.FC = () => {
   }
 
   const lightSource = sourceForMode(activeVideoUrl, activeVideoMeta, DEFAULT_LIGHT_VIDEO)
-  const darkSource = sourceForMode(activeVideoUrl, activeVideoMeta, DEFAULT_DARK_VIDEO)
+  // const darkSource = sourceForMode(activeVideoUrl, activeVideoMeta, DEFAULT_DARK_VIDEO)
 
   return (
     <>
@@ -105,12 +104,12 @@ const VideoBackground: React.FC = () => {
         autoPlay
         loop
         muted
-        className='fixed inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:dark:blur-[1px] object-cover pointer-events-none -z-10 dark:hidden'
+        className='fixed inset-0 w-full h-full blur-[0px] dark:blur-[1px] 2xl:dark:blur-[1px] 2xl:dark:blur-[1px] object-cover pointer-events-none -z-10'
         aria-hidden='true'
       >
         <source src={lightSource.src} type={lightSource.type} />
       </video>
-      <video
+      {/* <video
         key={darkSource.src}
         autoPlay
         loop
@@ -119,7 +118,7 @@ const VideoBackground: React.FC = () => {
         aria-hidden='true'
       >
         <source src={darkSource.src} type={darkSource.type} />
-      </video>
+      </video> */}
     </>
   )
 }

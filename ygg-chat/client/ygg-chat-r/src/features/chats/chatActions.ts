@@ -2385,24 +2385,34 @@ export const sendMessageToBranch = createAsyncThunk<
 // Sync a conversation and its messages to local SQLite (Electron only)
 export const syncConversationToLocal = createAsyncThunk<
   void,
-  { conversationId: ConversationId; messages: Message[] },
+  { conversationId: ConversationId; messages: Message[]; storageMode?: 'local' | 'cloud' },
   { state: RootState; extra: ThunkExtraArgument }
->('chat/syncConversationToLocal', async ({ conversationId, messages }, { extra, getState }) => {
+>('chat/syncConversationToLocal', async ({ conversationId, messages, storageMode }, { extra, getState }) => {
+  console.log('[syncConversationToLocal] START', { conversationId, messagesCount: messages?.length, storageMode })
   // Only run in Electron mode
   if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+
+  // Skip syncing for local-only conversations - they don't exist in cloud
+  if (storageMode === 'local') {
+    console.log('[syncConversationToLocal] SKIP - local-only conversation, no remote sync needed')
+    return
+  }
 
   const { auth } = extra
   const state = getState() as RootState
 
   try {
     const exists = await dualSync.checkConversationExists(conversationId)
+    console.log('[syncConversationToLocal] conversation exists locally:', exists)
     // Determine project ID from state or conversation data
     let projectId: string | null = selectSelectedProject(state)?.id || null
 
     if (!exists) {
+      console.log('[syncConversationToLocal] NOT exists locally, fetching from REMOTE...')
       // Fetch conversation from REMOTE source of truth (Cloud), not local API
       let conversation: Conversation | null = null
       try {
+        console.log('[syncConversationToLocal] about to fetch from REMOTE:', `${REMOTE_API_BASE}/conversations/${conversationId}`)
         const res = await fetch(`${REMOTE_API_BASE}/conversations/${conversationId}`, {
           headers: {
             Authorization: `Bearer ${auth.accessToken}`,

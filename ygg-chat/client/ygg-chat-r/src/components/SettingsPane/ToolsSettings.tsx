@@ -14,6 +14,7 @@ export const ToolsSettings: React.FC = () => {
   const [showDesktopModal, setShowDesktopModal] = useState(false)
   const [showCustomToolsHelp, setShowCustomToolsHelp] = useState(false)
   const [customToolsPath, setCustomToolsPath] = useState<string | null>(null)
+  const [reloadingTools, setReloadingTools] = useState(false)
   const wslDistro = localStorage.getItem('ygg_wsl_distro') || ''
 
   const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
@@ -118,6 +119,26 @@ export const ToolsSettings: React.FC = () => {
     setShowCustomToolsHelp(true)
   }
 
+  const handleReloadTools = async () => {
+    setReloadingTools(true)
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}/custom-tools/reload`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+
+      if (data.success) {
+        // Refresh the tools list after reload
+        await dispatch(fetchCustomTools())
+        await dispatch(fetchTools())
+      }
+    } catch (err) {
+      console.error('[ToolsSettings] Failed to reload tools:', err)
+    } finally {
+      setReloadingTools(false)
+    }
+  }
+
   if (!tools || tools.length === 0) {
     return <div className='text-gray-500 dark:text-gray-400 text-sm'>Loading tools...</div>
   }
@@ -192,15 +213,27 @@ export const ToolsSettings: React.FC = () => {
           <div className='space-y-4'>
             <div className='flex items-center justify-between mt-3 mb-3'>
               <h3 className='text-md font-medium text-stone-700 dark:text-stone-300'>Individual Tools</h3>
-              <Button
-                variant='outline2'
-                size='small'
-                onClick={handleOpenCustomToolsFolder}
-                className='flex items-center gap-1.5 text-sm'
-              >
-                <i className='bx bx-folder-plus text-base'></i>
-                Custom Tools
-              </Button>
+              <div className='flex items-center gap-2'>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={handleReloadTools}
+                  disabled={reloadingTools}
+                  className='flex items-center gap-1.5 text-sm'
+                >
+                  <i className={`bx bx-refresh text-base ${reloadingTools ? 'animate-spin' : ''}`}></i>
+                  {reloadingTools ? 'Reloading...' : 'Reload'}
+                </Button>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={handleOpenCustomToolsFolder}
+                  className='flex items-center gap-1.5 text-sm'
+                >
+                  <i className='bx bx-folder-plus text-base'></i>
+                  Custom Tools
+                </Button>
+              </div>
             </div>
 
             {/* Custom Tools Help View */}
@@ -220,16 +253,17 @@ export const ToolsSettings: React.FC = () => {
                 </div>
 
                 <div className='text-sm text-orange-700 dark:text-orange-300 space-y-3'>
-                  <p>
-                    Custom tools let you extend the AI's capabilities with your own functionality.
-                  </p>
+                  <p>Custom tools let you extend the AI's capabilities with your own functionality.</p>
 
                   <div>
                     <p className='font-medium mb-1'>Directory Structure:</p>
                     <code className='block bg-orange-100 dark:bg-orange-900/40 rounded px-2 py-1 text-xs font-mono'>
-                      {customToolsPath || 'custom-tools/'}<br />
-                      &nbsp;&nbsp;my_tool/<br />
-                      &nbsp;&nbsp;&nbsp;&nbsp;definition.json<br />
+                      {customToolsPath || 'custom-tools/'}
+                      <br />
+                      &nbsp;&nbsp;my_tool/
+                      <br />
+                      &nbsp;&nbsp;&nbsp;&nbsp;definition.json
+                      <br />
                       &nbsp;&nbsp;&nbsp;&nbsp;index.js
                     </code>
                   </div>
@@ -237,7 +271,7 @@ export const ToolsSettings: React.FC = () => {
                   <div>
                     <p className='font-medium mb-1'>definition.json:</p>
                     <code className='block bg-orange-100 dark:bg-orange-900/40 rounded px-2 py-1 text-xs font-mono whitespace-pre'>
-{`{
+                      {`{
   "name": "my_tool",
   "enabled": true,
   "description": "What this tool does",
@@ -255,7 +289,7 @@ export const ToolsSettings: React.FC = () => {
                   <div>
                     <p className='font-medium mb-1'>index.js:</p>
                     <code className='block bg-orange-100 dark:bg-orange-900/40 rounded px-2 py-1 text-xs font-mono whitespace-pre'>
-{`export async function execute(args, options) {
+                      {`export async function execute(args, options) {
   // Your tool logic here
   return { success: true, result: "..." };
 }`}

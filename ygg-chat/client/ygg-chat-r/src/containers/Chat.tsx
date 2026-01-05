@@ -474,24 +474,40 @@ function Chat() {
   // Compute storage_mode from projectConversations (already loaded from ConversationPage)
   // This avoids unreliable cache lookups inside queryFn
   const conversationStorageMode = useMemo(() => {
+    console.log('[Chat] conversationStorageMode useMemo computing...', {
+      storageModeFromNav,
+      storageModeFromHook,
+      conversationIdFromUrl,
+      projectConversationsLength: projectConversations.length,
+    })
     // Priority 1: Navigation state (immediate availability for new chats)
-    if (storageModeFromNav) return storageModeFromNav
+    if (storageModeFromNav) {
+      console.log('[Chat] conversationStorageMode: using storageModeFromNav:', storageModeFromNav)
+      return storageModeFromNav
+    }
 
     // Priority 2: Hook result (robust check checking all caches + local fetch)
-    if (storageModeFromHook) return storageModeFromHook
+    if (storageModeFromHook) {
+      console.log('[Chat] conversationStorageMode: using storageModeFromHook:', storageModeFromHook)
+      return storageModeFromHook
+    }
 
     if (!conversationIdFromUrl) {
-      // console.log('[Chat] conversationStorageMode: No conversationIdFromUrl')
+      console.log('[Chat] conversationStorageMode: No conversationIdFromUrl, returning undefined')
       return undefined
     }
 
     // Priority 3: Check project conversations cache
     const conv = projectConversations.find(c => String(c.id) === String(conversationIdFromUrl))
-    if (conv?.storage_mode) return conv.storage_mode
+    if (conv?.storage_mode) {
+      console.log('[Chat] conversationStorageMode: found in projectConversations:', conv.storage_mode)
+      return conv.storage_mode
+    }
 
     // Priority 4: Check all conversations cache (fallback)
     const allConvs = queryClient.getQueryData<Conversation[]>(['conversations'])
     const match = allConvs?.find(c => String(c.id) === String(conversationIdFromUrl))
+    console.log('[Chat] conversationStorageMode: fallback result:', match?.storage_mode || 'undefined')
     return match?.storage_mode
   }, [conversationIdFromUrl, projectConversations, storageModeFromNav, storageModeFromHook, queryClient])
 
@@ -604,6 +620,7 @@ function Chat() {
           syncConversationToLocal({
             conversationId: String(conversationIdFromUrl),
             messages: reactQueryMessages,
+            storageMode: conversationStorageMode,
           })
         )
       }
@@ -644,7 +661,7 @@ function Chat() {
         }
       })
     }
-  }, [reactQueryMessages, dispatch])
+  }, [reactQueryMessages, dispatch, conversationIdFromUrl, conversationStorageMode])
 
   // Sync tree data to Redux when it arrives
   // Always dispatch even when treeData is null/undefined to keep Redux in sync with React Query
