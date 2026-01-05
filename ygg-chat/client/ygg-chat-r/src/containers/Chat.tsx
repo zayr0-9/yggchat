@@ -67,8 +67,13 @@ import {
   updateResearchNote,
 } from '../features/conversations'
 import { updateCwd } from '../features/conversations/conversationActions'
-import { removeSelectedFileForChat, updateIdeContext } from '../features/ideContext'
-import { selectSelectedFilesForChat, selectWorkspace } from '../features/ideContext/ideContextSelectors'
+import { removeSelectedFileForChat, selectExtension, updateIdeContext } from '../features/ideContext'
+import {
+  selectExtensions,
+  selectSelectedExtensionId,
+  selectSelectedFilesForChat,
+  selectWorkspace,
+} from '../features/ideContext/ideContextSelectors'
 import { selectSelectedProject } from '../features/projects/projectSelectors'
 import { refreshUserCredits, selectCurrentUser } from '../features/users'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
@@ -96,7 +101,7 @@ function Chat() {
   const dispatch = useAppDispatch()
   const { accessToken, userId } = useAuth()
   const navigate = useNavigate()
-  const { ideContext } = useIdeContext()
+  const { ideContext, requestContext } = useIdeContext()
   const queryClient = useQueryClient()
 
   // Local state for input to completely avoid Redux dispatches during typing
@@ -191,6 +196,8 @@ function Chat() {
   }, [streamingRoot.activeIds, currentViewStream?.id, selectedPath])
   // const ideContext = useAppSelector(selectIdeContext)
   const workspace = useAppSelector(selectWorkspace)
+  const extensions = useAppSelector(selectExtensions)
+  const selectedExtensionId = useAppSelector(selectSelectedExtensionId)
   // const isIdeConnected = useAppSelector(selectIsIdeConnected)
   // const activeFile = useAppSelector(selectActiveFile)
   const selectedFilesForChat = useAppSelector(selectSelectedFilesForChat)
@@ -2755,12 +2762,33 @@ function Chat() {
               <div className='flex justify-between w-full mb-0'>
                 <div className='flex items-center justify-start gap-3 flex-wrap flex-1'>
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
-                    <div
-                      className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
-                      title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
-                    >
-                      {/* {ideContext?.extensionConnected ? '' : ''} */}
-                      {workspace?.name && ` ${'🟢 ' + workspace.name}`}
+                    <div className='flex items-center gap-2'>
+                      <Select
+                        value={selectedExtensionId || ''}
+                        onChange={val => {
+                          dispatch(selectExtension(val || null))
+                          // Immediately request context for the chosen extension
+                          requestContext(val || null)
+                        }}
+                        options={
+                          extensions.length > 0
+                            ? extensions.map(ext => ({
+                                value: ext.id,
+                                label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
+                              }))
+                            : [{ value: '', label: 'No extensions connected' }]
+                        }
+                        placeholder='Select extension'
+                        disabled={extensions.length === 0}
+                        className='min-w-[140px] max-w-[220px] text-xs sm:text-sm'
+                        size='small'
+                      />
+                      <div
+                        className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
+                        title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
+                      >
+                        {workspace?.name && ` ${'🟢 ' + workspace.name}`}
+                      </div>
                     </div>
                   )}
                   <Button

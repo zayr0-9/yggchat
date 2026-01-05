@@ -32,7 +32,6 @@ export interface BashOptions {
 
 export interface BashResult {
   success: boolean
-  command: string
   cwd: string
   stdout: string
   stderr: string
@@ -75,6 +74,13 @@ async function buildCommand(
 
   const [cmd, wslArgs] = await getWSLCommandArgs('bash', args, spawnCwd)
   return { cmd, args: wslArgs, wslCwd: spawnCwd }
+}
+
+function filterStderr(stderr: string): string {
+  return stderr
+    .split('\n')
+    .filter(line => !line.includes('screen size is bogus'))
+    .join('\n')
 }
 
 function clampMaxOutput(max?: number): number {
@@ -164,10 +170,9 @@ export async function runBashCommand(command: string, options: BashOptions = {})
     child.on('error', error => {
       finalize({
         success: false,
-        command: `${cmd} ${args.join(' ')}`,
         cwd: wslCwd ?? displayCwd,
         stdout,
-        stderr,
+        stderr: filterStderr(stderr),
         error: error instanceof Error ? error.message : String(error),
       })
     })
@@ -176,10 +181,9 @@ export async function runBashCommand(command: string, options: BashOptions = {})
       const successCodes = new Set(options.successCodes ?? getDefaultSuccessCodes(command))
       finalize({
         success: !timedOut && code !== null && successCodes.has(code),
-        command: `${cmd} ${args.join(' ')}`,
         cwd: wslCwd ?? displayCwd,
         stdout,
-        stderr,
+        stderr: filterStderr(stderr),
       })
     })
   })

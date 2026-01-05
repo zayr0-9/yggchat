@@ -1413,7 +1413,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Render html_renderer tool with always-visible HTML
       if (isHtmlRenderer && typeof extractedHtml === 'string') {
         // Debug: log to see if HTML is already stripped at this point
-        console.log('extractedHtml preview:', extractedHtml.substring(0, 500))
         return (
           <div
             key={toggleKey}

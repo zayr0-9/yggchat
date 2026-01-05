@@ -36,6 +36,15 @@ export interface SelectedFileContent {
   requestId?: number
 }
 
+export interface ExtensionInfo {
+  id: string
+  workspaceName: string | null
+  rootPath: string | null
+  lastHeartbeat: number
+  connectedAt: number
+  isConnected: boolean
+}
+
 export interface IdeContext {
   // Connection status
   isConnected: boolean
@@ -43,15 +52,15 @@ export interface IdeContext {
   lastUpdated: string
   selectedFilesForChat: SelectedFileContent[]
 
-  // Workspace information
+  // Workspace information (active selection)
   workspace: WorkspaceInfo | null
 
-  // File tracking
+  // File tracking (active selection)
   openFiles: FileInfo[]
   activeFile: FileInfo | null
   allFiles: string[] // For @mention functionality
 
-  // Selection tracking
+  // Selection tracking (active selection)
   currentSelection: SelectionInfo | null
 
   // Recent activity (for context awareness)
@@ -61,4 +70,8 @@ export interface IdeContext {
     filePath: string
     details?: any
   }[]
+
+  // Multi-extension support
+  extensions: ExtensionInfo[]
+  selectedExtensionId: string | null
 }

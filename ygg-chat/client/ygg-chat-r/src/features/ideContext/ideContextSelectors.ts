@@ -7,6 +7,8 @@ export const selectIdeContext = (state: RootState) => state.ideContext
 export const selectIsIdeConnected = (state: RootState) => state.ideContext.isConnected
 
 export const selectWorkspace = (state: RootState) => state.ideContext.workspace
+export const selectExtensions = (state: RootState) => state.ideContext.extensions
+export const selectSelectedExtensionId = (state: RootState) => state.ideContext.selectedExtensionId
 
 export const selectOpenFiles = (state: RootState) => state.ideContext.openFiles
 
@@ -36,4 +38,6 @@ export const selectContextSummary = (state: RootState) => ({
   hasSelection: !!state.ideContext.currentSelection,
   totalFiles: state.ideContext.allFiles.length,
   lastUpdated: state.ideContext.lastUpdated,
+  extensions: state.ideContext.extensions,
+  selectedExtensionId: state.ideContext.selectedExtensionId,
 })

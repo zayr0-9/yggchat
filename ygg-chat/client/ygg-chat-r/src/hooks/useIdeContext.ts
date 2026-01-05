@@ -13,6 +13,7 @@ import {
   setCurrentSelection,
   setExtensionStatus,
   setOpenFiles,
+  setExtensions,
   updateWorkspace,
 } from '../features/ideContext'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
@@ -33,8 +34,8 @@ let fileRequestSeq = 0
 
 interface UseIdeContextReturn {
   ideContext: IdeContext
-  requestContext: () => void
-  requestFileContent: (filePath: string) => Promise<string | null>
+  requestContext: (extensionId?: string | null) => void
+  requestFileContent: (filePath: string, extensionId?: string | null) => Promise<string | null>
   availableFiles: string[]
   getFileByPath: (path: string) => FileInfo | null
 }
@@ -49,36 +50,45 @@ export function useIdeContext(): UseIdeContextReturn {
   // Reconnect timeout remains per-hook; request tracking is global
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null)
 
-  const requestContext = useCallback(() => {
-    if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
-      // Debounce context requests to prevent spam
-      const now = Date.now()
-      if (now - lastContextRequestTs < 1000) {
-        return
+  const requestContext = useCallback(
+    (extensionId: string | null = ideContext.selectedExtensionId) => {
+      if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
+        // Debounce context requests to prevent spam
+        const now = Date.now()
+        if (now - lastContextRequestTs < 1000) {
+          return
+        }
+
+        lastContextRequestTs = now
+        // Generate unique requestId even if multiple calls in the same ms
+        requestSeq = (requestSeq + 1) % 1000
+        const requestId = now * 1000 + requestSeq
+        globalWebSocket.send(
+          JSON.stringify({
+            type: 'request_context',
+            requestId,
+            timestamp: new Date().toISOString(),
+            data: {
+              extensionId: extensionId ?? null,
+            },
+          })
+        )
+
+        // Set timeout to mark extension as disconnected if no response
+        const timeoutId = setTimeout(() => {
+          dispatch(setExtensionStatus(false))
+          contextRequestTimeoutsGlobal.delete(requestId)
+        }, 10000)
+        contextRequestTimeoutsGlobal.set(requestId, timeoutId)
       }
+    },
+    [dispatch, ideContext.selectedExtensionId]
+  )
 
-      lastContextRequestTs = now
-      // Generate unique requestId even if multiple calls in the same ms
-      requestSeq = (requestSeq + 1) % 1000
-      const requestId = now * 1000 + requestSeq
-      globalWebSocket.send(
-        JSON.stringify({
-          type: 'request_context',
-          requestId,
-          timestamp: new Date().toISOString(),
-        })
-      )
-
-      // Set timeout to mark extension as disconnected if no response
-      const timeoutId = setTimeout(() => {
-        dispatch(setExtensionStatus(false))
-        contextRequestTimeoutsGlobal.delete(requestId)
-      }, 10000)
-      contextRequestTimeoutsGlobal.set(requestId, timeoutId)
-    }
-  }, [dispatch])
-
-  const requestFileContent = (filePath: string): Promise<string | null> => {
+  const requestFileContent = (
+    filePath: string,
+    extensionId: string | null = ideContext.selectedExtensionId
+  ): Promise<string | null> => {
     return new Promise(resolve => {
       const now = Date.now()
       fileRequestSeq = (fileRequestSeq + 1) % 1000
@@ -111,6 +121,7 @@ export function useIdeContext(): UseIdeContextReturn {
             timestamp: new Date().toISOString(),
             data: {
               path: filePath,
+              extensionId: extensionId ?? null,
             },
           })
         )
@@ -181,7 +192,7 @@ export function useIdeContext(): UseIdeContextReturn {
         // Delay the context request slightly to ensure connection is stable
         setTimeout(() => {
           // Use debounced request to avoid duplicate sends from multiple mounts
-          requestContext()
+          requestContext(ideContext.selectedExtensionId)
         }, 100)
       }
 
@@ -195,6 +206,14 @@ export function useIdeContext(): UseIdeContextReturn {
           }
 
           switch (message.type) {
+            case 'extensions_overview': {
+              const overview = message.data?.extensions || []
+              if (Array.isArray(overview)) {
+                globalDispatch(setExtensions(overview))
+              }
+              break
+            }
+
             case 'project_state_update':
             case 'context_response': {
               // Clear the matching pending context timeout if requestId echoed; otherwise clear all
@@ -400,7 +419,7 @@ export function useIdeContext(): UseIdeContextReturn {
       // Delay the context request slightly to ensure component is mounted
       setTimeout(() => {
         // Use debounced request to avoid duplicate sends from multiple mounts
-        requestContext()
+        requestContext(ideContext.selectedExtensionId)
       }, 100)
     }
 

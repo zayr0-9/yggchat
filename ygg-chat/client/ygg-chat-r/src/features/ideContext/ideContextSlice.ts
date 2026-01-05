@@ -1,6 +1,6 @@
 // features/ideContext/ideContextSlice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
-import { FileInfo, IdeContext, SelectionInfo, WorkspaceInfo, SelectedFileContent } from './ideContextTypes'
+import { FileInfo, IdeContext, SelectionInfo, WorkspaceInfo, SelectedFileContent, ExtensionInfo } from './ideContextTypes'
 import { chatSliceActions } from '../chats/chatSlice'
 
 // Initial state
@@ -15,6 +15,8 @@ export const ideContextInitialState: IdeContext = {
   selectedFilesForChat: [],
   currentSelection: null,
   recentActivity: [],
+  extensions: [],
+  selectedExtensionId: null,
 }
 
 const ideContextSlice = createSlice({
@@ -174,6 +176,23 @@ const ideContextSlice = createSlice({
       }
     },
 
+    // Extensions overview update
+    setExtensions: (state, action: PayloadAction<ExtensionInfo[]>) => {
+      state.extensions = action.payload
+      // Keep selectedExtensionId if still present, otherwise default to first
+      if (state.selectedExtensionId && !state.extensions.some(ext => ext.id === state.selectedExtensionId)) {
+        state.selectedExtensionId = state.extensions[0]?.id || null
+      } else if (!state.selectedExtensionId && state.extensions.length > 0) {
+        state.selectedExtensionId = state.extensions[0].id
+      }
+      state.lastUpdated = new Date().toISOString()
+    },
+
+    selectExtension: (state, action: PayloadAction<string | null>) => {
+      state.selectedExtensionId = action.payload
+      state.lastUpdated = new Date().toISOString()
+    },
+
     // Batch update from extension
     updateIdeContext: (state, action: PayloadAction<Partial<IdeContext>>) => {
       Object.assign(state, action.payload)
@@ -207,6 +226,8 @@ export const {
   addFile,
   removeFile,
   setCurrentSelection,
+  setExtensions,
+  selectExtension,
   updateIdeContext,
   resetIdeContext,
 } = ideContextSlice.actions

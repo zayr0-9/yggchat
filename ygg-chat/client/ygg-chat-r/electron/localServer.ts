@@ -20,11 +20,11 @@ import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
 import { editFile } from './tools/editFile.js'
 import { globSearch } from './tools/glob.js'
+import htmlRenderer from './tools/htmlRenderer.js'
 import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { generateTodoId, getTodoStorageDirectory, listTodoIds, readTodoList, writeTodoList } from './tools/todoMd.js'
-import htmlRenderer from './tools/htmlRenderer.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -44,8 +44,7 @@ function validateAndResolvePath(
   // Detect if we should use POSIX logic (WSL paths on Windows)
   // If on Windows, but paths start with '/', treat as WSL/Linux path
   const usePosix =
-    process.platform === 'win32' &&
-    ((inputPath && inputPath.startsWith('/')) || (rootPath && rootPath.startsWith('/')))
+    process.platform === 'win32' && ((inputPath && inputPath.startsWith('/')) || (rootPath && rootPath.startsWith('/')))
 
   const pathModule = usePosix ? path.posix : path
 
@@ -537,14 +536,71 @@ function buildMessageTree(messages: any[]): ChatNode | null {
     children: rootNodes,
   }
 }
-
 interface ConnectedClient {
   ws: WebSocket
   type: 'extension' | 'frontend'
   id: string
+  workspaceName: string | null
+  rootPath: string | null
+  lastHeartbeat: number
+  connectedAt: number
 }
 
 const clients = new Set<ConnectedClient>()
+
+// Track extension metadata separately for efficient extension list management
+const extensionsMap = new Map<
+  string,
+  {
+    clientId: string
+    workspaceName: string | null
+    rootPath: string | null
+    lastHeartbeat: number
+    connectedAt: number
+  }
+>()
+
+function upsertExtensionMetadata(
+  clientId: string,
+  data: Partial<{ workspaceName: string | null; rootPath: string | null }>
+) {
+  const now = Date.now()
+  const existing = extensionsMap.get(clientId)
+  extensionsMap.set(clientId, {
+    clientId,
+    workspaceName: data.workspaceName ?? existing?.workspaceName ?? null,
+    rootPath: data.rootPath ?? existing?.rootPath ?? null,
+    lastHeartbeat: now,
+    connectedAt: existing?.connectedAt ?? now,
+  })
+}
+
+// Broadcast the current extensions overview to all frontend clients
+function broadcastExtensionsOverview() {
+  const extensionsList = Array.from(extensionsMap.values()).map(ext => ({
+    id: ext.clientId,
+    workspaceName: ext.workspaceName,
+    rootPath: ext.rootPath,
+    lastHeartbeat: ext.lastHeartbeat,
+    connectedAt: ext.connectedAt,
+    isConnected: true,
+  }))
+
+  const message = JSON.stringify({
+    type: 'extensions_overview',
+    data: {
+      extensions: extensionsList,
+      totalExtensions: extensionsList.length,
+      timestamp: new Date().toISOString(),
+    },
+  })
+
+  clients.forEach(c => {
+    if (c.type === 'frontend' && c.ws.readyState === WebSocket.OPEN) {
+      c.ws.send(message)
+    }
+  })
+}
 
 function initializeWebSocketServer(serverInstance: any) {
   // console.log('[LocalServer] Initializing WebSocket Server on /ide-context')
@@ -556,13 +612,27 @@ function initializeWebSocketServer(serverInstance: any) {
     const clientType = url.searchParams.get('type') as 'extension' | 'frontend'
     const clientId = url.searchParams.get('id') || 'anonymous'
 
+    const now = Date.now()
+
     const client: ConnectedClient = {
       ws,
       type: clientType || 'frontend',
       id: clientId,
+      workspaceName: null,
+      rootPath: null,
+      lastHeartbeat: now,
+      connectedAt: now,
     }
 
     clients.add(client)
+
+    // If this is an extension, track it in the extensions map
+    if (client.type === 'extension') {
+      upsertExtensionMetadata(client.id, { workspaceName: null, rootPath: null })
+      // Broadcast updated extensions list to frontend clients
+      broadcastExtensionsOverview()
+    }
+
     // console.log(`[LocalServer] Client connected: ${client.type} (${client.id})`)
 
     ws.on('message', data => {
@@ -580,6 +650,17 @@ function initializeWebSocketServer(serverInstance: any) {
             ...message,
             // Normalize requestId to be present at the top-level if available in data
             requestId: message.requestId ?? message.data?.requestId,
+            clientId: client.id,
+          }
+
+          // Update extension metadata when workspace info is present
+          if (message.type === 'project_state_update' || message.type === 'context_response') {
+            const projectState = message.data
+            const workspaceInfo = projectState?.workspace
+            const name = typeof workspaceInfo === 'string' ? workspaceInfo : (workspaceInfo?.name ?? null)
+            const rootPath = typeof workspaceInfo === 'string' ? null : (workspaceInfo?.rootPath ?? null)
+            upsertExtensionMetadata(client.id, { workspaceName: name, rootPath })
+            broadcastExtensionsOverview()
           }
 
           clients.forEach(c => {
@@ -596,8 +677,11 @@ function initializeWebSocketServer(serverInstance: any) {
               c => c.type === 'extension' && c.ws.readyState === WebSocket.OPEN
             )
 
+            const targetExtensionId = message.data?.extensionId as string | undefined
+
             clients.forEach(c => {
               if (c.type === 'extension' && c.ws.readyState === WebSocket.OPEN) {
+                if (targetExtensionId && c.id !== targetExtensionId) return
                 c.ws.send(
                   JSON.stringify({
                     type: 'request_context',
@@ -607,9 +691,8 @@ function initializeWebSocketServer(serverInstance: any) {
               }
             })
 
-            if (extensionClients.length === 0) {
-              // console.warn('[LocalServer] No extensions available to handle context request')
-              // Send back an empty response so frontend stops waiting
+            if (extensionClients.length === 0 || (targetExtensionId && !extensionsMap.has(targetExtensionId))) {
+              // No extensions available or selected extension not present: respond with empty context
               client.ws.send(
                 JSON.stringify({
                   type: 'context_response',
@@ -625,8 +708,11 @@ function initializeWebSocketServer(serverInstance: any) {
               )
             }
           } else if (message.type === 'request_file_content') {
+            const targetExtensionId = message.data?.extensionId as string | undefined
+
             clients.forEach(c => {
               if (c.type === 'extension' && c.ws.readyState === WebSocket.OPEN) {
+                if (targetExtensionId && c.id !== targetExtensionId) return
                 c.ws.send(
                   JSON.stringify({
                     type: 'request_file_content',
@@ -647,12 +733,20 @@ function initializeWebSocketServer(serverInstance: any) {
 
     ws.on('close', () => {
       clients.delete(client)
+      if (client.type === 'extension') {
+        extensionsMap.delete(client.id)
+        broadcastExtensionsOverview()
+      }
       // console.log(`[LocalServer] Client disconnected: ${client.type} (${client.id})`)
     })
 
     ws.on('error', error => {
       console.error(`[LocalServer] WebSocket error for ${client.type}:`, error)
       clients.delete(client)
+      if (client.type === 'extension') {
+        extensionsMap.delete(client.id)
+        broadcastExtensionsOverview()
+      }
     })
   })
 }
@@ -988,9 +1082,7 @@ function setupServer() {
 
       // Check if attachment with this sha256 already exists (deduplication)
       if (sha256) {
-        const existingAttachment = statements.getAttachmentBySha256.get(sha256) as
-          | { id: string }
-          | undefined
+        const existingAttachment = statements.getAttachmentBySha256.get(sha256) as { id: string } | undefined
 
         if (existingAttachment && existingAttachment.id !== id) {
           // Attachment with same content already exists - reuse it
@@ -1167,11 +1259,11 @@ function setupServer() {
 
       const attachment = statements.getAttachmentById.get(id) as
         | {
-          id: string
-          file_path: string | null
-          url: string | null
-          mime_type: string
-        }
+            id: string
+            file_path: string | null
+            url: string | null
+            mime_type: string
+          }
         | undefined
 
       if (!attachment) {
