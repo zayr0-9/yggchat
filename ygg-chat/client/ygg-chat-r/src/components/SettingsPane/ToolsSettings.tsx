@@ -33,12 +33,13 @@ export const ToolsSettings: React.FC = () => {
       fetch(`${LOCAL_API_BASE}/custom-tools/directory`)
         .then(res => res.json())
         .then(data => {
-          if (data.success && data.path) {
-            setCustomToolsPath(data.path)
+          console.log('[ToolsSettings] custom-tools/directory response:', data)
+          if (data.success && data.directory) {
+            setCustomToolsPath(data.directory)
           }
         })
-        .catch(() => {
-          // Silently fail
+        .catch(err => {
+          console.error('[ToolsSettings] Failed to fetch custom tools directory:', err)
         })
     }
   }, [dispatch, isWebMode])
@@ -102,10 +103,17 @@ export const ToolsSettings: React.FC = () => {
   const valkyrieActive = someToolsEnabled
 
   const handleOpenCustomToolsFolder = async () => {
-    if (customToolsPath && window.electronAPI?.auth?.openExternal) {
-      // Convert path to file:// URL
-      const fileUrl = `file://${customToolsPath.replace(/\\/g, '/')}`
-      await window.electronAPI.auth.openExternal(fileUrl)
+    console.log('[ToolsSettings] handleOpenCustomToolsFolder called')
+    console.log('[ToolsSettings] customToolsPath:', customToolsPath)
+    console.log('[ToolsSettings] electronAPI available:', !!window.electronAPI)
+    console.log('[ToolsSettings] shell.openPath available:', !!window.electronAPI?.shell?.openPath)
+
+    if (customToolsPath && window.electronAPI?.shell?.openPath) {
+      console.log('[ToolsSettings] Calling shell.openPath with:', customToolsPath)
+      const result = await window.electronAPI.shell.openPath(customToolsPath)
+      console.log('[ToolsSettings] shell.openPath result:', result)
+    } else {
+      console.log('[ToolsSettings] Cannot open - missing path or API')
     }
     setShowCustomToolsHelp(true)
   }

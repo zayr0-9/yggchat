@@ -49,6 +49,9 @@ interface ElectronAPI {
   theme: {
     update: (isDark: boolean) => Promise<void>
   }
+  shell: {
+    openPath: (path: string) => Promise<{ success: boolean; error?: string }>
+  }
   autoUpdater: {
     check: () => Promise<{ success: boolean; error?: string }>
     installNow: () => Promise<{ success: boolean; error?: string }>

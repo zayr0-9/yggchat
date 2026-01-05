@@ -641,6 +641,22 @@ ipcMain.handle('auth:openExternal', async (_event, url: string) => {
   }
 })
 
+// Open a file or folder path in the system file explorer
+ipcMain.handle('shell:openPath', async (_event, path: string) => {
+  console.log('[Electron IPC] Opening path:', path)
+  try {
+    const result = await shell.openPath(path)
+    if (result) {
+      // openPath returns empty string on success, error message on failure
+      return { success: false, error: result }
+    }
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to open path:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
 // Floating window controls
 ipcMain.handle('window:openFloating', async () => {
   console.log('[Electron IPC] Opening floating window')
