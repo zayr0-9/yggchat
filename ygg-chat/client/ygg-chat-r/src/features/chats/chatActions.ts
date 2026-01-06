@@ -1,6 +1,7 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import type { QueryClient } from '@tanstack/react-query'
 import { ConversationId, MessageId } from '../../../../../shared/types'
+import { v4 as uuidv4 } from 'uuid'
 import { getDefaultUserSystemPromptFromCache } from '../../hooks/useQueries'
 import { dualSync } from '../../lib/sync/dualSyncManager'
 import type { RootState } from '../../store/store'
@@ -760,9 +761,11 @@ export const sendMessage = createAsyncThunk<
       const selectedName = modelsData?.selected?.name || modelsData?.default?.name
       const modelName = input.modelOverride || selectedName
       // Map UI provider to server provider id
-      const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
-      const serverProvider = appProvider === 'google' ? 'gemini' : appProvider
-      const isLmStudio = appProvider === 'lmstudio'
+      const providerRaw = state.chat.providerState.currentProvider || 'ollama'
+      const appProvider = providerRaw.toLowerCase()
+      const providerSlug = appProvider.replace(/\s+/g, '')
+      const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
+      const isLmStudio = providerSlug === 'lmstudio'
       // Gather any image drafts (base64) to send along with the message. Nullable when empty.
       const drafts = state.chat.composition.imageDrafts || []
       const attachmentsBase64 = drafts.length
@@ -847,6 +850,86 @@ export const sendMessage = createAsyncThunk<
         }
 
         const shouldUseLmStudio = isElectronMode && isLmStudio
+
+        // For LM Studio, synthesize the user message locally on the first turn so history is not empty
+        if (shouldUseLmStudio && turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
+          const newUserMessage: Message = {
+            id: uuidv4(),
+            conversation_id: conversationId,
+            parent_id: parent,
+            children_ids: [],
+            role: 'user',
+            content: currentTurnContent,
+            content_plain_text: currentTurnContent,
+            thinking_block: '',
+            tool_calls: [],
+            content_blocks: [],
+            created_at: new Date().toISOString(),
+            model_name: modelName || '',
+            partial: false,
+            artifacts: [],
+            pastedContext: [],
+          }
+
+          dispatch(chatSliceActions.messageAdded(newUserMessage))
+          dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
+          updateMessageCache(extra.queryClient, conversationId, newUserMessage)
+
+          // Save to local DB if in local storage mode
+          if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
+            localApi
+              .post('/local/attachments/save-base64', {
+                messageId: newUserMessage.id,
+                attachments: attachmentsBase64,
+              })
+              .catch(err => console.error('[sendMessage][lmstudio] Failed to save local attachments:', err))
+          }
+
+          // Append draft artifacts immediately for UI parity
+          if (drafts.length > 0) {
+            const artifactDataUrls = drafts.map(d => d.dataUrl)
+            dispatch(
+              chatSliceActions.messageArtifactsAppended({
+                messageId: newUserMessage.id,
+                artifacts: artifactDataUrls,
+              })
+            )
+            updateMessageArtifactsInCache(extra.queryClient, conversationId, newUserMessage.id, artifactDataUrls)
+          }
+
+          // Persist locally (dual sync still respects storage mode)
+          dualSync.syncMessage({
+            ...newUserMessage,
+            user_id: auth.userId,
+            project_id: selectedProject?.id || null,
+            storage_mode: storageMode,
+          })
+
+          // Directly persist to local SQLite for LM Studio (dualSync skips local-only records)
+          if (shouldUseLmStudio && isElectronMode) {
+            localApi
+              .post('/sync/message', {
+                ...newUserMessage,
+                conversation_id: conversationId,
+                children_ids: newUserMessage.children_ids,
+                content_blocks: newUserMessage.content_blocks,
+                tool_calls: newUserMessage.tool_calls,
+                user_id: auth.userId,
+                owner_id: auth.userId,
+                project_id: selectedProject?.id || null,
+                storage_mode: storageMode,
+              })
+              .catch(err => console.error('[sendMessage][lmstudio] Failed to sync user message locally:', err))
+          }
+
+          // Track for return payload
+          userMessage = newUserMessage
+          currentTurnHistory.push(newUserMessage)
+          
+          // CRITICAL: Update parent to user message ID so assistant reply is parented correctly
+          parent = newUserMessage.id
+          console.log('[sendMessage][lmstudio] User message created, parent updated:', { userMsgId: newUserMessage.id, newParent: parent })
+        }
 
         const executeLocalTools = async (
           assistantMessage: any,
@@ -935,13 +1018,22 @@ export const sendMessage = createAsyncThunk<
 
         if (repeatNum > 1 && turnCount === 1) {
           if (shouldUseLmStudio) {
-            const lmHistory = currentTurnHistory.map(m => ({
-              role: m.role,
-              content: m.content,
-              name: undefined,
-              tool_call_id: m.tool_call_id,
-              tool_calls: m.tool_calls,
-            }))
+            const lmMessages: any[] = []
+            if (systemPrompt && systemPrompt.trim()) {
+              lmMessages.push({ role: 'system', content: systemPrompt })
+            }
+            lmMessages.push(
+              ...currentTurnHistory.map(m => ({
+                role: m.role,
+                content: m.content,
+                name: undefined,
+                tool_call_id: m.tool_call_id,
+                tool_calls: m.tool_calls,
+              }))
+            )
+            if (currentTurnContent && currentTurnContent.trim()) {
+              lmMessages.push({ role: 'user', content: currentTurnContent })
+            }
 
             await createLmStudioStreamingRequest(
               {
@@ -949,7 +1041,7 @@ export const sendMessage = createAsyncThunk<
                 parentId: parent,
                 modelName,
                 systemPrompt,
-                messages: lmHistory,
+                messages: lmMessages,
                 tools: getEnabledTools(),
               },
               {
@@ -968,14 +1060,25 @@ export const sendMessage = createAsyncThunk<
 
                   if (chunk.type === 'complete' && chunk.message) {
                     const assistantMsg = chunk.message
+                    // Add to Redux + update branch path
                     dispatch(chatSliceActions.messageAdded(assistantMsg))
                     dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+                    // Sync to React Query cache
                     updateMessageCache(extra.queryClient, conversationId, assistantMsg)
-                    dualSync.syncMessage({
-                      ...assistantMsg,
-                      user_id: auth.userId,
-                      project_id: selectedProject?.id || null,
-                    })
+                    // dualSync skips local-only records, so sync directly to local SQLite
+                    localApi
+                      .post('/sync/message', {
+                        ...assistantMsg,
+                        conversation_id: conversationId,
+                        children_ids: assistantMsg.children_ids || [],
+                        content_blocks: assistantMsg.content_blocks || [],
+                        tool_calls: assistantMsg.tool_calls || [],
+                        user_id: auth.userId,
+                        owner_id: auth.userId,
+                        project_id: selectedProject?.id || null,
+                        storage_mode: storageMode,
+                      })
+                      .catch(err => console.error('[sendMessage][lmstudio repeat] Failed to sync assistant message:', err))
 
                     messageId = assistantMsg.id
                     currentTurnHistory.push(assistantMsg)
@@ -1047,33 +1150,55 @@ export const sendMessage = createAsyncThunk<
           })
         } else {
           if (shouldUseLmStudio) {
+            const lmMessages: any[] = []
+            if (systemPrompt && systemPrompt.trim()) {
+              lmMessages.push({ role: 'system', content: systemPrompt })
+            }
+            lmMessages.push(
+              ...currentTurnHistory.map(m => ({
+                role: m.role,
+                content: m.content,
+                name: undefined,
+                tool_call_id: m.tool_call_id,
+                tool_calls: m.tool_calls,
+              }))
+            )
+            if (currentTurnContent && currentTurnContent.trim()) {
+              lmMessages.push({ role: 'user', content: currentTurnContent })
+            }
+
             await createLmStudioStreamingRequest(
               {
                 conversationId,
                 parentId: parent,
                 modelName,
                 systemPrompt,
-                messages: currentTurnHistory.map(m => ({
-                  role: m.role,
-                  content: m.content,
-                  name: undefined,
-                  tool_call_id: m.tool_call_id,
-                  tool_calls: m.tool_calls,
-                })),
+                messages: lmMessages,
                 tools: getEnabledTools(),
               },
               {
                 onChunk: chunk => {
                   dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   if (chunk.type === 'complete' && chunk.message) {
+                    // Add to Redux + update branch path
                     dispatch(chatSliceActions.messageAdded(chunk.message))
                     dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                    // Sync to React Query cache
                     updateMessageCache(extra.queryClient, conversationId, chunk.message)
-                    dualSync.syncMessage({
-                      ...chunk.message,
-                      user_id: auth.userId,
-                      project_id: selectedProject?.id || null,
-                    })
+                    // dualSync skips local-only records, so sync directly to local SQLite
+                    localApi
+                      .post('/sync/message', {
+                        ...chunk.message,
+                        conversation_id: conversationId,
+                        children_ids: chunk.message.children_ids || [],
+                        content_blocks: chunk.message.content_blocks || [],
+                        tool_calls: chunk.message.tool_calls || [],
+                        user_id: auth.userId,
+                        owner_id: auth.userId,
+                        project_id: selectedProject?.id || null,
+                        storage_mode: storageMode,
+                      })
+                      .catch(err => console.error('[sendMessage][lmstudio] Failed to sync assistant message:', err))
                     messageId = chunk.message.id
                     // Prepare for tool continuation if tool_calls exist
                     const hasToolCalls = Array.isArray(chunk.message.tool_calls) && chunk.message.tool_calls.length > 0
@@ -1773,8 +1898,11 @@ export const editMessageWithBranching = createAsyncThunk<
       let activeParentId = originalMessage.parent_id
 
       // Map UI provider to server provider id
-      const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
-      const serverProvider = appProvider === 'google' ? 'gemini' : appProvider
+      const providerRaw = state.chat.providerState.currentProvider || 'ollama'
+      const appProvider = providerRaw.toLowerCase()
+      const providerSlug = appProvider.replace(/\s+/g, '')
+      const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
+      const isLmStudio = providerSlug === 'lmstudio'
 
       // Combine system prompts in order: user default > project > conversation
       const selectedProject = selectSelectedProject(state)
@@ -1887,9 +2015,116 @@ export const editMessageWithBranching = createAsyncThunk<
       let messageId: MessageId | null = null
       let userMessage: any = null
 
+      const shouldUseLmStudio = isElectronMode && isLmStudio
+
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false
+
+        // LM Studio branch: handle locally like sendMessage does
+        if (shouldUseLmStudio) {
+          // Synthesize user message locally on first turn
+          if (turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
+            const newUserMessage: Message = {
+              id: uuidv4(),
+              conversation_id: conversationId,
+              parent_id: activeParentId,
+              children_ids: [],
+              role: 'user',
+              content: currentTurnContent,
+              content_plain_text: currentTurnContent,
+              thinking_block: '',
+              tool_calls: [],
+              content_blocks: [],
+              created_at: new Date().toISOString(),
+              model_name: modelName || '',
+              partial: false,
+              artifacts: [],
+              pastedContext: [],
+            }
+
+            dispatch(chatSliceActions.messageAdded(newUserMessage))
+            dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
+            updateMessageCache(extra.queryClient, conversationId, newUserMessage)
+
+            // Sync to local SQLite
+            localApi
+              .post('/sync/message', {
+                ...newUserMessage,
+                conversation_id: conversationId,
+                children_ids: newUserMessage.children_ids,
+                content_blocks: newUserMessage.content_blocks,
+                tool_calls: newUserMessage.tool_calls,
+                user_id: auth.userId,
+                owner_id: auth.userId,
+                project_id: selectedProject?.id || null,
+                storage_mode: storageMode,
+              })
+              .catch(err => console.error('[editMessageWithBranching][lmstudio] Failed to sync user message:', err))
+
+            userMessage = newUserMessage
+            currentTurnHistory.push(newUserMessage)
+            activeParentId = newUserMessage.id
+            console.log('[editMessageWithBranching][lmstudio] User message created, parent updated:', { userMsgId: newUserMessage.id })
+          }
+
+          // Build LM Studio messages
+          const lmMessages: any[] = []
+          if (systemPrompt && systemPrompt.trim()) {
+            lmMessages.push({ role: 'system', content: systemPrompt })
+          }
+          lmMessages.push(
+            ...currentTurnHistory.map(m => ({
+              role: m.role,
+              content: m.content,
+              name: undefined,
+              tool_call_id: m.tool_call_id,
+              tool_calls: m.tool_calls,
+            }))
+          )
+
+          await createLmStudioStreamingRequest(
+            {
+              conversationId,
+              parentId: activeParentId,
+              modelName,
+              systemPrompt,
+              messages: lmMessages,
+              tools: getEnabledTools(),
+            },
+            {
+              onChunk: chunk => {
+                dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
+                if (chunk.type === 'complete' && chunk.message) {
+                  dispatch(chatSliceActions.messageAdded(chunk.message))
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                  // Sync to local SQLite
+                  localApi
+                    .post('/sync/message', {
+                      ...chunk.message,
+                      conversation_id: conversationId,
+                      children_ids: chunk.message.children_ids || [],
+                      content_blocks: chunk.message.content_blocks || [],
+                      tool_calls: chunk.message.tool_calls || [],
+                      user_id: auth.userId,
+                      owner_id: auth.userId,
+                      project_id: selectedProject?.id || null,
+                      storage_mode: storageMode,
+                    })
+                    .catch(err => console.error('[editMessageWithBranching][lmstudio] Failed to sync assistant message:', err))
+                  messageId = chunk.message.id
+                  const hasToolCalls = Array.isArray(chunk.message.tool_calls) && chunk.message.tool_calls.length > 0
+                  continueTurn = hasToolCalls
+                  currentTurnContent = ''
+                  currentTurnHistory.push(chunk.message)
+                }
+              },
+            }
+          )
+          if (!continueTurn) break
+          continue
+        }
 
         // Create new user message as a branch (or continuation) - cloud server handles LLM, storageMode in body controls DB
         const response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
@@ -2378,8 +2613,11 @@ export const sendMessageToBranch = createAsyncThunk<
       const selectedName = modelsData?.selected?.name || modelsData?.default?.name
       const modelName = modelOverride || selectedName
       // Map UI provider to server provider id
-      const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
-      const serverProvider = appProvider === 'google' ? 'gemini' : appProvider
+      const providerRaw = state.chat.providerState.currentProvider || 'ollama'
+      const appProvider = providerRaw.toLowerCase()
+      const providerSlug = appProvider.replace(/\s+/g, '')
+      const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
+      const isLmStudio = providerSlug === 'lmstudio'
       const drafts = state.chat.composition.imageDrafts || []
       const attachmentsBase64 = drafts.length
         ? drafts.map(d => ({ dataUrl: d.dataUrl, name: d.name, type: d.type, size: d.size }))
@@ -2427,9 +2665,140 @@ export const sendMessageToBranch = createAsyncThunk<
       let messageId: MessageId | null = null
       let userMessage: any = null
 
+      // Build history from parent chain for LM Studio
+      const messagesCache = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>([
+        'conversations',
+        conversationId,
+        'messages',
+      ])
+      const cachedMessages = messagesCache?.messages || []
+      const currentMessages = cachedMessages.length > 0 ? cachedMessages : state.chat.conversation.messages
+      
+      // Build history by walking up parent chain
+      const buildHistoryFromParent = (parentId: MessageId | null): Message[] => {
+        const history: Message[] = []
+        let currentId = parentId
+        while (currentId) {
+          const msg = currentMessages.find(m => m.id === currentId)
+          if (msg) {
+            history.unshift(msg)
+            currentId = msg.parent_id
+          } else {
+            break
+          }
+        }
+        return history
+      }
+
+      let currentTurnHistory = buildHistoryFromParent(parentId)
+      const shouldUseLmStudio = isElectronMode && isLmStudio
+
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false
+
+        // LM Studio branch: handle locally
+        if (shouldUseLmStudio) {
+          // Synthesize user message locally on first turn
+          if (turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
+            const newUserMessage: Message = {
+              id: uuidv4(),
+              conversation_id: conversationId,
+              parent_id: currentParentId,
+              children_ids: [],
+              role: 'user',
+              content: currentTurnContent,
+              content_plain_text: currentTurnContent,
+              thinking_block: '',
+              tool_calls: [],
+              content_blocks: [],
+              created_at: new Date().toISOString(),
+              model_name: modelName || '',
+              partial: false,
+              artifacts: [],
+              pastedContext: [],
+            }
+
+            dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
+            updateMessageCache(extra.queryClient, conversationId, newUserMessage)
+
+            // Sync to local SQLite
+            localApi
+              .post('/sync/message', {
+                ...newUserMessage,
+                conversation_id: conversationId,
+                children_ids: newUserMessage.children_ids,
+                content_blocks: newUserMessage.content_blocks,
+                tool_calls: newUserMessage.tool_calls,
+                user_id: auth.userId,
+                owner_id: auth.userId,
+                project_id: selectedProject?.id || null,
+                storage_mode: storageMode,
+              })
+              .catch(err => console.error('[sendMessageToBranch][lmstudio] Failed to sync user message:', err))
+
+            userMessage = newUserMessage
+            currentTurnHistory.push(newUserMessage)
+            currentParentId = newUserMessage.id
+            console.log('[sendMessageToBranch][lmstudio] User message created, parent updated:', { userMsgId: newUserMessage.id })
+          }
+
+          // Build LM Studio messages
+          const lmMessages: any[] = []
+          if (effectiveSystemPrompt && effectiveSystemPrompt.trim()) {
+            lmMessages.push({ role: 'system', content: effectiveSystemPrompt })
+          }
+          lmMessages.push(
+            ...currentTurnHistory.map(m => ({
+              role: m.role,
+              content: m.content,
+              name: undefined,
+              tool_call_id: m.tool_call_id,
+              tool_calls: m.tool_calls,
+            }))
+          )
+
+          await createLmStudioStreamingRequest(
+            {
+              conversationId,
+              parentId: currentParentId,
+              modelName,
+              systemPrompt: effectiveSystemPrompt || '',
+              messages: lmMessages,
+              tools: getEnabledTools(),
+            },
+            {
+              onChunk: chunk => {
+                dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
+                if (chunk.type === 'complete' && chunk.message) {
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                  updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                  // Sync to local SQLite
+                  localApi
+                    .post('/sync/message', {
+                      ...chunk.message,
+                      conversation_id: conversationId,
+                      children_ids: chunk.message.children_ids || [],
+                      content_blocks: chunk.message.content_blocks || [],
+                      tool_calls: chunk.message.tool_calls || [],
+                      user_id: auth.userId,
+                      owner_id: auth.userId,
+                      project_id: selectedProject?.id || null,
+                      storage_mode: storageMode,
+                    })
+                    .catch(err => console.error('[sendMessageToBranch][lmstudio] Failed to sync assistant message:', err))
+                  messageId = chunk.message.id
+                  const hasToolCalls = Array.isArray(chunk.message.tool_calls) && chunk.message.tool_calls.length > 0
+                  continueTurn = hasToolCalls
+                  currentTurnContent = ''
+                  currentTurnHistory.push(chunk.message)
+                }
+              },
+            }
+          )
+          if (!continueTurn) break
+          continue
+        }
 
         // Cloud server handles LLM generation; storageMode in body tells it whether to save to cloud DB
         const endpoint = `/conversations/${conversationId}/messages`

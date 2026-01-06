@@ -783,10 +783,7 @@ export function useModels(provider: string | null) {
           endpoint = '/models/openai'
           break
         case 'openrouter':
-        case 'lmstudio':
-          break
-        case 'lmstudio':
-          endpoint = '/models/lmstudio'
+          endpoint = '/models/openrouter'
           break
         default:
           endpoint = '/models' // Ollama

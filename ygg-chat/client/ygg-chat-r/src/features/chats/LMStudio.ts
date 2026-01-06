@@ -1,12 +1,12 @@
 // LMStudio adapter: OpenAI-compatible streaming + models
 // Default base URL is LM Studio local server
 
-import { ConversationId, MessageId, ToolDefinition as SharedToolDefinition } from '../../../../../shared/types'
 import { v4 as uuidv4 } from 'uuid'
-import { getEnabledTools } from './toolDefinitions'
+import { ConversationId, MessageId, ToolDefinition as SharedToolDefinition } from '../../../../../shared/types'
 import { ContentBlock, Message, Model, ToolCall } from './chatTypes'
+import { getEnabledTools } from './toolDefinitions'
 
-const DEFAULT_LMSTUDIO_BASE = import.meta.env.VITE_LMSTUDIO_BASE || 'http://127.0.0.1:1234'
+const DEFAULT_LMSTUDIO_BASE = import.meta.env.VITE_LMSTUDIO_BASE || 'http://172.31.32.1:1234'
 
 // Map internal ToolDefinition -> OpenAI tool schema
 function mapTools(tools: SharedToolDefinition[]) {
