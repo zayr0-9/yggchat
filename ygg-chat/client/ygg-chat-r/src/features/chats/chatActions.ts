@@ -24,6 +24,7 @@ import {
 } from './chatTypes'
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
 import { getEnabledTools, getAllTools, setCustomTools } from './toolDefinitions'
+import { createLmStudioStreamingRequest } from './LMStudio'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -761,6 +762,7 @@ export const sendMessage = createAsyncThunk<
       // Map UI provider to server provider id
       const appProvider = (state.chat.providerState.currentProvider || 'ollama').toLowerCase()
       const serverProvider = appProvider === 'google' ? 'gemini' : appProvider
+      const isLmStudio = appProvider === 'lmstudio'
       // Gather any image drafts (base64) to send along with the message. Nullable when empty.
       const drafts = state.chat.composition.imageDrafts || []
       const attachmentsBase64 = drafts.length
@@ -844,7 +846,160 @@ export const sendMessage = createAsyncThunk<
           throw new Error('No model selected')
         }
 
+        const shouldUseLmStudio = isElectronMode && isLmStudio
+
+        const executeLocalTools = async (
+          assistantMessage: any,
+          assistantMessageId: MessageId | null,
+          assistantToolCalls: any[],
+          streamId: string
+        ) => {
+          const currentMessages = getState().chat.conversation.messages
+          const assistantStateMessage = currentMessages.find(m => m.id === (assistantMessageId || assistantMessage?.id))
+          const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
+          const operationMode = state.chat.operationMode
+          const toolResultBlocks: any[] = []
+          const processedToolCallIds = new Set<string>()
+          let successfulDesktopTool = false
+          let successfulBrowseWeb = false
+
+          const pendingToolCalls = assistantToolCalls
+          for (const toolCall of pendingToolCalls) {
+            let content: string
+            let isError = false
+
+            try {
+              const result = await executeToolWithPermissionCheck(
+                dispatch,
+                getState,
+                toolCall,
+                rootPath,
+                operationMode,
+                {
+                  conversationId,
+                  messageId: assistantMessageId ?? undefined,
+                  streamId,
+                }
+              )
+
+              content = typeof result === 'string' ? result : JSON.stringify(result)
+              if (isElectronEnvironment) {
+                successfulDesktopTool = true
+              } else if (toolCall?.name === 'browse_web') {
+                successfulBrowseWeb = true
+              }
+            } catch (error) {
+              isError = true
+              content = error instanceof Error ? error.message : String(error)
+            }
+
+            const toolResultBlock = {
+              type: 'tool_result',
+              tool_use_id: toolCall.id,
+              content,
+              is_error: isError,
+            }
+
+            toolResultBlocks.push(toolResultBlock)
+            processedToolCallIds.add(toolCall.id)
+
+            dispatch(
+              chatSliceActions.streamChunkReceived({
+                type: 'chunk',
+                part: 'tool_result',
+                toolResult: {
+                  tool_use_id: toolCall.id,
+                  content: toolResultBlock.content,
+                  is_error: isError,
+                },
+              })
+            )
+          }
+
+          if (toolResultBlocks.length > 0 && assistantStateMessage) {
+            const existingBlocks = parseContentBlocks(assistantStateMessage.content_blocks)
+            const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+            await dispatch(
+              updateMessage({
+                id: assistantStateMessage.id,
+                content: assistantStateMessage.content,
+                content_blocks: updatedContentBlocks,
+              })
+            )
+          }
+
+          const hasSuccessfulTool = successfulDesktopTool || successfulBrowseWeb
+          return hasSuccessfulTool
+        }
+
         if (repeatNum > 1 && turnCount === 1) {
+          if (shouldUseLmStudio) {
+            const lmHistory = currentTurnHistory.map(m => ({
+              role: m.role,
+              content: m.content,
+              name: undefined,
+              tool_call_id: m.tool_call_id,
+              tool_calls: m.tool_calls,
+            }))
+
+            await createLmStudioStreamingRequest(
+              {
+                conversationId,
+                parentId: parent,
+                modelName,
+                systemPrompt,
+                messages: lmHistory,
+                tools: getEnabledTools(),
+              },
+              {
+                onChunk: chunk => {
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
+
+                  if (chunk.part === 'tool_call' && chunk.toolCall) {
+                    // Accumulate tool calls for local execution
+                    const exists = currentTurnHistory.some(msg =>
+                      Array.isArray(msg.tool_calls) && msg.tool_calls.some((tc: any) => tc.id === chunk.toolCall.id)
+                    )
+                    if (!exists) {
+                      // create a synthetic assistant message if needed to host tool calls
+                    }
+                  }
+
+                  if (chunk.type === 'complete' && chunk.message) {
+                    const assistantMsg = chunk.message
+                    dispatch(chatSliceActions.messageAdded(assistantMsg))
+                    dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+                    updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+                    dualSync.syncMessage({
+                      ...assistantMsg,
+                      user_id: auth.userId,
+                      project_id: selectedProject?.id || null,
+                    })
+
+                    messageId = assistantMsg.id
+                    currentTurnHistory.push(assistantMsg)
+
+                    const toolCalls = Array.isArray(assistantMsg.tool_calls) ? assistantMsg.tool_calls : []
+                    if (toolCalls.length > 0) {
+                      continueTurn = true
+                      currentTurnContent = ''
+                      executeLocalTools(assistantMsg, assistantMsg.id, toolCalls, streamId).then(hasTool => {
+                        if (hasTool) {
+                          dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                        }
+                      })
+                    } else {
+                      continueTurn = false
+                    }
+                  }
+                },
+              }
+            )
+            if (!continueTurn) break
+            continue
+          }
+
           // Cloud server handles LLM generation; storageMode in body tells it whether to save to cloud DB
           const endpoint = `/conversations/${conversationId}/messages/repeat`
 
@@ -891,6 +1046,48 @@ export const sendMessage = createAsyncThunk<
             signal: controller.signal,
           })
         } else {
+          if (shouldUseLmStudio) {
+            await createLmStudioStreamingRequest(
+              {
+                conversationId,
+                parentId: parent,
+                modelName,
+                systemPrompt,
+                messages: currentTurnHistory.map(m => ({
+                  role: m.role,
+                  content: m.content,
+                  name: undefined,
+                  tool_call_id: m.tool_call_id,
+                  tool_calls: m.tool_calls,
+                })),
+                tools: getEnabledTools(),
+              },
+              {
+                onChunk: chunk => {
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
+                  if (chunk.type === 'complete' && chunk.message) {
+                    dispatch(chatSliceActions.messageAdded(chunk.message))
+                    dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                    updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                    dualSync.syncMessage({
+                      ...chunk.message,
+                      user_id: auth.userId,
+                      project_id: selectedProject?.id || null,
+                    })
+                    messageId = chunk.message.id
+                    // Prepare for tool continuation if tool_calls exist
+                    const hasToolCalls = Array.isArray(chunk.message.tool_calls) && chunk.message.tool_calls.length > 0
+                    continueTurn = hasToolCalls
+                    currentTurnContent = ''
+                    currentTurnHistory.push(chunk.message)
+                  }
+                },
+              }
+            )
+            if (!continueTurn) break
+            continue
+          }
+
           // Cloud server handles LLM generation; storageMode in body tells it whether to save to cloud DB
           const endpoint = `/conversations/${conversationId}/messages`
 
@@ -3911,3 +4108,5 @@ export const fetchUserSystemPrompts = createAsyncThunk<
     return rejectWithValue(message)
   }
 })
+// LM Studio models loader hook wiring TODO: integrate fetchLmStudioModels into useModels when provider = 'lmstudio'
+// Type shim for LM Studio branch to track parent across tool turns

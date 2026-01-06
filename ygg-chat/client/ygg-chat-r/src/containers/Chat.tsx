@@ -229,7 +229,9 @@ function Chat() {
   // Tool jobs modal state
   const [jobsModalOpen, setJobsModalOpen] = useState(false)
   const isElectronEnv = useMemo(
-    () => import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof window !== 'undefined' && (window as any).__IS_ELECTRON__),
+    () =>
+      import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+      (typeof window !== 'undefined' && (window as any).__IS_ELECTRON__),
     []
   )
 
@@ -1283,12 +1285,12 @@ function Chat() {
     [models, selectModelMutation, providers.currentProvider, selectedModel?.name]
   )
   // Commented out - provider selection removed from UI, defaulting to OpenRouter
-  // const handleProviderSelect = useCallback(
-  //   (providerName: string) => {
-  //     dispatch(chatSliceActions.providerSelected(providerName))
-  //   },
-  //   [dispatch]
-  // )
+  const handleProviderSelect = useCallback(
+    (providerName: string) => {
+      dispatch(chatSliceActions.providerSelected(providerName))
+    },
+    [dispatch]
+  )
   // Local version of canSend that checks localInput instead of Redux state
   const canSendLocal = useMemo(() => {
     const hasInput = localInput.trim().length > 0
@@ -2983,7 +2985,7 @@ function Chat() {
                   </Button>
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
                   {/* Provider selector commented out - defaulting to OpenRouter */}
-                  {/* <Select
+                  <Select
                     value={providers.currentProvider || ''}
                     onChange={handleProviderSelect}
                     options={providers.providers.map(p => p.name)}
@@ -2991,7 +2993,7 @@ function Chat() {
                     disabled={providers.providers.length === 0}
                     className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 transition-transform duration-60 active:scale-97'
                     searchBarVisible={true}
-                  /> */}
+                  />
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
                   <ModelSelectControl
                     provider={providers.currentProvider}

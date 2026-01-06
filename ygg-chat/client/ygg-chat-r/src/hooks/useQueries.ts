@@ -5,6 +5,7 @@ import { useLocation } from 'react-router-dom'
 import type { BaseModel, Project } from '../../../../shared/types'
 import { ConversationId, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
 import type { Message, Model } from '../features/chats/chatTypes'
+import { fetchLmStudioModels } from '../features/chats/LMStudio'
 import type { Conversation } from '../features/conversations/conversationTypes'
 import { api, environment, localApi } from '../utils/api'
 import { getFavoritedModels } from '../utils/favorites'
@@ -578,17 +579,14 @@ export function useConversationMessages(conversationId: ConversationId | null, s
   const query = useQuery({
     queryKey: ['conversations', conversationId, 'messages'],
     queryFn: async () => {
-      console.log('[useConversationMessages] queryFn START', { conversationId, storageMode, environment })
       if (!conversationId) throw new Error('Conversation ID is required')
 
       // Determine storage mode: use parameter if provided, otherwise check cached conversations
       let effectiveStorageMode = storageMode
-      console.log('[useConversationMessages] initial effectiveStorageMode from param:', effectiveStorageMode)
       if (!effectiveStorageMode) {
         // Search ALL cached conversation lists (main list, project lists, recent lists)
         // This finds the conversation even if it's only loaded in a specific project view
         const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
-        console.log('[useConversationMessages] checking caches, found queries:', allConversationQueries.length)
 
         for (const [data] of allConversationQueries) {
           if (Array.isArray(data)) {
@@ -626,19 +624,18 @@ export function useConversationMessages(conversationId: ConversationId | null, s
 
         // In Electron mode with unknown storage mode, try local first (handles page reload scenario)
         if (!effectiveStorageMode && environment === 'electron') {
-          console.log('[useConversationMessages] storage mode unknown in Electron, trying local first...')
           try {
-            const localResult = await localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
-              `/local/conversations/${conversationId}/messages/tree`
-            )
+            const localResult = await localApi.get<{
+              messages: Message[]
+              tree: any
+              meta?: { storage_mode: 'local' | 'cloud' }
+            }>(`/local/conversations/${conversationId}/messages/tree`)
             // If local API succeeds, return it
             if (localResult) {
-              console.log('[useConversationMessages] LOCAL SUCCESS - returning local data')
               return localResult
             }
           } catch (err) {
             // Local not found, fall through to cloud
-            console.log('[useConversationMessages] local try failed, falling back to cloud', err)
           }
           effectiveStorageMode = 'cloud'
         }
@@ -646,18 +643,14 @@ export function useConversationMessages(conversationId: ConversationId | null, s
         if (!effectiveStorageMode) effectiveStorageMode = 'cloud'
       }
 
-      console.log('[useConversationMessages] FINAL effectiveStorageMode:', effectiveStorageMode)
-
       // Route to appropriate API based on storage mode
       if (effectiveStorageMode === 'local' && environment === 'electron') {
-        console.log('[useConversationMessages] Using LOCAL API for conversation:', conversationId)
         return localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
           `/local/conversations/${conversationId}/messages/tree`
         )
       }
 
       // Default to cloud API
-      console.log('[useConversationMessages] Using CLOUD API for conversation:', conversationId)
       return api.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
         `/conversations/${conversationId}/messages/tree`,
         accessToken
@@ -757,6 +750,24 @@ export function useModels(provider: string | null) {
       if (!provider) throw new Error('Provider is required')
 
       const normalizedProvider = provider.toLowerCase()
+      const normalizedSlug = normalizedProvider.replace(/\s+/g, '')
+
+      if (normalizedSlug === 'lmstudio') {
+        const models = await fetchLmStudioModels()
+        const defaultModel = models[0] || stringToModel('lmstudio')
+
+        const storedSelection = getStoredSelectedModel()
+        const selectedModel = storedSelection
+          ? models.find(m => m.name === storedSelection.name) || defaultModel
+          : defaultModel
+
+        return {
+          models,
+          default: defaultModel,
+          selected: selectedModel,
+          userIsFreeTier: false,
+        }
+      }
       let endpoint = '/models' // Default to Ollama
 
       // Map provider to appropriate endpoint
@@ -772,7 +783,7 @@ export function useModels(provider: string | null) {
           endpoint = '/models/openai'
           break
         case 'openrouter':
-          endpoint = '/models/openrouter'
+        case 'lmstudio':
           break
         case 'lmstudio':
           endpoint = '/models/lmstudio'
@@ -1075,7 +1086,14 @@ export function useRefreshModels() {
   return useMutation({
     mutationFn: async (provider: string) => {
       const normalizedProvider = provider.toLowerCase()
+      const normalizedSlug = normalizedProvider.replace(/\s+/g, '')
       let endpoint = '/models'
+
+      if (normalizedSlug === 'lmstudio') {
+        const models = await fetchLmStudioModels()
+        const defaultModel = models[0] || stringToModel('lmstudio')
+        return { models, default: defaultModel }
+      }
 
       switch (normalizedProvider) {
         case 'google':
