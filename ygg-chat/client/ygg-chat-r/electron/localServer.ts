@@ -1731,6 +1731,18 @@ function setupServer() {
     try {
       await customToolRegistry.reload()
       const definitions = customToolRegistry.getDefinitions()
+
+      // Re-register custom tools with the orchestrator
+      for (const customToolDef of definitions) {
+        toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
+          return customToolRegistry.executeTool(customToolDef.name, args, {
+            cwd: options?.rootPath,
+            rootPath: options?.rootPath,
+            operationMode: options?.operationMode,
+          })
+        })
+      }
+
       res.json({
         success: true,
         tools: definitions,
@@ -3305,6 +3317,18 @@ export async function startLocalServer(port: number = 3002, dbPath?: string): Pr
     // Initialize tool orchestrator with database and register tools
     toolOrchestrator.initialize(db!)
     toolOrchestrator.registerTools(builtInTools)
+
+    // Register custom tools with the orchestrator
+    for (const customToolDef of customToolRegistry.getDefinitions()) {
+      toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
+        return customToolRegistry.executeTool(customToolDef.name, args, {
+          cwd: options?.rootPath,
+          rootPath: options?.rootPath,
+          operationMode: options?.operationMode,
+        })
+      })
+    }
+    console.log(`[LocalServer] Registered ${customToolRegistry.getDefinitions().length} custom tools with orchestrator`)
 
     setupServer()
 

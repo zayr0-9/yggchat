@@ -528,6 +528,8 @@ let mergedToolDefinitions: ToolDefinition[] = [...builtInToolDefinitions]
  * Custom tools cannot override built-in tools with the same name.
  */
 export const setCustomTools = (customTools: ToolDefinition[]): void => {
+  console.log(`[ToolDefinitions] setCustomTools called with ${customTools.length} tools:`, customTools.map(t => t.name))
+  
   // Filter out any custom tools that would override built-ins
   const builtInNames = new Set(builtInToolDefinitions.map(t => t.name))
   const safeCustomTools = customTools.filter(ct => {
@@ -540,6 +542,7 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
 
   // Merge built-in and custom tools
   mergedToolDefinitions = [...builtInToolDefinitions, ...safeCustomTools]
+  console.log(`[ToolDefinitions] Merged total: ${mergedToolDefinitions.length} (${safeCustomTools.length} custom)`)
 }
 
 /**
@@ -556,7 +559,13 @@ export const getAllTools = (): ToolDefinition[] => {
 
 // Get only enabled tools (built-in + custom)
 export const getEnabledTools = (): ToolDefinition[] => {
-  return mergedToolDefinitions.filter(t => t.enabled)
+  const enabled = mergedToolDefinitions.filter(t => t.enabled)
+  const customCount = enabled.filter(t => t.isCustom).length
+  console.log(`[ToolDefinitions] getEnabledTools: ${enabled.length} total (${customCount} custom)`)
+  if (customCount > 0) {
+    console.log('[ToolDefinitions] Custom tools:', enabled.filter(t => t.isCustom).map(t => t.name))
+  }
+  return enabled
 }
 
 // Get built-in tools only

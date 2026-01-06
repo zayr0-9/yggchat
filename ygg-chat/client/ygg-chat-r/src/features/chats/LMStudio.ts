@@ -172,7 +172,34 @@ export async function createLmStudioStreamingRequest(
   baseUrl = DEFAULT_LMSTUDIO_BASE
 ) {
   const { onChunk } = handlers
-  const tools = mapTools(payload.tools || getEnabledTools())
+
+  // Get built-in tools from payload or getEnabledTools
+  let allTools = payload.tools || getEnabledTools()
+
+  // Fetch custom tools directly and merge them
+  try {
+    const res = await fetch('http://127.0.0.1:3002/api/custom-tools')
+    if (res.ok) {
+      const data = await res.json()
+      if (data.success && Array.isArray(data.tools) && data.tools.length > 0) {
+        // Filter custom tools that aren't already in the list
+        const existingNames = new Set(allTools.map(t => t.name))
+        const newCustomTools = data.tools.filter((t: any) => !existingNames.has(t.name) && t.enabled !== false)
+        if (newCustomTools.length > 0) {
+          allTools = [...allTools, ...newCustomTools]
+          console.log('[LMStudio] Added custom tools:', newCustomTools.map((t: any) => t.name))
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[LMStudio] Failed to fetch custom tools:', e)
+  }
+
+  const tools = mapTools(allTools)
+
+  // Debug logging for tools
+  console.log('[LMStudio] Total tools count:', allTools.length)
+  console.log('[LMStudio] Tool names:', allTools.map(t => t.name))
 
   const body: any = {
     model: payload.modelName,
