@@ -17,6 +17,7 @@ import {
   Select,
   SettingsPane,
   TextField,
+  ToolJobsModal,
   ToolPermissionDialog,
 } from '../components'
 import {
@@ -225,6 +226,12 @@ function Chat() {
   const [isRefreshingCredits, setIsRefreshingCredits] = useState(false)
   // Todo list collapsed state
   const [todoListCollapsed, setTodoListCollapsed] = useState(false)
+  // Tool jobs modal state
+  const [jobsModalOpen, setJobsModalOpen] = useState(false)
+  const isElectronEnv = useMemo(
+    () => import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof window !== 'undefined' && (window as any).__IS_ELECTRON__),
+    []
+  )
 
   const handleCloseExpandedPreview = useCallback(() => {
     if (!expandedFilePath) return
@@ -3224,6 +3231,16 @@ function Chat() {
                   >
                     <i className='bx bx-paperclip text-[22px]' aria-hidden='true'></i>
                   </Button>
+                  <Button
+                    variant='outline2'
+                    className='rounded-full'
+                    size='large'
+                    onClick={() => setJobsModalOpen(true)}
+                    title={isElectronEnv ? 'View tool jobs' : 'Tool jobs are available in the desktop app'}
+                    disabled={!isElectronEnv}
+                  >
+                    <i className='bx bx-task text-[22px]' aria-hidden='true'></i>
+                  </Button>
                 </div>
                 <div className='flex items-center justify-end gap-2 pl-2.5'>
                   {!currentConversationId ? (
@@ -3488,6 +3505,7 @@ function Chat() {
         isOpen={showFreeTierModal}
         onClose={() => dispatch(chatSliceActions.freeTierLimitModalHidden())}
       />
+      <ToolJobsModal isOpen={jobsModalOpen} onClose={() => setJobsModalOpen(false)} />
     </motion.div>
   )
 }

@@ -375,6 +375,10 @@ const touchProjectTimestampInCache = (
 
 //   return response.json()
 // }
+// Helper: detect environment
+const isElectronEnvironment =
+  environment === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
+
 // Helper: convert Blob to data URL
 export const blobToDataURL = (blob: Blob): Promise<string> =>
   new Promise(resolve => {
@@ -457,9 +461,34 @@ const parseContentBlocks = (blocks: string | any[] | undefined): any[] => {
   return []
 }
 
-const executeLocalTool = async (toolCall: any, rootPath: string | null, operationMode: OperationMode) => {
-  // console.log(`🔧 Executing local tool: ${toolCall.name}`)
-  // console.log(`[chatActions] rootPath passed to tool: ${rootPath}`)
+/**
+ * Resolve timeout for a tool call (default 60s; long-duration defaults to 5m)
+ */
+const resolveToolTimeoutMs = (toolCall: any, override?: number) => {
+  if (typeof override === 'number') return override
+
+  const argTimeout = typeof toolCall?.arguments?.timeoutMs === 'number' ? toolCall.arguments.timeoutMs : undefined
+  const metadataTimeout = typeof toolCall?.timeoutMs === 'number' ? toolCall.timeoutMs : undefined
+  const isLongDuration =
+    toolCall?.metadata?.longDuration === true ||
+    toolCall?.arguments?.longDuration === true ||
+    toolCall?.arguments?.long_duration === true
+
+  if (typeof argTimeout === 'number') return argTimeout
+  if (typeof metadataTimeout === 'number') return metadataTimeout
+  if (isLongDuration) return 300000 // 5 minutes for long tasks
+  return 60000 // default 60s
+}
+
+/**
+ * Execute browse_web locally (allowed even in non-electron)
+ */
+const executeBrowseWebLocally = async (
+  toolCall: any,
+  rootPath: string | null,
+  operationMode: OperationMode,
+  timeoutMs: number
+) => {
   try {
     const response = await fetch(`${LOCAL_API_BASE}/tools/execute`, {
       method: 'POST',
@@ -469,6 +498,7 @@ const executeLocalTool = async (toolCall: any, rootPath: string | null, operatio
         args: toolCall.arguments,
         rootPath,
         operationMode,
+        timeoutMs,
       }),
     })
 
@@ -479,7 +509,146 @@ const executeLocalTool = async (toolCall: any, rootPath: string | null, operatio
     const data = await response.json()
     return data.result
   } catch (error) {
-    console.error(`Local tool execution error:`, error)
+    console.error(`browse_web execution error:`, error)
+    throw error instanceof Error ? error : new Error(String(error))
+  }
+}
+
+/**
+ * Execute a tool via orchestrator (blocking, immediate execution)
+ */
+const executeLocalTool = async (
+  toolCall: any,
+  rootPath: string | null,
+  operationMode: OperationMode,
+  context?: {
+    conversationId?: string
+    messageId?: string
+    streamId?: string
+    priority?: 'low' | 'normal' | 'high' | 'critical'
+    timeoutMs?: number
+  }
+) => {
+  const timeoutMs = resolveToolTimeoutMs(toolCall, context?.timeoutMs)
+
+  // Non-electron: only allow browse_web, otherwise bail
+  if (!isElectronEnvironment) {
+    if (toolCall?.name === 'browse_web') {
+      return await executeBrowseWebLocally(toolCall, rootPath, operationMode, timeoutMs)
+    }
+    throw new Error('Tool execution is only available in the desktop app.')
+  }
+
+  try {
+    const result = await executeToolAsJobAndWait(toolCall, rootPath, operationMode, {
+      conversationId: context?.conversationId,
+      messageId: context?.messageId,
+      streamId: context?.streamId,
+      priority: context?.priority ?? 'normal',
+      timeoutMs,
+    })
+    return result
+  } catch (error) {
+    console.error(`Tool execution error:`, error)
+    throw error instanceof Error ? error : new Error(String(error))
+  }
+}
+
+/**
+ * Execute a tool as a background job (via orchestrator)
+ * Returns immediately with the job ID - use toolJobManager to track progress
+ */
+export const submitToolAsJob = async (
+  toolCall: any,
+  rootPath: string | null,
+  operationMode: OperationMode,
+  options?: {
+    conversationId?: string
+    messageId?: string
+    streamId?: string
+    priority?: 'low' | 'normal' | 'high' | 'critical'
+    timeoutMs?: number
+  }
+) => {
+  try {
+    const response = await fetch(`${LOCAL_API_BASE}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toolName: toolCall.name,
+        args: toolCall.arguments,
+        options: {
+          rootPath,
+          operationMode,
+          conversationId: options?.conversationId,
+          messageId: options?.messageId,
+          streamId: options?.streamId,
+          priority: options?.priority ?? 'normal',
+          timeoutMs: options?.timeoutMs ?? 60000,
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Job submission failed: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    if (!data.success) {
+      throw new Error(data.error || 'Job submission failed')
+    }
+
+    return data.job
+  } catch (error) {
+    console.error(`Tool job submission error:`, error)
+    throw error
+  }
+}
+
+/**
+ * Execute a tool as a background job and wait for completion
+ * Useful for stream integration where you want managed execution but need the result
+ */
+export const executeToolAsJobAndWait = async (
+  toolCall: any,
+  rootPath: string | null,
+  operationMode: OperationMode,
+  options?: {
+    conversationId?: string
+    messageId?: string
+    streamId?: string
+    priority?: 'low' | 'normal' | 'high' | 'critical'
+    timeoutMs?: number
+  }
+) => {
+  try {
+    const response = await fetch(`${LOCAL_API_BASE}/jobs/execute-and-wait`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toolName: toolCall.name,
+        args: toolCall.arguments,
+        timeoutMs: options?.timeoutMs ?? 60000,
+        options: {
+          rootPath,
+          operationMode,
+          conversationId: options?.conversationId,
+          messageId: options?.messageId,
+          streamId: options?.streamId,
+          priority: options?.priority ?? 'normal',
+        },
+      }),
+    })
+
+    const data = await response.json()
+
+    if (data.success) {
+      return data.result
+    }
+
+    throw new Error(data.error || 'Job execution failed')
+  } catch (error) {
+    console.error(`Tool job execution error:`, error)
     return `Error executing tool ${toolCall.name}: ${error instanceof Error ? error.message : String(error)}`
   }
 }
@@ -491,7 +660,14 @@ const executeToolWithPermissionCheck = async (
   getState: any,
   toolCall: any,
   rootPath: string | null,
-  operationMode: OperationMode
+  operationMode: OperationMode,
+  context?: {
+    conversationId?: string
+    messageId?: string
+    streamId?: string
+    priority?: 'low' | 'normal' | 'high' | 'critical'
+    timeoutMs?: number
+  }
 ) => {
   // Check if auto-approve is enabled
   const state = getState() as RootState
@@ -499,7 +675,7 @@ const executeToolWithPermissionCheck = async (
 
   if (autoApprove) {
     // Auto-approve enabled: execute immediately without showing dialog
-    return await executeLocalTool(toolCall, rootPath, operationMode)
+    return await executeLocalTool(toolCall, rootPath, operationMode, context)
   }
 
   // Auto-approve disabled: show dialog and wait for user response
@@ -512,7 +688,7 @@ const executeToolWithPermissionCheck = async (
 
   // Execute or bail based on user decision
   if (allowed) {
-    return await executeLocalTool(toolCall, rootPath, operationMode)
+    return await executeLocalTool(toolCall, rootPath, operationMode, context)
   }
 
   // User explicitly denied the tool execution — surface as an error to halt generation
@@ -1046,16 +1222,36 @@ export const sendMessage = createAsyncThunk<
             const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
             const operationMode = state.chat.operationMode
             // console.log(`🛠️ [chatActions] rootPath passed to tool: ${rootPath}`)
-            for (const toolCall of pendingToolCalls) {
-              // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode)
+            let successfulDesktopTool = false
+            let successfulBrowseWeb = false
 
-              // Create tool_result block (NOT a separate message)
+            for (const toolCall of pendingToolCalls) {
+              let content: string
+              let isError = false
+
+              try {
+                const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode, {
+                  conversationId,
+                  messageId: messageId ?? turnAssistantMessageId ?? undefined,
+                  streamId,
+                })
+
+                content = typeof result === 'string' ? result : JSON.stringify(result)
+                if (isElectronEnvironment) {
+                  successfulDesktopTool = true
+                } else if (toolCall?.name === 'browse_web') {
+                  successfulBrowseWeb = true
+                }
+              } catch (error) {
+                isError = true
+                content = error instanceof Error ? error.message : String(error)
+              }
+
               const toolResultBlock = {
                 type: 'tool_result',
                 tool_use_id: toolCall.id,
-                content: typeof result === 'string' ? result : JSON.stringify(result),
-                is_error: false, // We handle errors in executeLocalTool returns
+                content,
+                is_error: isError,
               }
 
               toolResultBlocks.push(toolResultBlock)
@@ -1070,7 +1266,7 @@ export const sendMessage = createAsyncThunk<
                     toolResult: {
                       tool_use_id: toolCall.id,
                       content: toolResultBlock.content,
-                      is_error: false,
+                      is_error: isError,
                     },
                   },
                 })
@@ -1107,9 +1303,11 @@ export const sendMessage = createAsyncThunk<
             }
 
             // 4. Prepare for next turn (continuation)
+            const hasSuccessfulTool = successfulDesktopTool || successfulBrowseWeb
+
             currentTurnContent = '' // No new user input
             parent = messageId // Parent is the assistant message (not tool message)
-            continueTurn = true // Loop again to send tool results to LLM
+            continueTurn = hasSuccessfulTool // Loop again only when we executed a tool successfully
 
             // Reset buffers
             assistantMessageContent = ''
@@ -1815,16 +2013,36 @@ export const editMessageWithBranching = createAsyncThunk<
             const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
             const operationMode = state.chat.operationMode
 
-            for (const toolCall of pendingToolCalls) {
-              // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode)
+            let successfulDesktopTool = false
+            let successfulBrowseWeb = false
 
-              // Create tool_result block
+            for (const toolCall of pendingToolCalls) {
+              let content: string
+              let isError = false
+
+              try {
+                const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode, {
+                  conversationId,
+                  messageId: messageId ?? turnAssistantMessageId ?? undefined,
+                  streamId,
+                })
+
+                content = typeof result === 'string' ? result : JSON.stringify(result)
+                if (isElectronEnvironment) {
+                  successfulDesktopTool = true
+                } else if (toolCall?.name === 'browse_web') {
+                  successfulBrowseWeb = true
+                }
+              } catch (error) {
+                isError = true
+                content = error instanceof Error ? error.message : String(error)
+              }
+
               const toolResultBlock = {
                 type: 'tool_result',
                 tool_use_id: toolCall.id,
-                content: typeof result === 'string' ? result : JSON.stringify(result),
-                is_error: false,
+                content,
+                is_error: isError,
               }
 
               toolResultBlocks.push(toolResultBlock)
@@ -1837,7 +2055,7 @@ export const editMessageWithBranching = createAsyncThunk<
                   toolResult: {
                     tool_use_id: toolCall.id,
                     content: toolResultBlock.content,
-                    is_error: false,
+                    is_error: isError,
                   },
                 })
               )
@@ -1870,9 +2088,11 @@ export const editMessageWithBranching = createAsyncThunk<
             }
 
             // 4. Prepare for next turn
+            const hasSuccessfulTool = successfulDesktopTool || successfulBrowseWeb
+
             currentTurnContent = ''
             activeParentId = messageId // Parent is the assistant message (not tool message)
-            continueTurn = true
+            continueTurn = hasSuccessfulTool
             assistantMessageContent = ''
             assistantThinking = ''
             assistantToolCalls = []
@@ -2279,16 +2499,36 @@ export const sendMessageToBranch = createAsyncThunk<
             const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
             const operationMode = state.chat.operationMode
 
-            for (const toolCall of pendingToolCalls) {
-              // Execute tool
-              const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode)
+            let successfulDesktopTool = false
+            let successfulBrowseWeb = false
 
-              // Create tool_result block
+            for (const toolCall of pendingToolCalls) {
+              let content: string
+              let isError = false
+
+              try {
+                const result = await executeToolWithPermissionCheck(dispatch, getState, toolCall, rootPath, operationMode, {
+                  conversationId,
+                  messageId: messageId ?? turnAssistantMessageId ?? undefined,
+                  streamId,
+                })
+
+                content = typeof result === 'string' ? result : JSON.stringify(result)
+                if (isElectronEnvironment) {
+                  successfulDesktopTool = true
+                } else if (toolCall?.name === 'browse_web') {
+                  successfulBrowseWeb = true
+                }
+              } catch (error) {
+                isError = true
+                content = error instanceof Error ? error.message : String(error)
+              }
+
               const toolResultBlock = {
                 type: 'tool_result',
                 tool_use_id: toolCall.id,
-                content: typeof result === 'string' ? result : JSON.stringify(result),
-                is_error: false,
+                content,
+                is_error: isError,
               }
 
               toolResultBlocks.push(toolResultBlock)
@@ -2301,7 +2541,7 @@ export const sendMessageToBranch = createAsyncThunk<
                   toolResult: {
                     tool_use_id: toolCall.id,
                     content: toolResultBlock.content,
-                    is_error: false,
+                    is_error: isError,
                   },
                 })
               )
@@ -2341,9 +2581,11 @@ export const sendMessageToBranch = createAsyncThunk<
             }
 
             // 4. Prepare for next turn
+            const hasSuccessfulTool = successfulDesktopTool || successfulBrowseWeb
+
             currentTurnContent = ''
             currentParentId = messageId // Parent is the assistant message
-            continueTurn = true
+            continueTurn = hasSuccessfulTool
             assistantMessageContent = ''
             assistantThinking = ''
             assistantToolCalls = []
