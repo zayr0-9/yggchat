@@ -60,6 +60,7 @@ export async function fetchLmStudioModels(baseUrl = DEFAULT_LMSTUDIO_BASE): Prom
 
 // Types for streaming
 interface LmStudioDeltaToolCall {
+  index?: number
   id?: string
   type?: 'function'
   function?: {
@@ -72,16 +73,49 @@ interface LmStudioStreamChunk {
   choices?: Array<{ delta?: any; message?: any; finish_reason?: string | null }>
 }
 
-// Map OpenAI-like tool_calls delta to internal ToolCall
-function mapToolCallsFromDelta(deltaToolCalls: LmStudioDeltaToolCall[]): ToolCall[] {
-  const result: ToolCall[] = []
+// Accumulator for incremental tool call building
+// OpenAI streaming sends tool calls in pieces: first chunk has id+name, subsequent chunks append to arguments
+interface ToolCallAccumulator {
+  id: string
+  name: string
+  arguments: string
+}
+
+// Process incremental tool call deltas and accumulate them
+function processToolCallDeltas(
+  deltaToolCalls: LmStudioDeltaToolCall[],
+  accumulators: Map<number, ToolCallAccumulator>
+): { newToolCalls: ToolCall[]; updatedIndices: number[] } {
+  const newToolCalls: ToolCall[] = []
+  const updatedIndices: number[] = []
+
   for (const tc of deltaToolCalls || []) {
-    const id = tc.id || uuidv4()
-    const name = tc.function?.name || 'unknown_tool'
-    const args = tc.function?.arguments || ''
-    result.push({ id, name, arguments: args, status: 'pending' })
+    const index = tc.index ?? 0
+
+    if (!accumulators.has(index)) {
+      // First chunk for this tool call - create accumulator
+      const id = tc.id || uuidv4()
+      const name = tc.function?.name || ''
+      const args = tc.function?.arguments || ''
+      accumulators.set(index, { id, name, arguments: args })
+
+      // Only emit as new tool call if we have a name (first chunk)
+      if (name) {
+        newToolCalls.push({ id, name, arguments: args, status: 'pending' })
+      }
+    } else {
+      // Subsequent chunk - accumulate arguments
+      const acc = accumulators.get(index)!
+      if (tc.id) acc.id = tc.id
+      if (tc.function?.name) acc.name = tc.function.name
+      if (tc.function?.arguments) {
+        acc.arguments += tc.function.arguments
+      }
+      updatedIndices.push(index)
+    }
   }
-  return result
+
+  return { newToolCalls, updatedIndices }
 }
 
 // Build final Message from accumulated parts
@@ -169,9 +203,13 @@ export async function createLmStudioStreamingRequest(
 
   // Accumulators for final message
   let assistantText = ''
-  let assistantToolCalls: ToolCall[] = []
-  const contentBlocks: ContentBlock[] = []
+  let assistantReasoning = ''
+  // let assistantToolCalls: ToolCall[] = []
+  // const contentBlocks: ContentBlock[] = []
   let assistantMessageId: string | null = null
+
+  // Tool call accumulator for incremental streaming
+  const toolCallAccumulators = new Map<number, ToolCallAccumulator>()
 
   try {
     while (true) {
@@ -201,23 +239,11 @@ export async function createLmStudioStreamingRequest(
         const choice = parsed.choices[0]
         const delta = choice.delta || choice
 
-        // Tool calls delta
+        // Tool calls delta - accumulate incrementally
+        // Don't emit tool_call events during streaming since arguments are incomplete
+        // They will be included in the final complete message with full arguments
         if (delta?.tool_calls) {
-          const newToolCalls = mapToolCallsFromDelta(delta.tool_calls)
-          for (const tc of newToolCalls) {
-            const exists = assistantToolCalls.some(t => t.id === tc.id)
-            if (!exists) {
-              assistantToolCalls.push(tc)
-              contentBlocks.push({
-                type: 'tool_use',
-                index: contentBlocks.length,
-                id: tc.id,
-                name: tc.name,
-                input: tc.arguments,
-              })
-              onChunk({ type: 'chunk', part: 'tool_call', toolCall: tc })
-            }
-          }
+          processToolCallDeltas(delta.tool_calls, toolCallAccumulators)
         }
 
         // Text delta (OpenAI-style delta.content)
@@ -229,18 +255,84 @@ export async function createLmStudioStreamingRequest(
           }
         }
 
-        // finish_reason
+        // Reasoning delta (some models use this for chain-of-thought)
+        if (delta?.reasoning) {
+          const reasoningDelta = typeof delta.reasoning === 'string' ? delta.reasoning : ''
+          if (reasoningDelta) {
+            assistantReasoning += reasoningDelta
+            onChunk({ type: 'chunk', part: 'reasoning', delta: reasoningDelta })
+          }
+        }
+
+        // finish_reason - build final message with accumulated tool calls
         if (choice.finish_reason) {
           if (!assistantMessageId) assistantMessageId = uuidv4()
+
+          // Build final tool calls from accumulators (with complete arguments)
+          const finalToolCalls: ToolCall[] = []
+          const finalContentBlocks: ContentBlock[] = []
+
+          toolCallAccumulators.forEach((acc, index) => {
+            // Parse arguments JSON if possible
+            let parsedArgs: any = acc.arguments
+            try {
+              if (acc.arguments) {
+                parsedArgs = JSON.parse(acc.arguments)
+              }
+            } catch {
+              // Keep as string if not valid JSON
+            }
+
+            finalToolCalls.push({
+              id: acc.id,
+              name: acc.name,
+              arguments: parsedArgs,
+              status: 'pending',
+            })
+
+            finalContentBlocks.push({
+              type: 'tool_use',
+              index,
+              id: acc.id,
+              name: acc.name,
+              input: parsedArgs,
+            })
+          })
+
+          // Add text block if there's text content
+          if (assistantText) {
+            finalContentBlocks.unshift({
+              type: 'text',
+              index: 0,
+              content: assistantText,
+            })
+          }
+
+          // Add thinking block to content_blocks if there's reasoning content
+          // This is needed for persistence - when loaded from DB, contentBlocks are rendered
+          if (assistantReasoning) {
+            finalContentBlocks.unshift({
+              type: 'thinking',
+              index: 0,
+              content: assistantReasoning,
+            })
+          }
+
           const message = buildAssistantMessage({
             id: assistantMessageId,
             conversationId: payload.conversationId,
             parentId: payload.parentId,
             modelName: payload.modelName,
             text: assistantText,
-            toolCalls: assistantToolCalls,
-            contentBlocks,
+            toolCalls: finalToolCalls,
+            contentBlocks: finalContentBlocks,
           })
+
+          // Add reasoning to thinking_block if present
+          if (assistantReasoning) {
+            message.thinking_block = assistantReasoning
+          }
+
           onChunk({ type: 'complete', message })
         }
       }
