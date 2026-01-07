@@ -660,6 +660,10 @@ const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fu
       ref={iframeRef}
       className={fullHeight ? 'w-full h-full bg-white' : 'w-full min-h-[800px] rounded-lg bg-white'}
       style={{ border: 'none' }}
+      title='HTML Preview'
+      allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+      referrerPolicy='strict-origin-when-cross-origin'
+      sandbox='allow-scripts allow-same-origin allow-forms allow-popups allow-presentation'
     />
   )
 }
