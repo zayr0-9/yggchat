@@ -1573,13 +1573,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
                     const renderedBody = (() => {
                       if (typeof maybeHtml === 'string') {
-                        // Render HTML content (already sanitized server-side by htmlRenderer tool)
-                        return (
-                          <div
-                            className='prose max-w-none dark:prose-invert'
-                            dangerouslySetInnerHTML={{ __html: maybeHtml }}
-                          />
-                        )
+                        // Render HTML content in isolated iframe to prevent CSS leakage
+                        return <HtmlIframe html={maybeHtml} />
                       }
                       return formatToolResultContent(result.content)
                     })()

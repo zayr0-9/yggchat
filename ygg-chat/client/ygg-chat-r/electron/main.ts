@@ -255,6 +255,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      webviewTag: true, // Enable webview for YouTube embeds (fixes Error 153)
     },
     // Platform-specific title bar settings
     ...(process.platform === 'win32'
@@ -354,15 +355,14 @@ function createFloatingWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      webviewTag: true, // Enable webview for YouTube embeds (fixes Error 153)
     },
   })
 
   // Set floating level for better visibility over fullscreen apps
   floatingWindow.setAlwaysOnTop(true, 'floating', 1)
-  
   // Make window visible on all workspaces (including fullscreen apps)
   floatingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  
   // Disable fullscreen to keep it as a floating window
   floatingWindow.setFullScreenable(false)
 
