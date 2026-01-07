@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'child_process'
 import Conf from 'conf'
-import { app, BrowserWindow, ipcMain, nativeTheme, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, screen, shell } from 'electron'
 import autoUpdaterPkg from 'electron-updater'
 import fs from 'fs'
 import os from 'os'
@@ -655,6 +655,144 @@ ipcMain.handle('shell:openPath', async (_event, path: string) => {
     console.error('[Electron IPC] Failed to open path:', error)
     return { success: false, error: String(error) }
   }
+})
+
+// File dialog for custom tool widgets
+ipcMain.handle('dialog:openFile', async (_event, options?: {
+  title?: string
+  defaultPath?: string
+  filters?: { name: string; extensions: string[] }[]
+  properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
+}) => {
+  console.log('[Electron IPC] Opening file dialog with options:', options)
+  try {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: options?.title || 'Select File',
+      defaultPath: options?.defaultPath,
+      filters: options?.filters,
+      properties: options?.properties || ['openFile'],
+    })
+    return {
+      success: !result.canceled,
+      canceled: result.canceled,
+      filePaths: result.filePaths,
+    }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to open file dialog:', error)
+    return { success: false, error: String(error), filePaths: [] }
+  }
+})
+
+// Save dialog for custom tool widgets
+ipcMain.handle('dialog:saveFile', async (_event, options?: {
+  title?: string
+  defaultPath?: string
+  filters?: { name: string; extensions: string[] }[]
+}) => {
+  console.log('[Electron IPC] Opening save dialog with options:', options)
+  try {
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      title: options?.title || 'Save File',
+      defaultPath: options?.defaultPath,
+      filters: options?.filters,
+    })
+    return {
+      success: !result.canceled,
+      canceled: result.canceled,
+      filePath: result.filePath,
+    }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to open save dialog:', error)
+    return { success: false, error: String(error), filePath: undefined }
+  }
+})
+
+// Read file content for custom tool widgets
+ipcMain.handle('fs:readFile', async (_event, filePath: string, encoding?: BufferEncoding) => {
+  console.log('[Electron IPC] Reading file:', filePath)
+  try {
+    const content = fs.readFileSync(filePath, encoding || 'utf-8')
+    return { success: true, content }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to read file:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+// Write file content for custom tool widgets
+ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string, encoding?: BufferEncoding) => {
+  console.log('[Electron IPC] Writing file:', filePath)
+  try {
+    fs.writeFileSync(filePath, content, encoding || 'utf-8')
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to write file:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+// Create directory for custom tool widgets
+ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
+  console.log('[Electron IPC] Creating directory:', dirPath)
+  try {
+    fs.mkdirSync(dirPath, { recursive: true })
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to create directory:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+// Execute shell command for custom tool widgets
+ipcMain.handle('shell:exec', async (_event, command: string, options?: { cwd?: string; timeout?: number }) => {
+  console.log('[Electron IPC] Executing command:', command)
+  const { spawn } = require('child_process')
+  
+  return new Promise((resolve) => {
+    const timeout = options?.timeout || 300000 // 5 min default
+    let stdout = ''
+    let stderr = ''
+    let killed = false
+    
+    const child = spawn(command, [], {
+      shell: true,
+      cwd: options?.cwd,
+    })
+    
+    const timer = setTimeout(() => {
+      killed = true
+      child.kill('SIGTERM')
+    }, timeout)
+    
+    child.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString()
+    })
+    
+    child.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString()
+    })
+    
+    child.on('close', (code: number | null) => {
+      clearTimeout(timer)
+      resolve({
+        success: code === 0,
+        code,
+        stdout,
+        stderr,
+        killed,
+      })
+    })
+    
+    child.on('error', (err: Error) => {
+      clearTimeout(timer)
+      resolve({
+        success: false,
+        error: err.message,
+        stdout,
+        stderr,
+      })
+    })
+  })
 })
 
 // Floating window controls

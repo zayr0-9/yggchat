@@ -44,6 +44,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
   },
+  dialog: {
+    openFile: (options?: {
+      title?: string
+      defaultPath?: string
+      filters?: { name: string; extensions: string[] }[]
+      properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
+    }) => ipcRenderer.invoke('dialog:openFile', options),
+    saveFile: (options?: {
+      title?: string
+      defaultPath?: string
+      filters?: { name: string; extensions: string[] }[]
+    }) => ipcRenderer.invoke('dialog:saveFile', options),
+  },
+  fs: {
+    readFile: (filePath: string, encoding?: BufferEncoding) => ipcRenderer.invoke('fs:readFile', filePath, encoding),
+    writeFile: (filePath: string, content: string, encoding?: BufferEncoding) =>
+      ipcRenderer.invoke('fs:writeFile', filePath, content, encoding),
+    mkdir: (dirPath: string) => ipcRenderer.invoke('fs:mkdir', dirPath),
+  },
+  exec: {
+    run: (command: string, options?: { cwd?: string; timeout?: number }) =>
+      ipcRenderer.invoke('shell:exec', command, options),
+  },
   titleBar: {
     setOverlay: (payload: { color?: string; symbolColor?: string; height?: number }) =>
       ipcRenderer.invoke('titlebar:set-overlay', payload),

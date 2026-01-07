@@ -635,11 +635,86 @@ const todoActionLabel = (action: string) => {
 }
 
 // Component to render HTML in an iframe using srcdoc for packaged Electron compatibility
+// Supports postMessage bridge for file dialogs and filesystem access from widget iframes
 const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fullHeight = false }) => {
-  // Use srcdoc instead of document.write() - works better in packaged Electron apps
-  // document.write() loses origin context in sandboxed iframes within Electron production builds
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    // Bridge for iframe postMessage -> Electron IPC
+    const handleMessage = async (event: MessageEvent) => {
+      // Only handle messages from our iframe
+      if (iframeRef.current && event.source !== iframeRef.current.contentWindow) {
+        return
+      }
+
+      const { type, requestId, options } = event.data || {}
+      if (!type || !requestId) return
+
+      // Access Electron API if available
+      const electronAPI = (window as any).electronAPI
+
+      let response: any = { success: false, error: 'Unknown request type' }
+
+      try {
+        switch (type) {
+          case 'DIALOG_OPEN_FILE':
+            if (electronAPI?.dialog?.openFile) {
+              response = await electronAPI.dialog.openFile(options)
+            } else {
+              response = { success: false, error: 'File dialog not available (not in Electron)' }
+            }
+            break
+          case 'DIALOG_SAVE_FILE':
+            if (electronAPI?.dialog?.saveFile) {
+              response = await electronAPI.dialog.saveFile(options)
+            } else {
+              response = { success: false, error: 'Save dialog not available (not in Electron)' }
+            }
+            break
+          case 'FS_READ_FILE':
+            if (electronAPI?.fs?.readFile) {
+              response = await electronAPI.fs.readFile(options?.filePath, options?.encoding)
+            } else {
+              response = { success: false, error: 'File read not available (not in Electron)' }
+            }
+            break
+          case 'FS_WRITE_FILE':
+            if (electronAPI?.fs?.writeFile) {
+              response = await electronAPI.fs.writeFile(options?.filePath, options?.content, options?.encoding)
+            } else {
+              response = { success: false, error: 'File write not available (not in Electron)' }
+            }
+            break
+          case 'FS_MKDIR':
+            if (electronAPI?.fs?.mkdir) {
+              response = await electronAPI.fs.mkdir(options?.dirPath)
+            } else {
+              response = { success: false, error: 'Mkdir not available (not in Electron)' }
+            }
+            break
+          case 'SHELL_EXEC':
+            if (electronAPI?.exec?.run) {
+              response = await electronAPI.exec.run(options?.command, { cwd: options?.cwd, timeout: options?.timeout })
+            } else {
+              response = { success: false, error: 'Shell exec not available (not in Electron)' }
+            }
+            break
+        }
+      } catch (err) {
+        response = { success: false, error: String(err) }
+      }
+
+      // Send response back to iframe
+      iframeRef.current?.contentWindow?.postMessage({ type: `${type}_RESPONSE`, requestId, ...response }, '*')
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [])
+
   return (
     <iframe
+      ref={iframeRef}
       srcDoc={html}
       className={fullHeight ? 'w-full h-full bg-white' : 'w-full min-h-[800px] rounded-lg bg-white'}
       style={{ border: 'none' }}
@@ -1566,6 +1641,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       // Check if parsed/original content has an html property
                       if (typeof content === 'object' && content !== null && 'html' in content) {
                         return (content as any).html
+                      }
+
+                      // Check for {type: "text/html", content: "..."} format from custom tools
+                      if (typeof content === 'object' && content !== null && 
+                          (content as any).type === 'text/html' && typeof (content as any).content === 'string') {
+                        return (content as any).content
                       }
 
                       return null
