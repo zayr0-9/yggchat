@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../../features/chats/chatActions'
-// Note: fetchCustomTools and fetchTools are used by handleReloadTools for manual reload
 import { selectTools } from '../../features/chats/chatSelectors'
+import { getAllTools } from '../../features/chats/toolDefinitions'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { Button } from '../Button/button'
 
@@ -10,7 +10,10 @@ const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
 
 export const ToolsSettings: React.FC = () => {
   const dispatch = useAppDispatch()
-  const tools = useAppSelector(selectTools)
+  // Use Redux tools as trigger for re-render, but get actual tools from toolDefinitions
+  // This ensures we always see the merged list (built-in + custom)
+  const reduxTools = useAppSelector(selectTools)
+  const tools = getAllTools()
   const [updatingTools, setUpdatingTools] = useState<Set<string>>(new Set())
   const [showDesktopModal, setShowDesktopModal] = useState(false)
   const [showCustomToolsHelp, setShowCustomToolsHelp] = useState(false)

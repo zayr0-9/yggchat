@@ -25,7 +25,7 @@ import {
 } from './chatTypes'
 import { createLmStudioStreamingRequest } from './LMStudio'
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
-import { getAllTools, getEnabledTools, setCustomTools } from './toolDefinitions'
+import { getAllTools, getEnabledTools, setCustomTools, updateToolEnabled as updateToolEnabledInDefinitions } from './toolDefinitions'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -4267,7 +4267,9 @@ export const updateToolEnabled = createAsyncThunk<
   { toolName: string; enabled: boolean },
   { state: RootState }
 >('chat/updateToolEnabled', async ({ toolName, enabled }, { dispatch }) => {
-  // Update local state
+  // Update toolDefinitions module (source of truth for merged tools)
+  updateToolEnabledInDefinitions(toolName, enabled)
+  // Update Redux state for UI reactivity
   dispatch(chatSliceActions.toolEnabledUpdated({ toolName, enabled }))
 
   // Return the updated status
