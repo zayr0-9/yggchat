@@ -634,30 +634,13 @@ const todoActionLabel = (action: string) => {
   }
 }
 
-// Component to render HTML in an iframe using document.write for full CSS support
+// Component to render HTML in an iframe using srcdoc for packaged Electron compatibility
 const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fullHeight = false }) => {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-
-  useEffect(() => {
-    // Debug: log the raw HTML structure
-    console.log('HtmlIframe raw html length:', html.length)
-    console.log('HtmlIframe has <style>:', html.includes('<style'))
-    console.log('HtmlIframe has class=:', html.includes('class='))
-
-    // Use document.write for most reliable rendering with full CSS support
-    if (iframeRef.current) {
-      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
-      if (doc) {
-        doc.open()
-        doc.write(html)
-        doc.close()
-      }
-    }
-  }, [html])
-
+  // Use srcdoc instead of document.write() - works better in packaged Electron apps
+  // document.write() loses origin context in sandboxed iframes within Electron production builds
   return (
     <iframe
-      ref={iframeRef}
+      srcDoc={html}
       className={fullHeight ? 'w-full h-full bg-white' : 'w-full min-h-[800px] rounded-lg bg-white'}
       style={{ border: 'none' }}
       title='HTML Preview'
