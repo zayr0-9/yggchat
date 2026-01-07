@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../../features/chats/chatActions'
+// Note: fetchCustomTools and fetchTools are used by handleReloadTools for manual reload
 import { selectTools } from '../../features/chats/chatSelectors'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { Button } from '../Button/button'
@@ -24,12 +25,8 @@ export const ToolsSettings: React.FC = () => {
   }, [wslDistro])
 
   useEffect(() => {
-    // Fetch custom tools first (merges with built-in), then fetch all tools
-    dispatch(fetchCustomTools()).then(() => {
-      dispatch(fetchTools())
-    })
-
-    // Fetch custom tools directory path
+    // Tools are now initialized at store creation (store.ts)
+    // Only fetch the custom tools directory path for the UI
     if (!isWebMode) {
       fetch(`${LOCAL_API_BASE}/custom-tools/directory`)
         .then(res => res.json())
@@ -43,7 +40,7 @@ export const ToolsSettings: React.FC = () => {
           console.error('[ToolsSettings] Failed to fetch custom tools directory:', err)
         })
     }
-  }, [dispatch, isWebMode])
+  }, [isWebMode])
 
   const handleToggle = async (toolName: string, currentEnabled: boolean) => {
     setUpdatingTools(prev => new Set(prev).add(toolName))

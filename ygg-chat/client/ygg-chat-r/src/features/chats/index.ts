@@ -84,7 +84,9 @@ export {
 export {
   blobToDataURL,
   fetchConversationMessages,
+  fetchCustomTools,
   fetchMessageTree,
+  fetchTools,
   initializeConversationData,
   initializeUserAndConversation,
   resolveAttachmentUrl,

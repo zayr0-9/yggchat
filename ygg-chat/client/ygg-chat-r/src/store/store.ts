@@ -1,6 +1,6 @@
 // store.ts
 import { configureStore } from '@reduxjs/toolkit'
-import { chatReducer } from '../features/chats'
+import { chatReducer, fetchCustomTools, fetchTools } from '../features/chats'
 import { conversationsReducer } from '../features/conversations'
 import { ideContextReducer } from '../features/ideContext'
 import { default as projectsReducer } from '../features/projects/projectSlice'
@@ -31,6 +31,12 @@ export const store = configureStore({
       },
     }),
   devTools: process.env.NODE_ENV !== 'production',
+})
+
+// Initialize custom tools at app startup (before any component renders)
+// This ensures tools are available immediately when Chat component mounts
+store.dispatch(fetchCustomTools() as any).then(() => {
+  store.dispatch(fetchTools() as any)
 })
 
 // Store factory for testing with preloaded state
