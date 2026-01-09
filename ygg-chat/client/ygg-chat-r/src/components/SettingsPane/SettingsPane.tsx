@@ -10,6 +10,7 @@ import { useUserSystemPrompts } from '../../hooks/useUserSystemPrompts'
 import { extractTextFromPdf } from '../../utils/pdfUtils'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { ToolsSettings } from './ToolsSettings'
+import { VoiceSettings } from './VoiceSettings'
 
 type SettingsPaneProps = {
   open: boolean
@@ -334,9 +335,8 @@ ${block}`
       {/* Modal */}
       <div className='py-2 w-full max-w-5xl'>
         <div
-          className={`relative z-50 mx-4 rounded-3xl px-12 py-4 lg:py-6 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${
-            tools.some(tool => tool.enabled) ? 'h-[80vh]' : 'h-[58vh]'
-          }`}
+          className={`relative z-50 mx-4 rounded-3xl px-12 py-4 lg:py-6 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${tools.some(tool => tool.enabled) ? 'h-[80vh]' : 'h-[58vh]'
+            }`}
           onClick={e => e.stopPropagation()}
           style={{ scrollbarGutter: 'stable' }}
         >
@@ -385,11 +385,10 @@ ${block}`
                       <button
                         key={prompt.id}
                         onClick={() => handleSelectPrompt(prompt)}
-                        className={`flex items-center justify-center gap-2 flex-shrink-0 h-10 px-4 rounded-xl border transition-all duration-150 ${
-                          selectedPromptId === prompt.id
-                            ? 'bg-sky-600/70 text-white border-transparent'
-                            : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-transparent dark:border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700'
-                        }`}
+                        className={`flex items-center justify-center gap-2 flex-shrink-0 h-10 px-4 rounded-xl border transition-all duration-150 ${selectedPromptId === prompt.id
+                          ? 'bg-sky-600/70 text-white border-transparent'
+                          : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-transparent dark:border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                          }`}
                         title={prompt.description || prompt.content.substring(0, 100)}
                       >
                         <span className='font-medium text-sm whitespace-nowrap'>{prompt.name}</span>
@@ -525,6 +524,12 @@ ${block}`
                 showCharCount={true}
                 className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
               />
+            </div>
+
+            {/* Voice Settings Section */}
+            <div className='space-y-2'>
+              <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>Voice Input</span>
+              <VoiceSettings />
             </div>
 
             {/* Tools Section */}

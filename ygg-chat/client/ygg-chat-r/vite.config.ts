@@ -1,7 +1,34 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react-swc'
+import fs from 'fs'
 import path from 'path'
-import { defineConfig } from 'vite'
+import { defineConfig, Plugin } from 'vite'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
+
+// Custom plugin to serve WASM files with correct MIME type during dev
+function serveWasmPlugin(): Plugin {
+  return {
+    name: 'serve-wasm',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        // Handle requests for ONNX Runtime WASM files
+        if (req.url?.includes('ort-wasm') && req.url?.endsWith('.wasm')) {
+          const wasmPath = path.resolve(
+            __dirname,
+            '../../node_modules/openwakeword-wasm-browser/node_modules/onnxruntime-web/dist',
+            path.basename(req.url.split('?')[0])
+          )
+          if (fs.existsSync(wasmPath)) {
+            res.setHeader('Content-Type', 'application/wasm')
+            fs.createReadStream(wasmPath).pipe(res)
+            return
+          }
+        }
+        next()
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -13,7 +40,21 @@ export default defineConfig(({ mode }) => {
     // Use relative paths for Electron (file:// protocol requires ./ instead of /)
     base: isElectron ? './' : '/',
 
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      // Serve WASM files with correct MIME type during dev
+      serveWasmPlugin(),
+      // Copy ONNX Runtime WASM files to dist for production builds
+      viteStaticCopy({
+        targets: [
+          {
+            src: '../../node_modules/openwakeword-wasm-browser/node_modules/onnxruntime-web/dist/ort-wasm*.{wasm,mjs}',
+            dest: 'ort-wasm',
+          },
+        ],
+      }),
+    ],
 
     // Define compile-time constants for conditional code
     define: {
@@ -65,6 +106,17 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
       },
+      // Allow serving files from node_modules for ONNX Runtime WASM
+      fs: {
+        allow: ['..', '../../node_modules'],
+      },
+    },
+
+    // Optimize dependencies
+    optimizeDeps: {
+      // Exclude WASM-based packages from pre-bundling as they use dynamic imports
+      // onnxruntime-web MUST be excluded to avoid WASM MIME type issues
+      exclude: ['@xenova/transformers', 'onnxruntime-web'],
     },
   }
 })
