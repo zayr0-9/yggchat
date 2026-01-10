@@ -32,10 +32,16 @@ const PRIORITY_WEIGHTS: Record<JobPriority, number> = {
   critical: 4,
 }
 
-// Tool handler type (matches built-in tool signature)
+// Tool handler type (matches built-in tool signature, extended with context)
 type ToolHandler = (
   args: Record<string, any>,
-  options: { rootPath?: string; operationMode?: 'plan' | 'execute' }
+  options: {
+    rootPath?: string
+    operationMode?: 'plan' | 'execute'
+    conversationId?: string | null
+    messageId?: string | null
+    streamId?: string | null
+  }
 ) => Promise<any>
 
 export class ToolOrchestrator {
@@ -417,6 +423,9 @@ export class ToolOrchestrator {
         handler(job.args, {
           rootPath: job.rootPath ?? undefined,
           operationMode: job.operationMode,
+          conversationId: job.conversationId,
+          messageId: job.messageId,
+          streamId: job.streamId,
         }),
         timeoutPromise,
       ])

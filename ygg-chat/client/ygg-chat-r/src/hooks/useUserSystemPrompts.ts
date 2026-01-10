@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { createUserSystemPrompt, setDefaultUserSystemPrompt } from '../utils/api'
+import { clearDefaultUserSystemPrompt, createUserSystemPrompt, setDefaultUserSystemPrompt } from '../utils/api'
 import { useAuth } from './useAuth'
 import { UserSystemPromptCached, useUserSystemPromptsQuery } from './useQueries'
 
@@ -29,6 +29,7 @@ export interface UseUserSystemPromptsReturn {
   isExistingPrompt: boolean
   matchingPrompt: UserSystemPromptCached | null
   makingDefault: boolean
+  removingDefault: boolean
 
   // Actions
   setSelectedPromptId: (id: string | null) => void
@@ -37,6 +38,7 @@ export interface UseUserSystemPromptsReturn {
   handleSelectPrompt: (prompt: UserSystemPromptCached) => void
   handleSaveAsPrompt: () => Promise<void>
   handleMakeDefault: () => Promise<void>
+  handleRemoveDefault: () => Promise<void>
   resetSaveUI: () => void
   clearError: () => void
 }
@@ -57,6 +59,7 @@ export const useUserSystemPrompts = (options: UseUserSystemPromptsOptions = {}):
   const [savingPrompt, setSavingPrompt] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [makingDefault, setMakingDefault] = useState(false)
+  const [removingDefault, setRemovingDefault] = useState(false)
 
   // Find the prompt that matches current content (if any)
   const matchingPrompt = useMemo(() => {
@@ -144,6 +147,43 @@ export const useUserSystemPrompts = (options: UseUserSystemPromptsOptions = {}):
     }
   }, [matchingPrompt, accessToken, queryClient, userId, onError])
 
+  // Handle removing the default status from the matching prompt
+  const handleRemoveDefault = useCallback(async () => {
+    if (!matchingPrompt || !matchingPrompt.is_default) {
+      return
+    }
+
+    if (!accessToken) {
+      const errorMsg = 'Authentication required'
+      setSaveError(errorMsg)
+      onError?.(errorMsg)
+      return
+    }
+
+    setRemovingDefault(true)
+    setSaveError(null)
+
+    try {
+      await clearDefaultUserSystemPrompt(accessToken)
+
+      // Update React Query cache - set is_default to false for the matching prompt
+      queryClient.setQueryData<UserSystemPromptCached[]>(['userSystemPrompts', userId], old => {
+        if (!old) return old
+        return old.map(p => ({
+          ...p,
+          is_default: false,
+        }))
+      })
+    } catch (error) {
+      const errorMsg = 'Failed to remove default status. Please try again.'
+      console.error('Failed to remove default system prompt:', error)
+      setSaveError(errorMsg)
+      onError?.(errorMsg)
+    } finally {
+      setRemovingDefault(false)
+    }
+  }, [matchingPrompt, accessToken, queryClient, userId, onError])
+
   // Handle saving current prompt as a new user system prompt
   const handleSaveAsPrompt = useCallback(async () => {
     // Validation
@@ -219,6 +259,7 @@ export const useUserSystemPrompts = (options: UseUserSystemPromptsOptions = {}):
     isExistingPrompt,
     matchingPrompt,
     makingDefault,
+    removingDefault,
 
     // Actions
     setSelectedPromptId,
@@ -227,6 +268,7 @@ export const useUserSystemPrompts = (options: UseUserSystemPromptsOptions = {}):
     handleSelectPrompt,
     handleSaveAsPrompt,
     handleMakeDefault,
+    handleRemoveDefault,
     resetSaveUI,
     clearError,
   }

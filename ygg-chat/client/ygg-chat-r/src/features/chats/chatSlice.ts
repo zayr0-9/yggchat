@@ -21,6 +21,17 @@ import {
 import { createEmptyStreamState, DEFAULT_STREAM_ID } from './streamHelpers'
 import toolDefinitions, { ToolDefinition } from './toolDefinitions'
 
+// Helper to deep clone tool definitions for mutable Redux state
+const cloneTools = (tools: ToolDefinition[]): ToolDefinition[] =>
+  tools.map(t => ({
+    ...t,
+    inputSchema: {
+      ...t.inputSchema,
+      properties: { ...t.inputSchema.properties },
+      required: t.inputSchema.required ? [...t.inputSchema.required] : undefined,
+    },
+  }))
+
 // Helper function to build path from root to a message
 const buildPathToMessage = (messages: Message[], messageId: MessageId): MessageId[] => {
   const path: MessageId[] = []
@@ -111,7 +122,7 @@ const makeInitialState = (): ChatState => ({
     byMessage: {},
     backup: {},
   },
-  tools: toolDefinitions,
+  tools: cloneTools(toolDefinitions),
   toolCallPermissionRequest: null,
   toolAutoApprove: false,
   operationMode: 'plan',
@@ -774,7 +785,7 @@ export const chatSlice = createSlice({
 
     // Tools management
     toolsLoaded: (state, action: PayloadAction<any[]>) => {
-      state.tools = action.payload
+      state.tools = cloneTools(action.payload)
     },
     toolsError: (_state, action: PayloadAction<string>) => {
       console.error('Tools error:', action.payload)
@@ -787,7 +798,7 @@ export const chatSlice = createSlice({
     },
     // Set entire tools array (used when merging with custom tools)
     setTools: (state, action: PayloadAction<ToolDefinition[]>) => {
-      state.tools = action.payload
+      state.tools = cloneTools(action.payload)
     },
 
     toolPermissionRequested: (state, action: PayloadAction<ToolCallPermissionRequest>) => {

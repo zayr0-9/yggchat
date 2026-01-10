@@ -56,11 +56,14 @@ export interface CustomToolDefinition {
   sourcePath: string
 }
 
-// Tool execution options (matches built-in tools pattern)
+// Tool execution options (matches built-in tools pattern, extended with context)
 export interface ToolExecutionOptions {
   cwd?: string
   operationMode?: 'plan' | 'execute'
   rootPath?: string
+  conversationId?: string | null
+  messageId?: string | null
+  streamId?: string | null
 }
 
 // Tool result interface

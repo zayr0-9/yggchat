@@ -25,7 +25,8 @@ import {
 } from './chatTypes'
 import { createLmStudioStreamingRequest } from './LMStudio'
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
-import { getAllTools, getEnabledTools, setCustomTools, updateToolEnabled as updateToolEnabledInDefinitions } from './toolDefinitions'
+import { getAllTools, getToolsForAI, setCustomTools, updateToolEnabled as updateToolEnabledInDefinitions } from './toolDefinitions'
+import sysPromptConfig from './sys_prompt.json'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -842,6 +843,9 @@ export const sendMessage = createAsyncThunk<
         systemPrompt = cwdPrefix + systemPrompt
       }
 
+      // Append custom tools explanation to system prompt
+      systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
+
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       const isElectronMode =
@@ -1088,7 +1092,7 @@ export const sendMessage = createAsyncThunk<
                 modelName,
                 systemPrompt,
                 messages: lmMessages,
-                tools: getEnabledTools(),
+                tools: getToolsForAI(),
               },
               {
                 onChunk: chunk => {
@@ -1252,7 +1256,7 @@ export const sendMessage = createAsyncThunk<
               isElectron: isElectronMode,
               imageConfig,
               reasoningConfig,
-              tools: getEnabledTools(),
+              tools: getToolsForAI(),
             }),
             signal: controller.signal,
           })
@@ -1300,7 +1304,7 @@ export const sendMessage = createAsyncThunk<
                 modelName,
                 systemPrompt,
                 messages: lmMessages,
-                tools: getEnabledTools(),
+                tools: getToolsForAI(),
               },
               {
                 onChunk: chunk => {
@@ -1467,7 +1471,7 @@ export const sendMessage = createAsyncThunk<
               isElectron: isElectronMode,
               imageConfig,
               reasoningConfig,
-              tools: getEnabledTools(),
+              tools: getToolsForAI(),
             }),
             signal: controller.signal,
           })
@@ -2231,6 +2235,9 @@ export const editMessageWithBranching = createAsyncThunk<
         systemPrompt = cwdPrefix + systemPrompt
       }
 
+      // Append custom tools explanation to system prompt
+      systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
+
       // Determine execution mode
       const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       const isElectronMode =
@@ -2339,7 +2346,7 @@ export const editMessageWithBranching = createAsyncThunk<
               modelName,
               systemPrompt,
               messages: lmMessages,
-              tools: getEnabledTools(),
+              tools: getToolsForAI(),
             },
             {
               onChunk: chunk => {
@@ -2482,7 +2489,7 @@ export const editMessageWithBranching = createAsyncThunk<
             isBranch: true,
             storageMode,
             isElectron: isElectronMode,
-            tools: getEnabledTools(),
+            tools: getToolsForAI(),
           }),
           signal: controller.signal,
         })
@@ -2979,6 +2986,9 @@ export const sendMessageToBranch = createAsyncThunk<
         effectiveSystemPrompt = cwdPrefix + (effectiveSystemPrompt || '')
       }
 
+      // Append custom tools explanation to system prompt
+      effectiveSystemPrompt = (effectiveSystemPrompt || '') + '\n\n' + sysPromptConfig.customToolsPrompt
+
       if (!modelName) {
         throw new Error('No model selected')
       }
@@ -3113,7 +3123,7 @@ export const sendMessageToBranch = createAsyncThunk<
               modelName,
               systemPrompt: effectiveSystemPrompt || '',
               messages: lmMessages,
-              tools: getEnabledTools(),
+              tools: getToolsForAI(),
             },
             {
               onChunk: chunk => {
@@ -3241,7 +3251,7 @@ export const sendMessageToBranch = createAsyncThunk<
             isBranch: true,
             storageMode,
             isElectron: isElectronMode,
-            tools: getEnabledTools(),
+            tools: getToolsForAI(),
           }),
           signal: controller.signal,
         })

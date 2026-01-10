@@ -47,9 +47,11 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
     isExistingPrompt,
     matchingPrompt,
     makingDefault,
+    removingDefault,
     handleSelectPrompt,
     handleSaveAsPrompt,
     handleMakeDefault,
+    handleRemoveDefault,
     resetSaveUI,
   } = useUserSystemPrompts({
     currentPromptContent: newProjectSystemPrompt,
@@ -238,9 +240,19 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
               {newProjectSystemPrompt.trim() && (
                 <div className='mt-3'>
                   {isExistingPrompt ? (
-                    // Show "Make Default" button when prompt already exists
+                    // Show "Make Default" or "Remove Default" button when prompt already exists
                     matchingPrompt &&
-                    !matchingPrompt.is_default && (
+                    (matchingPrompt.is_default ? (
+                      <button
+                        type='button'
+                        onClick={handleRemoveDefault}
+                        disabled={removingDefault}
+                        className='flex items-center gap-2 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors disabled:opacity-50'
+                      >
+                        <i className='bx bxs-star text-base'></i>
+                        {removingDefault ? 'Removing...' : 'Remove Default'}
+                      </button>
+                    ) : (
                       <button
                         type='button'
                         onClick={handleMakeDefault}
@@ -250,7 +262,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
                         <i className='bx bx-star text-base'></i>
                         {makingDefault ? 'Setting...' : 'Make Default'}
                       </button>
-                    )
+                    ))
                   ) : (
                     // Show "Save as Prompt" when content doesn't match existing prompt
                     <>

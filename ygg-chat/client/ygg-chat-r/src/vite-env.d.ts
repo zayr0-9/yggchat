@@ -58,7 +58,9 @@ interface ElectronAPI {
     onChecking: (callback: () => void) => () => void
     onUpdateAvailable: (callback: (info: { version: string }) => void) => () => void
     onUpdateNotAvailable: (callback: (info: any) => void) => () => void
-    onDownloadProgress: (callback: (progress: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => () => void
+    onDownloadProgress: (
+      callback: (progress: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void
+    ) => () => void
     onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void
     onError: (callback: (error: string) => void) => () => void
   }
@@ -68,3 +70,5 @@ interface ElectronAPI {
 interface Window {
   electronAPI?: ElectronAPI
 }
+
+declare module 'openwakeword-wasm-browser'

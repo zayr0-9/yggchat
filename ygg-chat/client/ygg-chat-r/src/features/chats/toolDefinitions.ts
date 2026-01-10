@@ -517,10 +517,45 @@ const builtInToolDefinitions: ToolDefinition[] = [
       required: ['url'],
     },
   },
+  {
+    name: 'custom_tool_manager',
+    enabled: true,
+    description:
+      'Query and discover custom tools. Use "list" to see all available custom tools with brief descriptions, or "get" to retrieve full definitions for specific tools by name. Custom tools extend AI capabilities with user-defined functionality.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'get'],
+          description:
+            'Action to perform: "list" = show all custom tools with brief descriptions; "get" = retrieve full definitions for specific tools',
+        },
+        names: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'For "get" action: array of tool names to retrieve full definitions for. Example: ["my_tool", "another_tool"]',
+        },
+      },
+      required: ['action'],
+    },
+  },
 ]
 
+// Helper to deep clone a tool definition (makes it mutable)
+const cloneTool = (tool: ToolDefinition): ToolDefinition => ({
+  ...tool,
+  inputSchema: {
+    ...tool.inputSchema,
+    properties: { ...tool.inputSchema.properties },
+    required: tool.inputSchema.required ? [...tool.inputSchema.required] : undefined,
+  },
+})
+
 // Mutable array that holds merged tools (built-in + custom)
-let mergedToolDefinitions: ToolDefinition[] = [...builtInToolDefinitions]
+// Deep clone to ensure objects are mutable
+let mergedToolDefinitions: ToolDefinition[] = builtInToolDefinitions.map(cloneTool)
 
 /**
  * Set custom tools from the local server.
@@ -529,7 +564,7 @@ let mergedToolDefinitions: ToolDefinition[] = [...builtInToolDefinitions]
  */
 export const setCustomTools = (customTools: ToolDefinition[]): void => {
   console.log(`[ToolDefinitions] setCustomTools called with ${customTools.length} tools:`, customTools.map(t => t.name))
-  
+
   // Filter out any custom tools that would override built-ins
   const builtInNames = new Set(builtInToolDefinitions.map(t => t.name))
   const safeCustomTools = customTools.filter(ct => {
@@ -540,8 +575,11 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
     return true
   })
 
-  // Merge built-in and custom tools
-  mergedToolDefinitions = [...builtInToolDefinitions, ...safeCustomTools]
+  // Merge built-in (cloned) and custom tools (cloned for safety)
+  mergedToolDefinitions = [
+    ...builtInToolDefinitions.map(cloneTool),
+    ...safeCustomTools.map(cloneTool),
+  ]
   console.log(`[ToolDefinitions] Merged total: ${mergedToolDefinitions.length} (${safeCustomTools.length} custom)`)
 }
 
@@ -549,7 +587,7 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
  * Clear all custom tools (reset to built-in only)
  */
 export const clearCustomTools = (): void => {
-  mergedToolDefinitions = [...builtInToolDefinitions]
+  mergedToolDefinitions = builtInToolDefinitions.map(cloneTool)
 }
 
 // Get all tool definitions (built-in + custom)
@@ -578,21 +616,29 @@ export const getCustomTools = (): ToolDefinition[] => {
   return mergedToolDefinitions.filter(t => t.isCustom)
 }
 
+/**
+ * Get tools to send to AI API.
+ * Returns only built-in enabled tools (excludes custom tools).
+ * Custom tools are accessed via the custom_tool_manager tool.
+ */
+export const getToolsForAI = (): ToolDefinition[] => {
+  // Use mergedToolDefinitions (mutable) to get current enabled state, filter out custom tools
+  const enabled = mergedToolDefinitions.filter(t => t.enabled && !t.isCustom)
+  console.log(`[ToolDefinitions] getToolsForAI: ${enabled.length} built-in tools (custom tools excluded)`)
+  return enabled
+}
+
 // Get tool by name
 export const getToolByName = (name: string): ToolDefinition | undefined => {
   return mergedToolDefinitions.find(t => t.name === name)
 }
 
 // Update tool enabled status (works for both built-in and custom tools)
+// Only updates mergedToolDefinitions (the mutable working copy)
 export const updateToolEnabled = (name: string, enabled: boolean): boolean => {
   const tool = mergedToolDefinitions.find(t => t.name === name)
   if (tool) {
     tool.enabled = enabled
-    // Also update in built-in array if it's a built-in tool
-    const builtInTool = builtInToolDefinitions.find(t => t.name === name)
-    if (builtInTool) {
-      builtInTool.enabled = enabled
-    }
     return true
   }
   return false

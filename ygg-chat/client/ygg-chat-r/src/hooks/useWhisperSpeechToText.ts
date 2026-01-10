@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getAssetPath } from '@/utils/assetPath'
 
 interface UseWhisperSpeechToTextOptions {
   onTranscript?: (transcript: string) => void
@@ -34,7 +35,7 @@ const loadWhisperPipeline = async (
 
   pipelinePromise = (async () => {
     console.log('[Whisper] Loading transformers.js...')
-    const transformers = await import('@xenova/transformers')
+    const transformers = await import('@huggingface/transformers')
     const { pipeline, env } = transformers
 
     // Configure environment for proper model loading
@@ -42,10 +43,20 @@ const loadWhisperPipeline = async (
       // Use local models from public/models/ directory
       env.allowLocalModels = true
       env.allowRemoteModels = false // Disable remote to avoid CDN issues
-      env.localModelPath = '/models/' // Relative to public folder
+      env.localModelPath = getAssetPath('models/') // Relative to public folder
 
       // Use browser cache for any cached data
       env.useBrowserCache = true
+
+      console.log('[Whisper] Transformers environment:', env);
+
+      // Configure WASM paths
+      if (env.backends?.onnx?.wasm) {
+        env.backends.onnx.wasm.wasmPaths = getAssetPath('ort-wasm/');
+        console.log('[Whisper] Set WASM paths to:', env.backends.onnx.wasm.wasmPaths);
+      } else {
+        console.warn('[Whisper] env.backends.onnx.wasm is missing!');
+      }
 
       console.log('[Whisper] Environment configured for LOCAL models:', {
         allowLocalModels: env.allowLocalModels,
@@ -72,7 +83,7 @@ const loadWhisperPipeline = async (
           }
         },
         // Explicitly set quantized model for smaller size
-        quantized: true,
+        // quantized: true,
       })
 
       console.log('[Whisper] Model loaded successfully')
@@ -310,8 +321,8 @@ export const useWhisperSpeechToText = ({
       // Start silence detection loop
       const silenceCheckInterval = setInterval(checkSilence, 200)
 
-      // Store interval for cleanup
-      ;(mediaRecorder as any)._silenceCheckInterval = silenceCheckInterval
+        // Store interval for cleanup
+        ; (mediaRecorder as any)._silenceCheckInterval = silenceCheckInterval
     } catch (err) {
       console.error('[Whisper] Failed to start recording:', err)
       setWhisperState(prev => ({

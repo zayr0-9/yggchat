@@ -795,6 +795,96 @@ ipcMain.handle('shell:exec', async (_event, command: string, options?: { cwd?: s
   })
 })
 
+// HTTP request handler for custom tool widgets (enables calling local/remote APIs)
+ipcMain.handle('http:request', async (_event, options: {
+  url: string
+  method?: string
+  headers?: Record<string, string>
+  body?: string
+  timeout?: number
+}) => {
+  console.log('[Electron IPC] HTTP request:', options.method || 'GET', options.url)
+  
+  const http = require('http')
+  const https = require('https')
+  const { URL } = require('url')
+  
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(options.url)
+      const isHttps = url.protocol === 'https:'
+      const lib = isHttps ? https : http
+      
+      const timeout = options.timeout || 30000
+      
+      const reqOptions = {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        method: options.method || 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
+        timeout,
+      }
+      
+      const req = lib.request(reqOptions, (res: any) => {
+        let data = ''
+        
+        res.on('data', (chunk: Buffer) => {
+          data += chunk.toString()
+        })
+        
+        res.on('end', () => {
+          let parsedData: any = data
+          try {
+            parsedData = JSON.parse(data)
+          } catch {
+            // Keep as string if not JSON
+          }
+          
+          resolve({
+            success: res.statusCode >= 200 && res.statusCode < 300,
+            status: res.statusCode,
+            statusText: res.statusMessage,
+            headers: res.headers,
+            data: parsedData,
+          })
+        })
+      })
+      
+      req.on('error', (err: Error) => {
+        console.error('[Electron IPC] HTTP request error:', err)
+        resolve({
+          success: false,
+          error: err.message,
+        })
+      })
+      
+      req.on('timeout', () => {
+        req.destroy()
+        resolve({
+          success: false,
+          error: 'Request timeout',
+        })
+      })
+      
+      if (options.body) {
+        req.write(options.body)
+      }
+      
+      req.end()
+    } catch (err) {
+      console.error('[Electron IPC] HTTP request setup error:', err)
+      resolve({
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  })
+})
+
 // Floating window controls
 ipcMain.handle('window:openFloating', async () => {
   console.log('[Electron IPC] Opening floating window')

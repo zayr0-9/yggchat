@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getAssetPath } from '@/utils/assetPath'
 
 interface UseWakeWordOptions {
   keywords?: string[]
@@ -66,10 +67,13 @@ export const useWakeWord = ({
         const { default: WakeWordEngine } = await import('openwakeword-wasm-browser')
 
         console.log('[WakeWord] Creating engine with keywords:', keywords)
+        const ortWasmPath = getAssetPath('ort-wasm/');
+        console.log('[WakeWord] ortWasmPath computed as:', ortWasmPath);
+
         const engine = new WakeWordEngine({
-          baseAssetUrl: '/openwakeword/models',
+          baseAssetUrl: getAssetPath('openwakeword/models'),
           // Point to where Vite serves/copies WASM files (custom plugin during dev, static copy for build)
-          ortWasmPath: '/ort-wasm/',
+          ortWasmPath: ortWasmPath,
           keywords: keywords,
           detectionThreshold: threshold,
           cooldownMs: cooldownMs,

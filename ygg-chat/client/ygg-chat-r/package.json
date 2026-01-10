@@ -4,6 +4,9 @@
   "version": "0.0.24",
   "type": "module",
   "main": "electron/main.mjs",
+  "overrides": {
+    "onnxruntime-web": "1.23.2"
+  },
   "scripts": {
     "dev": "cross-env BUILD_TARGET=web vite",
     "dev:local": "cross-env BUILD_TARGET=local vite",
@@ -38,7 +41,7 @@
     "@tanstack/react-query-persist-client": "^5.90.2",
     "@types/three": "^0.182.0",
     "@vercel/analytics": "^1.6.1",
-    "@xenova/transformers": "^2.17.2",
+    "@huggingface/transformers": "^3.8.1",
     "@xyflow/react": "^12.8.2",
     "ajv": "^8.17.1",
     "ajv-formats": "^2.1.1",
@@ -61,6 +64,7 @@
     "lucide-react": "^0.516.0",
     "mammoth": "^1.11.0",
     "openwakeword-wasm-browser": "^0.1.1",
+    "onnxruntime-web": "1.23.2",
     "pdfjs-dist": "^5.4.449",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

@@ -4,7 +4,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { ConversationId, MessageId, ToolDefinition as SharedToolDefinition } from '../../../../../shared/types'
 import { ContentBlock, Message, Model, ToolCall } from './chatTypes'
-import { getEnabledTools } from './toolDefinitions'
+import { getToolsForAI } from './toolDefinitions'
 
 const DEFAULT_LMSTUDIO_BASE = import.meta.env.VITE_LMSTUDIO_BASE || 'http://172.31.32.1:1234'
 
@@ -173,28 +173,9 @@ export async function createLmStudioStreamingRequest(
 ) {
   const { onChunk } = handlers
 
-  // Get built-in tools from payload or getEnabledTools
-  let allTools = payload.tools || getEnabledTools()
-
-  // Fetch custom tools directly and merge them
-  try {
-    const res = await fetch('http://127.0.0.1:3002/api/custom-tools')
-    if (res.ok) {
-      const data = await res.json()
-      if (data.success && Array.isArray(data.tools) && data.tools.length > 0) {
-        // Filter custom tools that aren't already in the list
-        const existingNames = new Set(allTools.map(t => t.name))
-        const newCustomTools = data.tools.filter((t: any) => !existingNames.has(t.name) && t.enabled !== false)
-        if (newCustomTools.length > 0) {
-          allTools = [...allTools, ...newCustomTools]
-          console.log('[LMStudio] Added custom tools:', newCustomTools.map((t: any) => t.name))
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[LMStudio] Failed to fetch custom tools:', e)
-  }
-
+  // Get built-in tools from payload or getToolsForAI
+  // Custom tools are accessed via custom_tool_manager, not sent with initial context
+  const allTools = payload.tools || getToolsForAI()
   const tools = mapTools(allTools)
 
   // Debug logging for tools

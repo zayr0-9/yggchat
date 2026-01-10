@@ -476,6 +476,9 @@ export const setDefaultUserSystemPrompt = (id: string, accessToken: string | nul
 export const deleteUserSystemPrompt = (id: string, accessToken: string | null) =>
   api.delete<{ message: string; id: string }>(`/system-prompts/${id}`, accessToken)
 
+export const clearDefaultUserSystemPrompt = (accessToken: string | null) =>
+  api.delete<{ message: string }>('/system-prompts/default', accessToken)
+
 // Stripe Payment API functions
 export interface SubscriptionStatus {
   tier: 'high' | 'mid' | 'low' | null

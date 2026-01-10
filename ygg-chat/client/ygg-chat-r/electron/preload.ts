@@ -67,6 +67,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     run: (command: string, options?: { cwd?: string; timeout?: number }) =>
       ipcRenderer.invoke('shell:exec', command, options),
   },
+  http: {
+    request: (options: {
+      url: string
+      method?: string
+      headers?: Record<string, string>
+      body?: string
+      timeout?: number
+    }) => ipcRenderer.invoke('http:request', options),
+  },
   titleBar: {
     setOverlay: (payload: { color?: string; symbolColor?: string; height?: number }) =>
       ipcRenderer.invoke('titlebar:set-overlay', payload),

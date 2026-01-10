@@ -7,6 +7,9 @@
     "client/ygg-chat-r",
     "server"
   ],
+  "overrides": {
+    "onnxruntime-web": "1.23.2"
+  },
   "scripts": {
     "migrate": "npm --prefix server run migrate",
     "format": "prettier --write .",

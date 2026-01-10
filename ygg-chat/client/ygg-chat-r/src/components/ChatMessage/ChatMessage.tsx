@@ -699,6 +699,19 @@ const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fu
               response = { success: false, error: 'Shell exec not available (not in Electron)' }
             }
             break
+          case 'HTTP_REQUEST':
+            if (electronAPI?.http?.request) {
+              response = await electronAPI.http.request({
+                url: options?.url,
+                method: options?.method,
+                headers: options?.headers,
+                body: options?.body,
+                timeout: options?.timeout,
+              })
+            } else {
+              response = { success: false, error: 'HTTP request not available (not in Electron)' }
+            }
+            break
         }
       } catch (err) {
         response = { success: false, error: String(err) }

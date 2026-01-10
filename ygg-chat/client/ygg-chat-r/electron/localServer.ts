@@ -25,6 +25,7 @@ import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
+import { execute as executeCustomToolManager } from './tools/customToolManager.js'
 import { customToolRegistry, ToolResult } from './tools/customToolLoader.js'
 import { toolOrchestrator, JobOptions, JobFilter } from './tools/orchestrator/index.js'
 
@@ -258,6 +259,10 @@ function initializeBuiltInToolRegistry() {
       default:
         throw new Error(`Unsupported todo_list action: ${action}`)
     }
+  })
+
+  builtInTools.set('custom_tool_manager', async (args) => {
+    return await executeCustomToolManager(args)
   })
 
   console.log(`[LocalServer] Initialized ${builtInTools.size} built-in tools`)
@@ -1739,6 +1744,9 @@ function setupServer() {
             cwd: options?.rootPath,
             rootPath: options?.rootPath,
             operationMode: options?.operationMode,
+            conversationId: options?.conversationId,
+            messageId: options?.messageId,
+            streamId: options?.streamId,
           })
         })
       }
@@ -1922,6 +1930,306 @@ function setupServer() {
       res.status(408).json({ success: false, error: 'Job execution timed out', jobId: job.id })
     } catch (error) {
       console.error('[LocalServer] Error in execute-and-wait:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // ============================================================================
+  // App Automation API - /api/app/*
+  // Enables custom tools to automate app actions (create projects, conversations, messages)
+  // ============================================================================
+
+  // POST /api/app/projects - Create a new project
+  app.post('/api/app/projects', (req, res) => {
+    try {
+      const { name, user_id, context, system_prompt, storage_mode = 'local' } = req.body
+
+      if (!user_id) {
+        res.status(400).json({ success: false, error: 'user_id is required' })
+        return
+      }
+
+      const projectId = uuidv4()
+      const now = new Date().toISOString()
+
+      statements.upsertProject.run(
+        projectId,
+        name || 'Untitled Project',
+        user_id,
+        context || null,
+        system_prompt || null,
+        storage_mode,
+        now,
+        now
+      )
+
+      const project = statements.getProjectById.get(projectId)
+      res.status(201).json({ success: true, project })
+    } catch (error) {
+      console.error('[LocalServer] Error creating project via app API:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // GET /api/app/projects - List projects
+  app.get('/api/app/projects', (req, res) => {
+    try {
+      const userId = req.query.user_id as string
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'user_id query param required' })
+        return
+      }
+
+      const projects = db!.prepare('SELECT * FROM projects WHERE user_id = ? ORDER BY updated_at DESC').all(userId)
+      res.json({ success: true, projects })
+    } catch (error) {
+      console.error('[LocalServer] Error listing projects via app API:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/app/conversations - Create a new conversation
+  app.post('/api/app/conversations', (req, res) => {
+    try {
+      const { title, user_id, project_id, cwd, storage_mode = 'local' } = req.body
+
+      if (!user_id) {
+        res.status(400).json({ success: false, error: 'user_id is required' })
+        return
+      }
+
+      const conversationId = uuidv4()
+      const now = new Date().toISOString()
+
+      statements.upsertConversation.run(
+        conversationId,
+        title || 'New Conversation',
+        user_id,
+        project_id || null,
+        cwd || null,
+        null, // research_note
+        storage_mode,
+        now,
+        now
+      )
+
+      const conversation = statements.getConversationById.get(conversationId)
+      res.status(201).json({ success: true, conversation })
+    } catch (error) {
+      console.error('[LocalServer] Error creating conversation via app API:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // GET /api/app/conversations - List conversations
+  app.get('/api/app/conversations', (req, res) => {
+    try {
+      const userId = req.query.user_id as string
+      const projectId = req.query.project_id as string | undefined
+
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'user_id query param required' })
+        return
+      }
+
+      let conversations
+      if (projectId) {
+        conversations = db!
+          .prepare('SELECT * FROM conversations WHERE user_id = ? AND project_id = ? ORDER BY updated_at DESC')
+          .all(userId, projectId)
+      } else {
+        conversations = db!
+          .prepare('SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC')
+          .all(userId)
+      }
+
+      res.json({ success: true, conversations })
+    } catch (error) {
+      console.error('[LocalServer] Error listing conversations via app API:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // GET /api/app/conversations/:id/messages - Get messages for a conversation
+  app.get('/api/app/conversations/:id/messages', (req, res) => {
+    try {
+      const { id } = req.params
+      const messages = statements.getMessagesByConversationId.all(id)
+      res.json({ success: true, messages })
+    } catch (error) {
+      console.error('[LocalServer] Error getting messages via app API:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/app/messages - Create a new message (user or assistant)
+  app.post('/api/app/messages', (req, res) => {
+    try {
+      const {
+        conversation_id,
+        parent_id,
+        role,
+        content,
+        model_name,
+        tool_calls,
+        tool_call_id,
+        content_blocks,
+      } = req.body
+
+      if (!conversation_id) {
+        res.status(400).json({ success: false, error: 'conversation_id is required' })
+        return
+      }
+      if (!role || !['user', 'assistant', 'tool', 'system'].includes(role)) {
+        res.status(400).json({ success: false, error: 'role must be user, assistant, tool, or system' })
+        return
+      }
+
+      const messageId = uuidv4()
+      const now = new Date().toISOString()
+
+      statements.upsertMessage.run(
+        messageId,
+        conversation_id,
+        parent_id || null,
+        JSON.stringify([]), // children_ids
+        role,
+        content || '',
+        content || '', // plain_text_content
+        null, // thinking_block
+        JSON.stringify(tool_calls || null),
+        tool_call_id || null,
+        model_name || 'unknown',
+        null, // note
+        null, // ex_agent_session_id
+        null, // ex_agent_type
+        JSON.stringify(content_blocks || null),
+        now
+      )
+
+      // Update parent's children_ids if parent exists
+      if (parent_id) {
+        const parent = statements.getMessageById.get(parent_id) as any
+        if (parent) {
+          const childrenIds = JSON.parse(parent.children_ids || '[]')
+          if (!childrenIds.includes(messageId)) {
+            childrenIds.push(messageId)
+            db!.prepare('UPDATE messages SET children_ids = ? WHERE id = ?').run(JSON.stringify(childrenIds), parent_id)
+          }
+        }
+      }
+
+      // Update conversation timestamp
+      db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversation_id)
+
+      const message = statements.getMessageById.get(messageId)
+      res.status(201).json({ success: true, message })
+    } catch (error) {
+      console.error('[LocalServer] Error creating message via app API:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/app/messages/:id/branch - Create a branch from an existing message
+  app.post('/api/app/messages/:id/branch', (req, res) => {
+    try {
+      const { id } = req.params
+      const { content, role = 'user' } = req.body
+
+      // Get the parent message
+      const parentMessage = statements.getMessageById.get(id) as any
+      if (!parentMessage) {
+        res.status(404).json({ success: false, error: 'Parent message not found' })
+        return
+      }
+
+      const messageId = uuidv4()
+      const now = new Date().toISOString()
+
+      statements.upsertMessage.run(
+        messageId,
+        parentMessage.conversation_id,
+        id, // parent_id is the message we're branching from
+        JSON.stringify([]),
+        role,
+        content || '',
+        content || '',
+        null,
+        JSON.stringify(null),
+        null,
+        'unknown',
+        null,
+        null,
+        null,
+        JSON.stringify(null),
+        now
+      )
+
+      // Update parent's children_ids
+      const childrenIds = JSON.parse(parentMessage.children_ids || '[]')
+      childrenIds.push(messageId)
+      db!.prepare('UPDATE messages SET children_ids = ? WHERE id = ?').run(JSON.stringify(childrenIds), id)
+
+      // Update conversation timestamp
+      db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, parentMessage.conversation_id)
+
+      const message = statements.getMessageById.get(messageId)
+      res.status(201).json({ success: true, message, parent_id: id })
+    } catch (error) {
+      console.error('[LocalServer] Error branching message via app API:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // DELETE /api/app/messages/:id - Delete a message and its descendants
+  app.delete('/api/app/messages/:id', (req, res) => {
+    try {
+      const { id } = req.params
+
+      const message = statements.getMessageById.get(id) as any
+      if (!message) {
+        res.status(404).json({ success: false, error: 'Message not found' })
+        return
+      }
+
+      // Recursively collect all descendant IDs
+      const toDelete: string[] = [id]
+      const collectDescendants = (msgId: string) => {
+        const msg = statements.getMessageById.get(msgId) as any
+        if (msg) {
+          const childrenIds = JSON.parse(msg.children_ids || '[]')
+          for (const childId of childrenIds) {
+            toDelete.push(childId)
+            collectDescendants(childId)
+          }
+        }
+      }
+      collectDescendants(id)
+
+      // Delete all collected messages
+      const deletePlaceholders = toDelete.map(() => '?').join(',')
+      db!.prepare(`DELETE FROM messages WHERE id IN (${deletePlaceholders})`).run(...toDelete)
+
+      // Update parent's children_ids if parent exists
+      if (message.parent_id) {
+        const parent = statements.getMessageById.get(message.parent_id) as any
+        if (parent) {
+          const childrenIds = JSON.parse(parent.children_ids || '[]').filter((cid: string) => cid !== id)
+          db!.prepare('UPDATE messages SET children_ids = ? WHERE id = ?').run(JSON.stringify(childrenIds), message.parent_id)
+        }
+      }
+
+      res.json({ success: true, deleted: toDelete })
+    } catch (error) {
+      console.error('[LocalServer] Error deleting message via app API:', error)
       const msg = error instanceof Error ? error.message : String(error)
       res.status(500).json({ success: false, error: msg })
     }
@@ -3302,6 +3610,497 @@ function setupServer() {
 
     res.end()
   })
+
+  // ============================================================================
+  // App Automation API - Allows custom tools to control the app programmatically
+  // ============================================================================
+
+  // POST /api/app/projects - Create a new project
+  app.post('/api/app/projects', (req, res) => {
+    try {
+      const { name, context, system_prompt, user_id } = req.body
+
+      if (!user_id) {
+        res.status(400).json({ success: false, error: 'user_id is required' })
+        return
+      }
+
+      const projectId = uuidv4()
+      const now = new Date().toISOString()
+
+      statements.upsertProject.run(
+        projectId,
+        name || 'Untitled Project',
+        user_id,
+        context || null,
+        system_prompt || null,
+        'local',
+        now,
+        now
+      )
+
+      const project = statements.getProjectById.get(projectId)
+      res.status(201).json({ success: true, project })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error creating project:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // GET /api/app/projects - List all projects for a user
+  app.get('/api/app/projects', (req, res) => {
+    try {
+      const userId = req.query.user_id as string
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'user_id query param is required' })
+        return
+      }
+
+      const projects = statements.getLocalProjects.all(userId)
+      res.json({ success: true, projects })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error listing projects:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/app/conversations - Create a new conversation
+  app.post('/api/app/conversations', (req, res) => {
+    try {
+      const { title, project_id, user_id, cwd, system_prompt } = req.body
+
+      if (!user_id) {
+        res.status(400).json({ success: false, error: 'user_id is required' })
+        return
+      }
+
+      const conversationId = uuidv4()
+      const now = new Date().toISOString()
+
+      // If project_id provided, verify it exists
+      if (project_id) {
+        const project = statements.getProjectById.get(project_id)
+        if (!project) {
+          res.status(404).json({ success: false, error: 'Project not found' })
+          return
+        }
+      }
+
+      statements.upsertConversation.run(
+        conversationId,
+        title || 'New Conversation',
+        user_id,
+        project_id || null,
+        'local',
+        now,
+        now
+      )
+
+      // Update cwd if provided
+      if (cwd) {
+        statements.updateConversationCwd.run(cwd, conversationId)
+      }
+
+      const conversation = statements.getConversationById.get(conversationId)
+      res.status(201).json({ success: true, conversation })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error creating conversation:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // GET /api/app/conversations - List conversations (optionally filtered by project)
+  app.get('/api/app/conversations', (req, res) => {
+    try {
+      const userId = req.query.user_id as string
+      const projectId = req.query.project_id as string
+
+      if (!userId) {
+        res.status(400).json({ success: false, error: 'user_id query param is required' })
+        return
+      }
+
+      let conversations: any[]
+      if (projectId) {
+        conversations = statements.getLocalConversationsByProject.all(projectId)
+      } else {
+        // Get all local conversations for user (no project filter)
+        conversations = db!
+          .prepare(
+            `SELECT * FROM conversations
+             WHERE owner_id = ? AND storage_mode = 'local'
+             ORDER BY updated_at DESC`
+          )
+          .all(userId)
+      }
+
+      res.json({ success: true, conversations })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error listing conversations:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/app/messages - Send a message to a conversation
+  // This creates a user message and optionally triggers an LLM response
+  app.post('/api/app/messages', async (req, res) => {
+    try {
+      const { conversation_id, content, parent_id, user_id, role = 'user', trigger_response = false } = req.body
+
+      if (!conversation_id) {
+        res.status(400).json({ success: false, error: 'conversation_id is required' })
+        return
+      }
+      if (!content) {
+        res.status(400).json({ success: false, error: 'content is required' })
+        return
+      }
+      if (!user_id) {
+        res.status(400).json({ success: false, error: 'user_id is required' })
+        return
+      }
+
+      // Verify conversation exists
+      const conversation = statements.getConversationById.get(conversation_id)
+      if (!conversation) {
+        res.status(404).json({ success: false, error: 'Conversation not found' })
+        return
+      }
+
+      const messageId = uuidv4()
+      const now = new Date().toISOString()
+
+      // Insert the message
+      statements.upsertMessage.run(
+        messageId,
+        conversation_id,
+        parent_id || null,
+        JSON.stringify([]),
+        role,
+        content,
+        content,
+        null, // thinking_block
+        JSON.stringify([]), // tool_calls
+        JSON.stringify([]), // content_blocks
+        now,
+        null, // model_name (will be set for assistant messages)
+        null, // note
+        user_id
+      )
+
+      // Update parent's children_ids if parent exists
+      if (parent_id) {
+        const parentMsg = statements.getMessageById.get(parent_id) as any
+        if (parentMsg) {
+          let childrenIds: string[] = []
+          try {
+            childrenIds = JSON.parse(parentMsg.children_ids || '[]')
+          } catch {
+            childrenIds = []
+          }
+          if (!childrenIds.includes(messageId)) {
+            childrenIds.push(messageId)
+            db!.prepare('UPDATE messages SET children_ids = ? WHERE id = ?').run(JSON.stringify(childrenIds), parent_id)
+          }
+        }
+      }
+
+      // Update conversation timestamp
+      db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversation_id)
+
+      const message = statements.getMessageById.get(messageId)
+
+      // Note: trigger_response would require integration with LLM streaming
+      // For now, we just create the message. Full LLM integration can be added later.
+      if (trigger_response) {
+        // TODO: Implement LLM response triggering
+        // This would dispatch to the chat streaming logic
+        console.log('[LocalServer] App API - trigger_response requested but not yet implemented')
+      }
+
+      res.status(201).json({ success: true, message })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error creating message:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // GET /api/app/messages - Get messages for a conversation
+  app.get('/api/app/messages', (req, res) => {
+    try {
+      const conversationId = req.query.conversation_id as string
+
+      if (!conversationId) {
+        res.status(400).json({ success: false, error: 'conversation_id query param is required' })
+        return
+      }
+
+      const messages = statements.getLocalMessagesByConversation.all(conversationId)
+      res.json({ success: true, messages })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error listing messages:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/app/branch - Branch from an existing message (create a sibling)
+  app.post('/api/app/branch', async (req, res) => {
+    try {
+      const { message_id, content, user_id } = req.body
+
+      if (!message_id) {
+        res.status(400).json({ success: false, error: 'message_id is required' })
+        return
+      }
+      if (!content) {
+        res.status(400).json({ success: false, error: 'content is required' })
+        return
+      }
+      if (!user_id) {
+        res.status(400).json({ success: false, error: 'user_id is required' })
+        return
+      }
+
+      // Get the original message to find its parent
+      const originalMessage = statements.getMessageById.get(message_id) as any
+      if (!originalMessage) {
+        res.status(404).json({ success: false, error: 'Message not found' })
+        return
+      }
+
+      const conversationId = originalMessage.conversation_id
+      const parentId = originalMessage.parent_id // Branch at same parent level
+
+      const newMessageId = uuidv4()
+      const now = new Date().toISOString()
+
+      // Insert the branched message with same parent
+      statements.upsertMessage.run(
+        newMessageId,
+        conversationId,
+        parentId,
+        JSON.stringify([]),
+        'user',
+        content,
+        content,
+        null,
+        JSON.stringify([]),
+        JSON.stringify([]),
+        now,
+        null,
+        null,
+        user_id
+      )
+
+      // Update parent's children_ids if parent exists
+      if (parentId) {
+        const parentMsg = statements.getMessageById.get(parentId) as any
+        if (parentMsg) {
+          let childrenIds: string[] = []
+          try {
+            childrenIds = JSON.parse(parentMsg.children_ids || '[]')
+          } catch {
+            childrenIds = []
+          }
+          if (!childrenIds.includes(newMessageId)) {
+            childrenIds.push(newMessageId)
+            db!.prepare('UPDATE messages SET children_ids = ? WHERE id = ?').run(JSON.stringify(childrenIds), parentId)
+          }
+        }
+      }
+
+      // Update conversation timestamp
+      db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
+
+      const message = statements.getMessageById.get(newMessageId)
+      res.status(201).json({ success: true, message, branched_from: message_id })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error branching message:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // DELETE /api/app/messages/:id - Delete a message
+  app.delete('/api/app/messages/:id', (req, res) => {
+    try {
+      const { id } = req.params
+
+      const message = statements.getMessageById.get(id)
+      if (!message) {
+        res.status(404).json({ success: false, error: 'Message not found' })
+        return
+      }
+
+      // Delete the message (cascade will handle children if configured)
+      db!.prepare('DELETE FROM messages WHERE id = ?').run(id)
+
+      res.json({ success: true, deleted: id })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error deleting message:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // PATCH /api/app/messages/:id - Update a message
+  app.patch('/api/app/messages/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { content, note } = req.body
+
+      const message = statements.getMessageById.get(id) as any
+      if (!message) {
+        res.status(404).json({ success: false, error: 'Message not found' })
+        return
+      }
+
+      if (content !== undefined) {
+        db!.prepare('UPDATE messages SET content = ?, content_plain_text = ? WHERE id = ?').run(content, content, id)
+      }
+      if (note !== undefined) {
+        db!.prepare('UPDATE messages SET note = ? WHERE id = ?').run(note, id)
+      }
+
+      const updated = statements.getMessageById.get(id)
+      res.json({ success: true, message: updated })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error updating message:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // DELETE /api/app/conversations/:id - Delete a conversation
+  app.delete('/api/app/conversations/:id', (req, res) => {
+    try {
+      const { id } = req.params
+
+      const conversation = statements.getConversationById.get(id)
+      if (!conversation) {
+        res.status(404).json({ success: false, error: 'Conversation not found' })
+        return
+      }
+
+      // Delete all messages first
+      db!.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id)
+      // Then delete the conversation
+      db!.prepare('DELETE FROM conversations WHERE id = ?').run(id)
+
+      res.json({ success: true, deleted: id })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error deleting conversation:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // DELETE /api/app/projects/:id - Delete a project
+  app.delete('/api/app/projects/:id', (req, res) => {
+    try {
+      const { id } = req.params
+
+      const project = statements.getProjectById.get(id)
+      if (!project) {
+        res.status(404).json({ success: false, error: 'Project not found' })
+        return
+      }
+
+      // Unassign conversations from this project (don't delete them)
+      db!.prepare('UPDATE conversations SET project_id = NULL WHERE project_id = ?').run(id)
+      // Then delete the project
+      db!.prepare('DELETE FROM projects WHERE id = ?').run(id)
+
+      res.json({ success: true, deleted: id })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error deleting project:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // PATCH /api/app/projects/:id - Update a project
+  app.patch('/api/app/projects/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { name, context, system_prompt } = req.body
+
+      const project = statements.getProjectById.get(id) as any
+      if (!project) {
+        res.status(404).json({ success: false, error: 'Project not found' })
+        return
+      }
+
+      const now = new Date().toISOString()
+
+      if (name !== undefined) {
+        db!.prepare('UPDATE projects SET name = ?, updated_at = ? WHERE id = ?').run(name, now, id)
+      }
+      if (context !== undefined) {
+        db!.prepare('UPDATE projects SET context = ?, updated_at = ? WHERE id = ?').run(context, now, id)
+      }
+      if (system_prompt !== undefined) {
+        db!.prepare('UPDATE projects SET system_prompt = ?, updated_at = ? WHERE id = ?').run(system_prompt, now, id)
+      }
+
+      const updated = statements.getProjectById.get(id)
+      res.json({ success: true, project: updated })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error updating project:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // PATCH /api/app/conversations/:id - Update a conversation
+  app.patch('/api/app/conversations/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const { title, cwd, project_id, research_note } = req.body
+
+      const conversation = statements.getConversationById.get(id) as any
+      if (!conversation) {
+        res.status(404).json({ success: false, error: 'Conversation not found' })
+        return
+      }
+
+      const now = new Date().toISOString()
+
+      if (title !== undefined) {
+        db!.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, now, id)
+      }
+      if (cwd !== undefined) {
+        statements.updateConversationCwd.run(cwd || null, id)
+      }
+      if (project_id !== undefined) {
+        // Verify project exists if not null
+        if (project_id !== null) {
+          const project = statements.getProjectById.get(project_id)
+          if (!project) {
+            res.status(404).json({ success: false, error: 'Project not found' })
+            return
+          }
+        }
+        statements.updateConversationProjectId.run(project_id, id)
+      }
+      if (research_note !== undefined) {
+        statements.updateConversationResearchNote.run(research_note || null, id)
+      }
+
+      const updated = statements.getConversationById.get(id)
+      res.json({ success: true, conversation: updated })
+    } catch (error) {
+      console.error('[LocalServer] App API - Error updating conversation:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
 }
 
 // Start the server
@@ -3325,6 +4124,9 @@ export async function startLocalServer(port: number = 3002, dbPath?: string): Pr
           cwd: options?.rootPath,
           rootPath: options?.rootPath,
           operationMode: options?.operationMode,
+          conversationId: options?.conversationId,
+          messageId: options?.messageId,
+          streamId: options?.streamId,
         })
       })
     }

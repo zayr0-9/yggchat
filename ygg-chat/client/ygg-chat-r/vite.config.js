@@ -13,7 +13,7 @@ function serveWasmPlugin() {
                 var _a, _b;
                 // Handle requests for ONNX Runtime WASM files
                 if (((_a = req.url) === null || _a === void 0 ? void 0 : _a.includes('ort-wasm')) && ((_b = req.url) === null || _b === void 0 ? void 0 : _b.endsWith('.wasm'))) {
-                    var wasmPath = path.resolve(__dirname, '../../node_modules/openwakeword-wasm-browser/node_modules/onnxruntime-web/dist', path.basename(req.url.split('?')[0]));
+                    var wasmPath = path.resolve(__dirname, '../../node_modules/onnxruntime-web/dist', path.basename(req.url.split('?')[0]));
                     if (fs.existsSync(wasmPath)) {
                         res.setHeader('Content-Type', 'application/wasm');
                         fs.createReadStream(wasmPath).pipe(res);
@@ -43,7 +43,7 @@ export default defineConfig(function (_a) {
             viteStaticCopy({
                 targets: [
                     {
-                        src: '../../node_modules/openwakeword-wasm-browser/node_modules/onnxruntime-web/dist/ort-wasm*.{wasm,mjs}',
+                        src: '../../node_modules/onnxruntime-web/dist/ort-wasm*.{wasm,mjs}',
                         dest: 'ort-wasm',
                     },
                 ],
