@@ -187,6 +187,7 @@ export const HtmlToolsModal: React.FC = () => {
       className={`fixed inset-0 z-[1400] transition-opacity duration-200 ${
         isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
+      style={{ paddingTop: 'var(--titlebar-height, 0px)', boxSizing: 'border-box' }}
       aria-hidden={!isOpen}
     >
       <div
