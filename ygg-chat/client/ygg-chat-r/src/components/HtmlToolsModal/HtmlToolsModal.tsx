@@ -14,14 +14,23 @@ export const HtmlToolsModal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string | null>(null)
   const [showLimits, setShowLimits] = useState(false)
   const [showHibernated, setShowHibernated] = useState(false)
+  const [fullscreenKey, setFullscreenKey] = useState<string | null>(null)
   const lastFocusKeyRef = useRef<string | null>(null)
   const lastFocusModeRef = useRef<'list' | 'tabs' | null>(null)
 
   const entries = registry.entries
   const activeEntries = useMemo(() => entries.filter(entry => entry.status === 'active'), [entries])
   const hibernatedEntries = useMemo(() => entries.filter(entry => entry.status === 'hibernated'), [entries])
+  const fullscreenEntry = useMemo(
+    () => (fullscreenKey ? entries.find(entry => entry.key === fullscreenKey) ?? null : null),
+    [entries, fullscreenKey]
+  )
   const activeKey = activeTab ?? activeEntries[0]?.key ?? null
   const maxBytesMb = useMemo(() => Math.round(registry.settings.maxBytes / (1024 * 1024)), [registry.settings.maxBytes])
+
+  const toggleFullscreen = (entryKey: string) => {
+    setFullscreenKey(prev => (prev === entryKey ? null : entryKey))
+  }
 
   useEffect(() => {
     if (!isOpen || !focusKey) {
@@ -50,6 +59,20 @@ export const HtmlToolsModal: React.FC = () => {
   }, [activeEntries, focusKey, isOpen, viewMode])
 
   useEffect(() => {
+    if (!isOpen && fullscreenKey) {
+      setFullscreenKey(null)
+    }
+  }, [fullscreenKey, isOpen])
+
+  useEffect(() => {
+    if (!fullscreenKey) return
+    const exists = entries.some(entry => entry.key === fullscreenKey && entry.status === 'active')
+    if (!exists) {
+      setFullscreenKey(null)
+    }
+  }, [entries, fullscreenKey])
+
+  useEffect(() => {
     if (activeEntries.length === 0) {
       if (activeTab !== null) setActiveTab(null)
       return
@@ -63,11 +86,20 @@ export const HtmlToolsModal: React.FC = () => {
     const isCollapsed = collapsedTools[entry.key] ?? false
     const isHibernated = entry.status === 'hibernated'
     const isFavorite = entry.favorite
+    const isFullscreen = fullscreenKey === entry.key
+    const iframeHeightClass = isCollapsed
+      ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
+      : isFullscreen
+      ? 'flex-1 min-h-0'
+      : 'h-[50vh]'
+    const cardClassName = isFullscreen
+      ? 'h-full flex flex-col rounded-none border-0 bg-white dark:bg-yBlack-900 shadow-none'
+      : 'rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
 
     return (
       <div
         id={`html-tool-${entry.key}`}
-        className='rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 p-3 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+        className={`${cardClassName} p-3`}
       >
         <div className='flex items-center gap-3 mb-3'>
           <div className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>
@@ -106,6 +138,17 @@ export const HtmlToolsModal: React.FC = () => {
               rounded='full'
               className='border border-neutral-200/70 dark:border-neutral-700/60'
               disabled={isHibernated}
+              onClick={() => toggleFullscreen(entry.key)}
+              aria-label={isFullscreen ? 'Exit fullscreen tool output' : 'Enter fullscreen tool output'}
+            >
+              <i className={`bx ${isFullscreen ? 'bx-exit-fullscreen' : 'bx-fullscreen'}`} aria-hidden='true' />
+            </Button>
+            <Button
+              variant='outline2'
+              size='smaller'
+              rounded='full'
+              className='border border-neutral-200/70 dark:border-neutral-700/60'
+              disabled={isHibernated}
               onClick={() =>
                 setCollapsedTools(prev => ({
                   ...prev,
@@ -128,9 +171,7 @@ export const HtmlToolsModal: React.FC = () => {
               <div className='text-xs text-neutral-500 dark:text-neutral-400'>Output collapsed.</div>
             )}
             <div
-              className={`w-full ${
-                isCollapsed ? 'h-0 overflow-hidden opacity-0 pointer-events-none' : 'h-[50vh]'
-              }`}
+              className={`w-full ${iframeHeightClass}`}
               aria-hidden={isCollapsed}
             >
               <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' />
@@ -303,7 +344,11 @@ export const HtmlToolsModal: React.FC = () => {
             </div>
           </div>
         )}
-        {viewMode === 'tabs' ? (
+        {fullscreenEntry ? (
+          <div className='fixed inset-0 z-[1501] flex flex-col bg-white dark:bg-yBlack-900'>
+            {renderEntry(fullscreenEntry)}
+          </div>
+        ) : viewMode === 'tabs' ? (
           <div className='flex-1 flex flex-col overflow-hidden'>
             <div className='shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-4 overflow-x-auto thin-scrollbar'>
               <div className='flex gap-1 py-2'>
