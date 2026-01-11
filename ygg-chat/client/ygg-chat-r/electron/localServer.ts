@@ -28,6 +28,12 @@ import { createTodoList, editTodoList, listTodoLists, readTodoList } from './too
 import { execute as executeCustomToolManager } from './tools/customToolManager.js'
 import { customToolRegistry, ToolResult } from './tools/customToolLoader.js'
 import { toolOrchestrator, JobOptions, JobFilter } from './tools/orchestrator/index.js'
+import {
+  createToolsStatements,
+  initializeToolsSchema,
+  pruneOldTools,
+  registerToolsRoutes,
+} from './localToolsRoutes.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -408,6 +414,8 @@ function initializeLocalDatabase(dbPath: string) {
     )
   `)
 
+  initializeToolsSchema(db)
+
   // Create indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
@@ -547,6 +555,9 @@ function initializeLocalDatabase(dbPath: string) {
     // Message updates (for local editing)
     updateMessage: db.prepare('UPDATE messages SET content = ?, note = ?, content_blocks = ? WHERE id = ?'),
   }
+
+  Object.assign(statements, createToolsStatements(db))
+  pruneOldTools(statements)
 
   console.log('[LocalServer] Database initialized successfully')
 }
@@ -979,6 +990,10 @@ function setupServer() {
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', mode: 'local-sync' })
   })
+
+  if (db) {
+    registerToolsRoutes(app, db, statements)
+  }
 
   // =====================================================
   // OpenAI ChatGPT OAuth Authentication Endpoints

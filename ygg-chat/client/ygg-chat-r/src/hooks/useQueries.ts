@@ -1757,3 +1757,41 @@ export const getDefaultUserSystemPromptFromCache = (
   const prompts = getUserSystemPromptsFromCache(queryClient, userId)
   return prompts.find(p => p.is_default) || null
 }
+
+export interface HtmlToolRecord {
+  key: string
+  html: string
+  label: string | null
+  favorite: number
+  status: 'active' | 'hibernated'
+  size_bytes: number
+  created_at: number
+  updated_at: number
+  last_used_at: number
+  user_id: string
+  conversation_id?: string | null
+  project_id?: string | null
+}
+
+export const htmlToolsQueryKey = (userId: string | null | undefined) => ['html-tools', userId]
+
+export function useHtmlToolsCache(userId: string | null | undefined, enabled: boolean = true) {
+  return useQuery({
+    queryKey: htmlToolsQueryKey(userId),
+    queryFn: async () => {
+      if (!userId || environment !== 'electron') return []
+      return localApi.get<HtmlToolRecord[]>(`/local/tools?userId=${userId}`)
+    },
+    enabled: enabled && !!userId && environment === 'electron',
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export const getHtmlToolsFromCache = (queryClient: QueryClient | null, userId: string | null) => {
+  if (!queryClient || !userId) return []
+  return queryClient.getQueryData<HtmlToolRecord[]>(htmlToolsQueryKey(userId)) || []
+}

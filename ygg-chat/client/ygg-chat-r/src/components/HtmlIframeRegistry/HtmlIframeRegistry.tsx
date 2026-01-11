@@ -8,9 +8,12 @@ import React, {
   useRef,
   useState,
 } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import type { Message, ContentBlock } from '../../features/chats/chatTypes'
 import type { Conversation } from '../../features/conversations/conversationTypes'
-import { localApi } from '../../utils/api'
+import { useAuth } from '../../hooks/useAuth'
+import { getHtmlToolsFromCache, htmlToolsQueryKey, type HtmlToolRecord, useHtmlToolsCache } from '../../hooks/useQueries'
+import { environment, localApi } from '../../utils/api'
 
 type HtmlIframeEntry = {
   key: string
@@ -22,6 +25,8 @@ type HtmlIframeEntry = {
   createdAt: number
   updatedAt: number
   lastUsedAt: number
+  conversationId?: string | null
+  projectId?: string | null
 }
 
 type HtmlToolsSettings = {
@@ -34,8 +39,19 @@ type HtmlToolsSettings = {
 
 type HtmlIframeRegistryContextValue = {
   entries: HtmlIframeEntry[]
-  registerEntry: (key: string, html: string, label?: string | null) => void
-  updateIframe: (key: string, html: string, fullHeight: boolean, label?: string | null) => void
+  registerEntry: (
+    key: string,
+    html: string,
+    label?: string | null,
+    meta?: { conversationId?: string | null; projectId?: string | null }
+  ) => void
+  updateIframe: (
+    key: string,
+    html: string,
+    fullHeight: boolean,
+    label?: string | null,
+    meta?: { conversationId?: string | null; projectId?: string | null }
+  ) => void
   setTarget: (key: string, target: HTMLElement | null) => void
   isModalOpen: boolean
   focusKey: string | null
@@ -70,6 +86,9 @@ const DEFAULT_SETTINGS: HtmlToolsSettings = {
   hibernateAfterMinutes: 20,
 }
 
+const isElectronEnv =
+  (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || environment === 'electron'
+
 const LOG_HTML_TOOLS = true
 
 const logHtmlTools = (...args: any[]) => {
@@ -85,6 +104,35 @@ const getHtmlSizeBytes = (html: string) => {
 }
 
 const normalizeLimit = (value: number) => (Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0)
+
+const toCacheRecord = (entry: HtmlIframeEntry, userId: string): HtmlToolRecord => ({
+  key: entry.key,
+  html: entry.html,
+  label: entry.label,
+  favorite: entry.favorite ? 1 : 0,
+  status: entry.status,
+  size_bytes: entry.sizeBytes,
+  created_at: entry.createdAt,
+  updated_at: entry.updatedAt,
+  last_used_at: entry.lastUsedAt,
+  user_id: userId,
+  conversation_id: entry.conversationId ?? null,
+  project_id: entry.projectId ?? null,
+})
+
+const fromCacheRecord = (record: HtmlToolRecord): HtmlIframeEntry => ({
+  key: record.key,
+  html: record.html,
+  label: record.label ?? null,
+  favorite: Boolean(record.favorite),
+  status: record.status === 'hibernated' ? 'hibernated' : 'active',
+  sizeBytes: Number.isFinite(record.size_bytes) ? record.size_bytes : getHtmlSizeBytes(record.html),
+  createdAt: Number.isFinite(record.created_at) ? record.created_at : Date.now(),
+  updatedAt: Number.isFinite(record.updated_at) ? record.updated_at : Date.now(),
+  lastUsedAt: Number.isFinite(record.last_used_at) ? record.last_used_at : Date.now(),
+  conversationId: record.conversation_id ?? null,
+  projectId: record.project_id ?? null,
+})
 
 type ToolCallRenderGroup = {
   id: string
@@ -180,7 +228,7 @@ const extractHtmlFromToolResult = (content: any): string | null => {
 }
 
 const buildHtmlEntriesFromMessages = (messages: Message[]) => {
-  const entries: Array<{ key: string; html: string; label: string }> = []
+  const entries: Array<{ key: string; html: string; label: string; conversationId?: string | null }> = []
 
   const normalizeHtml = (html: string) => html.trim()
 
@@ -206,6 +254,7 @@ const buildHtmlEntriesFromMessages = (messages: Message[]) => {
             key: `${message.id}-html-renderer-${group.id}`,
             html: normalized,
             label: toolLabel,
+            conversationId: message.conversation_id ?? null,
           })
         }
       }
@@ -220,6 +269,7 @@ const buildHtmlEntriesFromMessages = (messages: Message[]) => {
           key: `${message.id}-${group.id}-result-${resultIdx}`,
           html: normalized,
           label: `${toolLabel} result ${resultIdx + 1}`,
+          conversationId: message.conversation_id ?? null,
         })
       })
     })
@@ -348,10 +398,122 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const [settings, setSettings] = useState<HtmlToolsSettings>(DEFAULT_SETTINGS)
   const hiddenHostRef = useRef<HTMLDivElement | null>(null)
   const bootstrapInFlightRef = useRef(false)
+  const queryClient = useQueryClient()
+  const { userId } = useAuth()
+  const toolsQuery = useHtmlToolsCache(userId, isElectronEnv)
+  const pendingUpsertsRef = useRef<Map<string, HtmlIframeEntry>>(new Map())
+  const pendingDeletesRef = useRef<Set<string>>(new Set())
+  const flushTimeoutRef = useRef<number | null>(null)
+  const lastQuerySyncRef = useRef<string | null>(null)
 
-  const syncEntries = useCallback(() => {
-    setEntries(Array.from(entriesRef.current.values()))
+  const syncEntries = useCallback((nextEntries?: HtmlIframeEntry[]) => {
+    setEntries(nextEntries ?? Array.from(entriesRef.current.values()))
   }, [])
+
+  const updateCacheEntry = useCallback(
+    (entry: HtmlIframeEntry) => {
+      if (!userId) return
+      queryClient.setQueryData<HtmlToolRecord[]>(htmlToolsQueryKey(userId), prev => {
+        const next = prev ? [...prev] : []
+        const record = toCacheRecord(entry, userId)
+        const index = next.findIndex(item => item.key === entry.key)
+        if (index >= 0) {
+          next[index] = { ...next[index], ...record }
+        } else {
+          next.push(record)
+        }
+        return next
+      })
+    },
+    [queryClient, userId]
+  )
+
+  const removeCacheEntry = useCallback(
+    (key: string) => {
+      if (!userId) return
+      queryClient.setQueryData<HtmlToolRecord[]>(htmlToolsQueryKey(userId), prev =>
+        prev ? prev.filter(item => item.key !== key) : []
+      )
+    },
+    [queryClient, userId]
+  )
+
+  const syncEntriesFromCache = useCallback(
+    (records: HtmlToolRecord[]) => {
+      if (!Array.isArray(records) || records.length === 0) return
+      const nextEntries = records.map(fromCacheRecord)
+      entriesRef.current = new Map(nextEntries.map(entry => [entry.key, entry]))
+      syncEntries(nextEntries)
+    },
+    [syncEntries]
+  )
+
+  const flushPersist = useCallback(async () => {
+    if (!userId || !isElectronEnv) return
+    const pendingUpserts = Array.from(pendingUpsertsRef.current.values())
+    const pendingDeletes = Array.from(pendingDeletesRef.current.values())
+    pendingUpsertsRef.current.clear()
+    pendingDeletesRef.current.clear()
+
+    try {
+      if (pendingUpserts.length > 0) {
+        await localApi.post('/local/tools/bulk', {
+          userId,
+          tools: pendingUpserts.map(entry => ({
+            key: entry.key,
+            html: entry.html,
+            label: entry.label,
+            favorite: entry.favorite,
+            status: entry.status,
+            sizeBytes: entry.sizeBytes,
+            createdAt: entry.createdAt,
+            updatedAt: entry.updatedAt,
+            lastUsedAt: entry.lastUsedAt,
+            conversationId: entry.conversationId ?? null,
+            projectId: entry.projectId ?? null,
+          })),
+        })
+      }
+
+      if (pendingDeletes.length > 0) {
+        await Promise.all(
+          pendingDeletes.map(key =>
+            localApi.delete(`/local/tools/${encodeURIComponent(key)}?userId=${encodeURIComponent(userId)}`)
+          )
+        )
+      }
+    } catch (err) {
+      console.error('[HtmlTools] persist failed', err)
+    }
+  }, [userId])
+
+  const queuePersistUpsert = useCallback(
+    (entry: HtmlIframeEntry) => {
+      if (!userId || !isElectronEnv) return
+      pendingUpsertsRef.current.set(entry.key, entry)
+      pendingDeletesRef.current.delete(entry.key)
+      if (flushTimeoutRef.current) return
+      flushTimeoutRef.current = window.setTimeout(() => {
+        flushTimeoutRef.current = null
+        void flushPersist()
+      }, 800)
+    },
+    [flushPersist, userId]
+  )
+
+  const queuePersistDelete = useCallback(
+    (key: string) => {
+      if (!userId || !isElectronEnv) return
+      pendingUpsertsRef.current.delete(key)
+      pendingDeletesRef.current.add(key)
+      if (flushTimeoutRef.current) return
+      flushTimeoutRef.current = window.setTimeout(() => {
+        flushTimeoutRef.current = null
+        void flushPersist()
+      }, 800)
+    },
+    [flushPersist, userId]
+  )
 
   const removeRecord = useCallback((key: string) => {
     const record = recordsRef.current.get(key)
@@ -370,10 +532,47 @@ export const HtmlIframeRegistryProvider: React.FC<{
     recordsRef.current.clear()
     targetsRef.current.clear()
     entriesRef.current.clear()
+    pendingUpsertsRef.current.clear()
+    pendingDeletesRef.current.clear()
+    if (flushTimeoutRef.current) {
+      window.clearTimeout(flushTimeoutRef.current)
+      flushTimeoutRef.current = null
+    }
     setEntries([])
     setFocusKey(null)
     setIsModalOpen(false)
   }, [resetKey])
+
+  useEffect(() => {
+    if (!userId || entriesRef.current.size > 0) return
+    if (!toolsQuery.data || toolsQuery.data.length === 0) return
+    syncEntriesFromCache(toolsQuery.data)
+  }, [syncEntriesFromCache, toolsQuery.data, userId])
+
+  useEffect(() => {
+    if (!userId || entries.length > 0) return
+    const cached = getHtmlToolsFromCache(queryClient, userId)
+    if (cached.length === 0) return
+    syncEntriesFromCache(cached)
+  }, [entries.length, queryClient, syncEntriesFromCache, userId])
+
+  useEffect(() => {
+    if (!userId || !isElectronEnv) return
+    const signature = entries.map(entry => `${entry.key}:${entry.updatedAt}`).join('|')
+    if (signature === lastQuerySyncRef.current) return
+    lastQuerySyncRef.current = signature
+    queryClient.setQueryData<HtmlToolRecord[]>(htmlToolsQueryKey(userId), entries.map(entry => toCacheRecord(entry, userId)))
+  }, [entries, queryClient, userId])
+
+  useEffect(() => {
+    return () => {
+      if (flushTimeoutRef.current) {
+        window.clearTimeout(flushTimeoutRef.current)
+        flushTimeoutRef.current = null
+      }
+      void flushPersist()
+    }
+  }, [flushPersist])
 
   const removeEntryInternal = useCallback(
     (key: string) => {
@@ -382,12 +581,14 @@ export const HtmlIframeRegistryProvider: React.FC<{
       removeRecord(key)
       entriesRef.current.delete(key)
       targetsRef.current.delete(key)
+      removeCacheEntry(key)
+      queuePersistDelete(key)
       if (focusKey === key) {
         setFocusKey(null)
       }
       return true
     },
-    [focusKey, removeRecord]
+    [focusKey, queuePersistDelete, removeCacheEntry, removeRecord]
   )
 
   const enforceLimits = useCallback(
@@ -437,13 +638,16 @@ export const HtmlIframeRegistryProvider: React.FC<{
       hibernateKeys.forEach(key => {
         const entry = entriesRef.current.get(key)
         if (!entry || entry.status === 'hibernated') return
-        entriesRef.current.set(key, {
+        const nextEntry: HtmlIframeEntry = {
           ...entry,
           status: 'hibernated',
           updatedAt: now,
-        })
+        }
+        entriesRef.current.set(key, nextEntry)
         targetsRef.current.set(key, null)
         removeRecord(key)
+        updateCacheEntry(nextEntry)
+        queuePersistUpsert(nextEntry)
         changed = true
       })
 
@@ -490,41 +694,55 @@ export const HtmlIframeRegistryProvider: React.FC<{
 
       return changed
     },
-    [removeEntryInternal, removeRecord, settings, syncEntries]
+    [queuePersistUpsert, removeEntryInternal, removeRecord, settings, syncEntries, updateCacheEntry]
   )
 
-  const registerEntry = useCallback((key: string, html: string, label?: string | null) => {
-    const now = Date.now()
-    const existingEntry = entriesRef.current.get(key)
-    const nextLabel = label ?? existingEntry?.label ?? null
-    const sizeBytes = getHtmlSizeBytes(html)
-    const lastUsedAt =
-      existingEntry && existingEntry.html === html ? existingEntry.lastUsedAt : existingEntry?.lastUsedAt ?? now
-    const nextEntry: HtmlIframeEntry = {
-      key,
-      html,
-      label: nextLabel,
-      favorite: existingEntry?.favorite ?? false,
-      status: existingEntry?.status ?? 'active',
-      sizeBytes,
-      createdAt: existingEntry?.createdAt ?? now,
-      updatedAt: now,
-      lastUsedAt: existingEntry && existingEntry.html === html ? lastUsedAt : now,
-    }
-    if (
-      !existingEntry ||
-      existingEntry.html !== html ||
-      existingEntry.label !== nextLabel ||
-      existingEntry.favorite !== nextEntry.favorite ||
-      existingEntry.status !== nextEntry.status ||
-      existingEntry.sizeBytes !== nextEntry.sizeBytes ||
-      existingEntry.lastUsedAt !== nextEntry.lastUsedAt
-    ) {
-      entriesRef.current.set(key, nextEntry)
-      syncEntries()
-      enforceLimits(now)
-    }
-  }, [enforceLimits, syncEntries])
+  const registerEntry = useCallback(
+    (
+      key: string,
+      html: string,
+      label?: string | null,
+      meta?: { conversationId?: string | null; projectId?: string | null }
+    ) => {
+      const now = Date.now()
+      const existingEntry = entriesRef.current.get(key)
+      const nextLabel = label ?? existingEntry?.label ?? null
+      const sizeBytes = getHtmlSizeBytes(html)
+      const lastUsedAt =
+        existingEntry && existingEntry.html === html ? existingEntry.lastUsedAt : existingEntry?.lastUsedAt ?? now
+      const nextEntry: HtmlIframeEntry = {
+        key,
+        html,
+        label: nextLabel,
+        favorite: existingEntry?.favorite ?? false,
+        status: existingEntry?.status ?? 'active',
+        sizeBytes,
+        createdAt: existingEntry?.createdAt ?? now,
+        updatedAt: now,
+        lastUsedAt: existingEntry && existingEntry.html === html ? lastUsedAt : now,
+        conversationId: meta?.conversationId ?? existingEntry?.conversationId ?? null,
+        projectId: meta?.projectId ?? existingEntry?.projectId ?? null,
+      }
+      if (
+        !existingEntry ||
+        existingEntry.html !== html ||
+        existingEntry.label !== nextLabel ||
+        existingEntry.favorite !== nextEntry.favorite ||
+        existingEntry.status !== nextEntry.status ||
+        existingEntry.sizeBytes !== nextEntry.sizeBytes ||
+        existingEntry.lastUsedAt !== nextEntry.lastUsedAt ||
+        existingEntry.conversationId !== nextEntry.conversationId ||
+        existingEntry.projectId !== nextEntry.projectId
+      ) {
+        entriesRef.current.set(key, nextEntry)
+        updateCacheEntry(nextEntry)
+        queuePersistUpsert(nextEntry)
+        syncEntries()
+        enforceLimits(now)
+      }
+    },
+    [enforceLimits, queuePersistUpsert, syncEntries, updateCacheEntry]
+  )
 
   const setTarget = useCallback((key: string, target: HTMLElement | null) => {
     targetsRef.current.set(key, target)
@@ -536,102 +754,126 @@ export const HtmlIframeRegistryProvider: React.FC<{
     }
   }, [])
 
-  const updateIframe = useCallback((key: string, html: string, fullHeight: boolean, label?: string | null) => {
-    let record = recordsRef.current.get(key)
-    if (!record) {
-      record = createIframeRecord(html, fullHeight)
-      recordsRef.current.set(key, record)
-      logHtmlTools('iframe-create', { key, fullHeight })
-    } else {
-      if (record.html !== html) {
-        record.iframe.srcdoc = html
-        record.html = html
+  const updateIframe = useCallback(
+    (
+      key: string,
+      html: string,
+      fullHeight: boolean,
+      label?: string | null,
+      meta?: { conversationId?: string | null; projectId?: string | null }
+    ) => {
+      let record = recordsRef.current.get(key)
+      if (!record) {
+        record = createIframeRecord(html, fullHeight)
+        recordsRef.current.set(key, record)
+        logHtmlTools('iframe-create', { key, fullHeight })
+      } else {
+        if (record.html !== html) {
+          record.iframe.srcdoc = html
+          record.html = html
+        }
+        if (record.fullHeight !== fullHeight) {
+          record.iframe.className = getIframeClassName(fullHeight)
+          record.fullHeight = fullHeight
+        }
       }
-      if (record.fullHeight !== fullHeight) {
-        record.iframe.className = getIframeClassName(fullHeight)
-        record.fullHeight = fullHeight
+
+      const now = Date.now()
+      const existingEntry = entriesRef.current.get(key)
+      const nextLabel = label ?? existingEntry?.label ?? null
+      const sizeBytes = getHtmlSizeBytes(html)
+      const nextEntry: HtmlIframeEntry = {
+        key,
+        html,
+        label: nextLabel,
+        favorite: existingEntry?.favorite ?? false,
+        status: existingEntry?.status === 'hibernated' ? 'active' : existingEntry?.status ?? 'active',
+        sizeBytes,
+        createdAt: existingEntry?.createdAt ?? now,
+        updatedAt: now,
+        lastUsedAt: existingEntry?.lastUsedAt ?? now,
+        conversationId: meta?.conversationId ?? existingEntry?.conversationId ?? null,
+        projectId: meta?.projectId ?? existingEntry?.projectId ?? null,
       }
-    }
+      if (
+        !existingEntry ||
+        existingEntry.html !== html ||
+        existingEntry.label !== nextLabel ||
+        existingEntry.favorite !== nextEntry.favorite ||
+        existingEntry.status !== nextEntry.status ||
+        existingEntry.sizeBytes !== nextEntry.sizeBytes ||
+        existingEntry.conversationId !== nextEntry.conversationId ||
+        existingEntry.projectId !== nextEntry.projectId
+      ) {
+        entriesRef.current.set(key, nextEntry)
+        updateCacheEntry(nextEntry)
+        queuePersistUpsert(nextEntry)
+        syncEntries()
+        enforceLimits(now)
+      }
 
-    const now = Date.now()
-    const existingEntry = entriesRef.current.get(key)
-    const nextLabel = label ?? existingEntry?.label ?? null
-    const sizeBytes = getHtmlSizeBytes(html)
-    const nextEntry: HtmlIframeEntry = {
-      key,
-      html,
-      label: nextLabel,
-      favorite: existingEntry?.favorite ?? false,
-      status: existingEntry?.status === 'hibernated' ? 'active' : existingEntry?.status ?? 'active',
-      sizeBytes,
-      createdAt: existingEntry?.createdAt ?? now,
-      updatedAt: now,
-      lastUsedAt: existingEntry?.lastUsedAt ?? now,
-    }
-    if (
-      !existingEntry ||
-      existingEntry.html !== html ||
-      existingEntry.label !== nextLabel ||
-      existingEntry.favorite !== nextEntry.favorite ||
-      existingEntry.status !== nextEntry.status ||
-      existingEntry.sizeBytes !== nextEntry.sizeBytes
-    ) {
-      entriesRef.current.set(key, nextEntry)
-      syncEntries()
-      enforceLimits(now)
-    }
-
-    const target = targetsRef.current.get(key)
-    const host = target ?? hiddenHostRef.current
-    if (host && record.iframe.parentElement !== host) {
-      host.appendChild(record.iframe)
-    }
-  }, [enforceLimits, syncEntries])
+      const target = targetsRef.current.get(key)
+      const host = target ?? hiddenHostRef.current
+      if (host && record.iframe.parentElement !== host) {
+        host.appendChild(record.iframe)
+      }
+    },
+    [enforceLimits, queuePersistUpsert, syncEntries, updateCacheEntry]
+  )
 
   const touchEntry = useCallback(
     (key: string) => {
       const entry = entriesRef.current.get(key)
       if (!entry) return
       const now = Date.now()
-      entriesRef.current.set(key, {
+      const nextEntry: HtmlIframeEntry = {
         ...entry,
         lastUsedAt: now,
         updatedAt: now,
-      })
+      }
+      entriesRef.current.set(key, nextEntry)
+      updateCacheEntry(nextEntry)
+      queuePersistUpsert(nextEntry)
       syncEntries()
     },
-    [syncEntries]
+    [queuePersistUpsert, syncEntries, updateCacheEntry]
   )
 
   const toggleFavorite = useCallback(
     (key: string) => {
       const entry = entriesRef.current.get(key)
       if (!entry) return
-      entriesRef.current.set(key, {
+      const nextEntry: HtmlIframeEntry = {
         ...entry,
         favorite: !entry.favorite,
         updatedAt: Date.now(),
-      })
+      }
+      entriesRef.current.set(key, nextEntry)
+      updateCacheEntry(nextEntry)
+      queuePersistUpsert(nextEntry)
       syncEntries()
     },
-    [syncEntries]
+    [queuePersistUpsert, syncEntries, updateCacheEntry]
   )
 
   const hibernateEntry = useCallback(
     (key: string) => {
       const entry = entriesRef.current.get(key)
       if (!entry || entry.status === 'hibernated') return
-      entriesRef.current.set(key, {
+      const nextEntry: HtmlIframeEntry = {
         ...entry,
         status: 'hibernated',
         updatedAt: Date.now(),
-      })
+      }
+      entriesRef.current.set(key, nextEntry)
       logHtmlTools('entry-hibernate', { key })
       targetsRef.current.set(key, null)
       removeRecord(key)
+      updateCacheEntry(nextEntry)
+      queuePersistUpsert(nextEntry)
       syncEntries()
     },
-    [removeRecord, syncEntries]
+    [queuePersistUpsert, removeRecord, syncEntries, updateCacheEntry]
   )
 
   const restoreEntry = useCallback(
@@ -639,17 +881,20 @@ export const HtmlIframeRegistryProvider: React.FC<{
       const entry = entriesRef.current.get(key)
       if (!entry) return
       const now = Date.now()
-      entriesRef.current.set(key, {
+      const nextEntry: HtmlIframeEntry = {
         ...entry,
         status: 'active',
         lastUsedAt: now,
         updatedAt: now,
-      })
+      }
+      entriesRef.current.set(key, nextEntry)
       logHtmlTools('entry-restore', { key })
+      updateCacheEntry(nextEntry)
+      queuePersistUpsert(nextEntry)
       syncEntries()
       enforceLimits(now)
     },
-    [enforceLimits, syncEntries]
+    [enforceLimits, queuePersistUpsert, syncEntries, updateCacheEntry]
   )
 
   const removeEntry = useCallback(
@@ -668,6 +913,21 @@ export const HtmlIframeRegistryProvider: React.FC<{
       bootstrapInFlightRef.current = true
       try {
         if (entriesRef.current.size > 0) return
+        const cachedTools = getHtmlToolsFromCache(queryClient, userId)
+        if (cachedTools.length > 0) {
+          syncEntriesFromCache(cachedTools)
+          return
+        }
+
+        if (isElectronEnv) {
+          const tools = await localApi.get<HtmlToolRecord[]>(`/local/tools?userId=${userId}`)
+          if (Array.isArray(tools) && tools.length > 0) {
+            queryClient.setQueryData(htmlToolsQueryKey(userId), tools)
+            syncEntriesFromCache(tools)
+            return
+          }
+        }
+
         logHtmlTools('bootstrap-start', { userId })
         const conversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
         if (!Array.isArray(conversations) || conversations.length === 0) return
@@ -692,7 +952,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
               if (added >= maxEntries) return
               if (seenKeys.has(entry.key) || entriesRef.current.has(entry.key)) return
               seenKeys.add(entry.key)
-              registerEntry(entry.key, entry.html, entry.label)
+              registerEntry(entry.key, entry.html, entry.label, { conversationId: entry.conversationId ?? null })
               added += 1
             })
           } catch (err) {
@@ -707,7 +967,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
         bootstrapInFlightRef.current = false
       }
     },
-    [registerEntry, settings.maxCached]
+    [queryClient, registerEntry, settings.maxCached, syncEntriesFromCache]
   )
 
   const openModal = useCallback(
@@ -716,12 +976,15 @@ export const HtmlIframeRegistryProvider: React.FC<{
         const entry = entriesRef.current.get(key)
         if (entry) {
           const now = Date.now()
-          entriesRef.current.set(key, {
+          const nextEntry: HtmlIframeEntry = {
             ...entry,
             status: 'active',
             lastUsedAt: now,
             updatedAt: now,
-          })
+          }
+          entriesRef.current.set(key, nextEntry)
+          updateCacheEntry(nextEntry)
+          queuePersistUpsert(nextEntry)
           syncEntries()
           enforceLimits(now)
         }
@@ -731,7 +994,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       }
       setIsModalOpen(true)
     },
-    [enforceLimits, syncEntries]
+    [enforceLimits, queuePersistUpsert, syncEntries, updateCacheEntry]
   )
 
   const closeModal = useCallback(() => {

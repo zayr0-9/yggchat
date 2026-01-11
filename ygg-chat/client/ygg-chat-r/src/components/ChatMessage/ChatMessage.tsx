@@ -818,6 +818,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const messageData = useSelector((state: RootState) =>
       state.chat.conversation.messages.find(m => String(m.id) === String(id))
     )
+    const conversationId = messageData?.conversation_id ?? null
+    const projectId = useSelector((state: RootState) => {
+      if (!conversationId) return null
+      return state.conversations.items.find(conv => conv.id === conversationId)?.project_id ?? null
+    })
 
     const hasContent = useMemo(() => {
       const hasSimpleContent = content && content.trim().length > 0
@@ -1542,9 +1547,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       if (!htmlRegistry || htmlRegistryEntries.length === 0) return
 
       htmlRegistryEntries.forEach(entry => {
-        htmlRegistry.registerEntry(entry.key, entry.html, entry.label)
+        htmlRegistry.registerEntry(entry.key, entry.html, entry.label, { conversationId, projectId })
       })
-    }, [htmlRegistry, htmlRegistryEntries])
+    }, [conversationId, htmlRegistry, htmlRegistryEntries, projectId])
 
     const renderHtmlViewerButton = (entryKey: string) => (
       <Button
