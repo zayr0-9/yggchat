@@ -15,6 +15,7 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
   const [activeTab, setActiveTab] = useState<string | null>(null)
 
   const entries = registry?.entries ?? []
+  const activeKey = activeTab ?? entries[0]?.key ?? null
 
   useEffect(() => {
     if (!isOpen || !focusKey) return
@@ -46,7 +47,6 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
 
     return (
       <div
-        key={entry.key}
         id={`html-tool-${entry.key}`}
         className='rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 p-3 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
       >
@@ -75,13 +75,17 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
             </Button>
           </div>
         </div>
-        {isCollapsed ? (
+        {isCollapsed && (
           <div className='text-xs text-neutral-500 dark:text-neutral-400'>Output collapsed.</div>
-        ) : (
-          <div className='h-[50vh] w-full'>
-            <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-[50vh] ' />
-          </div>
         )}
+        <div
+          className={`w-full ${
+            isCollapsed ? 'h-0 overflow-hidden opacity-0 pointer-events-none' : 'h-[50vh]'
+          }`}
+          aria-hidden={isCollapsed}
+        >
+          <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' />
+        </div>
       </div>
     )
   }
@@ -160,7 +164,7 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
                     type='button'
                     onClick={() => setActiveTab(entry.key)}
                     className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
-                      activeTab === entry.key
+                      activeKey === entry.key
                         ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
                         : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                     }`}
@@ -174,7 +178,20 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
               {entries.length === 0 ? (
                 <div className='text-sm text-neutral-600 dark:text-neutral-300'>No HTML tool outputs yet.</div>
               ) : (
-                renderEntry(entries.find(entry => entry.key === activeTab) ?? entries[0])
+                <div className='relative'>
+                  {entries.map(entry => {
+                    const isActive = entry.key === activeKey
+                    return (
+                      <div
+                        key={entry.key}
+                        className={isActive ? 'relative' : 'absolute inset-0 opacity-0 pointer-events-none'}
+                        aria-hidden={!isActive}
+                      >
+                        {renderEntry(entry)}
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -183,7 +200,7 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
             {entries.length === 0 ? (
               <div className='text-sm text-neutral-600 dark:text-neutral-300'>No HTML tool outputs yet.</div>
             ) : (
-              entries.map(entry => renderEntry(entry))
+              entries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
             )}
           </div>
         )}
