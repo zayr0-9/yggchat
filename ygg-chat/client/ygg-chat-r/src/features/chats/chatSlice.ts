@@ -32,6 +32,27 @@ const cloneTools = (tools: ToolDefinition[]): ToolDefinition[] =>
     },
   }))
 
+const isElectronEnvironment =
+  (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
+
+const webHiddenProviders = new Set(['OpenAI (ChatGPT)', 'LM Studio'])
+
+const getAvailableProviders = () => {
+  const allProviders = Object.values(providersList.providers)
+  if (isElectronEnvironment) {
+    return allProviders
+  }
+  return allProviders.filter(provider => !webHiddenProviders.has(provider.name))
+}
+
+const getInitialProvider = (providers: Array<{ name: string }>) => {
+  const stored = localStorage.getItem('currentProvider')
+  if (!stored) {
+    return null
+  }
+  return providers.some(provider => provider.name === stored) ? stored : null
+}
+
 // Helper function to build path from root to a message
 const buildPathToMessage = (messages: Message[], messageId: MessageId): MessageId[] => {
   const path: MessageId[] = []
@@ -64,80 +85,84 @@ const getOrCreateStream = (state: ChatState, streamId: string): StreamState => {
   return state.streaming.byId[streamId]
 }
 
-const makeInitialState = (): ChatState => ({
-  providerState: {
-    providers: Object.values(providersList.providers),
-    currentProvider: localStorage.getItem('currentProvider') || null,
-    loading: false,
-    error: null,
-  },
-  composition: {
-    input: {
-      content: '',
-      modelOverride: undefined,
+const makeInitialState = (): ChatState => {
+  const availableProviders = getAvailableProviders()
+
+  return {
+    providerState: {
+      providers: availableProviders,
+      currentProvider: getInitialProvider(availableProviders),
+      loading: false,
+      error: null,
     },
-    sending: false,
-    validationError: null,
-    draftMessage: null,
-    multiReplyCount: 1,
-    imageDrafts: [],
-    editingBranch: false,
-    optimisticMessage: null,
-    optimisticBranchMessage: null,
-  },
-  // Multi-stream state container
-  streaming: {
-    activeIds: [],
-    byId: {},
-    primaryStreamId: null,
-    lastCompletedId: null,
-  },
-  ui: {
-    modelSelectorOpen: false,
-  },
-  conversation: {
-    currentConversationId: null,
-    focusedChatMessageId: null,
-    currentPath: [],
-    messages: [],
-    bookmarked: [],
-    excludedMessages: [],
-    context: '',
-  },
-  heimdall: {
-    treeData: null,
-    loading: false,
-    error: null,
-    compactMode: false,
-    lastFetchedAt: null,
-    lastConversationId: null,
-  },
-  initialization: {
-    loading: false,
-    error: null,
-    userId: null,
-  },
-  selectedNodes: [],
-  attachments: {
-    byMessage: {},
-    backup: {},
-  },
-  tools: cloneTools(toolDefinitions),
-  toolCallPermissionRequest: null,
-  toolAutoApprove: false,
-  operationMode: 'plan',
-  ccSlashCommands: [],
-  freeTier: {
-    freeGenerationsRemaining: null,
-    showLimitModal: false,
-    isFreeTierUser: false,
-  },
-  userSystemPrompts: {
-    prompts: [],
-    loading: false,
-    error: null,
-  },
-})
+    composition: {
+      input: {
+        content: '',
+        modelOverride: undefined,
+      },
+      sending: false,
+      validationError: null,
+      draftMessage: null,
+      multiReplyCount: 1,
+      imageDrafts: [],
+      editingBranch: false,
+      optimisticMessage: null,
+      optimisticBranchMessage: null,
+    },
+    // Multi-stream state container
+    streaming: {
+      activeIds: [],
+      byId: {},
+      primaryStreamId: null,
+      lastCompletedId: null,
+    },
+    ui: {
+      modelSelectorOpen: false,
+    },
+    conversation: {
+      currentConversationId: null,
+      focusedChatMessageId: null,
+      currentPath: [],
+      messages: [],
+      bookmarked: [],
+      excludedMessages: [],
+      context: '',
+    },
+    heimdall: {
+      treeData: null,
+      loading: false,
+      error: null,
+      compactMode: false,
+      lastFetchedAt: null,
+      lastConversationId: null,
+    },
+    initialization: {
+      loading: false,
+      error: null,
+      userId: null,
+    },
+    selectedNodes: [],
+    attachments: {
+      byMessage: {},
+      backup: {},
+    },
+    tools: cloneTools(toolDefinitions),
+    toolCallPermissionRequest: null,
+    toolAutoApprove: false,
+    operationMode: 'plan',
+    ccSlashCommands: [],
+    freeTier: {
+      freeGenerationsRemaining: null,
+      showLimitModal: false,
+      isFreeTierUser: false,
+    },
+    userSystemPrompts: {
+      prompts: [],
+      loading: false,
+      error: null,
+    },
+  }
+}
 
 const initialState: ChatState = makeInitialState()
 
@@ -147,6 +172,9 @@ export const chatSlice = createSlice({
   reducers: {
     //provider management
     providerSelected: (state, action: PayloadAction<string>) => {
+      if (!state.providerState.providers.some(provider => provider.name === action.payload)) {
+        return
+      }
       state.providerState.currentProvider = action.payload
       localStorage.setItem('currentProvider', action.payload)
     },

@@ -3142,22 +3142,24 @@ function Chat() {
                     title='Chat Settings'
                   >
                     <i
-                      className={`bx bx-cog ml-0.5 text-[22px] sm:text-[18px] md:text-[16px] lg:text-[16px] 2xl:text-[22px] 3xl:text-[28px] 4xl:text-[24px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
+                      className={`bx bx-cog ml-0.5 text-[22px] sm:text-[22px] md:text-[22px] lg:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
                       aria-hidden='true'
                       onAnimationEnd={() => setSpinSettings(false)}
                     ></i>
                   </Button>
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
                   {/* Provider selector commented out - defaulting to OpenRouter */}
-                  <Select
-                    value={providers.currentProvider || ''}
-                    onChange={handleProviderSelect}
-                    options={providers.providers.map(p => p.name)}
-                    placeholder='Select a provider...'
-                    disabled={providers.providers.length === 0}
-                    className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 transition-transform duration-60 active:scale-97'
-                    searchBarVisible={true}
-                  />
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
+                    <Select
+                      value={providers.currentProvider || ''}
+                      onChange={handleProviderSelect}
+                      options={providers.providers.map(p => p.name)}
+                      placeholder='Select a provider...'
+                      disabled={providers.providers.length === 0}
+                      className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 transition-transform duration-60 active:scale-97'
+                      searchBarVisible={true}
+                    />
+                  )}
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
                   <ModelSelectControl
                     provider={providers.currentProvider}
@@ -3377,7 +3379,6 @@ function Chat() {
                       </>
                     )}
                   </Button>
-
                   {/* Attachment upload button */}
                   <input
                     ref={attachmentInputRef}
@@ -3398,102 +3399,107 @@ function Chat() {
                     <i className='bx bx-paperclip text-[22px]' aria-hidden='true'></i>
                   </Button>
                   {/* Speech-to-text microphone button (Whisper-based, offline) */}
-                  <Button
-                    variant='outline2'
-                    className={`rounded-full relative ${
-                      isListening
-                        ? 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700/50'
-                        : speechLoading
-                          ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700/50'
-                          : ''
-                    }`}
-                    size='large'
-                    onClick={toggleListening}
-                    onMouseEnter={() => {
-                      // Preload model on hover for faster first use
-                      if (!speechModelLoaded && !speechLoading) {
-                        preloadSpeechModel()
-                      }
-                    }}
-                    disabled={speechLoading}
-                    title={
-                      speechError
-                        ? `Speech error: ${speechError}`
-                        : speechLoading
-                          ? `Loading speech model... ${speechLoadProgress.toFixed(0)}%`
-                          : isListening
-                            ? 'Stop listening (processing will begin)'
-                            : speechModelLoaded
-                              ? 'Start voice input (Whisper)'
-                              : 'Start voice input (will download ~40MB model)'
-                    }
-                  >
-                    {speechLoading ? (
-                      <div className='relative'>
-                        <i
-                          className='bx bx-loader-alt text-[22px] text-blue-600 dark:text-blue-400 animate-spin'
-                          aria-hidden='true'
-                        ></i>
-                        <span className='absolute -bottom-3 left-1/2 -translate-x-1/2 text-[10px] text-blue-600 dark:text-blue-400'>
-                          {speechLoadProgress.toFixed(0)}%
-                        </span>
-                      </div>
-                    ) : (
-                      <i
-                        className={`bx ${isListening ? 'bx-stop' : 'bx-microphone'} text-[22px] ${
-                          isListening ? 'text-red-600 dark:text-red-400 animate-pulse' : ''
+                  {/* {import.meta.env.VITE_ENVIRONMENT === 'electron' && ( */}
+                  {false && (
+                    <>
+                      <Button
+                        variant='outline2'
+                        className={`rounded-full relative ${
+                          isListening
+                            ? 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700/50'
+                            : speechLoading
+                              ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700/50'
+                              : ''
                         }`}
-                        aria-hidden='true'
-                      ></i>
-                    )}
-                  </Button>
-                  {/* Wake word toggle button - "Hey Jarvis" detection */}
-                  <Button
-                    variant='outline2'
-                    className={`rounded-full relative ${
-                      isWakeWordListening
-                        ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700/50'
-                        : wakeWordLoading
-                          ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700/50'
-                          : ''
-                    }`}
-                    size='large'
-                    onClick={() => {
-                      if (isWakeWordListening) {
-                        stopWakeWord()
-                      } else {
-                        startWakeWord()
-                      }
-                    }}
-                    disabled={wakeWordLoading}
-                    title={
-                      wakeWordError
-                        ? `Wake word error: ${wakeWordError}`
-                        : wakeWordLoading
-                          ? 'Loading wake word engine...'
-                          : isWakeWordListening
-                            ? 'Wake word active - say "Hey Jarvis" to start voice input'
-                            : 'Enable wake word detection ("Hey Jarvis")'
-                    }
-                  >
-                    {wakeWordLoading ? (
-                      <i
-                        className='bx bx-loader-alt text-[22px] text-yellow-600 dark:text-yellow-400 animate-spin'
-                        aria-hidden='true'
-                      ></i>
-                    ) : (
-                      <i
-                        className={`bx bx-bot text-[22px] ${
-                          isWakeWordListening ? 'text-purple-600 dark:text-purple-400 animate-pulse' : ''
+                        size='large'
+                        onClick={toggleListening}
+                        onMouseEnter={() => {
+                          // Preload model on hover for faster first use
+                          if (!speechModelLoaded && !speechLoading) {
+                            preloadSpeechModel()
+                          }
+                        }}
+                        disabled={speechLoading}
+                        title={
+                          speechError
+                            ? `Speech error: ${speechError}`
+                            : speechLoading
+                              ? `Loading speech model... ${speechLoadProgress.toFixed(0)}%`
+                              : isListening
+                                ? 'Stop listening (processing will begin)'
+                                : speechModelLoaded
+                                  ? 'Start voice input (Whisper)'
+                                  : 'Start voice input (will download ~40MB model)'
+                        }
+                      >
+                        {speechLoading ? (
+                          <div className='relative'>
+                            <i
+                              className='bx bx-loader-alt text-[22px] text-blue-600 dark:text-blue-400 animate-spin'
+                              aria-hidden='true'
+                            ></i>
+                            <span className='absolute -bottom-3 left-1/2 -translate-x-1/2 text-[10px] text-blue-600 dark:text-blue-400'>
+                              {speechLoadProgress.toFixed(0)}%
+                            </span>
+                          </div>
+                        ) : (
+                          <i
+                            className={`bx ${isListening ? 'bx-stop' : 'bx-microphone'} text-[22px] ${
+                              isListening ? 'text-red-600 dark:text-red-400 animate-pulse' : ''
+                            }`}
+                            aria-hidden='true'
+                          ></i>
+                        )}
+                      </Button>
+                      {/* Wake word toggle button - "Hey Jarvis" detection */}
+                      <Button
+                        variant='outline2'
+                        className={`rounded-full relative ${
+                          isWakeWordListening
+                            ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700/50'
+                            : wakeWordLoading
+                              ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700/50'
+                              : ''
                         }`}
-                        aria-hidden='true'
-                      ></i>
-                    )}
-                    {/* Visual indicator when wake word is detected */}
-                    {wakeWordLastDetected && Date.now() - wakeWordLastDetected.timestamp < 2000 && (
-                      <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping'></span>
-                    )}
-                  </Button>
+                        size='large'
+                        onClick={() => {
+                          if (isWakeWordListening) {
+                            stopWakeWord()
+                          } else {
+                            startWakeWord()
+                          }
+                        }}
+                        disabled={wakeWordLoading}
+                        title={
+                          wakeWordError
+                            ? `Wake word error: ${wakeWordError}`
+                            : wakeWordLoading
+                              ? 'Loading wake word engine...'
+                              : isWakeWordListening
+                                ? 'Wake word active - say "Hey Jarvis" to start voice input'
+                                : 'Enable wake word detection ("Hey Jarvis")'
+                        }
+                      >
+                        {wakeWordLoading ? (
+                          <i
+                            className='bx bx-loader-alt text-[22px] text-yellow-600 dark:text-yellow-400 animate-spin'
+                            aria-hidden='true'
+                          ></i>
+                        ) : (
+                          <i
+                            className={`bx bx-bot text-[22px] ${
+                              isWakeWordListening ? 'text-purple-600 dark:text-purple-400 animate-pulse' : ''
+                            }`}
+                            aria-hidden='true'
+                          ></i>
+                        )}
+                        {/* Visual indicator when wake word is detected */}
+                        {wakeWordLastDetected && Date.now() - wakeWordLastDetected.timestamp < 2000 && (
+                          <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping'></span>
+                        )}
+                      </Button>
+                    </>
+                  )}
                   <Button
                     variant='outline2'
                     className='rounded-full'

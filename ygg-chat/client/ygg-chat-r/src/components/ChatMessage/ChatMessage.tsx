@@ -1684,6 +1684,16 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       >
                         <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
                           <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
+                          {typeof maybeHtml === 'string' && (
+                            <Button
+                              variant='outline2'
+                              size='small'
+                              onClick={() => setFullScreenHtml(maybeHtml)}
+                              title='Open full screen'
+                            >
+                              <i className='bx bx-fullscreen text-base' aria-hidden='true'></i>
+                            </Button>
+                          )}
                         </div>
                         {renderedBody}
                       </div>
