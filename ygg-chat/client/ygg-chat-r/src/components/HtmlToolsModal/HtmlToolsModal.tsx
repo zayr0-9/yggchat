@@ -93,7 +93,7 @@ export const HtmlToolsModal: React.FC = () => {
       ? 'flex-1 min-h-0'
       : 'h-[50vh]'
     const cardClassName = isFullscreen
-      ? 'h-full flex flex-col rounded-none border-0 bg-white dark:bg-yBlack-900 shadow-none'
+      ? 'flex-1 min-h-0 flex flex-col rounded-none border-0 bg-white dark:bg-yBlack-900 shadow-none'
       : 'rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
 
     return (
@@ -345,7 +345,10 @@ export const HtmlToolsModal: React.FC = () => {
           </div>
         )}
         {fullscreenEntry ? (
-          <div className='fixed inset-0 z-[1501] flex flex-col bg-white dark:bg-yBlack-900'>
+          <div
+            className='fixed inset-0 z-[1501] flex flex-col bg-white dark:bg-yBlack-900'
+            style={{ paddingTop: 'var(--titlebar-height, 0px)', boxSizing: 'border-box' }}
+          >
             {renderEntry(fullscreenEntry)}
           </div>
         ) : viewMode === 'tabs' ? (
