@@ -8,6 +8,9 @@ import React, {
   useRef,
   useState,
 } from 'react'
+import type { Message, ContentBlock } from '../../features/chats/chatTypes'
+import type { Conversation } from '../../features/conversations/conversationTypes'
+import { localApi } from '../../utils/api'
 
 type HtmlIframeEntry = {
   key: string
@@ -43,6 +46,7 @@ type HtmlIframeRegistryContextValue = {
   hibernateEntry: (key: string) => void
   restoreEntry: (key: string) => void
   removeEntry: (key: string) => void
+  bootstrapFromLocalCache: (userId: string) => Promise<void>
   settings: HtmlToolsSettings
   updateSettings: (updates: Partial<HtmlToolsSettings>) => void
 }
@@ -66,6 +70,13 @@ const DEFAULT_SETTINGS: HtmlToolsSettings = {
   hibernateAfterMinutes: 20,
 }
 
+const LOG_HTML_TOOLS = true
+
+const logHtmlTools = (...args: any[]) => {
+  if (!LOG_HTML_TOOLS) return
+  console.debug('[HtmlTools]', ...args)
+}
+
 const getHtmlSizeBytes = (html: string) => {
   if (typeof TextEncoder !== 'undefined') {
     return new TextEncoder().encode(html).length
@@ -74,6 +85,148 @@ const getHtmlSizeBytes = (html: string) => {
 }
 
 const normalizeLimit = (value: number) => (Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0)
+
+type ToolCallRenderGroup = {
+  id: string
+  name?: string
+  args?: Record<string, any> | null
+  results: Array<{ content: any; is_error?: boolean }>
+  anchorIndex: number
+}
+
+const parseContentBlocks = (raw?: Message['content_blocks']): ContentBlock[] => {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw
+  if (typeof raw === 'object') return [raw as ContentBlock]
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed as ContentBlock[]
+      if (parsed && typeof parsed === 'object') return [parsed as ContentBlock]
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+const buildToolCallGroupsFromBlocks = (blocks?: ContentBlock[]) => {
+  if (!blocks || blocks.length === 0) return new Map<number, ToolCallRenderGroup>()
+
+  const groupsById = new Map<string, ToolCallRenderGroup>()
+  const mapByIndex = new Map<number, ToolCallRenderGroup>()
+
+  blocks.forEach((block, idx) => {
+    if (block.type === 'tool_use') {
+      const id = block.id || `tool-${idx}`
+      if (!groupsById.has(id)) {
+        const group: ToolCallRenderGroup = {
+          id,
+          name: block.name,
+          args: block.input,
+          results: [],
+          anchorIndex: idx,
+        }
+        groupsById.set(id, group)
+        mapByIndex.set(idx, group)
+      }
+    } else if (block.type === 'tool_result') {
+      const id = block.tool_use_id || `tool-result-${idx}`
+      const target = groupsById.get(id)
+      if (target) {
+        target.results.push({ content: block.content, is_error: block.is_error })
+      } else {
+        const fallback: ToolCallRenderGroup = {
+          id,
+          name: 'Tool Result',
+          args: null,
+          results: [{ content: block.content, is_error: block.is_error }],
+          anchorIndex: idx,
+        }
+        mapByIndex.set(idx, fallback)
+      }
+    }
+  })
+
+  return mapByIndex
+}
+
+const extractHtmlFromToolResult = (content: any): string | null => {
+  if (!content) return null
+
+  let resolved = content
+  if (typeof resolved === 'string') {
+    try {
+      resolved = JSON.parse(resolved)
+    } catch {
+      return null
+    }
+  }
+
+  if (typeof resolved === 'object' && resolved !== null && 'html' in resolved) {
+    return (resolved as any).html
+  }
+
+  if (
+    typeof resolved === 'object' &&
+    resolved !== null &&
+    (resolved as any).type === 'text/html' &&
+    typeof (resolved as any).content === 'string'
+  ) {
+    return (resolved as any).content
+  }
+
+  return null
+}
+
+const buildHtmlEntriesFromMessages = (messages: Message[]) => {
+  const entries: Array<{ key: string; html: string; label: string }> = []
+
+  const normalizeHtml = (html: string) => html.trim()
+
+  messages.forEach(message => {
+    const blocks = parseContentBlocks(message.content_blocks)
+    if (!blocks.length) return
+
+    const groupsSource = buildToolCallGroupsFromBlocks(blocks)
+    const seen = new Set<string>()
+
+    groupsSource.forEach(group => {
+      if (seen.has(group.id)) return
+      seen.add(group.id)
+
+      const htmlSeen = new Set<string>()
+      const toolLabel = group.name || 'Tool Result'
+      const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
+      if (isHtmlRenderer && typeof group.args?.html === 'string') {
+        const normalized = normalizeHtml(group.args.html)
+        if (normalized.length > 0) {
+          htmlSeen.add(normalized)
+          entries.push({
+            key: `${message.id}-html-renderer-${group.id}`,
+            html: normalized,
+            label: toolLabel,
+          })
+        }
+      }
+
+      group.results.forEach((result, resultIdx) => {
+        const maybeHtml = extractHtmlFromToolResult(result.content)
+        if (typeof maybeHtml !== 'string') return
+        const normalized = normalizeHtml(maybeHtml)
+        if (!normalized || htmlSeen.has(normalized)) return
+        htmlSeen.add(normalized)
+        entries.push({
+          key: `${message.id}-${group.id}-result-${resultIdx}`,
+          html: normalized,
+          label: `${toolLabel} result ${resultIdx + 1}`,
+        })
+      })
+    })
+  })
+
+  return entries
+}
 
 const getIframeClassName = (fullHeight: boolean) =>
   fullHeight ? 'w-full h-full bg-white' : 'w-full min-h-[800px] rounded-lg bg-white'
@@ -194,6 +347,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const [focusKey, setFocusKey] = useState<string | null>(null)
   const [settings, setSettings] = useState<HtmlToolsSettings>(DEFAULT_SETTINGS)
   const hiddenHostRef = useRef<HTMLDivElement | null>(null)
+  const bootstrapInFlightRef = useRef(false)
 
   const syncEntries = useCallback(() => {
     setEntries(Array.from(entriesRef.current.values()))
@@ -202,6 +356,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const removeRecord = useCallback((key: string) => {
     const record = recordsRef.current.get(key)
     if (!record) return
+    logHtmlTools('iframe-remove', { key })
     record.cleanup()
     record.iframe.remove()
     recordsRef.current.delete(key)
@@ -376,6 +531,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
     const record = recordsRef.current.get(key)
     const host = target ?? hiddenHostRef.current
     if (record && host && record.iframe.parentElement !== host) {
+      logHtmlTools('iframe-move', { key, host: target ? 'slot' : 'hidden' })
       host.appendChild(record.iframe)
     }
   }, [])
@@ -385,6 +541,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
     if (!record) {
       record = createIframeRecord(html, fullHeight)
       recordsRef.current.set(key, record)
+      logHtmlTools('iframe-create', { key, fullHeight })
     } else {
       if (record.html !== html) {
         record.iframe.srcdoc = html
@@ -469,6 +626,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
         status: 'hibernated',
         updatedAt: Date.now(),
       })
+      logHtmlTools('entry-hibernate', { key })
       targetsRef.current.set(key, null)
       removeRecord(key)
       syncEntries()
@@ -487,6 +645,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
         lastUsedAt: now,
         updatedAt: now,
       })
+      logHtmlTools('entry-restore', { key })
       syncEntries()
       enforceLimits(now)
     },
@@ -496,10 +655,59 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const removeEntry = useCallback(
     (key: string) => {
       if (removeEntryInternal(key)) {
+        logHtmlTools('entry-remove', { key })
         syncEntries()
       }
     },
     [removeEntryInternal, syncEntries]
+  )
+
+  const bootstrapFromLocalCache = useCallback(
+    async (userId: string) => {
+      if (!userId || bootstrapInFlightRef.current) return
+      bootstrapInFlightRef.current = true
+      try {
+        if (entriesRef.current.size > 0) return
+        logHtmlTools('bootstrap-start', { userId })
+        const conversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+        if (!Array.isArray(conversations) || conversations.length === 0) return
+        const sorted = [...conversations].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )
+        const maxEntries = settings.maxCached > 0 ? settings.maxCached : Number.POSITIVE_INFINITY
+        let added = 0
+        const seenKeys = new Set<string>()
+
+        for (const conversation of sorted) {
+          if (!conversation?.id) continue
+          if (added >= maxEntries) break
+          try {
+            logHtmlTools('bootstrap-conversation', { id: conversation.id })
+            const result = await localApi.get<{ messages: Message[] }>(
+              `/local/conversations/${conversation.id}/messages/tree`
+            )
+            const messages = Array.isArray(result?.messages) ? result.messages : []
+            const cachedEntries = buildHtmlEntriesFromMessages(messages)
+            cachedEntries.forEach(entry => {
+              if (added >= maxEntries) return
+              if (seenKeys.has(entry.key) || entriesRef.current.has(entry.key)) return
+              seenKeys.add(entry.key)
+              registerEntry(entry.key, entry.html, entry.label)
+              added += 1
+            })
+          } catch (err) {
+            console.error('[HtmlTools] bootstrap conversation failed', conversation.id, err)
+          }
+        }
+
+        logHtmlTools('bootstrap-entries', { count: added })
+      } catch (err) {
+        console.error('[HtmlTools] bootstrap failed', err)
+      } finally {
+        bootstrapInFlightRef.current = false
+      }
+    },
+    [registerEntry, settings.maxCached]
   )
 
   const openModal = useCallback(
@@ -571,10 +779,12 @@ export const HtmlIframeRegistryProvider: React.FC<{
       hibernateEntry,
       restoreEntry,
       removeEntry,
+      bootstrapFromLocalCache,
       settings,
       updateSettings,
     }),
     [
+      bootstrapFromLocalCache,
       closeModal,
       entries,
       focusKey,
@@ -608,22 +818,33 @@ export const HtmlIframeSlot: React.FC<{
   className?: string
 }> = ({ iframeKey, html, fullHeight = false, className }) => {
   const registry = useHtmlIframeRegistry()
+  const registryRef = useRef(registry)
   const slotRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (!registry) return
-    registry.updateIframe(iframeKey, html, fullHeight)
-  }, [registry, iframeKey, html, fullHeight])
+    registryRef.current = registry
+  }, [registry])
+
+  useEffect(() => {
+    logHtmlTools('slot-mount', { key: iframeKey })
+    return () => {
+      logHtmlTools('slot-unmount', { key: iframeKey })
+    }
+  }, [iframeKey])
+
+  useEffect(() => {
+    if (!registryRef.current) return
+    registryRef.current.updateIframe(iframeKey, html, fullHeight)
+  }, [iframeKey, html, fullHeight])
 
   useLayoutEffect(() => {
-    if (!registry) return
     const node = slotRef.current
-    if (!node) return
-    registry.setTarget(iframeKey, node)
+    if (!node || !registryRef.current) return
+    registryRef.current.setTarget(iframeKey, node)
     return () => {
-      registry.setTarget(iframeKey, null)
+      registryRef.current?.setTarget(iframeKey, null)
     }
-  }, [registry, iframeKey])
+  }, [iframeKey])
 
   if (!registry) {
     return (

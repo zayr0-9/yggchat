@@ -1,6 +1,6 @@
 import { Analytics } from '@vercel/analytics/react'
 import { AnimatePresence } from 'framer-motion'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './App.css'
 import { HtmlIframeRegistryProvider, useHtmlIframeRegistry } from './components/HtmlIframeRegistry/HtmlIframeRegistry'
@@ -53,6 +53,19 @@ const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
   const currentUser = useAppSelector(selectCurrentUser)
   const isHiddenRoute = TOOL_VIEWER_HIDDEN_ROUTES.has(location.pathname)
   const canShow = Boolean(enabled && registry && currentUser && !isHiddenRoute)
+  const bootstrappedUserIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!registry || !enabled || !currentUser || bootstrappedUserIdRef.current === currentUser.id) return
+    bootstrappedUserIdRef.current = currentUser.id
+    registry.bootstrapFromLocalCache(currentUser.id)
+  }, [currentUser, enabled, registry])
+
+  useEffect(() => {
+    if (!registry || !enabled || !currentUser) return
+    if (!registry.isModalOpen || registry.entries.length > 0) return
+    registry.bootstrapFromLocalCache(currentUser.id)
+  }, [currentUser, enabled, registry])
 
   useEffect(() => {
     if (!registry || !registry.isModalOpen) return
