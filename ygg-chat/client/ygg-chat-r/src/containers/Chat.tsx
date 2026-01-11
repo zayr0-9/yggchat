@@ -12,6 +12,7 @@ import {
   ChatMessage,
   FreeGenerationsModal,
   Heimdall,
+  HtmlToolsModal,
   InputTextArea,
   ModelSelectControl,
   Select,
@@ -20,6 +21,7 @@ import {
   ToolJobsModal,
   ToolPermissionDialog,
 } from '../components'
+import { HtmlIframeRegistryProvider } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import {
   abortStreaming,
   blobToDataURL,
@@ -232,6 +234,9 @@ function Chat() {
   const [todoListCollapsed, setTodoListCollapsed] = useState(false)
   // Tool jobs modal state
   const [jobsModalOpen, setJobsModalOpen] = useState(false)
+  // HTML tool viewer modal state
+  const [toolHtmlModalOpen, setToolHtmlModalOpen] = useState(false)
+  const [toolHtmlModalFocus, setToolHtmlModalFocus] = useState<string | null>(null)
   // OpenAI ChatGPT login modal state
   const [openaiLoginModalOpen, setOpenaiLoginModalOpen] = useState(false)
   const [openaiAuthFlow, setOpenaiAuthFlow] = useState<{ url: string; verifier: string; state: string } | null>(null)
@@ -2325,6 +2330,18 @@ function Chat() {
     }
   }, [currentConversationId, accessToken, navigate, queryClient])
 
+  const handleOpenToolHtmlModal = useCallback((key?: string) => {
+    if (key) {
+      setToolHtmlModalFocus(key)
+    }
+    setToolHtmlModalOpen(true)
+  }, [])
+
+  const handleCloseToolHtmlModal = useCallback(() => {
+    setToolHtmlModalOpen(false)
+    setToolHtmlModalFocus(null)
+  }, [])
+
   // Refresh models using React Query mutation
   // const handleRefreshModels = useCallback(() => {
   //   if (providers.currentProvider) {
@@ -2409,6 +2426,7 @@ function Chat() {
             onResend={handleResend}
             onAddToNote={handleAddToNote}
             onExplainFromSelection={handleExplainFromSelection}
+            onOpenToolHtmlModal={handleOpenToolHtmlModal}
           />
         )
       })
@@ -2420,6 +2438,7 @@ function Chat() {
     handleResend,
     handleAddToNote,
     handleExplainFromSelection,
+    handleOpenToolHtmlModal,
   ])
 
   // Helper: Parse todo items from markdown content
@@ -2799,80 +2818,90 @@ function Chat() {
               paddingBottom: `${containerHeight - 220}px`,
             }}
           >
-            {displayMessages.length === 0 ? (
-              <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
-            ) : (
-              memoizedMessageList
-            )}
+            <HtmlIframeRegistryProvider resetKey={currentConversationId}>
+              {displayMessages.length === 0 ? (
+                <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
+              ) : (
+                memoizedMessageList
+              )}
 
-            {/* Show optimistic message in web mode only */}
-            {import.meta.env.VITE_ENVIRONMENT === 'web' && optimisticMessage && (
-              <ChatMessage
-                key={`optimistic-${optimisticMessage.id}`}
-                id={optimisticMessage.id.toString()}
-                role={optimisticMessage.role}
-                content={optimisticMessage.content}
-                timestamp={optimisticMessage.created_at}
-                modelName={optimisticMessage.model_name}
-                artifacts={optimisticMessage.artifacts}
-                width='w-full'
-                className='opacity-70'
-              />
-            )}
-
-            {/* Show optimistic branch message in web mode only */}
-            {import.meta.env.VITE_ENVIRONMENT === 'web' && optimisticBranchMessage && (
-              <ChatMessage
-                key={`optimistic-branch-${optimisticBranchMessage.id}`}
-                id={optimisticBranchMessage.id.toString()}
-                role={optimisticBranchMessage.role}
-                content={optimisticBranchMessage.content}
-                timestamp={optimisticBranchMessage.created_at}
-                modelName={optimisticBranchMessage.model_name}
-                artifacts={optimisticBranchMessage.artifacts}
-                width='w-full'
-                className='opacity-70'
-              />
-            )}
-
-            {/* Show streaming content */}
-            {streamState.active &&
-              (Boolean(streamState.buffer) ||
-                Boolean(streamState.thinkingBuffer) ||
-                streamState.toolCalls.length > 0 ||
-                streamState.events.length > 0) && (
+              {/* Show optimistic message in web mode only */}
+              {import.meta.env.VITE_ENVIRONMENT === 'web' && optimisticMessage && (
                 <ChatMessage
-                  id='streaming'
-                  role='assistant'
-                  content={streamState.buffer}
-                  thinking={streamState.thinkingBuffer}
+                  key={`optimistic-${optimisticMessage.id}`}
+                  id={optimisticMessage.id.toString()}
+                  role={optimisticMessage.role}
+                  content={optimisticMessage.content}
+                  timestamp={optimisticMessage.created_at}
+                  modelName={optimisticMessage.model_name}
+                  artifacts={optimisticMessage.artifacts}
+                  width='w-full'
+                  className='opacity-70'
+                  onOpenToolHtmlModal={handleOpenToolHtmlModal}
+                />
+              )}
+
+              {/* Show optimistic branch message in web mode only */}
+              {import.meta.env.VITE_ENVIRONMENT === 'web' && optimisticBranchMessage && (
+                <ChatMessage
+                  key={`optimistic-branch-${optimisticBranchMessage.id}`}
+                  id={optimisticBranchMessage.id.toString()}
+                  role={optimisticBranchMessage.role}
+                  content={optimisticBranchMessage.content}
+                  timestamp={optimisticBranchMessage.created_at}
+                  modelName={optimisticBranchMessage.model_name}
+                  artifacts={optimisticBranchMessage.artifacts}
+                  width='w-full'
+                  className='opacity-70'
+                  onOpenToolHtmlModal={handleOpenToolHtmlModal}
+                />
+              )}
+
+              {/* Show streaming content */}
+              {streamState.active &&
+                (Boolean(streamState.buffer) ||
+                  Boolean(streamState.thinkingBuffer) ||
+                  streamState.toolCalls.length > 0 ||
+                  streamState.events.length > 0) && (
+                  <ChatMessage
+                    id='streaming'
+                    role='assistant'
+                    content={streamState.buffer}
+                    thinking={streamState.thinkingBuffer}
                   toolCalls={streamState.toolCalls}
                   streamEvents={streamState.events}
                   width='w-full'
                   modelName={selectedModel?.name || undefined}
                   className=''
+                  onOpenToolHtmlModal={handleOpenToolHtmlModal}
                 />
               )}
-            {/* {streamState.active && (
-              <div className='pb-4 px-3 flex justify-end'>
-                <video
-                  src={getAssetPath('video/loadingoutput.webm')}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className='h-6 xl:h-8 w-auto rounded-full overflow-hidden'
-                  style={{ imageRendering: 'auto' }}
-                />
-              </div>
-            )} */}
-            {streamState.active && (
-              <div className=' pb-4 px-3 text-stone-800 dark:text-stone-200 flex justify-end'>
-                <i className='bx bx-loader-alt text-2xl animate-spin' style={{ animationDuration: '1s' }}></i>
-              </div>
-            )}
-            {/* Bottom sentinel for robust scrolling */}
-            <div ref={bottomRef} data-bottom-sentinel='true' className='h-px' />
+              {/* {streamState.active && (
+                <div className='pb-4 px-3 flex justify-end'>
+                  <video
+                    src={getAssetPath('video/loadingoutput.webm')}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className='h-6 xl:h-8 w-auto rounded-full overflow-hidden'
+                    style={{ imageRendering: 'auto' }}
+                  />
+                </div>
+              )} */}
+              {streamState.active && (
+                <div className=' pb-4 px-3 text-stone-800 dark:text-stone-200 flex justify-end'>
+                  <i className='bx bx-loader-alt text-2xl animate-spin' style={{ animationDuration: '1s' }}></i>
+                </div>
+              )}
+              {/* Bottom sentinel for robust scrolling */}
+              <div ref={bottomRef} data-bottom-sentinel='true' className='h-px' />
+              <HtmlToolsModal
+                isOpen={toolHtmlModalOpen}
+                onClose={handleCloseToolHtmlModal}
+                focusKey={toolHtmlModalFocus}
+              />
+            </HtmlIframeRegistryProvider>
           </div>
         </div>
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}

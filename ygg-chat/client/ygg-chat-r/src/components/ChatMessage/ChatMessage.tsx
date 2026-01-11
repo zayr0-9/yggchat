@@ -15,6 +15,7 @@ import { chatSliceActions } from '../../features/chats/chatSlice'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
 import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
+import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { TextArea } from '../TextArea/TextArea'
@@ -46,6 +47,7 @@ interface ChatMessageProps {
   onResend?: (id: string) => void
   onAddToNote?: (text: string) => void
   onExplainFromSelection?: (id: string, newContent: string) => void
+  onOpenToolHtmlModal?: (key?: string) => void
   isEditing?: boolean
   width: ChatMessageWidth
   // When true (default), message cards have colored backgrounds and left borders.
@@ -757,6 +759,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     onResend,
     onAddToNote,
     onExplainFromSelection,
+    onOpenToolHtmlModal,
     isEditing = false,
     width = 'w-3/5',
     colored = true,
@@ -793,10 +796,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
     const [selectedText, setSelectedText] = useState<string>('')
     const [selectedArtifactUrl, setSelectedArtifactUrl] = useState<string | null>(null)
-    const [activeHtmlKey, setActiveHtmlKey] = useState<string | null>(null)
     // Explain input states
     const streamToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromStream(streamEvents), [streamEvents])
     const contentToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromBlocks(contentBlocks), [contentBlocks])
+    const htmlRegistry = useHtmlIframeRegistry()
     const [showExplainInput, setShowExplainInput] = useState(false)
     const [explainInputValue, setExplainInputValue] = useState('')
     const explainInputPosition = useRef<{ x: number; y: number } | null>(null)
@@ -1237,22 +1240,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
     }, [showExplainInput])
 
-    useEffect(() => {
-      if (!activeHtmlKey) return
-
-      const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-          event.preventDefault()
-          setActiveHtmlKey(null)
-        }
-      }
-
-      document.addEventListener('keydown', handleKeyDown)
-      return () => {
-        document.removeEventListener('keydown', handleKeyDown)
-      }
-    }, [activeHtmlKey])
-
     // Close More menu when context menu opens to avoid conflicts
     useEffect(() => {
       if (contextMenuOpen) {
@@ -1470,50 +1457,94 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return words.slice(0, maxWords).join(' ') + '...'
     }
 
-    const renderHtmlPreview = (html: string, key: string) => {
-      const isFullscreen = activeHtmlKey === key
+    const extractHtmlFromToolResult = (content: any): string | null => {
+      if (!content) return null
 
-      return (
-        <div
-          className={
-            isFullscreen
-              ? 'fixed inset-0 z-[1300] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm'
-              : ''
-          }
-          onClick={isFullscreen ? () => setActiveHtmlKey(null) : undefined}
-          role={isFullscreen ? 'dialog' : undefined}
-          aria-modal={isFullscreen ? 'true' : undefined}
-          aria-label={isFullscreen ? 'HTML preview' : undefined}
-        >
-          <div
-            className={
-              isFullscreen
-                ? 'relative w-[95vw] h-[95vh] overflow-hidden rounded-2xl border border-neutral-200/60 dark:border-neutral-700 bg-white dark:bg-yBlack-900 shadow-[0_10px_30px_rgba(0,0,0,0.35)]'
-                : ''
-            }
-            onClick={isFullscreen ? e => e.stopPropagation() : undefined}
-          >
-            {isFullscreen && (
-              <div className='absolute right-2 top-2 z-20'>
-                <Button
-                  variant='outline'
-                  size='large'
-                  rounded='full'
-                  className='border border-white/30 bg-black/50 text-white shadow-lg shadow-black/40 hover:bg-black/60 focus:ring-0'
-                  onClick={() => setActiveHtmlKey(null)}
-                  aria-label='Close HTML preview'
-                >
-                  <i className='bx bx-x text-3xl' aria-hidden='true'></i>
-                </Button>
-              </div>
-            )}
-            <div className={isFullscreen ? 'h-full w-full' : ''}>
-              <HtmlIframe html={html} fullHeight={isFullscreen} />
-            </div>
-          </div>
-        </div>
-      )
+      let resolved = content
+      if (typeof resolved === 'string') {
+        try {
+          resolved = JSON.parse(resolved)
+        } catch {
+          return null
+        }
+      }
+
+      if (typeof resolved === 'object' && resolved !== null && 'html' in resolved) {
+        return (resolved as any).html
+      }
+
+      if (
+        typeof resolved === 'object' &&
+        resolved !== null &&
+        (resolved as any).type === 'text/html' &&
+        typeof (resolved as any).content === 'string'
+      ) {
+        return (resolved as any).content
+      }
+
+      return null
     }
+
+    const htmlRegistryEntries = useMemo(() => {
+      const entries: Array<{ key: string; html: string; label: string }> = []
+
+      const addEntry = (key: string, html: string, label: string) => {
+        if (typeof html === 'string' && html.trim().length > 0) {
+          entries.push({ key, html, label })
+        }
+      }
+
+      const groupsSource =
+        Array.isArray(streamEvents) && streamEvents.length > 0
+          ? streamToolGroupsByIndex
+          : Array.isArray(contentBlocks) && contentBlocks.length > 0
+            ? contentToolGroupsByIndex
+            : null
+
+      if (groupsSource) {
+        const seen = new Set<string>()
+        groupsSource.forEach(group => {
+          if (seen.has(group.id)) return
+          seen.add(group.id)
+
+          const toolLabel = group.name || 'Tool Result'
+          const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
+          if (isHtmlRenderer && typeof group.args?.html === 'string') {
+            addEntry(`${id}-html-renderer-${group.id}`, group.args.html, toolLabel)
+          }
+
+          group.results.forEach((result, resultIdx) => {
+            const maybeHtml = extractHtmlFromToolResult(result.content)
+            if (typeof maybeHtml === 'string') {
+              addEntry(`${id}-${group.id}-result-${resultIdx}`, maybeHtml, `${toolLabel} result ${resultIdx + 1}`)
+            }
+          })
+        })
+      }
+
+      return entries
+    }, [contentBlocks, contentToolGroupsByIndex, id, streamEvents, streamToolGroupsByIndex])
+
+    useEffect(() => {
+      if (!htmlRegistry || htmlRegistryEntries.length === 0) return
+
+      htmlRegistryEntries.forEach(entry => {
+        htmlRegistry.registerEntry(entry.key, entry.html, entry.label)
+      })
+    }, [htmlRegistry, htmlRegistryEntries])
+
+    const renderHtmlViewerButton = (entryKey: string) => (
+      <Button
+        variant='outline2'
+        size='small'
+        onClick={() => onOpenToolHtmlModal?.(entryKey)}
+        disabled={!onOpenToolHtmlModal}
+        title='Open tool output viewer'
+      >
+        <i className='bx bx-window-open text-base' aria-hidden='true'></i>
+        <span className='ml-1'>Open Viewer</span>
+      </Button>
+    )
 
     const renderToolCallGroupCard = (group: ToolCallRenderGroup, key: string) => {
       // Don't render orphaned groups (results waiting for their tool_call)
@@ -1548,49 +1579,46 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         }
         return null
       })()
+      const hasHtmlOutput =
+        (isHtmlRenderer && typeof extractedHtml === 'string') ||
+        group.results.some(result => typeof extractHtmlFromToolResult(result.content) === 'string')
 
       // Render html_renderer tool with always-visible HTML
       if (isHtmlRenderer && typeof extractedHtml === 'string') {
         // Debug: log to see if HTML is already stripped at this point
-        const htmlPreviewKey = `${toggleKey}-html`
+        const htmlPreviewKey = `${id}-html-renderer-${group.id}`
         return (
           <div
             key={toggleKey}
             className='tool-call-card relative p-2 mb-0 mx-3 rounded-xl border border-neutral-200/70 bg-blue-50/40 dark:border-neutral-900/40 dark:bg-neutral-900/70 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'
           >
-            <div className='flex items-start justify-between gap-4 mb-2'>
+            <div className='flex items-start gap-2 mb-2'>
               <p className='text-base font-semibold text-blue-900 dark:text-blue-100'>{group.name}</p>
-              <div className='flex items-center gap-2'>
-                <Button
-                  variant='outline2'
-                  size='small'
-                  onClick={() => setActiveHtmlKey(prev => (prev === htmlPreviewKey ? null : htmlPreviewKey))}
-                  title='Open full screen'
-                >
-                  <i className='bx bx-fullscreen text-lg' aria-hidden='true'></i>
-                </Button>
-                <Button
-                  variant='outline2'
-                  size='small'
-                  onClick={() => toggleBlock('toolCalls', toggleKey)}
-                  title={isExpanded ? 'Hide inputs' : 'Show inputs'}
-                >
-                  {isExpanded ? (
-                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                    </svg>
-                  ) : (
-                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                    </svg>
-                  )}
-                </Button>
+              {renderHtmlViewerButton(htmlPreviewKey)}
+              <div className='flex items-center gap-2 ml-auto'>
+                {!hasHtmlOutput && (
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => toggleBlock('toolCalls', toggleKey)}
+                    title={isExpanded ? 'Hide inputs' : 'Show inputs'}
+                  >
+                    {isExpanded ? (
+                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
+                      </svg>
+                    ) : (
+                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+                      </svg>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
-            {/* Always render the HTML output in an iframe using blob URL for proper rendering */}
-            {renderHtmlPreview(extractedHtml, htmlPreviewKey)}
+            <HtmlIframe html={extractedHtml} />
             {/* Only show inputs when expanded */}
-            {isExpanded && group.args && Object.keys(group.args).length > 0 && (
+            {!hasHtmlOutput && isExpanded && group.args && Object.keys(group.args).length > 0 && (
               <div className='mt-3 rounded-xl border border-neutral-200/60 dark:border-neutral-900/40 bg-white dark:bg-yBlack-900/70 p-3 space-y-1 text-xs'>
                 <p className='text-[11px] uppercase font-semibold text-blue-500 dark:text-blue-300'>Inputs</p>
                 {Object.entries(group.args).map(([argKey, value]) => (
@@ -1610,6 +1638,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const pathParam = extractPathParam(group.args)
       const resultSummary = group.results.length > 0 ? formatToolResultSummary(group.results[0].content) : null
       const pathContent = pathParam || null
+      const htmlResultKeys = group.results
+        .map((result, resultIdx) =>
+          typeof extractHtmlFromToolResult(result.content) === 'string' ? `${id}-${group.id}-result-${resultIdx}` : null
+        )
+        .filter((key): key is string => Boolean(key))
+      const primaryHtmlResultKey = htmlResultKeys[0]
       return (
         <div
           key={toggleKey}
@@ -1620,6 +1654,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               <p className='text-base font-semibold text-blue-900 dark:text-blue-100 shrink-0'>
                 {group.name || 'Tool Result'}
               </p>
+              {primaryHtmlResultKey && renderHtmlViewerButton(primaryHtmlResultKey)}
               {!isExpanded && (
                 <div className='flex items-center gap-2 min-w-0 flex-1 overflow-hidden'>
                   {resultSummary && (
@@ -1666,7 +1701,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
           {isExpanded && (
             <div className='mt-3 space-y-3 text-xs text-slate-700 dark:text-slate-200'>
-              {group.args && Object.keys(group.args).length > 0 && (
+              {!hasHtmlOutput && group.args && Object.keys(group.args).length > 0 && (
                 <div className='rounded-xl border border-neutral-200/60 dark:border-neutral-900/40 bg-white dark:bg-yBlack-900/70 p-3 space-y-1'>
                   <p className='text-[11px] uppercase font-semibold text-blue-500 dark:text-blue-300'>Inputs</p>
                   {Object.entries(group.args).map(([key, value]) => (
@@ -1683,41 +1718,13 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               {group.results.length > 0 && (
                 <div className='space-y-2'>
                   {group.results.map((result, resultIdx) => {
-                    const resultKey = `${group.id}-result-${resultIdx}`
-                    const isResultHtmlFullscreen = activeHtmlKey === resultKey
-                    // Extract HTML from tool result - handles both object and JSON string content
-                    const maybeHtml = (() => {
-                      if (!result) return null
-
-                      let content = result.content
-
-                      // If content is a string, try to parse it as JSON
-                      if (typeof content === 'string') {
-                        try {
-                          content = JSON.parse(content)
-                        } catch {
-                          return null
-                        }
-                      }
-
-                      // Check if parsed/original content has an html property
-                      if (typeof content === 'object' && content !== null && 'html' in content) {
-                        return (content as any).html
-                      }
-
-                      // Check for {type: "text/html", content: "..."} format from custom tools
-                      if (typeof content === 'object' && content !== null && 
-                          (content as any).type === 'text/html' && typeof (content as any).content === 'string') {
-                        return (content as any).content
-                      }
-
-                      return null
-                    })()
+                    const resultKey = `${id}-${group.id}-result-${resultIdx}`
+                    const maybeHtml = extractHtmlFromToolResult(result.content)
+                    const showResultLabel = result.is_error || typeof maybeHtml !== 'string'
 
                     const renderedBody = (() => {
                       if (typeof maybeHtml === 'string') {
-                        // Render HTML content in isolated iframe to prevent CSS leakage
-                        return renderHtmlPreview(maybeHtml, resultKey)
+                        return <HtmlIframe html={maybeHtml} />
                       }
                       return formatToolResultContent(result.content)
                     })()
@@ -1729,20 +1736,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                           result.is_error
                             ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
                             : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
-                        } ${isResultHtmlFullscreen ? 'overflow-visible' : ''}`}
+                        }`}
                       >
                         <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
-                          <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
-                          {typeof maybeHtml === 'string' && (
-                            <Button
-                              variant='outline2'
-                              size='small'
-                              onClick={() => setActiveHtmlKey(prev => (prev === resultKey ? null : resultKey))}
-                              title='Open full screen'
-                            >
-                              <i className='bx bx-fullscreen text-base' aria-hidden='true'></i>
-                            </Button>
-                          )}
+                          <div className='flex items-center gap-2'>
+                            {showResultLabel && (
+                              <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
+                            )}
+                          </div>
                         </div>
                         {renderedBody}
                       </div>
@@ -1885,6 +1886,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 const toolCall = event.toolCall
                 const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolCall.id}-${idx}`)
                 const pathParam = extractPathParam(toolCall.arguments)
+                const isHtmlToolCall = (toolCall.name ?? '').toLowerCase() === 'html_renderer'
+                const hasHtmlOutput = isHtmlToolCall || typeof extractHtmlFromToolResult(toolCall.result) === 'string'
                 return (
                   <div
                     key={`tool-${toolCall.id}-${idx}`}
@@ -1911,7 +1914,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     </div>
                     {isExpanded ? (
                       <>
-                        {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                        {!hasHtmlOutput && toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
                           <div className='text-xs space-y-1'>
                             {Object.entries(toolCall.arguments).map(([key, value]) => (
                               <div key={key} className='flex gap-2'>
@@ -1925,7 +1928,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                         )}
                         {toolCall.result && (
                           <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
-                            <div className='font-semibold mb-1'>Result:</div>
+                            {!hasHtmlOutput && <div className='font-semibold mb-1'>Result:</div>}
                             <div className='break-all'>{toolCall.result}</div>
                           </div>
                         )}
@@ -2397,7 +2400,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           imageUrl={selectedArtifactUrl ?? ''}
           onClose={handleCloseArtifactModal}
         />
-
       </div>
     )
   }
