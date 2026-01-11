@@ -24,9 +24,16 @@ import {
   ToolDefinition,
 } from './chatTypes'
 import { createLmStudioStreamingRequest } from './LMStudio'
+import { createOpenAIChatGPTStreamingRequest } from './OpenAIChatGPT'
+// OpenAI OAuth is handled internally by OpenAIChatGPT module
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
-import { getAllTools, getToolsForAI, setCustomTools, updateToolEnabled as updateToolEnabledInDefinitions } from './toolDefinitions'
 import sysPromptConfig from './sys_prompt.json'
+import {
+  getAllTools,
+  getToolsForAI,
+  setCustomTools,
+  updateToolEnabled as updateToolEnabledInDefinitions,
+} from './toolDefinitions'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -794,6 +801,7 @@ export const sendMessage = createAsyncThunk<
       const providerSlug = appProvider.replace(/\s+/g, '')
       const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
       const isLmStudio = providerSlug === 'lmstudio'
+      const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
       // Gather any image drafts (base64) to send along with the message. Nullable when empty.
       const drafts = state.chat.composition.imageDrafts || []
       const attachmentsBase64 = drafts.length
@@ -881,9 +889,15 @@ export const sendMessage = createAsyncThunk<
         }
 
         const shouldUseLmStudio = isElectronMode && isLmStudio
+        const shouldUseOpenAIChatGPT = isElectronMode && isOpenAIChatGPT
 
-        // For LM Studio, synthesize the user message locally on the first turn so history is not empty
-        if (shouldUseLmStudio && turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
+        // For LM Studio or OpenAI ChatGPT, synthesize the user message locally on the first turn so history is not empty
+        if (
+          (shouldUseLmStudio || shouldUseOpenAIChatGPT) &&
+          turnCount === 1 &&
+          currentTurnContent &&
+          currentTurnContent.trim()
+        ) {
           const newUserMessage: Message = {
             id: uuidv4(),
             conversation_id: conversationId,
@@ -936,8 +950,9 @@ export const sendMessage = createAsyncThunk<
             storage_mode: storageMode,
           })
 
-          // Directly persist to local SQLite for LM Studio (dualSync skips local-only records)
-          if (shouldUseLmStudio && isElectronMode) {
+          // Directly persist to local SQLite for LM Studio/OpenAI ChatGPT (dualSync skips local-only records)
+          if ((shouldUseLmStudio || shouldUseOpenAIChatGPT) && isElectronMode) {
+            const providerLabel = shouldUseLmStudio ? 'lmstudio' : 'openai-chatgpt'
             localApi
               .post('/sync/message', {
                 ...newUserMessage,
@@ -950,7 +965,7 @@ export const sendMessage = createAsyncThunk<
                 project_id: selectedProject?.id || null,
                 storage_mode: storageMode,
               })
-              .catch(err => console.error('[sendMessage][lmstudio] Failed to sync user message locally:', err))
+              .catch(err => console.error(`[sendMessage][${providerLabel}] Failed to sync user message locally:`, err))
           }
 
           // Track for return payload
@@ -959,9 +974,10 @@ export const sendMessage = createAsyncThunk<
 
           // CRITICAL: Update parent to user message ID so assistant reply is parented correctly
           parent = newUserMessage.id
-          console.log('[sendMessage][lmstudio] User message created, parent updated:', {
+          console.log('[sendMessage][local-provider] User message created, parent updated:', {
             userMsgId: newUserMessage.id,
             newParent: parent,
+            provider: shouldUseLmStudio ? 'lmstudio' : 'openai-chatgpt',
           })
         }
 
@@ -1081,7 +1097,13 @@ export const sendMessage = createAsyncThunk<
                 })
               }
             }
-            if (currentTurnContent && currentTurnContent.trim()) {
+            const trimmedTurnContent = currentTurnContent.trim()
+            const lastLmMessage = currentTurnHistory[currentTurnHistory.length - 1]
+            const isDuplicateUser =
+              lastLmMessage?.role === 'user' &&
+              typeof lastLmMessage?.content === 'string' &&
+              lastLmMessage.content.trim() === trimmedTurnContent
+            if (trimmedTurnContent && !isDuplicateUser) {
               lmMessages.push({ role: 'user', content: currentTurnContent })
             }
 
@@ -1092,7 +1114,7 @@ export const sendMessage = createAsyncThunk<
                 modelName,
                 systemPrompt,
                 messages: lmMessages,
-                tools: getToolsForAI(),
+                tools: getAllTools(),
               },
               {
                 onChunk: chunk => {
@@ -1215,6 +1237,163 @@ export const sendMessage = createAsyncThunk<
             continue
           }
 
+          // OpenAI ChatGPT: handle repeat locally via OAuth tokens
+          if (shouldUseOpenAIChatGPT) {
+            const chatgptMessages: any[] = []
+            if (systemPrompt && systemPrompt.trim()) {
+              chatgptMessages.push({ role: 'system', content: systemPrompt })
+            }
+            for (const m of currentTurnHistory) {
+              if (m.role === 'user') {
+                const userContent = typeof m.content === 'string' ? m.content : String(m.content ?? '')
+                const lastMessage = chatgptMessages[chatgptMessages.length - 1]
+                const lastContent =
+                  lastMessage?.role === 'user' && typeof lastMessage?.content === 'string' ? lastMessage.content : null
+                if (lastContent && lastContent.trim() === userContent.trim()) {
+                  continue
+                }
+                chatgptMessages.push({ role: 'user', content: m.content })
+              } else if (m.role === 'assistant') {
+                const assistantMsg: any = { role: 'assistant', content: m.content || '', content_blocks: m.content_blocks }
+                if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+                  assistantMsg.tool_calls = m.tool_calls.map(tc => ({
+                    id: tc.id,
+                    name: tc.name,
+                    arguments: tc.arguments,
+                  }))
+                }
+                chatgptMessages.push(assistantMsg)
+              } else if (m.role === 'tool' && m.tool_call_id) {
+                chatgptMessages.push({
+                  role: 'tool',
+                  tool_call_id: m.tool_call_id,
+                  content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                })
+              }
+            }
+            const trimmedTurnContent = currentTurnContent.trim()
+            const lastChatGPTMessage = currentTurnHistory[currentTurnHistory.length - 1]
+            const isDuplicateUser =
+              lastChatGPTMessage?.role === 'user' &&
+              typeof lastChatGPTMessage?.content === 'string' &&
+              lastChatGPTMessage.content.trim() === trimmedTurnContent
+            if (trimmedTurnContent && !isDuplicateUser) {
+              chatgptMessages.push({ role: 'user', content: currentTurnContent })
+            }
+
+            await createOpenAIChatGPTStreamingRequest(
+              {
+                conversationId,
+                parentId: parent,
+                modelName,
+                systemPrompt,
+                messages: chatgptMessages,
+                tools: getAllTools(),
+                reasoningConfig,
+              },
+              {
+                onChunk: chunk => {
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
+                  if (chunk.type === 'complete' && chunk.message) {
+                    const assistantMsg = chunk.message
+                    dispatch(chatSliceActions.messageAdded(assistantMsg))
+                    dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+                    updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+                    localApi
+                      .post('/sync/message', {
+                        ...assistantMsg,
+                        conversation_id: conversationId,
+                        children_ids: assistantMsg.children_ids || [],
+                        content_blocks: assistantMsg.content_blocks || [],
+                        tool_calls: assistantMsg.tool_calls || [],
+                        user_id: auth.userId,
+                        owner_id: auth.userId,
+                        project_id: selectedProject?.id || null,
+                        storage_mode: storageMode,
+                      })
+                      .catch(err =>
+                        console.error('[sendMessage][openai-chatgpt repeat] Failed to sync assistant message:', err)
+                      )
+                    messageId = assistantMsg.id
+                    currentTurnHistory.push(assistantMsg)
+                  }
+                },
+              }
+            )
+
+            // Handle tool calls
+            const lastMsg = currentTurnHistory[currentTurnHistory.length - 1]
+            const pendingToolCalls = Array.isArray(lastMsg?.tool_calls) ? lastMsg.tool_calls : []
+            const isStreamActive = getState().chat.streaming.byId[streamId]?.active ?? false
+
+            if (pendingToolCalls.length > 0 && isStreamActive) {
+              const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
+              const operationMode = state.chat.operationMode
+              const toolResultBlocks: any[] = []
+              let successfulTool = false
+
+              for (const toolCall of pendingToolCalls) {
+                let content: string
+                let isError = false
+                try {
+                  const result = await executeToolWithPermissionCheck(
+                    dispatch,
+                    getState,
+                    toolCall,
+                    rootPath,
+                    operationMode,
+                    { conversationId, messageId: lastMsg.id, streamId }
+                  )
+                  content = typeof result === 'string' ? result : JSON.stringify(result)
+                  successfulTool = true
+                } catch (error) {
+                  isError = true
+                  content = error instanceof Error ? error.message : String(error)
+                }
+
+                toolResultBlocks.push({
+                  type: 'tool_result',
+                  tool_use_id: toolCall.id,
+                  content,
+                  is_error: isError,
+                })
+
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    streamId,
+                    chunk: {
+                      type: 'chunk',
+                      part: 'tool_result',
+                      toolResult: { tool_use_id: toolCall.id, content, is_error: isError },
+                    },
+                  })
+                )
+
+                currentTurnHistory.push(createToolResultMessage(conversationId, lastMsg.id, toolCall.id, content))
+              }
+
+              if (toolResultBlocks.length > 0 && lastMsg.id) {
+                const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
+                await dispatch(
+                  updateMessage({
+                    id: lastMsg.id,
+                    content: lastMsg.content,
+                    content_blocks: [...existingBlocks, ...toolResultBlocks],
+                  })
+                )
+              }
+
+              currentTurnContent = ''
+              parent = lastMsg.id
+              continueTurn = successfulTool
+            } else {
+              continueTurn = false
+            }
+
+            if (!continueTurn) break
+            continue
+          }
+
           // Cloud server handles LLM generation; storageMode in body tells it whether to save to cloud DB
           const endpoint = `/conversations/${conversationId}/messages/repeat`
 
@@ -1293,7 +1472,13 @@ export const sendMessage = createAsyncThunk<
                 })
               }
             }
-            if (currentTurnContent && currentTurnContent.trim()) {
+            const trimmedTurnContent = currentTurnContent.trim()
+            const lastLmMessage = currentTurnHistory[currentTurnHistory.length - 1]
+            const isDuplicateUser =
+              lastLmMessage?.role === 'user' &&
+              typeof lastLmMessage?.content === 'string' &&
+              lastLmMessage.content.trim() === trimmedTurnContent
+            if (trimmedTurnContent && !isDuplicateUser) {
               lmMessages.push({ role: 'user', content: currentTurnContent })
             }
 
@@ -1304,7 +1489,7 @@ export const sendMessage = createAsyncThunk<
                 modelName,
                 systemPrompt,
                 messages: lmMessages,
-                tools: getToolsForAI(),
+                tools: getAllTools(),
               },
               {
                 onChunk: chunk => {
@@ -1397,6 +1582,181 @@ export const sendMessage = createAsyncThunk<
               }
 
               // Update assistant message with tool results (like non-LM Studio flow)
+              if (toolResultBlocks.length > 0 && lastMsg.id) {
+                const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
+                const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+                await dispatch(
+                  updateMessage({
+                    id: lastMsg.id,
+                    content: lastMsg.content,
+                    content_blocks: updatedContentBlocks,
+                  })
+                )
+
+                // Update in currentTurnHistory
+                const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
+                if (historyIndex !== -1) {
+                  currentTurnHistory[historyIndex] = {
+                    ...currentTurnHistory[historyIndex],
+                    content_blocks: updatedContentBlocks,
+                  }
+                }
+              }
+
+              // Prepare for next turn
+              currentTurnContent = ''
+              parent = lastMsg.id
+              continueTurn = successfulTool
+            } else {
+              continueTurn = false
+            }
+
+            if (!continueTurn) break
+            continue
+          }
+
+          // OpenAI ChatGPT: handle locally via OAuth tokens (personal use only)
+          if (shouldUseOpenAIChatGPT) {
+            const chatgptMessages: any[] = []
+            if (systemPrompt && systemPrompt.trim()) {
+              chatgptMessages.push({ role: 'system', content: systemPrompt })
+            }
+            // Build OpenAI-compatible messages from history
+            for (const m of currentTurnHistory) {
+              if (m.role === 'user') {
+                chatgptMessages.push({ role: 'user', content: m.content })
+              } else if (m.role === 'assistant') {
+                const assistantMsg: any = { role: 'assistant', content: m.content || '', content_blocks: m.content_blocks }
+                if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+                  assistantMsg.tool_calls = m.tool_calls.map(tc => ({
+                    id: tc.id,
+                    name: tc.name,
+                    arguments: tc.arguments,
+                  }))
+                }
+                chatgptMessages.push(assistantMsg)
+              } else if (m.role === 'tool' && m.tool_call_id) {
+                chatgptMessages.push({
+                  role: 'tool',
+                  tool_call_id: m.tool_call_id,
+                  content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                })
+              }
+            }
+            const trimmedTurnContent = currentTurnContent.trim()
+            const lastChatGPTMessage = currentTurnHistory[currentTurnHistory.length - 1]
+            const isDuplicateUser =
+              lastChatGPTMessage?.role === 'user' &&
+              typeof lastChatGPTMessage?.content === 'string' &&
+              lastChatGPTMessage.content.trim() === trimmedTurnContent
+            if (trimmedTurnContent && !isDuplicateUser) {
+              chatgptMessages.push({ role: 'user', content: currentTurnContent })
+            }
+
+            await createOpenAIChatGPTStreamingRequest(
+              {
+                conversationId,
+                parentId: parent,
+                modelName,
+                systemPrompt,
+                messages: chatgptMessages,
+                tools: getAllTools(),
+                reasoningConfig,
+              },
+              {
+                onChunk: chunk => {
+                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
+                  if (chunk.type === 'complete' && chunk.message) {
+                    // Add to Redux + update branch path
+                    dispatch(chatSliceActions.messageAdded(chunk.message))
+                    dispatch(chatSliceActions.messageBranchCreated({ newMessage: chunk.message }))
+                    // Sync to React Query cache
+                    updateMessageCache(extra.queryClient, conversationId, chunk.message)
+                    // Sync directly to local SQLite
+                    localApi
+                      .post('/sync/message', {
+                        ...chunk.message,
+                        conversation_id: conversationId,
+                        children_ids: chunk.message.children_ids || [],
+                        content_blocks: chunk.message.content_blocks || [],
+                        tool_calls: chunk.message.tool_calls || [],
+                        user_id: auth.userId,
+                        owner_id: auth.userId,
+                        project_id: selectedProject?.id || null,
+                        storage_mode: storageMode,
+                      })
+                      .catch(err =>
+                        console.error('[sendMessage][openai-chatgpt] Failed to sync assistant message:', err)
+                      )
+                    messageId = chunk.message.id
+                    currentTurnContent = ''
+                    currentTurnHistory.push(chunk.message)
+                  }
+                },
+              }
+            )
+
+            // After streaming, check for tool calls and execute them locally
+            const lastMsg = currentTurnHistory[currentTurnHistory.length - 1]
+            const pendingToolCalls = Array.isArray(lastMsg?.tool_calls) ? lastMsg.tool_calls : []
+            const isStreamActive = getState().chat.streaming.byId[streamId]?.active ?? false
+
+            if (pendingToolCalls.length > 0 && isStreamActive) {
+              const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
+              const operationMode = state.chat.operationMode
+              const toolResultBlocks: any[] = []
+              let successfulTool = false
+
+              for (const toolCall of pendingToolCalls) {
+                let content: string
+                let isError = false
+
+                try {
+                  const result = await executeToolWithPermissionCheck(
+                    dispatch,
+                    getState,
+                    toolCall,
+                    rootPath,
+                    operationMode,
+                    { conversationId, messageId: lastMsg.id, streamId }
+                  )
+                  content = typeof result === 'string' ? result : JSON.stringify(result)
+                  successfulTool = true
+                } catch (error) {
+                  isError = true
+                  content = error instanceof Error ? error.message : String(error)
+                }
+
+                const toolResultBlock = {
+                  type: 'tool_result',
+                  tool_use_id: toolCall.id,
+                  content,
+                  is_error: isError,
+                }
+                toolResultBlocks.push(toolResultBlock)
+
+                // Dispatch tool result event for UI
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    streamId,
+                    chunk: {
+                      type: 'chunk',
+                      part: 'tool_result',
+                      toolResult: {
+                        tool_use_id: toolCall.id,
+                        content,
+                        is_error: isError,
+                      },
+                    },
+                  })
+                )
+
+                // Add tool result to history for next request
+                currentTurnHistory.push(createToolResultMessage(conversationId, lastMsg.id, toolCall.id, content))
+              }
+
+              // Update assistant message with tool results
               if (toolResultBlocks.length > 0 && lastMsg.id) {
                 const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
                 const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
@@ -2138,6 +2498,7 @@ export const editMessageWithBranching = createAsyncThunk<
       const providerSlug = appProvider.replace(/\s+/g, '')
       const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
       const isLmStudio = providerSlug === 'lmstudio'
+      const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
 
       // Combine system prompts in order: user default > project > conversation
       const selectedProject = selectSelectedProject(state)
@@ -2254,6 +2615,7 @@ export const editMessageWithBranching = createAsyncThunk<
       let userMessage: any = null
 
       const shouldUseLmStudio = isElectronMode && isLmStudio
+      const shouldUseOpenAIChatGPT = isElectronMode && isOpenAIChatGPT
 
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
@@ -2417,6 +2779,199 @@ export const editMessageWithBranching = createAsyncThunk<
                 is_error: isError,
               }
               toolResultBlocks.push(toolResultBlock)
+
+              dispatch(
+                chatSliceActions.streamChunkReceived({
+                  streamId,
+                  chunk: {
+                    type: 'chunk',
+                    part: 'tool_result',
+                    toolResult: { tool_use_id: toolCall.id, content, is_error: isError },
+                  },
+                })
+              )
+
+              currentTurnHistory.push(createToolResultMessage(conversationId, lastMsg.id, toolCall.id, content))
+            }
+
+            if (toolResultBlocks.length > 0 && lastMsg.id) {
+              const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
+              await dispatch(
+                updateMessage({
+                  id: lastMsg.id,
+                  content: lastMsg.content,
+                  content_blocks: [...existingBlocks, ...toolResultBlocks],
+                })
+              )
+            }
+
+            currentTurnContent = ''
+            activeParentId = lastMsg.id
+            continueTurn = successfulTool
+          } else {
+            continueTurn = false
+          }
+
+          if (!continueTurn) break
+          continue
+        }
+
+        // OpenAI ChatGPT branch: handle locally via OAuth tokens
+        if (shouldUseOpenAIChatGPT) {
+          // Synthesize user message locally on first turn
+          if (turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
+            const newUserMessage: Message = {
+              id: uuidv4(),
+              conversation_id: conversationId,
+              parent_id: activeParentId,
+              children_ids: [],
+              role: 'user',
+              content: currentTurnContent,
+              content_plain_text: currentTurnContent,
+              thinking_block: '',
+              tool_calls: [],
+              content_blocks: [],
+              created_at: new Date().toISOString(),
+              model_name: modelName || '',
+              partial: false,
+              artifacts: [],
+              pastedContext: [],
+            }
+
+            dispatch(chatSliceActions.messageAdded(newUserMessage))
+            dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
+            updateMessageCache(extra.queryClient, conversationId, newUserMessage)
+
+            localApi
+              .post('/sync/message', {
+                ...newUserMessage,
+                conversation_id: conversationId,
+                children_ids: newUserMessage.children_ids,
+                content_blocks: newUserMessage.content_blocks,
+                tool_calls: newUserMessage.tool_calls,
+                user_id: auth.userId,
+                owner_id: auth.userId,
+                project_id: selectedProject?.id || null,
+                storage_mode: storageMode,
+              })
+              .catch(err =>
+                console.error('[editMessageWithBranching][openai-chatgpt] Failed to sync user message:', err)
+              )
+
+            userMessage = newUserMessage
+            currentTurnHistory.push(newUserMessage)
+            activeParentId = newUserMessage.id
+          }
+
+          // Build ChatGPT messages
+          const chatgptMessages: any[] = []
+          if (systemPrompt && systemPrompt.trim()) {
+            chatgptMessages.push({ role: 'system', content: systemPrompt })
+          }
+          for (const m of currentTurnHistory) {
+            if (m.role === 'user') {
+              const userContent = typeof m.content === 'string' ? m.content : String(m.content ?? '')
+              const lastMessage = chatgptMessages[chatgptMessages.length - 1]
+              const lastContent =
+                lastMessage?.role === 'user' && typeof lastMessage?.content === 'string' ? lastMessage.content : null
+              if (lastContent && lastContent.trim() === userContent.trim()) {
+                continue
+              }
+              chatgptMessages.push({ role: 'user', content: m.content })
+            } else if (m.role === 'assistant') {
+              const assistantMsg: any = { role: 'assistant', content: m.content || '', content_blocks: m.content_blocks }
+              if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+                assistantMsg.tool_calls = m.tool_calls.map(tc => ({
+                  id: tc.id,
+                  name: tc.name,
+                  arguments: tc.arguments,
+                }))
+              }
+              chatgptMessages.push(assistantMsg)
+            } else if (m.role === 'tool' && m.tool_call_id) {
+              chatgptMessages.push({
+                role: 'tool',
+                tool_call_id: m.tool_call_id,
+                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+              })
+            }
+          }
+
+          await createOpenAIChatGPTStreamingRequest(
+            {
+              conversationId,
+              parentId: activeParentId,
+              modelName,
+              systemPrompt,
+              messages: chatgptMessages,
+              tools: getToolsForAI(),
+            },
+            {
+              onChunk: chunk => {
+                dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
+                if (chunk.type === 'complete' && chunk.message) {
+                  const assistantMsg = chunk.message
+                  dispatch(chatSliceActions.messageAdded(assistantMsg))
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+                  updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+                  localApi
+                    .post('/sync/message', {
+                      ...assistantMsg,
+                      conversation_id: conversationId,
+                      children_ids: assistantMsg.children_ids || [],
+                      content_blocks: assistantMsg.content_blocks || [],
+                      tool_calls: assistantMsg.tool_calls || [],
+                      user_id: auth.userId,
+                      owner_id: auth.userId,
+                      project_id: selectedProject?.id || null,
+                      storage_mode: storageMode,
+                    })
+                    .catch(err =>
+                      console.error('[editMessageWithBranching][openai-chatgpt] Failed to sync assistant message:', err)
+                    )
+                  messageId = assistantMsg.id
+                  currentTurnHistory.push(assistantMsg)
+                }
+              },
+            }
+          )
+
+          // Handle tool calls
+          const lastMsg = currentTurnHistory[currentTurnHistory.length - 1]
+          const pendingToolCalls = Array.isArray(lastMsg?.tool_calls) ? lastMsg.tool_calls : []
+          const isStreamActive = getState().chat.streaming.byId[streamId]?.active ?? false
+
+          if (pendingToolCalls.length > 0 && isStreamActive) {
+            const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
+            const operationMode = state.chat.operationMode
+            const toolResultBlocks: any[] = []
+            let successfulTool = false
+
+            for (const toolCall of pendingToolCalls) {
+              let content: string
+              let isError = false
+              try {
+                const result = await executeToolWithPermissionCheck(
+                  dispatch,
+                  getState,
+                  toolCall,
+                  rootPath,
+                  operationMode,
+                  { conversationId, messageId: lastMsg.id, streamId }
+                )
+                content = typeof result === 'string' ? result : JSON.stringify(result)
+                successfulTool = true
+              } catch (error) {
+                isError = true
+                content = error instanceof Error ? error.message : String(error)
+              }
+
+              toolResultBlocks.push({
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                content,
+                is_error: isError,
+              })
 
               dispatch(
                 chatSliceActions.streamChunkReceived({
@@ -2956,6 +3511,7 @@ export const sendMessageToBranch = createAsyncThunk<
       const providerSlug = appProvider.replace(/\s+/g, '')
       const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
       const isLmStudio = providerSlug === 'lmstudio'
+      const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
       const drafts = state.chat.composition.imageDrafts || []
       const attachmentsBase64 = drafts.length
         ? drafts.map(d => ({ dataUrl: d.dataUrl, name: d.name, type: d.type, size: d.size }))
@@ -3033,6 +3589,7 @@ export const sendMessageToBranch = createAsyncThunk<
 
       let currentTurnHistory = buildHistoryFromParent(parentId)
       const shouldUseLmStudio = isElectronMode && isLmStudio
+      const shouldUseOpenAIChatGPT = isElectronMode && isOpenAIChatGPT
 
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
@@ -3193,6 +3750,188 @@ export const sendMessageToBranch = createAsyncThunk<
                 is_error: isError,
               }
               toolResultBlocks.push(toolResultBlock)
+
+              dispatch(
+                chatSliceActions.streamChunkReceived({
+                  streamId,
+                  chunk: {
+                    type: 'chunk',
+                    part: 'tool_result',
+                    toolResult: { tool_use_id: toolCall.id, content, is_error: isError },
+                  },
+                })
+              )
+
+              currentTurnHistory.push(createToolResultMessage(conversationId, lastMsg.id, toolCall.id, content))
+            }
+
+            if (toolResultBlocks.length > 0 && lastMsg.id) {
+              const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
+              await dispatch(
+                updateMessage({
+                  id: lastMsg.id,
+                  content: lastMsg.content,
+                  content_blocks: [...existingBlocks, ...toolResultBlocks],
+                })
+              )
+            }
+
+            currentTurnContent = ''
+            currentParentId = lastMsg.id
+            continueTurn = successfulTool
+          } else {
+            continueTurn = false
+          }
+
+          if (!continueTurn) break
+          continue
+        }
+
+        // OpenAI ChatGPT branch: handle locally via OAuth tokens
+        if (shouldUseOpenAIChatGPT) {
+          // Synthesize user message locally on first turn
+          if (turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
+            const newUserMessage: Message = {
+              id: uuidv4(),
+              conversation_id: conversationId,
+              parent_id: currentParentId,
+              children_ids: [],
+              role: 'user',
+              content: currentTurnContent,
+              content_plain_text: currentTurnContent,
+              thinking_block: '',
+              tool_calls: [],
+              content_blocks: [],
+              created_at: new Date().toISOString(),
+              model_name: modelName || '',
+              partial: false,
+              artifacts: [],
+              pastedContext: [],
+            }
+
+            dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
+            updateMessageCache(extra.queryClient, conversationId, newUserMessage)
+
+            localApi
+              .post('/sync/message', {
+                ...newUserMessage,
+                conversation_id: conversationId,
+                children_ids: newUserMessage.children_ids,
+                content_blocks: newUserMessage.content_blocks,
+                tool_calls: newUserMessage.tool_calls,
+                user_id: auth.userId,
+                owner_id: auth.userId,
+                project_id: selectedProject?.id || null,
+                storage_mode: storageMode,
+              })
+              .catch(err => console.error('[sendMessageToBranch][openai-chatgpt] Failed to sync user message:', err))
+
+            userMessage = newUserMessage
+            currentTurnHistory.push(newUserMessage)
+            currentParentId = newUserMessage.id
+          }
+
+          // Build ChatGPT messages
+          const chatgptMessages: any[] = []
+          if (effectiveSystemPrompt && effectiveSystemPrompt.trim()) {
+            chatgptMessages.push({ role: 'system', content: effectiveSystemPrompt })
+          }
+          for (const m of currentTurnHistory) {
+            if (m.role === 'user') {
+              chatgptMessages.push({ role: 'user', content: m.content })
+            } else if (m.role === 'assistant') {
+              const assistantMsg: any = { role: 'assistant', content: m.content || '', content_blocks: m.content_blocks }
+              if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+                assistantMsg.tool_calls = m.tool_calls.map(tc => ({
+                  id: tc.id,
+                  name: tc.name,
+                  arguments: tc.arguments,
+                }))
+              }
+              chatgptMessages.push(assistantMsg)
+            } else if (m.role === 'tool' && m.tool_call_id) {
+              chatgptMessages.push({
+                role: 'tool',
+                tool_call_id: m.tool_call_id,
+                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+              })
+            }
+          }
+
+          await createOpenAIChatGPTStreamingRequest(
+            {
+              conversationId,
+              parentId: currentParentId,
+              modelName,
+              systemPrompt: effectiveSystemPrompt || '',
+              messages: chatgptMessages,
+              tools: getToolsForAI(),
+            },
+            {
+              onChunk: chunk => {
+                dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
+                if (chunk.type === 'complete' && chunk.message) {
+                  const assistantMsg = chunk.message
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: assistantMsg }))
+                  updateMessageCache(extra.queryClient, conversationId, assistantMsg)
+                  localApi
+                    .post('/sync/message', {
+                      ...assistantMsg,
+                      conversation_id: conversationId,
+                      children_ids: assistantMsg.children_ids || [],
+                      content_blocks: assistantMsg.content_blocks || [],
+                      tool_calls: assistantMsg.tool_calls || [],
+                      user_id: auth.userId,
+                      owner_id: auth.userId,
+                      project_id: selectedProject?.id || null,
+                      storage_mode: storageMode,
+                    })
+                    .catch(err =>
+                      console.error('[sendMessageToBranch][openai-chatgpt] Failed to sync assistant message:', err)
+                    )
+                  messageId = assistantMsg.id
+                  currentTurnHistory.push(assistantMsg)
+                }
+              },
+            }
+          )
+
+          // Handle tool calls
+          const lastMsg = currentTurnHistory[currentTurnHistory.length - 1]
+          const pendingToolCalls = Array.isArray(lastMsg?.tool_calls) ? lastMsg.tool_calls : []
+          const isStreamActive = getState().chat.streaming.byId[streamId]?.active ?? false
+
+          if (pendingToolCalls.length > 0 && isStreamActive) {
+            const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
+            const operationMode = state.chat.operationMode
+            const toolResultBlocks: any[] = []
+            let successfulTool = false
+
+            for (const toolCall of pendingToolCalls) {
+              let content: string
+              let isError = false
+              try {
+                const result = await executeToolWithPermissionCheck(
+                  dispatch,
+                  getState,
+                  toolCall,
+                  rootPath,
+                  operationMode,
+                  { conversationId, messageId: lastMsg.id, streamId }
+                )
+                content = typeof result === 'string' ? result : JSON.stringify(result)
+                successfulTool = true
+              } catch (error) {
+                isError = true
+                content = error instanceof Error ? error.message : String(error)
+              }
+
+              toolResultBlocks.push({
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                content,
+                is_error: isError,
+              })
 
               dispatch(
                 chatSliceActions.streamChunkReceived({

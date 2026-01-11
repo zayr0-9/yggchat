@@ -10,6 +10,12 @@
       "name": "LM Studio",
       "url": "http://127.0.0.1:1234",
       "description": "Local LM Studio server"
+    },
+
+    "openaichatgpt": {
+      "name": "OpenAI (ChatGPT)",
+      "url": "https://chatgpt.com/backend-api",
+      "description": "OpenAI ChatGPT Plus/Pro (local only, uses your subscription)"
     }
   }
 }

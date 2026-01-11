@@ -6,6 +6,7 @@ import type { BaseModel, Project } from '../../../../shared/types'
 import { ConversationId, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
 import type { Message, Model } from '../features/chats/chatTypes'
 import { fetchLmStudioModels } from '../features/chats/LMStudio'
+import { getOpenAIChatGPTModels } from '../features/chats/openaiOAuth'
 import type { Conversation } from '../features/conversations/conversationTypes'
 import { api, environment, localApi } from '../utils/api'
 import { getFavoritedModels } from '../utils/favorites'
@@ -768,6 +769,25 @@ export function useModels(provider: string | null) {
           userIsFreeTier: false,
         }
       }
+
+      // OpenAI ChatGPT - local models (uses user's ChatGPT Plus/Pro subscription)
+      if (normalizedSlug === 'openai(chatgpt)' || normalizedSlug === 'openaichatgpt') {
+        const models = getOpenAIChatGPTModels() as Model[]
+        const defaultModel = models[0] || stringToModel('gpt-5.2-codex')
+
+        const storedSelection = getStoredSelectedModel()
+        const selectedModel = storedSelection
+          ? models.find(m => m.name === storedSelection.name) || defaultModel
+          : defaultModel
+
+        return {
+          models,
+          default: defaultModel,
+          selected: selectedModel,
+          userIsFreeTier: false,
+        }
+      }
+
       let endpoint = '/models' // Default to Ollama
 
       // Map provider to appropriate endpoint
