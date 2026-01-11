@@ -21,10 +21,6 @@ export const HtmlToolsModal: React.FC = () => {
   const entries = registry.entries
   const activeEntries = useMemo(() => entries.filter(entry => entry.status === 'active'), [entries])
   const hibernatedEntries = useMemo(() => entries.filter(entry => entry.status === 'hibernated'), [entries])
-  const fullscreenEntry = useMemo(
-    () => (fullscreenKey ? entries.find(entry => entry.key === fullscreenKey) ?? null : null),
-    [entries, fullscreenKey]
-  )
   const activeKey = activeTab ?? activeEntries[0]?.key ?? null
   const maxBytesMb = useMemo(() => Math.round(registry.settings.maxBytes / (1024 * 1024)), [registry.settings.maxBytes])
 
@@ -93,13 +89,17 @@ export const HtmlToolsModal: React.FC = () => {
       ? 'flex-1 min-h-0'
       : 'h-[50vh]'
     const cardClassName = isFullscreen
-      ? 'flex-1 min-h-0 flex flex-col rounded-none border-0 bg-white dark:bg-yBlack-900 shadow-none'
+      ? 'fixed inset-0 z-[1501] flex flex-col min-h-0 rounded-none border-0 bg-white dark:bg-yBlack-900 shadow-none'
       : 'rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+    const cardStyle = isFullscreen
+      ? { paddingTop: 'calc(var(--titlebar-height, 0px) + 0.75rem)' }
+      : undefined
 
     return (
       <div
         id={`html-tool-${entry.key}`}
         className={`${cardClassName} p-3`}
+        style={cardStyle}
       >
         <div className='flex items-center gap-3 mb-3'>
           <div className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>
@@ -345,14 +345,7 @@ export const HtmlToolsModal: React.FC = () => {
             </div>
           </div>
         )}
-        {fullscreenEntry ? (
-          <div
-            className='fixed inset-0 z-[1501] flex flex-col bg-white dark:bg-yBlack-900'
-            style={{ paddingTop: 'var(--titlebar-height, 0px)', boxSizing: 'border-box' }}
-          >
-            {renderEntry(fullscreenEntry)}
-          </div>
-        ) : viewMode === 'tabs' ? (
+        {viewMode === 'tabs' ? (
           <div className='flex-1 flex flex-col overflow-hidden'>
             <div className='shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-4 overflow-x-auto thin-scrollbar'>
               <div className='flex gap-1 py-2'>
