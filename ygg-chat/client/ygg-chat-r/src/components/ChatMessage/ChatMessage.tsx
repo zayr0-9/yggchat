@@ -1488,9 +1488,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const htmlRegistryEntries = useMemo(() => {
       const entries: Array<{ key: string; html: string; label: string }> = []
 
+      const normalizeHtml = (html: string) => html.trim()
       const addEntry = (key: string, html: string, label: string) => {
-        if (typeof html === 'string' && html.trim().length > 0) {
-          entries.push({ key, html, label })
+        if (typeof html !== 'string') return
+        const normalized = normalizeHtml(html)
+        if (normalized.length > 0) {
+          entries.push({ key, html: normalized, label })
         }
       }
 
@@ -1507,16 +1510,26 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           if (seen.has(group.id)) return
           seen.add(group.id)
 
+          const htmlSeen = new Set<string>()
           const toolLabel = group.name || 'Tool Result'
           const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
           if (isHtmlRenderer && typeof group.args?.html === 'string') {
-            addEntry(`${id}-html-renderer-${group.id}`, group.args.html, toolLabel)
+            const normalized = normalizeHtml(group.args.html)
+            if (normalized.length > 0) {
+              htmlSeen.add(normalized)
+              addEntry(`${id}-html-renderer-${group.id}`, normalized, toolLabel)
+            }
           }
 
           group.results.forEach((result, resultIdx) => {
             const maybeHtml = extractHtmlFromToolResult(result.content)
             if (typeof maybeHtml === 'string') {
-              addEntry(`${id}-${group.id}-result-${resultIdx}`, maybeHtml, `${toolLabel} result ${resultIdx + 1}`)
+              const normalized = normalizeHtml(maybeHtml)
+              if (normalized.length === 0 || htmlSeen.has(normalized)) {
+                return
+              }
+              htmlSeen.add(normalized)
+              addEntry(`${id}-${group.id}-result-${resultIdx}`, normalized, `${toolLabel} result ${resultIdx + 1}`)
             }
           })
         })

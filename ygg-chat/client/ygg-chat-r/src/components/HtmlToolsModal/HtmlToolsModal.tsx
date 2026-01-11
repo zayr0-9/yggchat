@@ -1,21 +1,22 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Button } from '../Button/button'
 import { HtmlIframeSlot, useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 
-type HtmlToolsModalProps = {
-  isOpen: boolean
-  onClose: () => void
-  focusKey?: string | null
-}
-
-export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose, focusKey }) => {
+export const HtmlToolsModal: React.FC = () => {
   const registry = useHtmlIframeRegistry()
+  if (!registry) return null
+
+  const isOpen = registry.isModalOpen
+  const focusKey = registry.focusKey
+  const onClose = registry.closeModal
   const [collapsedTools, setCollapsedTools] = useState<Record<string, boolean>>({})
   const [viewMode, setViewMode] = useState<'list' | 'tabs'>('tabs')
   const [activeTab, setActiveTab] = useState<string | null>(null)
+  const [showLimits, setShowLimits] = useState(false)
 
-  const entries = registry?.entries ?? []
+  const entries = registry.entries
   const activeKey = activeTab ?? entries[0]?.key ?? null
+  const maxBytesMb = useMemo(() => Math.round(registry.settings.maxBytes / (1024 * 1024)), [registry.settings.maxBytes])
 
   useEffect(() => {
     if (!isOpen || !focusKey) return
@@ -44,6 +45,8 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
 
   const renderEntry = (entry: (typeof entries)[number]) => {
     const isCollapsed = collapsedTools[entry.key] ?? false
+    const isHibernated = entry.status === 'hibernated'
+    const isFavorite = entry.favorite
 
     return (
       <div
@@ -63,6 +66,30 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
               size='smaller'
               rounded='full'
               className='border border-neutral-200/70 dark:border-neutral-700/60'
+              onClick={() => registry.toggleFavorite(entry.key)}
+              aria-pressed={isFavorite}
+              aria-label={isFavorite ? 'Unfavorite tool output' : 'Favorite tool output'}
+            >
+              <i className={`bx ${isFavorite ? 'bxs-star' : 'bx-star'}`} aria-hidden='true' />
+            </Button>
+            <Button
+              variant='outline2'
+              size='smaller'
+              rounded='full'
+              className='border border-neutral-200/70 dark:border-neutral-700/60'
+              onClick={() =>
+                isHibernated ? registry.restoreEntry(entry.key) : registry.hibernateEntry(entry.key)
+              }
+              aria-label={isHibernated ? 'Restore tool output' : 'Hibernate tool output'}
+            >
+              <i className={`bx ${isHibernated ? 'bx-play' : 'bx-moon'}`} aria-hidden='true' />
+            </Button>
+            <Button
+              variant='outline2'
+              size='smaller'
+              rounded='full'
+              className='border border-neutral-200/70 dark:border-neutral-700/60'
+              disabled={isHibernated}
               onClick={() =>
                 setCollapsedTools(prev => ({
                   ...prev,
@@ -75,22 +102,28 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
             </Button>
           </div>
         </div>
-        {isCollapsed && (
-          <div className='text-xs text-neutral-500 dark:text-neutral-400'>Output collapsed.</div>
+        {isHibernated ? (
+          <div className='text-xs text-neutral-500 dark:text-neutral-400'>
+            Hibernated to save resources. Restore to reload.
+          </div>
+        ) : (
+          <>
+            {isCollapsed && (
+              <div className='text-xs text-neutral-500 dark:text-neutral-400'>Output collapsed.</div>
+            )}
+            <div
+              className={`w-full ${
+                isCollapsed ? 'h-0 overflow-hidden opacity-0 pointer-events-none' : 'h-[50vh]'
+              }`}
+              aria-hidden={isCollapsed}
+            >
+              <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' />
+            </div>
+          </>
         )}
-        <div
-          className={`w-full ${
-            isCollapsed ? 'h-0 overflow-hidden opacity-0 pointer-events-none' : 'h-[50vh]'
-          }`}
-          aria-hidden={isCollapsed}
-        >
-          <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' />
-        </div>
       </div>
     )
   }
-
-  if (!registry) return null
 
   return (
     <div
@@ -143,6 +176,17 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
               </button>
             </div>
             <Button
+              variant='outline2'
+              size='smaller'
+              rounded='full'
+              className='border border-neutral-200 dark:border-neutral-700'
+              onClick={() => setShowLimits(prev => !prev)}
+              aria-pressed={showLimits}
+              aria-label={showLimits ? 'Hide tool limits' : 'Show tool limits'}
+            >
+              <i className='bx bx-slider-alt' aria-hidden='true'></i>
+            </Button>
+            <Button
               variant='outline'
               size='medium'
               rounded='full'
@@ -154,6 +198,80 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
             </Button>
           </div>
         </div>
+        {showLimits && (
+          <div className='border-b border-neutral-200 dark:border-neutral-700 px-5 py-3'>
+            <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs text-neutral-600 dark:text-neutral-300'>
+              <label className='flex flex-col gap-1'>
+                <span className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
+                  Max live iframes
+                </span>
+                <input
+                  type='number'
+                  min={0}
+                  value={registry.settings.maxActive}
+                  onChange={event => registry.updateSettings({ maxActive: Number(event.target.value) })}
+                  className='rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900/70 px-2 py-1 text-sm text-neutral-800 dark:text-neutral-100'
+                />
+              </label>
+              <label className='flex flex-col gap-1'>
+                <span className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
+                  Max cached tools
+                </span>
+                <input
+                  type='number'
+                  min={0}
+                  value={registry.settings.maxCached}
+                  onChange={event => registry.updateSettings({ maxCached: Number(event.target.value) })}
+                  className='rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900/70 px-2 py-1 text-sm text-neutral-800 dark:text-neutral-100'
+                />
+              </label>
+              <label className='flex flex-col gap-1'>
+                <span className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
+                  Cache TTL (minutes)
+                </span>
+                <input
+                  type='number'
+                  min={0}
+                  value={registry.settings.ttlMinutes}
+                  onChange={event => registry.updateSettings({ ttlMinutes: Number(event.target.value) })}
+                  className='rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900/70 px-2 py-1 text-sm text-neutral-800 dark:text-neutral-100'
+                />
+              </label>
+              <label className='flex flex-col gap-1'>
+                <span className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
+                  Hibernate after (minutes)
+                </span>
+                <input
+                  type='number'
+                  min={0}
+                  value={registry.settings.hibernateAfterMinutes}
+                  onChange={event => registry.updateSettings({ hibernateAfterMinutes: Number(event.target.value) })}
+                  className='rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900/70 px-2 py-1 text-sm text-neutral-800 dark:text-neutral-100'
+                />
+              </label>
+              <label className='flex flex-col gap-1'>
+                <span className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
+                  Max cache size (MB)
+                </span>
+                <input
+                  type='number'
+                  min={0}
+                  value={maxBytesMb}
+                  onChange={event =>
+                    registry.updateSettings({
+                      maxBytes: Number(event.target.value) * 1024 * 1024,
+                    })
+                  }
+                  className='rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900/70 px-2 py-1 text-sm text-neutral-800 dark:text-neutral-100'
+                />
+              </label>
+              <div className='flex flex-col gap-1 text-[11px] text-neutral-500 dark:text-neutral-400'>
+                <span className='uppercase tracking-wide'>Notes</span>
+                <span>0 = no limit. Favorites are never evicted.</span>
+              </div>
+            </div>
+          </div>
+        )}
         {viewMode === 'tabs' ? (
           <div className='flex-1 flex flex-col overflow-hidden'>
             <div className='shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-4 overflow-x-auto thin-scrollbar'>
@@ -162,7 +280,10 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
                   <button
                     key={entry.key}
                     type='button'
-                    onClick={() => setActiveTab(entry.key)}
+                    onClick={() => {
+                      setActiveTab(entry.key)
+                      registry.touchEntry(entry.key)
+                    }}
                     className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${
                       activeKey === entry.key
                         ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
@@ -178,20 +299,7 @@ export const HtmlToolsModal: React.FC<HtmlToolsModalProps> = ({ isOpen, onClose,
               {entries.length === 0 ? (
                 <div className='text-sm text-neutral-600 dark:text-neutral-300'>No HTML tool outputs yet.</div>
               ) : (
-                <div className='relative'>
-                  {entries.map(entry => {
-                    const isActive = entry.key === activeKey
-                    return (
-                      <div
-                        key={entry.key}
-                        className={isActive ? 'relative' : 'absolute inset-0 opacity-0 pointer-events-none'}
-                        aria-hidden={!isActive}
-                      >
-                        {renderEntry(entry)}
-                      </div>
-                    )
-                  })}
-                </div>
+                renderEntry(entries.find(entry => entry.key === activeKey) ?? entries[0])
               )}
             </div>
           </div>
