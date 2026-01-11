@@ -732,7 +732,8 @@ const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fu
       className={fullHeight ? 'w-full h-full bg-white' : 'w-full min-h-[800px] rounded-lg bg-white'}
       style={{ border: 'none' }}
       title='HTML Preview'
-      allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+      allow='fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+      allowFullScreen
       referrerPolicy='strict-origin-when-cross-origin'
       sandbox='allow-scripts allow-same-origin allow-forms allow-popups allow-presentation'
     />
@@ -792,7 +793,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
     const [selectedText, setSelectedText] = useState<string>('')
     const [selectedArtifactUrl, setSelectedArtifactUrl] = useState<string | null>(null)
-    const [fullScreenHtml, setFullScreenHtml] = useState<string | null>(null)
+    const [activeHtmlKey, setActiveHtmlKey] = useState<string | null>(null)
     // Explain input states
     const streamToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromStream(streamEvents), [streamEvents])
     const contentToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromBlocks(contentBlocks), [contentBlocks])
@@ -1237,12 +1238,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }, [showExplainInput])
 
     useEffect(() => {
-      if (!fullScreenHtml) return
+      if (!activeHtmlKey) return
 
       const handleKeyDown = (event: KeyboardEvent) => {
         if (event.key === 'Escape') {
           event.preventDefault()
-          setFullScreenHtml(null)
+          setActiveHtmlKey(null)
         }
       }
 
@@ -1250,7 +1251,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return () => {
         document.removeEventListener('keydown', handleKeyDown)
       }
-    }, [fullScreenHtml])
+    }, [activeHtmlKey])
 
     // Close More menu when context menu opens to avoid conflicts
     useEffect(() => {
@@ -1469,6 +1470,51 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return words.slice(0, maxWords).join(' ') + '...'
     }
 
+    const renderHtmlPreview = (html: string, key: string) => {
+      const isFullscreen = activeHtmlKey === key
+
+      return (
+        <div
+          className={
+            isFullscreen
+              ? 'fixed inset-0 z-[1300] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm'
+              : ''
+          }
+          onClick={isFullscreen ? () => setActiveHtmlKey(null) : undefined}
+          role={isFullscreen ? 'dialog' : undefined}
+          aria-modal={isFullscreen ? 'true' : undefined}
+          aria-label={isFullscreen ? 'HTML preview' : undefined}
+        >
+          <div
+            className={
+              isFullscreen
+                ? 'relative w-[95vw] h-[95vh] overflow-hidden rounded-2xl border border-neutral-200/60 dark:border-neutral-700 bg-white dark:bg-yBlack-900 shadow-[0_10px_30px_rgba(0,0,0,0.35)]'
+                : ''
+            }
+            onClick={isFullscreen ? e => e.stopPropagation() : undefined}
+          >
+            {isFullscreen && (
+              <div className='absolute right-2 top-2 z-20'>
+                <Button
+                  variant='outline'
+                  size='large'
+                  rounded='full'
+                  className='border border-white/30 bg-black/50 text-white shadow-lg shadow-black/40 hover:bg-black/60 focus:ring-0'
+                  onClick={() => setActiveHtmlKey(null)}
+                  aria-label='Close HTML preview'
+                >
+                  <i className='bx bx-x text-3xl' aria-hidden='true'></i>
+                </Button>
+              </div>
+            )}
+            <div className={isFullscreen ? 'h-full w-full' : ''}>
+              <HtmlIframe html={html} fullHeight={isFullscreen} />
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     const renderToolCallGroupCard = (group: ToolCallRenderGroup, key: string) => {
       // Don't render orphaned groups (results waiting for their tool_call)
       if (group.anchorIndex === -1) {
@@ -1506,6 +1552,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Render html_renderer tool with always-visible HTML
       if (isHtmlRenderer && typeof extractedHtml === 'string') {
         // Debug: log to see if HTML is already stripped at this point
+        const htmlPreviewKey = `${toggleKey}-html`
         return (
           <div
             key={toggleKey}
@@ -1517,7 +1564,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 <Button
                   variant='outline2'
                   size='small'
-                  onClick={() => setFullScreenHtml(extractedHtml)}
+                  onClick={() => setActiveHtmlKey(prev => (prev === htmlPreviewKey ? null : htmlPreviewKey))}
                   title='Open full screen'
                 >
                   <i className='bx bx-fullscreen text-lg' aria-hidden='true'></i>
@@ -1541,7 +1588,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               </div>
             </div>
             {/* Always render the HTML output in an iframe using blob URL for proper rendering */}
-            <HtmlIframe html={extractedHtml} />
+            {renderHtmlPreview(extractedHtml, htmlPreviewKey)}
             {/* Only show inputs when expanded */}
             {isExpanded && group.args && Object.keys(group.args).length > 0 && (
               <div className='mt-3 rounded-xl border border-neutral-200/60 dark:border-neutral-900/40 bg-white dark:bg-yBlack-900/70 p-3 space-y-1 text-xs'>
@@ -1636,6 +1683,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               {group.results.length > 0 && (
                 <div className='space-y-2'>
                   {group.results.map((result, resultIdx) => {
+                    const resultKey = `${group.id}-result-${resultIdx}`
+                    const isResultHtmlFullscreen = activeHtmlKey === resultKey
                     // Extract HTML from tool result - handles both object and JSON string content
                     const maybeHtml = (() => {
                       if (!result) return null
@@ -1668,19 +1717,19 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     const renderedBody = (() => {
                       if (typeof maybeHtml === 'string') {
                         // Render HTML content in isolated iframe to prevent CSS leakage
-                        return <HtmlIframe html={maybeHtml} />
+                        return renderHtmlPreview(maybeHtml, resultKey)
                       }
                       return formatToolResultContent(result.content)
                     })()
 
                     return (
                       <div
-                        key={`${group.id}-result-${resultIdx}`}
+                        key={resultKey}
                         className={`rounded-xl border p-3 whitespace-pre-wrap break-words overflow-hidden leading-relaxed ${
                           result.is_error
                             ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
                             : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
-                        }`}
+                        } ${isResultHtmlFullscreen ? 'overflow-visible' : ''}`}
                       >
                         <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
                           <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
@@ -1688,7 +1737,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                             <Button
                               variant='outline2'
                               size='small'
-                              onClick={() => setFullScreenHtml(maybeHtml)}
+                              onClick={() => setActiveHtmlKey(prev => (prev === resultKey ? null : resultKey))}
                               title='Open full screen'
                             >
                               <i className='bx bx-fullscreen text-base' aria-hidden='true'></i>
@@ -2349,46 +2398,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           onClose={handleCloseArtifactModal}
         />
 
-        <AnimatePresence>
-          {fullScreenHtml && (
-            <motion.div
-              key='html-fullscreen-overlay'
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className='fixed inset-0 z-[1300] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm'
-              onClick={() => setFullScreenHtml(null)}
-              role='dialog'
-              aria-modal='true'
-              aria-label='HTML preview'
-            >
-              <motion.div
-                initial={{ scale: 0.98, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.98, opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className='relative w-[95vw] h-[95vh] overflow-hidden rounded-2xl border border-neutral-200/60 dark:border-neutral-700 bg-white dark:bg-yBlack-900 shadow-[0_10px_30px_rgba(0,0,0,0.35)]'
-                onClick={e => e.stopPropagation()}
-              >
-                <div className='absolute right-2 top-2 z-20'>
-                  <Button
-                    variant='outline'
-                    size='large'
-                    rounded='full'
-                    className='border border-white/30 bg-black/50 text-white shadow-lg shadow-black/40 hover:bg-black/60 focus:ring-0'
-                    onClick={() => setFullScreenHtml(null)}
-                    aria-label='Close HTML preview'
-                  >
-                    <i className='bx bx-x text-3xl' aria-hidden='true'></i>
-                  </Button>
-                </div>
-                <div className='h-full w-full'>
-                  <HtmlIframe html={fullScreenHtml} fullHeight />
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     )
   }
