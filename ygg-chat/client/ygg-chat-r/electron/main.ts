@@ -20,6 +20,17 @@ let compactMode = false
 let savedBounds: Electron.Rectangle | null = null
 let serverProcess: ChildProcess | null = null
 let localServerStarted = false
+const activeReadStreams = new Map<
+  string,
+  {
+    stream: fs.ReadStream
+    sender: Electron.WebContents
+    loaded: number
+    total: number | null
+    aborted: boolean
+    abortedSent: boolean
+  }
+>()
 
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat'
@@ -717,6 +728,142 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string, encoding?: Buffer
     console.error('[Electron IPC] Failed to read file:', error)
     return { success: false, error: String(error) }
   }
+})
+
+// Stat file for custom tool widgets
+ipcMain.handle('fs:stat', async (_event, filePath: string) => {
+  console.log('[Electron IPC] Stating file:', filePath)
+  try {
+    const stats = await fs.promises.stat(filePath)
+    return {
+      success: true,
+      size: stats.size,
+      isFile: stats.isFile(),
+      isDirectory: stats.isDirectory(),
+      mtimeMs: stats.mtimeMs,
+    }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to stat file:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+// Stream file content for custom tool widgets
+ipcMain.handle(
+  'fs:readFileStream',
+  async (
+    event,
+    filePath: string,
+    options?: {
+      encoding?: BufferEncoding
+      highWaterMark?: number
+    }
+  ) => {
+    console.log('[Electron IPC] Streaming file:', filePath)
+    try {
+      const stats = await fs.promises.stat(filePath)
+      const total = Number.isFinite(stats.size) ? stats.size : null
+      const streamId = `stream_${Date.now()}_${Math.random().toString(16).slice(2)}`
+      const stream = fs.createReadStream(filePath, {
+        encoding: options?.encoding,
+        highWaterMark: options?.highWaterMark,
+      })
+
+      const meta = {
+        stream,
+        sender: event.sender,
+        loaded: 0,
+        total,
+        aborted: false,
+        abortedSent: false,
+      }
+      activeReadStreams.set(streamId, meta)
+
+      const sendToRenderer = (channel: string, payload: Record<string, any>) => {
+        if (!meta.sender.isDestroyed()) {
+          meta.sender.send(channel, payload)
+        }
+      }
+
+      stream.on('data', (chunk: Buffer | string) => {
+        const chunkSize =
+          typeof chunk === 'string' ? Buffer.byteLength(chunk, options?.encoding || 'utf-8') : chunk.length
+        meta.loaded += chunkSize
+        sendToRenderer('fs:readFileStream:chunk', {
+          streamId,
+          chunk,
+          loaded: meta.loaded,
+          total: meta.total,
+        })
+        sendToRenderer('fs:readFileStream:progress', {
+          streamId,
+          loaded: meta.loaded,
+          total: meta.total,
+          percent: meta.total ? (meta.loaded / meta.total) * 100 : null,
+        })
+      })
+
+      stream.on('end', () => {
+        if (!meta.aborted) {
+          sendToRenderer('fs:readFileStream:end', {
+            streamId,
+            loaded: meta.loaded,
+            total: meta.total,
+          })
+        }
+        activeReadStreams.delete(streamId)
+      })
+
+      stream.on('error', (error: Error) => {
+        if (meta.aborted) {
+          if (!meta.abortedSent) {
+            sendToRenderer('fs:readFileStream:aborted', {
+              streamId,
+              loaded: meta.loaded,
+              total: meta.total,
+            })
+            meta.abortedSent = true
+          }
+        } else {
+          console.error('[Electron IPC] Stream error:', error)
+          sendToRenderer('fs:readFileStream:error', {
+            streamId,
+            error: error.message,
+            loaded: meta.loaded,
+            total: meta.total,
+          })
+        }
+        activeReadStreams.delete(streamId)
+      })
+
+      return { success: true, streamId, total }
+    } catch (error) {
+      console.error('[Electron IPC] Failed to stream file:', error)
+      return { success: false, error: String(error) }
+    }
+  }
+)
+
+// Abort an active file stream
+ipcMain.handle('fs:abortReadFileStream', async (_event, streamId: string) => {
+  console.log('[Electron IPC] Aborting file stream:', streamId)
+  const meta = activeReadStreams.get(streamId)
+  if (!meta) {
+    return { success: false, error: 'Stream not found' }
+  }
+
+  meta.aborted = true
+  if (!meta.abortedSent && !meta.sender.isDestroyed()) {
+    meta.sender.send('fs:readFileStream:aborted', {
+      streamId,
+      loaded: meta.loaded,
+      total: meta.total,
+    })
+    meta.abortedSent = true
+  }
+  meta.stream.destroy()
+  activeReadStreams.delete(streamId)
+  return { success: true }
 })
 
 // Write file content for custom tool widgets

@@ -44,6 +44,10 @@
       "from": "../../server/src/database",
       "to": "server/src/database",
       "filter": ["**/*.sql", "**/*.txt"]
+    },
+    {
+      "from": "custom-tools/CUSTOM_TOOLS_GUIIDE.md",
+      "to": "custom-tools/CUSTOM_TOOLS_GUIIDE.md"
     }
   ],
   "win": {

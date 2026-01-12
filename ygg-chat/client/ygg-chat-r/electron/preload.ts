@@ -62,6 +62,40 @@ contextBridge.exposeInMainWorld('electronAPI', {
     writeFile: (filePath: string, content: string, encoding?: BufferEncoding) =>
       ipcRenderer.invoke('fs:writeFile', filePath, content, encoding),
     mkdir: (dirPath: string) => ipcRenderer.invoke('fs:mkdir', dirPath),
+    stat: (filePath: string) => ipcRenderer.invoke('fs:stat', filePath),
+    readFileStream: (
+      filePath: string,
+      options?: {
+        encoding?: BufferEncoding
+        highWaterMark?: number
+      }
+    ) => ipcRenderer.invoke('fs:readFileStream', filePath, options),
+    abortReadFileStream: (streamId: string) => ipcRenderer.invoke('fs:abortReadFileStream', streamId),
+    onReadFileStreamChunk: (callback: (payload: any) => void) => {
+      const listener = (_event: any, payload: any) => callback(payload)
+      ipcRenderer.on('fs:readFileStream:chunk', listener)
+      return () => ipcRenderer.removeListener('fs:readFileStream:chunk', listener)
+    },
+    onReadFileStreamProgress: (callback: (payload: any) => void) => {
+      const listener = (_event: any, payload: any) => callback(payload)
+      ipcRenderer.on('fs:readFileStream:progress', listener)
+      return () => ipcRenderer.removeListener('fs:readFileStream:progress', listener)
+    },
+    onReadFileStreamEnd: (callback: (payload: any) => void) => {
+      const listener = (_event: any, payload: any) => callback(payload)
+      ipcRenderer.on('fs:readFileStream:end', listener)
+      return () => ipcRenderer.removeListener('fs:readFileStream:end', listener)
+    },
+    onReadFileStreamError: (callback: (payload: any) => void) => {
+      const listener = (_event: any, payload: any) => callback(payload)
+      ipcRenderer.on('fs:readFileStream:error', listener)
+      return () => ipcRenderer.removeListener('fs:readFileStream:error', listener)
+    },
+    onReadFileStreamAborted: (callback: (payload: any) => void) => {
+      const listener = (_event: any, payload: any) => callback(payload)
+      ipcRenderer.on('fs:readFileStream:aborted', listener)
+      return () => ipcRenderer.removeListener('fs:readFileStream:aborted', listener)
+    },
   },
   exec: {
     run: (command: string, options?: { cwd?: string; timeout?: number }) =>

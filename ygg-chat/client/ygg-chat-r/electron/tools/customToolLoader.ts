@@ -7,6 +7,7 @@ import path from 'path'
 import { pathToFileURL } from 'url'
 
 const CUSTOM_TOOLS_DIR_NAME = 'custom-tools'
+const CUSTOM_TOOLS_GUIDE_FILE = 'CUSTOM_TOOLS_GUIIDE.md'
 const DEFINITION_FILE = 'definition.json'
 const IMPLEMENTATION_FILE = 'index.js'
 const EXECUTION_TIMEOUT_MS = 60000 // 60 seconds
@@ -38,6 +39,18 @@ function resolveBaseDir(): string {
 
 function getCustomToolsDirectory(): string {
   return path.join(resolveBaseDir(), CUSTOM_TOOLS_DIR_NAME)
+}
+
+function resolveGuideSourcePath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
+  }
+
+  try {
+    return path.join(app.getAppPath(), CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
+  } catch {
+    return path.join(process.cwd(), CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
+  }
 }
 
 // Tool definition interface (matches toolDefinitions.ts pattern)
@@ -128,6 +141,7 @@ class CustomToolRegistry {
     console.log('[CustomToolLoader] Initializing custom tools from:', customToolsDir)
 
     await this.ensureDirectory()
+    await this.ensureGuideFile()
     await this.loadAllTools()
     this.initialized = true
 
@@ -140,6 +154,32 @@ class CustomToolRegistry {
       await fs.mkdir(dir, { recursive: true })
     } catch (error) {
       console.error('[CustomToolLoader] Failed to create directory:', error)
+    }
+  }
+
+  private async ensureGuideFile(): Promise<void> {
+    const targetPath = path.join(getCustomToolsDirectory(), CUSTOM_TOOLS_GUIDE_FILE)
+
+    try {
+      await fs.access(targetPath)
+      return
+    } catch {
+      // File does not exist; seed it below.
+    }
+
+    const sourcePath = resolveGuideSourcePath()
+    try {
+      await fs.access(sourcePath)
+    } catch (error) {
+      console.warn('[CustomToolLoader] Guide file not found at:', sourcePath, error)
+      return
+    }
+
+    try {
+      await fs.copyFile(sourcePath, targetPath)
+      console.log('[CustomToolLoader] Seeded custom tools guide at:', targetPath)
+    } catch (error) {
+      console.error('[CustomToolLoader] Failed to seed guide file:', error)
     }
   }
 

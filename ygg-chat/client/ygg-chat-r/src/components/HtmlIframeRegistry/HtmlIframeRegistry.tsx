@@ -294,6 +294,75 @@ const configureIframeElement = (iframe: HTMLIFrameElement) => {
 }
 
 const attachMessageBridge = (iframe: HTMLIFrameElement) => {
+  const streamTargets = new Set<string>()
+  const pendingStreamEvents = new Map<string, Array<{ type: string; payload: any }>>()
+  let awaitingStreamResponse = 0
+  const electronAPI = (window as any).electronAPI
+
+  const emitStreamEvent = (type: string, payload: any) => {
+    const streamId = payload?.streamId
+    if (!streamId) return
+    iframe.contentWindow?.postMessage({ type, ...payload }, '*')
+    if (
+      type === 'FS_READ_FILE_STREAM_END' ||
+      type === 'FS_READ_FILE_STREAM_ERROR' ||
+      type === 'FS_READ_FILE_STREAM_ABORTED'
+    ) {
+      streamTargets.delete(streamId)
+      pendingStreamEvents.delete(streamId)
+    }
+  }
+
+  const forwardStreamEvent = (type: string, payload: any) => {
+    const streamId = payload?.streamId
+    if (!streamId) return
+    if (!streamTargets.has(streamId)) {
+      if (awaitingStreamResponse > 0) {
+        const pending = pendingStreamEvents.get(streamId) || []
+        pending.push({ type, payload })
+        pendingStreamEvents.set(streamId, pending)
+      }
+      return
+    }
+    emitStreamEvent(type, payload)
+  }
+
+  const flushPendingEvents = (streamId: string) => {
+    const pending = pendingStreamEvents.get(streamId)
+    if (!pending || pending.length === 0) return
+    pending.forEach(entry => emitStreamEvent(entry.type, entry.payload))
+    pendingStreamEvents.delete(streamId)
+  }
+
+  const streamCleanupFns: Array<(() => void) | undefined> = []
+  if (electronAPI?.fs?.onReadFileStreamChunk) {
+    streamCleanupFns.push(
+      electronAPI.fs.onReadFileStreamChunk((payload: any) => forwardStreamEvent('FS_READ_FILE_STREAM_CHUNK', payload))
+    )
+  }
+  if (electronAPI?.fs?.onReadFileStreamProgress) {
+    streamCleanupFns.push(
+      electronAPI.fs.onReadFileStreamProgress((payload: any) =>
+        forwardStreamEvent('FS_READ_FILE_STREAM_PROGRESS', payload)
+      )
+    )
+  }
+  if (electronAPI?.fs?.onReadFileStreamEnd) {
+    streamCleanupFns.push(
+      electronAPI.fs.onReadFileStreamEnd((payload: any) => forwardStreamEvent('FS_READ_FILE_STREAM_END', payload))
+    )
+  }
+  if (electronAPI?.fs?.onReadFileStreamError) {
+    streamCleanupFns.push(
+      electronAPI.fs.onReadFileStreamError((payload: any) => forwardStreamEvent('FS_READ_FILE_STREAM_ERROR', payload))
+    )
+  }
+  if (electronAPI?.fs?.onReadFileStreamAborted) {
+    streamCleanupFns.push(
+      electronAPI.fs.onReadFileStreamAborted((payload: any) => forwardStreamEvent('FS_READ_FILE_STREAM_ABORTED', payload))
+    )
+  }
+
   const handleMessage = async (event: MessageEvent) => {
     if (event.source !== iframe.contentWindow) {
       return
@@ -301,8 +370,6 @@ const attachMessageBridge = (iframe: HTMLIFrameElement) => {
 
     const { type, requestId, options } = event.data || {}
     if (!type || !requestId) return
-
-    const electronAPI = (window as any).electronAPI
 
     let response: any = { success: false, error: 'Unknown request type' }
 
@@ -327,6 +394,44 @@ const attachMessageBridge = (iframe: HTMLIFrameElement) => {
             response = await electronAPI.fs.readFile(options?.filePath, options?.encoding)
           } else {
             response = { success: false, error: 'File read not available (not in Electron)' }
+          }
+          break
+        case 'FS_READ_FILE_STREAM':
+          if (electronAPI?.fs?.readFileStream) {
+            awaitingStreamResponse += 1
+            try {
+              response = await electronAPI.fs.readFileStream(options?.filePath, {
+                encoding: options?.encoding,
+                highWaterMark: options?.highWaterMark,
+              })
+              if (response?.success && response?.streamId) {
+                streamTargets.add(response.streamId)
+                flushPendingEvents(response.streamId)
+              }
+            } catch (err) {
+              response = { success: false, error: String(err) }
+            } finally {
+              awaitingStreamResponse = Math.max(0, awaitingStreamResponse - 1)
+              if (awaitingStreamResponse === 0) {
+                pendingStreamEvents.clear()
+              }
+            }
+          } else {
+            response = { success: false, error: 'File stream not available (not in Electron)' }
+          }
+          break
+        case 'FS_STAT':
+          if (electronAPI?.fs?.stat) {
+            response = await electronAPI.fs.stat(options?.filePath)
+          } else {
+            response = { success: false, error: 'File stat not available (not in Electron)' }
+          }
+          break
+        case 'FS_ABORT':
+          if (electronAPI?.fs?.abortReadFileStream) {
+            response = await electronAPI.fs.abortReadFileStream(options?.streamId)
+          } else {
+            response = { success: false, error: 'Stream abort not available (not in Electron)' }
           }
           break
         case 'FS_WRITE_FILE':
@@ -372,7 +477,12 @@ const attachMessageBridge = (iframe: HTMLIFrameElement) => {
   }
 
   window.addEventListener('message', handleMessage)
-  return () => window.removeEventListener('message', handleMessage)
+  return () => {
+    window.removeEventListener('message', handleMessage)
+    streamCleanupFns.forEach(cleanup => cleanup?.())
+    streamTargets.clear()
+    pendingStreamEvents.clear()
+  }
 }
 
 const createIframeRecord = (html: string, fullHeight: boolean): IframeRecord => {
