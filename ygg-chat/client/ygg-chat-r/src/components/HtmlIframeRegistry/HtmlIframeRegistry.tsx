@@ -1376,7 +1376,9 @@ export const HtmlIframeSlot: React.FC<{
     }
   }, [iframeKey])
 
-  useEffect(() => {
+  // IMPORTANT: useLayoutEffect for updateIframe must run BEFORE the setTarget useLayoutEffect below.
+  // This ensures the iframe record exists before we try to position it.
+  useLayoutEffect(() => {
     if (!registryRef.current) return
     registryRef.current.updateIframe(iframeKey, html, fullHeight)
   }, [iframeKey, html, fullHeight])

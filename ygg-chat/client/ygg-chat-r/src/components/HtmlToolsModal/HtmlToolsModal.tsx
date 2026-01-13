@@ -21,6 +21,7 @@ export const HtmlToolsModal: React.FC = () => {
   const [showFullscreenSettings, setShowFullscreenSettings] = useState(false)
   const [showFullscreenTabMenu, setShowFullscreenTabMenu] = useState<string | null>(null)
   const settingsRef = useRef<HTMLDivElement | null>(null)
+  const settingsDropdownRef = useRef<HTMLDivElement | null>(null)
   const tabMenuRef = useRef<HTMLDivElement | null>(null)
   const lastFocusKeyRef = useRef<string | null>(null)
   const lastFocusModeRef = useRef<'list' | 'tabs' | null>(null)
@@ -91,10 +92,13 @@ export const HtmlToolsModal: React.FC = () => {
   useEffect(() => {
     if (!showFullscreenSettings && !showFullscreenTabMenu) return
     const handleClick = (e: MouseEvent) => {
-      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      const isInsideSettingsTrigger = settingsRef.current?.contains(target)
+      const isInsideSettingsDropdown = settingsDropdownRef.current?.contains(target)
+      if (!isInsideSettingsTrigger && !isInsideSettingsDropdown) {
         setShowFullscreenSettings(false)
       }
-      if (tabMenuRef.current && !tabMenuRef.current.contains(e.target as Node)) {
+      if (tabMenuRef.current && !tabMenuRef.current.contains(target)) {
         setShowFullscreenTabMenu(null)
       }
     }
@@ -541,13 +545,22 @@ export const HtmlToolsModal: React.FC = () => {
             <div className='relative' ref={settingsRef}>
               <button
                 type='button'
+                data-settings-trigger
                 onClick={() => setShowFullscreenSettings(!showFullscreenSettings)}
                 className='p-1.5 rounded-lg hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 text-neutral-600 dark:text-neutral-400'
               >
                 <i className='bx bx-cog text-sm' />
               </button>
-              {showFullscreenSettings && (
-                <div className='absolute right-0 top-full mt-1 w-56 rounded-lg border border-neutral-200/60 dark:border-neutral-700/60 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg py-2 z-[1500]'>
+              {showFullscreenSettings &&
+                createPortal(
+                  <div
+                    ref={settingsDropdownRef}
+                    className='fixed w-56 rounded-lg border border-neutral-200/60 dark:border-neutral-700/60 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg py-2 z-[1500]'
+                    style={{
+                      top: `${(document.querySelector('[data-settings-trigger]') as HTMLElement)?.getBoundingClientRect().bottom ?? 44}px`,
+                      right: `${window.innerWidth - ((document.querySelector('[data-settings-trigger]') as HTMLElement)?.getBoundingClientRect().right ?? 100)}px`,
+                    }}
+                  >
                   <div className='px-3 py-1.5 text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500'>
                     Settings
                   </div>
@@ -593,8 +606,9 @@ export const HtmlToolsModal: React.FC = () => {
                       ))}
                     </>
                   )}
-                </div>
-              )}
+                  </div>,
+                  document.body
+                )}
             </div>
             {/* Close button */}
             <button
