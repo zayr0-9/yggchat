@@ -34,6 +34,7 @@ import {
   pruneOldTools,
   registerToolsRoutes,
 } from './localToolsRoutes.js'
+import { registerProxyRoutes } from './proxyGateway.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -983,7 +984,21 @@ function initializeWebSocketServer(serverInstance: any) {
 
 // Setup Express app
 function setupServer() {
-  app.use(cors())
+  app.use(cors({
+    origin: true, // Allow all origins in local dev
+    credentials: true,
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-api-key',
+      'x-tenant-id',
+      'x-tool-name',
+      'x-tool-id',
+      'x-session-id',
+      'x-proxy-admin-key',
+    ],
+    exposedHeaders: ['Authorization'],
+  }))
   app.use(express.json({ limit: '25mb' }))
 
   // Health check
@@ -994,6 +1009,7 @@ function setupServer() {
   if (db) {
     registerToolsRoutes(app, db, statements)
   }
+  registerProxyRoutes(app)
 
   // =====================================================
   // OpenAI ChatGPT OAuth Authentication Endpoints

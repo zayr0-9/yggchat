@@ -12,6 +12,7 @@ import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { chatSliceActions } from '../../features/chats/chatSlice'
+import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
 import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
@@ -639,7 +640,13 @@ const todoActionLabel = (action: string) => {
 // Component to render HTML in an iframe using srcdoc for packaged Electron compatibility
 // Supports postMessage bridge for file dialogs and filesystem access from widget iframes
 const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fullHeight = false }) => {
+  const { userId } = useAuth()
+  const userIdRef = useRef<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+
+  useEffect(() => {
+    userIdRef.current = userId ?? null
+  }, [userId])
 
   useEffect(() => {
     const streamTargets = new Set<string>()
@@ -819,6 +826,9 @@ const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fu
             } else {
               response = { success: false, error: 'HTTP request not available (not in Electron)' }
             }
+            break
+          case 'AUTH_CONTEXT':
+            response = { success: true, tenantId: userIdRef.current ?? null }
             break
         }
       } catch (err) {

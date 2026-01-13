@@ -17,6 +17,7 @@ import settingsRoutes from './routes/settings'
 import { stripMarkdownToText } from './utils/markdownStripper'
 import { preloadModelPricing } from './utils/openrouter'
 import tools from './utils/tools/index'
+import { registerProxyRoutes } from './services/proxyGateway'
 
 // =============================================================================
 // PROCESS ERROR HANDLERS - Prevent crashes from unhandled errors
@@ -224,7 +225,16 @@ app.use(
     },
     credentials: true, // Allow credentials (cookies, authorization headers)
     exposedHeaders: ['Authorization'], // Expose JWT headers to client
-    allowedHeaders: ['Content-Type', 'Authorization'], // Accept JWT Authorization header from client
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-api-key',
+      'x-tenant-id',
+      'x-tool-name',
+      'x-tool-id',
+      'x-session-id',
+      'x-proxy-admin-key',
+    ],
   })
 )
 
@@ -293,6 +303,14 @@ if (env.VITE_ENVIRONMENT === 'web') {
     // Agent routes: Claude Code and other external agents
     const supaAgents = require('./routes/supaAgents').default
     app.use('/api/agents', supaAgents)
+
+    // OAuth provider routes (server-side token storage)
+    const oauthProviders = require('./routes/oauthProviders').default
+    app.use('/api', oauthProviders)
+
+    // Proxy gateway routes (custom tool API proxy)
+    registerProxyRoutes(app)
+    console.log('[Startup] Proxy gateway routes registered')
 
     // OOB Auth routes: OAuth callback page + code exchange for Electron/CLI
     const oobAuth = require('./routes/oobAuth').default

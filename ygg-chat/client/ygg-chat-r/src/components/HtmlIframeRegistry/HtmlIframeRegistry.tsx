@@ -13,7 +13,7 @@ import type { Message, ContentBlock } from '../../features/chats/chatTypes'
 import type { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
 import { getHtmlToolsFromCache, htmlToolsQueryKey, type HtmlToolRecord, useHtmlToolsCache } from '../../hooks/useQueries'
-import { environment, localApi } from '../../utils/api'
+import { createStreamingRequest, environment, localApi } from '../../utils/api'
 
 type HtmlIframeEntry = {
   key: string
@@ -57,6 +57,8 @@ type HtmlIframeRegistryContextValue = {
   focusKey: string | null
   openModal: (focusKey?: string | null) => void
   closeModal: () => void
+  isHomepageFullscreen: boolean
+  setHomepageFullscreen: (open: boolean) => void
   touchEntry: (key: string) => void
   toggleFavorite: (key: string) => void
   hibernateEntry: (key: string) => void
@@ -72,6 +74,7 @@ type IframeRecord = {
   html: string
   fullHeight: boolean
   cleanup: () => void
+  positionCleanup?: () => void
 }
 
 const HtmlIframeRegistryContext = createContext<HtmlIframeRegistryContextValue | null>(null)
@@ -293,7 +296,7 @@ const configureIframeElement = (iframe: HTMLIFrameElement) => {
   iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation')
 }
 
-const attachMessageBridge = (iframe: HTMLIFrameElement) => {
+const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => { tenantId?: string | null }) => {
   const streamTargets = new Set<string>()
   const pendingStreamEvents = new Map<string, Array<{ type: string; payload: any }>>()
   let awaitingStreamResponse = 0
@@ -468,6 +471,98 @@ const attachMessageBridge = (iframe: HTMLIFrameElement) => {
             response = { success: false, error: 'HTTP request not available (not in Electron)' }
           }
           break
+        case 'AUTH_CONTEXT': {
+          const authContext = getAuthContext?.()
+          response = { success: true, tenantId: authContext?.tenantId ?? null }
+          break
+        }
+        case 'REQUEST_GENERATION': {
+          const { prompt, model, maxTokens, temperature, systemPrompt } = options || {}
+
+          if (!prompt) {
+            response = { success: false, error: 'Missing prompt' }
+            break
+          }
+
+          try {
+            const streamResponse = await createStreamingRequest('/generate/ephemeral', null, {
+              method: 'POST',
+              body: JSON.stringify({
+                prompt,
+                model: model || 'anthropic/claude-sonnet-4',
+                maxTokens: maxTokens || 4096,
+                temperature: temperature ?? 0.7,
+                systemPrompt,
+              }),
+            })
+
+            if (!streamResponse.ok) {
+              const errorText = await streamResponse.text()
+              response = { success: false, error: `HTTP ${streamResponse.status}: ${errorText}` }
+              break
+            }
+
+            const reader = streamResponse.body?.getReader()
+            if (!reader) {
+              response = { success: false, error: 'No response body' }
+              break
+            }
+
+            const decoder = new TextDecoder()
+            let fullText = ''
+
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+
+              const chunk = decoder.decode(value, { stream: true })
+
+              // Parse SSE events from chunk
+              const lines = chunk.split('\n')
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6)
+                  if (data === '[DONE]') continue
+                  try {
+                    const parsed = JSON.parse(data)
+                    if (parsed.text) {
+                      fullText += parsed.text
+                      // Send streaming chunk to iframe
+                      iframe.contentWindow?.postMessage(
+                        {
+                          type: 'REQUEST_GENERATION_CHUNK',
+                          requestId,
+                          chunk: parsed.text,
+                          text: fullText,
+                        },
+                        '*'
+                      )
+                    }
+                  } catch {
+                    // Non-JSON line, might be raw text
+                    if (data.trim()) {
+                      fullText += data
+                      iframe.contentWindow?.postMessage(
+                        {
+                          type: 'REQUEST_GENERATION_CHUNK',
+                          requestId,
+                          chunk: data,
+                          text: fullText,
+                        },
+                        '*'
+                      )
+                    }
+                  }
+                }
+              }
+            }
+
+            response = { success: true, text: fullText }
+          } catch (err) {
+            response = { success: false, error: String(err) }
+          }
+          break
+        }
       }
     } catch (err) {
       response = { success: false, error: String(err) }
@@ -485,12 +580,16 @@ const attachMessageBridge = (iframe: HTMLIFrameElement) => {
   }
 }
 
-const createIframeRecord = (html: string, fullHeight: boolean): IframeRecord => {
+const createIframeRecord = (
+  html: string,
+  fullHeight: boolean,
+  getAuthContext?: () => { tenantId?: string | null }
+): IframeRecord => {
   const iframe = document.createElement('iframe')
   configureIframeElement(iframe)
   iframe.className = getIframeClassName(fullHeight)
   iframe.srcdoc = html
-  const cleanup = attachMessageBridge(iframe)
+  const cleanup = attachMessageBridge(iframe, getAuthContext)
 
   return { iframe, html, fullHeight, cleanup }
 }
@@ -504,17 +603,25 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const entriesRef = useRef<Map<string, HtmlIframeEntry>>(new Map())
   const [entries, setEntries] = useState<HtmlIframeEntry[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isHomepageFullscreen, setIsHomepageFullscreen] = useState(false)
   const [focusKey, setFocusKey] = useState<string | null>(null)
   const [settings, setSettings] = useState<HtmlToolsSettings>(DEFAULT_SETTINGS)
   const hiddenHostRef = useRef<HTMLDivElement | null>(null)
+  const overlayHostRef = useRef<HTMLDivElement | null>(null)
   const bootstrapInFlightRef = useRef(false)
   const queryClient = useQueryClient()
   const { userId } = useAuth()
+  const authContextRef = useRef<{ tenantId?: string | null }>({ tenantId: userId ?? null })
+  const getAuthContext = useCallback(() => authContextRef.current, [])
   const toolsQuery = useHtmlToolsCache(userId, isElectronEnv)
   const pendingUpsertsRef = useRef<Map<string, HtmlIframeEntry>>(new Map())
   const pendingDeletesRef = useRef<Set<string>>(new Set())
   const flushTimeoutRef = useRef<number | null>(null)
   const lastQuerySyncRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    authContextRef.current = { tenantId: userId ?? null }
+  }, [userId])
 
   const syncEntries = useCallback((nextEntries?: HtmlIframeEntry[]) => {
     setEntries(nextEntries ?? Array.from(entriesRef.current.values()))
@@ -629,6 +736,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
     const record = recordsRef.current.get(key)
     if (!record) return
     logHtmlTools('iframe-remove', { key })
+    record.positionCleanup?.()
     record.cleanup()
     record.iframe.remove()
     recordsRef.current.delete(key)
@@ -636,6 +744,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
 
   useEffect(() => {
     recordsRef.current.forEach(record => {
+      record.positionCleanup?.()
       record.cleanup()
       record.iframe.remove()
     })
@@ -851,16 +960,63 @@ export const HtmlIframeRegistryProvider: React.FC<{
         enforceLimits(now)
       }
     },
-    [enforceLimits, queuePersistUpsert, syncEntries, updateCacheEntry]
+    [enforceLimits, getAuthContext, queuePersistUpsert, syncEntries, updateCacheEntry]
   )
 
   const setTarget = useCallback((key: string, target: HTMLElement | null) => {
     targetsRef.current.set(key, target)
     const record = recordsRef.current.get(key)
-    const host = target ?? hiddenHostRef.current
-    if (record && host && record.iframe.parentElement !== host) {
-      logHtmlTools('iframe-move', { key, host: target ? 'slot' : 'hidden' })
-      host.appendChild(record.iframe)
+    if (!record) return
+
+    // Clean up previous position tracking
+    record.positionCleanup?.()
+    record.positionCleanup = undefined
+
+    // Ensure iframe is in the overlay container (not moved)
+    if (!record.iframe.parentElement) {
+      overlayHostRef.current?.appendChild(record.iframe)
+    }
+
+    if (!target) {
+      // No target slot - hide the iframe
+      record.iframe.style.display = 'none'
+      record.iframe.style.position = ''
+      record.iframe.style.left = ''
+      record.iframe.style.top = ''
+      record.iframe.style.width = ''
+      record.iframe.style.height = ''
+      logHtmlTools('iframe-hide', { key })
+      return
+    }
+
+    // Position iframe over the target slot using CSS overlay
+    const updatePosition = () => {
+      const rect = target.getBoundingClientRect()
+      record.iframe.style.position = 'fixed'
+      record.iframe.style.left = `${rect.left}px`
+      record.iframe.style.top = `${rect.top}px`
+      record.iframe.style.width = `${rect.width}px`
+      record.iframe.style.height = `${rect.height}px`
+      record.iframe.style.display = rect.width > 0 && rect.height > 0 ? 'block' : 'none'
+    }
+
+    updatePosition()
+    logHtmlTools('iframe-position', { key })
+
+    // Track position changes with ResizeObserver and scroll/resize events
+    const resizeObserver = new ResizeObserver(updatePosition)
+    resizeObserver.observe(target)
+
+    // Also observe ancestors for scroll
+    const scrollHandler = () => requestAnimationFrame(updatePosition)
+    window.addEventListener('scroll', scrollHandler, true)
+    window.addEventListener('resize', scrollHandler)
+
+    // Cleanup function
+    record.positionCleanup = () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('scroll', scrollHandler, true)
+      window.removeEventListener('resize', scrollHandler)
     }
   }, [])
 
@@ -874,8 +1030,14 @@ export const HtmlIframeRegistryProvider: React.FC<{
     ) => {
       let record = recordsRef.current.get(key)
       if (!record) {
-        record = createIframeRecord(html, fullHeight)
+        record = createIframeRecord(html, fullHeight, getAuthContext)
         recordsRef.current.set(key, record)
+        // Enable pointer events on iframe (container is pointer-events: none)
+        record.iframe.style.pointerEvents = 'auto'
+        // Initially hidden until a slot targets it
+        record.iframe.style.display = 'none'
+        // Append to overlay container (never moved after this)
+        overlayHostRef.current?.appendChild(record.iframe)
         logHtmlTools('iframe-create', { key, fullHeight })
       } else {
         if (record.html !== html) {
@@ -922,13 +1084,10 @@ export const HtmlIframeRegistryProvider: React.FC<{
         enforceLimits(now)
       }
 
-      const target = targetsRef.current.get(key)
-      const host = target ?? hiddenHostRef.current
-      if (host && record.iframe.parentElement !== host) {
-        host.appendChild(record.iframe)
-      }
+      // Iframes stay in overlayHostRef permanently - no DOM movement needed
+      // Positioning is handled by setTarget via CSS overlay
     },
-    [enforceLimits, queuePersistUpsert, syncEntries, updateCacheEntry]
+    [enforceLimits, getAuthContext, queuePersistUpsert, syncEntries, updateCacheEntry]
   )
 
   const touchEntry = useCallback(
@@ -1147,6 +1306,8 @@ export const HtmlIframeRegistryProvider: React.FC<{
       focusKey,
       openModal,
       closeModal,
+      isHomepageFullscreen,
+      setHomepageFullscreen: setIsHomepageFullscreen,
       touchEntry,
       toggleFavorite,
       hibernateEntry,
@@ -1162,6 +1323,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       entries,
       focusKey,
       hibernateEntry,
+      isHomepageFullscreen,
       isModalOpen,
       openModal,
       registerEntry,
@@ -1180,6 +1342,15 @@ export const HtmlIframeRegistryProvider: React.FC<{
     <HtmlIframeRegistryContext.Provider value={contextValue}>
       {children}
       <div ref={hiddenHostRef} className='fixed left-0 top-0 h-0 w-0 overflow-hidden' aria-hidden='true' />
+      {/* Overlay container for iframes - positioned via CSS, never moved in DOM */}
+      <div
+        ref={overlayHostRef}
+        className='fixed inset-0 pointer-events-none'
+        style={{ zIndex: 1450 }}
+        aria-hidden='true'
+      >
+        {/* Iframes are appended here and positioned absolutely over their slots */}
+      </div>
     </HtmlIframeRegistryContext.Provider>
   )
 }

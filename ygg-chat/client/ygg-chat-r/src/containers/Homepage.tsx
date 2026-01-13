@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Project, ProjectWithLatestConversation } from '../../../../shared/types'
 import { Button } from '../components'
+import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
 import { chatSliceActions } from '../features/chats'
@@ -28,6 +29,8 @@ const Homepage: React.FC = () => {
   const isMobile = useIsMobile()
   const currentUser = useAppSelector(selectCurrentUser)
   const quickChatProjectId = currentUser?.quick_chat_project_id || null
+  const htmlRegistry = useHtmlIframeRegistry()
+  const isToolsFullscreen = htmlRegistry?.isHomepageFullscreen ?? false
 
   // Check if running in Electron
   const isElectronMode =
@@ -215,6 +218,8 @@ const Homepage: React.FC = () => {
     queryClient.invalidateQueries({ queryKey: ['conversations', 'recent'] })
     queryClient.invalidateQueries({ queryKey: ['research-notes'] })
   }
+
+
 
   return (
     <div className=' h-full flex'>
@@ -427,6 +432,18 @@ const Homepage: React.FC = () => {
                   }`}
                   aria-hidden='true'
                 ></i>
+              </Button>
+              <Button
+                variant='acrylic'
+                size='circle'
+                rounded='full'
+                onClick={() => htmlRegistry?.setHomepageFullscreen(true)}
+                className={`group rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] ${
+                  isToolsFullscreen ? 'bg-blue-500 text-white dark:bg-blue-600' : ''
+                }`}
+                title='Open Tool Viewer'
+              >
+                <i className='bx bx-code-block text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none' aria-hidden='true'></i>
               </Button>
             </div>
           </div>

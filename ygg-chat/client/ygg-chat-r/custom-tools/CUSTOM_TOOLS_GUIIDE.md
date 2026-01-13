@@ -720,6 +720,125 @@ if (result.success) {
 }
 ```
 
+### LLM Generation (Ephemeral)
+
+Make one-off LLM generation requests directly from your tool UI. This is useful for AI-powered features within your tools without creating chat messages.
+
+```javascript
+// Request generation
+const result = await send('REQUEST_GENERATION', {
+  prompt: 'Summarize this code:\n\n' + codeContent,
+  model: 'anthropic/claude-sonnet-4', // Optional, defaults to claude-sonnet-4
+  maxTokens: 4096, // Optional, defaults to 4096
+  temperature: 0.7, // Optional, defaults to 0.7
+  systemPrompt: 'You are a helpful code assistant.', // Optional
+})
+
+if (result.success) {
+  console.log('Generated text:', result.text)
+}
+```
+
+#### Streaming Response
+
+The generation streams tokens as they arrive. Listen for chunk events:
+
+```javascript
+let fullText = ''
+
+// Listen for streaming chunks
+window.addEventListener('message', e => {
+  if (e.data?.type === 'REQUEST_GENERATION_CHUNK' && e.data.requestId === myRequestId) {
+    // e.data.chunk - the new text chunk
+    // e.data.text - accumulated full text so far
+    fullText = e.data.text
+    updateUI(fullText)
+  }
+})
+
+// Initiate the request
+const myRequestId = 'gen_' + Date.now()
+window.parent.postMessage(
+  {
+    type: 'REQUEST_GENERATION',
+    requestId: myRequestId,
+    options: {
+      prompt: 'Explain quantum computing',
+      model: 'anthropic/claude-sonnet-4',
+    },
+  },
+  '*'
+)
+
+// The final response will come as REQUEST_GENERATION_RESPONSE
+window.addEventListener('message', e => {
+  if (e.data?.type === 'REQUEST_GENERATION_RESPONSE' && e.data.requestId === myRequestId) {
+    if (e.data.success) {
+      console.log('Final text:', e.data.text)
+    } else {
+      console.error('Error:', e.data.error)
+    }
+  }
+})
+```
+
+#### Complete Example: AI Code Analyzer
+
+```html
+<button onclick="analyzeCode()">Analyze Code</button>
+<div id="analysis"></div>
+
+<script>
+  async function analyzeCode() {
+    const code = document.getElementById('codeInput').value
+    const analysisDiv = document.getElementById('analysis')
+    analysisDiv.textContent = 'Analyzing...'
+
+    let reqId = 'analysis_' + Date.now()
+
+    // Listen for streaming updates
+    const handler = e => {
+      if (e.data?.type === 'REQUEST_GENERATION_CHUNK' && e.data.requestId === reqId) {
+        analysisDiv.textContent = e.data.text
+      }
+      if (e.data?.type === 'REQUEST_GENERATION_RESPONSE' && e.data.requestId === reqId) {
+        window.removeEventListener('message', handler)
+        if (!e.data.success) {
+          analysisDiv.textContent = 'Error: ' + e.data.error
+        }
+      }
+    }
+    window.addEventListener('message', handler)
+
+    // Send generation request
+    window.parent.postMessage(
+      {
+        type: 'REQUEST_GENERATION',
+        requestId: reqId,
+        options: {
+          prompt: `Analyze this code for potential issues, suggest improvements, and explain what it does:\n\n\`\`\`\n${code}\n\`\`\``,
+          systemPrompt: 'You are a senior software engineer. Be concise and practical.',
+          temperature: 0.3,
+        },
+      },
+      '*'
+    )
+  }
+</script>
+```
+
+#### Available Models
+
+You can specify any model available through OpenRouter, or use direct provider models:
+
+- `anthropic/claude-sonnet-4` (default)
+- `anthropic/claude-3-5-sonnet`
+- `openai/gpt-4o`
+- `google/gemini-2.0-flash`
+- Or any OpenRouter model ID
+
+**Note:** Ephemeral generation uses your account's credits and respects rate limits.
+
 ---
 
 ## Complete Example: File Converter Tool

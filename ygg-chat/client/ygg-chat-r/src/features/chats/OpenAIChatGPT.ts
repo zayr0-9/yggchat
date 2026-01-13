@@ -5,8 +5,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { ConversationId, MessageId, ToolDefinition as SharedToolDefinition } from '../../../../../shared/types'
 import { ContentBlock, Message, ToolCall } from './chatTypes'
-import { CHATGPT_BASE_URL, CHATGPT_CODEX_ENDPOINT, getCodexInstructions, getValidTokens } from './openaiOAuth'
-import sysPromptConfig from './sys_prompt.json'
+import { CHATGPT_BASE_URL, CHATGPT_CODEX_ENDPOINT, getValidTokens } from './openaiOAuth'
 import { getToolsForAI } from './toolDefinitions'
 
 // Map internal ToolDefinition -> OpenAI tool schema
@@ -245,18 +244,10 @@ function getToolCallNameAndArgs(tc: any): { name: string; args: any } {
 }
 
 // Transform messages to ChatGPT backend (responses API) format
-function transformMessagesForChatGPT(messages: any[], developerPrompt?: string, codexUserPrompt?: string): any[] {
+function transformMessagesForChatGPT(messages: any[], developerPrompt?: string): any[] {
   const input: any[] = []
   const toolCallIds = new Set<string>()
   const toolOutputIds = new Set<string>()
-
-  if (codexUserPrompt && codexUserPrompt.trim()) {
-    input.push({
-      type: 'message',
-      role: 'user',
-      content: toInputTextContent(codexUserPrompt),
-    })
-  }
 
   if (developerPrompt && developerPrompt.trim()) {
     input.push({
@@ -379,8 +370,6 @@ export async function createOpenAIChatGPTStreamingRequest(
     throw new Error('OpenAI authentication required. Please sign in with your ChatGPT Plus/Pro account.')
   }
 
-  const codexInstructions = await getCodexInstructions(payload.modelName)
-
   // Get tools
   const allTools = payload.tools || getToolsForAI()
   const tools = mapTools(allTools)
@@ -389,10 +378,10 @@ export async function createOpenAIChatGPTStreamingRequest(
   console.log('[OpenAI ChatGPT] Model:', payload.modelName)
 
   // Transform messages to ChatGPT format
-  const input = transformMessagesForChatGPT(payload.messages, payload.systemPrompt, sysPromptConfig.codexUserPrompt)
+  const input = transformMessagesForChatGPT(payload.messages, payload.systemPrompt)
 
-  // Build request body
-  const body = buildCodexRequestBody(payload.modelName, input, tools, codexInstructions, payload.reasoningConfig)
+  // Build request body - use system prompt as instructions
+  const body = buildCodexRequestBody(payload.modelName, input, tools, payload.systemPrompt || '', payload.reasoningConfig)
 
   // Build URL for Codex endpoint
   const url = `${CHATGPT_BASE_URL}${CHATGPT_CODEX_ENDPOINT}`

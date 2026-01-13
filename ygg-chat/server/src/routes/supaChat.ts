@@ -178,6 +178,110 @@ router.get(
   })
 )
 
+// Ephemeral generation endpoint for custom tools
+// This allows tool UIs to make one-off LLM generation requests without creating messages/conversations
+router.post(
+  '/generate/ephemeral',
+  authenticatedRateLimiter,
+  asyncHandler(async (req, res) => {
+    const { userId } = await verifyAuth(req)
+    const { prompt, model, maxTokens, temperature, systemPrompt } = req.body
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Missing prompt' })
+    }
+
+    // Check if user can generate
+    const canGenerateResult = await canUserGenerate(userId)
+    if (!canGenerateResult.canGenerate) {
+      return res.status(403).json({ error: canGenerateResult.reason || 'Generation not allowed' })
+    }
+
+    // Check if user has paid access for non-free models
+    const selectedModel = model || 'anthropic/claude-sonnet-4'
+    const hasPaidAccess = await canAccessPaidModels(userId)
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+
+    // Handle client disconnect
+    const abortController = new AbortController()
+    req.on('close', () => {
+      console.log('[ephemeral] Client disconnected')
+      abortController.abort()
+    })
+
+    try {
+      // Create a simple message array for generation
+      const messages: any[] = [{ role: 'user', content: prompt }]
+
+      // Determine provider from model string
+      let provider: 'openrouter' | 'anthropic' | 'openai' | 'gemini' = 'openrouter'
+      if (selectedModel.startsWith('claude-') && !selectedModel.includes('/')) {
+        provider = 'anthropic'
+      } else if (selectedModel.startsWith('gpt-') || selectedModel.startsWith('o1')) {
+        provider = 'openai'
+      } else if (selectedModel.startsWith('gemini-')) {
+        provider = 'gemini'
+      }
+
+      await generateResponse(
+        messages,
+        chunk => {
+          try {
+            const parsed = JSON.parse(chunk)
+            const part = parsed?.part
+            const delta = parsed?.delta ?? ''
+
+            if (part === 'text' && delta) {
+              res.write(`data: ${JSON.stringify({ text: delta })}\n\n`)
+            } else if (part === 'reasoning' && delta) {
+              res.write(`data: ${JSON.stringify({ reasoning: delta })}\n\n`)
+            }
+          } catch {
+            // If chunk is not valid JSON, treat as raw text
+            if (chunk.trim()) {
+              res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`)
+            }
+          }
+        },
+        provider,
+        selectedModel,
+        undefined, // attachments
+        systemPrompt || undefined,
+        abortController.signal,
+        undefined, // conversationContext
+        false, // think
+        undefined, // messageId
+        userId,
+        undefined, // conversationId
+        'server',
+        'cloud',
+        false // isElectron
+      )
+
+      // If user doesn't have paid access, decrement free generation count
+      if (!hasPaidAccess) {
+        await decrementFreeGeneration(userId)
+      }
+
+      res.write('data: [DONE]\n\n')
+      res.end()
+    } catch (error: any) {
+      console.error('[ephemeral] Generation error:', error)
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message || 'Generation failed' })
+      } else {
+        res.write(`data: ${JSON.stringify({ error: error.message || 'Generation failed' })}\n\n`)
+        res.end()
+      }
+    }
+  })
+)
+
 // Fetch openai models on the server to keep API key private
 router.get(
   '/models/openai',

@@ -76,20 +76,24 @@ const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
 
   if (!canShow || !registry) return null
 
+  const isHomepageFullscreen = registry.isHomepageFullscreen
+
   return (
     <>
       <HtmlToolsModal />
-      <button
-        type='button'
-        onClick={() => registry.openModal()}
-        className='fixed bottom-6 right-6 z-[1500] rounded-full border border-neutral-200/80 dark:border-neutral-700/70 bg-white/90 dark:bg-yBlack-900/90 px-4 py-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100 shadow-lg transition hover:scale-[1.02] hover:shadow-xl'
-        aria-label='Open HTML tools'
-      >
-        <span className='flex items-center gap-2'>
-          <i className='bx bx-window-open text-lg' aria-hidden='true'></i>
-          Tools
-        </span>
-      </button>
+      {!isHomepageFullscreen && (
+        <button
+          type='button'
+          onClick={() => registry.openModal()}
+          className='fixed bottom-6 right-6 z-[1500] rounded-full border border-neutral-200/80 dark:border-neutral-700/70 bg-white/90 dark:bg-yBlack-900/90 px-4 py-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100 shadow-lg transition hover:scale-[1.02] hover:shadow-xl'
+          aria-label='Open HTML tools'
+        >
+          <span className='flex items-center gap-2'>
+            <i className='bx bx-window-open text-lg' aria-hidden='true'></i>
+            Tools
+          </span>
+        </button>
+      )}
     </>
   )
 }

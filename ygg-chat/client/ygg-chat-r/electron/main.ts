@@ -1,3 +1,4 @@
+import './envLoader.js'
 import { ChildProcess, spawn } from 'child_process'
 import Conf from 'conf'
 import { app, BrowserWindow, dialog, ipcMain, nativeTheme, screen, shell } from 'electron'
@@ -13,7 +14,6 @@ const { autoUpdater } = autoUpdaterPkg
 
 // ESM: Get __dirname from import.meta.url
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
-
 let mainWindow: BrowserWindow | null = null
 let floatingWindow: BrowserWindow | null = null
 let compactMode = false
@@ -669,54 +669,66 @@ ipcMain.handle('shell:openPath', async (_event, path: string) => {
 })
 
 // File dialog for custom tool widgets
-ipcMain.handle('dialog:openFile', async (_event, options?: {
-  title?: string
-  defaultPath?: string
-  filters?: { name: string; extensions: string[] }[]
-  properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
-}) => {
-  console.log('[Electron IPC] Opening file dialog with options:', options)
-  try {
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      title: options?.title || 'Select File',
-      defaultPath: options?.defaultPath,
-      filters: options?.filters,
-      properties: options?.properties || ['openFile'],
-    })
-    return {
-      success: !result.canceled,
-      canceled: result.canceled,
-      filePaths: result.filePaths,
+ipcMain.handle(
+  'dialog:openFile',
+  async (
+    _event,
+    options?: {
+      title?: string
+      defaultPath?: string
+      filters?: { name: string; extensions: string[] }[]
+      properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
     }
-  } catch (error) {
-    console.error('[Electron IPC] Failed to open file dialog:', error)
-    return { success: false, error: String(error), filePaths: [] }
+  ) => {
+    console.log('[Electron IPC] Opening file dialog with options:', options)
+    try {
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        title: options?.title || 'Select File',
+        defaultPath: options?.defaultPath,
+        filters: options?.filters,
+        properties: options?.properties || ['openFile'],
+      })
+      return {
+        success: !result.canceled,
+        canceled: result.canceled,
+        filePaths: result.filePaths,
+      }
+    } catch (error) {
+      console.error('[Electron IPC] Failed to open file dialog:', error)
+      return { success: false, error: String(error), filePaths: [] }
+    }
   }
-})
+)
 
 // Save dialog for custom tool widgets
-ipcMain.handle('dialog:saveFile', async (_event, options?: {
-  title?: string
-  defaultPath?: string
-  filters?: { name: string; extensions: string[] }[]
-}) => {
-  console.log('[Electron IPC] Opening save dialog with options:', options)
-  try {
-    const result = await dialog.showSaveDialog(mainWindow!, {
-      title: options?.title || 'Save File',
-      defaultPath: options?.defaultPath,
-      filters: options?.filters,
-    })
-    return {
-      success: !result.canceled,
-      canceled: result.canceled,
-      filePath: result.filePath,
+ipcMain.handle(
+  'dialog:saveFile',
+  async (
+    _event,
+    options?: {
+      title?: string
+      defaultPath?: string
+      filters?: { name: string; extensions: string[] }[]
     }
-  } catch (error) {
-    console.error('[Electron IPC] Failed to open save dialog:', error)
-    return { success: false, error: String(error), filePath: undefined }
+  ) => {
+    console.log('[Electron IPC] Opening save dialog with options:', options)
+    try {
+      const result = await dialog.showSaveDialog(mainWindow!, {
+        title: options?.title || 'Save File',
+        defaultPath: options?.defaultPath,
+        filters: options?.filters,
+      })
+      return {
+        success: !result.canceled,
+        canceled: result.canceled,
+        filePath: result.filePath,
+      }
+    } catch (error) {
+      console.error('[Electron IPC] Failed to open save dialog:', error)
+      return { success: false, error: String(error), filePath: undefined }
+    }
   }
-})
+)
 
 // Read file content for custom tool widgets
 ipcMain.handle('fs:readFile', async (_event, filePath: string, encoding?: BufferEncoding) => {
@@ -894,31 +906,31 @@ ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
 ipcMain.handle('shell:exec', async (_event, command: string, options?: { cwd?: string; timeout?: number }) => {
   console.log('[Electron IPC] Executing command:', command)
   const { spawn } = require('child_process')
-  
-  return new Promise((resolve) => {
+
+  return new Promise(resolve => {
     const timeout = options?.timeout || 300000 // 5 min default
     let stdout = ''
     let stderr = ''
     let killed = false
-    
+
     const child = spawn(command, [], {
       shell: true,
       cwd: options?.cwd,
     })
-    
+
     const timer = setTimeout(() => {
       killed = true
       child.kill('SIGTERM')
     }, timeout)
-    
+
     child.stdout.on('data', (data: Buffer) => {
       stdout += data.toString()
     })
-    
+
     child.stderr.on('data', (data: Buffer) => {
       stderr += data.toString()
     })
-    
+
     child.on('close', (code: number | null) => {
       clearTimeout(timer)
       resolve({
@@ -929,7 +941,7 @@ ipcMain.handle('shell:exec', async (_event, command: string, options?: { cwd?: s
         killed,
       })
     })
-    
+
     child.on('error', (err: Error) => {
       clearTimeout(timer)
       resolve({
@@ -943,94 +955,100 @@ ipcMain.handle('shell:exec', async (_event, command: string, options?: { cwd?: s
 })
 
 // HTTP request handler for custom tool widgets (enables calling local/remote APIs)
-ipcMain.handle('http:request', async (_event, options: {
-  url: string
-  method?: string
-  headers?: Record<string, string>
-  body?: string
-  timeout?: number
-}) => {
-  console.log('[Electron IPC] HTTP request:', options.method || 'GET', options.url)
-  
-  const http = require('http')
-  const https = require('https')
-  const { URL } = require('url')
-  
-  return new Promise((resolve) => {
-    try {
-      const url = new URL(options.url)
-      const isHttps = url.protocol === 'https:'
-      const lib = isHttps ? https : http
-      
-      const timeout = options.timeout || 30000
-      
-      const reqOptions = {
-        hostname: url.hostname,
-        port: url.port || (isHttps ? 443 : 80),
-        path: url.pathname + url.search,
-        method: options.method || 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-        timeout,
-      }
-      
-      const req = lib.request(reqOptions, (res: any) => {
-        let data = ''
-        
-        res.on('data', (chunk: Buffer) => {
-          data += chunk.toString()
-        })
-        
-        res.on('end', () => {
-          let parsedData: any = data
-          try {
-            parsedData = JSON.parse(data)
-          } catch {
-            // Keep as string if not JSON
-          }
-          
-          resolve({
-            success: res.statusCode >= 200 && res.statusCode < 300,
-            status: res.statusCode,
-            statusText: res.statusMessage,
-            headers: res.headers,
-            data: parsedData,
+ipcMain.handle(
+  'http:request',
+  async (
+    _event,
+    options: {
+      url: string
+      method?: string
+      headers?: Record<string, string>
+      body?: string
+      timeout?: number
+    }
+  ) => {
+    console.log('[Electron IPC] HTTP request:', options.method || 'GET', options.url)
+
+    const http = require('http')
+    const https = require('https')
+    const { URL } = require('url')
+
+    return new Promise(resolve => {
+      try {
+        const url = new URL(options.url)
+        const isHttps = url.protocol === 'https:'
+        const lib = isHttps ? https : http
+
+        const timeout = options.timeout || 30000
+
+        const reqOptions = {
+          hostname: url.hostname,
+          port: url.port || (isHttps ? 443 : 80),
+          path: url.pathname + url.search,
+          method: options.method || 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers,
+          },
+          timeout,
+        }
+
+        const req = lib.request(reqOptions, (res: any) => {
+          let data = ''
+
+          res.on('data', (chunk: Buffer) => {
+            data += chunk.toString()
+          })
+
+          res.on('end', () => {
+            let parsedData: any = data
+            try {
+              parsedData = JSON.parse(data)
+            } catch {
+              // Keep as string if not JSON
+            }
+
+            resolve({
+              success: res.statusCode >= 200 && res.statusCode < 300,
+              status: res.statusCode,
+              statusText: res.statusMessage,
+              headers: res.headers,
+              data: parsedData,
+            })
           })
         })
-      })
-      
-      req.on('error', (err: Error) => {
-        console.error('[Electron IPC] HTTP request error:', err)
+
+        req.on('error', (err: Error) => {
+          console.error('[Electron IPC] HTTP request error:', err)
+          resolve({
+            success: false,
+            error: err.message,
+          })
+        })
+
+        req.on('timeout', () => {
+          req.destroy()
+          resolve({
+            success: false,
+            error: 'Request timeout',
+          })
+        })
+
+        if (options.body) {
+          req.write(options.body)
+        }
+
+        req.end()
+      } catch (err) {
+        console.error('[Electron IPC] HTTP request setup error:', err)
         resolve({
           success: false,
-          error: err.message,
+          error: err instanceof Error ? err.message : String(err),
         })
-      })
-      
-      req.on('timeout', () => {
-        req.destroy()
-        resolve({
-          success: false,
-          error: 'Request timeout',
-        })
-      })
-      
-      if (options.body) {
-        req.write(options.body)
       }
-      
-      req.end()
-    } catch (err) {
-      console.error('[Electron IPC] HTTP request setup error:', err)
-      resolve({
-        success: false,
-        error: err instanceof Error ? err.message : String(err),
-      })
-    }
-  })
-})
+    })
+  }
+)
 
 // Floating window controls
 ipcMain.handle('window:openFloating', async () => {

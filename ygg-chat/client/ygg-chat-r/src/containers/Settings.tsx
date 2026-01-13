@@ -12,6 +12,8 @@ import {
   updateCustomVideoTextColorMode,
   VIDEO_BACKGROUND_CHANGE_EVENT,
 } from '../helpers/videoBackgroundStorage'
+import { useAuth } from '../hooks/useAuth'
+import { API_BASE } from '../utils/api'
 
 const MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024 // 8MB
 
@@ -37,14 +39,44 @@ const formatSize = (size?: number) => {
   return `${(kilo / 1024).toFixed(1)} MB`
 }
 
+interface GoogleDriveStatus {
+  connected: boolean
+  connectedAt: string | null
+  lastUsedAt: string | null
+}
+
 const Settings: React.FC = () => {
   const navigate = useNavigate()
+  const { accessToken } = useAuth()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const timeoutRef = useRef<number | null>(null)
   const [videos, setVideos] = useState<CustomVideoEntry[]>(() => loadSavedVideos())
   const [activeVideoId, setActiveVideoId] = useState<string | null>(() => loadActiveCustomVideoId())
   const [uploading, setUploading] = useState(false)
+  const [googleConnecting, setGoogleConnecting] = useState(false)
+  const [googleDisconnecting, setGoogleDisconnecting] = useState(false)
+  const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null)
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
+
+  // Fetch Google Drive connection status
+  const fetchGoogleDriveStatus = async () => {
+    if (!accessToken) return
+    try {
+      const response = await fetch(`${API_BASE}/oauth/google-drive/status`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (response.ok) {
+        const status = await response.json()
+        setGoogleDriveStatus(status)
+      }
+    } catch (error) {
+      console.error('Failed to fetch Google Drive status:', error)
+    }
+  }
+
+  useEffect(() => {
+    fetchGoogleDriveStatus()
+  }, [accessToken])
 
   useEffect(() => {
     const handleBackgroundChange = () => {
@@ -141,6 +173,76 @@ const Settings: React.FC = () => {
     showStatus({ type: 'success', text: `Text color mode set to "${mode}".` })
   }
 
+  const handleGoogleDriveConnect = async () => {
+    if (!accessToken) {
+      showStatus({ type: 'error', text: 'Sign in required to connect Google Drive.' })
+      return
+    }
+
+    setGoogleConnecting(true)
+    try {
+      const response = await fetch(`${API_BASE}/oauth/google-drive/start`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Unable to start Google Drive connection.')
+      }
+
+      if (!payload?.authUrl) {
+        throw new Error('No Google authorization URL returned.')
+      }
+
+      if (window.electronAPI?.auth?.openExternal) {
+        const result = await window.electronAPI.auth.openExternal(payload.authUrl)
+        if (!result?.success) {
+          window.open(payload.authUrl, '_blank', 'noopener,noreferrer')
+        }
+      } else {
+        window.open(payload.authUrl, '_blank', 'noopener,noreferrer')
+      }
+
+      showStatus({
+        type: 'info',
+        text: 'Google Drive sign-in opened in your browser. Refresh this page after signing in.',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to open Google Drive sign-in.'
+      showStatus({ type: 'error', text: message })
+    } finally {
+      setGoogleConnecting(false)
+    }
+  }
+
+  const handleGoogleDriveDisconnect = async () => {
+    if (!accessToken) return
+
+    setGoogleDisconnecting(true)
+    try {
+      const response = await fetch(`${API_BASE}/oauth/google-drive/disconnect`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to disconnect Google Drive.')
+      }
+
+      setGoogleDriveStatus({ connected: false, connectedAt: null, lastUsedAt: null })
+      showStatus({ type: 'success', text: 'Google Drive disconnected.' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to disconnect Google Drive.'
+      showStatus({ type: 'error', text: message })
+    } finally {
+      setGoogleDisconnecting(false)
+    }
+  }
+
   const renderStatus = () => {
     if (!statusMessage) return null
 
@@ -177,6 +279,76 @@ const Settings: React.FC = () => {
         </header>
 
         {renderStatus()}
+
+        {false && (
+          <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+            <div className='flex flex-col gap-1'>
+              <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Services</h2>
+              <p className='text-sm text-stone-500 dark:text-stone-200'>
+                Connect third-party services so tools can access them through the proxy.
+              </p>
+            </div>
+            <div className='mt-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
+              <div className='flex items-center gap-3'>
+                <div>
+                  <div className='flex items-center gap-2'>
+                    <p className='text-base font-semibold text-stone-900 dark:text-stone-100'>Google Drive</p>
+                    {googleDriveStatus?.connected && (
+                      <span className='rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300'>
+                        Connected
+                      </span>
+                    )}
+                  </div>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>
+                    {googleDriveStatus?.connected
+                      ? `Connected ${googleDriveStatus.connectedAt ? new Date(googleDriveStatus.connectedAt).toLocaleDateString() : ''}`
+                      : 'Sign in once to enable Drive-powered tools.'}
+                  </p>
+                </div>
+              </div>
+              <div className='flex gap-2'>
+                {googleDriveStatus?.connected ? (
+                  <>
+                    <Button
+                      variant='outline2'
+                      size='large'
+                      onClick={handleGoogleDriveConnect}
+                      disabled={googleConnecting}
+                      className='group'
+                    >
+                      <p className='transition-transform duration-100 group-active:scale-95'>
+                        {googleConnecting ? 'Opening…' : 'Reconnect'}
+                      </p>
+                    </Button>
+                    <Button
+                      variant='outline2'
+                      size='large'
+                      onClick={handleGoogleDriveDisconnect}
+                      disabled={googleDisconnecting}
+                      className='group text-rose-600 hover:text-rose-700 dark:text-rose-400'
+                    >
+                      <p className='transition-transform duration-100 group-active:scale-95'>
+                        {googleDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+                      </p>
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant='outline2'
+                    size='large'
+                    onClick={handleGoogleDriveConnect}
+                    disabled={googleConnecting}
+                    className='group'
+                  >
+                    <p className='transition-transform duration-100 group-active:scale-95'>
+                      {googleConnecting ? 'Opening…' : 'Connect Google Drive'}
+                    </p>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
           <div className='flex flex-col gap-1'>

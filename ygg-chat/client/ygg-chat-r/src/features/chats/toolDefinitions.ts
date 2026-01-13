@@ -561,9 +561,16 @@ let mergedToolDefinitions: ToolDefinition[] = builtInToolDefinitions.map(cloneTo
  * Set custom tools from the local server.
  * Custom tools are merged with built-in tools.
  * Custom tools cannot override built-in tools with the same name.
+ * Preserves user's enabled/disabled state for existing tools.
  */
 export const setCustomTools = (customTools: ToolDefinition[]): void => {
   console.log(`[ToolDefinitions] setCustomTools called with ${customTools.length} tools:`, customTools.map(t => t.name))
+
+  // Preserve current enabled state before resetting
+  const currentEnabledState = new Map<string, boolean>()
+  for (const tool of mergedToolDefinitions) {
+    currentEnabledState.set(tool.name, tool.enabled)
+  }
 
   // Filter out any custom tools that would override built-ins
   const builtInNames = new Set(builtInToolDefinitions.map(t => t.name))
@@ -580,14 +587,36 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
     ...builtInToolDefinitions.map(cloneTool),
     ...safeCustomTools.map(cloneTool),
   ]
+
+  // Restore user's enabled state for existing tools
+  for (const tool of mergedToolDefinitions) {
+    if (currentEnabledState.has(tool.name)) {
+      tool.enabled = currentEnabledState.get(tool.name)!
+    }
+  }
+
   console.log(`[ToolDefinitions] Merged total: ${mergedToolDefinitions.length} (${safeCustomTools.length} custom)`)
 }
 
 /**
  * Clear all custom tools (reset to built-in only)
+ * Preserves user's enabled/disabled state for built-in tools.
  */
 export const clearCustomTools = (): void => {
+  // Preserve current enabled state before resetting
+  const currentEnabledState = new Map<string, boolean>()
+  for (const tool of mergedToolDefinitions) {
+    currentEnabledState.set(tool.name, tool.enabled)
+  }
+
   mergedToolDefinitions = builtInToolDefinitions.map(cloneTool)
+
+  // Restore user's enabled state for built-in tools
+  for (const tool of mergedToolDefinitions) {
+    if (currentEnabledState.has(tool.name)) {
+      tool.enabled = currentEnabledState.get(tool.name)!
+    }
+  }
 }
 
 // Get all tool definitions (built-in + custom)
