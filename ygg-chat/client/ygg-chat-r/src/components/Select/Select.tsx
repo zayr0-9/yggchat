@@ -393,7 +393,7 @@ export const Select: React.FC<SelectProps> = ({
               <div className='px-2 py-2 acrylic border-t border-neutral-200 dark:border-neutral-700 dark:bg-transparent'>
                 <Button
                   variant='outline2'
-                  size='large'
+                  size='medium'
                   className='w-full'
                   onClick={e => {
                     e.preventDefault()

@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import React, {
   createContext,
   useCallback,
@@ -8,11 +9,15 @@ import React, {
   useRef,
   useState,
 } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import type { Message, ContentBlock } from '../../features/chats/chatTypes'
+import type { ContentBlock, Message } from '../../features/chats/chatTypes'
 import type { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
-import { getHtmlToolsFromCache, htmlToolsQueryKey, type HtmlToolRecord, useHtmlToolsCache } from '../../hooks/useQueries'
+import {
+  getHtmlToolsFromCache,
+  htmlToolsQueryKey,
+  useHtmlToolsCache,
+  type HtmlToolRecord,
+} from '../../hooks/useQueries'
 import { createStreamingRequest, environment, localApi } from '../../utils/api'
 
 type HtmlIframeEntry = {
@@ -89,8 +94,7 @@ const DEFAULT_SETTINGS: HtmlToolsSettings = {
   hibernateAfterMinutes: 20,
 }
 
-const isElectronEnv =
-  (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || environment === 'electron'
+const isElectronEnv = (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || environment === 'electron'
 
 const LOG_HTML_TOOLS = true
 
@@ -362,7 +366,9 @@ const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => {
   }
   if (electronAPI?.fs?.onReadFileStreamAborted) {
     streamCleanupFns.push(
-      electronAPI.fs.onReadFileStreamAborted((payload: any) => forwardStreamEvent('FS_READ_FILE_STREAM_ABORTED', payload))
+      electronAPI.fs.onReadFileStreamAborted((payload: any) =>
+        forwardStreamEvent('FS_READ_FILE_STREAM_ABORTED', payload)
+      )
     )
   }
 
@@ -638,7 +644,6 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const [focusKey, setFocusKey] = useState<string | null>(null)
   const [settings, setSettings] = useState<HtmlToolsSettings>(DEFAULT_SETTINGS)
   const hiddenHostRef = useRef<HTMLDivElement | null>(null)
-  const overlayHostRef = useRef<HTMLDivElement | null>(null)
   const bootstrapInFlightRef = useRef(false)
   const queryClient = useQueryClient()
   const { userId } = useAuth()
@@ -811,7 +816,10 @@ export const HtmlIframeRegistryProvider: React.FC<{
     const signature = entries.map(entry => `${entry.key}:${entry.updatedAt}`).join('|')
     if (signature === lastQuerySyncRef.current) return
     lastQuerySyncRef.current = signature
-    queryClient.setQueryData<HtmlToolRecord[]>(htmlToolsQueryKey(userId), entries.map(entry => toCacheRecord(entry, userId)))
+    queryClient.setQueryData<HtmlToolRecord[]>(
+      htmlToolsQueryKey(userId),
+      entries.map(entry => toCacheRecord(entry, userId))
+    )
   }, [entries, queryClient, userId])
 
   useEffect(() => {
@@ -910,9 +918,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       if (settings.maxCached > 0) {
         const nextEntries = Array.from(entriesRef.current.values())
         if (nextEntries.length > settings.maxCached) {
-          const evictable = nextEntries
-            .filter(entry => !entry.favorite)
-            .sort((a, b) => a.lastUsedAt - b.lastUsedAt)
+          const evictable = nextEntries.filter(entry => !entry.favorite).sort((a, b) => a.lastUsedAt - b.lastUsedAt)
           for (const entry of evictable) {
             if (entriesRef.current.size <= settings.maxCached) break
             if (removeEntryInternal(entry.key)) {
@@ -959,7 +965,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       const nextLabel = label ?? existingEntry?.label ?? null
       const sizeBytes = getHtmlSizeBytes(html)
       const lastUsedAt =
-        existingEntry && existingEntry.html === html ? existingEntry.lastUsedAt : existingEntry?.lastUsedAt ?? now
+        existingEntry && existingEntry.html === html ? existingEntry.lastUsedAt : (existingEntry?.lastUsedAt ?? now)
       const nextEntry: HtmlIframeEntry = {
         key,
         html,
@@ -1003,24 +1009,25 @@ export const HtmlIframeRegistryProvider: React.FC<{
     record.positionCleanup?.()
     record.positionCleanup = undefined
 
-    // Ensure iframe is in the overlay container (not moved)
-    if (!record.iframe.parentElement) {
-      overlayHostRef.current?.appendChild(record.iframe)
+    // Always keep iframe in hidden container (never inside slot to avoid unmount issues)
+    if (!record.iframe.parentElement || record.iframe.parentElement !== hiddenHostRef.current) {
+      hiddenHostRef.current?.appendChild(record.iframe)
     }
 
     if (!target) {
-      // No target slot - hide the iframe
+      // No target slot - hide iframe
       record.iframe.style.display = 'none'
       record.iframe.style.position = ''
       record.iframe.style.left = ''
       record.iframe.style.top = ''
       record.iframe.style.width = ''
       record.iframe.style.height = ''
+      record.iframe.style.zIndex = ''
       logHtmlTools('iframe-hide', { key })
       return
     }
 
-    // Position iframe over the target slot using CSS overlay
+    // Position iframe over the target slot using fixed positioning
     const updatePosition = () => {
       const rect = target.getBoundingClientRect()
       record.iframe.style.position = 'fixed'
@@ -1028,6 +1035,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       record.iframe.style.top = `${rect.top}px`
       record.iframe.style.width = `${rect.width}px`
       record.iframe.style.height = `${rect.height}px`
+      record.iframe.style.zIndex = '1450'
       record.iframe.style.display = rect.width > 0 && rect.height > 0 ? 'block' : 'none'
     }
 
@@ -1038,12 +1046,10 @@ export const HtmlIframeRegistryProvider: React.FC<{
     const resizeObserver = new ResizeObserver(updatePosition)
     resizeObserver.observe(target)
 
-    // Also observe ancestors for scroll
     const scrollHandler = () => requestAnimationFrame(updatePosition)
     window.addEventListener('scroll', scrollHandler, true)
     window.addEventListener('resize', scrollHandler)
 
-    // Cleanup function
     record.positionCleanup = () => {
       resizeObserver.disconnect()
       window.removeEventListener('scroll', scrollHandler, true)
@@ -1063,12 +1069,10 @@ export const HtmlIframeRegistryProvider: React.FC<{
       if (!record) {
         record = createIframeRecord(html, fullHeight, getAuthContext)
         recordsRef.current.set(key, record)
-        // Enable pointer events on iframe (container is pointer-events: none)
-        record.iframe.style.pointerEvents = 'auto'
         // Initially hidden until a slot targets it
         record.iframe.style.display = 'none'
-        // Append to overlay container (never moved after this)
-        overlayHostRef.current?.appendChild(record.iframe)
+        // Append to hidden container initially (will be moved to slot when targeted)
+        hiddenHostRef.current?.appendChild(record.iframe)
         logHtmlTools('iframe-create', { key, fullHeight })
       } else {
         if (record.html !== html) {
@@ -1090,7 +1094,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
         html,
         label: nextLabel,
         favorite: existingEntry?.favorite ?? false,
-        status: existingEntry?.status === 'hibernated' ? 'active' : existingEntry?.status ?? 'active',
+        status: existingEntry?.status === 'hibernated' ? 'active' : (existingEntry?.status ?? 'active'),
         sizeBytes,
         createdAt: existingEntry?.createdAt ?? now,
         updatedAt: now,
@@ -1372,16 +1376,8 @@ export const HtmlIframeRegistryProvider: React.FC<{
   return (
     <HtmlIframeRegistryContext.Provider value={contextValue}>
       {children}
-      <div ref={hiddenHostRef} className='fixed left-0 top-0 h-0 w-0 overflow-hidden' aria-hidden='true' />
-      {/* Overlay container for iframes - positioned via CSS, never moved in DOM */}
-      <div
-        ref={overlayHostRef}
-        className='fixed inset-0 pointer-events-none'
-        style={{ zIndex: 1450 }}
-        aria-hidden='true'
-      >
-        {/* Iframes are appended here and positioned absolutely over their slots */}
-      </div>
+      {/* Container for iframes - iframes use fixed positioning to overlay slots */}
+      <div ref={hiddenHostRef} className='contents' aria-hidden='true' />
     </HtmlIframeRegistryContext.Provider>
   )
 }
