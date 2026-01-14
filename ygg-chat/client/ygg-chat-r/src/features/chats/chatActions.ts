@@ -34,6 +34,7 @@ import {
   setCustomTools,
   updateToolEnabled as updateToolEnabledInDefinitions,
 } from './toolDefinitions'
+import { updateToolEnabledState } from '../../helpers/toolSettingsStorage'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -5010,7 +5011,7 @@ export const fetchTools = createAsyncThunk<ToolDefinition[], void, { state: Root
   }
 )
 
-// Update tool enabled status - now updates local state only
+// Update tool enabled status - updates local state and persists to localStorage
 export const updateToolEnabled = createAsyncThunk<
   { success: boolean; toolName: string; enabled: boolean },
   { toolName: string; enabled: boolean },
@@ -5018,6 +5019,8 @@ export const updateToolEnabled = createAsyncThunk<
 >('chat/updateToolEnabled', async ({ toolName, enabled }, { dispatch }) => {
   // Update toolDefinitions module (source of truth for merged tools)
   updateToolEnabledInDefinitions(toolName, enabled)
+  // Persist to localStorage so state survives app restarts
+  updateToolEnabledState(toolName, enabled)
   // Update Redux state for UI reactivity
   dispatch(chatSliceActions.toolEnabledUpdated({ toolName, enabled }))
 

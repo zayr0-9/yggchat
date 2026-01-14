@@ -730,6 +730,25 @@ ipcMain.handle(
   }
 )
 
+// Select folder dialog
+ipcMain.handle('dialog:selectFolder', async (_event, options?: { title?: string; defaultPath?: string }) => {
+  console.log('[Electron IPC] Opening folder selection dialog')
+  try {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: options?.title || 'Select Folder',
+      defaultPath: options?.defaultPath,
+      properties: ['openDirectory'],
+    })
+    return {
+      success: !result.canceled,
+      path: result.filePaths[0],
+    }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to open folder dialog:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
 // Read file content for custom tool widgets
 ipcMain.handle('fs:readFile', async (_event, filePath: string, encoding?: BufferEncoding) => {
   console.log('[Electron IPC] Reading file:', filePath)

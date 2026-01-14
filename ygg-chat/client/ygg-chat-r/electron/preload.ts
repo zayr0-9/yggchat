@@ -56,6 +56,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       defaultPath?: string
       filters?: { name: string; extensions: string[] }[]
     }) => ipcRenderer.invoke('dialog:saveFile', options),
+    selectFolder: (options?: { title?: string; defaultPath?: string }) =>
+      ipcRenderer.invoke('dialog:selectFolder', options),
   },
   fs: {
     readFile: (filePath: string, encoding?: BufferEncoding) => ipcRenderer.invoke('fs:readFile', filePath, encoding),

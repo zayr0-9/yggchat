@@ -52,6 +52,9 @@ interface ElectronAPI {
   shell: {
     openPath: (path: string) => Promise<{ success: boolean; error?: string }>
   }
+  dialog: {
+    selectFolder: () => Promise<{ success: boolean; path?: string; error?: string }>
+  }
   autoUpdater: {
     check: () => Promise<{ success: boolean; error?: string }>
     installNow: () => Promise<{ success: boolean; error?: string }>

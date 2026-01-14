@@ -3,6 +3,8 @@
 // Tools execute locally via electron/localServer.ts, definitions are sent to AI API
 // Supports both built-in tools and user-defined custom tools
 
+import { loadToolEnabledStates } from '../../helpers/toolSettingsStorage'
+
 export interface ToolDefinition {
   name: string
   enabled: boolean
@@ -555,18 +557,32 @@ const cloneTool = (tool: ToolDefinition): ToolDefinition => ({
 
 // Mutable array that holds merged tools (built-in + custom)
 // Deep clone to ensure objects are mutable
-let mergedToolDefinitions: ToolDefinition[] = builtInToolDefinitions.map(cloneTool)
+// Apply persisted enabled states from localStorage on initialization
+const initializeTools = (): ToolDefinition[] => {
+  const tools = builtInToolDefinitions.map(cloneTool)
+  const persistedStates = loadToolEnabledStates()
+  for (const tool of tools) {
+    if (persistedStates[tool.name] !== undefined) {
+      tool.enabled = persistedStates[tool.name]
+    }
+  }
+  return tools
+}
+let mergedToolDefinitions: ToolDefinition[] = initializeTools()
 
 /**
  * Set custom tools from the local server.
  * Custom tools are merged with built-in tools.
  * Custom tools cannot override built-in tools with the same name.
- * Preserves user's enabled/disabled state for existing tools.
+ * Preserves user's enabled/disabled state from localStorage (persisted) and in-memory state.
  */
 export const setCustomTools = (customTools: ToolDefinition[]): void => {
   console.log(`[ToolDefinitions] setCustomTools called with ${customTools.length} tools:`, customTools.map(t => t.name))
 
-  // Preserve current enabled state before resetting
+  // Load persisted states from localStorage (survives app restarts)
+  const persistedStates = loadToolEnabledStates()
+
+  // Also preserve current in-memory enabled state (for session changes)
   const currentEnabledState = new Map<string, boolean>()
   for (const tool of mergedToolDefinitions) {
     currentEnabledState.set(tool.name, tool.enabled)
@@ -588,11 +604,16 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
     ...safeCustomTools.map(cloneTool),
   ]
 
-  // Restore user's enabled state for existing tools
+  // Apply enabled state: localStorage takes priority, then in-memory state, then default
   for (const tool of mergedToolDefinitions) {
-    if (currentEnabledState.has(tool.name)) {
+    if (persistedStates[tool.name] !== undefined) {
+      // Use persisted state from localStorage (survives restarts)
+      tool.enabled = persistedStates[tool.name]
+    } else if (currentEnabledState.has(tool.name)) {
+      // Fall back to in-memory state (session changes)
       tool.enabled = currentEnabledState.get(tool.name)!
     }
+    // Otherwise keep the default from definition
   }
 
   console.log(`[ToolDefinitions] Merged total: ${mergedToolDefinitions.length} (${safeCustomTools.length} custom)`)
@@ -600,10 +621,13 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
 
 /**
  * Clear all custom tools (reset to built-in only)
- * Preserves user's enabled/disabled state for built-in tools.
+ * Preserves user's enabled/disabled state from localStorage and in-memory state.
  */
 export const clearCustomTools = (): void => {
-  // Preserve current enabled state before resetting
+  // Load persisted states from localStorage
+  const persistedStates = loadToolEnabledStates()
+
+  // Also preserve current in-memory enabled state
   const currentEnabledState = new Map<string, boolean>()
   for (const tool of mergedToolDefinitions) {
     currentEnabledState.set(tool.name, tool.enabled)
@@ -611,9 +635,11 @@ export const clearCustomTools = (): void => {
 
   mergedToolDefinitions = builtInToolDefinitions.map(cloneTool)
 
-  // Restore user's enabled state for built-in tools
+  // Apply enabled state: localStorage takes priority, then in-memory state
   for (const tool of mergedToolDefinitions) {
-    if (currentEnabledState.has(tool.name)) {
+    if (persistedStates[tool.name] !== undefined) {
+      tool.enabled = persistedStates[tool.name]
+    } else if (currentEnabledState.has(tool.name)) {
       tool.enabled = currentEnabledState.get(tool.name)!
     }
   }

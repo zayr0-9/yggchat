@@ -80,6 +80,11 @@ import {
 import { selectSelectedProject } from '../features/projects/projectSelectors'
 import { refreshUserCredits, selectCurrentUser } from '../features/users'
 import { selectSttConfig, selectVoiceInputEnabled, selectWakeWordConfig } from '../features/voiceSettings'
+import {
+  loadProviderSettings,
+  PROVIDER_SETTINGS_CHANGE_EVENT,
+  ProviderSettings,
+} from '../helpers/providerSettingsStorage'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
@@ -126,7 +131,7 @@ function Chat() {
   ) : null
 
   // Claude Code mode toggle (disabled in web mode)
-  const [ccMode, setCCMode] = useState(import.meta.env.VITE_ENVIRONMENT === 'web' ? false : false)
+  const [ccMode, _setCCMode] = useState(import.meta.env.VITE_ENVIRONMENT === 'web' ? false : false)
 
   // Claude Code working directory input (disabled in web mode)
   const [ccCwd, setCcCwd] = useState('')
@@ -149,6 +154,9 @@ function Chat() {
   // This is CRITICAL for immediate routing to local server before cache is populated
   const location = useLocation()
   const storageModeFromNav = location.state?.storageMode as 'local' | 'cloud' | undefined
+
+  // Provider settings from localStorage
+  const [providerSettings, setProviderSettings] = useState<ProviderSettings>(() => loadProviderSettings())
 
   // Redux selectors
   const currentUser = useAppSelector(selectCurrentUser)
@@ -1306,12 +1314,35 @@ function Chat() {
     setLocalInput(messageInput.content)
   }, [messageInput.content, currentConversationId])
 
-  // Set OpenRouter as default provider if no provider is selected
+  // Listen for provider settings changes from Settings page
+  useEffect(() => {
+    const handleProviderSettingsChange = (e: CustomEvent<ProviderSettings>) => {
+      setProviderSettings(e.detail)
+    }
+
+    window.addEventListener(PROVIDER_SETTINGS_CHANGE_EVENT, handleProviderSettingsChange as EventListener)
+    return () =>
+      window.removeEventListener(PROVIDER_SETTINGS_CHANGE_EVENT, handleProviderSettingsChange as EventListener)
+  }, [])
+
+  // Set default provider based on settings or fall back to OpenRouter
   useEffect(() => {
     if (!providers.currentProvider) {
-      dispatch(chatSliceActions.providerSelected('OpenRouter'))
+      // If provider selector is hidden and a default is configured, use it
+      if (!providerSettings.showProviderSelector && providerSettings.defaultProvider) {
+        dispatch(chatSliceActions.providerSelected(providerSettings.defaultProvider))
+      } else {
+        dispatch(chatSliceActions.providerSelected('OpenRouter'))
+      }
     }
-  }, [providers.currentProvider, dispatch])
+  }, [providers.currentProvider, dispatch, providerSettings.showProviderSelector, providerSettings.defaultProvider])
+
+  // Auto-apply default provider when visibility is toggled off
+  useEffect(() => {
+    if (!providerSettings.showProviderSelector && providerSettings.defaultProvider) {
+      dispatch(chatSliceActions.providerSelected(providerSettings.defaultProvider))
+    }
+  }, [providerSettings.showProviderSelector, providerSettings.defaultProvider, dispatch])
 
   // Initialize or set conversation based on route param
   useEffect(() => {
@@ -3116,7 +3147,7 @@ function Chat() {
             <div className='bg-transparent rounded-b-4xl dark:bg-transparent flex flex-col items-end pt-3 md:pt-0'>
               <div className='flex justify-between w-full mb-0'>
                 <div className='flex items-center justify-start gap-2 xl:gap-3 flex-wrap flex-1'>
-                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && extensions.length > 0 && (
                     <div className='flex items-center gap-2 transition-transform duration-300'>
                       <Select
                         value={selectedExtensionId || ''}
@@ -3164,15 +3195,15 @@ function Chat() {
                     ></i>
                   </Button>
                   {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
-                  {/* Provider selector commented out - defaulting to OpenRouter */}
-                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
+                  {/* Provider selector - visibility controlled by user settings */}
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && providerSettings.showProviderSelector && (
                     <Select
                       value={providers.currentProvider || ''}
                       onChange={handleProviderSelect}
                       options={providers.providers.map(p => p.name)}
                       placeholder='Select a provider...'
                       disabled={providers.providers.length === 0}
-                      className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 transition-transform duration-60 active:scale-97'
+                      className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 lg:max-w-32 transition-transform duration-60 active:scale-97'
                       searchBarVisible={true}
                     />
                   )}
@@ -3183,7 +3214,7 @@ function Chat() {
                     onChange={handleModelSelect}
                     placeholder='Select a model...'
                     blur='low'
-                    className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-54 transition-transform duration-60 active:scale-99 rounded-4xl'
+                    className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-43 transition-transform duration-60 active:scale-99 rounded-4xl'
                     showFilters={true}
                     footerContent={modelSelectFooter}
                   />
@@ -3202,15 +3233,47 @@ function Chat() {
                       footer={
                         <div className='flex flex-col gap-2'>
                           {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
-                            <input
-                              type='text'
-                              value={ccCwd}
-                              onChange={e => setCcCwd(e.target.value)}
-                              placeholder='Working directory (optional)'
-                              className='w-full px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                              title='Specify the working directory for Claude Code agent'
-                            />
+                            <>
+                              <span className='text-black dark:text-neutral-200 text-[16px]'>Work directory:</span>
+                              <div className='flex gap-2'>
+                                <input
+                                  type='text'
+                                  value={ccCwd}
+                                  onChange={e => setCcCwd(e.target.value)}
+                                  placeholder='Working directory (optional)'
+                                  className='flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                  title='Specify the working directory for Claude Code agent'
+                                />
+                                <button
+                                  type='button'
+                                  onClick={async () => {
+                                    const result = await window.electronAPI?.dialog?.selectFolder()
+                                    if (result?.success && result.path) {
+                                      setCcCwd(result.path)
+                                    }
+                                  }}
+                                  className='px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                  title='Select Folder to let the AI work in'
+                                >
+                                  <svg
+                                    xmlns='http://www.w3.org/2000/svg'
+                                    className='h-4 w-4'
+                                    fill='none'
+                                    viewBox='0 0 24 24'
+                                    stroke='currentColor'
+                                  >
+                                    <path
+                                      strokeLinecap='round'
+                                      strokeLinejoin='round'
+                                      strokeWidth={2}
+                                      d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+                            </>
                           )}
+
                           {/* Image Generation Options - shown only for image generation models */}
                           {isImageGenerationModel && (
                             <>
@@ -3296,6 +3359,17 @@ function Chat() {
                       {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
                         <>
                           <Button
+                            variant='outline2'
+                            className='rounded-full'
+                            size='medium'
+                            onClick={() => setJobsModalOpen(true)}
+                            title={isElectronEnv ? 'View tool jobs' : 'Tool jobs are available in the desktop app'}
+                            disabled={!isElectronEnv}
+                          >
+                            <i className='bx bx-task pb-0.5' aria-hidden='true'></i>
+                            Jobs
+                          </Button>
+                          {/* <Button
                             variant={ccMode ? 'outline2' : 'outline2'}
                             size='medium'
                             onClick={() => setCCMode(!ccMode)}
@@ -3310,7 +3384,7 @@ function Chat() {
                             >
                               {ccMode ? 'CC On' : 'CC Off'}
                             </div>
-                          </Button>
+                          </Button> */}
 
                           {/* Allow All / Ask toggle */}
                           <Button
@@ -3329,7 +3403,7 @@ function Chat() {
                             }
                             aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
                           >
-                            <i className='bx bx-shield-quarter mr-1'></i>
+                            <i className='bx bx-shield-quarter pr-1 pb-0.5'></i>
                             {toolAutoApprove ? 'Allow all' : 'Ask'}
                           </Button>
 
@@ -3350,7 +3424,9 @@ function Chat() {
                             }
                             aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
                           >
-                            <i className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1`}></i>
+                            <i
+                              className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1 pb-0.5`}
+                            ></i>
                             {operationMode === 'plan' ? 'Chat' : 'Agent'}
                           </Button>
                         </>
@@ -3516,16 +3592,6 @@ function Chat() {
                       </Button>
                     </>
                   )}
-                  <Button
-                    variant='outline2'
-                    className='rounded-full'
-                    size='large'
-                    onClick={() => setJobsModalOpen(true)}
-                    title={isElectronEnv ? 'View tool jobs' : 'Tool jobs are available in the desktop app'}
-                    disabled={!isElectronEnv}
-                  >
-                    <i className='bx bx-task text-[22px]' aria-hidden='true'></i>
-                  </Button>
                 </div>
                 <div className='flex items-center justify-end gap-2 pl-2.5'>
                   {!currentConversationId ? (
