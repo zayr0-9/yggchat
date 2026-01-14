@@ -477,7 +477,7 @@ const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => {
           break
         }
         case 'REQUEST_GENERATION': {
-          const { prompt, model, maxTokens, temperature, systemPrompt } = options || {}
+          const { prompt, model, maxTokens, temperature, systemPrompt, attachmentsBase64 } = options || {}
 
           if (!prompt) {
             response = { success: false, error: 'Missing prompt' }
@@ -493,6 +493,7 @@ const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => {
                 maxTokens: maxTokens || 4096,
                 temperature: temperature ?? 0.7,
                 systemPrompt,
+                attachmentsBase64, // Image input: [{ dataUrl: "data:image/...", type: "image/jpeg" }]
               }),
             })
 
@@ -510,15 +511,21 @@ const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => {
 
             const decoder = new TextDecoder()
             let fullText = ''
+            const images: Array<{ url: string; mimeType: string }> = []
+            let sseBuffer = '' // Buffer for incomplete SSE lines
 
             while (true) {
               const { done, value } = await reader.read()
               if (done) break
 
               const chunk = decoder.decode(value, { stream: true })
+              sseBuffer += chunk
 
-              // Parse SSE events from chunk
-              const lines = chunk.split('\n')
+              // Parse complete SSE events from buffer
+              const lines = sseBuffer.split('\n')
+              // Keep the last (potentially incomplete) line in buffer
+              sseBuffer = lines.pop() || ''
+
               for (const line of lines) {
                 if (line.startsWith('data: ')) {
                   const data = line.slice(6)
@@ -527,13 +534,37 @@ const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => {
                     const parsed = JSON.parse(data)
                     if (parsed.text) {
                       fullText += parsed.text
-                      // Send streaming chunk to iframe
+                      // Send streaming text chunk to iframe
                       iframe.contentWindow?.postMessage(
                         {
                           type: 'REQUEST_GENERATION_CHUNK',
                           requestId,
                           chunk: parsed.text,
                           text: fullText,
+                        },
+                        '*'
+                      )
+                    } else if (parsed.image) {
+                      // Handle generated image from image generation models
+                      const imageData = { url: parsed.image, mimeType: parsed.mimeType || 'image/png' }
+                      images.push(imageData)
+                      // Send image event to iframe
+                      iframe.contentWindow?.postMessage(
+                        {
+                          type: 'REQUEST_GENERATION_IMAGE',
+                          requestId,
+                          image: imageData,
+                          images: [...images],
+                        },
+                        '*'
+                      )
+                    } else if (parsed.reasoning) {
+                      // Send reasoning chunk to iframe (for thinking models)
+                      iframe.contentWindow?.postMessage(
+                        {
+                          type: 'REQUEST_GENERATION_REASONING',
+                          requestId,
+                          reasoning: parsed.reasoning,
                         },
                         '*'
                       )
@@ -557,7 +588,7 @@ const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => {
               }
             }
 
-            response = { success: true, text: fullText }
+            response = { success: true, text: fullText, images }
           } catch (err) {
             response = { success: false, error: String(err) }
           }

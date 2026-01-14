@@ -180,12 +180,13 @@ router.get(
 
 // Ephemeral generation endpoint for custom tools
 // This allows tool UIs to make one-off LLM generation requests without creating messages/conversations
+// Supports image input (attachmentsBase64) and image output (for image generation models)
 router.post(
   '/generate/ephemeral',
   authenticatedRateLimiter,
   asyncHandler(async (req, res) => {
     const { userId } = await verifyAuth(req)
-    const { prompt, model, maxTokens, temperature, systemPrompt } = req.body
+    const { prompt, model, maxTokens, temperature, systemPrompt, attachmentsBase64 } = req.body
 
     if (!prompt) {
       return res.status(400).json({ error: 'Missing prompt' })
@@ -228,6 +229,15 @@ router.post(
         provider = 'gemini'
       }
 
+      // Convert base64 attachments to the format expected by generateResponse
+      // Format: { url: dataUrl, mimeType: string }
+      const attachmentsForGeneration = Array.isArray(attachmentsBase64)
+        ? attachmentsBase64.map((att: any) => ({
+            url: att.dataUrl,
+            mimeType: att.type || 'image/jpeg',
+          }))
+        : undefined
+
       await generateResponse(
         messages,
         chunk => {
@@ -240,6 +250,11 @@ router.post(
               res.write(`data: ${JSON.stringify({ text: delta })}\n\n`)
             } else if (part === 'reasoning' && delta) {
               res.write(`data: ${JSON.stringify({ reasoning: delta })}\n\n`)
+            } else if (part === 'image') {
+              // Handle image output from image generation models
+              res.write(
+                `data: ${JSON.stringify({ image: parsed.url, mimeType: parsed.mimeType || 'image/png' })}\n\n`
+              )
             }
           } catch {
             // If chunk is not valid JSON, treat as raw text
@@ -250,7 +265,7 @@ router.post(
         },
         provider,
         selectedModel,
-        undefined, // attachments
+        attachmentsForGeneration, // image attachments for vision models
         systemPrompt || undefined,
         abortController.signal,
         undefined, // conversationContext
