@@ -20,6 +20,7 @@ export const HtmlToolsModal: React.FC = () => {
   const [fullscreenKey, setFullscreenKey] = useState<string | null>(null)
   const [showFullscreenSettings, setShowFullscreenSettings] = useState(false)
   const [showFullscreenTabMenu, setShowFullscreenTabMenu] = useState<string | null>(null)
+  const [tabMenuPosition, setTabMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const settingsRef = useRef<HTMLDivElement | null>(null)
   const settingsDropdownRef = useRef<HTMLDivElement | null>(null)
   const tabMenuRef = useRef<HTMLDivElement | null>(null)
@@ -31,6 +32,28 @@ export const HtmlToolsModal: React.FC = () => {
   const hibernatedEntries = useMemo(() => entries.filter(entry => entry.status === 'hibernated'), [entries])
   const activeKey = activeTab ?? activeEntries[0]?.key ?? null
   const maxBytesMb = useMemo(() => Math.round(registry.settings.maxBytes / (1024 * 1024)), [registry.settings.maxBytes])
+
+  const displayLabels = useMemo(() => {
+    const labelCounts = new Map<string, number>()
+    const labelIndices = new Map<string, number>()
+    activeEntries.forEach(entry => {
+      const label = entry.label || 'App'
+      labelCounts.set(label, (labelCounts.get(label) || 0) + 1)
+    })
+    const result = new Map<string, string>()
+    activeEntries.forEach(entry => {
+      const label = entry.label || 'App'
+      const count = labelCounts.get(label) || 1
+      if (count > 1) {
+        const idx = (labelIndices.get(label) || 0) + 1
+        labelIndices.set(label, idx)
+        result.set(entry.key, `${label} (${idx})`)
+      } else {
+        result.set(entry.key, label)
+      }
+    })
+    return result
+  }, [activeEntries])
 
   const toggleFullscreen = (entryKey: string) => {
     setFullscreenKey(prev => (prev === entryKey ? null : entryKey))
@@ -100,6 +123,7 @@ export const HtmlToolsModal: React.FC = () => {
       }
       if (tabMenuRef.current && !tabMenuRef.current.contains(target)) {
         setShowFullscreenTabMenu(null)
+        setTabMenuPosition(null)
       }
     }
     document.addEventListener('mousedown', handleClick)
@@ -219,32 +243,6 @@ export const HtmlToolsModal: React.FC = () => {
         <p className='text-xs text-neutral-500 dark:text-neutral-400'>HTML tool outputs</p>
       </div>
       <div className='flex items-center gap-2'>
-        <div className='flex items-center gap-1 rounded-full border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-yBlack-900/70 p-1'>
-          <button
-            type='button'
-            onClick={() => setViewMode('tabs')}
-            aria-pressed={viewMode === 'tabs'}
-            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-              viewMode === 'tabs'
-                ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
-                : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-            }`}
-          >
-            Tabs
-          </button>
-          <button
-            type='button'
-            onClick={() => setViewMode('list')}
-            aria-pressed={viewMode === 'list'}
-            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-              viewMode === 'list'
-                ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
-                : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-            }`}
-          >
-            List
-          </button>
-        </div>
         <Button
           variant='outline2'
           size='smaller'
@@ -462,7 +460,7 @@ export const HtmlToolsModal: React.FC = () => {
                   >
                     <span className='flex items-center gap-1.5'>
                       {entry.favorite && <i className='bx bxs-star text-amber-500 text-[10px]' />}
-                      {entry.label || 'App'}
+                      {displayLabels.get(entry.key) || entry.label || 'App'}
                     </span>
                   </button>
                   {/* Tab context menu trigger */}
@@ -470,21 +468,28 @@ export const HtmlToolsModal: React.FC = () => {
                     type='button'
                     onClick={e => {
                       e.stopPropagation()
-                      setShowFullscreenTabMenu(showFullscreenTabMenu === entry.key ? null : entry.key)
+                      if (showFullscreenTabMenu === entry.key) {
+                        setShowFullscreenTabMenu(null)
+                        setTabMenuPosition(null)
+                      } else {
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                        setTabMenuPosition({ top: rect.bottom + 4, left: rect.left })
+                        setShowFullscreenTabMenu(entry.key)
+                      }
                     }}
                     className='opacity-0 group-hover:opacity-100 ml-0.5 p-1 rounded hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50 transition-opacity'
                   >
                     <i className='bx bx-dots-vertical-rounded text-xs text-neutral-500 dark:text-neutral-400' />
                   </button>
                   {/* Tab dropdown menu */}
-                  {showFullscreenTabMenu === entry.key &&
+                  {showFullscreenTabMenu === entry.key && tabMenuPosition &&
                     createPortal(
                       <div
                         ref={tabMenuRef}
                         className='fixed z-[1500] min-w-[140px] rounded-lg border border-neutral-200/60 dark:border-neutral-700/60 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md shadow-lg py-1'
                         style={{
-                          top: '44px',
-                          left: `${(document.querySelector(`[data-tab-key="${entry.key}"]`) as HTMLElement)?.getBoundingClientRect().left ?? 100}px`,
+                          top: `${tabMenuPosition.top}px`,
+                          left: `${tabMenuPosition.left}px`,
                         }}
                       >
                         <button

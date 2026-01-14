@@ -1611,7 +1611,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return null
     }
 
+    // Only register HTML tools from contentBlocks (DB mode), NOT during streaming.
+    // Streaming mode uses streamEvents which produce generic "Tool Result" labels.
+    // We skip registration during streaming to avoid polluting the registry.
     const htmlRegistryEntries = useMemo(() => {
+      // Skip if we're in streaming mode - only register after message is persisted
+      if (Array.isArray(streamEvents) && streamEvents.length > 0) {
+        return []
+      }
+
       const entries: Array<{ key: string; html: string; label: string }> = []
 
       const normalizeHtml = (html: string) => html.trim()
@@ -1624,11 +1632,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
 
       const groupsSource =
-        Array.isArray(streamEvents) && streamEvents.length > 0
-          ? streamToolGroupsByIndex
-          : Array.isArray(contentBlocks) && contentBlocks.length > 0
-            ? contentToolGroupsByIndex
-            : null
+        Array.isArray(contentBlocks) && contentBlocks.length > 0 ? contentToolGroupsByIndex : null
 
       if (groupsSource) {
         const seen = new Set<string>()
@@ -1637,7 +1641,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           seen.add(group.id)
 
           const htmlSeen = new Set<string>()
-          const toolLabel = group.name || 'Tool Result'
+          // Format label: replace underscores with spaces and title case
+          const rawName = group.name || 'Tool Result'
+          const toolLabel = rawName
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase())
           const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
           if (isHtmlRenderer && typeof group.args?.html === 'string') {
             const normalized = normalizeHtml(group.args.html)
@@ -1655,14 +1663,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 return
               }
               htmlSeen.add(normalized)
-              addEntry(`${id}-${group.id}-result-${resultIdx}`, normalized, `${toolLabel} result ${resultIdx + 1}`)
+              addEntry(`${id}-${group.id}-result-${resultIdx}`, normalized, toolLabel)
             }
           })
         })
       }
 
       return entries
-    }, [contentBlocks, contentToolGroupsByIndex, id, streamEvents, streamToolGroupsByIndex])
+    }, [contentBlocks, contentToolGroupsByIndex, id, streamEvents])
 
     useEffect(() => {
       if (!htmlRegistry || htmlRegistryEntries.length === 0) return
