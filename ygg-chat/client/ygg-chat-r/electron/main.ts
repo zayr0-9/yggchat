@@ -1,7 +1,7 @@
 import './envLoader.js'
 import { ChildProcess, spawn } from 'child_process'
 import Conf from 'conf'
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell } from 'electron'
 import autoUpdaterPkg from 'electron-updater'
 import fs from 'fs'
 import os from 'os'
@@ -267,6 +267,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: false,
       webviewTag: true, // Enable webview for YouTube embeds (fixes Error 153)
+      spellcheck: true,
     },
     // Platform-specific title bar settings
     ...(process.platform === 'win32'
@@ -337,6 +338,43 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+
+  // Custom context menu with spell check
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const menuItems: Electron.MenuItemConstructorOptions[] = []
+
+    // Spell check suggestions
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+        menuItems.push({
+          label: suggestion,
+          click: () => mainWindow?.webContents.replaceMisspelling(suggestion),
+        })
+      }
+      if (params.dictionarySuggestions.length > 0) {
+        menuItems.push({ type: 'separator' })
+      }
+      menuItems.push({
+        label: 'Add to Dictionary',
+        click: () => mainWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      })
+      menuItems.push({ type: 'separator' })
+    }
+
+    // Standard edit actions
+    menuItems.push(
+      { role: 'undo', enabled: params.editFlags.canUndo },
+      { role: 'redo', enabled: params.editFlags.canRedo },
+      { type: 'separator' },
+      { role: 'cut', enabled: params.editFlags.canCut },
+      { role: 'copy', enabled: params.editFlags.canCopy },
+      { role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll', enabled: params.editFlags.canSelectAll },
+    )
+
+    Menu.buildFromTemplate(menuItems).popup()
+  })
 }
 
 // Create a floating popup window (like picture-in-picture)
@@ -367,6 +405,7 @@ function createFloatingWindow() {
       nodeIntegration: false,
       sandbox: false,
       webviewTag: true, // Enable webview for YouTube embeds (fixes Error 153)
+      spellcheck: true,
     },
   })
 
@@ -394,6 +433,43 @@ function createFloatingWindow() {
 
   floatingWindow.on('closed', () => {
     floatingWindow = null
+  })
+
+  // Custom context menu with spell check
+  floatingWindow.webContents.on('context-menu', (_event, params) => {
+    const menuItems: Electron.MenuItemConstructorOptions[] = []
+
+    // Spell check suggestions
+    if (params.misspelledWord) {
+      for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+        menuItems.push({
+          label: suggestion,
+          click: () => floatingWindow?.webContents.replaceMisspelling(suggestion),
+        })
+      }
+      if (params.dictionarySuggestions.length > 0) {
+        menuItems.push({ type: 'separator' })
+      }
+      menuItems.push({
+        label: 'Add to Dictionary',
+        click: () => floatingWindow?.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+      })
+      menuItems.push({ type: 'separator' })
+    }
+
+    // Standard edit actions
+    menuItems.push(
+      { role: 'undo', enabled: params.editFlags.canUndo },
+      { role: 'redo', enabled: params.editFlags.canRedo },
+      { type: 'separator' },
+      { role: 'cut', enabled: params.editFlags.canCut },
+      { role: 'copy', enabled: params.editFlags.canCopy },
+      { role: 'paste', enabled: params.editFlags.canPaste },
+      { type: 'separator' },
+      { role: 'selectAll', enabled: params.editFlags.canSelectAll },
+    )
+
+    Menu.buildFromTemplate(menuItems).popup()
   })
 }
 

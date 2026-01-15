@@ -91,7 +91,36 @@ const DEFAULT_SETTINGS: HtmlToolsSettings = {
   maxCached: 20,
   maxBytes: 8 * 1024 * 1024,
   ttlMinutes: 12 * 60,
-  hibernateAfterMinutes: 20,
+  hibernateAfterMinutes: 720,
+}
+
+const HTML_TOOLS_SETTINGS_KEY = 'html-tools-settings'
+
+const loadSettingsFromStorage = (): HtmlToolsSettings => {
+  try {
+    const stored = localStorage.getItem(HTML_TOOLS_SETTINGS_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return {
+        maxActive: normalizeLimit(parsed.maxActive ?? DEFAULT_SETTINGS.maxActive),
+        maxCached: normalizeLimit(parsed.maxCached ?? DEFAULT_SETTINGS.maxCached),
+        maxBytes: normalizeLimit(parsed.maxBytes ?? DEFAULT_SETTINGS.maxBytes),
+        ttlMinutes: normalizeLimit(parsed.ttlMinutes ?? DEFAULT_SETTINGS.ttlMinutes),
+        hibernateAfterMinutes: normalizeLimit(parsed.hibernateAfterMinutes ?? DEFAULT_SETTINGS.hibernateAfterMinutes),
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return DEFAULT_SETTINGS
+}
+
+const saveSettingsToStorage = (settings: HtmlToolsSettings) => {
+  try {
+    localStorage.setItem(HTML_TOOLS_SETTINGS_KEY, JSON.stringify(settings))
+  } catch {
+    // ignore storage errors
+  }
 }
 
 const isElectronEnv = (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || environment === 'electron'
@@ -642,7 +671,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isHomepageFullscreen, setIsHomepageFullscreen] = useState(false)
   const [focusKey, setFocusKey] = useState<string | null>(null)
-  const [settings, setSettings] = useState<HtmlToolsSettings>(DEFAULT_SETTINGS)
+  const [settings, setSettings] = useState<HtmlToolsSettings>(loadSettingsFromStorage)
   const hiddenHostRef = useRef<HTMLDivElement | null>(null)
   const bootstrapInFlightRef = useRef(false)
   const queryClient = useQueryClient()
@@ -1309,7 +1338,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const updateSettings = useCallback((updates: Partial<HtmlToolsSettings>) => {
     setSettings(prev => {
       const merged = { ...prev, ...updates }
-      return {
+      const next = {
         ...merged,
         maxActive: normalizeLimit(merged.maxActive),
         maxCached: normalizeLimit(merged.maxCached),
@@ -1317,6 +1346,8 @@ export const HtmlIframeRegistryProvider: React.FC<{
         ttlMinutes: normalizeLimit(merged.ttlMinutes),
         hibernateAfterMinutes: normalizeLimit(merged.hibernateAfterMinutes),
       }
+      saveSettingsToStorage(next)
+      return next
     })
   }, [])
 
