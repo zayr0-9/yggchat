@@ -132,7 +132,7 @@ export const HtmlToolsModal: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [showFullscreenSettings, showFullscreenTabMenu])
 
-  const renderEntry = (entry: (typeof entries)[number]) => {
+  const renderEntry = (entry: (typeof entries)[number], options?: { fillHeight?: boolean }) => {
     const isCollapsed = collapsedTools[entry.key] ?? false
     const isHibernated = entry.status === 'hibernated'
     const isFavorite = entry.favorite
@@ -141,10 +141,14 @@ export const HtmlToolsModal: React.FC = () => {
       ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
       : isFullscreen
         ? 'flex-1 min-h-0'
-        : 'h-[50vh]'
+        : options?.fillHeight
+          ? 'flex-1 min-h-0'
+          : 'h-[50vh]'
     const cardClassName = isFullscreen
       ? 'fixed inset-0 z-[1501] flex flex-col min-h-0 rounded-none border-0 bg-white dark:bg-yBlack-900 shadow-none'
-      : 'rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+      : options?.fillHeight
+        ? 'flex-1 flex flex-col min-h-0 rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+        : 'rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
     const cardStyle = isFullscreen ? { paddingTop: 'calc(var(--titlebar-height, 0px) + 0.75rem)' } : undefined
 
     return (
@@ -226,7 +230,7 @@ export const HtmlToolsModal: React.FC = () => {
   const handleClose = isHomepageFullscreen ? closeHomepageFullscreen : onClose
 
   const headerContent = (
-    <div className='flex items-center justify-between px-5 py-4 border-b border-neutral-200 dark:border-neutral-700'>
+    <div className='flex items-center justify-between px-5 py-4 border-b border-neutral-200 dark:border-neutral-700 relative z-[1451] bg-white dark:bg-yBlack-900'>
       <div>
         <h2 className='text-lg font-semibold text-neutral-900 dark:text-neutral-100'>Tool Viewer</h2>
         <p className='text-xs text-neutral-500 dark:text-neutral-400'>HTML tool outputs</p>
@@ -288,7 +292,7 @@ export const HtmlToolsModal: React.FC = () => {
   )
 
   const limitsContent = showLimits && (
-    <div className='border-b border-neutral-200 dark:border-neutral-700 px-5 py-3'>
+    <div className='border-b border-neutral-200 dark:border-neutral-700 px-5 py-3 relative z-[1451] bg-white dark:bg-yBlack-900'>
       <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs text-neutral-600 dark:text-neutral-300'>
         <label className='flex flex-col gap-1'>
           <span className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
@@ -365,7 +369,7 @@ export const HtmlToolsModal: React.FC = () => {
   const mainContent =
     viewMode === 'tabs' ? (
       <div className='flex-1 flex flex-col overflow-hidden'>
-        <div className='shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-4 overflow-x-auto thin-scrollbar'>
+        <div className='shrink-0 border-b border-neutral-200 dark:border-neutral-700 px-4 overflow-x-auto thin-scrollbar relative z-[1451] bg-white dark:bg-yBlack-900'>
           <div className='flex gap-1 py-2'>
             {activeEntries.map(entry => (
               <button
@@ -386,24 +390,22 @@ export const HtmlToolsModal: React.FC = () => {
             ))}
           </div>
         </div>
-        <div className='flex-1 overflow-y-auto p-4'>
+        <div className='flex-1 flex flex-col min-h-0 p-4'>
           {activeEntries.length === 0 ? (
             <div className='text-sm text-neutral-600 dark:text-neutral-300'>No active HTML tool outputs yet.</div>
           ) : (
-            <div>
-              {activeEntries.map(entry => {
-                const isActive = entry.key === activeKey
-                return (
-                  <div key={entry.key} className={isActive ? 'block' : 'hidden'} aria-hidden={!isActive}>
-                    {renderEntry(entry)}
-                  </div>
-                )
-              })}
-            </div>
+            activeEntries.map(entry => {
+              const isActive = entry.key === activeKey
+              return (
+                <div key={entry.key} className={isActive ? 'flex-1 flex flex-col min-h-0' : 'hidden'} aria-hidden={!isActive}>
+                  {renderEntry(entry, { fillHeight: true })}
+                </div>
+              )
+            })
           )}
         </div>
         {showFavorites && (
-          <div className='border-t border-amber-200 dark:border-amber-700/40 bg-amber-50/50 dark:bg-amber-900/10 p-4 max-h-[40vh] overflow-y-auto space-y-4'>
+          <div className='shrink-0 border-t border-amber-200 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/30 p-4 max-h-[40vh] overflow-y-auto space-y-4 relative z-[1451]'>
             <div className='text-[11px] uppercase tracking-wide text-amber-600 dark:text-amber-400 flex items-center gap-1.5'>
               <i className='bx bxs-star' aria-hidden='true'></i>
               Favorite tools (never removed or hibernated)
@@ -416,7 +418,7 @@ export const HtmlToolsModal: React.FC = () => {
           </div>
         )}
         {showHibernated && (
-          <div className='border-t border-neutral-200 dark:border-neutral-700 p-4 max-h-[40vh] overflow-y-auto space-y-4'>
+          <div className='shrink-0 border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900 p-4 max-h-[40vh] overflow-y-auto space-y-4 relative z-[1451]'>
             <div className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
               Hibernated tools
             </div>
@@ -436,7 +438,7 @@ export const HtmlToolsModal: React.FC = () => {
           activeEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
         )}
         {showFavorites && (
-          <div className='border-t border-amber-200 dark:border-amber-700/40 bg-amber-50/50 dark:bg-amber-900/10 pt-4 space-y-4'>
+          <div className='border-t border-amber-200 dark:border-amber-700/40 bg-amber-50 dark:bg-amber-900/30 pt-4 space-y-4 relative z-[1451]'>
             <div className='text-[11px] uppercase tracking-wide text-amber-600 dark:text-amber-400 flex items-center gap-1.5'>
               <i className='bx bxs-star' aria-hidden='true'></i>
               Favorite tools (never removed or hibernated)
@@ -449,7 +451,7 @@ export const HtmlToolsModal: React.FC = () => {
           </div>
         )}
         {showHibernated && (
-          <div className='border-t border-neutral-200 dark:border-neutral-700 pt-4 space-y-4'>
+          <div className='border-t border-neutral-200 dark:border-neutral-700 bg-white dark:bg-yBlack-900 pt-4 space-y-4 relative z-[1451]'>
             <div className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
               Hibernated tools
             </div>
