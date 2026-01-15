@@ -1611,23 +1611,23 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return null
     }
 
-    // Only register HTML tools from contentBlocks (DB mode), NOT during streaming.
-    // Streaming mode uses streamEvents which produce generic "Tool Result" labels.
-    // We skip registration during streaming to avoid polluting the registry.
-    const htmlRegistryEntries = useMemo(() => {
-      // Skip if we're in streaming mode - only register after message is persisted
-      if (Array.isArray(streamEvents) && streamEvents.length > 0) {
-        return []
-      }
+    // Build a lookup map of HTML entries for on-demand registration.
+    // Entries are NOT auto-registered - only when user clicks "Open Viewer" or expands.
+    // This prevents polluting the registry with every tool found on the page.
+    const htmlRegistryEntriesMap = useMemo(() => {
+      const entriesMap = new Map<string, { key: string; html: string; label: string }>()
 
-      const entries: Array<{ key: string; html: string; label: string }> = []
+      // Skip if we're in streaming mode - only available after message is persisted
+      if (Array.isArray(streamEvents) && streamEvents.length > 0) {
+        return entriesMap
+      }
 
       const normalizeHtml = (html: string) => html.trim()
       const addEntry = (key: string, html: string, label: string) => {
         if (typeof html !== 'string') return
         const normalized = normalizeHtml(html)
         if (normalized.length > 0) {
-          entries.push({ key, html: normalized, label })
+          entriesMap.set(key, { key, html: normalized, label })
         }
       }
 
@@ -1669,22 +1669,28 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         })
       }
 
-      return entries
+      return entriesMap
     }, [contentBlocks, contentToolGroupsByIndex, id, streamEvents])
 
-    useEffect(() => {
-      if (!htmlRegistry || htmlRegistryEntries.length === 0) return
+    // Register an HTML entry on-demand (when user clicks "Open Viewer")
+    const registerAndOpenHtmlViewer = (entryKey: string) => {
+      if (!htmlRegistry || !onOpenToolHtmlModal) return
 
-      htmlRegistryEntries.forEach(entry => {
+      // Find the entry in our map and register it before opening
+      const entry = htmlRegistryEntriesMap.get(entryKey)
+      if (entry) {
         htmlRegistry.registerEntry(entry.key, entry.html, entry.label, { conversationId, projectId })
-      })
-    }, [conversationId, htmlRegistry, htmlRegistryEntries, projectId])
+      }
+
+      // Open the modal
+      onOpenToolHtmlModal(entryKey)
+    }
 
     const renderHtmlViewerButton = (entryKey: string) => (
       <Button
         variant='outline2'
         size='small'
-        onClick={() => onOpenToolHtmlModal?.(entryKey)}
+        onClick={() => registerAndOpenHtmlViewer(entryKey)}
         disabled={!onOpenToolHtmlModal}
         title='Open tool output viewer'
       >
@@ -1692,6 +1698,39 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         <span className='ml-1'>Open Viewer</span>
       </Button>
     )
+
+    // Handle expand click - also registers HTML entries when expanding (not collapsing)
+    const handleExpandToggle = (toggleKey: string, group: ToolCallRenderGroup) => {
+      const isCurrentlyExpanded = expandedBlocks.toolCalls.has(toggleKey)
+
+      // If we're expanding (not currently expanded), register any HTML entries
+      if (!isCurrentlyExpanded && htmlRegistry) {
+        // Check for html_renderer tool
+        const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
+        if (isHtmlRenderer && typeof group.args?.html === 'string') {
+          const entryKey = `${id}-html-renderer-${group.id}`
+          const entry = htmlRegistryEntriesMap.get(entryKey)
+          if (entry) {
+            htmlRegistry.registerEntry(entry.key, entry.html, entry.label, { conversationId, projectId })
+          }
+        }
+
+        // Register HTML results
+        group.results.forEach((result, resultIdx) => {
+          const maybeHtml = extractHtmlFromToolResult(result.content)
+          if (typeof maybeHtml === 'string') {
+            const entryKey = `${id}-${group.id}-result-${resultIdx}`
+            const entry = htmlRegistryEntriesMap.get(entryKey)
+            if (entry) {
+              htmlRegistry.registerEntry(entry.key, entry.html, entry.label, { conversationId, projectId })
+            }
+          }
+        })
+      }
+
+      // Toggle the expansion state
+      toggleBlock('toolCalls', toggleKey)
+    }
 
     const renderToolCallGroupCard = (group: ToolCallRenderGroup, key: string) => {
       // Don't render orphaned groups (results waiting for their tool_call)
@@ -1831,7 +1870,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             <Button
               variant='outline2'
               size='small'
-              onClick={() => toggleBlock('toolCalls', toggleKey)}
+              onClick={() => handleExpandToggle(toggleKey, group)}
               title={isExpanded ? 'Hide details' : 'Show details'}
             >
               {isExpanded ? (

@@ -16,6 +16,7 @@ export const HtmlToolsModal: React.FC = () => {
   const [viewMode, _setViewMode] = useState<'list' | 'tabs'>('tabs')
   const [activeTab, setActiveTab] = useState<string | null>(null)
   const [showLimits, setShowLimits] = useState(false)
+  const [showFavorites, setShowFavorites] = useState(false)
   const [showHibernated, setShowHibernated] = useState(false)
   const [fullscreenKey, setFullscreenKey] = useState<string | null>(null)
   const [showFullscreenSettings, setShowFullscreenSettings] = useState(false)
@@ -30,6 +31,7 @@ export const HtmlToolsModal: React.FC = () => {
   const entries = registry.entries
   const activeEntries = useMemo(() => entries.filter(entry => entry.status === 'active'), [entries])
   const hibernatedEntries = useMemo(() => entries.filter(entry => entry.status === 'hibernated'), [entries])
+  const favoriteEntries = useMemo(() => entries.filter(entry => entry.favorite), [entries])
   const activeKey = activeTab ?? activeEntries[0]?.key ?? null
   const maxBytesMb = useMemo(() => Math.round(registry.settings.maxBytes / (1024 * 1024)), [registry.settings.maxBytes])
 
@@ -234,6 +236,21 @@ export const HtmlToolsModal: React.FC = () => {
           variant='outline2'
           size='smaller'
           rounded='full'
+          className={`border ${showFavorites ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'border-neutral-200 dark:border-neutral-700'}`}
+          onClick={() => setShowFavorites(prev => !prev)}
+          aria-pressed={showFavorites}
+          aria-label={showFavorites ? 'Hide favorite tools' : 'Show favorite tools'}
+        >
+          <span className='flex items-center gap-1 text-xs'>
+            <i className={`bx ${showFavorites ? 'bxs-star text-amber-500' : 'bx-star'}`} aria-hidden='true'></i>
+            {showFavorites ? 'Hide' : 'Show'} favorites
+            {favoriteEntries.length > 0 ? ` (${favoriteEntries.length})` : ''}
+          </span>
+        </Button>
+        <Button
+          variant='outline2'
+          size='smaller'
+          rounded='full'
           className='border border-neutral-200 dark:border-neutral-700'
           onClick={() => setShowHibernated(prev => !prev)}
           aria-pressed={showHibernated}
@@ -385,6 +402,19 @@ export const HtmlToolsModal: React.FC = () => {
             </div>
           )}
         </div>
+        {showFavorites && (
+          <div className='border-t border-amber-200 dark:border-amber-700/40 bg-amber-50/50 dark:bg-amber-900/10 p-4 max-h-[40vh] overflow-y-auto space-y-4'>
+            <div className='text-[11px] uppercase tracking-wide text-amber-600 dark:text-amber-400 flex items-center gap-1.5'>
+              <i className='bx bxs-star' aria-hidden='true'></i>
+              Favorite tools (never removed or hibernated)
+            </div>
+            {favoriteEntries.length === 0 ? (
+              <div className='text-sm text-neutral-600 dark:text-neutral-300'>No favorite tools. Click the star icon on any tool to add it to favorites.</div>
+            ) : (
+              favoriteEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
+            )}
+          </div>
+        )}
         {showHibernated && (
           <div className='border-t border-neutral-200 dark:border-neutral-700 p-4 max-h-[40vh] overflow-y-auto space-y-4'>
             <div className='text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400'>
@@ -404,6 +434,19 @@ export const HtmlToolsModal: React.FC = () => {
           <div className='text-sm text-neutral-600 dark:text-neutral-300'>No active HTML tool outputs yet.</div>
         ) : (
           activeEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
+        )}
+        {showFavorites && (
+          <div className='border-t border-amber-200 dark:border-amber-700/40 bg-amber-50/50 dark:bg-amber-900/10 pt-4 space-y-4'>
+            <div className='text-[11px] uppercase tracking-wide text-amber-600 dark:text-amber-400 flex items-center gap-1.5'>
+              <i className='bx bxs-star' aria-hidden='true'></i>
+              Favorite tools (never removed or hibernated)
+            </div>
+            {favoriteEntries.length === 0 ? (
+              <div className='text-sm text-neutral-600 dark:text-neutral-300'>No favorite tools. Click the star icon on any tool to add it to favorites.</div>
+            ) : (
+              favoriteEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
+            )}
+          </div>
         )}
         {showHibernated && (
           <div className='border-t border-neutral-200 dark:border-neutral-700 pt-4 space-y-4'>

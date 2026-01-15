@@ -724,8 +724,18 @@ export const HtmlIframeRegistryProvider: React.FC<{
     (records: HtmlToolRecord[]) => {
       if (!Array.isArray(records) || records.length === 0) return
       const nextEntries = records.map(fromCacheRecord)
-      entriesRef.current = new Map(nextEntries.map(entry => [entry.key, entry]))
-      syncEntries(nextEntries)
+      // MERGE: only add entries that don't already exist - never overwrite existing entries
+      let added = false
+      nextEntries.forEach(entry => {
+        if (!entriesRef.current.has(entry.key)) {
+          entriesRef.current.set(entry.key, entry)
+          added = true
+        }
+      })
+      // Only trigger state sync if we actually added new entries
+      if (added) {
+        syncEntries()
+      }
     },
     [syncEntries]
   )
@@ -901,7 +911,8 @@ export const HtmlIframeRegistryProvider: React.FC<{
       if (settings.hibernateAfterMinutes > 0) {
         const cutoff = now - settings.hibernateAfterMinutes * 60 * 1000
         remainingEntries.forEach(entry => {
-          if (entry.status === 'active' && entry.lastUsedAt < cutoff) {
+          // Skip favorites - they should never be auto-hibernated
+          if (!entry.favorite && entry.status === 'active' && entry.lastUsedAt < cutoff) {
             hibernateKeys.add(entry.key)
           }
         })
@@ -912,7 +923,9 @@ export const HtmlIframeRegistryProvider: React.FC<{
           entry => entry.status === 'active' && !hibernateKeys.has(entry.key)
         )
         if (activeEntries.length > settings.maxActive) {
-          const sorted = [...activeEntries].sort((a, b) => a.lastUsedAt - b.lastUsedAt)
+          // Only hibernate non-favorites when over the limit
+          const evictableActive = [...activeEntries].filter(entry => !entry.favorite)
+          const sorted = evictableActive.sort((a, b) => a.lastUsedAt - b.lastUsedAt)
           let remainingActive = activeEntries.length
           for (const entry of sorted) {
             if (remainingActive <= settings.maxActive) break
