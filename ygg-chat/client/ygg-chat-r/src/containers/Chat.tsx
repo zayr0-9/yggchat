@@ -723,7 +723,7 @@ function Chat() {
       if (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl) {
         // Use type assertion or cast if the action is not properly typed in the dispatch
         // but since it's a thunk, dispatch handles it fine.
-        ; (dispatch as any)(
+        ;(dispatch as any)(
           syncConversationToLocal({
             conversationId: String(conversationIdFromUrl),
             messages: reactQueryMessages,
@@ -875,7 +875,7 @@ function Chat() {
       setLeftWidthPct(pct)
       try {
         window.localStorage.setItem('chat:leftWidthPct', pct.toFixed(2))
-      } catch { }
+      } catch {}
     }
 
     const onMouseMove = (e: MouseEvent) => handleMove(e.clientX)
@@ -1192,6 +1192,41 @@ function Chat() {
     }
   }, [focusedChatMessageId, filteredMessages, virtualizer, streamState.active])
 
+  // Helper to check if a message should be excluded from visibility tracking
+  // (tool-only or reasoning-only messages without meaningful text content)
+  const isToolOrReasoningOnly = useCallback((msg: Message): boolean => {
+    if (msg.role === 'tool') return true
+
+    if (msg.content_blocks) {
+      try {
+        const blocks = typeof msg.content_blocks === 'string' ? JSON.parse(msg.content_blocks) : msg.content_blocks
+        const arr = Array.isArray(blocks) ? blocks : [blocks]
+
+        // Helper to check if a block has text content
+        const hasTextContent = (b: any): boolean => {
+          if (b.type === 'text' || b.type === 'image') return true
+          if (b.type === 'thinking' && b.content && typeof b.content === 'string' && b.content.trim()) return true
+          if (b.type === 'reasoning_details' && Array.isArray(b.reasoningDetails)) {
+            return b.reasoningDetails.some((r: any) => r.text && typeof r.text === 'string' && r.text.trim())
+          }
+          if (b.type === 'tool_result' && b.content) {
+            if (typeof b.content === 'string' && b.content.trim()) return true
+            if (Array.isArray(b.content)) {
+              return b.content.some((c: any) => c.type === 'text' && c.text && c.text.trim())
+            }
+          }
+          return false
+        }
+
+        // Exclude only if no blocks have meaningful text content
+        return arr.length > 0 && !arr.some(hasTextContent)
+      } catch {
+        return false
+      }
+    }
+    return false
+  }, [])
+
   // Track the most visible message using virtualizer's virtual items on scroll
   // Since elements are virtualized, we compute visibility based on scroll position
   useEffect(() => {
@@ -1200,26 +1235,73 @@ function Chat() {
 
     const updateVisibleMessage = () => {
       const virtualItems = virtualizer.getVirtualItems()
+
+      // Helper to find the first allowed message in the list (fallback)
+      const findFirstAllowedMessage = (): MessageId | null => {
+        for (const msg of filteredMessages) {
+          if (msg && !isToolOrReasoningOnly(msg)) {
+            return msg.id
+          }
+        }
+        return null
+      }
+
+      // Helper to find the last allowed message in the list (fallback)
+      const findLastAllowedMessage = (): MessageId | null => {
+        for (let i = filteredMessages.length - 1; i >= 0; i--) {
+          const msg = filteredMessages[i]
+          if (msg && !isToolOrReasoningOnly(msg)) {
+            return msg.id
+          }
+        }
+        return null
+      }
+
       if (virtualItems.length === 0) {
-        setVisibleMessageId(null)
+        // No virtual items - fall back to first allowed message, never set null
+        const fallback = findFirstAllowedMessage()
+        if (fallback) {
+          setVisibleMessageId(fallback)
+        }
+        // If no fallback found, keep current value (don't set null)
         return
       }
 
-      const containerRect = container.getBoundingClientRect()
       const scrollTop = container.scrollTop
-      const viewportCenter = scrollTop + containerRect.height / 2
+      const viewportHeight = container.clientHeight
+      // Offset detection point 20px below scroll position for better alignment
+      const detectionOffset = 20
+      const adjustedScrollTop = scrollTop + detectionOffset
 
-      // Find the virtual item closest to the center of the viewport
-      let closestItem = virtualItems[0]
-      let closestDistance = Infinity
+      // Find the first allowed message whose top edge is at or past the scroll position
+      // (i.e., the message currently at the top of the viewport)
+      let closestItem: (typeof virtualItems)[0] | null = null
 
       for (const item of virtualItems) {
-        const itemCenter = item.start + item.size / 2
-        const distance = Math.abs(itemCenter - viewportCenter)
-        if (distance < closestDistance) {
-          closestDistance = distance
+        const msg = filteredMessages[item.index]
+        if (!msg || isToolOrReasoningOnly(msg)) continue
+
+        const itemTop = item.start
+        const itemBottom = item.start + item.size
+
+        // Message is visible if it overlaps the top 50% of the viewport (with offset)
+        const topHalfEnd = adjustedScrollTop + viewportHeight * 0.5
+        if (itemBottom < adjustedScrollTop || itemTop > topHalfEnd) continue
+
+        // Pick the first (topmost) allowed message in the top half
+        if (!closestItem || item.start < closestItem.start) {
           closestItem = item
         }
+      }
+
+      // If all visible items are excluded types, fall back to the last allowed message
+      if (!closestItem) {
+        const fallback = findLastAllowedMessage()
+        if (fallback) {
+          setVisibleMessageId(fallback)
+        }
+        // If no fallback found, keep current value (don't set null)
+        return
       }
 
       const msg = filteredMessages[closestItem.index]
@@ -1236,7 +1318,7 @@ function Chat() {
     return () => {
       container.removeEventListener('scroll', updateVisibleMessage)
     }
-  }, [filteredMessages, virtualizer])
+  }, [filteredMessages, virtualizer, isToolOrReasoningOnly])
 
   // If URL contains a #messageId fragment, capture it once
   // const location = useLocation() // Moved to top
@@ -2250,10 +2332,10 @@ function Chat() {
                   researchNotesCache.map(item =>
                     item.id === currentConversationId
                       ? {
-                        ...item,
-                        research_note: updatedNote,
-                        updated_at: new Date().toISOString(),
-                      }
+                          ...item,
+                          research_note: updatedNote,
+                          updated_at: new Date().toISOString(),
+                        }
                       : item
                   )
                 )
@@ -2703,7 +2785,7 @@ function Chat() {
                     setHeimdallVisible(newValue)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', String(newValue))
-                    } catch { }
+                    } catch {}
                   }}
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
@@ -3018,10 +3100,11 @@ function Chat() {
                     {latestTodoList.items.map((item, idx) => (
                       <li
                         key={`todo-item-${idx}`}
-                        className={`flex items-center gap-2 text-xs ${item.done
-                          ? 'text-neutral-500 dark:text-neutral-400'
-                          : 'text-neutral-800 dark:text-neutral-200'
-                          }`}
+                        className={`flex items-center gap-2 text-xs ${
+                          item.done
+                            ? 'text-neutral-500 dark:text-neutral-400'
+                            : 'text-neutral-800 dark:text-neutral-200'
+                        }`}
                       >
                         <span className={item.done ? 'text-green-600 dark:text-green-400' : 'text-neutral-400'}>
                           {item.done ? '[✓]' : '[ ]'}
@@ -3089,10 +3172,11 @@ function Chat() {
 
                       {/* Hover tooltip that can expand into anchored modal */}
                       <div
-                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${isExpanded
-                          ? 'hidden'
-                          : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
-                          }`}
+                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${
+                          isExpanded
+                            ? 'hidden'
+                            : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
+                        }`}
                       >
                         <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-2 truncate'>
                           {file.name || file.relativePath.split('/').pop() || file.path.split('/').pop()}
@@ -3201,9 +3285,9 @@ function Chat() {
                       options={
                         extensions.length > 0
                           ? extensions.map(ext => ({
-                            value: ext.id,
-                            label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
-                          }))
+                              value: ext.id,
+                              label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
+                            }))
                           : [{ value: '', label: 'No extensions connected' }]
                       }
                       placeholder='Select extension'
@@ -3262,155 +3346,155 @@ function Chat() {
                 {(isImageGenerationModel ||
                   think ||
                   (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl)) && (
-                    <ActionPopover
-                      isActive={
-                        toolAutoApprove ||
-                        operationMode === 'plan' ||
-                        ccMode ||
-                        !!imageConfig.aspectRatio ||
-                        !!imageConfig.imageSize ||
-                        (think && reasoningConfig.effort !== 'medium')
-                      }
-                      footer={
-                        <div className='flex flex-col gap-2'>
-                          {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
-                            <>
-                              <span className='text-black dark:text-neutral-200 text-[16px]'>Work directory:</span>
-                              <div className='flex gap-2'>
-                                <input
-                                  type='text'
-                                  value={ccCwd}
-                                  onChange={e => setCcCwd(e.target.value)}
-                                  placeholder='Working directory (optional)'
-                                  className='flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                                  title='Specify the working directory for Claude Code agent'
-                                />
-                                <button
-                                  type='button'
-                                  onClick={async () => {
-                                    const result = await window.electronAPI?.dialog?.selectFolder()
-                                    if (result?.success && result.path) {
-                                      setCcCwd(result.path)
-                                    }
-                                  }}
-                                  className='px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                                  title='Select Folder to let the AI work in'
+                  <ActionPopover
+                    isActive={
+                      toolAutoApprove ||
+                      operationMode === 'plan' ||
+                      ccMode ||
+                      !!imageConfig.aspectRatio ||
+                      !!imageConfig.imageSize ||
+                      (think && reasoningConfig.effort !== 'medium')
+                    }
+                    footer={
+                      <div className='flex flex-col gap-2'>
+                        {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                          <>
+                            <span className='text-black dark:text-neutral-200 text-[16px]'>Work directory:</span>
+                            <div className='flex gap-2'>
+                              <input
+                                type='text'
+                                value={ccCwd}
+                                onChange={e => setCcCwd(e.target.value)}
+                                placeholder='Working directory (optional)'
+                                className='flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                title='Specify the working directory for Claude Code agent'
+                              />
+                              <button
+                                type='button'
+                                onClick={async () => {
+                                  const result = await window.electronAPI?.dialog?.selectFolder()
+                                  if (result?.success && result.path) {
+                                    setCcCwd(result.path)
+                                  }
+                                }}
+                                className='px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                title='Select Folder to let the AI work in'
+                              >
+                                <svg
+                                  xmlns='http://www.w3.org/2000/svg'
+                                  className='h-4 w-4'
+                                  fill='none'
+                                  viewBox='0 0 24 24'
+                                  stroke='currentColor'
                                 >
-                                  <svg
-                                    xmlns='http://www.w3.org/2000/svg'
-                                    className='h-4 w-4'
-                                    fill='none'
-                                    viewBox='0 0 24 24'
-                                    stroke='currentColor'
-                                  >
-                                    <path
-                                      strokeLinecap='round'
-                                      strokeLinejoin='round'
-                                      strokeWidth={2}
-                                      d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
-                                    />
-                                  </svg>
-                                </button>
-                              </div>
-                            </>
-                          )}
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          </>
+                        )}
 
-                          {/* Image Generation Options - shown only for image generation models */}
-                          {isImageGenerationModel && (
-                            <>
-                              <h1 className='text-black dark:text-neutral-200 text-[16px]'>Image Options</h1>
-                              <div className='flex flex-col gap-1'>
-                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Aspect Ratio</label>
-                                <Select
-                                  value={imageConfig.aspectRatio || ''}
-                                  options={[
-                                    { value: '', label: 'Default' },
-                                    { value: '1:1', label: '1:1 (Square)' },
-                                    { value: '16:9', label: '16:9 (Landscape)' },
-                                    { value: '9:16', label: '9:16 (Portrait)' },
-                                    { value: '4:3', label: '4:3' },
-                                    { value: '3:4', label: '3:4' },
-                                    { value: '3:2', label: '3:2' },
-                                    { value: '2:3', label: '2:3' },
-                                    { value: '4:5', label: '4:5' },
-                                    { value: '5:4', label: '5:4' },
-                                    { value: '21:9', label: '21:9 (Ultrawide)' },
-                                  ]}
-                                  onChange={value =>
-                                    setImageConfig(prev => ({
-                                      ...prev,
-                                      aspectRatio: (value as ImageConfig['aspectRatio']) || undefined,
-                                    }))
-                                  }
-                                  placeholder='Select aspect ratio'
-                                  size='small'
-                                />
-                              </div>
-                              <div className='flex flex-col gap-1'>
-                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Image Size</label>
-                                <Select
-                                  value={imageConfig.imageSize || ''}
-                                  options={[
-                                    { value: '', label: 'Default' },
-                                    { value: '1K', label: '1K' },
-                                    { value: '2K', label: '2K' },
-                                    { value: '4K', label: '4K' },
-                                  ]}
-                                  onChange={value =>
-                                    setImageConfig(prev => ({
-                                      ...prev,
-                                      imageSize: (value as ImageConfig['imageSize']) || undefined,
-                                    }))
-                                  }
-                                  placeholder='Select image size'
-                                  size='small'
-                                />
-                              </div>
-                            </>
-                          )}
-                          {/* Reasoning Effort Options - shown when thinking is enabled */}
-                          {selectedModel?.thinking && (
-                            <>
-                              <h1 className='text-black dark:text-neutral-200 text-[16px]'>Reasoning Options</h1>
-                              <div className='flex flex-col gap-1'>
-                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Effort Level</label>
-                                <Select
-                                  value={reasoningConfig.effort}
-                                  options={[
-                                    { value: 'low', label: 'Low' },
-                                    { value: 'medium', label: 'Medium (Default)' },
-                                    { value: 'high', label: 'High' },
-                                    { value: 'xhigh', label: 'X-High' },
-                                  ]}
-                                  onChange={value =>
-                                    setReasoningConfig(prev => ({
-                                      ...prev,
-                                      effort: value as ReasoningConfig['effort'],
-                                    }))
-                                  }
-                                  placeholder='Select effort level'
-                                  size='small'
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      }
-                    >
-                      {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
-                        <>
-                          <Button
-                            variant='outline2'
-                            className='rounded-full'
-                            size='medium'
-                            onClick={() => setJobsModalOpen(true)}
-                            title={isElectronEnv ? 'View tool jobs' : 'Tool jobs are available in the desktop app'}
-                            disabled={!isElectronEnv}
-                          >
-                            <i className='bx bx-task pb-0.5' aria-hidden='true'></i>
-                            Jobs
-                          </Button>
-                          {/* <Button
+                        {/* Image Generation Options - shown only for image generation models */}
+                        {isImageGenerationModel && (
+                          <>
+                            <h1 className='text-black dark:text-neutral-200 text-[16px]'>Image Options</h1>
+                            <div className='flex flex-col gap-1'>
+                              <label className='text-xs text-neutral-500 dark:text-neutral-400'>Aspect Ratio</label>
+                              <Select
+                                value={imageConfig.aspectRatio || ''}
+                                options={[
+                                  { value: '', label: 'Default' },
+                                  { value: '1:1', label: '1:1 (Square)' },
+                                  { value: '16:9', label: '16:9 (Landscape)' },
+                                  { value: '9:16', label: '9:16 (Portrait)' },
+                                  { value: '4:3', label: '4:3' },
+                                  { value: '3:4', label: '3:4' },
+                                  { value: '3:2', label: '3:2' },
+                                  { value: '2:3', label: '2:3' },
+                                  { value: '4:5', label: '4:5' },
+                                  { value: '5:4', label: '5:4' },
+                                  { value: '21:9', label: '21:9 (Ultrawide)' },
+                                ]}
+                                onChange={value =>
+                                  setImageConfig(prev => ({
+                                    ...prev,
+                                    aspectRatio: (value as ImageConfig['aspectRatio']) || undefined,
+                                  }))
+                                }
+                                placeholder='Select aspect ratio'
+                                size='small'
+                              />
+                            </div>
+                            <div className='flex flex-col gap-1'>
+                              <label className='text-xs text-neutral-500 dark:text-neutral-400'>Image Size</label>
+                              <Select
+                                value={imageConfig.imageSize || ''}
+                                options={[
+                                  { value: '', label: 'Default' },
+                                  { value: '1K', label: '1K' },
+                                  { value: '2K', label: '2K' },
+                                  { value: '4K', label: '4K' },
+                                ]}
+                                onChange={value =>
+                                  setImageConfig(prev => ({
+                                    ...prev,
+                                    imageSize: (value as ImageConfig['imageSize']) || undefined,
+                                  }))
+                                }
+                                placeholder='Select image size'
+                                size='small'
+                              />
+                            </div>
+                          </>
+                        )}
+                        {/* Reasoning Effort Options - shown when thinking is enabled */}
+                        {selectedModel?.thinking && (
+                          <>
+                            <h1 className='text-black dark:text-neutral-200 text-[16px]'>Reasoning Options</h1>
+                            <div className='flex flex-col gap-1'>
+                              <label className='text-xs text-neutral-500 dark:text-neutral-400'>Effort Level</label>
+                              <Select
+                                value={reasoningConfig.effort}
+                                options={[
+                                  { value: 'low', label: 'Low' },
+                                  { value: 'medium', label: 'Medium (Default)' },
+                                  { value: 'high', label: 'High' },
+                                  { value: 'xhigh', label: 'X-High' },
+                                ]}
+                                onChange={value =>
+                                  setReasoningConfig(prev => ({
+                                    ...prev,
+                                    effort: value as ReasoningConfig['effort'],
+                                  }))
+                                }
+                                placeholder='Select effort level'
+                                size='small'
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    }
+                  >
+                    {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                      <>
+                        <Button
+                          variant='outline2'
+                          className='rounded-full'
+                          size='medium'
+                          onClick={() => setJobsModalOpen(true)}
+                          title={isElectronEnv ? 'View tool jobs' : 'Tool jobs are available in the desktop app'}
+                          disabled={!isElectronEnv}
+                        >
+                          <i className='bx bx-task pb-0.5' aria-hidden='true'></i>
+                          Jobs
+                        </Button>
+                        {/* <Button
                             variant={ccMode ? 'outline2' : 'outline2'}
                             size='medium'
                             onClick={() => setCCMode(!ccMode)}
@@ -3427,60 +3511,61 @@ function Chat() {
                             </div>
                           </Button> */}
 
-                          {/* Allow All / Ask toggle */}
-                          <Button
-                            variant='outline2'
-                            size='medium'
-                            onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
-                            className={
-                              toolAutoApprove
-                                ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
-                                : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
-                            }
-                            title={
-                              toolAutoApprove
-                                ? 'Auto-approving tools (click to disable)'
-                                : 'Asking for permission (click to auto-approve)'
-                            }
-                            aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
-                          >
-                            <i className='bx bx-shield-quarter pr-1 pb-0.5'></i>
-                            {toolAutoApprove ? 'Allow all' : 'Ask'}
-                          </Button>
+                        {/* Allow All / Ask toggle */}
+                        <Button
+                          variant='outline2'
+                          size='medium'
+                          onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
+                          className={
+                            toolAutoApprove
+                              ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
+                              : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
+                          }
+                          title={
+                            toolAutoApprove
+                              ? 'Auto-approving tools (click to disable)'
+                              : 'Asking for permission (click to auto-approve)'
+                          }
+                          aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
+                        >
+                          <i className='bx bx-shield-quarter pr-1 pb-0.5'></i>
+                          {toolAutoApprove ? 'Allow all' : 'Ask'}
+                        </Button>
 
-                          {/* Chat / Agent toggle */}
-                          <Button
-                            variant='outline2'
-                            size='medium'
-                            onClick={() => dispatch(chatSliceActions.operationModeToggled())}
-                            className={
-                              operationMode === 'plan'
-                                ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
-                                : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
-                            }
-                            title={
-                              operationMode === 'plan'
-                                ? 'Plan mode enabled (tools will be blocked)'
-                                : 'Execution mode enabled (tools may modify files)'
-                            }
-                            aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
-                          >
-                            <i
-                              className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1 pb-0.5`}
-                            ></i>
-                            {operationMode === 'plan' ? 'Chat' : 'Agent'}
-                          </Button>
-                        </>
-                      )}
-                      {/* Claude Code toggle */}
-                    </ActionPopover>
-                  )}
+                        {/* Chat / Agent toggle */}
+                        <Button
+                          variant='outline2'
+                          size='medium'
+                          onClick={() => dispatch(chatSliceActions.operationModeToggled())}
+                          className={
+                            operationMode === 'plan'
+                              ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
+                              : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
+                          }
+                          title={
+                            operationMode === 'plan'
+                              ? 'Plan mode enabled (tools will be blocked)'
+                              : 'Execution mode enabled (tools may modify files)'
+                          }
+                          aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
+                        >
+                          <i
+                            className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1 pb-0.5`}
+                          ></i>
+                          {operationMode === 'plan' ? 'Chat' : 'Agent'}
+                        </Button>
+                      </>
+                    )}
+                    {/* Claude Code toggle */}
+                  </ActionPopover>
+                )}
                 {/* Thinking toggle - next to popover, disabled when not supported */}
                 <button
-                  className={`p-2 rounded-lg transition-all duration-200 ${selectedModel?.thinking
-                    ? 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-white/10 dark:hover:bg-white/5'
-                    : 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed'
-                    }`}
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    selectedModel?.thinking
+                      ? 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-white/10 dark:hover:bg-white/5'
+                      : 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed'
+                  }`}
                   onClick={() => setThink(t => !t)}
                   disabled={!selectedModel?.thinking}
                   title={selectedModel?.thinking ? 'Enable thinking' : 'Thinking not supported by this model'}
@@ -3538,12 +3623,13 @@ function Chat() {
                   <>
                     <Button
                       variant='outline2'
-                      className={`rounded-full relative ${isListening
-                        ? 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700/50'
-                        : speechLoading
-                          ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700/50'
-                          : ''
-                        }`}
+                      className={`rounded-full relative ${
+                        isListening
+                          ? 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700/50'
+                          : speechLoading
+                            ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700/50'
+                            : ''
+                      }`}
                       size='large'
                       onClick={toggleListening}
                       onMouseEnter={() => {
@@ -3577,8 +3663,9 @@ function Chat() {
                         </div>
                       ) : (
                         <i
-                          className={`bx ${isListening ? 'bx-stop' : 'bx-microphone'} text-[22px] ${isListening ? 'text-red-600 dark:text-red-400 animate-pulse' : ''
-                            }`}
+                          className={`bx ${isListening ? 'bx-stop' : 'bx-microphone'} text-[22px] ${
+                            isListening ? 'text-red-600 dark:text-red-400 animate-pulse' : ''
+                          }`}
                           aria-hidden='true'
                         ></i>
                       )}
@@ -3586,12 +3673,13 @@ function Chat() {
                     {/* Wake word toggle button - "Hey Jarvis" detection */}
                     <Button
                       variant='outline2'
-                      className={`rounded-full relative ${isWakeWordListening
-                        ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700/50'
-                        : wakeWordLoading
-                          ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700/50'
-                          : ''
-                        }`}
+                      className={`rounded-full relative ${
+                        isWakeWordListening
+                          ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700/50'
+                          : wakeWordLoading
+                            ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700/50'
+                            : ''
+                      }`}
                       size='large'
                       onClick={() => {
                         if (isWakeWordListening) {
@@ -3618,8 +3706,9 @@ function Chat() {
                         ></i>
                       ) : (
                         <i
-                          className={`bx bx-bot text-[22px] ${isWakeWordListening ? 'text-purple-600 dark:text-purple-400 animate-pulse' : ''
-                            }`}
+                          className={`bx bx-bot text-[22px] ${
+                            isWakeWordListening ? 'text-purple-600 dark:text-purple-400 animate-pulse' : ''
+                          }`}
                           aria-hidden='true'
                         ></i>
                       )}
@@ -3637,10 +3726,11 @@ function Chat() {
                   <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Creating...</span>
                 ) : sendingState.streaming ? (
                   <button
-                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${streamState.active
-                      ? 'bg-red-500 dark:bg-red-500 text-white hover:bg-red-600 hover:scale-105 active:scale-95 cursor-pointer'
-                      : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
-                      }`}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                      streamState.active
+                        ? 'bg-red-500 dark:bg-red-500 text-white hover:bg-red-600 hover:scale-105 active:scale-95 cursor-pointer'
+                        : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
+                    }`}
                     onClick={handleStopGeneration}
                     disabled={!streamState.active}
                     title={streamState.active ? 'Stop generation' : 'Switch to active stream branch to stop'}
@@ -3653,10 +3743,11 @@ function Chat() {
                   <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Sending...</span>
                 ) : (
                   <button
-                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${canSendLocal && currentConversationId
-                      ? 'bg-white dark:bg-white text-black hover:bg-blue-500 hover:text-white hover:scale-105 active:scale-95 cursor-pointer'
-                      : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
-                      }`}
+                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                      canSendLocal && currentConversationId
+                        ? 'bg-white dark:bg-white text-black hover:bg-blue-500 hover:text-white hover:scale-105 active:scale-95 cursor-pointer'
+                        : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
+                    }`}
                     disabled={!canSendLocal || !currentConversationId}
                     title='Send message'
                     onClick={() => {
@@ -3772,7 +3863,7 @@ function Chat() {
                   setHeimdallVisible(false)
                   try {
                     window.localStorage.setItem('chat:heimdallVisible', 'false')
-                  } catch { }
+                  } catch {}
                 }}
               />
             )}
@@ -3814,7 +3905,7 @@ function Chat() {
                     setHeimdallVisible(false)
                     try {
                       window.localStorage.setItem('chat:heimdallVisible', 'false')
-                    } catch { }
+                    } catch {}
                   }}
                   className='fixed bottom-6 right-6 z-110 w-12 h-12 rounded-full bg-neutral-700 dark:bg-neutral-600 hover:bg-neutral-800 dark:hover:bg-neutral-500 text-white shadow-lg flex items-center justify-center transition-colors'
                   aria-label='Close tree view'
