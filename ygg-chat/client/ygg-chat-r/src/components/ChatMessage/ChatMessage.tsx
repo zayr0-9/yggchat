@@ -57,6 +57,8 @@ interface ChatMessageProps {
   modelName?: string
   className?: string
   artifacts?: string[]
+  // Font size offset in pixels: positive increases, negative decreases all fonts uniformly
+  fontSizeOffset?: number
 }
 
 interface MessageActionsProps {
@@ -926,6 +928,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     modelName,
     className,
     artifacts = [],
+    fontSizeOffset = 0,
   }) => {
     const dispatch = useDispatch()
     const isMobile = useIsMobile()
@@ -1953,6 +1956,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       )
     }
 
+    // Style object for text content areas that should scale with fontSizeOffset
+    const textContentStyle: React.CSSProperties | undefined =
+      fontSizeOffset !== 0 ? { fontSize: `calc(1em + ${fontSizeOffset}px)` } : undefined
+
     return (
       <div
         id={`message-${id}`}
@@ -1960,7 +1967,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         onContextMenu={handleContextMenu}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
-        // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
         {role === 'user' && (
@@ -2001,6 +2007,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     <div
                       key={`text-${idx}`}
                       className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
+                      style={textContentStyle}
                     >
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath]}
@@ -2062,7 +2069,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                       {/* Expandable content */}
                       <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
                         <div className='tool-expand-content pt-2'>
-                          <div className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'>
+                          <div
+                            className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'
+                            style={textContentStyle}
+                          >
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm, remarkMath]}
                               rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
@@ -2179,6 +2189,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   <div
                     key={`text-${block.index}-${idx}`}
                     className='prose sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px] mt-2'
+                    style={textContentStyle}
                   >
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
@@ -2252,7 +2263,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     {/* Expandable content */}
                     <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
                       <div className='tool-expand-content pt-2'>
-                        <div className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'>
+                        <div
+                          className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'
+                          style={textContentStyle}
+                        >
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm, remarkMath]}
                             rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
@@ -2344,6 +2358,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     <div
                       id={`reasoning-content-${id}`}
                       className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'
+                      style={textContentStyle}
                     >
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath]}
@@ -2395,7 +2410,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           <>
             {/* Display mode - only show if no contentBlocks or streamEvents present (to avoid duplication) */}
             {(!contentBlocks || contentBlocks.length === 0) && (!streamEvents || streamEvents.length === 0) && (
-              <div className='prose px-4 py-2 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[20px]'>
+              <div
+                className='prose px-4 py-2 sm:px-1 max-w-none dark:prose-invert w-full text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[20px] 3xl:text-[20px] 4xl:text-[20px]'
+                style={textContentStyle}
+              >
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm, remarkMath]}
                   rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}

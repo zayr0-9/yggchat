@@ -818,6 +818,23 @@ function Chat() {
       return isMobileDevice ? false : true
     }
   })
+  // Font size offset for messages (synced from SettingsPane via custom event)
+  const [fontSizeOffset, setFontSizeOffset] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('chat:fontSizeOffset')
+      return stored ? parseInt(stored, 10) : 0
+    } catch {
+      return 0
+    }
+  })
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail
+      if (typeof detail === 'number') setFontSizeOffset(detail)
+    }
+    window.addEventListener('fontSizeOffsetChange', handler)
+    return () => window.removeEventListener('fontSizeOffsetChange', handler)
+  }, [])
   // Detect if user is on mobile device (below md breakpoint: 768px)
   const isMobile = useIsMobile()
   // One-time spin flags for icon buttons
@@ -2836,6 +2853,7 @@ function Chat() {
                         width='w-full'
                         modelName={msg.model_name}
                         artifacts={msg.artifacts}
+                        fontSizeOffset={fontSizeOffset}
                         onEdit={handleMessageEdit}
                         onBranch={handleMessageBranch}
                         onDelete={handleRequestDelete}
@@ -2861,6 +2879,7 @@ function Chat() {
                 modelName={optimisticMessage.model_name}
                 artifacts={optimisticMessage.artifacts}
                 width='w-full'
+                fontSizeOffset={fontSizeOffset}
                 className='opacity-70'
                 onOpenToolHtmlModal={openToolHtmlModal}
               />
@@ -2877,6 +2896,7 @@ function Chat() {
                 modelName={optimisticBranchMessage.model_name}
                 artifacts={optimisticBranchMessage.artifacts}
                 width='w-full'
+                fontSizeOffset={fontSizeOffset}
                 className='opacity-70'
                 onOpenToolHtmlModal={openToolHtmlModal}
               />
@@ -2896,6 +2916,7 @@ function Chat() {
                   toolCalls={streamState.toolCalls}
                   streamEvents={streamState.events}
                   width='w-full'
+                  fontSizeOffset={fontSizeOffset}
                   modelName={selectedModel?.name || undefined}
                   className=''
                   onOpenToolHtmlModal={openToolHtmlModal}

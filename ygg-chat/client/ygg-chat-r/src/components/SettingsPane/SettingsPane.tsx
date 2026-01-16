@@ -92,6 +92,27 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const [attachmentTarget, setAttachmentTarget] = useState<'system' | 'context'>('system')
   const attachmentInputRef = useRef<HTMLInputElement>(null)
 
+  // Font size offset state (persisted to localStorage)
+  const [fontSizeOffset, setFontSizeOffset] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('chat:fontSizeOffset')
+      return stored ? parseInt(stored, 10) : 0
+    } catch {
+      return 0
+    }
+  })
+
+  const handleFontSizeChange = useCallback((value: number) => {
+    const next = Math.max(-8, Math.min(16, value)) // Clamp between -8 and +16
+    setFontSizeOffset(next)
+    try {
+      localStorage.setItem('chat:fontSizeOffset', String(next))
+      window.dispatchEvent(new CustomEvent('fontSizeOffsetChange', { detail: next }))
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [])
+
   // Use the custom hook for system prompt management
   const {
     prompts: userSystemPrompts,
@@ -337,8 +358,9 @@ ${block}`
       {/* Modal */}
       <div className='py-2 w-full max-w-5xl'>
         <div
-          className={`relative z-50 mx-4 rounded-3xl px-12 py-4 lg:py-6 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${tools.some(tool => tool.enabled) ? 'h-[80vh]' : 'h-[58vh]'
-            }`}
+          className={`relative z-50 mx-4 rounded-3xl px-12 py-4 lg:py-6 dark:border-1 dark:border-neutral-900 bg-neutral-100 dark:bg-yBlack-900 shadow-lg overflow-y-scroll no-scrollbar transition-all duration-300 ease-in-out ${
+            tools.some(tool => tool.enabled) ? 'h-[80vh]' : 'h-[58vh]'
+          }`}
           onClick={e => e.stopPropagation()}
           style={{ scrollbarGutter: 'stable' }}
         >
@@ -387,10 +409,11 @@ ${block}`
                       <button
                         key={prompt.id}
                         onClick={() => handleSelectPrompt(prompt)}
-                        className={`flex items-center justify-center gap-2 flex-shrink-0 h-10 px-4 rounded-xl border transition-all duration-150 ${selectedPromptId === prompt.id
-                          ? 'bg-sky-600/70 text-white border-transparent'
-                          : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-transparent dark:border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700'
-                          }`}
+                        className={`flex items-center justify-center gap-2 flex-shrink-0 h-10 px-4 rounded-xl border transition-all duration-150 ${
+                          selectedPromptId === prompt.id
+                            ? 'bg-sky-600/70 text-white border-transparent'
+                            : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-transparent dark:border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                        }`}
                         title={prompt.description || prompt.content.substring(0, 100)}
                       >
                         <span className='font-medium text-sm whitespace-nowrap'>{prompt.name}</span>
@@ -431,29 +454,28 @@ ${block}`
                 <div className='mt-3'>
                   {isExistingPrompt ? (
                     // Show "Make Default" or "Remove Default" button when prompt already exists
-                    matchingPrompt && (
-                      matchingPrompt.is_default ? (
-                        <button
-                          type='button'
-                          onClick={handleRemoveDefault}
-                          disabled={removingDefault}
-                          className='flex items-center gap-2 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors disabled:opacity-50'
-                        >
-                          <i className='bx bxs-star text-base'></i>
-                          {removingDefault ? 'Removing...' : 'Remove Default'}
-                        </button>
-                      ) : (
-                        <button
-                          type='button'
-                          onClick={handleMakeDefault}
-                          disabled={makingDefault}
-                          className='flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors disabled:opacity-50'
-                        >
-                          <i className='bx bx-star text-base'></i>
-                          {makingDefault ? 'Setting...' : 'Make Default'}
-                        </button>
-                      )
-                    )
+                    matchingPrompt &&
+                    (matchingPrompt.is_default ? (
+                      <button
+                        type='button'
+                        onClick={handleRemoveDefault}
+                        disabled={removingDefault}
+                        className='flex items-center gap-2 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors disabled:opacity-50'
+                      >
+                        <i className='bx bxs-star text-base'></i>
+                        {removingDefault ? 'Removing...' : 'Remove Default'}
+                      </button>
+                    ) : (
+                      <button
+                        type='button'
+                        onClick={handleMakeDefault}
+                        disabled={makingDefault}
+                        className='flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors disabled:opacity-50'
+                      >
+                        <i className='bx bx-star text-base'></i>
+                        {makingDefault ? 'Setting...' : 'Make Default'}
+                      </button>
+                    ))
                   ) : (
                     // Show "Save as Prompt" when content doesn't match existing prompt
                     <>
@@ -498,9 +520,7 @@ ${block}`
                               <i className='bx bx-x text-lg'></i>
                             </button>
                           </div>
-                          {saveError && (
-                            <p className='text-sm text-red-500 dark:text-red-400'>{saveError}</p>
-                          )}
+                          {saveError && <p className='text-sm text-red-500 dark:text-red-400'>{saveError}</p>}
                         </div>
                       )}
                     </>
@@ -538,6 +558,39 @@ ${block}`
                 showCharCount={true}
                 className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
               />
+            </div>
+
+            {/* Font Size Section */}
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between'>
+                <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>Message Font Size</span>
+                <span className='text-sm font-mono text-neutral-600 dark:text-neutral-400'>
+                  {fontSizeOffset === 0 ? 'Default' : `${fontSizeOffset > 0 ? '+' : ''}${fontSizeOffset}px`}
+                </span>
+              </div>
+              <div className='flex items-center gap-4'>
+                <span className='text-xs text-neutral-500 dark:text-neutral-500 w-6'>-8</span>
+                <input
+                  type='range'
+                  min={-8}
+                  max={16}
+                  step={1}
+                  value={fontSizeOffset}
+                  onChange={e => handleFontSizeChange(parseInt(e.target.value, 10))}
+                  className='flex-1 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500'
+                />
+                <span className='text-xs text-neutral-500 dark:text-neutral-500 w-6'>+16</span>
+                {fontSizeOffset !== 0 && (
+                  <button
+                    type='button'
+                    onClick={() => handleFontSizeChange(0)}
+                    className='px-3 py-1.5 rounded-lg text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors'
+                    title='Reset to default'
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Voice Settings Section */}
