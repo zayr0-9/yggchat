@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import React, { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
 export interface ContextMenuItem {
   label: string
@@ -78,7 +79,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ isOpen, position, item
 
   const adjustedPosition = getAdjustedPosition() || position
 
-  return (
+  // Use portal to render at document body, escaping any parent stacking contexts
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -87,7 +89,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ isOpen, position, item
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           transition={{ duration: 0.1 }}
-          className='fixed z-[10000] min-w-[180px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden'
+          className='fixed z-[100000] min-w-[180px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] overflow-hidden'
           style={{
             left: `${adjustedPosition.x}px`,
             top: `${adjustedPosition.y}px`,
@@ -116,6 +118,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ isOpen, position, item
           </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   )
 }
