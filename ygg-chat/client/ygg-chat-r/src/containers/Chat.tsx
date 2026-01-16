@@ -122,9 +122,14 @@ function Chat() {
   // Subscription status for free/paid detection
   const { isFreeUser } = useSubscriptionStatus(userId)
   const modelSelectFooter = isFreeUser ? (
-    <div className='p-1 space-y-2'>
+    <div className='space-y-2'>
       {/* <div className='text-sm text-neutral-700 dark:text-neutral-200'>Subscribe now for access to all 400+ models</div> */}
-      <Button variant='outline2' size='medium' className='w-full' onClick={() => navigate('/payment')}>
+      <Button
+        variant='outline2'
+        size='medium'
+        className='w-full text-[13px] sm:text-[13px] md:text-[13px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[18px] 4xl:text-[20px] text-neutral-500 dark:text-neutral-200'
+        onClick={() => navigate('/payment')}
+      >
         Subscribe now for access to all 400+ models
       </Button>
     </div>
@@ -250,6 +255,10 @@ function Chat() {
       (typeof window !== 'undefined' && (window as any).__IS_ELECTRON__),
     []
   )
+  const inputAreaBorderClasses =
+    operationMode === 'plan'
+      ? 'outline-1 outline-blue-200/70 dark:outline-neutral-700/50'
+      : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
 
   // Get voice settings from Redux
   const voiceInputEnabled = useAppSelector(selectVoiceInputEnabled)
@@ -2933,7 +2942,7 @@ function Chat() {
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
           <div
-            className={`slate-input-wrapper bg-neutral-100/40 dark:bg-neutral-900/40 backdrop-blur-xl border border-white/10 dark:border-white/[0.08] rounded-3xl px-3 py-2 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] transition-[border-color] duration-300 focus-within:border-white/20 dark:focus-within:border-white/15`}
+            className={`slate-input-wrapper ${inputAreaBorderClasses}  bg-neutral-100/40 dark:bg-neutral-900/40 backdrop-blur-xl rounded-3xl px-4 py-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300  }`}
           >
             {toolCallPermissionRequest && (
               <ToolPermissionDialog

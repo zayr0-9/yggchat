@@ -728,7 +728,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
           //   <br />
           //   for new line
           // </div>
-          <span className='hidden sm:block font-mono text-[10px] text-neutral-400/60 dark:text-neutral-600 whitespace-nowrap pt-3 select-none'>
+          <span className='absolute top-2 right-2 hidden sm:block font-mono text-[10px] text-neutral-400/60 dark:text-neutral-600 whitespace-nowrap select-none'>
             SHIFT+ENTER <span className='opacity-50'>NEW LINE</span>
           </span>
         )}
