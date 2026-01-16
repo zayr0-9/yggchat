@@ -39,6 +39,7 @@
     "prettier": "^3.6.2"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.18",
     "strip-markdown": "^6.0.0"
   }
 }

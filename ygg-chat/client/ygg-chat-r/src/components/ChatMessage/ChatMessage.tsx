@@ -1846,45 +1846,47 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             }`}
           />
 
-          {/* Tool header button */}
-          <button
-            onClick={() => handleExpandToggle(toggleKey, group)}
-            className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
-          >
-            <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
-              {group.name || 'tool'}
-            </span>
-            {/* Status indicator when collapsed */}
-            {/* {!isExpanded && resultSummary && (
-              <span
-                className={`text-[10px] ${resultSummary === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}
-              >
-                {resultSummary}
-              </span>
-            )} */}
-            {!isExpanded && !resultSummary && (
-              <span className='inline-flex items-center text-neutral-400 dark:text-neutral-500'>
-                <i className='bx bx-dots-horizontal-rounded text-sm animate-pulse' />
-              </span>
-            )}
-            {!isExpanded && pathContent && (
-              <span
-                className='text-[10px] text-neutral-500 dark:text-neutral-500 max-w-[200px] overflow-hidden whitespace-nowrap'
-                style={{ direction: 'rtl', textOverflow: 'ellipsis' }}
-              >
-                {pathContent}
-              </span>
-            )}
-            {primaryHtmlResultKey && renderHtmlViewerButton(primaryHtmlResultKey)}
-            <svg
-              className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/tool:text-neutral-500 dark:group-hover/tool:text-neutral-400 ${isExpanded ? 'open' : ''}`}
-              fill='none'
-              viewBox='0 0 24 24'
-              stroke='currentColor'
+          {/* Tool header row */}
+          <div className='flex items-center gap-2'>
+            <button
+              onClick={() => handleExpandToggle(toggleKey, group)}
+              className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
             >
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
-            </svg>
-          </button>
+              <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
+                {group.name || 'tool'}
+              </span>
+              {/* Status indicator when collapsed */}
+              {/* {!isExpanded && resultSummary && (
+                <span
+                  className={`text-[10px] ${resultSummary === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}
+                >
+                  {resultSummary}
+                </span>
+              )} */}
+              {!isExpanded && !resultSummary && (
+                <span className='inline-flex items-center text-neutral-400 dark:text-neutral-500'>
+                  <i className='bx bx-dots-horizontal-rounded text-sm animate-pulse' />
+                </span>
+              )}
+              {!isExpanded && pathContent && (
+                <span
+                  className='text-[10px] text-neutral-500 dark:text-neutral-500 max-w-[200px] overflow-hidden whitespace-nowrap'
+                  style={{ direction: 'rtl', textOverflow: 'ellipsis' }}
+                >
+                  {pathContent}
+                </span>
+              )}
+              <svg
+                className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/tool:text-neutral-500 dark:group-hover/tool:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                fill='none'
+                viewBox='0 0 24 24'
+                stroke='currentColor'
+              >
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+              </svg>
+            </button>
+            {primaryHtmlResultKey && renderHtmlViewerButton(primaryHtmlResultKey)}
+          </div>
 
           {/* Expandable content */}
           <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>

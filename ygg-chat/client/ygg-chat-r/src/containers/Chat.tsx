@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -495,6 +496,25 @@ function Chat() {
       observer.disconnect()
     }
   }, [])
+
+  // Filtered messages for virtualization - removes nulls and invalid IDs
+  const filteredMessages = useMemo(() => {
+    return displayMessages.filter(msg => msg && msg.id != null)
+  }, [displayMessages])
+
+  // Calculate padding for end of list - allows last message to scroll to middle of viewport
+  const virtualizerPaddingEnd = useMemo(() => {
+    return Math.max(500, containerHeight * 0.6)
+  }, [containerHeight])
+
+  // Virtualizer for efficient message list rendering
+  const virtualizer = useVirtualizer({
+    count: filteredMessages.length,
+    getScrollElement: () => messagesContainerRef.current,
+    estimateSize: () => 200, // Estimated average message height
+    overscan: 5, // Buffer 5 messages above/below viewport
+    paddingEnd: virtualizerPaddingEnd,
+  })
 
   // Consider the user to be "at the bottom" if within this many pixels
   const NEAR_BOTTOM_PX = 48
@@ -1095,40 +1115,23 @@ function Chat() {
   useEffect(() => {
     if (selectionScrollCauseRef.current === 'user' && selectedPath && selectedPath.length > 0) {
       const targetId = focusedChatMessageId
-      const tryScroll = (attempt = 0) => {
-        const el = document.getElementById(`message-${targetId}`)
-        const container = messagesContainerRef.current
-        if (el && container) {
-          // Compute element position relative to container and align its top to the container's top
-          const containerRect = container.getBoundingClientRect()
-          const elRect = el.getBoundingClientRect()
-          const relativeTop = elRect.top - containerRect.top
-          const targetTop = container.scrollTop + relativeTop
-          container.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
-          // Record that we've scrolled to this focused target to avoid later auto-scrolls fighting it
-          if (typeof targetId === 'number') {
-            lastFocusedScrollIdRef.current = targetId
-          }
-          // After handling, reset so programmatic path changes (e.g., during send/stream) won't recenter
-          selectionScrollCauseRef.current = null
-          return
-        }
-        // Retry briefly if the element is not yet present
-        if (attempt < 5) {
-          setTimeout(() => tryScroll(attempt + 1), 50)
-        } else {
-          selectionScrollCauseRef.current = null
+      // Find the index of the target message in filteredMessages for virtualizer
+      const targetIndex = filteredMessages.findIndex(msg => msg.id === targetId)
+
+      if (targetIndex !== -1) {
+        // Use virtualizer to scroll to the message index
+        virtualizer.scrollToIndex(targetIndex, { align: 'start', behavior: 'smooth' })
+
+        // Record that we've scrolled to this focused target to avoid later auto-scrolls fighting it
+        if (typeof targetId === 'number') {
+          lastFocusedScrollIdRef.current = targetId
         }
       }
 
-      // Defer until after DOM/layout has settled for this render
-      if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
-        requestAnimationFrame(() => requestAnimationFrame(() => tryScroll()))
-      } else {
-        setTimeout(() => tryScroll(), 0)
-      }
+      // After handling, reset so programmatic path changes (e.g., during send/stream) won't recenter
+      selectionScrollCauseRef.current = null
     }
-  }, [selectedPath, focusedChatMessageId])
+  }, [selectedPath, focusedChatMessageId, filteredMessages, virtualizer])
 
   // Scroll to the focused message when focus changes via hash/search (non user-click cases)
   useEffect(() => {
@@ -1144,85 +1147,62 @@ function Chat() {
       userScrolledDuringStreamRef.current = true
     }
 
-    const tryScroll = (attempt = 0) => {
-      const container = messagesContainerRef.current
-      if (!container) return
-      const el = document.getElementById(`message-${focusedChatMessageId}`)
-      if (el) {
-        const containerRect = container.getBoundingClientRect()
-        const elRect = el.getBoundingClientRect()
-        const relativeTop = elRect.top - containerRect.top
-        const targetTop = container.scrollTop + relativeTop
-        container.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
-        // Mark this focus as handled so we don't keep re-centering on subsequent renders
-        lastFocusedScrollIdRef.current = focusedChatMessageId
-        return
-      }
-      // Retry briefly if the element is not yet present
-      if (attempt < 5) {
-        setTimeout(() => tryScroll(attempt + 1), 50)
-      }
-    }
+    // Find the index of the target message in filteredMessages for virtualizer
+    const targetIndex = filteredMessages.findIndex(msg => msg.id === focusedChatMessageId)
 
-    if (typeof window !== 'undefined' && 'requestAnimationFrame' in window) {
-      requestAnimationFrame(() => requestAnimationFrame(() => tryScroll()))
-    } else {
-      setTimeout(() => tryScroll(), 0)
+    if (targetIndex !== -1) {
+      // Use virtualizer to scroll to the message index
+      virtualizer.scrollToIndex(targetIndex, { align: 'start', behavior: 'smooth' })
+      // Mark this focus as handled so we don't keep re-centering on subsequent renders
+      lastFocusedScrollIdRef.current = focusedChatMessageId
     }
-  }, [focusedChatMessageId, displayMessages])
+  }, [focusedChatMessageId, filteredMessages, virtualizer, streamState.active])
 
-  // Intersection Observer to track the most visible message
+  // Track the most visible message using virtualizer's virtual items on scroll
+  // Since elements are virtualized, we compute visibility based on scroll position
   useEffect(() => {
     const container = messagesContainerRef.current
     if (!container) return
 
-    // Map to store intersection ratios for each message
-    const visibilityMap = new Map<MessageId, number>()
-
-    const observer = new IntersectionObserver(
-      entries => {
-        // Update visibility map with new intersection ratios
-        entries.forEach(entry => {
-          const messageId = entry.target.getAttribute('id')?.replace('message-', '')
-          if (messageId) {
-            const parsedId = parseId(messageId)
-            if ((typeof parsedId === 'number' && !isNaN(parsedId)) || typeof parsedId === 'string') {
-              if (entry.isIntersecting) {
-                visibilityMap.set(parsedId, entry.intersectionRatio)
-              } else {
-                visibilityMap.delete(parsedId)
-              }
-            }
-          }
-        })
-
-        // Find the message with the highest intersection ratio
-        let maxRatio = 0
-        let mostVisibleId: MessageId | null = null
-        visibilityMap.forEach((ratio, id) => {
-          if (ratio > maxRatio) {
-            maxRatio = ratio
-            mostVisibleId = id
-          }
-        })
-
-        // Update state with the most visible message ID
-        setVisibleMessageId(mostVisibleId)
-      },
-      {
-        root: container,
-        threshold: [0, 0.25, 0.5, 0.75, 1.0],
+    const updateVisibleMessage = () => {
+      const virtualItems = virtualizer.getVirtualItems()
+      if (virtualItems.length === 0) {
+        setVisibleMessageId(null)
+        return
       }
-    )
 
-    // Observe all message elements
-    const messageElements = container.querySelectorAll('[id^="message-"]')
-    messageElements.forEach(el => observer.observe(el))
+      const containerRect = container.getBoundingClientRect()
+      const scrollTop = container.scrollTop
+      const viewportCenter = scrollTop + containerRect.height / 2
 
-    return () => {
-      observer.disconnect()
+      // Find the virtual item closest to the center of the viewport
+      let closestItem = virtualItems[0]
+      let closestDistance = Infinity
+
+      for (const item of virtualItems) {
+        const itemCenter = item.start + item.size / 2
+        const distance = Math.abs(itemCenter - viewportCenter)
+        if (distance < closestDistance) {
+          closestDistance = distance
+          closestItem = item
+        }
+      }
+
+      const msg = filteredMessages[closestItem.index]
+      if (msg) {
+        setVisibleMessageId(msg.id)
+      }
     }
-  }, [displayMessages])
+
+    // Initial update
+    updateVisibleMessage()
+
+    // Update on scroll
+    container.addEventListener('scroll', updateVisibleMessage, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', updateVisibleMessage)
+    }
+  }, [filteredMessages, virtualizer])
 
   // If URL contains a #messageId fragment, capture it once
   // const location = useLocation() // Moved to top
@@ -2379,97 +2359,62 @@ function Chat() {
   //   }
   // }, [providers.currentProvider, refreshModelsMutation])
 
-  // Memoized message list to prevent re-rendering all messages when unrelated state changes
-  const memoizedMessageList = useMemo(() => {
-    // Filter out any undefined/null messages or messages with invalid IDs
-    return displayMessages
-      .filter(msg => msg && msg.id != null)
-      .map(msg => {
-        // Parse tool_calls into structured ToolCall array if present
-        // Handles both formats:
-        // - String (from SQLite in local mode): needs JSON.parse()
-        // - Object/Array (from Supabase in web mode): already parsed
-        let toolCalls: ToolCall[] | undefined = undefined
-        if (msg.tool_calls) {
-          try {
-            // If tool_calls is already an object/array (from Supabase), use it directly
-            if (typeof msg.tool_calls === 'object') {
-              toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [msg.tool_calls]
-            } else if (typeof msg.tool_calls === 'string') {
-              // If it's a string (from SQLite), parse it
-              const parsed = JSON.parse(msg.tool_calls)
-              toolCalls = Array.isArray(parsed) ? parsed : [parsed]
-            }
-          } catch (error) {
-            console.warn(`Failed to parse tool_calls for message ${msg.id}:`, msg.tool_calls, error)
-          }
+  // Helper to parse message data (tool_calls and content_blocks) for rendering
+  const parseMessageData = useCallback((msg: Message) => {
+    // Parse tool_calls into structured ToolCall array if present
+    // Handles both formats:
+    // - String (from SQLite in local mode): needs JSON.parse()
+    // - Object/Array (from Supabase in web mode): already parsed
+    let toolCalls: ToolCall[] | undefined = undefined
+    if (msg.tool_calls) {
+      try {
+        // If tool_calls is already an object/array (from Supabase), use it directly
+        if (typeof msg.tool_calls === 'object') {
+          toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [msg.tool_calls]
+        } else if (typeof msg.tool_calls === 'string') {
+          // If it's a string (from SQLite), parse it
+          const parsed = JSON.parse(msg.tool_calls)
+          toolCalls = Array.isArray(parsed) ? parsed : [parsed]
         }
+      } catch (error) {
+        console.warn(`Failed to parse tool_calls for message ${msg.id}:`, msg.tool_calls, error)
+      }
+    }
 
-        // Parse content_blocks for assistant messages with sequential rendering
-        // Handles both formats:
-        // - String (from SQLite): needs JSON.parse()
-        // - Object/Array (from Supabase): already parsed
-        // Prioritize content_blocks over legacy fields (content, thinking_block, tool_calls)
-        let contentBlocks: ContentBlock[] | undefined = undefined
-        if ((msg.role === 'assistant' || msg.role === 'ex_agent') && msg.content_blocks) {
-          try {
-            if (typeof msg.content_blocks === 'object') {
-              contentBlocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [msg.content_blocks]
-            } else if (typeof msg.content_blocks === 'string') {
-              const parsed = JSON.parse(msg.content_blocks)
-              contentBlocks = Array.isArray(parsed) ? parsed : [parsed]
-            }
-            // Ensure all blocks have an index property, add if missing
-            if (contentBlocks && contentBlocks.length > 0) {
-              contentBlocks = contentBlocks.map((block, idx) => ({
-                ...block,
-                index: block.index !== undefined ? block.index : idx,
-              }))
-              // Sort by index to ensure chronological order
-              contentBlocks.sort((a, b) => a.index - b.index)
-            } else {
-              // If content_blocks is empty after parsing, treat as undefined to use legacy rendering
-              contentBlocks = undefined
-            }
-          } catch (error) {
-            console.warn(`Failed to parse content_blocks for message ${msg.id}`, error)
-            contentBlocks = undefined
-          }
+    // Parse content_blocks for assistant messages with sequential rendering
+    // Handles both formats:
+    // - String (from SQLite): needs JSON.parse()
+    // - Object/Array (from Supabase): already parsed
+    // Prioritize content_blocks over legacy fields (content, thinking_block, tool_calls)
+    let contentBlocks: ContentBlock[] | undefined = undefined
+    if ((msg.role === 'assistant' || msg.role === 'ex_agent') && msg.content_blocks) {
+      try {
+        if (typeof msg.content_blocks === 'object') {
+          contentBlocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [msg.content_blocks]
+        } else if (typeof msg.content_blocks === 'string') {
+          const parsed = JSON.parse(msg.content_blocks)
+          contentBlocks = Array.isArray(parsed) ? parsed : [parsed]
         }
+        // Ensure all blocks have an index property, add if missing
+        if (contentBlocks && contentBlocks.length > 0) {
+          contentBlocks = contentBlocks.map((block, idx) => ({
+            ...block,
+            index: block.index !== undefined ? block.index : idx,
+          }))
+          // Sort by index to ensure chronological order
+          contentBlocks.sort((a, b) => a.index - b.index)
+        } else {
+          // If content_blocks is empty after parsing, treat as undefined to use legacy rendering
+          contentBlocks = undefined
+        }
+      } catch (error) {
+        console.warn(`Failed to parse content_blocks for message ${msg.id}`, error)
+        contentBlocks = undefined
+      }
+    }
 
-        return (
-          <ChatMessage
-            key={msg.id}
-            id={msg.id.toString()}
-            role={msg.role}
-            content={msg.content}
-            thinking={msg.thinking_block}
-            toolCalls={toolCalls}
-            contentBlocks={contentBlocks}
-            timestamp={msg.created_at}
-            width='w-full'
-            modelName={msg.model_name}
-            artifacts={msg.artifacts}
-            onEdit={handleMessageEdit}
-            onBranch={handleMessageBranch}
-            onDelete={handleRequestDelete}
-            onResend={handleResend}
-            onAddToNote={handleAddToNote}
-            onExplainFromSelection={handleExplainFromSelection}
-            onOpenToolHtmlModal={openToolHtmlModal}
-          />
-        )
-      })
-  }, [
-    displayMessages,
-    handleMessageEdit,
-    handleMessageBranch,
-    handleRequestDelete,
-    handleResend,
-    handleAddToNote,
-    handleExplainFromSelection,
-    openToolHtmlModal,
-  ])
+    return { toolCalls, contentBlocks }
+  }, [])
 
   // Helper: Parse todo items from markdown content
   const TODO_ITEM_REGEX = /^\s*[-*]\s*\[(x|X| )\]\s*(.*)$/
@@ -2848,15 +2793,61 @@ function Chat() {
             className={`flex flex-col pt-25 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
             style={{
               ['overflowAnchor' as any]: 'none',
-              // transform: 'translateZ(0)',
-              willChange: 'contents',
-              paddingBottom: `${containerHeight - 220}px`,
+              willChange: 'scroll-position',
             }}
           >
-            {displayMessages.length === 0 ? (
+            {filteredMessages.length === 0 ? (
               <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
             ) : (
-              memoizedMessageList
+              <div
+                style={{
+                  minHeight: `${virtualizer.getTotalSize()}px`,
+                  height: `${virtualizer.getTotalSize()}px`,
+                  width: '100%',
+                  position: 'relative',
+                  flexShrink: 0,
+                }}
+              >
+                {virtualizer.getVirtualItems().map(virtualRow => {
+                  const msg = filteredMessages[virtualRow.index]
+                  const { toolCalls, contentBlocks } = parseMessageData(msg)
+                  return (
+                    <div
+                      key={msg.id}
+                      id={`message-${msg.id}`}
+                      data-index={virtualRow.index}
+                      ref={virtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      <ChatMessage
+                        id={msg.id.toString()}
+                        role={msg.role}
+                        content={msg.content}
+                        thinking={msg.thinking_block}
+                        toolCalls={toolCalls}
+                        contentBlocks={contentBlocks}
+                        timestamp={msg.created_at}
+                        width='w-full'
+                        modelName={msg.model_name}
+                        artifacts={msg.artifacts}
+                        onEdit={handleMessageEdit}
+                        onBranch={handleMessageBranch}
+                        onDelete={handleRequestDelete}
+                        onResend={handleResend}
+                        onAddToNote={handleAddToNote}
+                        onExplainFromSelection={handleExplainFromSelection}
+                        onOpenToolHtmlModal={openToolHtmlModal}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
             )}
 
             {/* Show optimistic message in web mode only */}
@@ -2928,8 +2919,8 @@ function Chat() {
                 <i className='bx bx-loader-alt text-2xl animate-spin' style={{ animationDuration: '1s' }}></i>
               </div>
             )}
-            {/* Bottom sentinel for robust scrolling */}
-            <div ref={bottomRef} data-bottom-sentinel='true' className='h-px' />
+            {/* Bottom sentinel and padding for scrolling past last message */}
+            <div ref={bottomRef} data-bottom-sentinel='true' style={{ height: Math.max(100, containerHeight - 300) }} />
           </div>
         </div>
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}

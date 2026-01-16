@@ -2335,10 +2335,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             <div className='w-3 h-3 bg-slate-50 dark:bg-yBlack-900 dark:border-yBrown-500 rounded border-2 border-slate-400'></div>
             <span>Assistant messages</span>
           </div>
-          <div className='flex items-center gap-2'>
+          {/* <div className='flex items-center gap-2'>
             <div className='w-3 h-3 bg-slate-50 dark:bg-yBlack-900 dark:border-orange-600 rounded border-2 border-orange-300'></div>
             <span>Ex-agent messages</span>
-          </div>
+          </div> */}
         </div>
       </div>
       <svg
