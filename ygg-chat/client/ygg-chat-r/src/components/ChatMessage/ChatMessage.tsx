@@ -73,6 +73,7 @@ interface MessageActionsProps {
   editMode?: 'edit' | 'branch'
   copied?: boolean
   modelName?: string
+  isVisible?: boolean
 }
 
 const MessageActions: React.FC<MessageActionsProps> = ({
@@ -89,9 +90,16 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   editMode = 'edit',
   copied = false,
   modelName,
+  isVisible = false,
 }) => {
   return (
-    <div className='inline-flex items-center bg-neutral-100/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/50 dark:border-white/[0.08] rounded-full p-0 gap-0.5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-2 scale-[0.98] group-hover:translate-y-0 group-hover:scale-100 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] pointer-events-none group-hover:pointer-events-auto'>
+    <div
+      className={`inline-flex items-center bg-neutral-100/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/50 dark:border-white/[0.08] rounded-full p-0 gap-0.5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+        isVisible
+          ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
+          : 'opacity-0 translate-y-2 scale-[0.98] pointer-events-none'
+      }`}
+    >
       {/* Model ID Badge */}
       {modelName && !isEditing && (
         <div className='font-mono text-[10px] text-neutral-500 dark:text-neutral-400 tracking-wider px-3 border-r border-neutral-200 dark:border-white/[0.08] uppercase'>
@@ -942,6 +950,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [showMoreInfo, setShowMoreInfo] = useState(false)
     const [menuOpenUp, setMenuOpenUp] = useState(false)
     const moreMenuRef = useRef<HTMLDivElement | null>(null)
+    // Hover state for message actions visibility (fixes web mode hover detection)
+    const [isHovering, setIsHovering] = useState(false)
     const moreButtonRef = useRef<HTMLDivElement | null>(null)
     // Context menu states
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
@@ -1948,15 +1958,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         id={`message-${id}`}
         className={`group px-0 sm:px-2 md:px-2 mb-0 sm:mb-0 md:mb-0 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
         // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
         {role === 'user' && (
           <div className='inline-flex items-center gap-2 py-[3px] px-2.5 bg-white/[0.03] border border-white/[0.08] rounded-md mb-3 backdrop-blur cursor-default transition-all duration-200'>
             <div className='w-1 h-1 rounded-full bg-neutral-500 shadow-[0_0_8px_rgba(115,115,115,0.4)]'></div>
-            <span className='font-mono text-[11px] uppercase tracking-[0.1em] text-neutral-500'>
-              {styles.roleText}
-            </span>
+            <span className='font-mono text-[11px] uppercase tracking-[0.1em] text-neutral-500'>{styles.roleText}</span>
           </div>
         )}
 
@@ -2453,6 +2463,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 editMode={editMode}
                 copied={copied}
                 modelName={modelName}
+                isVisible={isHovering}
               />
               {/* More menu dropdown */}
               {showMoreMenu && (
