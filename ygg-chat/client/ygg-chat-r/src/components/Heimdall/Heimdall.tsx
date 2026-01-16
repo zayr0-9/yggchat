@@ -24,11 +24,9 @@ import { makeSelectConversationById } from '../../features/conversations/convers
 import { Message } from '@/features/chats'
 import { ConversationId, MessageId } from '../../../../../shared/types'
 import { useIsMobile } from '../../hooks/useMediaQuery'
-import { useResearchNotes } from '../../hooks/useQueries'
 import type { RootState } from '../../store/store'
 import { parseId } from '../../utils/helpers'
 import stripMarkdownToText from '../../utils/markdownStripper'
-import { LowBar } from '../LowBar/LowBar'
 // import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { TextArea } from '../TextArea/TextArea'
 import { TextField } from '../TextField/TextField'
@@ -92,8 +90,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const currentConversation = useSelector(conversationId ? makeSelectConversationById(conversationId) : () => null)
   // Track total messages to detect a truly empty conversation
   const messagesCount = useSelector((state: RootState) => state.chat.conversation.messages.length)
-  // Fetch all research notes for the tabbed interface
-  const { data: researchNotes = [], isLoading: isLoadingNotes } = useResearchNotes()
   // Track if on mobile device for responsive tooltip behavior
   const isMobile = useIsMobile()
 
@@ -187,16 +183,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [plainMessages, setPlainMessages] = useState<any[]>([])
   useEffect(() => {
     let cancelled = false
-      ; (async () => {
-        try {
-          const res = (await stripMarkdownToText(flatMessages as any)) as any
-          if (!cancelled) {
-            setPlainMessages(Array.isArray(res) ? (res as any[]) : (flatMessages as any[]))
-          }
-        } catch {
-          if (!cancelled) setPlainMessages(flatMessages as any[])
+    ;(async () => {
+      try {
+        const res = (await stripMarkdownToText(flatMessages as any)) as any
+        if (!cancelled) {
+          setPlainMessages(Array.isArray(res) ? (res as any[]) : (flatMessages as any[]))
         }
-      })()
+      } catch {
+        if (!cancelled) setPlainMessages(flatMessages as any[])
+      }
+    })()
     return () => {
       cancelled = true
     }
@@ -244,13 +240,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const addGlobalNoSelect = () => {
     try {
       document.body.classList.add('ygg-no-select')
-    } catch { }
+    } catch {}
   }
 
   const removeGlobalNoSelect = () => {
     try {
       document.body.classList.remove('ygg-no-select')
-    } catch { }
+    } catch {}
   }
 
   // Debounced update function for notes
@@ -329,7 +325,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     if (isDraggingRef.current || isSelectingRef.current) {
       try {
         e.preventDefault()
-      } catch { }
+      } catch {}
     }
     if (!e.touches || e.touches.length === 0) return
     const t = e.touches[0]
@@ -473,13 +469,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     try {
       e.preventDefault()
-    } catch { }
+    } catch {}
     // Hide any open custom context menu upon new interaction
     setShowContextMenu(false)
     // Capture pointer so we continue to receive move/up events outside
     try {
-      ; (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId)
-    } catch { }
+      ;(e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId)
+    } catch {}
 
     const isRightButton = e.button === 2 && e.pointerType !== 'touch'
     const isPrimaryLike = e.button === 0 || e.pointerType === 'touch' || e.buttons === 1
@@ -574,7 +570,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
       try {
         e.preventDefault()
-      } catch { }
+      } catch {}
       return // Don't process dragging/selecting while pinching
     }
 
@@ -615,8 +611,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     try {
-      ; (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
-    } catch { }
+      ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
+    } catch {}
 
     // Handle click on node (when user didn't drag)
     if (!hasMovedRef.current && clickedNodeRef.current && onNodeSelect) {
@@ -661,8 +657,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     try {
-      ; (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
-    } catch { }
+      ;(e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId)
+    } catch {}
 
     handleMouseUp()
   }
@@ -1045,10 +1041,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       // Prevent default scrolling behavior and handle zoom instead
       try {
         e.preventDefault()
-      } catch { }
+      } catch {}
       try {
         e.stopPropagation()
-      } catch { }
+      } catch {}
 
       // Handle zoom centered at the cursor position
       // Normalize delta to pixels across browsers/devices
@@ -1836,8 +1832,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               height={nodeHeight}
               rx='8'
               strokeWidth='2'
-              className={`cursor-pointer hover:opacity-90 transition-colors duration-200 ${compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
-                } ${node.sender === 'user' ? `fill-neutral-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-neutral-300'}` : node.sender === 'ex_agent' ? `fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 ${isVisible ? 'dark:stroke-orange-600 stroke-emerald-400' : 'dark:stroke-orange-600'}` : `fill-slate-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400' : 'stroke-neutral-200'}`}`}
+              className={`cursor-pointer hover:opacity-90 transition-colors duration-200 ${
+                compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
+              } ${node.sender === 'user' ? `fill-neutral-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-neutral-300'}` : node.sender === 'ex_agent' ? `fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 ${isVisible ? 'dark:stroke-orange-600 stroke-emerald-400' : 'dark:stroke-orange-600'}` : `fill-slate-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400' : 'stroke-neutral-200'}`}`}
               style={{
                 filter:
                   compactMode && focusedNodeId === node.id ? `drop-shadow(0 0 10px rgba(59, 130, 246, 0.5))` : 'none',
@@ -2008,12 +2005,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               cx={x}
               cy={y + circleRadius}
               r={circleRadius}
-              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-neutral-800 dark:stroke-neutral-900'} ${node.sender === 'user'
+              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-neutral-800 dark:stroke-neutral-900'} ${
+                node.sender === 'user'
                   ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-neutral-900'
                   : node.sender === 'ex_agent'
                     ? 'fill-orange-50 stroke-orange-600'
                     : 'fill-indigo-50 stroke-yPurple-500'
-                } `}
+              } `}
               style={{
                 transform: selectedNode?.id === node.id ? 'scale(1.1)' : 'scale(1)',
                 transformOrigin: `${x}px ${y + circleRadius}px`,
@@ -2196,10 +2194,11 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         </button>
         <button
           onClick={toggleFilterEmptyMessages}
-          className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${filterEmptyMessages
+          className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${
+            filterEmptyMessages
               ? 'bg-blue-100 text-blue-700 dark:bg-neutral-500/60 dark:text-blue-100'
               : 'bg-neutral-50 text-stone-800 dark:text-stone-200 dark:bg-yBlack-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-            }`}
+          }`}
           title={filterEmptyMessages ? 'Show Empty Messages' : 'Hide Empty Messages'}
         >
           <i className='bx bx-filter text-xl' />
@@ -2296,8 +2295,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                             setSearchQuery('')
                           }}
                           onMouseEnter={() => setSearchHoverIndex(idx)}
-                          className={`w-full text-left px-3 py-4 hover:bg-stone-100 dark:hover:bg-neutral-800 ${idx === searchHoverIndex ? 'bg-stone-100 dark:bg-neutral-800' : ''
-                            }`}
+                          className={`w-full text-left px-3 py-4 hover:bg-stone-100 dark:hover:bg-neutral-800 ${
+                            idx === searchHoverIndex ? 'bg-stone-100 dark:bg-neutral-800' : ''
+                          }`}
                         >
                           <div className='items-start gap-2'>
                             <span className='line-clamp-2'>{snippet || '(empty message)'}</span>
@@ -2482,8 +2482,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
           return (
             <div
-              className={`absolute bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 no-scrollbar ${compactMode ? 'border-2 border-gray-600' : ''
-                }`}
+              className={`absolute bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-20 no-scrollbar ${
+                compactMode ? 'border-2 border-gray-600' : ''
+              }`}
               style={{
                 left: Math.max(10, leftPos),
                 top: Math.max(mousePosition.y + 10, 10),
@@ -2510,8 +2511,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                               <img
                                 src={block.url}
                                 alt={`Generated image ${idx + 1}`}
-                                className={`max-w-full object-contain rounded ${hasImage ? 'max-h-[600px]' : 'max-h-48'
-                                  }`}
+                                className={`max-w-full object-contain rounded ${
+                                  hasImage ? 'max-h-[600px]' : 'max-h-48'
+                                }`}
                               />
                             </div>
                           )
@@ -2615,10 +2617,11 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 // Fallback to message content
                 return (
                   <div
-                    className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${isMobile
+                    className={`prose prose-sm dark:prose-invert max-w-none text-sm break-words ${
+                      isMobile
                         ? 'max-h-80 overflow-y-auto overflow-x-hidden thin-scrollbar'
                         : 'overflow-hidden overflow-x-hidden ygg-line-clamp-15'
-                      }`}
+                    }`}
                   >
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
