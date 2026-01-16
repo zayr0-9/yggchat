@@ -117,6 +117,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const noteMessageContentRef = useRef<string>('')
   // Track dark mode for shadows
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  // Track hover state for showing/hiding controls
+  const [isHovering, setIsHovering] = useState<boolean>(false)
   // Track pointers for pinch-to-zoom gesture
   const pointerMapRef = useRef<Map<number, { clientX: number; clientY: number; pointerType: string }>>(new Map())
   const fallbackOffsetsRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
@@ -2105,6 +2107,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         filter: isTransitioning ? 'none' : 'none',
         transition: 'filter 100ms ease-in-out',
       }}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
     >
       {/* Overlays: loading, error, empty-state (non-destructive, do not unmount SVG) */}
       {/* <AnimatePresence>
@@ -2170,7 +2174,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           </div>
         </div>
       )}
-      <div className='absolute top-4 left-4 z-10 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200'>
+      <div
+        className={`absolute top-4 left-4 z-10 flex gap-2 transition-opacity duration-200 ${isHovering ? 'opacity-100' : 'opacity-0'}`}
+      >
         <button
           onClick={zoomIn}
           className='p-2 bg-neutral-50 text-stone-800 dark:text-stone-200 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 dark:bg-neutral-700 transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] dark:bg-yBlack-900 '
