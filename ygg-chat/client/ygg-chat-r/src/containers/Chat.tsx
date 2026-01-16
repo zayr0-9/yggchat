@@ -190,10 +190,6 @@ function Chat() {
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
   const showFreeTierModal = useAppSelector(state => state.chat.freeTier.showLimitModal)
   // const freeGenerationsRemaining = useAppSelector(state => state.chat.freeTier.freeGenerationsRemaining)
-  const inputAreaBorderClasses =
-    operationMode === 'plan'
-      ? 'outline-2 outline-blue-200/70 dark:outline-neutral-500/50'
-      : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
 
   // React Query for message fetching - MOVED BELOW after projectConversations is available
   // to enable passing storage_mode from cached conversations
@@ -2840,7 +2836,7 @@ function Chat() {
 
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col pt-20 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
+            className={`flex flex-col pt-25 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
             style={{
               ['overflowAnchor' as any]: 'none',
               // transform: 'translateZ(0)',
@@ -2930,14 +2926,14 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute z-10 bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-3 md:px-4 lg:px-4 2xl:px-4 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+          className={`absolute z-10 bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-0 md:px-4 lg:px-4 2xl:px-4  ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
           style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {/* Controls row (above) */}
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
           <div
-            className={`acrylic-subtle pb-1 ${inputAreaBorderClasses} rounded-3xl shadow-[0_0px_12px_-3px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)] dark:bg-yBlack-900`}
+            className={`slate-input-wrapper bg-neutral-100/40 dark:bg-neutral-900/40 backdrop-blur-xl border border-white/10 dark:border-white/[0.08] rounded-3xl px-3 py-2 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] transition-[border-color] duration-300 focus-within:border-white/20 dark:focus-within:border-white/15`}
           >
             {toolCallPermissionRequest && (
               <ToolPermissionDialog
@@ -3000,19 +2996,22 @@ function Chat() {
                 )}
               </div>
             )}
-            <InputTextArea
-              value={localInput}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyPress}
-              onBlur={() => dispatch(chatSliceActions.inputChanged({ content: localInput }))}
-              placeholder='Type your message...'
-              state='default'
-              width='w-full'
-              minRows={1}
-              autoFocus={true}
-              showCharCount={false}
-              slashCommands={ccMode && ccModeAvailable ? ccSlashCommands : undefined}
-            />
+            {/* Textarea with shortcut hint */}
+            <div className=''>
+              <InputTextArea
+                value={localInput}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyPress}
+                onBlur={() => dispatch(chatSliceActions.inputChanged({ content: localInput }))}
+                placeholder='Type your message...'
+                state='default'
+                width='w-full'
+                minRows={1}
+                autoFocus={true}
+                showCharCount={false}
+                slashCommands={ccMode && ccModeAvailable ? ccSlashCommands : undefined}
+              />
+            </div>
             {/* Selected file chips moved from InputTextArea */}
             {selectedFilesForChat && selectedFilesForChat.length > 0 && (
               <div className='m-2 flex flex-wrap gap-2'>
@@ -3073,10 +3072,11 @@ function Chat() {
                 })}
               </div>
             )}
+
             {/* Token Usage Progress Bar - Stacked */}
-            <div className='ml-4 mr-6 my-0 group relative cursor-pointer'>
+            <div className='mx-1 mb-0.5 group relative cursor-pointer'>
               <div className='flex items-center gap-2'>
-                <div className='flex-1 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden relative'>
+                <div className='flex-1 h-1 bg-neutral-300/50 dark:bg-neutral-700/50 rounded-full overflow-hidden relative'>
                   {/* Render larger bar first (bottom), smaller bar second (top) */}
                   {inputProgress >= outputProgress ? (
                     <>
@@ -3148,233 +3148,233 @@ function Chat() {
                 </div>
               </div>
             </div>
-            {/* Extension menu */}
-            <div className='bg-transparent rounded-b-4xl dark:bg-transparent flex flex-col items-end pt-3 md:pt-0'>
-              <div className='flex justify-between w-full mb-0'>
-                <div className='flex items-center justify-start gap-2 xl:gap-3 flex-wrap flex-1'>
-                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && extensions.length > 0 && (
-                    <div className='flex items-center gap-2 transition-transform duration-300'>
-                      <Select
-                        value={selectedExtensionId || ''}
-                        onChange={val => {
-                          dispatch(selectExtension(val || null))
-                          // Immediately request context for the chosen extension
-                          requestContext(val || null)
-                        }}
-                        blur='low'
-                        options={
-                          extensions.length > 0
-                            ? extensions.map(ext => ({
-                                value: ext.id,
-                                label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
-                              }))
-                            : [{ value: '', label: 'No extensions connected' }]
-                        }
-                        placeholder='Select extension'
-                        disabled={extensions.length === 0}
-                        className=' min-w-[70px] max-w-[120px] lg:max-w-[200px] ml-2 text-xs sm:text-sm text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
-                        size='small'
-                      />
-                      {/* <div
+            {/* Controls row */}
+            <div className='flex items-center justify-between gap-2 flex-wrap'>
+              {/* Left side controls */}
+              <div className='flex items-center gap-1 flex-wrap'>
+                {import.meta.env.VITE_ENVIRONMENT === 'electron' && extensions.length > 0 && (
+                  <div className='flex items-center gap-2 transition-transform duration-300'>
+                    <Select
+                      value={selectedExtensionId || ''}
+                      onChange={val => {
+                        dispatch(selectExtension(val || null))
+                        // Immediately request context for the chosen extension
+                        requestContext(val || null)
+                      }}
+                      blur='low'
+                      options={
+                        extensions.length > 0
+                          ? extensions.map(ext => ({
+                              value: ext.id,
+                              label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
+                            }))
+                          : [{ value: '', label: 'No extensions connected' }]
+                      }
+                      placeholder='Select extension'
+                      disabled={extensions.length === 0}
+                      className=' min-w-[70px] max-w-[120px] lg:max-w-[200px] ml-2 text-xs sm:text-sm text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
+                      size='small'
+                    />
+                    {/* <div
                         className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
                         title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
                       >
                         {workspace?.name && ` ${'🟢 ' + workspace.name}`}
                       </div> */}
-                    </div>
-                  )}
-                  <Button
-                    variant='outline2'
-                    className='rounded-full'
-                    size='medium'
-                    onClick={() => {
-                      setSpinSettings(true)
-                      setSettingsOpen(true)
-                    }}
-                    title='Chat Settings'
-                  >
-                    <i
-                      className={`bx bx-cog ml-0.5 text-[22px] sm:text-[22px] md:text-[22px] lg:text-[22px] 2xl:text-[22px] 3xl:text-[22px] 4xl:text-[22px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
-                      aria-hidden='true'
-                      onAnimationEnd={() => setSpinSettings(false)}
-                    ></i>
-                  </Button>
-                  {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
-                  {/* Provider selector - visibility controlled by user settings */}
-                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && providerSettings.showProviderSelector && (
-                    <Select
-                      value={providers.currentProvider || ''}
-                      onChange={handleProviderSelect}
-                      options={providers.providers.map(p => p.name)}
-                      placeholder='Select a provider...'
-                      disabled={providers.providers.length === 0}
-                      className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 lg:max-w-32 transition-transform duration-60 active:scale-97'
-                      searchBarVisible={true}
-                    />
-                  )}
-                  {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
-                  <ModelSelectControl
-                    provider={providers.currentProvider}
-                    selectedModelName={selectedModel?.name || ''}
-                    onChange={handleModelSelect}
-                    placeholder='Select a model...'
-                    blur='low'
-                    className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-43 transition-transform duration-60 active:scale-99 rounded-4xl'
-                    showFilters={true}
-                    footerContent={modelSelectFooter}
+                  </div>
+                )}
+                <button
+                  className='p-2 rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-white/10 dark:hover:bg-white/5 transition-all duration-200'
+                  onClick={() => {
+                    setSpinSettings(true)
+                    setSettingsOpen(true)
+                  }}
+                  title='Chat Settings'
+                >
+                  <i
+                    className={`bx bx-cog text-[18px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
+                    aria-hidden='true'
+                    onAnimationEnd={() => setSpinSettings(false)}
+                  ></i>
+                </button>
+                {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
+                {/* Provider selector - visibility controlled by user settings */}
+                {import.meta.env.VITE_ENVIRONMENT === 'electron' && providerSettings.showProviderSelector && (
+                  <Select
+                    value={providers.currentProvider || ''}
+                    onChange={handleProviderSelect}
+                    options={providers.providers.map(p => p.name)}
+                    placeholder='Select a provider...'
+                    disabled={providers.providers.length === 0}
+                    className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 lg:max-w-32 transition-transform duration-60 active:scale-97'
+                    searchBarVisible={true}
                   />
-                  {(isImageGenerationModel ||
-                    think ||
-                    (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl)) && (
-                    <ActionPopover
-                      isActive={
-                        toolAutoApprove ||
-                        operationMode === 'plan' ||
-                        ccMode ||
-                        !!imageConfig.aspectRatio ||
-                        !!imageConfig.imageSize ||
-                        (think && reasoningConfig.effort !== 'medium')
-                      }
-                      footer={
-                        <div className='flex flex-col gap-2'>
-                          {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
-                            <>
-                              <span className='text-black dark:text-neutral-200 text-[16px]'>Work directory:</span>
-                              <div className='flex gap-2'>
-                                <input
-                                  type='text'
-                                  value={ccCwd}
-                                  onChange={e => setCcCwd(e.target.value)}
-                                  placeholder='Working directory (optional)'
-                                  className='flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                                  title='Specify the working directory for Claude Code agent'
-                                />
-                                <button
-                                  type='button'
-                                  onClick={async () => {
-                                    const result = await window.electronAPI?.dialog?.selectFolder()
-                                    if (result?.success && result.path) {
-                                      setCcCwd(result.path)
-                                    }
-                                  }}
-                                  className='px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                                  title='Select Folder to let the AI work in'
+                )}
+                {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
+                <ModelSelectControl
+                  provider={providers.currentProvider}
+                  selectedModelName={selectedModel?.name || ''}
+                  onChange={handleModelSelect}
+                  placeholder='Select a model...'
+                  blur='low'
+                  className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-43 transition-transform duration-60 active:scale-99 rounded-4xl'
+                  showFilters={true}
+                  footerContent={modelSelectFooter}
+                />
+                {/* Vertical divider */}
+                <div className='hidden sm:block w-px h-4 bg-white/10 dark:bg-white/[0.08] mx-2' />
+                {(isImageGenerationModel ||
+                  think ||
+                  (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl)) && (
+                  <ActionPopover
+                    isActive={
+                      toolAutoApprove ||
+                      operationMode === 'plan' ||
+                      ccMode ||
+                      !!imageConfig.aspectRatio ||
+                      !!imageConfig.imageSize ||
+                      (think && reasoningConfig.effort !== 'medium')
+                    }
+                    footer={
+                      <div className='flex flex-col gap-2'>
+                        {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                          <>
+                            <span className='text-black dark:text-neutral-200 text-[16px]'>Work directory:</span>
+                            <div className='flex gap-2'>
+                              <input
+                                type='text'
+                                value={ccCwd}
+                                onChange={e => setCcCwd(e.target.value)}
+                                placeholder='Working directory (optional)'
+                                className='flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                title='Specify the working directory for Claude Code agent'
+                              />
+                              <button
+                                type='button'
+                                onClick={async () => {
+                                  const result = await window.electronAPI?.dialog?.selectFolder()
+                                  if (result?.success && result.path) {
+                                    setCcCwd(result.path)
+                                  }
+                                }}
+                                className='px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                title='Select Folder to let the AI work in'
+                              >
+                                <svg
+                                  xmlns='http://www.w3.org/2000/svg'
+                                  className='h-4 w-4'
+                                  fill='none'
+                                  viewBox='0 0 24 24'
+                                  stroke='currentColor'
                                 >
-                                  <svg
-                                    xmlns='http://www.w3.org/2000/svg'
-                                    className='h-4 w-4'
-                                    fill='none'
-                                    viewBox='0 0 24 24'
-                                    stroke='currentColor'
-                                  >
-                                    <path
-                                      strokeLinecap='round'
-                                      strokeLinejoin='round'
-                                      strokeWidth={2}
-                                      d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
-                                    />
-                                  </svg>
-                                </button>
-                              </div>
-                            </>
-                          )}
+                                  <path
+                                    strokeLinecap='round'
+                                    strokeLinejoin='round'
+                                    strokeWidth={2}
+                                    d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          </>
+                        )}
 
-                          {/* Image Generation Options - shown only for image generation models */}
-                          {isImageGenerationModel && (
-                            <>
-                              <h1 className='text-black dark:text-neutral-200 text-[16px]'>Image Options</h1>
-                              <div className='flex flex-col gap-1'>
-                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Aspect Ratio</label>
-                                <Select
-                                  value={imageConfig.aspectRatio || ''}
-                                  options={[
-                                    { value: '', label: 'Default' },
-                                    { value: '1:1', label: '1:1 (Square)' },
-                                    { value: '16:9', label: '16:9 (Landscape)' },
-                                    { value: '9:16', label: '9:16 (Portrait)' },
-                                    { value: '4:3', label: '4:3' },
-                                    { value: '3:4', label: '3:4' },
-                                    { value: '3:2', label: '3:2' },
-                                    { value: '2:3', label: '2:3' },
-                                    { value: '4:5', label: '4:5' },
-                                    { value: '5:4', label: '5:4' },
-                                    { value: '21:9', label: '21:9 (Ultrawide)' },
-                                  ]}
-                                  onChange={value =>
-                                    setImageConfig(prev => ({
-                                      ...prev,
-                                      aspectRatio: (value as ImageConfig['aspectRatio']) || undefined,
-                                    }))
-                                  }
-                                  placeholder='Select aspect ratio'
-                                  size='small'
-                                />
-                              </div>
-                              <div className='flex flex-col gap-1'>
-                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Image Size</label>
-                                <Select
-                                  value={imageConfig.imageSize || ''}
-                                  options={[
-                                    { value: '', label: 'Default' },
-                                    { value: '1K', label: '1K' },
-                                    { value: '2K', label: '2K' },
-                                    { value: '4K', label: '4K' },
-                                  ]}
-                                  onChange={value =>
-                                    setImageConfig(prev => ({
-                                      ...prev,
-                                      imageSize: (value as ImageConfig['imageSize']) || undefined,
-                                    }))
-                                  }
-                                  placeholder='Select image size'
-                                  size='small'
-                                />
-                              </div>
-                            </>
-                          )}
-                          {/* Reasoning Effort Options - shown when thinking is enabled */}
-                          {selectedModel?.thinking && (
-                            <>
-                              <h1 className='text-black dark:text-neutral-200 text-[16px]'>Reasoning Options</h1>
-                              <div className='flex flex-col gap-1'>
-                                <label className='text-xs text-neutral-500 dark:text-neutral-400'>Effort Level</label>
-                                <Select
-                                  value={reasoningConfig.effort}
-                                  options={[
-                                    { value: 'low', label: 'Low' },
-                                    { value: 'medium', label: 'Medium (Default)' },
-                                    { value: 'high', label: 'High' },
-                                    { value: 'xhigh', label: 'X-High' },
-                                  ]}
-                                  onChange={value =>
-                                    setReasoningConfig(prev => ({
-                                      ...prev,
-                                      effort: value as ReasoningConfig['effort'],
-                                    }))
-                                  }
-                                  placeholder='Select effort level'
-                                  size='small'
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      }
-                    >
-                      {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
-                        <>
-                          <Button
-                            variant='outline2'
-                            className='rounded-full'
-                            size='medium'
-                            onClick={() => setJobsModalOpen(true)}
-                            title={isElectronEnv ? 'View tool jobs' : 'Tool jobs are available in the desktop app'}
-                            disabled={!isElectronEnv}
-                          >
-                            <i className='bx bx-task pb-0.5' aria-hidden='true'></i>
-                            Jobs
-                          </Button>
-                          {/* <Button
+                        {/* Image Generation Options - shown only for image generation models */}
+                        {isImageGenerationModel && (
+                          <>
+                            <h1 className='text-black dark:text-neutral-200 text-[16px]'>Image Options</h1>
+                            <div className='flex flex-col gap-1'>
+                              <label className='text-xs text-neutral-500 dark:text-neutral-400'>Aspect Ratio</label>
+                              <Select
+                                value={imageConfig.aspectRatio || ''}
+                                options={[
+                                  { value: '', label: 'Default' },
+                                  { value: '1:1', label: '1:1 (Square)' },
+                                  { value: '16:9', label: '16:9 (Landscape)' },
+                                  { value: '9:16', label: '9:16 (Portrait)' },
+                                  { value: '4:3', label: '4:3' },
+                                  { value: '3:4', label: '3:4' },
+                                  { value: '3:2', label: '3:2' },
+                                  { value: '2:3', label: '2:3' },
+                                  { value: '4:5', label: '4:5' },
+                                  { value: '5:4', label: '5:4' },
+                                  { value: '21:9', label: '21:9 (Ultrawide)' },
+                                ]}
+                                onChange={value =>
+                                  setImageConfig(prev => ({
+                                    ...prev,
+                                    aspectRatio: (value as ImageConfig['aspectRatio']) || undefined,
+                                  }))
+                                }
+                                placeholder='Select aspect ratio'
+                                size='small'
+                              />
+                            </div>
+                            <div className='flex flex-col gap-1'>
+                              <label className='text-xs text-neutral-500 dark:text-neutral-400'>Image Size</label>
+                              <Select
+                                value={imageConfig.imageSize || ''}
+                                options={[
+                                  { value: '', label: 'Default' },
+                                  { value: '1K', label: '1K' },
+                                  { value: '2K', label: '2K' },
+                                  { value: '4K', label: '4K' },
+                                ]}
+                                onChange={value =>
+                                  setImageConfig(prev => ({
+                                    ...prev,
+                                    imageSize: (value as ImageConfig['imageSize']) || undefined,
+                                  }))
+                                }
+                                placeholder='Select image size'
+                                size='small'
+                              />
+                            </div>
+                          </>
+                        )}
+                        {/* Reasoning Effort Options - shown when thinking is enabled */}
+                        {selectedModel?.thinking && (
+                          <>
+                            <h1 className='text-black dark:text-neutral-200 text-[16px]'>Reasoning Options</h1>
+                            <div className='flex flex-col gap-1'>
+                              <label className='text-xs text-neutral-500 dark:text-neutral-400'>Effort Level</label>
+                              <Select
+                                value={reasoningConfig.effort}
+                                options={[
+                                  { value: 'low', label: 'Low' },
+                                  { value: 'medium', label: 'Medium (Default)' },
+                                  { value: 'high', label: 'High' },
+                                  { value: 'xhigh', label: 'X-High' },
+                                ]}
+                                onChange={value =>
+                                  setReasoningConfig(prev => ({
+                                    ...prev,
+                                    effort: value as ReasoningConfig['effort'],
+                                  }))
+                                }
+                                placeholder='Select effort level'
+                                size='small'
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    }
+                  >
+                    {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
+                      <>
+                        <Button
+                          variant='outline2'
+                          className='rounded-full'
+                          size='medium'
+                          onClick={() => setJobsModalOpen(true)}
+                          title={isElectronEnv ? 'View tool jobs' : 'Tool jobs are available in the desktop app'}
+                          disabled={!isElectronEnv}
+                        >
+                          <i className='bx bx-task pb-0.5' aria-hidden='true'></i>
+                          Jobs
+                        </Button>
+                        {/* <Button
                             variant={ccMode ? 'outline2' : 'outline2'}
                             size='medium'
                             onClick={() => setCCMode(!ccMode)}
@@ -3391,274 +3391,292 @@ function Chat() {
                             </div>
                           </Button> */}
 
-                          {/* Allow All / Ask toggle */}
-                          <Button
-                            variant='outline2'
-                            size='medium'
-                            onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
-                            className={
-                              toolAutoApprove
-                                ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
-                                : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
-                            }
-                            title={
-                              toolAutoApprove
-                                ? 'Auto-approving tools (click to disable)'
-                                : 'Asking for permission (click to auto-approve)'
-                            }
-                            aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
-                          >
-                            <i className='bx bx-shield-quarter pr-1 pb-0.5'></i>
-                            {toolAutoApprove ? 'Allow all' : 'Ask'}
-                          </Button>
+                        {/* Allow All / Ask toggle */}
+                        <Button
+                          variant='outline2'
+                          size='medium'
+                          onClick={() => dispatch(chatSliceActions.toolAutoApproveToggled())}
+                          className={
+                            toolAutoApprove
+                              ? 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 dark:hover:bg-white/5'
+                              : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50 dark:hover:bg-white/5'
+                          }
+                          title={
+                            toolAutoApprove
+                              ? 'Auto-approving tools (click to disable)'
+                              : 'Asking for permission (click to auto-approve)'
+                          }
+                          aria-label={toolAutoApprove ? 'Disable auto-approve' : 'Enable auto-approve'}
+                        >
+                          <i className='bx bx-shield-quarter pr-1 pb-0.5'></i>
+                          {toolAutoApprove ? 'Allow all' : 'Ask'}
+                        </Button>
 
-                          {/* Chat / Agent toggle */}
-                          <Button
-                            variant='outline2'
-                            size='medium'
-                            onClick={() => dispatch(chatSliceActions.operationModeToggled())}
-                            className={
-                              operationMode === 'plan'
-                                ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
-                                : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
-                            }
-                            title={
-                              operationMode === 'plan'
-                                ? 'Plan mode enabled (tools will be blocked)'
-                                : 'Execution mode enabled (tools may modify files)'
-                            }
-                            aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
-                          >
-                            <i
-                              className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1 pb-0.5`}
-                            ></i>
-                            {operationMode === 'plan' ? 'Chat' : 'Agent'}
-                          </Button>
-                        </>
-                      )}
-                      {/* Claude Code toggle */}
-                    </ActionPopover>
-                  )}
-                  {/* Thinking toggle - next to popover, disabled when not supported */}
-                  <Button
-                    variant='outline2'
-                    className='rounded-full'
-                    size='large'
-                    onClick={() => setThink(t => !t)}
-                    disabled={!selectedModel?.thinking}
-                    title={selectedModel?.thinking ? 'Enable thinking' : 'Thinking not supported by this model'}
-                  >
-                    {think ? (
-                      <>
-                        <img
-                          src={getAssetPath('img/thinkingonlightmode.svg')}
-                          alt='Thinking active'
-                          className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
-                        />
-                        <img
-                          src={getAssetPath('img/thinkingondarkmode.svg')}
-                          alt='Thinking active'
-                          className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <img
-                          src={getAssetPath('img/thinkingofflightmode.svg')}
-                          alt='Thinking'
-                          className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
-                        />
-                        <img
-                          src={getAssetPath('img/thinkingoffdarkmode.svg')}
-                          alt='Thinking'
-                          className='w-[28px] h-[28px] sm:w-[28px] sm:h-[28px] md:w-[28px] md:h-[28px] lg:w-[24px] lg:h-[24px] 2xl:w-[28px] 2xl:h-[28px] 3xl:w-[28px] 3xl:h-[28px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
-                        />
+                        {/* Chat / Agent toggle */}
+                        <Button
+                          variant='outline2'
+                          size='medium'
+                          onClick={() => dispatch(chatSliceActions.operationModeToggled())}
+                          className={
+                            operationMode === 'plan'
+                              ? 'text-fuchsia-700 dark:text-fuchsia-300 bg-blue-50 dark:bg-blue-900/30 border-fuchsia-200 dark:border-fuchsia-700/60 hover:bg-blue-100 dark:hover:bg-white/5'
+                              : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700/50 hover:bg-orange-100 dark:hover:bg-white/5'
+                          }
+                          title={
+                            operationMode === 'plan'
+                              ? 'Plan mode enabled (tools will be blocked)'
+                              : 'Execution mode enabled (tools may modify files)'
+                          }
+                          aria-label={operationMode === 'plan' ? 'Switch to execution mode' : 'Switch to plan mode'}
+                        >
+                          <i
+                            className={`bx ${operationMode === 'plan' ? 'bx-clipboard' : 'bx-code-block'} mr-1 pb-0.5`}
+                          ></i>
+                          {operationMode === 'plan' ? 'Chat' : 'Agent'}
+                        </Button>
                       </>
                     )}
-                  </Button>
-                  {/* Attachment upload button */}
-                  <input
-                    ref={attachmentInputRef}
-                    type='file'
-                    accept='application/pdf,image/*'
-                    multiple
-                    onChange={handleAttachmentInputChange}
-                    className='hidden'
-                    aria-hidden='true'
-                  />
-                  <Button
-                    variant='outline2'
-                    className='rounded-full'
-                    size='large'
-                    onClick={() => attachmentInputRef.current?.click()}
-                    title='Attach files'
-                  >
-                    <i className='bx bx-paperclip text-[22px]' aria-hidden='true'></i>
-                  </Button>
-                  {/* Speech-to-text microphone button (Whisper-based, offline) */}
-                  {/* {import.meta.env.VITE_ENVIRONMENT === 'electron' && ( */}
-                  {false && (
+                    {/* Claude Code toggle */}
+                  </ActionPopover>
+                )}
+                {/* Thinking toggle - next to popover, disabled when not supported */}
+                <button
+                  className={`p-2 rounded-lg transition-all duration-200 ${
+                    selectedModel?.thinking
+                      ? 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-white/10 dark:hover:bg-white/5'
+                      : 'text-neutral-300 dark:text-neutral-600 cursor-not-allowed'
+                  }`}
+                  onClick={() => setThink(t => !t)}
+                  disabled={!selectedModel?.thinking}
+                  title={selectedModel?.thinking ? 'Enable thinking' : 'Thinking not supported by this model'}
+                >
+                  {think ? (
                     <>
-                      <Button
-                        variant='outline2'
-                        className={`rounded-full relative ${
-                          isListening
-                            ? 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700/50'
-                            : speechLoading
-                              ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700/50'
-                              : ''
-                        }`}
-                        size='large'
-                        onClick={toggleListening}
-                        onMouseEnter={() => {
-                          // Preload model on hover for faster first use
-                          if (!speechModelLoaded && !speechLoading) {
-                            preloadSpeechModel()
-                          }
-                        }}
-                        disabled={speechLoading}
-                        title={
-                          speechError
-                            ? `Speech error: ${speechError}`
-                            : speechLoading
-                              ? `Loading speech model... ${speechLoadProgress.toFixed(0)}%`
-                              : isListening
-                                ? 'Stop listening (processing will begin)'
-                                : speechModelLoaded
-                                  ? 'Start voice input (Whisper)'
-                                  : 'Start voice input (will download ~40MB model)'
-                        }
-                      >
-                        {speechLoading ? (
-                          <div className='relative'>
-                            <i
-                              className='bx bx-loader-alt text-[22px] text-blue-600 dark:text-blue-400 animate-spin'
-                              aria-hidden='true'
-                            ></i>
-                            <span className='absolute -bottom-3 left-1/2 -translate-x-1/2 text-[10px] text-blue-600 dark:text-blue-400'>
-                              {speechLoadProgress.toFixed(0)}%
-                            </span>
-                          </div>
-                        ) : (
-                          <i
-                            className={`bx ${isListening ? 'bx-stop' : 'bx-microphone'} text-[22px] ${
-                              isListening ? 'text-red-600 dark:text-red-400 animate-pulse' : ''
-                            }`}
-                            aria-hidden='true'
-                          ></i>
-                        )}
-                      </Button>
-                      {/* Wake word toggle button - "Hey Jarvis" detection */}
-                      <Button
-                        variant='outline2'
-                        className={`rounded-full relative ${
-                          isWakeWordListening
-                            ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700/50'
-                            : wakeWordLoading
-                              ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700/50'
-                              : ''
-                        }`}
-                        size='large'
-                        onClick={() => {
-                          if (isWakeWordListening) {
-                            stopWakeWord()
-                          } else {
-                            startWakeWord()
-                          }
-                        }}
-                        disabled={wakeWordLoading}
-                        title={
-                          wakeWordError
-                            ? `Wake word error: ${wakeWordError}`
-                            : wakeWordLoading
-                              ? 'Loading wake word engine...'
-                              : isWakeWordListening
-                                ? 'Wake word active - say "Hey Jarvis" to start voice input'
-                                : 'Enable wake word detection ("Hey Jarvis")'
-                        }
-                      >
-                        {wakeWordLoading ? (
-                          <i
-                            className='bx bx-loader-alt text-[22px] text-yellow-600 dark:text-yellow-400 animate-spin'
-                            aria-hidden='true'
-                          ></i>
-                        ) : (
-                          <i
-                            className={`bx bx-bot text-[22px] ${
-                              isWakeWordListening ? 'text-purple-600 dark:text-purple-400 animate-pulse' : ''
-                            }`}
-                            aria-hidden='true'
-                          ></i>
-                        )}
-                        {/* Visual indicator when wake word is detected */}
-                        {wakeWordLastDetected && Date.now() - wakeWordLastDetected.timestamp < 2000 && (
-                          <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping'></span>
-                        )}
-                      </Button>
+                      <img
+                        src={getAssetPath('img/thinkingonlightmode.svg')}
+                        alt='Thinking active'
+                        className='w-[22px] h-[22px] dark:hidden'
+                      />
+                      <img
+                        src={getAssetPath('img/thinkingondarkmode.svg')}
+                        alt='Thinking active'
+                        className='w-[22px] h-[22px] hidden dark:block'
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <img
+                        src={getAssetPath('img/thinkingofflightmode.svg')}
+                        alt='Thinking'
+                        className='w-[22px] h-[22px] dark:hidden'
+                      />
+                      <img
+                        src={getAssetPath('img/thinkingoffdarkmode.svg')}
+                        alt='Thinking'
+                        className='w-[22px] h-[22px] hidden dark:block'
+                      />
                     </>
                   )}
-                </div>
-                <div className='flex items-center justify-end gap-2 pl-2.5'>
-                  {!currentConversationId ? (
-                    'Creating...'
-                  ) : sendingState.streaming ? (
+                </button>
+                {/* Attachment upload button */}
+                <input
+                  ref={attachmentInputRef}
+                  type='file'
+                  accept='application/pdf,image/*'
+                  multiple
+                  onChange={handleAttachmentInputChange}
+                  className='hidden'
+                  aria-hidden='true'
+                />
+                <button
+                  className='p-2 rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-white/10 dark:hover:bg-white/5 transition-all duration-200'
+                  onClick={() => attachmentInputRef.current?.click()}
+                  title='Attach files'
+                >
+                  <svg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+                    <path d='m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.51a2 2 0 0 1-2.83-2.83l8.49-8.48' />
+                  </svg>
+                </button>
+                {/* Speech-to-text microphone button (Whisper-based, offline) */}
+                {/* {import.meta.env.VITE_ENVIRONMENT === 'electron' && ( */}
+                {false && (
+                  <>
                     <Button
                       variant='outline2'
-                      onClick={handleStopGeneration}
+                      className={`rounded-full relative ${
+                        isListening
+                          ? 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700/50'
+                          : speechLoading
+                            ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700/50'
+                            : ''
+                      }`}
                       size='large'
-                      disabled={!streamState.active}
-                      title={streamState.active ? 'Stop generation' : 'Switch to active stream branch to stop'}
-                    >
-                      <i className='bx bx-stop-circle text-[18px]' aria-hidden='true'></i>
-                    </Button>
-                  ) : sendingState.sending ? (
-                    'Sending...'
-                  ) : (
-                    <Button
-                      variant={canSendLocal && currentConversationId ? 'outline2' : 'outline2'}
-                      size='medium'
-                      rounded='lg'
-                      className='mr-2'
-                      disabled={!canSendLocal || !currentConversationId}
-                      title='Send message'
-                      onClick={() => {
-                        if (ccMode && ccModeAvailable && localInput.trim()) {
-                          // Send to Claude Code agent (disabled in web mode)
-                          const parent: MessageId | null =
-                            selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
-
-                          // Use shared helper to find last ex_agent session ID
-                          const lastExAgentSessionId = findLastExAgentSession(selectedPath)
-
-                          dispatch(
-                            sendCCMessage({
-                              conversationId: currentConversationId,
-                              message: localInput.trim(),
-                              cwd: ccCwd || undefined,
-                              permissionMode: 'default',
-                              resume: true,
-                              parentId: parent,
-                              sessionId: lastExAgentSessionId,
-                            })
-                          )
-                            .unwrap()
-                            .then(() => {
-                              setLocalInput('')
-                            })
-                            .catch(error => {
-                              console.error('Failed to send CC message:', error)
-                            })
-                        } else {
-                          // Send normal message
-                          handleSend(multiReplyCount)
+                      onClick={toggleListening}
+                      onMouseEnter={() => {
+                        // Preload model on hover for faster first use
+                        if (!speechModelLoaded && !speechLoading) {
+                          preloadSpeechModel()
                         }
                       }}
+                      disabled={speechLoading}
+                      title={
+                        speechError
+                          ? `Speech error: ${speechError}`
+                          : speechLoading
+                            ? `Loading speech model... ${speechLoadProgress.toFixed(0)}%`
+                            : isListening
+                              ? 'Stop listening (processing will begin)'
+                              : speechModelLoaded
+                                ? 'Start voice input (Whisper)'
+                                : 'Start voice input (will download ~40MB model)'
+                      }
                     >
-                      <i className='bx bx-send text-[24px] p-0 ' aria-hidden='true'></i>
+                      {speechLoading ? (
+                        <div className='relative'>
+                          <i
+                            className='bx bx-loader-alt text-[22px] text-blue-600 dark:text-blue-400 animate-spin'
+                            aria-hidden='true'
+                          ></i>
+                          <span className='absolute -bottom-3 left-1/2 -translate-x-1/2 text-[10px] text-blue-600 dark:text-blue-400'>
+                            {speechLoadProgress.toFixed(0)}%
+                          </span>
+                        </div>
+                      ) : (
+                        <i
+                          className={`bx ${isListening ? 'bx-stop' : 'bx-microphone'} text-[22px] ${
+                            isListening ? 'text-red-600 dark:text-red-400 animate-pulse' : ''
+                          }`}
+                          aria-hidden='true'
+                        ></i>
+                      )}
                     </Button>
-                  )}
-                </div>
-                {/* <Button
+                    {/* Wake word toggle button - "Hey Jarvis" detection */}
+                    <Button
+                      variant='outline2'
+                      className={`rounded-full relative ${
+                        isWakeWordListening
+                          ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700/50'
+                          : wakeWordLoading
+                            ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700/50'
+                            : ''
+                      }`}
+                      size='large'
+                      onClick={() => {
+                        if (isWakeWordListening) {
+                          stopWakeWord()
+                        } else {
+                          startWakeWord()
+                        }
+                      }}
+                      disabled={wakeWordLoading}
+                      title={
+                        wakeWordError
+                          ? `Wake word error: ${wakeWordError}`
+                          : wakeWordLoading
+                            ? 'Loading wake word engine...'
+                            : isWakeWordListening
+                              ? 'Wake word active - say "Hey Jarvis" to start voice input'
+                              : 'Enable wake word detection ("Hey Jarvis")'
+                      }
+                    >
+                      {wakeWordLoading ? (
+                        <i
+                          className='bx bx-loader-alt text-[22px] text-yellow-600 dark:text-yellow-400 animate-spin'
+                          aria-hidden='true'
+                        ></i>
+                      ) : (
+                        <i
+                          className={`bx bx-bot text-[22px] ${
+                            isWakeWordListening ? 'text-purple-600 dark:text-purple-400 animate-pulse' : ''
+                          }`}
+                          aria-hidden='true'
+                        ></i>
+                      )}
+                      {/* Visual indicator when wake word is detected */}
+                      {wakeWordLastDetected && Date.now() - wakeWordLastDetected.timestamp < 2000 && (
+                        <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping'></span>
+                      )}
+                    </Button>
+                  </>
+                )}
+              </div>
+              {/* Right side controls */}
+              <div className='flex items-center gap-1'>
+                {!currentConversationId ? (
+                  <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Creating...</span>
+                ) : sendingState.streaming ? (
+                  <button
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                      streamState.active
+                        ? 'bg-red-500 dark:bg-red-500 text-white hover:bg-red-600 hover:scale-105 active:scale-95 cursor-pointer'
+                        : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
+                    }`}
+                    onClick={handleStopGeneration}
+                    disabled={!streamState.active}
+                    title={streamState.active ? 'Stop generation' : 'Switch to active stream branch to stop'}
+                  >
+                    <svg width='18' height='18' viewBox='0 0 24 24' fill='currentColor'>
+                      <rect x='6' y='6' width='12' height='12' rx='2' />
+                    </svg>
+                  </button>
+                ) : sendingState.sending ? (
+                  <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Sending...</span>
+                ) : (
+                  <button
+                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                      canSendLocal && currentConversationId
+                        ? 'bg-white dark:bg-white text-black hover:bg-blue-500 hover:text-white hover:scale-105 active:scale-95 cursor-pointer'
+                        : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
+                    }`}
+                    disabled={!canSendLocal || !currentConversationId}
+                    title='Send message'
+                    onClick={() => {
+                      if (ccMode && ccModeAvailable && localInput.trim()) {
+                        // Send to Claude Code agent (disabled in web mode)
+                        const parent: MessageId | null =
+                          selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
+
+                        // Use shared helper to find last ex_agent session ID
+                        const lastExAgentSessionId = findLastExAgentSession(selectedPath)
+
+                        dispatch(
+                          sendCCMessage({
+                            conversationId: currentConversationId,
+                            message: localInput.trim(),
+                            cwd: ccCwd || undefined,
+                            permissionMode: 'default',
+                            resume: true,
+                            parentId: parent,
+                            sessionId: lastExAgentSessionId,
+                          })
+                        )
+                          .unwrap()
+                          .then(() => {
+                            setLocalInput('')
+                          })
+                          .catch(error => {
+                            console.error('Failed to send CC message:', error)
+                          })
+                      } else {
+                        // Send normal message
+                        handleSend(multiReplyCount)
+                      }
+                    }}
+                  >
+                    <svg
+                      className='w-[18px] h-[18px] -rotate-45 relative left-[1px]'
+                      fill='none'
+                      viewBox='0 0 24 24'
+                      stroke='currentColor'
+                      strokeWidth={3}
+                    >
+                      <path d='m5 12 14 0' />
+                      <path d='m12 5 7 7-7 7' />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {/* <Button
                   variant={canSendLocal && currentConversationId ? 'primary' : 'secondary'}
                   disabled={!canSendLocal || !currentConversationId}
                   onClick={() => handleSend(multiReplyCount)}
@@ -3671,7 +3689,6 @@ function Chat() {
                         ? 'Sending...'
                         : 'Send'}
                 </Button> */}
-              </div>
             </div>
           </div>
         </div>

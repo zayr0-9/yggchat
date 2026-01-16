@@ -1783,9 +1783,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const isNodeSelected =
         ((typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string') &&
         selectedNodes.includes(nodeIdParsed)
-      const isOnCurrentPath =
-        ((typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string') &&
-        currentPathSet.has(nodeIdParsed)
+      // const isOnCurrentPath =
+      //   ((typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string') &&
+      //   currentPathSet.has(nodeIdParsed)
       const isVisible =
         ((typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string') &&
         visibleMessageId === nodeIdParsed

@@ -565,3 +565,61 @@ html {
 .tool-chevron.open {
   transform: rotate(90deg);
 }
+
+/* Slate input wrapper glassmorphism effect */
+.slate-input-wrapper {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* Slate icon control button base style */
+.slate-icon-ctrl {
+  background: transparent;
+  border: none;
+  color: #737373;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.slate-icon-ctrl:hover {
+  color: #e5e5e5;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dark .slate-icon-ctrl {
+  color: #525252;
+}
+
+.dark .slate-icon-ctrl:hover {
+  color: #e5e5e5;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Slate select dropdown style */
+.slate-select {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  color: #737373;
+  font-size: 12px;
+}
+
+.slate-select:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #e5e5e5;
+}
+
+.slate-select-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: #3b82f6;
+  opacity: 0.8;
+}

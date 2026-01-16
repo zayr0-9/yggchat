@@ -607,7 +607,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
 
   const baseStyles = outline
     ? `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-3 lg:py-2 2xl:px-4 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 overflow-hidden bg-transparent text-[16px] sm:text-[16px] md:text-[16px] lg:text-[16px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px] ${variantStyles[variant]}`
-    : `${width} px-3 py-2 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-3 lg:py-2 2xl:px-4 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 rounded-xl transition-all duration-200 overflow-hidden bg-transparent text-[16px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[18px]`
+    : `${width} px-3 py-1 sm:px-4 sm:py-1 md:px-4 md:py-1 lg:px-3 lg:py-1 2xl:px-4 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 rounded-xl transition-all duration-200 overflow-hidden bg-transparent text-[16px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[18px]`
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
 
   const stateStyles = outline
@@ -707,7 +707,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
           onPaste={handlePaste}
           disabled={state === 'disabled'}
           // maxLength={maxLength}
-          className={`${stateStyles[state]} mt-2 thin-scrollbar resize-none ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${className}`}
+          className={`${stateStyles[state]} thin-scrollbar resize-none ${dragOver ? 'border-blue-500 ring-2 ring-blue-500' : ''} ${className}`}
           aria-invalid={state === 'error'}
           aria-describedby={state === 'error' && errorMessage ? errorId : undefined}
           autoFocus={autoFocus}
@@ -722,12 +722,15 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
         )}
         {/* Help text indicator */}
         {showHelp && value.length <= 0 && (
-          <div className='absolute top-4 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[10px] 3xl:text-[12px] 4xl:text-[14px] text-stone-800 dark:text-stone-200'>
-            {/* {value.length}/{maxLength} */}
-            Shift+Enter
-            <br />
-            for new line
-          </div>
+          // <div className='absolute top-4 right-2 text-[10px] sm:text-[8px] md:text-[8px] lg:text-[10px] 2xl:text-[10px] 3xl:text-[12px] 4xl:text-[14px] text-stone-800 dark:text-stone-200'>
+          //   {/* {value.length}/{maxLength} */}
+          //   Shift+Enter
+          //   <br />
+          //   for new line
+          // </div>
+          <span className='hidden sm:block font-mono text-[10px] text-neutral-400/60 dark:text-neutral-600 whitespace-nowrap pt-3 select-none'>
+            SHIFT+ENTER <span className='opacity-50'>NEW LINE</span>
+          </span>
         )}
       </div>
 
