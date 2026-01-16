@@ -2156,7 +2156,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
-
       {error && (
         <div className='absolute inset-0 z-20 flex items-center justify-center bg-slate-50 text-stone-800 dark:text-stone-200'>
           <div className='text-white text-center max-w-md'>
@@ -2326,7 +2325,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           Zoom: {Math.round(zoom * 100)}%
         </div> */}
 
-        <div className='bg-neutral-50 text-stone-800 dark:text-stone-200 px-3 py-1 rounded-lg text-sm border-2 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)]  dark:bg-yBlack-900 opacity-0 group-hover:opacity-100 transition-opacity duration-200'>
+        {/* <div className='bg-neutral-50 text-stone-800 dark:text-stone-200 px-3 py-1 rounded-lg text-sm border-2 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)]  dark:bg-yBlack-900 opacity-0 group-hover:opacity-100 transition-opacity duration-200'>
           <div className='flex items-center gap-2'>
             <div className='w-3 h-3 bg-neutral-50 border-2 dark:border-yPurple-400 rounded dark:bg-neutral-900 border-stone-400'></div>
             <span>User messages</span>
@@ -2335,11 +2334,11 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             <div className='w-3 h-3 bg-slate-50 dark:bg-yBlack-900 dark:border-yBrown-500 rounded border-2 border-slate-400'></div>
             <span>Assistant messages</span>
           </div>
-          {/* <div className='flex items-center gap-2'>
+          <div className='flex items-center gap-2'>
             <div className='w-3 h-3 bg-slate-50 dark:bg-yBlack-900 dark:border-orange-600 rounded border-2 border-orange-300'></div>
             <span>Ex-agent messages</span>
-          </div> */}
-        </div>
+          </div>
+        </div> */}
       </div>
       <svg
         ref={svgRef}
@@ -2469,7 +2468,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           </ul>
         </div>
       )}
-
       {selectedNode &&
         (() => {
           const nodeIdParsed = parseId(selectedNode.id)
@@ -2641,7 +2639,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             </div>
           )
         })()}
-
       {/* Note dialog */}
       {showNoteDialog && noteDialogPos && noteMessageId !== null && (
         <div
@@ -2685,9 +2682,15 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           </div>
         </div>
       )}
-
       {/* LowBar for conversation research notes with tabbed interface */}
-      <LowBar conversationId={conversationId} enableTabs={true} notes={researchNotes} isLoadingNotes={isLoadingNotes} />
+      {__IS_ELECTRON__ && (
+        <LowBar
+          conversationId={conversationId}
+          enableTabs={true}
+          notes={researchNotes}
+          isLoadingNotes={isLoadingNotes}
+        />
+      )}{' '}
     </div>
   )
 }

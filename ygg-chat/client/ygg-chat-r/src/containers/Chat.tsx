@@ -818,7 +818,7 @@ function Chat() {
       return isMobileDevice ? false : true
     }
   })
-  // Font size offset for messages (synced from SettingsPane via custom event)
+  // Font size offset for messages (synced from SettingsPane via custom event + localStorage)
   const [fontSizeOffset, setFontSizeOffset] = useState<number>(() => {
     try {
       const stored = localStorage.getItem('chat:fontSizeOffset')
@@ -828,12 +828,24 @@ function Chat() {
     }
   })
   useEffect(() => {
-    const handler = (e: Event) => {
+    // Listen for custom event from SettingsPane (same window)
+    const handleCustomEvent = (e: Event) => {
       const detail = (e as CustomEvent<number>).detail
       if (typeof detail === 'number') setFontSizeOffset(detail)
     }
-    window.addEventListener('fontSizeOffsetChange', handler)
-    return () => window.removeEventListener('fontSizeOffsetChange', handler)
+    // Listen for storage event (cross-tab/window sync)
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'chat:fontSizeOffset' && e.newValue !== null) {
+        const parsed = parseInt(e.newValue, 10)
+        if (!isNaN(parsed)) setFontSizeOffset(parsed)
+      }
+    }
+    window.addEventListener('fontSizeOffsetChange', handleCustomEvent)
+    window.addEventListener('storage', handleStorageEvent)
+    return () => {
+      window.removeEventListener('fontSizeOffsetChange', handleCustomEvent)
+      window.removeEventListener('storage', handleStorageEvent)
+    }
   }, [])
   // Detect if user is on mobile device (below md breakpoint: 768px)
   const isMobile = useIsMobile()
