@@ -159,7 +159,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           size='circle'
           rounded='full'
           onClick={toggleCollapse}
-          className={`${isCollapsed ? 'mx-auto' : ' mr-2'} transition-transform duration-200 hover:scale-103`}
+          className={`${isCollapsed ? 'mx-auto' : ' mr-2'} transition-transform duration-200 hover:scale-103 px-3 py-3`}
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           <i className={`bx ${isCollapsed ? 'bx-chevron-right' : 'bx-chevron-left'} text-2xl `} aria-hidden='true'></i>

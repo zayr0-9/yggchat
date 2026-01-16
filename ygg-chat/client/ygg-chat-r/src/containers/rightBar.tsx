@@ -61,7 +61,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
   useEffect(() => {
     try {
       localStorage.setItem('rightbar:collapsed', String(isCollapsed))
-    } catch {}
+    } catch { }
   }, [isCollapsed])
 
   // Debounced update function
@@ -130,10 +130,10 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
                     researchNotesCache.map(item =>
                       item.id === conversationId
                         ? {
-                            ...item,
-                            research_note: note,
-                            updated_at: new Date().toISOString(),
-                          }
+                          ...item,
+                          research_note: note,
+                          updated_at: new Date().toISOString(),
+                        }
                         : item
                     )
                   )
@@ -191,20 +191,20 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
 
   return (
     <aside
-      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} shadow-md rounded-l-xl border-l border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-16' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
+      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} shadow-md border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-12' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
       aria-label='Research Notes'
     >
       {/* Toggle Button */}
       <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
         <Button
-          variant='acrylic'
+          variant='outline2'
           size='circle'
           rounded='full'
           onClick={toggleCollapse}
-          className={`${isCollapsed ? 'mx-auto' : 'ml-2'} transition-transform duration-200 hover:scale-103`}
+          className={`${isCollapsed ? 'mx-auto' : 'ml-2'} transition-transform duration-200 hover:scale-103 px-2 py-2`}
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          <i className={`bx ${isCollapsed ? 'bx-chevron-left' : 'bx-chevron-right'} text-2xl`} aria-hidden='true'></i>
+          <i className={`bx ${isCollapsed ? 'bx-chevron-left' : 'bx-chevron-right'} text-xl`} aria-hidden='true'></i>
         </Button>
         {!isCollapsed && (
           <h2 className='text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] pr-2 font-semibold text-neutral-700 dark:text-neutral-200 truncate'>
@@ -218,21 +218,19 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
         <div className='flex gap-2 px-3 pb-2'>
           <button
             onClick={() => setActiveTab('note')}
-            className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
-              activeTab === 'note'
-                ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)]'
-                : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
-            }`}
+            className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === 'note'
+              ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)]'
+              : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+              }`}
           >
             Note
           </button>
           <button
             onClick={() => setActiveTab('list')}
-            className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
-              activeTab === 'list'
-                ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)]'
-                : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
-            }`}
+            className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === 'list'
+              ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)]'
+              : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+              }`}
           >
             List
           </button>

@@ -471,7 +471,7 @@ const ConversationPage: React.FC = () => {
                 rounded='full'
                 size='circle'
                 onClick={() => navigate('/homepage')}
-                className='group border-2 hover:bg-pureWhite-100 dark:hover:bg-neutral-900 dark:border-neutral-800 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.5)] dark:shadow-[0_1px_22px_1px_rgba(0,0,0,0.45)]'
+                className='px-3 py-3 group border-2 hover:bg-pureWhite-100 dark:hover:bg-neutral-900 dark:border-neutral-800 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.5)] dark:shadow-[0_1px_22px_1px_rgba(0,0,0,0.45)]'
               >
                 <i
                   className='bx bx-home text-[24px] sm:text-[14px] md:text-[25px] lg:text-[30px] 2xl:text-[38px] 3xl:text-[28px] 4xl:text-[32px] pb-0.75 transition-transform group-hover:scale-101 duration-100 group-active:scale-93 pointer-events-none'
@@ -580,7 +580,7 @@ const ConversationPage: React.FC = () => {
                 className='shrink-0 ml-1 group'
               >
                 <i
-                  className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none`}
+                  className={` px-3 py-3 bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none`}
                   aria-hidden='true'
                 ></i>
               </Button>
@@ -591,7 +591,7 @@ const ConversationPage: React.FC = () => {
                 rounded='full'
                 onClick={handleRefreshConversations}
                 disabled={isRefetching}
-                className='group ml-1 dark:outline-2 rounded-full transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-300/20'
+                className='px-3 py-3 group ml-1 dark:outline-2 rounded-full transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] dark:outline-neutral-300/20'
                 title='Refresh conversations from server'
               >
                 <i
@@ -664,7 +664,7 @@ const ConversationPage: React.FC = () => {
                           variant='outline2'
                           size='circle'
                           rounded='full'
-                          className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
+                          className='px-3 py-3 acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
                           onClick={e => handleEditClick(e, conv)}
                         >
                           <i className='bx bx-dots-horizontal-rounded text-lg' aria-hidden='true'></i>
@@ -675,7 +675,7 @@ const ConversationPage: React.FC = () => {
                           variant='outline2'
                           size='circle'
                           rounded='full'
-                          className='acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
+                          className='px-3 py-3 acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
                           onClick={
                             (e => {
                               ;(e as unknown as React.MouseEvent).stopPropagation()

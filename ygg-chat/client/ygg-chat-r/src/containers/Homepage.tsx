@@ -219,8 +219,6 @@ const Homepage: React.FC = () => {
     queryClient.invalidateQueries({ queryKey: ['research-notes'] })
   }
 
-
-
   return (
     <div className=' h-full flex'>
       {/* Dark Overlay */}
@@ -410,7 +408,7 @@ const Homepage: React.FC = () => {
                 size='circle'
                 rounded='full'
                 onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className='shrink-0 group rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'
+                className='px-3 py-3 shrink-0 group rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] '
               >
                 <i
                   className={`bx ${sortOrder === 'asc' ? 'bx-sort-up' : 'bx-sort-down'} text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none`}
@@ -423,7 +421,7 @@ const Homepage: React.FC = () => {
                 rounded='full'
                 onClick={handleRefreshProjects}
                 disabled={isRefetching}
-                className='group rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'
+                className='px-3 py-3 group rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'
                 title='Refresh projects from server'
               >
                 <i
@@ -438,12 +436,15 @@ const Homepage: React.FC = () => {
                 size='circle'
                 rounded='full'
                 onClick={() => htmlRegistry?.setHomepageFullscreen(true)}
-                className={`group rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] ${
+                className={`px-3 py-3 sgroup rounded-4xl transition-all hover:scale-98 duration-200 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] ${
                   isToolsFullscreen ? 'bg-blue-500 text-white dark:bg-blue-600' : ''
                 }`}
                 title='Open Tool Viewer'
               >
-                <i className='bx bx-code-block text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none' aria-hidden='true'></i>
+                <i
+                  className='bx bx-code-block text-xl transition-transform duration-100 group-active:scale-90 pointer-events-none'
+                  aria-hidden='true'
+                ></i>
               </Button>
             </div>
           </div>
@@ -488,7 +489,7 @@ const Homepage: React.FC = () => {
                           variant='acrylic'
                           size='circle'
                           rounded='full'
-                          className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
+                          className='px-3 py-3 group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
                           onClick={
                             (e => {
                               ;(e as unknown as React.MouseEvent).stopPropagation()
@@ -506,7 +507,7 @@ const Homepage: React.FC = () => {
                             variant='acrylic'
                             size='circle'
                             rounded='full'
-                            className='group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
+                            className='px-3 py-3 group dark:shadow-[0px_0px_6px_6px_rgba(0,0,0,0.95)] hover:scale-105 transition-transform duration-300 active:scale-95'
                             onClick={
                               (e => {
                                 ;(e as unknown as React.MouseEvent).stopPropagation()
