@@ -21,6 +21,9 @@ import {
   toolJobManager,
 } from '../services/ToolJobManager'
 
+// Check if running in web mode (Electron features disabled)
+const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
+
 /**
  * Subscribe to all jobs with real-time updates
  */
@@ -99,8 +102,9 @@ export function useToolJobs(filter?: JobFilter): {
     }
   }, [filter])
 
-  // Initial load
+  // Initial load (skip in web mode - electron only)
   useEffect(() => {
+    if (isWebMode) return
     refresh()
   }, [refresh])
 
@@ -242,13 +246,15 @@ export function useJobStats(): {
     }
   }, [])
 
-  // Initial load
+  // Initial load (skip in web mode - electron only)
   useEffect(() => {
+    if (isWebMode) return
     refresh()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update stats when jobs change (no re-fetch; rely on server-pushed stats via getStats? not available)
+  // Update stats when jobs change (skip in web mode - electron only)
   useEffect(() => {
+    if (isWebMode) return
     const unsubscribe = toolJobManager.onJobsChange(() => {
       // setVersion(v => v + 1)
       // fire-and-forget refresh without loading state to keep UI live
