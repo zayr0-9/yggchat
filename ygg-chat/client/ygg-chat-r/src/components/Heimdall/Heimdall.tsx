@@ -1838,7 +1838,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               strokeWidth='2'
               className={`cursor-pointer hover:opacity-90 transition-colors duration-200 ${
                 compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
-              } ${node.sender === 'user' ? `fill-neutral-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400' : 'stroke-neutral-300'}` : node.sender === 'ex_agent' ? `fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 ${isVisible ? 'dark:stroke-orange-600 stroke-emerald-400' : 'dark:stroke-orange-600'}` : `fill-slate-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400' : 'stroke-neutral-200'}`}`}
+              } ${node.sender === 'user' ? `fill-neutral-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-neutral-300'}` : node.sender === 'ex_agent' ? `fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 ${isVisible ? 'dark:stroke-orange-600 stroke-emerald-400' : 'dark:stroke-orange-600'}` : `fill-slate-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400' : 'stroke-neutral-200'}`}`}
               style={{
                 filter:
                   compactMode && focusedNodeId === node.id ? `drop-shadow(0 0 10px rgba(59, 130, 246, 0.5))` : 'none',

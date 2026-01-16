@@ -97,6 +97,7 @@ import {
   useConversationStorageMode,
   useModels,
   useProjects,
+  useResearchNotes,
   useSelectedModel,
   useSelectModel,
 } from '../hooks/useQueries'
@@ -107,6 +108,7 @@ import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
 import { extractTextFromPdf } from '../utils/pdfUtils'
+import RightBar from './rightBar'
 import SideBar from './sideBar'
 
 function Chat() {
@@ -122,6 +124,9 @@ function Chat() {
 
   // Subscription status for free/paid detection
   const { isFreeUser } = useSubscriptionStatus(userId)
+
+  // Research notes for the right sidebar
+  const { data: researchNotes = [], isLoading: isLoadingResearchNotes } = useResearchNotes()
   const modelSelectFooter = isFreeUser ? (
     <div className='space-y-2'>
       {/* <div className='text-sm text-neutral-700 dark:text-neutral-200'>Subscribe now for access to all 400+ models</div> */}
@@ -3830,6 +3835,16 @@ function Chat() {
           </AnimatePresence>
         </>
       )}
+
+      {/* Research notes sidebar */}
+      {!isMobile && (
+        <RightBar
+          conversationId={currentConversationId}
+          notes={researchNotes}
+          isLoadingNotes={isLoadingResearchNotes}
+        />
+      )}
+
       <SettingsPane open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Centered custom delete confirmation modal */}
