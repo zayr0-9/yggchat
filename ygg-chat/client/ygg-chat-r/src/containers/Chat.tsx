@@ -2691,26 +2691,28 @@ function Chat() {
           {/* Conversation Title Editor */}
           {currentConversationId && (
             <div
-              className={`absolute mb-2 top-0 left-0 px-2 z-10  mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+              className={`absolute mb-2 mt-4 top-0 left-0 px-2 z-10 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
             >
-              <div className=' rounded-2xl flex items-center gap-2 py-1 xl:py-1 2xl:p-2 mt-1 bg-transparent acrylic shadow-[0_2px_5px_1px_rgba(0,0,0,0.06)] dark:shadow-[0_12px_12px_-6px_rgba(0,0,0,0.65)]  '>
+              <div className='flex items-center bg-white/80 dark:bg-neutral-900/80 backdrop-blur-[12px] border border-black/[0.08] dark:border-white/[0.08] rounded-full py-1 px-1.5 gap-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]'>
+                {/* Workspace Actions */}
                 <Button
                   variant='outline2'
                   size='medium'
-                  className='transition-transform duration-100 active:scale-95'
+                  className='!rounded-full !p-2 transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5'
                   aria-label='Conversations'
                   onClick={() => {
                     const projectId = selectedProject?.id || currentConversation?.project_id
                     navigate(projectId ? `/conversationPage?projectId=${projectId}` : '/conversationPage')
                   }}
+                  title='New Chat'
                 >
-                  <i className='bx bx-chat text-2xl' aria-hidden='true'></i>
+                  <i className='bx bx-chat text-lg' aria-hidden='true'></i>
                 </Button>
 
                 <Button
                   variant='outline2'
                   size='medium'
-                  className='transition-transform duration-100 active:scale-95'
+                  className='!rounded-full !p-2 transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5'
                   aria-label={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                   onClick={() => {
                     const newValue = !heimdallVisible
@@ -2721,39 +2723,18 @@ function Chat() {
                   }}
                   title={heimdallVisible ? 'Hide Tree View' : 'Show Tree View'}
                 >
-                  <img
-                    src={getAssetPath('img/branchlighmode.svg')}
-                    alt='tree view'
-                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[18px] md:h-[18px] lg:w-[20px] lg:h-[20px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[24px] 3xl:h-[24px] 4xl:w-[24px] 4xl:h-[24px] dark:hidden'
-                  />
+                  <img src={getAssetPath('img/branchlighmode.svg')} alt='tree view' className='w-4 h-4 dark:hidden' />
                   <img
                     src={getAssetPath('img/branchdarkmode.svg')}
                     alt='tree view'
-                    className='w-[22px] h-[22px] sm:w-[18px] sm:h-[18px] md:w-[18px] md:h-[18px] lg:w-[20px] lg:h-[20px] 2xl:w-[22px] 2xl:h-[22px] 3xl:w-[24px] 3xl:h-[24px] 4xl:w-[24px] 4xl:h-[24px] hidden dark:block'
+                    className='w-4 h-4 hidden dark:block'
                   />
-                  {/* <i
-                    className={`bx ${heimdallVisible ? 'bx-sidebar' : 'bx-layout'} text-2xl transition-transform duration-200`}
-                    aria-hidden='true'
-                  ></i> */}
                 </Button>
 
-                <Button
-                  variant='outline2'
-                  size='medium'
-                  className='transition-transform duration-100 active:scale-95'
-                  aria-label='Refresh Messages'
-                  onClick={() => {
-                    if (currentConversationId) {
-                      queryClient.invalidateQueries({
-                        queryKey: ['conversations', currentConversationId, 'messages'],
-                      })
-                    }
-                  }}
-                  title='Refresh Messages'
-                >
-                  <i className='bx bx-refresh text-2xl' aria-hidden='true'></i>
-                </Button>
+                {/* Divider */}
+                <div className='w-px h-4 bg-black/[0.08] dark:bg-white/[0.08] mx-1' />
 
+                {/* Session Pill */}
                 {editingTitle ? (
                   <>
                     <TextField
@@ -2763,15 +2744,16 @@ function Chat() {
                       }}
                       placeholder='Conversation title'
                       size='large'
+                      className='rounded-full'
                     />
                     <Button
                       variant='outline2'
                       size='medium'
-                      className=''
+                      className='!rounded-full !p-2 transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5'
                       aria-label='Confirm edit'
                       onClick={() => setEditingTitle(false)}
                     >
-                      <i className='bx bx-check text-2xl' aria-hidden='true'></i>
+                      <i className='bx bx-check text-lg' aria-hidden='true'></i>
                     </Button>
                   </>
                 ) : (
@@ -2793,42 +2775,65 @@ function Chat() {
                       blur='high'
                       placeholder='Select conversation...'
                       disabled={sortedConversations.length === 0}
-                      className='flex-1 transition-transform min-w-0 outline-1 outline-neutral-200/40 dark:outline-neutral-700 rounded-lg'
+                      className='flex-1 transition-transform min-w-0 rounded-full border-transparent hover:border-black/5 dark:hover:border-white/5'
                       searchBarVisible={true}
                     />
-                    <div ref={optionsRef} className='relative'>
-                      <Button
-                        variant='outline2'
-                        size='small'
-                        className='transition-transform duration-100 active:scale-95'
-                        aria-label='Options'
-                        onClick={() => setOptionsOpen(!optionsOpen)}
-                      >
-                        <i className='bx bx-dots-vertical-rounded text-xl' aria-hidden='true'></i>
-                      </Button>
-                      {optionsOpen && (
-                        <div className='absolute right-0 top-full mt-1 z-50 bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl w-max'>
-                          <button
-                            className='w-full text-left px-3 py-2 text-sm text-stone-800 dark:text-stone-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors rounded-t-lg whitespace-nowrap'
-                            onClick={() => {
-                              setEditingTitle(true)
-                              setOptionsOpen(false)
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            className='w-full text-left px-3 py-2 text-sm text-stone-800 dark:text-stone-200 hover:bg-neutral-100 dark:hover:bg-neutral-900 transition-colors rounded-b-lg whitespace-nowrap'
-                            onClick={handleCloneConversation}
-                            disabled={cloningConversation}
-                          >
-                            {cloningConversation ? 'Cloning...' : 'Clone Chat'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
                   </>
                 )}
+
+                {/* Divider */}
+                <div className='w-px h-4 bg-black/[0.08] dark:bg-white/[0.08] mx-1' />
+
+                {/* System Actions */}
+                <Button
+                  variant='outline2'
+                  size='medium'
+                  className='!rounded-full !p-2 transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5'
+                  aria-label='Refresh Messages'
+                  onClick={() => {
+                    if (currentConversationId) {
+                      queryClient.invalidateQueries({
+                        queryKey: ['conversations', currentConversationId, 'messages'],
+                      })
+                    }
+                  }}
+                  title='Sync / Refresh'
+                >
+                  <i className='bx bx-refresh text-lg' aria-hidden='true'></i>
+                </Button>
+
+                <div ref={optionsRef} className='relative'>
+                  <Button
+                    variant='outline2'
+                    size='medium'
+                    className='!rounded-full !p-2 transition-all duration-200 hover:bg-black/5 dark:hover:bg-white/5'
+                    aria-label='Options'
+                    onClick={() => setOptionsOpen(!optionsOpen)}
+                    title='Settings'
+                  >
+                    <i className='bx bx-dots-vertical-rounded text-lg' aria-hidden='true'></i>
+                  </Button>
+                  {optionsOpen && (
+                    <div className='absolute right-0 top-full mt-1 z-50 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-[12px] border border-black/[0.08] dark:border-white/[0.08] rounded-xl shadow-[0_10px_30px_-10px_rgba(0,0,0,0.3)] w-max'>
+                      <button
+                        className='w-full text-left px-3 py-2 text-sm text-neutral-500 hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors rounded-t-xl whitespace-nowrap'
+                        onClick={() => {
+                          setEditingTitle(true)
+                          setOptionsOpen(false)
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className='w-full text-left px-3 py-2 text-sm text-neutral-500 hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors rounded-b-xl whitespace-nowrap'
+                        onClick={handleCloneConversation}
+                        disabled={cloningConversation}
+                      >
+                        {cloningConversation ? 'Cloning...' : 'Clone Chat'}
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

@@ -132,11 +132,12 @@ export const HtmlToolsModal: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [showFullscreenSettings, showFullscreenTabMenu])
 
-  const renderEntry = (entry: (typeof entries)[number], options?: { fillHeight?: boolean }) => {
+  const renderEntry = (entry: (typeof entries)[number], options?: { fillHeight?: boolean; compactView?: boolean }) => {
     const isCollapsed = collapsedTools[entry.key] ?? false
     const isHibernated = entry.status === 'hibernated'
     const isFavorite = entry.favorite
     const isFullscreen = fullscreenKey === entry.key
+    const isCompact = options?.compactView === true
     const iframeHeightClass = isCollapsed
       ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
       : isFullscreen
@@ -148,16 +149,25 @@ export const HtmlToolsModal: React.FC = () => {
       ? 'fixed inset-0 z-[1501] flex flex-col min-h-0 rounded-none border-0 bg-white dark:bg-yBlack-900 shadow-none'
       : options?.fillHeight
         ? 'flex-1 flex flex-col min-h-0 rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
-        : 'rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
+        : isCompact
+          ? 'rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)] cursor-pointer hover:bg-neutral-100 dark:hover:bg-yBlack-800 transition-colors'
+          : 'rounded-xl border border-neutral-200/70 dark:border-neutral-700/60 bg-neutral-50/60 dark:bg-yBlack-900/60 shadow-[0_2px_8px_rgba(0,0,0,0.08)]'
     const cardStyle = isFullscreen ? { paddingTop: 'calc(var(--titlebar-height, 0px) + 0.75rem)' } : undefined
 
+    const handleCompactClick = () => {
+      if (!isCompact) return
+      setActiveTab(entry.key)
+      registry.touchEntry(entry.key)
+      setShowFavorites(false)
+    }
+
     return (
-      <div id={`html-tool-${entry.key}`} className={`${cardClassName} p-3`} style={cardStyle}>
-        <div className='flex items-center gap-3 mb-3'>
+      <div id={`html-tool-${entry.key}`} className={`${cardClassName} p-3`} style={cardStyle} onClick={handleCompactClick}>
+        <div className={`flex items-center gap-3 ${isCompact ? '' : 'mb-3'}`}>
           <div className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>
             {entry.label || 'HTML Tool Output'}
           </div>
-          <div className='flex items-center gap-2 min-w-0 ml-auto flex-1 justify-end'>
+          <div className='flex items-center gap-2 min-w-0 ml-auto flex-1 justify-end' onClick={e => e.stopPropagation()}>
             <div className='text-[11px] text-neutral-500 dark:text-neutral-400 truncate max-w-[55%] min-w-0 text-right'>
               {entry.key}
             </div>
@@ -193,25 +203,27 @@ export const HtmlToolsModal: React.FC = () => {
             >
               <i className={`bx ${isFullscreen ? 'bx-exit-fullscreen' : 'bx-fullscreen'}`} aria-hidden='true' />
             </Button>
-            <Button
-              variant='outline2'
-              size='smaller'
-              rounded='full'
-              className='border border-neutral-200/70 dark:border-neutral-700/60'
-              disabled={isHibernated}
-              onClick={() =>
-                setCollapsedTools(prev => ({
-                  ...prev,
-                  [entry.key]: !prev[entry.key],
-                }))
-              }
-              aria-label={isCollapsed ? 'Expand tool output' : 'Collapse tool output'}
-            >
-              <i className={`bx ${isCollapsed ? 'bx-chevron-down' : 'bx-chevron-up'}`} aria-hidden='true' />
-            </Button>
+            {!isCompact && (
+              <Button
+                variant='outline2'
+                size='smaller'
+                rounded='full'
+                className='border border-neutral-200/70 dark:border-neutral-700/60'
+                disabled={isHibernated}
+                onClick={() =>
+                  setCollapsedTools(prev => ({
+                    ...prev,
+                    [entry.key]: !prev[entry.key],
+                  }))
+                }
+                aria-label={isCollapsed ? 'Expand tool output' : 'Collapse tool output'}
+              >
+                <i className={`bx ${isCollapsed ? 'bx-chevron-down' : 'bx-chevron-up'}`} aria-hidden='true' />
+              </Button>
+            )}
           </div>
         </div>
-        {isHibernated ? (
+        {isCompact ? null : isHibernated ? (
           <div className='text-xs text-neutral-500 dark:text-neutral-400'>
             Hibernated to save resources. Restore to reload.
           </div>
@@ -413,7 +425,7 @@ export const HtmlToolsModal: React.FC = () => {
             {favoriteEntries.length === 0 ? (
               <div className='text-sm text-neutral-600 dark:text-neutral-300'>No favorite tools. Click the star icon on any tool to add it to favorites.</div>
             ) : (
-              favoriteEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
+              favoriteEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry, { compactView: true })}</React.Fragment>)
             )}
           </div>
         )}
@@ -446,7 +458,7 @@ export const HtmlToolsModal: React.FC = () => {
             {favoriteEntries.length === 0 ? (
               <div className='text-sm text-neutral-600 dark:text-neutral-300'>No favorite tools. Click the star icon on any tool to add it to favorites.</div>
             ) : (
-              favoriteEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
+              favoriteEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry, { compactView: true })}</React.Fragment>)
             )}
           </div>
         )}

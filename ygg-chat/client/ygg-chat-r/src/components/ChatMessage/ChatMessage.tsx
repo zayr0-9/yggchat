@@ -72,6 +72,7 @@ interface MessageActionsProps {
   isEditing: boolean
   editMode?: 'edit' | 'branch'
   copied?: boolean
+  modelName?: string
 }
 
 const MessageActions: React.FC<MessageActionsProps> = ({
@@ -79,7 +80,7 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   onBranch,
   onDelete,
   onCopy,
-  onResend,
+  // onResend - hidden from UI
   onSave,
   onCancel,
   onSaveBranch,
@@ -87,132 +88,162 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   isEditing,
   editMode = 'edit',
   copied = false,
+  modelName,
 }) => {
   return (
-    <div className='flex items-center gap-0.5 sm:gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 border-1 border-stone-300 dark:bg-yBlack-900 dark:border-1 dark:border-neutral-700 transition-opacity rounded-3xl duration-200 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_6px_2px_rgba(0,0,0,0.35)] [will-change:contents] [transform:translateZ(0)]'>
-      <div className='flex items-center gap-0.5 sm:gap-1 px-1 sm:px-2 py-0.5 sm:py-1'>
-        {isEditing ? (
-          <>
+    <div className='inline-flex items-center bg-neutral-100/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/50 dark:border-white/[0.08] rounded-full p-0 gap-0.5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 translate-y-2 scale-[0.98] group-hover:translate-y-0 group-hover:scale-100 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] pointer-events-none group-hover:pointer-events-auto'>
+      {/* Model ID Badge */}
+      {modelName && !isEditing && (
+        <div className='font-mono text-[10px] text-neutral-500 dark:text-neutral-400 tracking-wider px-3 border-r border-neutral-200 dark:border-white/[0.08] uppercase'>
+          {(() => {
+            const displayName = modelName.includes('/') ? modelName.split('/').pop() || modelName : modelName
+            return displayName.length > 20 ? displayName.slice(0, 20) + '...' : displayName
+          })()}
+        </div>
+      )}
+
+      {isEditing ? (
+        <>
+          <button
+            onClick={editMode === 'branch' ? onSaveBranch : onSave}
+            className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-green-500 transition-all duration-200'
+            title={editMode === 'branch' ? 'Create branch' : 'Save changes'}
+          >
+            <svg className='w-[15px] h-[15px]' strokeWidth='1.8' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+              <path strokeLinecap='round' strokeLinejoin='round' d='M5 13l4 4L19 7' />
+            </svg>
+          </button>
+          <button
+            onClick={onCancel}
+            className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200'
+            title='Cancel editing'
+          >
+            <svg className='w-[15px] h-[15px]' strokeWidth='1.8' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+              <path strokeLinecap='round' strokeLinejoin='round' d='M6 18L18 6M6 6l12 12' />
+            </svg>
+          </button>
+        </>
+      ) : (
+        <>
+          {/* Copy Button */}
+          <button
+            onClick={onCopy}
+            className={`p-2 rounded-full bg-transparent border-none cursor-pointer transition-all duration-200 ${
+              copied
+                ? 'text-green-500'
+                : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
+            }`}
+            title={copied ? 'Copied' : 'Copy Content'}
+          >
+            {copied ? (
+              <svg
+                className='w-[15px] h-[15px]'
+                strokeWidth='1.8'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
+                <path strokeLinecap='round' strokeLinejoin='round' d='M5 13l4 4L19 7' />
+              </svg>
+            ) : (
+              <svg
+                className='w-[15px] h-[15px]'
+                strokeWidth='1.8'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
+                <path d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z' />
+              </svg>
+            )}
+          </button>
+
+          {/* Edit Button */}
+          {onEdit && (
             <button
-              onClick={editMode === 'branch' ? onSaveBranch : onSave}
-              className='p-1.5 rounded-2xl text-stone-700 hover:text-green-600 dark:text-stone-300 dark:hover:text-green-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900 hover:scale-105 transition-colors duration-150 active:scale-90'
-              title={editMode === 'branch' ? 'Create branch' : 'Save changes'}
+              onClick={onEdit}
+              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200 transition-all duration-200'
+              title='Edit Prompt'
             >
-              {editMode === 'branch' ? (
-                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
-                </svg>
-              ) : (
-                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
-                </svg>
-              )}
-            </button>
-            <button
-              onClick={onCancel}
-              className='p-1.5 rounded-2xl text-stone-700 hover:text-red-400 hover:bg-neutral-100 dark:text-stone-300 hover:scale-105 dark:hover:bg-yBlack-900 transition-colors duration-150 active:scale-90'
-              title='Cancel editing'
-            >
-              <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+              <svg
+                className='w-[15px] h-[15px]'
+                strokeWidth='1.8'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
+                <path d='M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' />
               </svg>
             </button>
-          </>
-        ) : (
-          <>
+          )}
+
+          {/* Branch Button */}
+          {onBranch && (
             <button
-              onClick={onCopy}
-              className={`p-1.5 rounded-2xl transition-colors duration-150 hover:scale-104 ${
-                copied
-                  ? 'text-green-500 hover:text-green-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900'
-                  : 'text-stone-700 hover:text-blue-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-transform duration-100 active:scale-90'
-              }`}
-              title={copied ? 'Copied' : 'Copy message'}
+              onClick={onBranch}
+              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-green-500 transition-all duration-200'
+              title='Branch message'
             >
-              {copied ? (
-                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 13l4 4L19 7' />
-                </svg>
-              ) : (
-                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z'
-                  />
-                </svg>
-              )}
+              <svg
+                className='w-[15px] h-[15px]'
+                strokeWidth='1.8'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
+              >
+                <path
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  d='M6 4v8a4 4 0 004 4h4M6 8a2 2 0 100-4 2 2 0 000 4zm8 8a2 2 0 100-4 2 2 0 000 4z'
+                />
+              </svg>
             </button>
-            {onEdit && (
-              <button
-                onClick={onEdit}
-                className='p-1.5 rounded-2xl text-stone-700 hover:text-yellow-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900 hover:scale-105 transition-colors duration-150 active:scale-90'
-                title='Edit message'
+          )}
+
+          {/* Regenerate Button - currently hidden per user request */}
+          {/* {onResend && (
+            <button
+              onClick={onResend}
+              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-blue-500 transition-all duration-200'
+              title='Regenerate Response'
+            >
+              <svg className='w-[15px] h-[15px]' strokeWidth='1.8' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                <path d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+              </svg>
+            </button>
+          )} */}
+
+          {/* Delete Button */}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200'
+              title='Delete'
+            >
+              <svg
+                className='w-[15px] h-[15px]'
+                strokeWidth='1.8'
+                fill='none'
+                stroke='currentColor'
+                viewBox='0 0 24 24'
               >
-                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z'
-                  />
-                </svg>
-              </button>
-            )}
-            {onBranch && (
-              <button
-                onClick={onBranch}
-                className='p-1.5 pt-2 rounded-2xl text-stone-700 hover:text-green-600 hover:bg-neutral-100 dark:hover:bg-yBlack-900 hover:scale-109 transition-colors duration-150 active:scale-90'
-                title='Branch message'
-              >
-                <svg className='w-6 h-6 mt-0.5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M6 4v8a4 4 0 004 4h4M6 8a2 2 0 100-4 2 2 0 000 4zm8 8a2 2 0 100-4 2 2 0 000 4z'
-                  />
-                </svg>
-              </button>
-            )}
-            {onResend && (
-              <button
-                onClick={onResend}
-                className='p-1.5 rounded-2xl text-stone-700 hover:text-indigo-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 hover:scale-105 transition-colors duration-150 active:scale-90'
-                title='Resend message'
-              >
-                <svg xmlns='http://www.w3.org/2000/svg' className='w-5.5 h-5.5' fill='currentColor' viewBox='0 0 24 24'>
-                  <path d='M19.07 4.93a9.9 9.9 0 0 0-3.18-2.14 10.12 10.12 0 0 0-7.79 0c-1.19.5-2.26 1.23-3.18 2.14S3.28 6.92 2.78 8.11A9.95 9.95 0 0 0 1.99 12h2c0-1.08.21-2.13.63-3.11.4-.95.98-1.81 1.72-2.54.73-.74 1.59-1.31 2.54-1.71 1.97-.83 4.26-.83 6.23 0 .95.4 1.81.98 2.54 1.72.17.17.33.34.48.52L16 9.01h6V3l-2.45 2.45c-.15-.18-.31-.36-.48-.52M19.37 15.11c-.4.95-.98 1.81-1.72 2.54-.73.74-1.59 1.31-2.54 1.71-1.97.83-4.26.83-6.23 0-.95-.4-1.81-.98-2.54-1.72-.17-.17-.33-.34-.48-.52l2.13-2.13H2v6l2.45-2.45c.15.18.31.36.48.52.92.92 1.99 1.64 3.18 2.14 1.23.52 2.54.79 3.89.79s2.66-.26 3.89-.79c1.19-.5 2.26-1.23 3.18-2.14s1.64-1.99 2.14-3.18c.52-1.23.79-2.54.79-3.89h-2c0 1.08-.21 2.13-.63 3.11Z'></path>
-                </svg>
-              </button>
-            )}
-            {onDelete && (
-              <button
-                onClick={onDelete}
-                className='p-1.5 rounded-2xl text-stone-700 hover:text-red-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-colors duration-150 active:scale-90 hover:scale-105'
-                title='Delete message'
-              >
-                <svg className='w-6 h-6' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    strokeWidth={2}
-                    d='M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16'
-                  />
-                </svg>
-              </button>
-            )}
-            {onMore && (
-              <div className='rounded-full pt-1 px-1 text-stone-700 hover:text-purple-400 hover:bg-neutral-100 dark:hover:bg-yBlack-900 transition-colors duration-150 active:scale-90 hover:scale-106'>
-                <button onClick={onMore} className='' title='More options'>
-                  <i className='bx bx-dots-vertical-rounded text-2xl mt-0.5'></i>
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+                <path d='M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' />
+              </svg>
+            </button>
+          )}
+
+          {/* More Options Button */}
+          {onMore && (
+            <button
+              onClick={onMore}
+              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200 transition-all duration-200'
+              title='More options'
+            >
+              <i className='bx bx-dots-vertical-rounded text-[15px]'></i>
+            </button>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -1631,8 +1662,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         }
       }
 
-      const groupsSource =
-        Array.isArray(contentBlocks) && contentBlocks.length > 0 ? contentToolGroupsByIndex : null
+      const groupsSource = Array.isArray(contentBlocks) && contentBlocks.length > 0 ? contentToolGroupsByIndex : null
 
       if (groupsSource) {
         const seen = new Set<string>()
@@ -1643,9 +1673,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           const htmlSeen = new Set<string>()
           // Format label: replace underscores with spaces and title case
           const rawName = group.name || 'Tool Result'
-          const toolLabel = rawName
-            .replace(/_/g, ' ')
-            .replace(/\b\w/g, c => c.toUpperCase())
+          const toolLabel = rawName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
           const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
           if (isHtmlRenderer && typeof group.args?.html === 'string') {
             const normalized = normalizeHtml(group.args.html)
@@ -1771,52 +1799,24 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
       // Render html_renderer tool with always-visible HTML
       if (isHtmlRenderer && typeof extractedHtml === 'string') {
-        // Debug: log to see if HTML is already stripped at this point
         const htmlPreviewKey = `${id}-html-renderer-${group.id}`
         return (
-          <div
-            key={toggleKey}
-            className='tool-call-card relative p-2 mb-0 mx-3 rounded-xl border border-neutral-200/70 bg-blue-50/40 dark:border-neutral-900/40 dark:bg-neutral-900/70 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'
-          >
-            <div className='flex items-start gap-2 mb-2'>
-              <p className='text-base font-semibold text-blue-900 dark:text-blue-100'>{group.name}</p>
+          <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+            {/* Green pip indicator */}
+            <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
+
+            {/* Tool header */}
+            <div className='flex items-center gap-2 mb-2'>
+              <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
+                {group.name || 'html_renderer'}
+              </span>
               {renderHtmlViewerButton(htmlPreviewKey)}
-              <div className='flex items-center gap-2 ml-auto'>
-                {!hasHtmlOutput && (
-                  <Button
-                    variant='outline2'
-                    size='small'
-                    onClick={() => toggleBlock('toolCalls', toggleKey)}
-                    title={isExpanded ? 'Hide inputs' : 'Show inputs'}
-                  >
-                    {isExpanded ? (
-                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                      </svg>
-                    ) : (
-                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                      </svg>
-                    )}
-                  </Button>
-                )}
-              </div>
             </div>
-            <HtmlIframe html={extractedHtml} />
-            {/* Only show inputs when expanded */}
-            {!hasHtmlOutput && isExpanded && group.args && Object.keys(group.args).length > 0 && (
-              <div className='mt-3 rounded-xl border border-neutral-200/60 dark:border-neutral-900/40 bg-white dark:bg-yBlack-900/70 p-3 space-y-1 text-xs'>
-                <p className='text-[11px] uppercase font-semibold text-blue-500 dark:text-blue-300'>Inputs</p>
-                {Object.entries(group.args).map(([argKey, value]) => (
-                  <div key={argKey} className='flex gap-2'>
-                    <span className='font-medium text-gray-600 dark:text-gray-300'>{argKey}:</span>
-                    <span className='text-gray-800 dark:text-gray-100 break-all'>
-                      {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+
+            {/* Always show HTML output */}
+            <div className='mt-2'>
+              <HtmlIframe html={extractedHtml} />
+            </div>
           </div>
         )
       }
@@ -1830,70 +1830,72 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         )
         .filter((key): key is string => Boolean(key))
       const primaryHtmlResultKey = htmlResultKeys[0]
+
+      // Check for failure: either structured failure response OR is_error flag on any result
+      const hasResults = group.results.length > 0
+      const hasError = group.results.some(r => r.is_error) || resultSummary === 'failure'
+
       return (
-        <div
-          key={toggleKey}
-          className='tool-call-card relative p-2 mb-0 mx-3 rounded-xl border border-neutral-200/70 bg-blue-50/40 dark:border-neutral-900/40 dark:bg-neutral-900/70 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)]'
-        >
-          <div className='flex items-start justify-between gap-4'>
-            <div className='flex items-center gap-3 min-w-0 flex-1 overflow-hidden'>
-              <p className='text-base font-semibold text-blue-900 dark:text-blue-100 shrink-0'>
-                {group.name || 'Tool Result'}
-              </p>
-              {primaryHtmlResultKey && renderHtmlViewerButton(primaryHtmlResultKey)}
-              {!isExpanded && (
-                <div className='flex items-center gap-2 min-w-0 flex-1 overflow-hidden'>
-                  {resultSummary && (
-                    <span
-                      className={`text-xs shrink-0 ${resultSummary === 'success' ? 'text-emerald-600 dark:text-emerald-200' : 'text-red-600 dark:text-red-400'}`}
-                    >
-                      {resultSummary}
-                    </span>
-                  )}
-                  {!resultSummary && (
-                    <span className='inline-flex items-center text-blue-500 dark:text-blue-300 shrink-0'>
-                      <i className='bx bx-dots-horizontal-rounded text-xl animate-pulse'></i>
-                    </span>
-                  )}
-                  {pathContent && (
-                    <span
-                      className='text-xs text-blue-700 dark:text-blue-200 min-w-0 overflow-hidden whitespace-nowrap'
-                      style={{ direction: 'rtl', textOverflow: 'ellipsis' }}
-                    >
-                      {pathContent}
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
+        <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+          {/* Status pip indicator - green for success/executing, red for error */}
+          <div
+            className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
+              hasResults && hasError
+                ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+                : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+            }`}
+          />
 
-            <Button
-              variant='outline2'
-              size='small'
-              onClick={() => handleExpandToggle(toggleKey, group)}
-              title={isExpanded ? 'Hide details' : 'Show details'}
+          {/* Tool header button */}
+          <button
+            onClick={() => handleExpandToggle(toggleKey, group)}
+            className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
+          >
+            <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
+              {group.name || 'tool'}
+            </span>
+            {/* Status indicator when collapsed */}
+            {/* {!isExpanded && resultSummary && (
+              <span
+                className={`text-[10px] ${resultSummary === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}
+              >
+                {resultSummary}
+              </span>
+            )} */}
+            {!isExpanded && !resultSummary && (
+              <span className='inline-flex items-center text-neutral-400 dark:text-neutral-500'>
+                <i className='bx bx-dots-horizontal-rounded text-sm animate-pulse' />
+              </span>
+            )}
+            {!isExpanded && pathContent && (
+              <span
+                className='text-[10px] text-neutral-500 dark:text-neutral-500 max-w-[200px] overflow-hidden whitespace-nowrap'
+                style={{ direction: 'rtl', textOverflow: 'ellipsis' }}
+              >
+                {pathContent}
+              </span>
+            )}
+            {primaryHtmlResultKey && renderHtmlViewerButton(primaryHtmlResultKey)}
+            <svg
+              className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/tool:text-neutral-500 dark:group-hover/tool:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+              fill='none'
+              viewBox='0 0 24 24'
+              stroke='currentColor'
             >
-              {isExpanded ? (
-                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                </svg>
-              ) : (
-                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                </svg>
-              )}
-            </Button>
-          </div>
+              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+            </svg>
+          </button>
 
-          {isExpanded && (
-            <div className='mt-3 space-y-3 text-xs text-slate-700 dark:text-slate-200'>
+          {/* Expandable content */}
+          <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+            <div className='tool-expand-content pt-3'>
+              {/* Tool inputs */}
               {!hasHtmlOutput && group.args && Object.keys(group.args).length > 0 && (
-                <div className='rounded-xl border border-neutral-200/60 dark:border-neutral-900/40 bg-white dark:bg-yBlack-900/70 p-3 space-y-1'>
-                  <p className='text-[11px] uppercase font-semibold text-blue-500 dark:text-blue-300'>Inputs</p>
-                  {Object.entries(group.args).map(([key, value]) => (
-                    <div key={key} className='flex gap-2'>
-                      <span className='font-medium text-gray-600 dark:text-gray-300'>{key}:</span>
-                      <span className='text-gray-800 dark:text-gray-100 break-all'>
+                <div className='border-l-2 border-neutral-300/50 dark:border-neutral-700/50 pl-4 py-1 mb-2 font-mono text-[11px] text-neutral-500 dark:text-neutral-500 leading-relaxed'>
+                  {Object.entries(group.args).map(([argKey, value]) => (
+                    <div key={argKey} className='break-all'>
+                      <span className='text-neutral-400 dark:text-neutral-600'>{argKey}:</span>{' '}
+                      <span className='text-neutral-600 dark:text-neutral-400'>
                         {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                       </span>
                     </div>
@@ -1901,44 +1903,40 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 </div>
               )}
 
+              {/* Tool results */}
               {group.results.length > 0 && (
                 <div className='space-y-2'>
                   {group.results.map((result, resultIdx) => {
                     const resultKey = `${id}-${group.id}-result-${resultIdx}`
                     const maybeHtml = extractHtmlFromToolResult(result.content)
-                    const showResultLabel = result.is_error || typeof maybeHtml !== 'string'
 
-                    const renderedBody = (() => {
-                      if (typeof maybeHtml === 'string') {
-                        return <HtmlIframe html={maybeHtml} />
-                      }
-                      return formatToolResultContent(result.content)
-                    })()
+                    if (typeof maybeHtml === 'string') {
+                      return <HtmlIframe key={resultKey} html={maybeHtml} />
+                    }
 
+                    const renderedContent = formatToolResultContent(result.content)
                     return (
                       <div
                         key={resultKey}
-                        className={`rounded-xl border p-3 whitespace-pre-wrap break-words overflow-hidden leading-relaxed ${
+                        className={`border-l-2 pl-4 py-1 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words ${
                           result.is_error
-                            ? 'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40 text-red-800 dark:text-red-200'
-                            : 'border-neutral-200 bg-neutral-50 dark:border-neutral-900/30 dark:bg-neutral-950/30 text-neutral-800 dark:text-neutral-300'
+                            ? 'border-red-400/50 dark:border-red-600/50 text-red-600 dark:text-red-400'
+                            : 'border-neutral-300/50 dark:border-neutral-700/50 text-neutral-500 dark:text-neutral-500'
                         }`}
                       >
-                        <div className='flex items-center justify-between text-[11px] uppercase font-semibold mb-2 text-emerald-500/90'>
-                          <div className='flex items-center gap-2'>
-                            {showResultLabel && (
-                              <span>{result.is_error ? 'Tool Error' : `Result ${resultIdx + 1}`}</span>
-                            )}
-                          </div>
-                        </div>
-                        {renderedBody}
+                        {renderedContent}
+                        {!result.is_error && (
+                          <span className='text-neutral-400 dark:text-neutral-600 italic mt-1 block text-[10px] tracking-tight'>
+                            completed
+                          </span>
+                        )}
                       </div>
                     )
                   })}
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       )
     }
@@ -1946,27 +1944,24 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     return (
       <div
         id={`message-${id}`}
-        className={`group px-0 sm:px-2 md:px-2 mb-1 sm:mb-1 md:mb-0 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
+        className={`group px-0 sm:px-2 md:px-2 mb-0 sm:mb-0 md:mb-0 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
         // style={{ willChange: 'contents', backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}
       >
         {/* Header with role */}
         {role === 'user' && (
-          <div className='flex items-center justify-between mb-3 xl:mb-4 ml-1'>
-            <div className='flex items-center justify-between max-w-32 dark:bg-neutral-800 shadow-[0px_0px_2.5px_-0.5px_rgba(0,0,0,0.25)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] rounded-4xl px-3 py-2'>
-              <span
-                className={`text-[14px] mt-0 sm:text-[14px] lg:text-[16px] 3xl:text-base font-semibold ${styles.role}`}
-              >
-                {styles.roleText}
-              </span>
-            </div>
+          <div className='inline-flex items-center gap-2 py-[3px] px-2.5 bg-white/[0.03] border border-white/[0.08] rounded-md mb-3 backdrop-blur cursor-default transition-all duration-200'>
+            <div className='w-1 h-1 rounded-full bg-neutral-500 shadow-[0_0_8px_rgba(115,115,115,0.4)]'></div>
+            <span className='font-mono text-[11px] uppercase tracking-[0.1em] text-neutral-500'>
+              {styles.roleText}
+            </span>
           </div>
         )}
 
         {/* Prioritize rendering: streamEvents > contentBlocks > legacy fields */}
         {/* Sequential streaming events - render in order as received */}
         {!editingState && Array.isArray(streamEvents) && streamEvents.length > 0 ? (
-          <div className='space-y-3 mb-3'>
+          <div className='space-y-0 mb-3'>
             {streamEvents.map((event, idx) => {
               const groupedTool = streamToolGroupsByIndex.get(idx)
               if (groupedTool) {
@@ -2020,116 +2015,126 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 if (idx === 0 || streamEvents[idx - 1].type !== 'reasoning') {
                   const isExpanded = expandedBlocks.reasoning.has(idx)
                   const reasoningSummary = truncateWords(accumulatedReasoning)
+
                   return (
                     <div
                       key={`reasoning-${idx}`}
-                      className='relative rounded-xl p-2 bg-neutral-50 mx-3 sm:px-2 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                      className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
                     >
-                      <div className='flex items-center justify-between gap-3'>
-                        <div className='flex items-center gap-2 min-w-0'>
-                          <span className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
-                            Reasoning
+                      {/* Blue pip indicator for reasoning */}
+                      <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' />
+
+                      {/* Reasoning header */}
+                      <button
+                        onClick={() => toggleBlock('reasoning', idx)}
+                        className='flex items-center gap-2 group/reason hover:opacity-80 transition-opacity cursor-pointer outline-none'
+                      >
+                        <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
+                          Reasoning
+                        </span>
+                        {!isExpanded && reasoningSummary && (
+                          <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[300px]'>
+                            {reasoningSummary}
                           </span>
-                          {!isExpanded && (
-                            <div className='text-xs text-neutral-600 dark:text-neutral-400 line-clamp-1 overflow-hidden min-w-0'>
-                              {reasoningSummary}
-                            </div>
-                          )}
-                        </div>
-                        <Button
-                          variant='outline2'
-                          size='small'
-                          onClick={() => toggleBlock('reasoning', idx)}
-                          title={isExpanded ? 'Hide details' : 'Show details'}
+                        )}
+                        <svg
+                          className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/reason:text-neutral-500 dark:group-hover/reason:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                          fill='none'
+                          viewBox='0 0 24 24'
+                          stroke='currentColor'
                         >
-                          {isExpanded ? (
-                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                            </svg>
-                          ) : (
-                            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                            </svg>
-                          )}
-                        </Button>
-                      </div>
-                      {isExpanded && (
-                        <div className='prose max-w-none dark:prose-invert w-full text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px] mt-2'>
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkMath]}
-                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
-                            components={{ pre: PreRenderer, a: MarkdownLink }}
-                          >
-                            {accumulatedReasoning}
-                          </ReactMarkdown>
+                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                        </svg>
+                      </button>
+
+                      {/* Expandable content */}
+                      <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+                        <div className='tool-expand-content pt-2'>
+                          <div className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'>
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm, remarkMath]}
+                              rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
+                              components={{ pre: PreRenderer, a: MarkdownLink }}
+                            >
+                              {accumulatedReasoning}
+                            </ReactMarkdown>
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   )
                 }
                 return null
               } else if (event.type === 'tool_call' && event.toolCall && event.complete) {
                 const toolCall = event.toolCall
-                const isExpanded = expandedBlocks.toolCalls.has(`tool-call-${toolCall.id}-${idx}`)
+                const toggleKey = `tool-call-${toolCall.id}-${idx}`
+                const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
                 const pathParam = extractPathParam(toolCall.arguments)
                 const isHtmlToolCall = (toolCall.name ?? '').toLowerCase() === 'html_renderer'
                 const hasHtmlOutput = isHtmlToolCall || typeof extractHtmlFromToolResult(toolCall.result) === 'string'
+
                 return (
                   <div
                     key={`tool-${toolCall.id}-${idx}`}
-                    className='relative mb-3 mx-3 rounded-xl border border-neutral-200 bg-neutral-50 p-2 sm:p-3 dark:border-neutral-900/30 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                    className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
                   >
-                    <div className='flex items-center justify-between mb-2'>
-                      <div className='font-semibold text-blue-700 dark:text-blue-300'>{toolCall.name}</div>
-                      <Button
-                        variant='outline2'
-                        size='small'
-                        onClick={() => toggleBlock('toolCalls', `tool-call-${toolCall.id}-${idx}`)}
-                        title={isExpanded ? 'Hide details' : 'Show details'}
+                    {/* Green pip indicator */}
+                    <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
+
+                    {/* Tool header button */}
+                    <button
+                      onClick={() => toggleBlock('toolCalls', toggleKey)}
+                      className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
+                    >
+                      <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
+                        {toolCall.name || 'tool'}
+                      </span>
+                      {!isExpanded && pathParam && (
+                        <span
+                          className='text-[10px] text-neutral-500 dark:text-neutral-500 max-w-[200px] overflow-hidden whitespace-nowrap'
+                          style={{ direction: 'rtl', textOverflow: 'ellipsis' }}
+                        >
+                          {pathParam}
+                        </span>
+                      )}
+                      <svg
+                        className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/tool:text-neutral-500 dark:group-hover/tool:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                        fill='none'
+                        viewBox='0 0 24 24'
+                        stroke='currentColor'
                       >
-                        {isExpanded ? (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                          </svg>
-                        ) : (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                          </svg>
-                        )}
-                      </Button>
-                    </div>
-                    {isExpanded ? (
-                      <>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                      </svg>
+                    </button>
+
+                    {/* Expandable content */}
+                    <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+                      <div className='tool-expand-content pt-3'>
+                        {/* Tool inputs */}
                         {!hasHtmlOutput && toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                          <div className='text-xs space-y-1'>
+                          <div className='border-l-2 border-neutral-300/50 dark:border-neutral-700/50 pl-4 py-1 mb-2 font-mono text-[11px] text-neutral-500 dark:text-neutral-500 leading-relaxed'>
                             {Object.entries(toolCall.arguments).map(([key, value]) => (
-                              <div key={key} className='flex gap-2'>
-                                <span className='font-medium text-gray-600 dark:text-gray-400'>{key}:</span>
-                                <span className='text-gray-800 dark:text-gray-200 break-all'>
+                              <div key={key} className='break-all'>
+                                <span className='text-neutral-400 dark:text-neutral-600'>{key}:</span>{' '}
+                                <span className='text-neutral-600 dark:text-neutral-400'>
                                   {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                                 </span>
                               </div>
                             ))}
                           </div>
                         )}
+
+                        {/* Tool result */}
                         {toolCall.result && (
-                          <div className='mt-2 p-1.5 bg-green-50 dark:bg-green-900/20 rounded text-green-800 dark:text-green-300 text-xs'>
-                            {!hasHtmlOutput && <div className='font-semibold mb-1'>Result:</div>}
-                            <div className='break-all'>{toolCall.result}</div>
+                          <div className='border-l-2 border-neutral-300/50 dark:border-neutral-700/50 pl-4 py-1 font-mono text-[11px] text-neutral-500 dark:text-neutral-500 leading-relaxed whitespace-pre-wrap break-words'>
+                            {toolCall.result}
+                            <span className='text-neutral-400 dark:text-neutral-600 italic mt-1 block text-[10px] tracking-tight'>
+                              completed
+                            </span>
                           </div>
                         )}
-                      </>
-                    ) : (
-                      <div className='text-xs text-blue-600 dark:text-blue-300'>
-                        {pathParam ? (
-                          <>
-                            <span className='font-medium'>path:</span> {pathParam}
-                          </>
-                        ) : (
-                          <span className='text-gray-600 dark:text-gray-400'>View details</span>
-                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 )
               } else if (event.type === 'image' && event.url) {
@@ -2150,7 +2155,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         ) : !editingState && Array.isArray(contentBlocks) && contentBlocks.length > 0 ? (
           // Render content_blocks if available (prioritized over legacy fields)
           // Uses same formatting as streaming events
-          <div className='space-y-3 mb-2'>
+          <div className='space-y-0 mb-0'>
             {contentBlocks.map((block, idx) => {
               const groupedTool = contentToolGroupsByIndex.get(idx)
               if (groupedTool) {
@@ -2161,7 +2166,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 return (
                   <div
                     key={`text-${block.index}-${idx}`}
-                    className='prose sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
+                    className='prose sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px] mt-2'
                   >
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
@@ -2200,50 +2205,52 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
                 const isExpanded = expandedBlocks.reasoning.has(block.index)
                 const reasoningSummary = truncateWords(accumulatedThinking)
+
                 return (
                   <div
                     key={`thinking-${block.index}-${idx}`}
-                    className='relative mb-3 mx-3 rounded-xl p-2 border border-neutral-100 bg-neutral-50 sm:px-2 dark:border-1 dark:border-transparent dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'
+                    className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
                   >
-                    <div className='flex items-center justify-between gap-3 mb-0'>
-                      <div className='flex items-center gap-2 min-w-0'>
-                        <span className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
-                          Reasoning
+                    {/* Blue pip indicator for reasoning */}
+                    <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' />
+
+                    {/* Reasoning header */}
+                    <button
+                      onClick={() => toggleBlock('reasoning', block.index)}
+                      className='flex items-center gap-2 group/reason hover:opacity-80 transition-opacity cursor-pointer outline-none'
+                    >
+                      <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
+                        Reasoning
+                      </span>
+                      {!isExpanded && reasoningSummary && (
+                        <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[300px]'>
+                          {reasoningSummary}
                         </span>
-                        {!isExpanded && reasoningSummary && (
-                          <div className='text-xs text-neutral-600 dark:text-neutral-400 line-clamp-1 overflow-hidden min-w-0'>
-                            {reasoningSummary}
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        variant='outline2'
-                        size='small'
-                        onClick={() => toggleBlock('reasoning', block.index)}
-                        title={isExpanded ? 'Hide details' : 'Show details'}
+                      )}
+                      <svg
+                        className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/reason:text-neutral-500 dark:group-hover/reason:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                        fill='none'
+                        viewBox='0 0 24 24'
+                        stroke='currentColor'
                       >
-                        {isExpanded ? (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                          </svg>
-                        ) : (
-                          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                          </svg>
-                        )}
-                      </Button>
-                    </div>
-                    {isExpanded && (
-                      <div className='prose max-w-none dark:prose-invert w-full px-4 py-1 text-[14px] sm:text-[14px] 2xl:text-[14px] 3xl:text-[14px]'>
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
-                          components={{ pre: PreRenderer, a: MarkdownLink }}
-                        >
-                          {accumulatedThinking}
-                        </ReactMarkdown>
+                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                      </svg>
+                    </button>
+
+                    {/* Expandable content */}
+                    <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+                      <div className='tool-expand-content pt-2'>
+                        <div className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkMath]}
+                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
+                            components={{ pre: PreRenderer, a: MarkdownLink }}
+                          >
+                            {accumulatedThinking}
+                          </ReactMarkdown>
+                        </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )
               } else if (block.type === 'reasoning_details') {
@@ -2270,7 +2277,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           <>
             {/* Fallback: render tool calls and reasoning separately if no streamEvents or contentBlocks */}
             {Array.isArray(toolCalls) && toolCalls.length > 0 && (
-              <div className='space-y-3 mb-3'>
+              <div className='space-y-0 mb-3'>
                 {toolCalls.map((toolCall, idx) =>
                   renderToolCallGroupCard(
                     {
@@ -2290,45 +2297,52 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
             {/* Reasoning / thinking block */}
             {typeof thinking === 'string' && thinking.trim().length > 0 && (
-              <div className='relative mb-4 rounded-xl p-2 border border-neutral-100 bg-neutral-50 mx-3 sm:px-2 dark:border-1 dark:border-neutral-800/99 dark:bg-neutral-900 shadow-[0px_0px_3px_1px_rgba(0,0,0,0.05)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.25)] [will-change:contents] [transform:translateZ(0)]'>
-                <div className='mb-2 flex items-center justify-between'>
-                  <div className='text-xs sm:text-sm 3xl:text-base font-semibold uppercase tracking-wide text-neutral-800 dark:text-neutral-300'>
+              <div className='relative pl-6 pb-4 ml-2 mb-2 border-l border-neutral-300 dark:border-neutral-700'>
+                {/* Blue pip indicator for reasoning */}
+                <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' />
+
+                {/* Reasoning header */}
+                <button
+                  onClick={() => setShowThinking(s => !s)}
+                  className='flex items-center gap-2 group/reason hover:opacity-80 transition-opacity cursor-pointer outline-none'
+                  aria-expanded={showThinking}
+                  aria-controls={`reasoning-content-${id}`}
+                >
+                  <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
                     Reasoning
-                  </div>
-                  <button
-                    onClick={() => setShowThinking(s => !s)}
-                    className='p-1 rounded-md text-xs hover:bg-black/10 dark:hover:bg-white/10 transition-colors'
-                    title={showThinking ? 'Hide details' : 'Show details'}
-                    aria-expanded={showThinking}
-                    aria-controls={`reasoning-content-${id}`}
+                  </span>
+                  {!showThinking && (
+                    <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[300px]'>
+                      {truncateWords(thinking)}
+                    </span>
+                  )}
+                  <svg
+                    className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/reason:text-neutral-500 dark:group-hover/reason:text-neutral-400 ${showThinking ? 'open' : ''}`}
+                    fill='none'
+                    viewBox='0 0 24 24'
+                    stroke='currentColor'
                   >
-                    {showThinking ? (
-                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-                      </svg>
-                    ) : (
-                      <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-                {showThinking ? (
-                  <div
-                    id={`reasoning-content-${id}`}
-                    className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
-                  >
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
-                      components={{ pre: PreRenderer, a: MarkdownLink }}
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                  </svg>
+                </button>
+
+                {/* Expandable content */}
+                <div className={`tool-expand-container ${showThinking ? 'open' : ''}`}>
+                  <div className='tool-expand-content pt-2'>
+                    <div
+                      id={`reasoning-content-${id}`}
+                      className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'
                     >
-                      {thinking}
-                    </ReactMarkdown>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkMath]}
+                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
+                        components={{ pre: PreRenderer, a: MarkdownLink }}
+                      >
+                        {thinking}
+                      </ReactMarkdown>
+                    </div>
                   </div>
-                ) : (
-                  <div className='text-xs text-neutral-600 dark:text-neutral-400'>{truncateWords(thinking)}</div>
-                )}
+                </div>
               </div>
             )}
           </>
@@ -2381,9 +2395,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             )}
           </>
         )}
-        {hasContent && modelName && role !== 'user' && (
+        {/* {hasContent && modelName && role !== 'user' && (
           <div className='mt-1 text-xs sm:text-sm 3xl:text-base text-stone-400 flex justify-end'>{modelName}</div>
-        )}
+        )} */}
         {/* Artifacts (images) */}
         {Array.isArray(artifacts) && artifacts.length > 0 && role !== 'assistant' && (
           <div className='mt-3 mb-3 space-y-2 flex flex-col items-end'>
@@ -2429,7 +2443,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 onBranch={role === 'user' ? handleBranch : undefined}
                 onDelete={handleDelete}
                 onCopy={handleCopy}
-                onResend={role === 'assistant' ? handleResend : undefined}
                 onSave={handleSave}
                 onSaveBranch={handleSaveBranch}
                 onCancel={handleCancel}
@@ -2437,6 +2450,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 isEditing={editingState}
                 editMode={editMode}
                 copied={copied}
+                modelName={modelName}
               />
               {/* More menu dropdown */}
               {showMoreMenu && (
@@ -2499,7 +2513,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         )}
 
         {role === 'user' && (
-          <div className='w-full border-t border-2 border-blue-400 dark:border-orange-600/30 my-4 mb-8 rounded-full'></div>
+          <div className='h-px w-full bg-gradient-to-r from-transparent via-orange-500/30 to-transparent my-8'></div>
         )}
 
         {/* Edit instructions */}

@@ -534,3 +534,34 @@ html {
     interpolate-size: allow-keywords;
   }
 }
+
+/* Tool call expand animation using grid-template-rows trick */
+.tool-expand-container {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.tool-expand-container.open {
+  grid-template-rows: 1fr;
+}
+
+.tool-expand-content {
+  min-height: 0;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.tool-expand-container.open .tool-expand-content {
+  opacity: 1;
+}
+
+/* Tool call chevron rotation */
+.tool-chevron {
+  transition: transform 0.2s ease;
+}
+
+.tool-chevron.open {
+  transform: rotate(90deg);
+}

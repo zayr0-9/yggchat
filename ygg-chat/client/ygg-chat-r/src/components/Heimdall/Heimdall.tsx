@@ -1803,20 +1803,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             transition={{ duration: 0.18, ease: 'easeOut' }}
           >
             {/* Current path highlight (rendered first so selection can appear above) */}
-            {isOnCurrentPath && (
-              // <rect
-              //   width={nodeWidth + 12}
-              //   height={nodeHeight + 12}
-              //   x={-6}
-              //   y={-6}
-              //   rx='14'
-              //   fill='none'
-              //   stroke='currentColor'
-              //   strokeWidth='3'
-              //   className={`animate-pulse-slow transition-colors duration-300 ${
-              //     isVisible ? 'stroke-rose-300' : 'stroke-indigo-200 dark:stroke-yPurple-50'
-              //   }`}
-              // />
+            {/* {isOnCurrentPath && (
+             
               <line
                 x1='72'
                 y1={nodeHeight + 14}
@@ -1827,7 +1815,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                   isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-indigo-200 dark:stroke-yPurple-50'
                 }`}
               />
-            )}
+            )} */}
             {/* Selection highlight */}
             {isNodeSelected && (
               <rect
@@ -1839,7 +1827,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 fill='none'
                 stroke='currentColor'
                 strokeWidth='3'
-                className={`animate-pulse-slow transition-colors duration-300 ${' stroke-stone-400 dark:stroke-neutral-200'}`}
+                className={`animate-pulse-slow transition-colors duration-300 ${isVisible ? 'stroke-stone-400 dark:stroke-orange-600' : 'stroke-stone-400 dark:stroke-neutral-200'}`}
               />
             )}
             <rect
@@ -1848,14 +1836,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               height={nodeHeight}
               rx='8'
               strokeWidth='2'
-              className={`cursor-pointer hover:opacity-90 transition-opacity duration-200 ${
+              className={`cursor-pointer hover:opacity-90 transition-colors duration-200 ${
                 compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
-              } ${node.sender === 'user' ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400' : node.sender === 'ex_agent' ? 'fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 dark:stroke-orange-600' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400 '} `}
+              } ${node.sender === 'user' ? `fill-neutral-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400' : 'stroke-neutral-300'}` : node.sender === 'ex_agent' ? `fill-slate-50 stroke-orange-600 dark:fill-yBlack-900 ${isVisible ? 'dark:stroke-orange-600 stroke-emerald-400' : 'dark:stroke-orange-600'}` : `fill-slate-100 dark:fill-neutral-900 dark:stroke-neutral-800 ${isVisible ? 'stroke-emerald-400' : 'stroke-neutral-200'}`}`}
               style={{
                 filter:
-                  compactMode && focusedNodeId === node.id
-                    ? `drop-shadow(0 12px 12px rgba(0,0,0,${isDarkMode ? '0.45' : '0.05'})) drop-shadow(0 6px 18px rgba(0,0,0,0.02)) drop-shadow(0 0 10px rgba(59, 130, 246, 0.5))`
-                    : `drop-shadow(0 12px 12px rgba(0,0,0,${isDarkMode ? '0.55' : '0.05'})) drop-shadow(0 6px 18px rgba(0,0,0,0.02))`,
+                  compactMode && focusedNodeId === node.id ? `drop-shadow(0 0 10px rgba(59, 130, 246, 0.5))` : 'none',
               }}
               onMouseEnter={e => {
                 setSelectedNode(node)
@@ -2023,9 +2009,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               cx={x}
               cy={y + circleRadius}
               r={circleRadius}
-              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-yBlack-900 dark:stroke-yBrown-400'} ${
+              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-neutral-800 dark:stroke-neutral-900'} ${
                 node.sender === 'user'
-                  ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-yPurple-400'
+                  ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-neutral-900'
                   : node.sender === 'ex_agent'
                     ? 'fill-orange-50 stroke-orange-600'
                     : 'fill-indigo-50 stroke-yPurple-500'
@@ -2033,7 +2019,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               style={{
                 transform: selectedNode?.id === node.id ? 'scale(1.1)' : 'scale(1)',
                 transformOrigin: `${x}px ${y + circleRadius}px`,
-                filter: `drop-shadow(0 12px 28px rgba(0,0,0,${isDarkMode ? '0.45' : '0.05'})) drop-shadow(0 6px 18px rgba(0,0,0,0.02))`,
+                filter: `drop-shadow(0 4px 12px rgba(0,0,0,${isDarkMode ? '0.25' : '0.05'})) drop-shadow(0 6px 18px rgba(0,0,0,0.02))`,
               }}
               onMouseEnter={e => {
                 setSelectedNode(node)
@@ -2106,7 +2092,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   return (
     <div
       ref={containerRef}
-      className='group w-full h-screen border-l dark:border-neutral-800 border-neutral-200 bg-neutral-50 relative overflow-hidden dark:bg-neutral-900 shadow-[inset_8px_0_17px_-8px_rgba(0,0,0,0.1)] dark:shadow-[inset_8px_0_12px_-2px_rgba(0,0,0,0.85)]'
+      className='group w-full h-screen border-l dark:border-neutral-800 border-neutral-200 bg-neutral-50 relative overflow-hidden dark:bg-yBlack-900 shadow-[inset_8px_0_17px_-8px_rgba(0,0,0,0.1)] dark:shadow-[inset_4px_0_6px_-2px_rgba(0,0,0,0.45)]'
       onContextMenu={e => {
         // Check if the context menu event originates from an exempt element
         let el = e.target as Node | null
