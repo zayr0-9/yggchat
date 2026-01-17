@@ -87,6 +87,7 @@ export const HtmlToolsModal: React.FC = () => {
   const [showFavorites, setShowFavorites] = useState(false)
   const [showHibernated, setShowHibernated] = useState(false)
   const [fullscreenKey, setFullscreenKey] = useState<string | null>(null)
+  const [modalFullscreen, setModalFullscreen] = useState(false)
   const [showFullscreenSettings, setShowFullscreenSettings] = useState(false)
   const [showFullscreenTabMenu, setShowFullscreenTabMenu] = useState<string | null>(null)
   const [tabMenuPosition, setTabMenuPosition] = useState<{ top: number; left: number } | null>(null)
@@ -126,7 +127,9 @@ export const HtmlToolsModal: React.FC = () => {
   }, [activeEntries])
 
   const toggleFullscreen = (entryKey: string) => {
-    setFullscreenKey(prev => (prev === entryKey ? null : entryKey))
+    const isExiting = fullscreenKey === entryKey
+    setFullscreenKey(isExiting ? null : entryKey)
+    setModalFullscreen(!isExiting)
   }
 
   const isVisible = isOpen || isHomepageFullscreen
@@ -158,10 +161,11 @@ export const HtmlToolsModal: React.FC = () => {
   }, [activeEntries, focusKey, isVisible, viewMode])
 
   useEffect(() => {
-    if (!isVisible && fullscreenKey) {
-      setFullscreenKey(null)
+    if (!isVisible) {
+      if (fullscreenKey) setFullscreenKey(null)
+      if (modalFullscreen) setModalFullscreen(false)
     }
-  }, [fullscreenKey, isVisible])
+  }, [fullscreenKey, modalFullscreen, isVisible])
 
   useEffect(() => {
     if (!fullscreenKey) return
@@ -789,18 +793,28 @@ export const HtmlToolsModal: React.FC = () => {
   // Main modal view
   return (
     <div
-      className='fixed inset-0 z-[1400] flex items-center justify-center p-10'
-      style={{ paddingTop: 'calc(var(--titlebar-height, 0px) + 40px)', boxSizing: 'border-box' }}
+      className={`fixed inset-0 z-[1400] ${modalFullscreen ? '' : 'flex items-center justify-center p-10'}`}
+      style={
+        modalFullscreen
+          ? { paddingTop: 'var(--titlebar-height, 0px)', boxSizing: 'border-box' }
+          : { paddingTop: 'calc(var(--titlebar-height, 0px) + 40px)', boxSizing: 'border-box' }
+      }
     >
       {/* Backdrop */}
-      <div
-        className='absolute inset-0 bg-black/20 dark:bg-black/40 backdrop-blur'
-        onClick={onClose}
-        aria-hidden='true'
-      />
+      {!modalFullscreen && (
+        <div
+          className='absolute inset-0 bg-black/20 dark:bg-black/40 backdrop-blur'
+          onClick={onClose}
+          aria-hidden='true'
+        />
+      )}
       {/* Glass Modal */}
       <div
-        className='relative w-full max-w-[1000px] h-[80vh] bg-white/75 dark:bg-[rgba(15,15,15,0.82)] backdrop-blur-[32px] border border-neutral-200 dark:border-white/[0.08] rounded-3xl shadow-2xl dark:shadow-[0_40px_100px_-20px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden'
+        className={
+          modalFullscreen
+            ? 'relative w-full h-full bg-white/98 dark:bg-[rgba(15,15,15,0.98)] backdrop-blur-[32px] flex flex-col overflow-hidden'
+            : 'relative w-full max-w-[1000px] h-[80vh] bg-white/75 dark:bg-[rgba(15,15,15,0.82)] backdrop-blur-[32px] border border-neutral-200 dark:border-white/[0.08] rounded-3xl shadow-2xl dark:shadow-[0_40px_100px_-20px_rgba(0,0,0,0.7)] flex flex-col'
+        }
         role='dialog'
         aria-modal='true'
         aria-label='HTML tool viewer'
