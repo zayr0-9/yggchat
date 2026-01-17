@@ -3358,7 +3358,7 @@ function Chat() {
             {/* Controls row */}
             <div className='flex items-center justify-between gap-0 flex-wrap'>
               {/* Left side controls */}
-              <div className='flex items-center'>
+              <div className='flex items-center min-w-0 flex-1'>
                 <button
                   className='pt-1.5 px-2 rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-white/10 dark:hover:bg-white/5 transition-all duration-200'
                   onClick={() => {
@@ -3373,40 +3373,31 @@ function Chat() {
                     onAnimationEnd={() => setSpinSettings(false)}
                   ></i>
                 </button>
-                <div className='flex items-center gap-1 flex-wrap'>
+                <div className='flex items-center gap-1 flex-nowrap min-w-0 flex-1'>
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && extensions.length > 0 && (
-                    <div className='flex items-center gap-2 transition-transform duration-300'>
-                      <Select
-                        value={selectedExtensionId || ''}
-                        onChange={val => {
-                          dispatch(selectExtension(val || null))
-                          // Immediately request context for the chosen extension
-                          requestContext(val || null)
-                        }}
-                        blur='low'
-                        options={
-                          extensions.length > 0
-                            ? extensions.map(ext => ({
-                                value: ext.id,
-                                label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
-                              }))
-                            : [{ value: '', label: 'No extensions connected' }]
-                        }
-                        placeholder='Select extension'
-                        disabled={extensions.length === 0}
-                        className=' min-w-[70px] max-w-[120px] lg:max-w-[200px] ml-2 text-xs sm:text-sm text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
-                        size='small'
-                      />
-                      {/* <div
-                        className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
-                        title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
-                      >
-                        {workspace?.name && ` ${'🟢 ' + workspace.name}`}
-                      </div> */}
-                    </div>
+                    <Select
+                      value={selectedExtensionId || ''}
+                      onChange={val => {
+                        dispatch(selectExtension(val || null))
+                        // Immediately request context for the chosen extension
+                        requestContext(val || null)
+                      }}
+                      blur='low'
+                      options={
+                        extensions.length > 0
+                          ? extensions.map(ext => ({
+                              value: ext.id,
+                              label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
+                            }))
+                          : [{ value: '', label: 'No extensions connected' }]
+                      }
+                      placeholder='Select extension'
+                      disabled={extensions.length === 0}
+                      className='flex-1 basis-0 min-w-0 max-w-[200px] ml-2 text-xs sm:text-sm text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
+                      size='small'
+                    />
                   )}
 
-                  {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
                   {/* Provider selector - visibility controlled by user settings */}
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && providerSettings.showProviderSelector && (
                     <Select
@@ -3415,18 +3406,17 @@ function Chat() {
                       options={providers.providers.map(p => p.name)}
                       placeholder='Select a provider...'
                       disabled={providers.providers.length === 0}
-                      className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 lg:max-w-32 transition-transform duration-60 active:scale-97'
+                      className='flex-1 basis-0 min-w-0 max-w-[200px] transition-transform duration-60 active:scale-97'
                       searchBarVisible={true}
                     />
                   )}
-                  {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
                   <ModelSelectControl
                     provider={providers.currentProvider}
                     selectedModelName={selectedModel?.name || ''}
                     onChange={handleModelSelect}
                     placeholder='Select a model...'
                     blur='low'
-                    className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-43 transition-transform duration-60 active:scale-99 rounded-4xl'
+                    className='flex-1 basis-0 min-w-0 max-w-[200px] transition-transform duration-60 active:scale-99 rounded-4xl'
                     showFilters={true}
                     footerContent={modelSelectFooter}
                   />
