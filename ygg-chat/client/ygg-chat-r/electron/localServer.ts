@@ -35,6 +35,7 @@ import {
   registerToolsRoutes,
 } from './localToolsRoutes.js'
 import { registerProxyRoutes } from './proxyGateway.js'
+import { registerLocalOperationsRoutes } from './localOperations.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -1010,6 +1011,7 @@ function setupServer() {
     registerToolsRoutes(app, db, statements)
   }
   registerProxyRoutes(app)
+  registerLocalOperationsRoutes(app)
 
   // =====================================================
   // OpenAI ChatGPT OAuth Authentication Endpoints

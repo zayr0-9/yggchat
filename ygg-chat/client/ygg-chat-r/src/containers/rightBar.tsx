@@ -9,21 +9,36 @@ import { updateResearchNote } from '../features/conversations/conversationAction
 import { makeSelectConversationById } from '../features/conversations/conversationSelectors'
 import { Conversation } from '../features/conversations/conversationTypes'
 import { useAuth } from '../hooks/useAuth'
-import { ResearchNoteItem } from '../hooks/useQueries'
+import { DirectoryFileEntry, ResearchNoteItem, useDirectoryFiles } from '../hooks/useQueries'
 
 interface RightBarProps {
   conversationId: ConversationId | null
   notes?: ResearchNoteItem[]
   isLoadingNotes?: boolean
   className?: string
+  ccCwd?: string
+  onFilePathInsert?: (path: string) => void
 }
 
-const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadingNotes = false, className = '' }) => {
+const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadingNotes = false, className = '', ccCwd = '', onFilePathInsert }) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { userId } = useAuth()
   const isWeb = import.meta.env.VITE_ENVIRONMENT === 'web'
+
+  // File browser state
+  const [currentPath, setCurrentPath] = useState<string>(ccCwd)
+  const [pathHistory, setPathHistory] = useState<string[]>([])
+  const { data: directoryData, isLoading: isLoadingFiles, error: filesError } = useDirectoryFiles(currentPath || null)
+
+  // Sync currentPath with ccCwd when it changes
+  useEffect(() => {
+    if (ccCwd && ccCwd !== currentPath) {
+      setCurrentPath(ccCwd)
+      setPathHistory([])
+    }
+  }, [ccCwd])
 
   // Drawer collapse state with localStorage persistence
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
@@ -189,6 +204,38 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
     navigate(`/chat/${noteItem.project_id || 'unknown'}/${noteItem.id}`)
   }
 
+  // File browser navigation
+  const handleFileClick = (file: DirectoryFileEntry) => {
+    if (file.isDirectory) {
+      setPathHistory(prev => [...prev, currentPath])
+      setCurrentPath(file.path)
+    }
+  }
+
+  const handleGoBack = () => {
+    if (pathHistory.length > 0) {
+      const previousPath = pathHistory[pathHistory.length - 1]
+      setPathHistory(prev => prev.slice(0, -1))
+      setCurrentPath(previousPath)
+    } else if (ccCwd) {
+      setCurrentPath(ccCwd)
+    }
+  }
+
+  const handleGoToRoot = () => {
+    if (ccCwd) {
+      setCurrentPath(ccCwd)
+      setPathHistory([])
+    }
+  }
+
+  // Get the display name for current path (relative to ccCwd)
+  const getDisplayPath = () => {
+    if (!currentPath || !ccCwd) return ''
+    if (currentPath === ccCwd) return '/'
+    return currentPath.replace(ccCwd, '') || '/'
+  }
+
   return (
     <aside
       className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} shadow-md border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-12' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
@@ -213,39 +260,136 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
         )}
       </div>
 
-      {/* Tab buttons - only show when expanded */}
-      {!isCollapsed && (
-        <div className='flex gap-2 px-3 pb-2'>
-          <button
-            onClick={() => setActiveTab('note')}
-            className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === 'note'
-              ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)]'
-              : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
-              }`}
-          >
-            Note
-          </button>
-          <button
-            onClick={() => setActiveTab('list')}
-            className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === 'list'
-              ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)]'
-              : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
-              }`}
-          >
-            List
-          </button>
-        </div>
-      )}
+      {/* Main content wrapper - equal height sections when expanded */}
+      <div className={`flex-1 flex flex-col ${isCollapsed ? '' : 'min-h-0'}`}>
+        {/* File browser - show when ccCwd is set and expanded */}
+        {!isCollapsed && ccCwd && (
+          <div className='flex-1 min-h-0 flex flex-col px-2 pb-2 border-b border-neutral-200 dark:border-neutral-800'>
+            {/* Path header with navigation */}
+            <div className='flex items-center gap-1 mb-2 flex-shrink-0'>
+              <button
+                onClick={handleGoToRoot}
+                className='p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors'
+                title='Go to root'
+                disabled={currentPath === ccCwd}
+              >
+                <i className='bx bx-home text-sm text-neutral-600 dark:text-neutral-400' />
+              </button>
+              <button
+                onClick={handleGoBack}
+                className='p-1 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors'
+                title='Go back'
+                disabled={pathHistory.length === 0}
+              >
+                <i className='bx bx-arrow-back text-sm text-neutral-600 dark:text-neutral-400' />
+              </button>
+              <span className='text-[10px] text-neutral-500 dark:text-neutral-400 truncate flex-1' title={currentPath}>
+                {getDisplayPath()}
+              </span>
+            </div>
 
-      {/* Content Area */}
-      <div
-        className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-2 2xl:pt-2 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0'
-        data-heimdall-wheel-exempt='true'
-        data-heimdall-contextmenu-exempt='true'
-      >
+            {/* File list */}
+            <div className='flex-1 overflow-y-auto no-scrollbar'>
+              {isLoadingFiles && (
+                <div className='text-[10px] text-neutral-500 dark:text-neutral-400 py-1'>Loading files...</div>
+              )}
+              {filesError && (
+                <div className='text-[10px] text-red-500 dark:text-red-400 py-1'>
+                  {filesError instanceof Error ? filesError.message : 'Failed to load files'}
+                </div>
+              )}
+              {directoryData?.files && directoryData.files.length === 0 && !isLoadingFiles && (
+                <div className='text-[10px] text-neutral-500 dark:text-neutral-400 py-1'>Empty directory</div>
+              )}
+              {directoryData?.files?.map(file => (
+                <div
+                  key={file.path}
+                  className='flex items-center gap-1.5 px-1.5 py-1 rounded text-[11px] transition-colors group'
+                >
+                  <div
+                    role='button'
+                    tabIndex={0}
+                    onClick={() => handleFileClick(file)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleFileClick(file)
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 flex-1 min-w-0 ${
+                      file.isDirectory
+                        ? 'cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded px-1 -mx-1'
+                        : 'cursor-default text-neutral-500 dark:text-neutral-400'
+                    }`}
+                  >
+                    <i
+                      className={`bx ${file.isDirectory ? 'bx-folder text-amber-500' : 'bx-file text-neutral-400'} text-sm flex-shrink-0`}
+                    />
+                    <span className='truncate text-neutral-700 dark:text-neutral-300'>{file.name}</span>
+                  </div>
+                  {onFilePathInsert && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        onFilePathInsert(file.path)
+                      }}
+                      className='p-0.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0'
+                      title='Insert path to input'
+                    >
+                      <i className='bx bx-plus text-sm text-neutral-600 dark:text-neutral-400' />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tab buttons - only show when expanded */}
+        {!isCollapsed && (
+          <div className='flex gap-2 px-3 py-2 flex-shrink-0'>
+            <button
+              onClick={() => setActiveTab('note')}
+              className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === 'note'
+                ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)]'
+                : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+                }`}
+            >
+              Note
+            </button>
+            <button
+              onClick={() => setActiveTab('list')}
+              className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === 'list'
+                ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)]'
+                : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+                }`}
+            >
+              List
+            </button>
+          </div>
+        )}
+
+        {/* Content Area */}
+        <div
+          className={`${!isCollapsed && ccCwd ? 'flex-1' : 'flex-1'} min-h-0 overflow-y-auto overflow-x-hidden p-2 pt-2 2xl:pt-2 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0`}
+          data-heimdall-wheel-exempt='true'
+          data-heimdall-contextmenu-exempt='true'
+        >
         {isCollapsed ? (
-          // Collapsed state - show icon only
+          // Collapsed state - show icons only
           <div className='flex flex-col items-center gap-2'>
+            {ccCwd && (
+              <Button
+                variant='outline2'
+                size='circle'
+                rounded='full'
+                className='h-10 w-10'
+                onClick={toggleCollapse}
+                title='Expand to view files'
+              >
+                <i className='bx bx-folder text-lg' aria-hidden='true'></i>
+              </Button>
+            )}
             <Button
               variant='outline2'
               size='circle'
@@ -321,6 +465,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
             )}
           </>
         )}
+        </div>
       </div>
     </aside>
   )

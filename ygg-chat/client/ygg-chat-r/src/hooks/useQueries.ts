@@ -1795,3 +1795,55 @@ export const getHtmlToolsFromCache = (queryClient: QueryClient | null, userId: s
   if (!queryClient || !userId) return []
   return queryClient.getQueryData<HtmlToolRecord[]>(htmlToolsQueryKey(userId)) || []
 }
+
+/**
+ * File entry from directory listing
+ */
+export interface DirectoryFileEntry {
+  name: string
+  isDirectory: boolean
+  path: string
+}
+
+/**
+ * Directory listing response
+ */
+export interface DirectoryListingResponse {
+  path: string
+  files: DirectoryFileEntry[]
+}
+
+/**
+ * Fetch files from a directory path
+ * Cache key: ['directory-files', path]
+ *
+ * Only available in electron/local mode for security
+ * Returns file list sorted with directories first
+ *
+ * @param directoryPath - The directory path to list files from
+ * @returns Query result with files array
+ */
+export function useDirectoryFiles(directoryPath: string | null | undefined) {
+  return useQuery({
+    queryKey: ['directory-files', directoryPath],
+    queryFn: async () => {
+      if (!directoryPath) throw new Error('Directory path is required')
+
+      // Use local API for file system access (electron mode - port 3002)
+      const params = new URLSearchParams({ path: directoryPath })
+      const response = await fetch(`http://127.0.0.1:3002/api/local/files?${params}`)
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to list directory' }))
+        throw new Error(error.error || 'Failed to list directory')
+      }
+
+      return response.json() as Promise<DirectoryListingResponse>
+    },
+    enabled: !!directoryPath && directoryPath.trim().length > 0 && environment !== 'web',
+    staleTime: 30 * 1000, // 30 seconds - files can change frequently
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}

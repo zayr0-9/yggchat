@@ -3994,6 +3994,10 @@ function Chat() {
           conversationId={currentConversationId}
           notes={researchNotes}
           isLoadingNotes={isLoadingResearchNotes}
+          ccCwd={ccCwd}
+          onFilePathInsert={(path: string) => {
+            setLocalInput(prev => (prev ? prev + ' ' + path : path))
+          }}
         />
       )}
 
