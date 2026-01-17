@@ -26,6 +26,7 @@ import {
 import { createLmStudioStreamingRequest } from './LMStudio'
 import { createOpenAIChatGPTStreamingRequest } from './OpenAIChatGPT'
 // OpenAI OAuth is handled internally by OpenAIChatGPT module
+import { updateToolEnabledState } from '../../helpers/toolSettingsStorage'
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
 import sysPromptConfig from './sys_prompt.json'
 import {
@@ -34,7 +35,6 @@ import {
   setCustomTools,
   updateToolEnabled as updateToolEnabledInDefinitions,
 } from './toolDefinitions'
-import { updateToolEnabledState } from '../../helpers/toolSettingsStorage'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -553,6 +553,90 @@ const executeBrowseWebLocally = async (
 }
 
 /**
+ * Execute subagent tool by calling the ephemeral generation endpoint directly.
+ * This runs in the client context where auth token is available.
+ * Accumulates the streaming response and returns the final text.
+ */
+const executeSubagentCall = async (toolCall: any, accessToken: string | null): Promise<string> => {
+  const args = toolCall.arguments || {}
+  const { prompt, model, systemPrompt, maxTokens, temperature } = args
+
+  if (!prompt) {
+    throw new Error('Subagent requires a prompt')
+  }
+
+  try {
+    const response = await createStreamingRequest('/generate/ephemeral', accessToken, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        model: model || 'google/gemini-3-flash-preview',
+        maxTokens: Math.min(maxTokens || 4096, 16384),
+        temperature: temperature ?? 0.7,
+        systemPrompt,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Subagent generation failed: HTTP ${response.status}: ${errorText}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) {
+      throw new Error('No response body from subagent')
+    }
+
+    const decoder = new TextDecoder()
+    let fullText = ''
+    let reasoning = ''
+    let sseBuffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      sseBuffer += chunk
+
+      // Parse complete SSE events from buffer
+      const lines = sseBuffer.split('\n')
+      sseBuffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6)
+          if (data === '[DONE]') continue
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.text) {
+              fullText += parsed.text
+            } else if (parsed.reasoning) {
+              reasoning += parsed.reasoning
+            }
+          } catch {
+            // Non-JSON line, might be raw text
+            if (data.trim()) {
+              fullText += data
+            }
+          }
+        }
+      }
+    }
+
+    // Format result with reasoning if present
+    if (reasoning) {
+      return `<thinking>\n${reasoning}\n</thinking>\n\n${fullText}`
+    }
+    return fullText || 'Subagent returned empty response'
+  } catch (error) {
+    console.error('[executeSubagentCall] Error:', error)
+    throw error instanceof Error ? error : new Error(String(error))
+  }
+}
+
+/**
  * Execute a tool via orchestrator (blocking, immediate execution)
  */
 const executeLocalTool = async (
@@ -565,9 +649,15 @@ const executeLocalTool = async (
     streamId?: string
     priority?: 'low' | 'normal' | 'high' | 'critical'
     timeoutMs?: number
+    accessToken?: string | null
   }
 ) => {
   const timeoutMs = resolveToolTimeoutMs(toolCall, context?.timeoutMs)
+
+  // Subagent: execute via ephemeral endpoint (works in both electron and web)
+  if (toolCall?.name === 'subagent') {
+    return await executeSubagentCall(toolCall, context?.accessToken ?? null)
+  }
 
   // Non-electron: only allow browse_web, otherwise bail
   if (!isElectronEnvironment) {
@@ -705,6 +795,7 @@ const executeToolWithPermissionCheck = async (
     streamId?: string
     priority?: 'low' | 'normal' | 'high' | 'critical'
     timeoutMs?: number
+    accessToken?: string | null
   }
 ) => {
   // Check if auto-approve is enabled
@@ -1184,7 +1275,7 @@ export const sendMessage = createAsyncThunk<
                     toolCall,
                     rootPath,
                     operationMode,
-                    { conversationId, messageId: lastMsg.id, streamId }
+                    { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
                   )
                   content = typeof result === 'string' ? result : JSON.stringify(result)
                   successfulTool = true
@@ -1254,7 +1345,11 @@ export const sendMessage = createAsyncThunk<
                 }
                 chatgptMessages.push({ role: 'user', content: m.content })
               } else if (m.role === 'assistant') {
-                const assistantMsg: any = { role: 'assistant', content: m.content || '', content_blocks: m.content_blocks }
+                const assistantMsg: any = {
+                  role: 'assistant',
+                  content: m.content || '',
+                  content_blocks: m.content_blocks,
+                }
                 if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                   assistantMsg.tool_calls = m.tool_calls.map(tc => ({
                     id: tc.id,
@@ -1342,7 +1437,7 @@ export const sendMessage = createAsyncThunk<
                     toolCall,
                     rootPath,
                     operationMode,
-                    { conversationId, messageId: lastMsg.id, streamId }
+                    { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
                   )
                   content = typeof result === 'string' ? result : JSON.stringify(result)
                   successfulTool = true
@@ -1544,7 +1639,7 @@ export const sendMessage = createAsyncThunk<
                     toolCall,
                     rootPath,
                     operationMode,
-                    { conversationId, messageId: lastMsg.id, streamId }
+                    { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
                   )
                   content = typeof result === 'string' ? result : JSON.stringify(result)
                   successfulTool = true
@@ -1627,7 +1722,11 @@ export const sendMessage = createAsyncThunk<
               if (m.role === 'user') {
                 chatgptMessages.push({ role: 'user', content: m.content })
               } else if (m.role === 'assistant') {
-                const assistantMsg: any = { role: 'assistant', content: m.content || '', content_blocks: m.content_blocks }
+                const assistantMsg: any = {
+                  role: 'assistant',
+                  content: m.content || '',
+                  content_blocks: m.content_blocks,
+                }
                 if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                   assistantMsg.tool_calls = m.tool_calls.map(tc => ({
                     id: tc.id,
@@ -1719,7 +1818,7 @@ export const sendMessage = createAsyncThunk<
                     toolCall,
                     rootPath,
                     operationMode,
-                    { conversationId, messageId: lastMsg.id, streamId }
+                    { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
                   )
                   content = typeof result === 'string' ? result : JSON.stringify(result)
                   successfulTool = true
@@ -2141,6 +2240,7 @@ export const sendMessage = createAsyncThunk<
                     conversationId,
                     messageId: messageId ?? turnAssistantMessageId ?? undefined,
                     streamId,
+                    accessToken: auth.accessToken,
                   }
                 )
 
@@ -2760,7 +2860,7 @@ export const editMessageWithBranching = createAsyncThunk<
                   toolCall,
                   rootPath,
                   operationMode,
-                  { conversationId, messageId: lastMsg.id, streamId }
+                  { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
                 )
                 content = typeof result === 'string' ? result : JSON.stringify(result)
                 successfulTool = true
@@ -2876,7 +2976,11 @@ export const editMessageWithBranching = createAsyncThunk<
               }
               chatgptMessages.push({ role: 'user', content: m.content })
             } else if (m.role === 'assistant') {
-              const assistantMsg: any = { role: 'assistant', content: m.content || '', content_blocks: m.content_blocks }
+              const assistantMsg: any = {
+                role: 'assistant',
+                content: m.content || '',
+                content_blocks: m.content_blocks,
+              }
               if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                 assistantMsg.tool_calls = m.tool_calls.map(tc => ({
                   id: tc.id,
@@ -2954,7 +3058,7 @@ export const editMessageWithBranching = createAsyncThunk<
                   toolCall,
                   rootPath,
                   operationMode,
-                  { conversationId, messageId: lastMsg.id, streamId }
+                  { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
                 )
                 content = typeof result === 'string' ? result : JSON.stringify(result)
                 successfulTool = true
@@ -3344,6 +3448,7 @@ export const editMessageWithBranching = createAsyncThunk<
                     conversationId,
                     messageId: messageId ?? turnAssistantMessageId ?? undefined,
                     streamId,
+                    accessToken: auth.accessToken,
                   }
                 )
 
@@ -3729,7 +3834,7 @@ export const sendMessageToBranch = createAsyncThunk<
                   toolCall,
                   rootPath,
                   operationMode,
-                  { conversationId, messageId: lastMsg.id, streamId }
+                  { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
                 )
                 content = typeof result === 'string' ? result : JSON.stringify(result)
                 successfulTool = true
@@ -3835,7 +3940,11 @@ export const sendMessageToBranch = createAsyncThunk<
             if (m.role === 'user') {
               chatgptMessages.push({ role: 'user', content: m.content })
             } else if (m.role === 'assistant') {
-              const assistantMsg: any = { role: 'assistant', content: m.content || '', content_blocks: m.content_blocks }
+              const assistantMsg: any = {
+                role: 'assistant',
+                content: m.content || '',
+                content_blocks: m.content_blocks,
+              }
               if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                 assistantMsg.tool_calls = m.tool_calls.map(tc => ({
                   id: tc.id,
@@ -3912,7 +4021,7 @@ export const sendMessageToBranch = createAsyncThunk<
                   toolCall,
                   rootPath,
                   operationMode,
-                  { conversationId, messageId: lastMsg.id, streamId }
+                  { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
                 )
                 content = typeof result === 'string' ? result : JSON.stringify(result)
                 successfulTool = true
@@ -4250,6 +4359,7 @@ export const sendMessageToBranch = createAsyncThunk<
                     conversationId,
                     messageId: messageId ?? turnAssistantMessageId ?? undefined,
                     streamId,
+                    accessToken: auth.accessToken,
                   }
                 )
 

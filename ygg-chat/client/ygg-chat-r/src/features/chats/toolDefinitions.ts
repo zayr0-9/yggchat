@@ -543,6 +543,43 @@ const builtInToolDefinitions: ToolDefinition[] = [
       required: ['action'],
     },
   },
+  {
+    name: 'subagent',
+    enabled: true,
+    description:
+      'Spawn a sub-agent to perform a specialized task using a separate LLM generation. Useful for delegating complex subtasks, getting a second opinion, or using a different model for specific capabilities. The subagent runs independently and returns its complete response. Use sparingly as each call consumes additional tokens.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description: 'The task prompt for the subagent. Be specific and provide all necessary context.',
+        },
+        model: {
+          type: 'string',
+          description:
+            'Model to use for the subagent (e.g., "anthropic/claude-sonnet-4", "openai/gpt-4o", "google/gemini-2.0-flash"). Defaults to anthropic/claude-sonnet-4.',
+        },
+        systemPrompt: {
+          type: 'string',
+          description: 'Optional system prompt to set the subagent behavior/persona.',
+        },
+        maxTokens: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 16384,
+          description: 'Maximum tokens for the response (default 4096, max 16384).',
+        },
+        temperature: {
+          type: 'number',
+          minimum: 0,
+          maximum: 2,
+          description: 'Sampling temperature (0-2, default 0.7). Lower = more focused, higher = more creative.',
+        },
+      },
+      required: ['prompt'],
+    },
+  },
 ]
 
 // Helper to deep clone a tool definition (makes it mutable)
