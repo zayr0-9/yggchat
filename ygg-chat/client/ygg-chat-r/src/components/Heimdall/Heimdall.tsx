@@ -2175,7 +2175,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         </div>
       )}
       <div
-        className={`absolute top-4 left-4 z-10 flex gap-2 transition-opacity duration-200 ${isHovering ? 'opacity-100' : 'opacity-0'}`}
+        className={`absolute bottom-4 left-4 z-10 flex gap-2 transition-opacity duration-200 ${isHovering ? 'opacity-100' : 'opacity-0'}`}
       >
         <button
           onClick={zoomIn}
@@ -2221,7 +2221,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       </div>
       <div className='absolute top-4 right-8 ml-100 z-10 flex flex-col gap-2 items-end'>
         {/* Search bar for messages in the current chat */}
-        <div className='w-full max-w-[400px] relative mb-2 shadow-[0_20px_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.2)]'>
+        <div className='w-full min-w-[200px] max-w-[400px] relative mb-2 shadow-[0_20px_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.2)]'>
           <TextField
             placeholder='Search'
             value={searchQuery}
