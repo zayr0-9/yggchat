@@ -6,6 +6,12 @@ import { selectProviderState } from '../features/chats'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../features/chats/chatActions'
 import { getAllTools } from '../features/chats/toolDefinitions'
 import {
+  loadProviderSettings,
+  PROVIDER_SETTINGS_CHANGE_EVENT,
+  ProviderSettings,
+  saveProviderSettings,
+} from '../helpers/providerSettingsStorage'
+import {
   addCustomVideo,
   clearCustomVideoLibrary,
   CustomVideoEntry,
@@ -16,12 +22,6 @@ import {
   updateCustomVideoTextColorMode,
   VIDEO_BACKGROUND_CHANGE_EVENT,
 } from '../helpers/videoBackgroundStorage'
-import {
-  loadProviderSettings,
-  PROVIDER_SETTINGS_CHANGE_EVENT,
-  ProviderSettings,
-  saveProviderSettings,
-} from '../helpers/providerSettingsStorage'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { API_BASE } from '../utils/api'
@@ -116,7 +116,8 @@ const Settings: React.FC = () => {
     }
 
     window.addEventListener(PROVIDER_SETTINGS_CHANGE_EVENT, handleProviderSettingsChange as EventListener)
-    return () => window.removeEventListener(PROVIDER_SETTINGS_CHANGE_EVENT, handleProviderSettingsChange as EventListener)
+    return () =>
+      window.removeEventListener(PROVIDER_SETTINGS_CHANGE_EVENT, handleProviderSettingsChange as EventListener)
   }, [])
 
   const handleProviderVisibilityToggle = () => {
@@ -139,7 +140,10 @@ const Settings: React.FC = () => {
     }
     saveProviderSettings(updated)
     setProviderSettings(updated)
-    showStatus({ type: 'success', text: providerName ? `Default provider set to "${providerName}".` : 'Default provider cleared.' })
+    showStatus({
+      type: 'success',
+      text: providerName ? `Default provider set to "${providerName}".` : 'Default provider cleared.',
+    })
   }
 
   // Tool handlers
@@ -457,7 +461,7 @@ const Settings: React.FC = () => {
             {/* Collapsible content */}
             <div
               className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                toolsExpanded ? 'max-h-[2000px] opacity-100 mt-4' : 'max-h-0 opacity-0'
+                toolsExpanded ? ' opacity-100 my-4' : 'max-h-0 opacity-0'
               }`}
             >
               {/* Reload button */}
@@ -476,54 +480,50 @@ const Settings: React.FC = () => {
 
               {/* Tools list */}
               <div className='space-y-2'>
-                {tools.map(tool => (
-                  <div
-                    key={tool.name}
-                    className={`flex items-center justify-between p-3 rounded-lg border ${
-                      tool.isCustom
-                        ? 'border-orange-300 dark:border-orange-600/50 bg-orange-50/50 dark:bg-orange-900/10'
-                        : 'border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/30'
-                    }`}
-                  >
-                    <div className='flex-1 min-w-0'>
-                      <div className='flex items-center gap-2'>
-                        <span className='font-medium text-stone-800 dark:text-stone-200 truncate'>
-                          {tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                        </span>
-                        {tool.isCustom && (
-                          <span className='text-xs px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 flex-shrink-0'>
-                            Custom
-                          </span>
-                        )}
-                      </div>
-                      <p className='text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5'>
-                        {tool.description}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleToolToggle(tool.name, tool.enabled)}
-                      disabled={updatingTools.has(tool.name)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ml-3 flex-shrink-0 ${
-                        tool.enabled
-                          ? 'bg-emerald-500 dark:bg-emerald-600'
-                          : 'bg-stone-300 dark:bg-stone-600'
-                      } ${updatingTools.has(tool.name) ? 'opacity-50 cursor-wait' : ''}`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          tool.enabled ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
+                {tools.length === 0 ? (
+                  <div className='rounded-xl border-2 border-dashed border-stone-200 bg-stone-50/80 p-6 text-center text-sm text-stone-500 dark:border-stone-700 dark:bg-zinc-900/60 dark:text-stone-400'>
+                    No tools available. Reload to check for new tools.
                   </div>
-                ))}
+                ) : (
+                  tools.map(tool => (
+                    <div
+                      key={tool.name}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        tool.isCustom
+                          ? 'border-orange-300 dark:border-orange-600/50 bg-orange-50/50 dark:bg-orange-900/10'
+                          : 'border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/30'
+                      }`}
+                    >
+                      <div className='flex-1 min-w-0'>
+                        <div className='flex items-center gap-2'>
+                          <span className='font-medium text-stone-800 dark:text-stone-200 truncate'>
+                            {tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </span>
+                          {tool.isCustom && (
+                            <span className='text-xs px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 flex-shrink-0'>
+                              Custom
+                            </span>
+                          )}
+                        </div>
+                        <p className='text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5'>{tool.description}</p>
+                      </div>
+                      <button
+                        onClick={() => handleToolToggle(tool.name, tool.enabled)}
+                        disabled={updatingTools.has(tool.name)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ml-3 flex-shrink-0 ${
+                          tool.enabled ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                        } ${updatingTools.has(tool.name) ? 'opacity-50 cursor-wait' : ''}`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            tool.enabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
-
-              {tools.length === 0 && (
-                <p className='text-sm text-stone-500 dark:text-stone-400 text-center py-4'>
-                  No tools available. Reload to check for new tools.
-                </p>
-              )}
             </div>
           </section>
         )}
@@ -542,9 +542,7 @@ const Settings: React.FC = () => {
                 </p>
               </div>
               <div className='flex items-center gap-2'>
-                <span className='text-sm text-stone-500 dark:text-stone-400'>
-                  {htmlRegistry.entries.length} cached
-                </span>
+                <span className='text-sm text-stone-500 dark:text-stone-400'>{htmlRegistry.entries.length} cached</span>
                 <i
                   className={`bx bx-chevron-down text-2xl text-stone-500 dark:text-stone-400 transition-transform duration-200 ${
                     htmlToolsExpanded ? 'rotate-180' : ''
@@ -601,8 +599,7 @@ const Settings: React.FC = () => {
                             )}
                           </div>
                           <p className='text-xs text-stone-500 dark:text-stone-400 mt-0.5'>
-                            Key: {truncatedKey} · {sizeKb} KB · Updated{' '}
-                            {new Date(entry.updatedAt).toLocaleDateString()}
+                            Key: {truncatedKey} · {sizeKb} KB · Updated {new Date(entry.updatedAt).toLocaleDateString()}
                           </p>
                         </div>
                         <div className='flex items-center gap-1.5 ml-3 flex-shrink-0'>
@@ -660,7 +657,7 @@ const Settings: React.FC = () => {
 
               {/* Clear all button */}
               {htmlRegistry.entries.length > 0 && (
-                <div className='mt-4 pt-3 border-t border-stone-200 dark:border-stone-700 flex justify-end'>
+                <div className='mt-4 pt-3 flex justify-end'>
                   <Button
                     variant='outline2'
                     size='small'

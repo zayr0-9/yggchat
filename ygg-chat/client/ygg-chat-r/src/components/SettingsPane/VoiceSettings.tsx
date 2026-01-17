@@ -1,16 +1,16 @@
 import React from 'react'
 import {
-  selectVoiceSettings,
   selectVoiceInputEnabled,
+  selectVoiceSettings,
+  setSttAutoStart,
   setSttLanguage,
   setSttModel,
   setSttSilenceThreshold,
-  setSttAutoStart,
+  setVoiceInputEnabled,
   setWakeWordCooldownMs,
   setWakeWordEnabled,
   setWakeWordKeyword,
   setWakeWordThreshold,
-  setVoiceInputEnabled,
   STT_LANGUAGE_OPTIONS,
   STT_MODEL_OPTIONS,
   WAKE_WORD_OPTIONS,
@@ -108,9 +108,7 @@ export const VoiceSettings: React.FC = () => {
             {/* Cooldown */}
             <div className='space-y-1'>
               <div className='flex items-center justify-between'>
-                <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
-                  Cooldown Period
-                </label>
+                <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Cooldown Period</label>
                 <span className='text-xs text-neutral-500'>{(settings.wakeWordCooldownMs / 1000).toFixed(1)}s</span>
               </div>
               <input
@@ -141,8 +139,12 @@ export const VoiceSettings: React.FC = () => {
         {/* Auto-start after wake word */}
         <div className='flex items-center justify-between'>
           <div>
-            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Auto-start after wake word</label>
-            <p className='text-xs text-neutral-500 dark:text-neutral-400'>Begin recording immediately when wake word triggers</p>
+            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+              Auto-start after wake word
+            </label>
+            <p className='text-xs text-neutral-500 dark:text-neutral-400'>
+              Begin recording immediately when wake word triggers
+            </p>
           </div>
           <label className='relative inline-flex items-center cursor-pointer'>
             <input
@@ -159,9 +161,7 @@ export const VoiceSettings: React.FC = () => {
         {/* Silence Threshold */}
         <div className='space-y-1'>
           <div className='flex items-center justify-between'>
-            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
-              Silence Detection
-            </label>
+            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Silence Detection</label>
             <span className='text-xs text-neutral-500'>{settings.sttSilenceThreshold.toFixed(1)}s</span>
           </div>
           <input

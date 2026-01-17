@@ -11,7 +11,7 @@ import { extractTextFromPdf } from '../../utils/pdfUtils'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { SendButtonAnimationSettings } from './SendButtonAnimationSettings'
 import { ToolsSettings } from './ToolsSettings'
-import { VoiceSettings } from './VoiceSettings'
+import { VoiceSettingsSection } from './VoiceSettingsSection'
 
 type SettingsPaneProps = {
   open: boolean
@@ -581,24 +581,19 @@ ${block}`
                   className='flex-1 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500'
                 />
                 <span className='text-xs text-neutral-500 dark:text-neutral-500 w-6'>+16</span>
-                {fontSizeOffset !== 0 && (
-                  <button
-                    type='button'
-                    onClick={() => handleFontSizeChange(0)}
-                    className='px-3 py-1.5 rounded-lg text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors'
-                    title='Reset to default'
-                  >
-                    Reset
-                  </button>
-                )}
+                <button
+                  type='button'
+                  onClick={() => handleFontSizeChange(0)}
+                  className={`px-3 py-1.5 rounded-lg text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors ${fontSizeOffset === 0 ? 'invisible' : ''}`}
+                  title='Reset to default'
+                >
+                  Reset
+                </button>
               </div>
             </div>
 
             {/* Voice Settings Section */}
-            <div className='space-y-2'>
-              <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>Voice Input</span>
-              <VoiceSettings />
-            </div>
+            <VoiceSettingsSection />
 
             {/* Send Button Animation Section */}
             <div className='space-y-2'>

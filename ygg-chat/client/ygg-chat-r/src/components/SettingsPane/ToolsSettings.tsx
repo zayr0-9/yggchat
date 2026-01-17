@@ -304,7 +304,7 @@ export const ToolsSettings: React.FC = () => {
               </div>
             )}
 
-            <div className='space-y-4 px-2 bg-transparent'>
+            <div className='space-y-4 px-2 bg-transparent pb-6'>
               {tools.map(tool => (
                 <div
                   key={tool.name}

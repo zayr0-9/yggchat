@@ -150,7 +150,7 @@ export const SendButtonAnimationSettings: React.FC = () => {
         onClick={() => setIsExpanded(!isExpanded)}
         className='w-full flex items-center justify-between py-2'
       >
-        <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>Send Button Animation</span>
+        <span className='text-md font-medium text-stone-700 dark:text-stone-200'>Send Button Animation</span>
         <div className='flex items-center gap-2'>
           <div
             className='w-5 h-5 rounded border border-neutral-300 dark:border-neutral-600'
