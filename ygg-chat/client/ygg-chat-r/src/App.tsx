@@ -24,8 +24,9 @@ import {
   Settings,
   TermsOfService,
 } from './containers'
-import { useAppSelector } from './hooks/redux'
 import { selectCurrentUser } from './features/users'
+import { useAppSelector } from './hooks/redux'
+import { useIsMobile } from './hooks/useMediaQuery'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
@@ -51,6 +52,7 @@ const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
   const location = useLocation()
   const registry = useHtmlIframeRegistry()
   const currentUser = useAppSelector(selectCurrentUser)
+  const isMobile = useIsMobile()
   const isHiddenRoute = TOOL_VIEWER_HIDDEN_ROUTES.has(location.pathname)
   const canShow = Boolean(enabled && registry && currentUser && !isHiddenRoute)
   const bootstrappedUserIdRef = useRef<string | null>(null)
@@ -85,7 +87,7 @@ const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
         <button
           type='button'
           onClick={() => registry.openModal()}
-          className='fixed bottom-6 right-6 z-[1500] rounded-full border border-neutral-200/80 dark:border-neutral-700/70 bg-white/90 dark:bg-yBlack-900/90 px-4 py-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100 shadow-lg transition hover:scale-[1.02] hover:shadow-xl'
+          className={`fixed ${isMobile ? 'bottom-32 right-5' : 'bottom-6 right-6'} z-[1500] rounded-full border border-neutral-200/80 dark:border-neutral-700/70 bg-white/90 dark:bg-yBlack-900/90 px-4 py-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100 shadow-lg transition hover:scale-[1.02] hover:shadow-xl`}
           aria-label='Open HTML tools'
         >
           <span className='flex items-center gap-2'>

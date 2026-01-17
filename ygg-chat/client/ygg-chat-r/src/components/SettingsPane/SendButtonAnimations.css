@@ -1,0 +1,195 @@
+/* Send Button Loading Animations */
+
+.send-btn-loading {
+  width: 36px;
+  height: 36px;
+  background-color: var(--send-btn-bg, #ffffff);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.send-btn-preview {
+  width: 44px;
+  height: 44px;
+  background-color: var(--send-btn-bg, #ffffff);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 1. PULSE ORBIT */
+.pulse-orbit::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #000;
+  border-radius: 50%;
+  animation: pulse-orb 1.5s infinite ease-in-out;
+}
+@keyframes pulse-orb {
+  0%, 100% { transform: scale(0.5); opacity: 0.3; }
+  50% { transform: scale(1.2); opacity: 1; }
+}
+
+/* 2. ELLIPSIS FLOW */
+.ellipsis-flow {
+  display: flex;
+  gap: 3px;
+}
+.ellipsis-flow span {
+  width: 4px;
+  height: 4px;
+  background: #000;
+  border-radius: 50%;
+  animation: ellip-f 1s infinite ease-in-out;
+}
+.ellipsis-flow span:nth-child(2) { animation-delay: 0.2s; }
+.ellipsis-flow span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ellip-f {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* 3. LIQUID FILL */
+.liquid-fill::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: #000;
+  opacity: 0.15;
+  animation: liq-h 2.5s infinite ease-in-out;
+}
+@keyframes liq-h {
+  0%, 100% { height: 0%; }
+  50% { height: 100%; }
+}
+
+/* 4. NEUTRAL BOND */
+.neutral-bond::before,
+.neutral-bond::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #000;
+  border-radius: 50%;
+}
+.neutral-bond::before { animation: bond-a 1.2s infinite ease-in-out; }
+.neutral-bond::after { animation: bond-b 1.2s infinite ease-in-out; }
+@keyframes bond-a {
+  0%, 100% { transform: translateX(-10px); }
+  50% { transform: translateX(10px); }
+}
+@keyframes bond-b {
+  0%, 100% { transform: translateX(10px); }
+  50% { transform: translateX(-10px); }
+}
+
+/* 5. GEOMETRIC APERTURE */
+.geom-aperture::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid #000;
+  animation: geom-ap 2s infinite cubic-bezier(0.65, 0, 0.35, 1);
+}
+@keyframes geom-ap {
+  0% { transform: rotate(0deg) scale(1); border-radius: 2px; }
+  50% { transform: rotate(180deg) scale(0.4); border-radius: 50%; }
+  100% { transform: rotate(360deg) scale(1); border-radius: 2px; }
+}
+
+/* 6. NEURAL FLUX */
+.neural-flux::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background: #000;
+  border-radius: 50%;
+  animation: n-flux 1.8s infinite ease-in-out;
+}
+@keyframes n-flux {
+  0%, 100% { border-radius: 50%; transform: scale(1); }
+  33% { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; }
+  66% { border-radius: 70% 30% 30% 70% / 70% 70% 30% 30%; transform: scale(1.1); }
+}
+
+/* 7. DATA DRIFT */
+.data-drift span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  background: #000;
+  border-radius: 50%;
+  opacity: 0;
+  animation: d-drift 1.2s infinite linear;
+}
+.data-drift span:nth-child(1) { left: 10px; animation-delay: 0s; }
+.data-drift span:nth-child(2) { left: 16px; animation-delay: 0.4s; }
+.data-drift span:nth-child(3) { left: 22px; animation-delay: 0.8s; }
+@keyframes d-drift {
+  0% { transform: translateY(12px); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateY(-12px); opacity: 0; }
+}
+
+/* 8. INERTIAL COMPASS (INERTIA) */
+.inertia::after {
+  content: '';
+  width: 2px;
+  height: 14px;
+  background: #000;
+  border-radius: 4px;
+  animation: i-comp 1s infinite cubic-bezier(0.19, 1, 0.22, 1);
+}
+@keyframes i-comp {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(180deg); }
+}
+
+/* 9. BINARY SWAP */
+.binary-swap span {
+  width: 6px;
+  height: 6px;
+  background: #000;
+  position: absolute;
+  border-radius: 1px;
+}
+.binary-swap span:first-child { animation: b-swap-a 0.8s infinite alternate ease-in-out; }
+.binary-swap span:last-child { animation: b-swap-b 0.8s infinite alternate ease-in-out; }
+@keyframes b-swap-a {
+  0% { transform: translate(-8px, -8px); }
+  100% { transform: translate(8px, 8px); }
+}
+@keyframes b-swap-b {
+  0% { transform: translate(8px, 8px); }
+  100% { transform: translate(-8px, -8px); }
+}
+
+/* 10. PULSE FREQ */
+.pulse-freq {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.pulse-freq span {
+  width: 2px;
+  height: 4px;
+  background: #000;
+  animation: p-freq 0.6s infinite ease-in-out alternate;
+}
+.pulse-freq span:nth-child(2) { animation-delay: 0.1s; }
+.pulse-freq span:nth-child(3) { animation-delay: 0.2s; }
+@keyframes p-freq {
+  from { height: 4px; }
+  to { height: 16px; }
+}

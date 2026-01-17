@@ -856,7 +856,6 @@ export const sendMessage = createAsyncThunk<
       systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
 
       // Determine execution mode
-      const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       const isElectronMode =
         import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
       // For local tool execution support (GemTools), we prefer client mode even in web environment
@@ -1925,10 +1924,8 @@ export const sendMessage = createAsyncThunk<
                   // Add to local history tracking for next turn
                   currentTurnHistory.push(chunk.message)
 
-                  // Clear optimistic message immediately when real user message confirmed (web mode only)
-                  if (isWebMode) {
-                    dispatch(chatSliceActions.optimisticMessageCleared())
-                  }
+                  // Clear optimistic message immediately when real user message confirmed
+                  dispatch(chatSliceActions.optimisticMessageCleared())
                   // Live-update: append current image drafts to this new user message's artifacts
                   if (drafts.length > 0) {
                     const artifactDataUrls = drafts.map(d => d.dataUrl)
@@ -2601,7 +2598,6 @@ export const editMessageWithBranching = createAsyncThunk<
       systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
 
       // Determine execution mode
-      const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
       const isElectronMode =
         import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
       const executionMode = 'client' // Prefer client execution for tools
@@ -3159,10 +3155,8 @@ export const editMessageWithBranching = createAsyncThunk<
                     }
                   }
 
-                  // Clear optimistic branch message immediately when real branch message confirmed (web mode only)
-                  if (isWebMode) {
-                    dispatch(chatSliceActions.optimisticBranchMessageCleared())
-                  }
+                  // Clear optimistic branch message immediately when real branch message confirmed
+                  dispatch(chatSliceActions.optimisticBranchMessageCleared())
                 }
 
                 // Handle tool results (accumulated server-side into content_blocks)

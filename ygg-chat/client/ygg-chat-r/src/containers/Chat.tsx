@@ -23,6 +23,12 @@ import {
 } from '../components'
 import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import {
+  getStoredSendButtonAnimation,
+  getStoredSendButtonColor,
+  SendButtonAnimationType,
+  SendButtonLoadingAnimation,
+} from '../components/SettingsPane/SendButtonAnimationSettings'
+import {
   abortStreaming,
   blobToDataURL,
   chatSliceActions,
@@ -512,9 +518,28 @@ function Chat() {
     return Math.max(500, containerHeight * 0.6)
   }, [containerHeight])
 
+  // Determine if optimistic messages should be shown (all modes for instant feedback)
+  const showOptimisticMessage = !!optimisticMessage
+  const showOptimisticBranchMessage = !!optimisticBranchMessage
+
+  // Determine if streaming message should be shown (include in virtualizer)
+  const showStreamingMessage = useMemo(
+    () =>
+      streamState.active &&
+      (Boolean(streamState.buffer) ||
+        Boolean(streamState.thinkingBuffer) ||
+        streamState.toolCalls.length > 0 ||
+        streamState.events.length > 0),
+    [streamState.active, streamState.buffer, streamState.thinkingBuffer, streamState.toolCalls, streamState.events]
+  )
+
+  // Calculate extra items count for virtualizer (optimistic + streaming)
+  const extraItemsCount =
+    (showOptimisticMessage ? 1 : 0) + (showOptimisticBranchMessage ? 1 : 0) + (showStreamingMessage ? 1 : 0)
+
   // Virtualizer for efficient message list rendering
   const virtualizer = useVirtualizer({
-    count: filteredMessages.length,
+    count: filteredMessages.length + extraItemsCount,
     getScrollElement: () => messagesContainerRef.current,
     estimateSize: () => 200, // Estimated average message height
     overscan: 5, // Buffer 5 messages above/below viewport
@@ -849,6 +874,35 @@ function Chat() {
     window.addEventListener('storage', handleStorageEvent)
     return () => {
       window.removeEventListener('fontSizeOffsetChange', handleCustomEvent)
+      window.removeEventListener('storage', handleStorageEvent)
+    }
+  }, [])
+  // Send button animation type and color (synced from SettingsPane via custom event + localStorage)
+  const [sendButtonAnimation, setSendButtonAnimation] = useState<SendButtonAnimationType>(getStoredSendButtonAnimation)
+  const [sendButtonColor, setSendButtonColor] = useState<string>(getStoredSendButtonColor)
+  useEffect(() => {
+    const handleAnimationEvent = (e: Event) => {
+      const detail = (e as CustomEvent<SendButtonAnimationType>).detail
+      if (detail) setSendButtonAnimation(detail)
+    }
+    const handleColorEvent = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail) setSendButtonColor(detail)
+    }
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'chat:sendButtonAnimation' && e.newValue) {
+        setSendButtonAnimation(e.newValue as SendButtonAnimationType)
+      }
+      if (e.key === 'chat:sendButtonColor' && e.newValue) {
+        setSendButtonColor(e.newValue)
+      }
+    }
+    window.addEventListener('sendButtonAnimationChange', handleAnimationEvent)
+    window.addEventListener('sendButtonColorChange', handleColorEvent)
+    window.addEventListener('storage', handleStorageEvent)
+    return () => {
+      window.removeEventListener('sendButtonAnimationChange', handleAnimationEvent)
+      window.removeEventListener('sendButtonColorChange', handleColorEvent)
       window.removeEventListener('storage', handleStorageEvent)
     }
   }, [])
@@ -1548,8 +1602,6 @@ function Chat() {
           displayMessages.length > 0 &&
           displayMessages[displayMessages.length - 1]?.role === 'user'
 
-        const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
-
         // CC Mode: Send via sendCCMessage instead of sendMessage (disabled in web mode)
         if (ccMode && ccModeAvailable) {
           const parent: MessageId | null = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
@@ -1717,24 +1769,22 @@ function Chat() {
               dispatch(conversationsLoaded(updatedConversations))
             }
 
-            // Only create optimistic message in web mode for instant UI feedback
-            if (isWebMode) {
-              const optimisticUserMessage: Message = {
-                id: `temp-${Date.now()}`,
-                conversation_id: currentConversationId,
-                role: 'user' as const,
-                content: processedContent,
-                content_plain_text: processedContent,
-                parent_id: parent || null,
-                children_ids: [],
-                created_at: new Date().toISOString(),
-                model_name: selectedModel?.name || '',
-                partial: false,
-                pastedContext: [],
-                artifacts: [],
-              }
-              dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
+            // Create optimistic message for instant UI feedback
+            const optimisticUserMessage: Message = {
+              id: `temp-${Date.now()}`,
+              conversation_id: currentConversationId,
+              role: 'user' as const,
+              content: processedContent,
+              content_plain_text: processedContent,
+              parent_id: parent || null,
+              children_ids: [],
+              created_at: new Date().toISOString(),
+              model_name: selectedModel?.name || '',
+              partial: false,
+              pastedContext: [],
+              artifacts: [],
             }
+            dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
 
             // Use processed content for immediate send
             const inputToSend = { content: processedContent }
@@ -1765,11 +1815,9 @@ function Chat() {
                 // Redux already updated via messageAdded() + messageBranchCreated() dispatches
               })
               .catch(error => {
-                // Clear optimistic message on error (web mode only)
+                // Clear optimistic message on error
                 // Note: Success case is handled in chatActions when user_message chunk arrives
-                if (isWebMode) {
-                  dispatch(chatSliceActions.optimisticMessageCleared())
-                }
+                dispatch(chatSliceActions.optimisticMessageCleared())
                 console.error('Failed to send message:', error)
               })
           }
@@ -1830,7 +1878,6 @@ function Chat() {
       if (currentConversationId) {
         // Replace any @file mentions with actual file contents before branching
         const processed = replaceFileMentionsWithPath(newContent)
-        const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
         const parsedId = parseId(id)
         const originalMessage = conversationMessages.find(m => m.id === parsedId)
 
@@ -1861,25 +1908,23 @@ function Chat() {
             })
         } else {
           // Regular message branching logic (non-CC mode)
-          if (isWebMode) {
-            if (originalMessage) {
-              // Create optimistic branch message for instant UI feedback (web mode only)
-              const optimisticBranchMessage: Message = {
-                id: `branch-temp-${Date.now()}`,
-                conversation_id: currentConversationId,
-                role: 'user' as const,
-                content: processed,
-                content_plain_text: processed,
-                parent_id: originalMessage.parent_id,
-                children_ids: [],
-                created_at: new Date().toISOString(),
-                model_name: selectedModel?.name || '',
-                partial: false,
-                pastedContext: [],
-                artifacts: [],
-              }
-              dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
+          if (originalMessage) {
+            // Create optimistic branch message for instant UI feedback
+            const optimisticBranchMessage: Message = {
+              id: `branch-temp-${Date.now()}`,
+              conversation_id: currentConversationId,
+              role: 'user' as const,
+              content: processed,
+              content_plain_text: processed,
+              parent_id: originalMessage.parent_id,
+              children_ids: [],
+              created_at: new Date().toISOString(),
+              model_name: selectedModel?.name || '',
+              partial: false,
+              pastedContext: [],
+              artifacts: [],
             }
+            dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
           }
 
           dispatch(
@@ -1902,10 +1947,8 @@ function Chat() {
               })
             })
             .catch(error => {
-              // Clear optimistic branch message on error (web mode only)
-              if (isWebMode) {
-                dispatch(chatSliceActions.optimisticBranchMessageCleared())
-              }
+              // Clear optimistic branch message on error
+              dispatch(chatSliceActions.optimisticBranchMessageCleared())
               console.error('Failed to branch message:', error)
             })
         }
@@ -1946,26 +1989,22 @@ function Chat() {
 
         if (!hasChildren) {
           // No children: send a new message with this message as parent (linear continuation)
-          const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
-
-          if (isWebMode) {
-            // Create optimistic message for instant UI feedback
-            const optimisticUserMessage: Message = {
-              id: `temp-${Date.now()}`,
-              conversation_id: currentConversationId,
-              role: 'user' as const,
-              content: newContent,
-              content_plain_text: newContent,
-              parent_id: parsedId,
-              children_ids: [],
-              created_at: new Date().toISOString(),
-              model_name: selectedModel?.name || '',
-              partial: false,
-              pastedContext: [],
-              artifacts: [],
-            }
-            dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
+          // Create optimistic message for instant UI feedback
+          const optimisticUserMessage: Message = {
+            id: `temp-${Date.now()}`,
+            conversation_id: currentConversationId,
+            role: 'user' as const,
+            content: newContent,
+            content_plain_text: newContent,
+            parent_id: parsedId,
+            children_ids: [],
+            created_at: new Date().toISOString(),
+            model_name: selectedModel?.name || '',
+            partial: false,
+            pastedContext: [],
+            artifacts: [],
           }
+          dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
 
           // Send as a regular message with the selected message as parent
           dispatch(
@@ -1989,33 +2028,27 @@ function Chat() {
             })
             .catch(error => {
               // Clear optimistic message on error
-              if (isWebMode) {
-                dispatch(chatSliceActions.optimisticMessageCleared())
-              }
+              dispatch(chatSliceActions.optimisticMessageCleared())
               console.error('Failed to send message:', error)
             })
         } else {
           // Has children: create a branch (same as branch button behavior)
-          const isWebMode = import.meta.env.VITE_ENVIRONMENT === 'web'
-
-          if (isWebMode) {
-            // Create optimistic branch message for instant UI feedback (web mode only)
-            const optimisticBranchMessage: Message = {
-              id: `branch-temp-${Date.now()}`,
-              conversation_id: currentConversationId,
-              role: 'user' as const,
-              content: newContent,
-              content_plain_text: newContent,
-              parent_id: originalMessage.parent_id,
-              children_ids: [],
-              created_at: new Date().toISOString(),
-              model_name: selectedModel?.name || '',
-              partial: false,
-              pastedContext: [],
-              artifacts: [],
-            }
-            dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
+          // Create optimistic branch message for instant UI feedback
+          const optimisticBranchMessage: Message = {
+            id: `branch-temp-${Date.now()}`,
+            conversation_id: currentConversationId,
+            role: 'user' as const,
+            content: newContent,
+            content_plain_text: newContent,
+            parent_id: originalMessage.parent_id,
+            children_ids: [],
+            created_at: new Date().toISOString(),
+            model_name: selectedModel?.name || '',
+            partial: false,
+            pastedContext: [],
+            artifacts: [],
           }
+          dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
 
           dispatch(
             editMessageWithBranching({
@@ -2036,10 +2069,8 @@ function Chat() {
               })
             })
             .catch(error => {
-              // Clear optimistic branch message on error (web mode only)
-              if (isWebMode) {
-                dispatch(chatSliceActions.optimisticBranchMessageCleared())
-              }
+              // Clear optimistic branch message on error
+              dispatch(chatSliceActions.optimisticBranchMessageCleared())
               console.error('Failed to branch message:', error)
             })
         }
@@ -2912,7 +2943,7 @@ function Chat() {
               willChange: 'scroll-position',
             }}
           >
-            {filteredMessages.length === 0 ? (
+            {filteredMessages.length === 0 && extraItemsCount === 0 ? (
               <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
             ) : (
               <div
@@ -2925,6 +2956,115 @@ function Chat() {
                 }}
               >
                 {virtualizer.getVirtualItems().map(virtualRow => {
+                  // Calculate indices for extra items (order: optimistic, optimisticBranch, streaming)
+                  const optimisticIndex = showOptimisticMessage ? filteredMessages.length : -1
+                  const optimisticBranchIndex = showOptimisticBranchMessage
+                    ? filteredMessages.length + (showOptimisticMessage ? 1 : 0)
+                    : -1
+                  const streamingIndex = showStreamingMessage
+                    ? filteredMessages.length +
+                      (showOptimisticMessage ? 1 : 0) +
+                      (showOptimisticBranchMessage ? 1 : 0)
+                    : -1
+
+                  // Render optimistic message
+                  if (virtualRow.index === optimisticIndex && optimisticMessage) {
+                    return (
+                      <div
+                        key={`optimistic-${optimisticMessage.id}`}
+                        id={`message-optimistic-${optimisticMessage.id}`}
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <ChatMessage
+                          id={optimisticMessage.id.toString()}
+                          role={optimisticMessage.role}
+                          content={optimisticMessage.content}
+                          timestamp={optimisticMessage.created_at}
+                          modelName={optimisticMessage.model_name}
+                          artifacts={optimisticMessage.artifacts}
+                          width='w-full'
+                          fontSizeOffset={fontSizeOffset}
+                          className='opacity-70'
+                          onOpenToolHtmlModal={openToolHtmlModal}
+                        />
+                      </div>
+                    )
+                  }
+
+                  // Render optimistic branch message
+                  if (virtualRow.index === optimisticBranchIndex && optimisticBranchMessage) {
+                    return (
+                      <div
+                        key={`optimistic-branch-${optimisticBranchMessage.id}`}
+                        id={`message-optimistic-branch-${optimisticBranchMessage.id}`}
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <ChatMessage
+                          id={optimisticBranchMessage.id.toString()}
+                          role={optimisticBranchMessage.role}
+                          content={optimisticBranchMessage.content}
+                          timestamp={optimisticBranchMessage.created_at}
+                          modelName={optimisticBranchMessage.model_name}
+                          artifacts={optimisticBranchMessage.artifacts}
+                          width='w-full'
+                          fontSizeOffset={fontSizeOffset}
+                          className='opacity-70'
+                          onOpenToolHtmlModal={openToolHtmlModal}
+                        />
+                      </div>
+                    )
+                  }
+
+                  // Render streaming message
+                  if (virtualRow.index === streamingIndex) {
+                    return (
+                      <div
+                        key='streaming'
+                        id='message-streaming'
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <ChatMessage
+                          id='streaming'
+                          role='assistant'
+                          content={streamState.buffer}
+                          thinking={streamState.thinkingBuffer}
+                          toolCalls={streamState.toolCalls}
+                          streamEvents={streamState.events}
+                          width='w-full'
+                          fontSizeOffset={fontSizeOffset}
+                          modelName={selectedModel?.name || undefined}
+                          className=''
+                          onOpenToolHtmlModal={openToolHtmlModal}
+                        />
+                      </div>
+                    )
+                  }
+
+                  // Render regular message
                   const msg = filteredMessages[virtualRow.index]
                   const { toolCalls, contentBlocks } = parseMessageData(msg)
                   return (
@@ -2967,60 +3107,7 @@ function Chat() {
               </div>
             )}
 
-            {/* Show optimistic message in web mode only */}
-            {import.meta.env.VITE_ENVIRONMENT === 'web' && optimisticMessage && (
-              <ChatMessage
-                key={`optimistic-${optimisticMessage.id}`}
-                id={optimisticMessage.id.toString()}
-                role={optimisticMessage.role}
-                content={optimisticMessage.content}
-                timestamp={optimisticMessage.created_at}
-                modelName={optimisticMessage.model_name}
-                artifacts={optimisticMessage.artifacts}
-                width='w-full'
-                fontSizeOffset={fontSizeOffset}
-                className='opacity-70'
-                onOpenToolHtmlModal={openToolHtmlModal}
-              />
-            )}
 
-            {/* Show optimistic branch message in web mode only */}
-            {import.meta.env.VITE_ENVIRONMENT === 'web' && optimisticBranchMessage && (
-              <ChatMessage
-                key={`optimistic-branch-${optimisticBranchMessage.id}`}
-                id={optimisticBranchMessage.id.toString()}
-                role={optimisticBranchMessage.role}
-                content={optimisticBranchMessage.content}
-                timestamp={optimisticBranchMessage.created_at}
-                modelName={optimisticBranchMessage.model_name}
-                artifacts={optimisticBranchMessage.artifacts}
-                width='w-full'
-                fontSizeOffset={fontSizeOffset}
-                className='opacity-70'
-                onOpenToolHtmlModal={openToolHtmlModal}
-              />
-            )}
-
-            {/* Show streaming content */}
-            {streamState.active &&
-              (Boolean(streamState.buffer) ||
-                Boolean(streamState.thinkingBuffer) ||
-                streamState.toolCalls.length > 0 ||
-                streamState.events.length > 0) && (
-                <ChatMessage
-                  id='streaming'
-                  role='assistant'
-                  content={streamState.buffer}
-                  thinking={streamState.thinkingBuffer}
-                  toolCalls={streamState.toolCalls}
-                  streamEvents={streamState.events}
-                  width='w-full'
-                  fontSizeOffset={fontSizeOffset}
-                  modelName={selectedModel?.name || undefined}
-                  className=''
-                  onOpenToolHtmlModal={openToolHtmlModal}
-                />
-              )}
             {/* {streamState.active && (
               <div className='pb-4 px-3 flex justify-end'>
                 <video
@@ -3034,11 +3121,11 @@ function Chat() {
                 />
               </div>
             )} */}
-            {streamState.active && (
+            {/* {streamState.active && (
               <div className=' pb-4 px-3 text-stone-800 dark:text-stone-200 flex justify-end'>
                 <i className='bx bx-loader-alt text-2xl animate-spin' style={{ animationDuration: '1s' }}></i>
               </div>
-            )}
+            )} */}
             {/* Bottom sentinel and padding for scrolling past last message */}
             <div ref={bottomRef} data-bottom-sentinel='true' style={{ height: Math.max(100, containerHeight - 300) }} />
           </div>
@@ -3053,7 +3140,7 @@ function Chat() {
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
           <div
-            className={`slate-input-wrapper ${inputAreaBorderClasses}  bg-neutral-100/40 dark:bg-neutral-900/40 backdrop-blur-xl rounded-3xl px-4 py-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300  }`}
+            className={`slate-input-wrapper ${inputAreaBorderClasses}  bg-neutral-100/40 dark:bg-neutral-900/40 backdrop-blur-xl rounded-3xl px-2 py-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300  }`}
           >
             {toolCallPermissionRequest && (
               <ToolPermissionDialog
@@ -3269,42 +3356,11 @@ function Chat() {
               </div>
             </div>
             {/* Controls row */}
-            <div className='flex items-center justify-between gap-2 flex-wrap'>
+            <div className='flex items-center justify-between gap-0 flex-wrap'>
               {/* Left side controls */}
-              <div className='flex items-center gap-1 flex-wrap'>
-                {import.meta.env.VITE_ENVIRONMENT === 'electron' && extensions.length > 0 && (
-                  <div className='flex items-center gap-2 transition-transform duration-300'>
-                    <Select
-                      value={selectedExtensionId || ''}
-                      onChange={val => {
-                        dispatch(selectExtension(val || null))
-                        // Immediately request context for the chosen extension
-                        requestContext(val || null)
-                      }}
-                      blur='low'
-                      options={
-                        extensions.length > 0
-                          ? extensions.map(ext => ({
-                              value: ext.id,
-                              label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
-                            }))
-                          : [{ value: '', label: 'No extensions connected' }]
-                      }
-                      placeholder='Select extension'
-                      disabled={extensions.length === 0}
-                      className=' min-w-[70px] max-w-[120px] lg:max-w-[200px] ml-2 text-xs sm:text-sm text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
-                      size='small'
-                    />
-                    {/* <div
-                        className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
-                        title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
-                      >
-                        {workspace?.name && ` ${'🟢 ' + workspace.name}`}
-                      </div> */}
-                  </div>
-                )}
+              <div className='flex items-center'>
                 <button
-                  className='p-2 rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-white/10 dark:hover:bg-white/5 transition-all duration-200'
+                  className='pt-1.5 px-2 rounded-lg text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-white/10 dark:hover:bg-white/5 transition-all duration-200'
                   onClick={() => {
                     setSpinSettings(true)
                     setSettingsOpen(true)
@@ -3312,37 +3368,72 @@ function Chat() {
                   title='Chat Settings'
                 >
                   <i
-                    className={`bx bx-cog text-[18px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
+                    className={`bx bx-cog text-[22px] ${spinSettings ? 'animate-[spin_0.6s_linear_1]' : ''}`}
                     aria-hidden='true'
                     onAnimationEnd={() => setSpinSettings(false)}
                   ></i>
                 </button>
-                {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
-                {/* Provider selector - visibility controlled by user settings */}
-                {import.meta.env.VITE_ENVIRONMENT === 'electron' && providerSettings.showProviderSelector && (
-                  <Select
-                    value={providers.currentProvider || ''}
-                    onChange={handleProviderSelect}
-                    options={providers.providers.map(p => p.name)}
-                    placeholder='Select a provider...'
-                    disabled={providers.providers.length === 0}
-                    className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 lg:max-w-32 transition-transform duration-60 active:scale-97'
-                    searchBarVisible={true}
+                <div className='flex items-center gap-1 flex-wrap'>
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && extensions.length > 0 && (
+                    <div className='flex items-center gap-2 transition-transform duration-300'>
+                      <Select
+                        value={selectedExtensionId || ''}
+                        onChange={val => {
+                          dispatch(selectExtension(val || null))
+                          // Immediately request context for the chosen extension
+                          requestContext(val || null)
+                        }}
+                        blur='low'
+                        options={
+                          extensions.length > 0
+                            ? extensions.map(ext => ({
+                                value: ext.id,
+                                label: ext.workspaceName || `Extension ${ext.id.slice(0, 6)}`,
+                              }))
+                            : [{ value: '', label: 'No extensions connected' }]
+                        }
+                        placeholder='Select extension'
+                        disabled={extensions.length === 0}
+                        className=' min-w-[70px] max-w-[120px] lg:max-w-[200px] ml-2 text-xs sm:text-sm text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
+                        size='small'
+                      />
+                      {/* <div
+                        className='ide-status text-neutral-900 pl-2 max-w-18 sm:max-w-18 md:max-w-22 lg:max-w-24 xl:max-w-24 text-[14px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[13px] 3xl:text-[12px] 4xl:text-[22px] dark:text-neutral-200 break-words line-clamp-1 text-right'
+                        title={workspace?.name ? `Workspace: ${workspace.name} connected` : ''}
+                      >
+                        {workspace?.name && ` ${'🟢 ' + workspace.name}`}
+                      </div> */}
+                    </div>
+                  )}
+
+                  {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>Available: {providers.providers.length}</span> */}
+                  {/* Provider selector - visibility controlled by user settings */}
+                  {import.meta.env.VITE_ENVIRONMENT === 'electron' && providerSettings.showProviderSelector && (
+                    <Select
+                      value={providers.currentProvider || ''}
+                      onChange={handleProviderSelect}
+                      options={providers.providers.map(p => p.name)}
+                      placeholder='Select a provider...'
+                      disabled={providers.providers.length === 0}
+                      className='flex-1 max-w-24 sm:max-w-32 md:max-w-40 lg:max-w-32 transition-transform duration-60 active:scale-97'
+                      searchBarVisible={true}
+                    />
+                  )}
+                  {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
+                  <ModelSelectControl
+                    provider={providers.currentProvider}
+                    selectedModelName={selectedModel?.name || ''}
+                    onChange={handleModelSelect}
+                    placeholder='Select a model...'
+                    blur='low'
+                    className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-43 transition-transform duration-60 active:scale-99 rounded-4xl'
+                    showFilters={true}
+                    footerContent={modelSelectFooter}
                   />
-                )}
-                {/* <span className='text-stone-800 dark:text-stone-200 text-sm'>{models.length} models</span> */}
-                <ModelSelectControl
-                  provider={providers.currentProvider}
-                  selectedModelName={selectedModel?.name || ''}
-                  onChange={handleModelSelect}
-                  placeholder='Select a model...'
-                  blur='low'
-                  className='flex-1 max-w-32 sm:max-w-32 md:max-w-42 lg:max-w-43 transition-transform duration-60 active:scale-99 rounded-4xl'
-                  showFilters={true}
-                  footerContent={modelSelectFooter}
-                />
-                {/* Vertical divider */}
-                <div className='hidden sm:block w-px h-4 bg-white/10 dark:bg-white/[0.08] mx-2' />
+                </div>
+              </div>
+              {/* Right side controls */}
+              <div className='flex items-center gap-1 mr-2'>
                 {(isImageGenerationModel ||
                   think ||
                   (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl)) && (
@@ -3719,33 +3810,22 @@ function Chat() {
                     </Button>
                   </>
                 )}
-              </div>
-              {/* Right side controls */}
-              <div className='flex items-center gap-1'>
                 {!currentConversationId ? (
                   <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Creating...</span>
-                ) : sendingState.streaming ? (
+                ) : sendingState.streaming || sendingState.sending ? (
                   <button
-                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-                      streamState.active
-                        ? 'bg-red-500 dark:bg-red-500 text-white hover:bg-red-600 hover:scale-105 active:scale-95 cursor-pointer'
-                        : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
-                    }`}
                     onClick={handleStopGeneration}
                     disabled={!streamState.active}
-                    title={streamState.active ? 'Stop generation' : 'Switch to active stream branch to stop'}
+                    title={streamState.active ? 'Stop generation' : 'Generating...'}
+                    className='cursor-pointer hover:scale-105 active:scale-95 transition-transform'
                   >
-                    <svg width='18' height='18' viewBox='0 0 24 24' fill='currentColor'>
-                      <rect x='6' y='6' width='12' height='12' rx='2' />
-                    </svg>
+                    <SendButtonLoadingAnimation animationType={sendButtonAnimation} bgColor={sendButtonColor} />
                   </button>
-                ) : sendingState.sending ? (
-                  <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Sending...</span>
                 ) : (
                   <button
-                    className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+                    className={`ml-1 w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
                       canSendLocal && currentConversationId
-                        ? 'bg-white dark:bg-white text-black hover:bg-blue-500 hover:text-white hover:scale-105 active:scale-95 cursor-pointer'
+                        ? 'bg-white dark:bg-neutral-200 text-black hover:bg-blue-500 hover:text-white hover:scale-105 active:scale-95 cursor-pointer'
                         : 'bg-neutral-300 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400 cursor-not-allowed'
                     }`}
                     disabled={!canSendLocal || !currentConversationId}
@@ -3784,7 +3864,7 @@ function Chat() {
                     }}
                   >
                     <svg
-                      className='w-[18px] h-[18px] -rotate-45 relative left-[1px]'
+                      className='w-[24px] h-[24px] -rotate-45 relative'
                       fill='none'
                       viewBox='0 0 24 24'
                       stroke='currentColor'

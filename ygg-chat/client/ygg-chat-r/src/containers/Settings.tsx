@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Select } from '../components'
+import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import { selectProviderState } from '../features/chats'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../features/chats/chatActions'
 import { getAllTools } from '../features/chats/toolDefinitions'
@@ -60,10 +61,12 @@ const Settings: React.FC = () => {
   const dispatch = useAppDispatch()
   const { accessToken } = useAuth()
   const providers = useAppSelector(selectProviderState)
+  const htmlRegistry = useHtmlIframeRegistry()
 
   // Tools state
   const tools = getAllTools()
   const [toolsExpanded, setToolsExpanded] = useState(false)
+  const [htmlToolsExpanded, setHtmlToolsExpanded] = useState(false)
   const [updatingTools, setUpdatingTools] = useState<Set<string>>(new Set())
   const [reloadingTools, setReloadingTools] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -520,6 +523,156 @@ const Settings: React.FC = () => {
                 <p className='text-sm text-stone-500 dark:text-stone-400 text-center py-4'>
                   No tools available. Reload to check for new tools.
                 </p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* HTML Tools Management Section - Collapsible */}
+        {htmlRegistry && (
+          <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+            <button
+              onClick={() => setHtmlToolsExpanded(!htmlToolsExpanded)}
+              className='w-full flex items-center justify-between text-left'
+            >
+              <div className='flex flex-col gap-1'>
+                <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100'>HTML Tools Cache</h2>
+                <p className='text-sm text-stone-500 dark:text-stone-200'>
+                  Manage cached HTML tool outputs. Remove problematic tools without rendering them.
+                </p>
+              </div>
+              <div className='flex items-center gap-2'>
+                <span className='text-sm text-stone-500 dark:text-stone-400'>
+                  {htmlRegistry.entries.length} cached
+                </span>
+                <i
+                  className={`bx bx-chevron-down text-2xl text-stone-500 dark:text-stone-400 transition-transform duration-200 ${
+                    htmlToolsExpanded ? 'rotate-180' : ''
+                  }`}
+                ></i>
+              </div>
+            </button>
+
+            {/* Collapsible content */}
+            <div
+              className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                htmlToolsExpanded ? 'max-h-[2000px] opacity-100 mt-4' : 'max-h-0 opacity-0'
+              }`}
+            >
+              {/* Tools list */}
+              <div className='space-y-2'>
+                {htmlRegistry.entries.length === 0 ? (
+                  <div className='rounded-xl border-2 border-dashed border-stone-200 bg-stone-50/80 p-6 text-center text-sm text-stone-500 dark:border-stone-700 dark:bg-zinc-900/60 dark:text-stone-400'>
+                    No HTML tools cached. Tools will appear here when AI generates interactive outputs.
+                  </div>
+                ) : (
+                  htmlRegistry.entries.map(entry => {
+                    const isHibernated = entry.status === 'hibernated'
+                    const isFavorite = entry.favorite
+                    const sizeKb = Math.round(entry.sizeBytes / 1024)
+                    const truncatedKey =
+                      entry.key.length > 20 ? `${entry.key.slice(0, 10)}...${entry.key.slice(-6)}` : entry.key
+
+                    return (
+                      <div
+                        key={entry.key}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          isHibernated
+                            ? 'border-stone-300 dark:border-stone-600 bg-stone-100/50 dark:bg-stone-800/50 opacity-60'
+                            : isFavorite
+                              ? 'border-amber-300 dark:border-amber-600/50 bg-amber-50/50 dark:bg-amber-900/10'
+                              : 'border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/30'
+                        }`}
+                      >
+                        <div className='flex-1 min-w-0'>
+                          <div className='flex items-center gap-2'>
+                            <span className='font-medium text-stone-800 dark:text-stone-200 truncate'>
+                              {entry.label || 'Unnamed Tool'}
+                            </span>
+                            {isFavorite && (
+                              <span className='text-xs px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-300 flex-shrink-0'>
+                                ★ Favorite
+                              </span>
+                            )}
+                            {isHibernated && (
+                              <span className='text-xs px-1.5 py-0.5 rounded bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-400 flex-shrink-0'>
+                                Hibernated
+                              </span>
+                            )}
+                          </div>
+                          <p className='text-xs text-stone-500 dark:text-stone-400 mt-0.5'>
+                            Key: {truncatedKey} · {sizeKb} KB · Updated{' '}
+                            {new Date(entry.updatedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className='flex items-center gap-1.5 ml-3 flex-shrink-0'>
+                          {/* Favorite toggle */}
+                          <button
+                            onClick={() => {
+                              htmlRegistry.toggleFavorite(entry.key)
+                              showStatus({
+                                type: 'success',
+                                text: entry.favorite ? 'Removed from favorites.' : 'Added to favorites.',
+                              })
+                            }}
+                            className={`p-2 rounded-lg transition-colors ${
+                              isFavorite
+                                ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400'
+                                : 'bg-stone-100 text-stone-500 hover:bg-stone-200 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600'
+                            }`}
+                            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                          >
+                            <i className={`bx ${isFavorite ? 'bxs-star' : 'bx-star'} text-base`}></i>
+                          </button>
+                          {/* Hibernate/Restore toggle */}
+                          <button
+                            onClick={() => {
+                              if (isHibernated) {
+                                htmlRegistry.restoreEntry(entry.key)
+                                showStatus({ type: 'success', text: 'Tool restored.' })
+                              } else {
+                                htmlRegistry.hibernateEntry(entry.key)
+                                showStatus({ type: 'info', text: 'Tool hibernated.' })
+                              }
+                            }}
+                            className='p-2 rounded-lg bg-stone-100 text-stone-500 hover:bg-stone-200 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600 transition-colors'
+                            title={isHibernated ? 'Restore tool' : 'Hibernate tool'}
+                          >
+                            <i className={`bx ${isHibernated ? 'bx-sun' : 'bx-moon'} text-base`}></i>
+                          </button>
+                          {/* Remove button */}
+                          <button
+                            onClick={() => {
+                              htmlRegistry.removeEntry(entry.key)
+                              showStatus({ type: 'info', text: 'Tool removed from cache.' })
+                            }}
+                            className='p-2 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 dark:bg-rose-900/30 dark:text-rose-400 dark:hover:bg-rose-900/50 transition-colors'
+                            title='Remove tool'
+                          >
+                            <i className='bx bx-trash text-base'></i>
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+
+              {/* Clear all button */}
+              {htmlRegistry.entries.length > 0 && (
+                <div className='mt-4 pt-3 border-t border-stone-200 dark:border-stone-700 flex justify-end'>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => {
+                      htmlRegistry.entries.forEach(entry => htmlRegistry.removeEntry(entry.key))
+                      showStatus({ type: 'success', text: 'All HTML tools cleared.' })
+                    }}
+                    className='text-rose-600 hover:text-rose-700 dark:text-rose-400'
+                  >
+                    Clear All Tools
+                  </Button>
+                </div>
               )}
             </div>
           </section>

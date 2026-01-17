@@ -262,7 +262,7 @@ export const Select: React.FC<SelectProps> = ({
     <div className={`relative ${className}`}>
       <Button
         ref={btnRef}
-        variant={blur === 'high' ? 'outline2' : 'acrylicul'}
+        variant={blur === 'high' ? 'outline2' : 'outline2'}
         size='large'
         className={`w-full justify-between ${sizeClass}`}
         aria-haspopup='listbox'

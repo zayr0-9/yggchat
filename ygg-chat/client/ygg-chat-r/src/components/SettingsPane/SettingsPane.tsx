@@ -9,6 +9,7 @@ import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { useUserSystemPrompts } from '../../hooks/useUserSystemPrompts'
 import { extractTextFromPdf } from '../../utils/pdfUtils'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
+import { SendButtonAnimationSettings } from './SendButtonAnimationSettings'
 import { ToolsSettings } from './ToolsSettings'
 import { VoiceSettings } from './VoiceSettings'
 
@@ -597,6 +598,11 @@ ${block}`
             <div className='space-y-2'>
               <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>Voice Input</span>
               <VoiceSettings />
+            </div>
+
+            {/* Send Button Animation Section */}
+            <div className='space-y-2'>
+              <SendButtonAnimationSettings />
             </div>
 
             {/* Tools Section */}
