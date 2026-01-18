@@ -415,29 +415,23 @@ class DualSyncManager {
 
   // Check if a conversation exists locally
   async checkConversationExists(conversationId: string): Promise<boolean> {
-    console.log('[DualSync] checkConversationExists START', { conversationId, enabled: this.enabled })
     if (!this.enabled) {
-      console.log('[DualSync] checkConversationExists: NOT enabled, returning false')
       return false
     }
 
     try {
-      console.log('[DualSync] checkConversationExists: fetching', `${LOCAL_API_BASE}/sync/conversation/${conversationId}`)
       const response = await fetch(`${LOCAL_API_BASE}/sync/conversation/${conversationId}`, {
         method: 'GET',
         signal: AbortSignal.timeout(2000),
       })
-      console.log('[DualSync] checkConversationExists: response status', response.status)
 
       if (response.ok) {
         const data = await response.json()
-        console.log('[DualSync] checkConversationExists: response data', data)
         return !!data.exists
       }
     } catch (error) {
       console.warn('[DualSync] Failed to check conversation existence:', error)
     }
-    console.log('[DualSync] checkConversationExists: returning false (fallback)')
     return false
   }
 

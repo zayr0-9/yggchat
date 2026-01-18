@@ -1,4 +1,3 @@
-import './envLoader.js'
 import { ChildProcess, spawn } from 'child_process'
 import Conf from 'conf'
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell } from 'electron'
@@ -7,6 +6,7 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import './envLoader.js'
 import { startLocalServer, stopLocalServer } from './localServer.js'
 
 // Destructure autoUpdater from CommonJS module (ESM/CJS interop)
@@ -370,7 +370,7 @@ function createWindow() {
       { role: 'copy', enabled: params.editFlags.canCopy },
       { role: 'paste', enabled: params.editFlags.canPaste },
       { type: 'separator' },
-      { role: 'selectAll', enabled: params.editFlags.canSelectAll },
+      { role: 'selectAll', enabled: params.editFlags.canSelectAll }
     )
 
     Menu.buildFromTemplate(menuItems).popup()
@@ -466,7 +466,7 @@ function createFloatingWindow() {
       { role: 'copy', enabled: params.editFlags.canCopy },
       { role: 'paste', enabled: params.editFlags.canPaste },
       { type: 'separator' },
-      { role: 'selectAll', enabled: params.editFlags.canSelectAll },
+      { role: 'selectAll', enabled: params.editFlags.canSelectAll }
     )
 
     Menu.buildFromTemplate(menuItems).popup()
@@ -522,8 +522,6 @@ if (!gotTheLock) {
 
 // Handle OAuth callback from external browser
 function handleOAuthCallback(url: string) {
-  console.log('[Electron] Received OAuth callback:', url)
-
   // Send the callback URL to the renderer process
   if (mainWindow && mainWindow.webContents) {
     mainWindow.webContents.send('oauth:callback', url)
@@ -537,24 +535,24 @@ function handleOAuthCallback(url: string) {
 // App lifecycle
 app.whenReady().then(async () => {
   try {
-    console.log('[Electron] App ready, initializing storage...')
+    // console.log('[Electron] App ready, initializing storage...')
     await initializeStore()
-    console.log('[Electron] Storage initialized, starting server...')
+    // console.log('[Electron] Storage initialized, starting server...')
     await startServer()
-    console.log('[Electron] Server started, starting local sync server...')
+    // console.log('[Electron] Server started, starting local sync server...')
 
     // Start local SQLite server for dual-sync (port 3002)
     try {
       const localDbPath = path.join(app.getPath('userData'), 'local-sync.db')
       await startLocalServer(3002, localDbPath)
       localServerStarted = true
-      console.log('[Electron] Local sync server started on port 3002')
+      // console.log('[Electron] Local sync server started on port 3002')
     } catch (localServerError) {
       console.warn('[Electron] Failed to start local sync server:', localServerError)
       console.warn('[Electron] Continuing without local sync - data will not be synced locally')
     }
 
-    console.log('[Electron] Creating window...')
+    // console.log('[Electron] Creating window...')
     createWindow()
     configureAutoUpdater()
   } catch (error) {
@@ -609,19 +607,19 @@ app.on('before-quit', () => {
 ipcMain.handle('auth:login', async (_event, _credentials) => {
   // In Electron, we can store credentials securely using electron-store or keytar
   // For now, return a simple success
-  console.log('[Electron IPC] auth:login called')
+  // console.log('[Electron IPC] auth:login called')
   return { success: true, userId: 'electron-user-id' }
 })
 
 ipcMain.handle('auth:logout', async () => {
-  console.log('[Electron IPC] auth:logout called')
+  // console.log('[Electron IPC] auth:logout called')
   // Clear stored credentials
   return { success: true }
 })
 
 // Storage - Persistent storage using electron-store with fallback
 ipcMain.handle('storage:get', async (_event, key: string) => {
-  console.log('[Electron IPC] storage:get called for key:', key)
+  // console.log('[Electron IPC] storage:get called for key:', key)
 
   if (!storeInitialized) {
     console.error('[Electron IPC] Storage not initialized yet')
@@ -630,7 +628,7 @@ ipcMain.handle('storage:get', async (_event, key: string) => {
 
   try {
     const value = getFromStore(key)
-    console.log('[Electron IPC] Retrieved value:', value ? 'found' : 'not found')
+    // console.log('[Electron IPC] Retrieved value:', value ? 'found' : 'not found')
     return value || null
   } catch (error) {
     console.error('[Electron IPC] Failed to get from storage:', error)
@@ -639,7 +637,7 @@ ipcMain.handle('storage:get', async (_event, key: string) => {
 })
 
 ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
-  console.log('[Electron IPC] storage:set called for key:', key)
+  // console.log('[Electron IPC] storage:set called for key:', key)
 
   if (!storeInitialized) {
     console.error('[Electron IPC] Storage not initialized yet')
@@ -650,11 +648,11 @@ ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
     if (value === null || value === undefined) {
       // Delete key if value is null/undefined
       const success = deleteFromStore(key)
-      console.log('[Electron IPC] Deleted key from storage')
+      // console.log('[Electron IPC] Deleted key from storage')
       return { success }
     } else {
       const success = setInStore(key, value)
-      console.log('[Electron IPC] Stored successfully')
+      // console.log('[Electron IPC] Stored successfully')
       return { success }
     }
   } catch (error) {
@@ -665,7 +663,7 @@ ipcMain.handle('storage:set', async (_event, key: string, value: any) => {
 
 // Clear all storage (for logout/account switching)
 ipcMain.handle('storage:clear', async () => {
-  console.log('[Electron IPC] storage:clear called - clearing all stored data')
+  // console.log('[Electron IPC] storage:clear called - clearing all stored data')
 
   if (!storeInitialized) {
     console.error('[Electron IPC] Storage not initialized yet')
@@ -705,7 +703,7 @@ ipcMain.handle('autoUpdater:check', async () => {
 })
 
 ipcMain.handle('autoUpdater:installNow', async () => {
-  console.log('[Electron] User requested immediate update install')
+  // console.log('[Electron] User requested immediate update install')
   try {
     // quitAndInstall will close the app and run the installer
     autoUpdater.quitAndInstall(false, true) // isSilent=false, isForceRunAfter=true
@@ -718,7 +716,7 @@ ipcMain.handle('autoUpdater:installNow', async () => {
 
 // Open OAuth URL in external browser
 ipcMain.handle('auth:openExternal', async (_event, url: string) => {
-  console.log('[Electron IPC] Opening external URL for OAuth:', url)
+  // console.log('[Electron IPC] Opening external URL for OAuth:', url)
   try {
     await shell.openExternal(url)
     return { success: true }
@@ -730,7 +728,7 @@ ipcMain.handle('auth:openExternal', async (_event, url: string) => {
 
 // Open a file or folder path in the system file explorer
 ipcMain.handle('shell:openPath', async (_event, path: string) => {
-  console.log('[Electron IPC] Opening path:', path)
+  // console.log('[Electron IPC] Opening path:', path)
   try {
     const result = await shell.openPath(path)
     if (result) {
@@ -756,7 +754,7 @@ ipcMain.handle(
       properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
     }
   ) => {
-    console.log('[Electron IPC] Opening file dialog with options:', options)
+    // console.log('[Electron IPC] Opening file dialog with options:', options)
     try {
       const result = await dialog.showOpenDialog(mainWindow!, {
         title: options?.title || 'Select File',
@@ -787,7 +785,7 @@ ipcMain.handle(
       filters?: { name: string; extensions: string[] }[]
     }
   ) => {
-    console.log('[Electron IPC] Opening save dialog with options:', options)
+    // console.log('[Electron IPC] Opening save dialog with options:', options)
     try {
       const result = await dialog.showSaveDialog(mainWindow!, {
         title: options?.title || 'Save File',
@@ -808,7 +806,7 @@ ipcMain.handle(
 
 // Select folder dialog
 ipcMain.handle('dialog:selectFolder', async (_event, options?: { title?: string; defaultPath?: string }) => {
-  console.log('[Electron IPC] Opening folder selection dialog')
+  // console.log('[Electron IPC] Opening folder selection dialog')
   try {
     const result = await dialog.showOpenDialog(mainWindow!, {
       title: options?.title || 'Select Folder',
@@ -827,7 +825,7 @@ ipcMain.handle('dialog:selectFolder', async (_event, options?: { title?: string;
 
 // Read file content for custom tool widgets
 ipcMain.handle('fs:readFile', async (_event, filePath: string, encoding?: BufferEncoding) => {
-  console.log('[Electron IPC] Reading file:', filePath)
+  // console.log('[Electron IPC] Reading file:', filePath)
   try {
     const content = fs.readFileSync(filePath, encoding || 'utf-8')
     return { success: true, content }
@@ -839,7 +837,7 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string, encoding?: Buffer
 
 // Stat file for custom tool widgets
 ipcMain.handle('fs:stat', async (_event, filePath: string) => {
-  console.log('[Electron IPC] Stating file:', filePath)
+  // console.log('[Electron IPC] Stating file:', filePath)
   try {
     const stats = await fs.promises.stat(filePath)
     return {
@@ -866,7 +864,7 @@ ipcMain.handle(
       highWaterMark?: number
     }
   ) => {
-    console.log('[Electron IPC] Streaming file:', filePath)
+    // console.log('[Electron IPC] Streaming file:', filePath)
     try {
       const stats = await fs.promises.stat(filePath)
       const total = Number.isFinite(stats.size) ? stats.size : null
@@ -953,7 +951,7 @@ ipcMain.handle(
 
 // Abort an active file stream
 ipcMain.handle('fs:abortReadFileStream', async (_event, streamId: string) => {
-  console.log('[Electron IPC] Aborting file stream:', streamId)
+  // console.log('[Electron IPC] Aborting file stream:', streamId)
   const meta = activeReadStreams.get(streamId)
   if (!meta) {
     return { success: false, error: 'Stream not found' }
@@ -975,7 +973,7 @@ ipcMain.handle('fs:abortReadFileStream', async (_event, streamId: string) => {
 
 // Write file content for custom tool widgets
 ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string, encoding?: BufferEncoding) => {
-  console.log('[Electron IPC] Writing file:', filePath)
+  // console.log('[Electron IPC] Writing file:', filePath)
   try {
     fs.writeFileSync(filePath, content, encoding || 'utf-8')
     return { success: true }
@@ -987,7 +985,7 @@ ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string,
 
 // Create directory for custom tool widgets
 ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
-  console.log('[Electron IPC] Creating directory:', dirPath)
+  // console.log('[Electron IPC] Creating directory:', dirPath)
   try {
     fs.mkdirSync(dirPath, { recursive: true })
     return { success: true }
@@ -999,7 +997,7 @@ ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
 
 // Execute shell command for custom tool widgets
 ipcMain.handle('shell:exec', async (_event, command: string, options?: { cwd?: string; timeout?: number }) => {
-  console.log('[Electron IPC] Executing command:', command)
+  // console.log('[Electron IPC] Executing command:', command)
   const { spawn } = require('child_process')
 
   return new Promise(resolve => {
@@ -1062,7 +1060,7 @@ ipcMain.handle(
       timeout?: number
     }
   ) => {
-    console.log('[Electron IPC] HTTP request:', options.method || 'GET', options.url)
+    // console.log('[Electron IPC] HTTP request:', options.method || 'GET', options.url)
 
     const http = require('http')
     const https = require('https')
@@ -1147,7 +1145,7 @@ ipcMain.handle(
 
 // Floating window controls
 ipcMain.handle('window:openFloating', async () => {
-  console.log('[Electron IPC] Opening floating window')
+  // console.log('[Electron IPC] Opening floating window')
   try {
     createFloatingWindow()
     return { success: true }
@@ -1158,7 +1156,7 @@ ipcMain.handle('window:openFloating', async () => {
 })
 
 ipcMain.handle('window:closeFloating', async () => {
-  console.log('[Electron IPC] Closing floating window')
+  // console.log('[Electron IPC] Closing floating window')
   try {
     if (floatingWindow) {
       floatingWindow.close()
@@ -1173,7 +1171,7 @@ ipcMain.handle('window:closeFloating', async () => {
 })
 
 ipcMain.handle('window:toggleFloating', async () => {
-  console.log('[Electron IPC] Toggling floating window')
+  // console.log('[Electron IPC] Toggling floating window')
   try {
     toggleFloatingWindow()
     return { success: true, isOpen: floatingWindow !== null }
@@ -1189,7 +1187,7 @@ ipcMain.handle('window:isFloatingOpen', async () => {
 
 // Compact mode controls (uses main window instead of spawning a new one)
 ipcMain.handle('window:toggleCompact', async () => {
-  console.log('[Electron IPC] Toggling compact mode')
+  // console.log('[Electron IPC] Toggling compact mode')
   try {
     const compact = toggleCompactMode()
     return { success: true, compact }
@@ -1205,7 +1203,7 @@ ipcMain.handle('window:isCompact', async () => {
 
 // Open OAuth URL in a new BrowserWindow (for WSL/Linux compatibility)
 ipcMain.handle('auth:openOAuthWindow', async (_event, url: string) => {
-  console.log('[Electron IPC] Opening OAuth window:', url)
+  // console.log('[Electron IPC] Opening OAuth window:', url)
 
   return new Promise(resolve => {
     // Create a modal window for OAuth
@@ -1228,11 +1226,11 @@ ipcMain.handle('auth:openOAuthWindow', async (_event, url: string) => {
 
     // Handle navigation to callback URL
     const handleNavigation = (navigationUrl: string) => {
-      console.log('[Electron OAuth] Navigation detected:', navigationUrl)
+      // console.log('[Electron OAuth] Navigation detected:', navigationUrl)
 
       // Check if this is our callback URL
       if (navigationUrl.startsWith(`${PROTOCOL}://`)) {
-        console.log('[Electron OAuth] Callback URL detected, closing window')
+        // console.log('[Electron OAuth] Callback URL detected, closing window')
 
         // Close the OAuth window
         oauthWindow.close()
@@ -1262,7 +1260,7 @@ ipcMain.handle('auth:openOAuthWindow', async (_event, url: string) => {
 
     // Handle window close
     oauthWindow.on('closed', () => {
-      console.log('[Electron OAuth] Window closed')
+      // console.log('[Electron OAuth] Window closed')
       resolve({ success: true })
     })
 
@@ -1319,7 +1317,7 @@ function configureAutoUpdater() {
   }
 
   if (!app.isPackaged) {
-    console.log('[Electron] Auto-updater skipped: not packaged')
+    // console.log('[Electron] Auto-updater skipped: not packaged')
     return
   }
 
@@ -1346,17 +1344,17 @@ function configureAutoUpdater() {
   autoUpdaterConfigured = true
 
   autoUpdater.on('checking-for-update', () => {
-    console.log('[Electron] Checking for updates...')
+    // console.log('[Electron] Checking for updates...')
     mainWindow?.webContents.send('autoUpdater:checking')
   })
 
   autoUpdater.on('update-available', info => {
-    console.log('[Electron] Update available:', info?.version)
+    // console.log('[Electron] Update available:', info?.version)
     mainWindow?.webContents.send('autoUpdater:update-available', info)
   })
 
   autoUpdater.on('update-not-available', info => {
-    console.log('[Electron] No updates available')
+    // console.log('[Electron] No updates available')
     mainWindow?.webContents.send('autoUpdater:update-not-available', info)
   })
 
@@ -1365,13 +1363,13 @@ function configureAutoUpdater() {
   })
 
   autoUpdater.on('update-downloaded', info => {
-    console.log('[Electron] Update downloaded, ready to install')
+    // console.log('[Electron] Update downloaded, ready to install')
     mainWindow?.webContents.send('autoUpdater:update-downloaded', info)
     // Don't auto-install - let user choose via modal
   })
 
   autoUpdater.on('error', error => {
-    console.error('[Electron] Auto-updater error:', error)
+    // console.error('[Electron] Auto-updater error:', error)
     mainWindow?.webContents.send('autoUpdater:error', error ? error.message || String(error) : 'Unknown error')
   })
 

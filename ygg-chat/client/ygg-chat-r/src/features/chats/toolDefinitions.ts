@@ -547,7 +547,7 @@ const builtInToolDefinitions: ToolDefinition[] = [
     name: 'subagent',
     enabled: true,
     description:
-      'Spawn a sub-agent to perform a specialized task using a separate LLM generation. Useful for delegating complex subtasks, getting a second opinion, or using a different model for specific capabilities. The subagent runs independently and returns its complete response. Use sparingly as each call consumes additional tokens.',
+      'Spawn an agentic sub-agent to perform complex tasks using tool calls. The subagent can use tools like read_file, ripgrep, browse_web etc. to accomplish tasks autonomously. Supports multi-turn execution with configurable tool access. Messages are persisted and can be reviewed. Use orchestratorMode=true to specify exact tools, or false to use pre-configured default tools.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -575,6 +575,29 @@ const builtInToolDefinitions: ToolDefinition[] = [
           minimum: 0,
           maximum: 2,
           description: 'Sampling temperature (0-2, default 0.7). Lower = more focused, higher = more creative.',
+        },
+        maxTurns: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 50,
+          description:
+            'Maximum tool call rounds (default 10). Each turn = one LLM call + tool executions. Set lower for simple tasks.',
+        },
+        orchestratorMode: {
+          type: 'boolean',
+          description:
+            'If true, use tools specified in `tools` parameter. If false, use pre-configured subagent tool list from settings. Default: false.',
+        },
+        tools: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Tool names to enable for subagent (only used when orchestratorMode=true). Example: ["read_file", "bash", "ripgrep", "brave_search"]. The subagent tool itself is always excluded to prevent recursion.',
+        },
+        inheritAutoApprove: {
+          type: 'boolean',
+          description:
+            'If true, inherit parent auto-approve setting for tool calls. If false, always require approval for subagent tool calls. Default: true.',
         },
       },
       required: ['prompt'],
@@ -614,8 +637,6 @@ let mergedToolDefinitions: ToolDefinition[] = initializeTools()
  * Preserves user's enabled/disabled state from localStorage (persisted) and in-memory state.
  */
 export const setCustomTools = (customTools: ToolDefinition[]): void => {
-  console.log(`[ToolDefinitions] setCustomTools called with ${customTools.length} tools:`, customTools.map(t => t.name))
-
   // Load persisted states from localStorage (survives app restarts)
   const persistedStates = loadToolEnabledStates()
 
@@ -636,10 +657,7 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
   })
 
   // Merge built-in (cloned) and custom tools (cloned for safety)
-  mergedToolDefinitions = [
-    ...builtInToolDefinitions.map(cloneTool),
-    ...safeCustomTools.map(cloneTool),
-  ]
+  mergedToolDefinitions = [...builtInToolDefinitions.map(cloneTool), ...safeCustomTools.map(cloneTool)]
 
   // Apply enabled state: localStorage takes priority, then in-memory state, then default
   for (const tool of mergedToolDefinitions) {
@@ -652,8 +670,6 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
     }
     // Otherwise keep the default from definition
   }
-
-  console.log(`[ToolDefinitions] Merged total: ${mergedToolDefinitions.length} (${safeCustomTools.length} custom)`)
 }
 
 /**
@@ -691,9 +707,8 @@ export const getAllTools = (): ToolDefinition[] => {
 export const getEnabledTools = (): ToolDefinition[] => {
   const enabled = mergedToolDefinitions.filter(t => t.enabled)
   const customCount = enabled.filter(t => t.isCustom).length
-  console.log(`[ToolDefinitions] getEnabledTools: ${enabled.length} total (${customCount} custom)`)
   if (customCount > 0) {
-    console.log('[ToolDefinitions] Custom tools:', enabled.filter(t => t.isCustom).map(t => t.name))
+    enabled.filter(t => t.isCustom).map(t => t.name)
   }
   return enabled
 }
@@ -716,7 +731,6 @@ export const getCustomTools = (): ToolDefinition[] => {
 export const getToolsForAI = (): ToolDefinition[] => {
   // Use mergedToolDefinitions (mutable) to get current enabled state, filter out custom tools
   const enabled = mergedToolDefinitions.filter(t => t.enabled && !t.isCustom)
-  console.log(`[ToolDefinitions] getToolsForAI: ${enabled.length} built-in tools (custom tools excluded)`)
   return enabled
 }
 

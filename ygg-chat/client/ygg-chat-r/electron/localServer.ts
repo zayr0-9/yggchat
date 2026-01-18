@@ -12,30 +12,25 @@ import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
 
 // Tool imports
+import { registerLocalOperationsRoutes } from './localOperations.js'
+import { createToolsStatements, initializeToolsSchema, pruneOldTools, registerToolsRoutes } from './localToolsRoutes.js'
+import { registerProxyRoutes } from './proxyGateway.js'
 import { runBashCommand } from './tools/bash.js'
 import { browseWeb } from './tools/browseWeb.js'
 import { CCResponse, executeClaudeCode, getAvailableSlashCommands, getSession, setSession } from './tools/claudeCode.js'
 import { createTextFile } from './tools/createFile.js'
+import { customToolRegistry, ToolResult } from './tools/customToolLoader.js'
+import { execute as executeCustomToolManager } from './tools/customToolManager.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
 import { editFile } from './tools/editFile.js'
 import { globSearch } from './tools/glob.js'
 import htmlRenderer from './tools/htmlRenderer.js'
+import { JobFilter, JobOptions, toolOrchestrator } from './tools/orchestrator/index.js'
 import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
-import { execute as executeCustomToolManager } from './tools/customToolManager.js'
-import { customToolRegistry, ToolResult } from './tools/customToolLoader.js'
-import { toolOrchestrator, JobOptions, JobFilter } from './tools/orchestrator/index.js'
-import {
-  createToolsStatements,
-  initializeToolsSchema,
-  pruneOldTools,
-  registerToolsRoutes,
-} from './localToolsRoutes.js'
-import { registerProxyRoutes } from './proxyGateway.js'
-import { registerLocalOperationsRoutes } from './localOperations.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -90,7 +85,7 @@ const builtInTools: Map<string, BuiltInToolHandler> = new Map()
 
 // Initialize built-in tools registry
 function initializeBuiltInToolRegistry() {
-  builtInTools.set('html_renderer', async (args) => {
+  builtInTools.set('html_renderer', async args => {
     const { html, allowUnsafe } = args
     if (!html) throw new Error('html is required')
     const rendered = await htmlRenderer.run({ html, allowUnsafe })
@@ -222,7 +217,7 @@ function initializeBuiltInToolRegistry() {
     })
   })
 
-  builtInTools.set('browse_web', async (args) => {
+  builtInTools.set('browse_web', async args => {
     const { url, ...options } = args
     if (!url) throw new Error('url is required')
     return await browseWeb(url, options)
@@ -240,7 +235,7 @@ function initializeBuiltInToolRegistry() {
     })
   })
 
-  builtInTools.set('todo_list', async (args) => {
+  builtInTools.set('todo_list', async args => {
     const { action, name, content, search, replacement } = args
     switch (action) {
       case 'list': {
@@ -269,7 +264,7 @@ function initializeBuiltInToolRegistry() {
     }
   })
 
-  builtInTools.set('custom_tool_manager', async (args) => {
+  builtInTools.set('custom_tool_manager', async args => {
     return await executeCustomToolManager(args)
   })
 
@@ -286,7 +281,6 @@ let currentDbPath: string | null = null
 
 // Initialize database at specified path
 function initializeLocalDatabase(dbPath: string) {
-  console.log('[LocalServer] Initializing database at:', dbPath)
   currentDbPath = dbPath
 
   // Ensure directory exists
@@ -560,8 +554,6 @@ function initializeLocalDatabase(dbPath: string) {
 
   Object.assign(statements, createToolsStatements(db))
   pruneOldTools(statements)
-
-  console.log('[LocalServer] Database initialized successfully')
 }
 
 // Helper functions to ensure dependencies exist before sync operations
@@ -659,7 +651,6 @@ async function saveGeneratedImage(
     if (existingAttachment) {
       // Reuse existing attachment - just create a link to it
       attachmentId = existingAttachment.id
-      console.log('[LocalServer] Reusing existing generated image attachment:', attachmentId)
     } else {
       // Create new attachment record
       attachmentId = uuidv4()
@@ -677,13 +668,11 @@ async function saveGeneratedImage(
         sha256,
         now
       )
-      console.log('[LocalServer] Created new generated image attachment:', attachmentId)
     }
 
     // Link attachment to message (INSERT OR IGNORE handles duplicate links gracefully)
     statements.linkAttachment.run(uuidv4(), messageId, attachmentId, now)
 
-    console.log('[LocalServer] Linked generated image to message:', messageId)
     return { filePath, attachmentId }
   } catch (error) {
     console.error('[LocalServer] Error saving generated image:', error)
@@ -985,21 +974,23 @@ function initializeWebSocketServer(serverInstance: any) {
 
 // Setup Express app
 function setupServer() {
-  app.use(cors({
-    origin: true, // Allow all origins in local dev
-    credentials: true,
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'x-api-key',
-      'x-tenant-id',
-      'x-tool-name',
-      'x-tool-id',
-      'x-session-id',
-      'x-proxy-admin-key',
-    ],
-    exposedHeaders: ['Authorization'],
-  }))
+  app.use(
+    cors({
+      origin: true, // Allow all origins in local dev
+      credentials: true,
+      allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'x-api-key',
+        'x-tenant-id',
+        'x-tool-name',
+        'x-tool-id',
+        'x-session-id',
+        'x-proxy-admin-key',
+      ],
+      exposedHeaders: ['Authorization'],
+    })
+  )
   app.use(express.json({ limit: '25mb' }))
 
   // Health check
@@ -1028,13 +1019,16 @@ function setupServer() {
   // OAuth state storage (in-memory, per session)
   const oauthPendingFlows = new Map<string, { verifier: string; state: string; createdAt: number }>()
   // Storage for completed OAuth tokens (keyed by state, for frontend to retrieve)
-  const oauthCompletedTokens = new Map<string, {
-    accessToken: string
-    refreshToken: string
-    expiresAt: number
-    accountId: string
-    createdAt: number
-  }>()
+  const oauthCompletedTokens = new Map<
+    string,
+    {
+      accessToken: string
+      refreshToken: string
+      expiresAt: number
+      accountId: string
+      createdAt: number
+    }
+  >()
 
   // Clean up old pending flows and completed tokens (older than 10 minutes)
   setInterval(() => {
@@ -1126,7 +1120,6 @@ function setupServer() {
           accountId,
           createdAt: Date.now(),
         })
-        console.log('[OAuthServer] Tokens stored for state:', state.substring(0, 8) + '...')
 
         // Clean up pending flow
         oauthPendingFlows.delete(state)
@@ -1933,7 +1926,6 @@ function setupServer() {
         if (existingAttachment && existingAttachment.id !== id) {
           // Attachment with same content already exists - reuse it
           attachmentId = existingAttachment.id
-          console.log('[LocalServer] Reusing existing attachment for sync:', attachmentId)
         } else if (!existingAttachment) {
           // Create new attachment
           statements.upsertAttachment.run(
@@ -2055,7 +2047,6 @@ function setupServer() {
           if (existingAttachment) {
             // Reuse existing attachment - just create a link to it
             attachmentId = existingAttachment.id
-            console.log('[LocalServer] Reusing existing attachment:', attachmentId, 'for message:', messageId)
           } else {
             // Create new attachment record
             attachmentId = uuidv4()
@@ -2073,14 +2064,12 @@ function setupServer() {
               sha256,
               now
             )
-            console.log('[LocalServer] Created new attachment:', attachmentId)
           }
 
           // Link attachment to message (INSERT OR IGNORE handles duplicate links gracefully)
           statements.linkAttachment.run(uuidv4(), messageId, attachmentId, now)
 
           savedAttachments.push({ id: attachmentId, file_path: filePath })
-          console.log('[LocalServer] Linked attachment to message:', messageId)
         } catch (attachmentError) {
           console.error('[LocalServer] Error saving individual attachment:', attachmentError)
         }
@@ -2504,7 +2493,12 @@ function setupServer() {
   // but still need to wait for the result before continuing
   app.post('/api/jobs/execute-and-wait', async (req, res) => {
     try {
-      const { toolName, args, options, timeoutMs = 300000 } = req.body as {
+      const {
+        toolName,
+        args,
+        options,
+        timeoutMs = 300000,
+      } = req.body as {
         toolName: string
         args: Record<string, any>
         options?: JobOptions
@@ -2699,16 +2693,8 @@ function setupServer() {
   // POST /api/app/messages - Create a new message (user or assistant)
   app.post('/api/app/messages', (req, res) => {
     try {
-      const {
-        conversation_id,
-        parent_id,
-        role,
-        content,
-        model_name,
-        tool_calls,
-        tool_call_id,
-        content_blocks,
-      } = req.body
+      const { conversation_id, parent_id, role, content, model_name, tool_calls, tool_call_id, content_blocks } =
+        req.body
 
       if (!conversation_id) {
         res.status(400).json({ success: false, error: 'conversation_id is required' })
@@ -2851,7 +2837,9 @@ function setupServer() {
         const parent = statements.getMessageById.get(message.parent_id) as any
         if (parent) {
           const childrenIds = JSON.parse(parent.children_ids || '[]').filter((cid: string) => cid !== id)
-          db!.prepare('UPDATE messages SET children_ids = ? WHERE id = ?').run(JSON.stringify(childrenIds), message.parent_id)
+          db!
+            .prepare('UPDATE messages SET children_ids = ? WHERE id = ?')
+            .run(JSON.stringify(childrenIds), message.parent_id)
         }
       }
 

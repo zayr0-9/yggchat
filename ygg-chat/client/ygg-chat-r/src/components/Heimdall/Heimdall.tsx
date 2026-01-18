@@ -60,6 +60,7 @@ interface Bounds {
 
 interface HeimdallProps {
   chatData?: ChatNode | null
+
   compactMode?: boolean
   loading?: boolean
   error?: string | null
@@ -71,6 +72,7 @@ interface HeimdallProps {
 
 export const Heimdall: React.FC<HeimdallProps> = ({
   chatData = null,
+
   compactMode = true,
   loading = false,
   error = null,
@@ -100,6 +102,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [isDragging, setIsDragging] = useState<boolean>(false)
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const [selectedNode, setSelectedNode] = useState<ChatNode | null>(null)
+  const [subagentPanel, setSubagentPanel] = useState<{ parentId: string; x: number; y: number } | null>(null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [isSelecting, setIsSelecting] = useState<boolean>(false)
@@ -180,6 +183,96 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     },
     [flatMessages]
   )
+
+  const subagentMapByParent = useMemo(() => {
+    // We compute the map directly from allMessages to ensure it works even when
+    // nodes are filtered from the tree (e.g. "Filter Empty Messages" is ON).
+    // This handles both:
+    // 1. Legacy: Messages with role="ex_agent"
+    // 2. New: Assistant messages containing "subagent" tool calls
+    const map: Record<string, Array<{ id: string; message?: string; sender?: string; content_blocks?: any[] }>> = {}
+
+    allMessages.forEach(msg => {
+      // 1. Legacy ex_agent messages
+      if (msg.role === 'ex_agent' && msg.parent_id) {
+        const parentId = String(msg.parent_id)
+        if (!map[parentId]) map[parentId] = []
+        map[parentId].push({
+          id: String(msg.id),
+          message: msg.content,
+          sender: 'ex_agent',
+          content_blocks: msg.content_blocks,
+        })
+        return
+      }
+
+      // 2. Subagent tool calls in assistant messages
+      if (msg.role === 'assistant' && Array.isArray(msg.content_blocks) && msg.parent_id) {
+        const subagentCalls = msg.content_blocks.filter(
+          (block: any) => block.type === 'tool_use' && block.name === 'subagent'
+        )
+
+        if (subagentCalls.length > 0) {
+          const parentId = String(msg.parent_id)
+          if (!map[parentId]) map[parentId] = []
+
+          subagentCalls.forEach((call: any, idx: number) => {
+            // Filter content_blocks to include:
+            // 1. This specific tool_use and its matching tool_result
+            // 2. Any thinking/text blocks that appear before this tool_use (until previous tool_result or start)
+            const toolUseId = call.id
+            const blocks = msg.content_blocks
+            const toolUseIndex = blocks.findIndex((b: any) => b.type === 'tool_use' && b.id === toolUseId)
+
+            // Find preceding thinking/text blocks (go backwards until we hit a tool_result or start)
+            const precedingBlocks: any[] = []
+            for (let i = toolUseIndex - 1; i >= 0; i--) {
+              const block = blocks[i]
+              if (block.type === 'tool_result') break // Stop at previous tool's result
+              if (block.type === 'thinking' || block.type === 'text') {
+                precedingBlocks.unshift(block) // Add to front to maintain order
+              }
+            }
+
+            // Get this tool_use and its matching tool_result
+            const toolUseBlock = blocks[toolUseIndex]
+            const toolResultBlock = blocks.find((b: any) => b.type === 'tool_result' && b.tool_use_id === toolUseId)
+
+            const filteredBlocks = [...precedingBlocks, toolUseBlock, ...(toolResultBlock ? [toolResultBlock] : [])]
+
+            map[parentId].push({
+              id: `${msg.id}_subagent_${idx}`, // Virtual ID for the badge count
+              message: call.input?.prompt || 'Subagent Call',
+              sender: 'ex_agent',
+              content_blocks: filteredBlocks,
+            })
+          })
+        }
+      }
+    })
+    return map
+  }, [allMessages])
+
+  const handleSubagentBadgeClick = useCallback((event: React.MouseEvent<SVGGElement>, parentId: string) => {
+    event.stopPropagation()
+    const containerRect = containerRef.current?.getBoundingClientRect()
+    if (!containerRect) {
+      console.warn('[Heimdall] No container rect')
+      return
+    }
+    const nextPos = {
+      parentId,
+      x: event.clientX - containerRect.left,
+      y: event.clientY - containerRect.top,
+    }
+    setSubagentPanel(prev => (prev?.parentId === parentId ? null : nextPos))
+  }, [])
+
+  const getSubagentBadgeMetrics = (count: number) => {
+    const label = `${count} SUB-CALL${count === 1 ? '' : 'S'}`
+    const width = Math.max(64, Math.round(label.length * 6.5 + 16))
+    return { label, width, height: 20 }
+  }
 
   // Maintain a plain-text processed copy of messages for client-side search
   const [plainMessages, setPlainMessages] = useState<any[]>([])
@@ -712,6 +805,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   //   console.log('chatData 2', chatData)
   // }, [conversationId])
 
+  useEffect(() => {
+    setSubagentPanel(null)
+  }, [conversationId])
+
   const nodeWidth = 250
   const nodeHeight = 80
   const circleRadius = 20
@@ -754,6 +851,15 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
   // Helper to recursively filter and flatten the tree
   const filterEmptyNodes = (node: ChatNode, hasSiblings = false): ChatNode[] => {
+    // Always filter out ex_agent nodes - promote their children
+    if (node.sender === 'ex_agent') {
+      if (node.children && node.children.length > 0) {
+        const childrenHaveSiblings = node.children.length > 1
+        return node.children.flatMap(child => filterEmptyNodes(child, childrenHaveSiblings))
+      }
+      return []
+    }
+
     // Look up full message to check for structured content (blocks, tools, etc.)
     const fullMsg = allMessages.find(m => String(m.id) === String(node.id))
 
@@ -1205,7 +1311,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
 
       // Dispatch the delete action with conversationId and storageMode
-      console.log('[Heimdall] handleDeleteNodes - storageMode:', storageMode, 'conversationId:', conversationId)
       await (dispatch as any)(deleteSelectedNodes({ ids, conversationId, storageMode })).unwrap()
 
       // Clear selection after successful delete
@@ -1476,7 +1581,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const resetView = (): void => {
     // Compute bounds for fitting that ignore focusedNodeId so fit is consistent
     // across calls regardless of previous focus state.
-    console.log('resetView called -------------')
     const fitBounds = (() => {
       const values = Object.values(positions)
       if (values.length === 0) {
@@ -1788,6 +1892,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         ((typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string') &&
         visibleMessageId === nodeIdParsed
       const isNew = !firstPaintRef.current && !seenNodeIdsRef.current.has(node.id)
+      const subagentNodes = subagentMapByParent[String(node.id)] || []
+      const subagentCount = subagentNodes.length
+      const showSubagentBadge = subagentCount > 0 && node.sender === 'user'
 
       if (isExpanded) {
         // Render full node
@@ -1853,6 +1960,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               }}
               onMouseLeave={() => setSelectedNode(null)}
               onClick={() => {
+                setSubagentPanel(null)
                 if (onNodeSelect) {
                   const nodeIdParsed = parseId(node.id)
                   // If clicked node is already in current path, just update focused message
@@ -1866,6 +1974,37 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               }}
               onContextMenu={e => handleContextMenu(e, node.id)}
             />
+            {showSubagentBadge &&
+              (() => {
+                const badge = getSubagentBadgeMetrics(subagentCount)
+                const badgeX = nodeWidth - badge.width - 8
+                const badgeY = -12
+                return (
+                  <g
+                    transform={`translate(${badgeX}, ${badgeY})`}
+                    className='cursor-pointer'
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={e => handleSubagentBadgeClick(e, String(node.id))}
+                  >
+                    <rect
+                      width={badge.width}
+                      height={badge.height}
+                      rx='9'
+                      className='fill-blue-500 dark:fill-orange-600'
+                      stroke='rgba(0,0,0,0.15)'
+                      strokeWidth='1'
+                    />
+                    <text
+                      x={badge.width / 2}
+                      y={badge.height / 2 + 4}
+                      textAnchor='middle'
+                      className='fill-white text-[10px] font-semibold tracking-wide'
+                    >
+                      {badge.label}
+                    </text>
+                  </g>
+                )
+              })()}
             {/* Bottom border line */}
             {/* <line
               x1='0'
@@ -2031,6 +2170,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               }}
               onMouseLeave={() => setSelectedNode(null)}
               onClick={() => {
+                setSubagentPanel(null)
                 // Trigger node selection callback
                 if (onNodeSelect) {
                   const nodeIdParsed = parseId(node.id)
@@ -2045,6 +2185,37 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               }}
               onContextMenu={e => handleContextMenu(e, node.id)}
             />
+            {showSubagentBadge &&
+              (() => {
+                const badge = getSubagentBadgeMetrics(subagentCount)
+                const badgeX = x + circleRadius + 6
+                const badgeY = y - 12
+                return (
+                  <g
+                    transform={`translate(${badgeX}, ${badgeY})`}
+                    className='cursor-pointer'
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={e => handleSubagentBadgeClick(e, String(node.id))}
+                  >
+                    <rect
+                      width={badge.width}
+                      height={badge.height}
+                      rx='9'
+                      className='fill-orange-500 dark:fill-orange-600'
+                      stroke='rgba(0,0,0,0.15)'
+                      strokeWidth='1'
+                    />
+                    <text
+                      x={badge.width / 2}
+                      y={badge.height / 2 + 4}
+                      textAnchor='middle'
+                      className='fill-white text-[10px] font-semibold tracking-wide'
+                    >
+                      {badge.label}
+                    </text>
+                  </g>
+                )
+              })()}
             {/* Note indicator for compact view */}
             {(() => {
               const nodeIdParsed = parseId(node.id)
@@ -2642,6 +2813,180 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           )
         })()}
       {/* Note dialog */}
+      {/* Subagent Calls Modal */}
+      {subagentPanel &&
+        (() => {
+          const parentId = subagentPanel.parentId
+          const subagentNodes = subagentMapByParent[parentId] || []
+
+          // Find parent node message to display
+          const parentMessage = allMessages.find(m => String(m.id) === parentId)
+
+          return (
+            <div
+              className='absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]'
+              onClick={() => setSubagentPanel(null)}
+            >
+              <div
+                className='bg-neutral-50 dark:bg-zinc-900 border border-stone-200 dark:border-neutral-700 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] w-[90%] max-w-2xl'
+                onClick={e => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className='flex justify-between items-center px-5 py-4 border-b border-stone-200 dark:border-neutral-800 shrink-0'>
+                  <h3 className='text-base font-semibold text-stone-800 dark:text-stone-100'>
+                    Subagent Calls ({subagentNodes.length})
+                  </h3>
+                  <button
+                    onClick={() => setSubagentPanel(null)}
+                    className='p-1.5 hover:bg-stone-200 dark:hover:bg-neutral-800 rounded-full transition-colors'
+                  >
+                    <svg className='w-5 h-5 text-stone-500' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Scrollable content */}
+                <div className='overflow-y-auto flex-1 thin-scrollbar' data-heimdall-wheel-exempt='true'>
+                  {/* Parent task context */}
+                  <div className='px-5 py-4 border-b border-stone-100 dark:border-neutral-800 bg-stone-50 dark:bg-neutral-900/50'>
+                    <div className='text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-2'>
+                      Parent Task
+                    </div>
+                    <div className='prose prose-sm dark:prose-invert max-w-none text-stone-700 dark:text-stone-300 prose-p:my-1 prose-headings:my-2 prose-pre:my-2 prose-pre:bg-stone-100 dark:prose-pre:bg-neutral-800 prose-code:text-orange-600 dark:prose-code:text-orange-400'>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                        {parentMessage?.content || 'Parent Task'}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+
+                  {/* Subagent calls list */}
+                  <div className='divide-y divide-stone-100 dark:divide-neutral-800'>
+                    {subagentNodes.map((node, i) => {
+                      // Parse content_blocks if available
+                      const blocks = Array.isArray(node.content_blocks) ? node.content_blocks : []
+                      const hasBlocks = blocks.length > 0
+
+                      return (
+                        <div key={node.id} className='px-5 py-4'>
+                          <div className='flex items-center gap-2 mb-3'>
+                            <span className='inline-flex items-center justify-center w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 text-xs font-bold'>
+                              {i + 1}
+                            </span>
+                            <span className='text-xs font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wider'>
+                              Subagent Call
+                            </span>
+                          </div>
+
+                          {/* Show prompt/message first */}
+                          {node.message && (
+                            <div className='prose prose-sm dark:prose-invert max-w-none text-stone-800 dark:text-stone-200 prose-p:my-1 prose-headings:my-2 prose-pre:my-2 prose-pre:bg-stone-100 dark:prose-pre:bg-neutral-800 prose-code:text-orange-600 dark:prose-code:text-orange-400 prose-pre:text-xs prose-pre:overflow-x-auto mb-3'>
+                              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                                {node.message}
+                              </ReactMarkdown>
+                            </div>
+                          )}
+
+                          {/* Render content_blocks */}
+                          {hasBlocks && (
+                            <div className='space-y-3 mt-3'>
+                              {blocks.map((block: any, blockIdx: number) => {
+                                // Text block
+                                if (block.type === 'text' && block.content) {
+                                  return (
+                                    <div
+                                      key={blockIdx}
+                                      className='prose prose-sm dark:prose-invert max-w-none text-stone-700 dark:text-stone-300 prose-p:my-1 prose-pre:my-2 prose-pre:bg-stone-100 dark:prose-pre:bg-neutral-800 prose-code:text-orange-600 dark:prose-code:text-orange-400 prose-pre:text-xs prose-pre:overflow-x-auto'
+                                    >
+                                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+                                        {block.content}
+                                      </ReactMarkdown>
+                                    </div>
+                                  )
+                                }
+
+                                // Tool use block
+                                if (block.type === 'tool_use') {
+                                  return (
+                                    <div
+                                      key={blockIdx}
+                                      className='border-l-2 border-blue-400 dark:border-blue-600 pl-3 py-2'
+                                    >
+                                      <div className='flex items-center gap-2 mb-1'>
+                                        <span className='text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wider'>
+                                          Tool: {block.name}
+                                        </span>
+                                      </div>
+                                      {block.input && (
+                                        <pre className='text-[11px] text-stone-600 dark:text-stone-400 bg-stone-100 dark:bg-neutral-800 p-2 rounded overflow-x-auto max-h-40 thin-scrollbar'>
+                                          {typeof block.input === 'string'
+                                            ? block.input
+                                            : JSON.stringify(block.input, null, 2)}
+                                        </pre>
+                                      )}
+                                    </div>
+                                  )
+                                }
+
+                                // Tool result block
+                                if (block.type === 'tool_result') {
+                                  const isError = block.is_error
+                                  const content =
+                                    typeof block.content === 'string'
+                                      ? block.content
+                                      : JSON.stringify(block.content, null, 2)
+                                  return (
+                                    <div
+                                      key={blockIdx}
+                                      className={`border-l-2 ${isError ? 'border-red-400 dark:border-red-600' : 'border-emerald-400 dark:border-emerald-600'} pl-3 py-2`}
+                                    >
+                                      <div className='flex items-center gap-2 mb-1'>
+                                        <span
+                                          className={`text-[10px] font-semibold uppercase tracking-wider ${isError ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}
+                                        >
+                                          {isError ? 'Error' : 'Result'}
+                                        </span>
+                                      </div>
+                                      <pre className='text-[11px] text-stone-600 dark:text-stone-400 bg-stone-100 dark:bg-neutral-800 p-2 rounded overflow-x-auto max-h-60 whitespace-pre-wrap break-words thin-scrollbar'>
+                                        {content}
+                                      </pre>
+                                    </div>
+                                  )
+                                }
+
+                                // Thinking block
+                                if (block.type === 'thinking' && block.content) {
+                                  return (
+                                    <div
+                                      key={blockIdx}
+                                      className='border-l-2 border-purple-400 dark:border-purple-600 pl-3 py-2 bg-purple-50/50 dark:bg-purple-900/10 rounded-r'
+                                    >
+                                      <div className='flex items-center gap-2 mb-1'>
+                                        <span className='text-[10px] font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wider'>
+                                          Thinking
+                                        </span>
+                                      </div>
+                                      <div className='prose prose-sm dark:prose-invert max-w-none text-stone-600 dark:text-stone-400 prose-p:my-1'>
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.content}</ReactMarkdown>
+                                      </div>
+                                    </div>
+                                  )
+                                }
+
+                                return null
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
       {showNoteDialog && noteDialogPos && noteMessageId !== null && (
         <div
           className='note-dialog-container absolute z-40 w-96 bg-neutral-50 dark:bg-yBlack-900 border border-stone-200 dark:border-neutral-700 rounded-2xl shadow-lg'

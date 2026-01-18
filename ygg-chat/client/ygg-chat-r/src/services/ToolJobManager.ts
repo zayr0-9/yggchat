@@ -153,7 +153,6 @@ class ToolJobManager {
       this.connectWebSocket()
 
       this.initialized = true
-      console.log('[ToolJobManager] Initialized')
     } catch (error) {
       console.error('[ToolJobManager] Initialization failed:', error)
     } finally {
@@ -173,7 +172,6 @@ class ToolJobManager {
       this.ws = new WebSocket(WS_URL)
 
       this.ws.onopen = () => {
-        console.log('[ToolJobManager] WebSocket connected')
         this.wsConnected = true
         this.wsReconnectAttempts = 0
 
@@ -187,8 +185,6 @@ class ToolJobManager {
 
           if (message.type === 'job_event') {
             this.handleJobEvent(message.data as JobEvent)
-          } else if (message.type === 'jobs_subscribed') {
-            console.log('[ToolJobManager] Subscribed to job events')
           }
         } catch (error) {
           console.error('[ToolJobManager] Failed to parse WebSocket message:', error)
@@ -196,7 +192,6 @@ class ToolJobManager {
       }
 
       this.ws.onclose = () => {
-        console.log('[ToolJobManager] WebSocket disconnected')
         this.wsConnected = false
         this.scheduleReconnect()
       }

@@ -1,12 +1,12 @@
 // ygg-chat/server/src/utils/tools/core/glob.ts
 import * as path from 'path'
 import * as fs from 'fs'
-import { glob as globCallback } from 'glob'
-import { promisify } from 'util'
+import { glob } from 'glob'
 import os from 'os'
 import { resolveToWindowsPath, isWSLPath } from '../../wslBridge'
 
-const globAsync = promisify(globCallback)
+// Modern glob (v9+) returns Promise natively, no need for promisify
+const globAsync = glob
 
 const DEFAULT_MAX_MATCHES = 1000
 const DEFAULT_TIMEOUT_MS = 5000

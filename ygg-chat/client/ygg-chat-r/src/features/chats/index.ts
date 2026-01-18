@@ -99,6 +99,7 @@ export {
   selectHeimdallData,
   selectHeimdallError,
   selectHeimdallLoading,
+  selectHeimdallSubagentMap,
   selectHeimdallState,
   selectInitializationError,
   selectInitializationLoading,

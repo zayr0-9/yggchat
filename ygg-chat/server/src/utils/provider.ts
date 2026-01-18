@@ -428,7 +428,16 @@ export async function generateResponse(
             content: msg.content,
           })
         }
-      } else if (msg.content && msg.content.trim()) {
+      } else if (msg.role === 'tool' || (msg as any).tool_call_id) {
+        // Handle tool result messages (from subagent or main sendMessage)
+        const toolCallId = (msg as any).tool_call_id || (msg as any).toolCallId
+        const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content || '')
+        result.push({
+          role: 'tool' as const,
+          tool_call_id: toolCallId,
+          content,
+        })
+      } else if (msg.content && typeof msg.content === 'string' && msg.content.trim()) {
         // Regular message without tool_calls - check for artifacts
         if (role === 'user' && hasArtifacts) {
           // User message with images - convert to multipart format

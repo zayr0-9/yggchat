@@ -178,10 +178,6 @@ export async function createLmStudioStreamingRequest(
   const allTools = payload.tools || getToolsForAI()
   const tools = mapTools(allTools)
 
-  // Debug logging for tools
-  console.log('[LMStudio] Total tools count:', allTools.length)
-  console.log('[LMStudio] Tool names:', allTools.map(t => t.name))
-
   const body: any = {
     model: payload.modelName,
     stream: true,

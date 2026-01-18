@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAssetPath } from '@/utils/assetPath'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface UseWakeWordOptions {
   keywords?: string[]
@@ -63,12 +63,9 @@ export const useWakeWord = ({
 
     enginePromise = (async () => {
       try {
-        console.log('[WakeWord] Loading WakeWordEngine...')
         const { default: WakeWordEngine } = await import('openwakeword-wasm-browser')
 
-        console.log('[WakeWord] Creating engine with keywords:', keywords)
-        const ortWasmPath = getAssetPath('ort-wasm/');
-        console.log('[WakeWord] ortWasmPath computed as:', ortWasmPath);
+        const ortWasmPath = getAssetPath('ort-wasm/')
 
         const engine = new WakeWordEngine({
           baseAssetUrl: getAssetPath('openwakeword/models'),
@@ -79,13 +76,10 @@ export const useWakeWord = ({
           cooldownMs: cooldownMs,
         })
 
-        console.log('[WakeWord] Loading models...')
         await engine.load()
-        console.log('[WakeWord] Models loaded successfully')
 
         // Set up detection handler
         engine.on('detect', ({ keyword, score }: { keyword: string; score: number }) => {
-          console.log(`[WakeWord] Detected: ${keyword} (score: ${score.toFixed(3)})`)
           setState(prev => ({
             ...prev,
             lastDetected: { keyword, score, timestamp: Date.now() },
@@ -111,7 +105,6 @@ export const useWakeWord = ({
 
   // Start listening for wake word
   const startListening = useCallback(async () => {
-    console.log('[WakeWord] startListening called')
     try {
       let engine = engineRef.current
       if (!engine) {
@@ -119,10 +112,8 @@ export const useWakeWord = ({
       }
 
       if (engine && !state.isListening) {
-        console.log('[WakeWord] Starting engine...')
         await engine.start()
         setState(prev => ({ ...prev, isListening: true, error: null }))
-        console.log('[WakeWord] Engine started, listening for wake word')
       }
     } catch (err) {
       console.error('[WakeWord] Failed to start:', err)
@@ -135,12 +126,10 @@ export const useWakeWord = ({
 
   // Stop listening
   const stopListening = useCallback(() => {
-    console.log('[WakeWord] stopListening called')
     const engine = engineRef.current
     if (engine && state.isListening) {
       engine.stop()
       setState(prev => ({ ...prev, isListening: false }))
-      console.log('[WakeWord] Engine stopped')
     }
   }, [state.isListening])
 

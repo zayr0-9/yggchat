@@ -92,6 +92,7 @@ import {
   PROVIDER_SETTINGS_CHANGE_EVENT,
   ProviderSettings,
 } from '../helpers/providerSettingsStorage'
+import { isOrchestratorEnabled, toggleOrchestratorEnabled } from '../helpers/subagentToolSettings'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
@@ -184,7 +185,6 @@ function Chat() {
   const sendingState = useAppSelector(selectSendingState)
   // Current view stream - automatically selects the relevant stream based on currentPath
   const currentViewStream = useAppSelector(selectCurrentViewStream)
-  const streamingRoot = useAppSelector(state => state.chat.streaming)
   // Derived streamState object for compatibility (combines current view stream data)
   const streamState = useMemo(
     () => ({
@@ -214,19 +214,6 @@ function Chat() {
   const multiReplyCount = useAppSelector(selectMultiReplyCount)
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
 
-  // Debug logging for stream switching - only when streams are active
-  useEffect(() => {
-    if (streamingRoot.activeIds.length > 0) {
-      console.log(
-        '[Chat] activeStreams:',
-        streamingRoot.activeIds.length,
-        'displaying:',
-        currentViewStream?.id?.slice(-8) || 'none',
-        'pathEnd:',
-        selectedPath?.slice(-1)?.[0]?.slice(0, 8)
-      )
-    }
-  }, [streamingRoot.activeIds, currentViewStream?.id, selectedPath])
   // const ideContext = useAppSelector(selectIdeContext)
   const workspace = useAppSelector(selectWorkspace)
   const extensions = useAppSelector(selectExtensions)
@@ -255,6 +242,7 @@ function Chat() {
   const [todoListCollapsed, setTodoListCollapsed] = useState(false)
   // Tool jobs modal state
   const [jobsModalOpen, setJobsModalOpen] = useState(false)
+  const [orchestratorEnabled, setOrchestratorEnabledState] = useState(() => isOrchestratorEnabled())
   // OpenAI ChatGPT login modal state
   const [openaiLoginModalOpen, setOpenaiLoginModalOpen] = useState(false)
   const [openaiAuthFlow, setOpenaiAuthFlow] = useState<{ url: string; verifier: string; state: string } | null>(null)
@@ -311,8 +299,7 @@ function Chat() {
     threshold: wakeWordConfig.threshold,
     cooldownMs: wakeWordConfig.cooldownMs,
     autoStart: wakeWordConfig.autoStart && voiceInputEnabled,
-    onDetected: (keyword, score) => {
-      console.log(`[Chat] Wake word "${keyword}" detected with score ${score}`)
+    onDetected: () => {
       // When wake word is detected, start Whisper recording
       if (!isListening && !speechLoading) {
         startWhisperListening()
@@ -569,6 +556,7 @@ function Chat() {
 
   // Heimdall state from Redux
   const heimdallData = useAppSelector(selectHeimdallData)
+
   const loading = useAppSelector(selectHeimdallLoading)
   const error = useAppSelector(selectHeimdallError)
   const compactMode = useAppSelector(selectHeimdallCompactMode)
@@ -606,40 +594,28 @@ function Chat() {
   // Compute storage_mode from projectConversations (already loaded from ConversationPage)
   // This avoids unreliable cache lookups inside queryFn
   const conversationStorageMode = useMemo(() => {
-    console.log('[Chat] conversationStorageMode useMemo computing...', {
-      storageModeFromNav,
-      storageModeFromHook,
-      conversationIdFromUrl,
-      projectConversationsLength: projectConversations.length,
-    })
     // Priority 1: Navigation state (immediate availability for new chats)
     if (storageModeFromNav) {
-      console.log('[Chat] conversationStorageMode: using storageModeFromNav:', storageModeFromNav)
       return storageModeFromNav
     }
 
     // Priority 2: Hook result (robust check checking all caches + local fetch)
     if (storageModeFromHook) {
-      console.log('[Chat] conversationStorageMode: using storageModeFromHook:', storageModeFromHook)
       return storageModeFromHook
     }
 
     if (!conversationIdFromUrl) {
-      console.log('[Chat] conversationStorageMode: No conversationIdFromUrl, returning undefined')
       return undefined
     }
 
     // Priority 3: Check project conversations cache
     const conv = projectConversations.find(c => String(c.id) === String(conversationIdFromUrl))
     if (conv?.storage_mode) {
-      console.log('[Chat] conversationStorageMode: found in projectConversations:', conv.storage_mode)
-      return conv.storage_mode
     }
 
     // Priority 4: Check all conversations cache (fallback)
     const allConvs = queryClient.getQueryData<Conversation[]>(['conversations'])
     const match = allConvs?.find(c => String(c.id) === String(conversationIdFromUrl))
-    console.log('[Chat] conversationStorageMode: fallback result:', match?.storage_mode || 'undefined')
     return match?.storage_mode
   }, [conversationIdFromUrl, projectConversations, storageModeFromNav, storageModeFromHook, queryClient])
 
@@ -650,6 +626,9 @@ function Chat() {
   const { data: conversationData } = useConversationMessages(conversationIdFromUrl, conversationStorageMode)
   const reactQueryMessages = conversationData?.messages || []
   const treeData = conversationData?.tree
+  // Use useMemo to ensure stable reference for empty object fallback
+  // Without this, {} !== {} on each render, causing the useEffect below to
+  // dispatch on every render, triggering an infinite update loop
 
   const [titleInput, setTitleInput] = useState(currentConversation?.title ?? '')
   const [editingTitle, setEditingTitle] = useState(false)
@@ -798,7 +777,7 @@ function Chat() {
   // Sync tree data to Redux when it arrives
   // Always dispatch even when treeData is null/undefined to keep Redux in sync with React Query
   useEffect(() => {
-    dispatch(chatSliceActions.heimdallDataLoaded({ treeData }))
+    dispatch(chatSliceActions.heimdallDataLoaded({ treeData, subagentMap: {} }))
   }, [treeData, dispatch])
 
   // Sync React Query conversations to Redux to ensure system_prompt and conversation_context are available
@@ -1851,10 +1830,7 @@ function Chat() {
   const handleStopGeneration = useCallback(() => {
     // Stop the current view's stream
     if (streamState.streamingMessageId) {
-      console.log('[handleStopGeneration] stopping stream for messageId:', streamState.streamingMessageId)
       dispatch(abortStreaming({ messageId: streamState.streamingMessageId }))
-    } else {
-      console.log('[handleStopGeneration] no streamingMessageId in current view stream')
     }
   }, [streamState.streamingMessageId, dispatch])
 
@@ -2962,9 +2938,7 @@ function Chat() {
                     ? filteredMessages.length + (showOptimisticMessage ? 1 : 0)
                     : -1
                   const streamingIndex = showStreamingMessage
-                    ? filteredMessages.length +
-                      (showOptimisticMessage ? 1 : 0) +
-                      (showOptimisticBranchMessage ? 1 : 0)
+                    ? filteredMessages.length + (showOptimisticMessage ? 1 : 0) + (showOptimisticBranchMessage ? 1 : 0)
                     : -1
 
                   // Render optimistic message
@@ -3106,7 +3080,6 @@ function Chat() {
                 })}
               </div>
             )}
-
 
             {/* {streamState.active && (
               <div className='pb-4 px-3 flex justify-end'>
@@ -3559,6 +3532,30 @@ function Chat() {
                             </div>
                           </>
                         )}
+                        {/* Orchestrator Mode Toggle */}
+                        <div className='flex items-center gap-2'>
+                          <span className='text-xs text-neutral-500 dark:text-neutral-400'>Orchestrator</span>
+                          <button
+                            onClick={() => {
+                              const newState = toggleOrchestratorEnabled()
+                              setOrchestratorEnabledState(newState)
+                            }}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                              orchestratorEnabled ? 'bg-blue-600' : 'bg-neutral-300 dark:bg-neutral-600'
+                            }`}
+                            title={
+                              orchestratorEnabled
+                                ? 'Subagent can use tools (click to disable)'
+                                : 'Subagent cannot use tools (click to enable)'
+                            }
+                          >
+                            <span
+                              className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                                orchestratorEnabled ? 'translate-x-4.5' : 'translate-x-1'
+                              }`}
+                            />
+                          </button>
+                        </div>
                       </div>
                     }
                   >

@@ -272,12 +272,13 @@ export interface ConversationState {
 export interface ChatNode {
   id: string
   message: string
-  sender: 'user' | 'assistant'
+  sender: 'user' | 'assistant' | 'ex_agent'
   children: ChatNode[]
 }
 
 export interface HeimdallState {
   treeData: ChatNode | null
+  subagentMap: Record<string, ChatNode[]>
   loading: boolean
   error: string | null
   compactMode: boolean

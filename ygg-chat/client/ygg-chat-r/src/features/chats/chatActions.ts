@@ -26,6 +26,7 @@ import {
 import { createLmStudioStreamingRequest } from './LMStudio'
 import { createOpenAIChatGPTStreamingRequest } from './OpenAIChatGPT'
 // OpenAI OAuth is handled internally by OpenAIChatGPT module
+import { getDefaultMaxTurns, getSubagentEnabledTools, isOrchestratorEnabled } from '../../helpers/subagentToolSettings'
 import { updateToolEnabledState } from '../../helpers/toolSettingsStorage'
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
 import sysPromptConfig from './sys_prompt.json'
@@ -553,11 +554,9 @@ const executeBrowseWebLocally = async (
 }
 
 /**
- * Execute subagent tool by calling the ephemeral generation endpoint directly.
- * This runs in the client context where auth token is available.
- * Accumulates the streaming response and returns the final text.
+ * Simple subagent execution without tool calling (fallback when context not available)
  */
-const executeSubagentCall = async (toolCall: any, accessToken: string | null): Promise<string> => {
+const executeSimpleSubagentCall = async (toolCall: any, accessToken: string | null): Promise<string> => {
   const args = toolCall.arguments || {}
   const { prompt, model, systemPrompt, maxTokens, temperature } = args
 
@@ -600,7 +599,6 @@ const executeSubagentCall = async (toolCall: any, accessToken: string | null): P
       const chunk = decoder.decode(value, { stream: true })
       sseBuffer += chunk
 
-      // Parse complete SSE events from buffer
       const lines = sseBuffer.split('\n')
       sseBuffer = lines.pop() || ''
 
@@ -616,7 +614,6 @@ const executeSubagentCall = async (toolCall: any, accessToken: string | null): P
               reasoning += parsed.reasoning
             }
           } catch {
-            // Non-JSON line, might be raw text
             if (data.trim()) {
               fullText += data
             }
@@ -625,15 +622,362 @@ const executeSubagentCall = async (toolCall: any, accessToken: string | null): P
       }
     }
 
-    // Format result with reasoning if present
     if (reasoning) {
       return `<thinking>\n${reasoning}\n</thinking>\n\n${fullText}`
     }
     return fullText || 'Subagent returned empty response'
   } catch (error) {
-    console.error('[executeSubagentCall] Error:', error)
+    console.error('[executeSimpleSubagentCall] Error:', error)
     throw error instanceof Error ? error : new Error(String(error))
   }
+}
+
+/**
+ * Convert ToolDefinition to server's expected format for openrouter
+ * Server expects: { name, enabled, description, inputSchema }
+ */
+const convertToServerToolFormat = (tool: ToolDefinition) => ({
+  name: tool.name,
+  enabled: true, // Tools sent to subagent are explicitly enabled
+  description: tool.description || '',
+  inputSchema: tool.inputSchema || { type: 'object', properties: {} },
+})
+
+/**
+ * Get filtered tool definitions for subagent based on mode
+ * Returns tools in server's expected format: { name, enabled, description, inputSchema }
+ */
+const getSubagentToolDefinitions = (
+  orchestratorMode: boolean,
+  requestedTools: string[] | undefined
+): Array<{ name: string; enabled: boolean; description: string; inputSchema: any }> => {
+  // Check if orchestrator is globally enabled
+  if (!isOrchestratorEnabled()) {
+    // Orchestrator disabled - subagent cannot use any tools
+    return []
+  }
+
+  const allTools = getAllTools()
+
+  // Always exclude 'subagent' to prevent recursion
+  const excludedTools = new Set(['subagent'])
+
+  let allowedToolNames: Set<string>
+
+  if (orchestratorMode && requestedTools?.length) {
+    // Orchestrator mode: use requested tools (intersection with available)
+    allowedToolNames = new Set(requestedTools.filter(name => !excludedTools.has(name)))
+  } else {
+    // Pre-configured mode: use localStorage settings
+    const configuredTools = getSubagentEnabledTools()
+    allowedToolNames = new Set(configuredTools.filter(name => !excludedTools.has(name)))
+  }
+
+  // Filter and convert to OpenAI format
+  // When orchestratorMode=true with explicit requestedTools, bypass the t.enabled check
+  // This allows the model to request any tool regardless of global enabled state
+  const bypassEnabledCheck = !!(orchestratorMode && requestedTools?.length)
+
+  return allTools
+    .filter(t => {
+      const passesEnabledCheck = bypassEnabledCheck ? true : t.enabled
+      return passesEnabledCheck && allowedToolNames.has(t.name) && !excludedTools.has(t.name)
+    })
+    .map(convertToServerToolFormat)
+}
+
+/**
+ * Execute subagent tool with full agentic capabilities.
+ * Supports multi-turn tool execution, message persistence, and configurable tool access.
+ */
+const executeSubagentCall = async (
+  toolCall: any,
+  accessToken: string | null,
+  context: {
+    dispatch: any
+    getState: () => RootState
+    conversationId: string
+    parentMessageId: string
+    rootPath: string | null
+    operationMode: OperationMode
+  }
+): Promise<string> => {
+  const args = toolCall.arguments || {}
+  const {
+    prompt,
+    model,
+    systemPrompt,
+    maxTokens,
+    temperature,
+    maxTurns: requestedMaxTurns,
+    orchestratorMode = false,
+    tools: requestedTools,
+    inheritAutoApprove = true,
+  } = args
+
+  if (!prompt) {
+    throw new Error('Subagent requires a prompt')
+  }
+
+  const { dispatch, getState, conversationId, parentMessageId, rootPath, operationMode } = context
+  const state = getState()
+
+  // Determine max turns (from args, localStorage, or default)
+  const maxTurns = Math.min(Math.max(requestedMaxTurns || getDefaultMaxTurns(), 1), 50)
+
+  // Get filtered tool definitions for this subagent
+  const subagentTools = getSubagentToolDefinitions(orchestratorMode, requestedTools)
+
+  // Generate unique session ID for this subagent invocation
+  const subagentSessionId = uuidv4()
+
+  // Track execution for result formatting
+  const toolsExecuted: { name: string; success: boolean }[] = []
+  let turnsUsed = 0
+
+  // Build conversation history for the subagent
+  const conversationHistory: any[] = [{ role: 'user', content: prompt }]
+
+  // Persist subagent user prompt message to local storage
+  const promptMessageId = uuidv4()
+  const storageMode = state.conversations.items.find(c => c.id === conversationId)?.storage_mode
+  const isLocalMode = shouldUseLocalApi(storageMode)
+
+  if (isLocalMode) {
+    try {
+      await localApi.post('/sync/message', {
+        id: promptMessageId,
+        conversation_id: conversationId,
+        parent_id: parentMessageId,
+        role: 'ex_agent',
+        content: prompt,
+        ex_agent_type: 'subagent',
+        ex_agent_session_id: subagentSessionId,
+        created_at: new Date().toISOString(),
+      })
+    } catch (err) {
+      console.warn('[subagent] Failed to persist prompt message:', err)
+    }
+  }
+
+  let finalResponse = ''
+  let lastAssistantMessageId = promptMessageId
+
+  // Agentic loop with hard limit
+  let shouldContinue = true
+  for (let turn = 0; turn < maxTurns && shouldContinue; turn++) {
+    turnsUsed = turn + 1
+
+    try {
+      // Call ephemeral endpoint with tools and conversation history
+      const response = await createStreamingRequest('/generate/ephemeral', accessToken, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: conversationHistory,
+          model: model || 'google/gemini-3-flash-preview',
+          maxTokens: Math.min(maxTokens || 4096, 16384),
+          temperature: temperature ?? 0.7,
+          systemPrompt,
+          tools: subagentTools.length > 0 ? subagentTools : undefined,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Subagent generation failed: HTTP ${response.status}: ${errorText}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error('No response body from subagent')
+      }
+
+      const decoder = new TextDecoder()
+      let turnText = ''
+      let turnReasoning = ''
+      const turnToolCalls: any[] = []
+      let sseBuffer = ''
+
+      // Parse SSE stream
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        sseBuffer += chunk
+
+        const lines = sseBuffer.split('\n')
+        sseBuffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.text) {
+                turnText += parsed.text
+              } else if (parsed.reasoning) {
+                turnReasoning += parsed.reasoning
+              } else if (parsed.toolCall) {
+                turnToolCalls.push(parsed.toolCall)
+              }
+            } catch {
+              if (data.trim()) {
+                turnText += data
+              }
+            }
+          }
+        }
+      }
+
+      // Create assistant message for this turn
+      const assistantMessageId = uuidv4()
+      const assistantMessage: any = {
+        id: assistantMessageId,
+        conversation_id: conversationId,
+        parent_id: lastAssistantMessageId,
+        role: 'ex_agent',
+        content: turnText,
+        ex_agent_type: 'subagent',
+        ex_agent_session_id: subagentSessionId,
+        tool_calls: turnToolCalls.length > 0 ? JSON.stringify(turnToolCalls) : null,
+        thinking_block: turnReasoning || null,
+        created_at: new Date().toISOString(),
+      }
+
+      // If no tool calls, this is the final response
+      if (turnToolCalls.length === 0) {
+        finalResponse = turnReasoning ? `<thinking>\n${turnReasoning}\n</thinking>\n\n${turnText}` : turnText
+
+        // Persist final assistant message
+        if (isLocalMode) {
+          try {
+            await localApi.post('/sync/message', assistantMessage)
+          } catch (err) {
+            console.warn('[subagent] Failed to persist final assistant message:', err)
+          }
+        }
+        break
+      }
+
+      // Process tool calls
+      const toolResults: any[] = []
+
+      for (const tc of turnToolCalls) {
+        // Skip nested subagent calls
+        if (tc.name === 'subagent') {
+          toolResults.push({
+            tool_use_id: tc.id,
+            content: 'Error: Nested subagent calls are not allowed.',
+            is_error: true,
+          })
+          toolsExecuted.push({ name: tc.name, success: false })
+          continue
+        }
+
+        try {
+          // Determine if we should auto-approve based on inheritAutoApprove setting
+          const parentAutoApprove = state.chat.toolAutoApprove
+          const shouldAutoApprove = inheritAutoApprove && parentAutoApprove
+
+          let result: string
+          if (shouldAutoApprove) {
+            // Execute directly without permission check
+            result = await executeLocalTool(tc, rootPath, operationMode, {
+              conversationId,
+              messageId: assistantMessageId,
+              accessToken,
+            })
+          } else {
+            // Show permission dialog
+            result = await executeToolWithPermissionCheck(dispatch, getState, tc, rootPath, operationMode, {
+              conversationId,
+              messageId: assistantMessageId,
+              accessToken,
+            })
+          }
+
+          toolResults.push({
+            tool_use_id: tc.id,
+            content: result,
+            is_error: false,
+          })
+          toolsExecuted.push({ name: tc.name, success: true })
+        } catch (err) {
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          toolResults.push({
+            tool_use_id: tc.id,
+            content: `Error: ${errorMsg}`,
+            is_error: true,
+          })
+          toolsExecuted.push({ name: tc.name, success: false })
+        }
+      }
+
+      // Build content_blocks with tool results
+      const contentBlocks: any[] = []
+      if (turnText) {
+        contentBlocks.push({ type: 'text', text: turnText })
+      }
+      for (const tc of turnToolCalls) {
+        contentBlocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments || tc.input })
+      }
+      for (const tr of toolResults) {
+        contentBlocks.push({ type: 'tool_result', tool_use_id: tr.tool_use_id, content: tr.content })
+      }
+
+      assistantMessage.content_blocks = JSON.stringify(contentBlocks)
+
+      // Persist assistant message with tool calls and results
+      if (isLocalMode) {
+        try {
+          await localApi.post('/sync/message', assistantMessage)
+        } catch (err) {
+          console.warn('[subagent] Failed to persist assistant message:', err)
+        }
+      }
+
+      // Add assistant message with tool_calls to conversation history
+      conversationHistory.push({
+        role: 'assistant',
+        content: turnText || null,
+        tool_calls: turnToolCalls.map(tc => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: JSON.stringify(tc.arguments || tc.input || {}) },
+        })),
+      })
+
+      // Add each tool result as a separate 'tool' message (same format as createToolResultMessage)
+      for (const tr of toolResults) {
+        conversationHistory.push({
+          role: 'tool',
+          tool_call_id: tr.tool_use_id,
+          content: tr.content,
+        })
+      }
+
+      lastAssistantMessageId = assistantMessageId
+      finalResponse = turnText // Keep last text in case we hit max turns
+
+      // Check if we've hit maxTurns - stop even if there are more tool calls
+      if (turnsUsed >= maxTurns) {
+        shouldContinue = false
+      }
+    } catch (error) {
+      console.error('[subagent] Error in turn', turn + 1, ':', error)
+      shouldContinue = false
+      throw error
+    }
+  }
+
+  // Format return value
+  const toolSummary =
+    toolsExecuted.length > 0 ? toolsExecuted.map(t => `${t.name} (${t.success ? '✓' : '✗'})`).join(', ') : 'none'
+
+  return `## Subagent Response (session: ${subagentSessionId.slice(0, 8)})\n\n${finalResponse || 'No response generated'}\n\n---\nTurns: ${turnsUsed}/${maxTurns} | Tools executed: ${toolSummary}`
 }
 
 /**
@@ -650,13 +994,27 @@ const executeLocalTool = async (
     priority?: 'low' | 'normal' | 'high' | 'critical'
     timeoutMs?: number
     accessToken?: string | null
+    // For subagent execution
+    dispatch?: any
+    getState?: () => RootState
   }
 ) => {
   const timeoutMs = resolveToolTimeoutMs(toolCall, context?.timeoutMs)
 
   // Subagent: execute via ephemeral endpoint (works in both electron and web)
   if (toolCall?.name === 'subagent') {
-    return await executeSubagentCall(toolCall, context?.accessToken ?? null)
+    if (!context?.dispatch || !context?.getState || !context?.conversationId || !context?.messageId) {
+      // Fallback to simple mode if context not available
+      return await executeSimpleSubagentCall(toolCall, context?.accessToken ?? null)
+    }
+    return await executeSubagentCall(toolCall, context.accessToken ?? null, {
+      dispatch: context.dispatch,
+      getState: context.getState,
+      conversationId: context.conversationId,
+      parentMessageId: context.messageId,
+      rootPath,
+      operationMode,
+    })
   }
 
   // Non-electron: only allow browse_web, otherwise bail
@@ -802,9 +1160,16 @@ const executeToolWithPermissionCheck = async (
   const state = getState() as RootState
   const autoApprove = state.chat.toolAutoApprove
 
+  // Extend context with dispatch/getState for subagent execution
+  const extendedContext = {
+    ...context,
+    dispatch,
+    getState,
+  }
+
   if (autoApprove) {
     // Auto-approve enabled: execute immediately without showing dialog
-    return await executeLocalTool(toolCall, rootPath, operationMode, context)
+    return await executeLocalTool(toolCall, rootPath, operationMode, extendedContext)
   }
 
   // Auto-approve disabled: show dialog and wait for user response
@@ -817,7 +1182,7 @@ const executeToolWithPermissionCheck = async (
 
   // Execute or bail based on user decision
   if (allowed) {
-    return await executeLocalTool(toolCall, rootPath, operationMode, context)
+    return await executeLocalTool(toolCall, rootPath, operationMode, extendedContext)
   }
 
   // User explicitly denied the tool execution — surface as an error to halt generation
@@ -1065,97 +1430,7 @@ export const sendMessage = createAsyncThunk<
 
           // CRITICAL: Update parent to user message ID so assistant reply is parented correctly
           parent = newUserMessage.id
-          console.log('[sendMessage][local-provider] User message created, parent updated:', {
-            userMsgId: newUserMessage.id,
-            newParent: parent,
-            provider: shouldUseLmStudio ? 'lmstudio' : 'openai-chatgpt',
-          })
         }
-
-        // const executeLocalTools = async (
-        //   assistantMessage: any,
-        //   assistantMessageId: MessageId | null,
-        //   assistantToolCalls: any[],
-        //   streamId: string
-        // ) => {
-        //   const currentMessages = getState().chat.conversation.messages
-        //   const assistantStateMessage = currentMessages.find(m => m.id === (assistantMessageId || assistantMessage?.id))
-        //   const rootPath = conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
-        //   const operationMode = state.chat.operationMode
-        //   const toolResultBlocks: any[] = []
-        //   const processedToolCallIds = new Set<string>()
-        //   let successfulDesktopTool = false
-        //   let successfulBrowseWeb = false
-
-        //   const pendingToolCalls = assistantToolCalls
-        //   for (const toolCall of pendingToolCalls) {
-        //     let content: string
-        //     let isError = false
-
-        //     try {
-        //       const result = await executeToolWithPermissionCheck(
-        //         dispatch,
-        //         getState,
-        //         toolCall,
-        //         rootPath,
-        //         operationMode,
-        //         {
-        //           conversationId,
-        //           messageId: assistantMessageId ?? undefined,
-        //           streamId,
-        //         }
-        //       )
-
-        //       content = typeof result === 'string' ? result : JSON.stringify(result)
-        //       if (isElectronEnvironment) {
-        //         successfulDesktopTool = true
-        //       } else if (toolCall?.name === 'browse_web') {
-        //         successfulBrowseWeb = true
-        //       }
-        //     } catch (error) {
-        //       isError = true
-        //       content = error instanceof Error ? error.message : String(error)
-        //     }
-
-        //     const toolResultBlock = {
-        //       type: 'tool_result',
-        //       tool_use_id: toolCall.id,
-        //       content,
-        //       is_error: isError,
-        //     }
-
-        //     toolResultBlocks.push(toolResultBlock)
-        //     processedToolCallIds.add(toolCall.id)
-
-        //     dispatch(
-        //       chatSliceActions.streamChunkReceived({
-        //         type: 'chunk',
-        //         part: 'tool_result',
-        //         toolResult: {
-        //           tool_use_id: toolCall.id,
-        //           content: toolResultBlock.content,
-        //           is_error: isError,
-        //         },
-        //       })
-        //     )
-        //   }
-
-        //   if (toolResultBlocks.length > 0 && assistantStateMessage) {
-        //     const existingBlocks = parseContentBlocks(assistantStateMessage.content_blocks)
-        //     const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
-
-        //     await dispatch(
-        //       updateMessage({
-        //         id: assistantStateMessage.id,
-        //         content: assistantStateMessage.content,
-        //         content_blocks: updatedContentBlocks,
-        //       })
-        //     )
-        //   }
-
-        //   const hasSuccessfulTool = successfulDesktopTool || successfulBrowseWeb
-        //   return hasSuccessfulTool
-        // }
 
         if (repeatNum > 1 && turnCount === 1) {
           if (shouldUseLmStudio) {
@@ -2545,15 +2820,6 @@ export const editMessageWithBranching = createAsyncThunk<
     const originalMessage = currentMessages.find(m => m.id === originalMessageId)
     const parentMessageId = originalMessage?.parent_id
 
-    console.log(
-      '[editMessageWithBranching] originalMessageId:',
-      originalMessageId,
-      'parentMessageId:',
-      parentMessageId,
-      'messagesCount:',
-      currentMessages.length
-    )
-
     dispatch(
       chatSliceActions.sendingStarted({
         streamId,
@@ -2762,9 +3028,6 @@ export const editMessageWithBranching = createAsyncThunk<
             userMessage = newUserMessage
             currentTurnHistory.push(newUserMessage)
             activeParentId = newUserMessage.id
-            console.log('[editMessageWithBranching][lmstudio] User message created, parent updated:', {
-              userMsgId: newUserMessage.id,
-            })
           }
 
           // Build LM Studio messages
@@ -3576,8 +3839,6 @@ export const sendMessageToBranch = createAsyncThunk<
     // Generate or use provided stream ID
     const streamId = providedStreamId ?? generateStreamId('branch')
 
-    console.log('[sendMessageToBranch] parentId:', parentId)
-
     dispatch(
       chatSliceActions.sendingStarted({
         streamId,
@@ -3738,9 +3999,6 @@ export const sendMessageToBranch = createAsyncThunk<
             userMessage = newUserMessage
             currentTurnHistory.push(newUserMessage)
             currentParentId = newUserMessage.id
-            console.log('[sendMessageToBranch][lmstudio] User message created, parent updated:', {
-              userMsgId: newUserMessage.id,
-            })
           }
 
           // Build LM Studio messages (OpenAI-compatible format)
@@ -4480,13 +4738,11 @@ export const syncConversationToLocal = createAsyncThunk<
   { conversationId: ConversationId; messages: Message[]; storageMode?: 'local' | 'cloud' },
   { state: RootState; extra: ThunkExtraArgument }
 >('chat/syncConversationToLocal', async ({ conversationId, messages, storageMode }, { extra, getState }) => {
-  console.log('[syncConversationToLocal] START', { conversationId, messagesCount: messages?.length, storageMode })
   // Only run in Electron mode
   if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
 
   // Skip syncing for local-only conversations - they don't exist in cloud
   if (storageMode === 'local') {
-    console.log('[syncConversationToLocal] SKIP - local-only conversation, no remote sync needed')
     return
   }
 
@@ -4495,19 +4751,13 @@ export const syncConversationToLocal = createAsyncThunk<
 
   try {
     const exists = await dualSync.checkConversationExists(conversationId)
-    console.log('[syncConversationToLocal] conversation exists locally:', exists)
     // Determine project ID from state or conversation data
     let projectId: string | null = selectSelectedProject(state)?.id || null
 
     if (!exists) {
-      console.log('[syncConversationToLocal] NOT exists locally, fetching from REMOTE...')
       // Fetch conversation from REMOTE source of truth (Cloud), not local API
       let conversation: Conversation | null = null
       try {
-        console.log(
-          '[syncConversationToLocal] about to fetch from REMOTE:',
-          `${REMOTE_API_BASE}/conversations/${conversationId}`
-        )
         const res = await fetch(`${REMOTE_API_BASE}/conversations/${conversationId}`, {
           headers: {
             Authorization: `Bearer ${auth.accessToken}`,
@@ -5145,7 +5395,6 @@ export const fetchCustomTools = createAsyncThunk<void, void, { state: RootState 
 
     if (!isElectronMode) {
       // Custom tools only available in Electron mode
-      console.log('[CustomTools] Skipping - not in Electron mode')
       return
     }
 
@@ -5163,8 +5412,6 @@ export const fetchCustomTools = createAsyncThunk<void, void, { state: RootState 
 
         // Update Redux state with merged tools
         dispatch(chatSliceActions.setTools(getAllTools()))
-
-        console.log(`[CustomTools] Loaded ${data.tools.length} custom tools`)
       }
     } catch (error) {
       // Silently fail - custom tools are optional
@@ -5432,7 +5679,6 @@ export const sendCCMessage = createAsyncThunk<
                 )
               } else if (chunk.type === 'system') {
                 // System events (init, auth, etc.) - log silently for now
-                console.log('[CC System]', chunk.message)
               } else if (chunk.type === 'result') {
                 // Result message from slash commands - backend streams output as chunks
                 // But also handle direct result.result for compatibility
@@ -5631,7 +5877,6 @@ export const sendCCBranch = createAsyncThunk<
                 )
               } else if (chunk.type === 'system') {
                 // System events (init, auth, etc.)
-                console.log('[CC System]', chunk.message)
               } else if (chunk.type === 'result') {
                 // Result message from slash commands - backend streams output as chunks
                 // But also handle direct result.result for compatibility

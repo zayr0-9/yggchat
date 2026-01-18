@@ -181,7 +181,6 @@ export const selectCurrentViewStream = createSelector(
 
       // Match ONLY if rootMessageId is in current path (streaming msg is on this branch)
       if (rootMsgId && currentPath.includes(rootMsgId)) {
-        console.log('[StreamSelector] MATCHED by root in path:', id.slice(-8), 'root:', String(rootMsgId).slice(0, 8))
         return { id, ...stream }
       }
     }
@@ -217,6 +216,7 @@ export const selectAllActiveStreams = createSelector([selectStreamingRoot], stre
 // Heimdall selectors
 export const selectHeimdallState = createSelector([selectChatState], chat => chat.heimdall)
 export const selectHeimdallData = createSelector([selectHeimdallState], h => h.treeData)
+export const selectHeimdallSubagentMap = createSelector([selectHeimdallState], h => h.subagentMap)
 export const selectHeimdallLoading = createSelector([selectHeimdallState], h => h.loading)
 export const selectHeimdallError = createSelector([selectHeimdallState], h => h.error)
 export const selectHeimdallCompactMode = createSelector([selectHeimdallState], h => h.compactMode)
@@ -230,6 +230,7 @@ export const selectInitializationError = createSelector([selectInitializationSta
 export const selectModelSelectorOpen = createSelector([selectChatState], chat => chat.ui.modelSelectorOpen)
 export const HeimdallDataReset = createSelector([selectHeimdallState], h => {
   h.treeData = null
+  h.subagentMap = {}
   h.loading = false
   h.error = null
 })

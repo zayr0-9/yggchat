@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAssetPath } from '@/utils/assetPath'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface UseWhisperSpeechToTextOptions {
   onTranscript?: (transcript: string) => void
@@ -21,10 +21,7 @@ let pipelinePromise: Promise<any> | null = null
 let pipelineInstance: any = null
 let configuredEnv = false
 
-const loadWhisperPipeline = async (
-  model: string,
-  onProgress?: (progress: number) => void
-): Promise<any> => {
+const loadWhisperPipeline = async (model: string, onProgress?: (progress: number) => void): Promise<any> => {
   if (pipelineInstance) {
     return pipelineInstance
   }
@@ -34,7 +31,6 @@ const loadWhisperPipeline = async (
   }
 
   pipelinePromise = (async () => {
-    console.log('[Whisper] Loading transformers.js...')
     const transformers = await import('@huggingface/transformers')
     const { pipeline, env } = transformers
 
@@ -48,45 +44,30 @@ const loadWhisperPipeline = async (
       // Use browser cache for any cached data
       env.useBrowserCache = true
 
-      console.log('[Whisper] Transformers environment:', env);
-
       // Configure WASM paths
       if (env.backends?.onnx?.wasm) {
-        env.backends.onnx.wasm.wasmPaths = getAssetPath('ort-wasm/');
-        console.log('[Whisper] Set WASM paths to:', env.backends.onnx.wasm.wasmPaths);
+        env.backends.onnx.wasm.wasmPaths = getAssetPath('ort-wasm/')
       } else {
-        console.warn('[Whisper] env.backends.onnx.wasm is missing!');
+        console.warn('[Whisper] env.backends.onnx.wasm is missing!')
       }
 
-      console.log('[Whisper] Environment configured for LOCAL models:', {
-        allowLocalModels: env.allowLocalModels,
-        allowRemoteModels: env.allowRemoteModels,
-        localModelPath: env.localModelPath,
-      })
       configuredEnv = true
     }
 
     // Use local path: /models/whisper-tiny (served from public/models/whisper-tiny)
     const modelId = `whisper-${model}`
-    console.log(`[Whisper] Loading model: ${modelId}...`)
 
     try {
       const pipe = await pipeline('automatic-speech-recognition', modelId, {
         progress_callback: (data: any) => {
           if (data.status === 'progress' && data.progress) {
-            console.log(`[Whisper] Loading ${data.file}: ${data.progress.toFixed(1)}%`)
             onProgress?.(data.progress)
-          } else if (data.status === 'done') {
-            console.log(`[Whisper] Loaded: ${data.file}`)
-          } else if (data.status === 'initiate') {
-            console.log(`[Whisper] Starting: ${data.file}`)
           }
         },
         // Explicitly set quantized model for smaller size
         // quantized: true,
       })
 
-      console.log('[Whisper] Model loaded successfully')
       pipelineInstance = pipe
       return pipe
     } catch (loadError) {
@@ -160,68 +141,58 @@ export const useWhisperSpeechToText = ({
   }, [model])
 
   // Convert audio blob to the format Whisper expects
-  const processAudio = useCallback(async (audioBlob: Blob): Promise<string> => {
-    console.log('[Whisper] Processing audio blob:', audioBlob.size, 'bytes')
+  const processAudio = useCallback(
+    async (audioBlob: Blob): Promise<string> => {
+      if (audioBlob.size < 1000) {
+        return ''
+      }
 
-    if (audioBlob.size < 1000) {
-      console.log('[Whisper] Audio too short, skipping')
-      return ''
-    }
+      const pipe = await loadWhisperPipeline(model, progress => {
+        setWhisperState(prev => ({ ...prev, loadProgress: progress }))
+      })
+      setWhisperState(prev => ({ ...prev, isModelLoaded: true }))
 
-    const pipe = await loadWhisperPipeline(model, progress => {
-      setWhisperState(prev => ({ ...prev, loadProgress: progress }))
-    })
-    setWhisperState(prev => ({ ...prev, isModelLoaded: true }))
+      // Convert blob to array buffer
+      const arrayBuffer = await audioBlob.arrayBuffer()
 
-    // Convert blob to array buffer
-    const arrayBuffer = await audioBlob.arrayBuffer()
+      // Decode audio using Web Audio API
+      const audioContext = new AudioContext({ sampleRate: 16000 })
+      let audioBuffer: AudioBuffer
 
-    // Decode audio using Web Audio API
-    const audioContext = new AudioContext({ sampleRate: 16000 })
-    let audioBuffer: AudioBuffer
+      try {
+        audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+      } catch (decodeError) {
+        console.error('[Whisper] Failed to decode audio:', decodeError)
+        audioContext.close()
+        return ''
+      }
 
-    try {
-      audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-    } catch (decodeError) {
-      console.error('[Whisper] Failed to decode audio:', decodeError)
+      // Get audio data as Float32Array (mono, 16kHz)
+      const audioData = audioBuffer.getChannelData(0)
+
+      // Run transcription
+
+      const result = await pipe(audioData, {
+        language,
+        task: 'transcribe',
+        chunk_length_s: 30,
+        stride_length_s: 5,
+      })
+
       audioContext.close()
-      return ''
-    }
-
-    // Get audio data as Float32Array (mono, 16kHz)
-    const audioData = audioBuffer.getChannelData(0)
-    console.log('[Whisper] Audio data length:', audioData.length, 'samples')
-
-    // Run transcription
-    console.log('[Whisper] Running transcription...')
-    const startTime = performance.now()
-
-    const result = await pipe(audioData, {
-      language,
-      task: 'transcribe',
-      chunk_length_s: 30,
-      stride_length_s: 5,
-    })
-
-    const elapsed = performance.now() - startTime
-    console.log(`[Whisper] Transcription completed in ${elapsed.toFixed(0)}ms:`, result.text)
-
-    audioContext.close()
-    return result.text || ''
-  }, [model, language])
+      return result.text || ''
+    },
+    [model, language]
+  )
 
   // Start recording
   const startListening = useCallback(async () => {
-    console.log('[Whisper] startListening called')
-
     if (isListening || isProcessingRef.current) {
-      console.log('[Whisper] Already listening or processing')
       return
     }
 
     try {
       // Request microphone access
-      console.log('[Whisper] Requesting microphone access...')
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
@@ -231,7 +202,6 @@ export const useWhisperSpeechToText = ({
         },
       })
       streamRef.current = stream
-      console.log('[Whisper] Microphone access granted')
 
       // Set up audio analysis for silence detection
       audioContextRef.current = new AudioContext()
@@ -248,8 +218,6 @@ export const useWhisperSpeechToText = ({
           ? 'audio/webm'
           : 'audio/mp4'
 
-      console.log('[Whisper] Using MIME type:', mimeType)
-
       const mediaRecorder = new MediaRecorder(stream, { mimeType })
       mediaRecorderRef.current = mediaRecorder
       audioChunksRef.current = []
@@ -257,16 +225,13 @@ export const useWhisperSpeechToText = ({
       mediaRecorder.ondataavailable = event => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data)
-          console.log('[Whisper] Audio chunk received:', event.data.size, 'bytes')
         }
       }
 
       mediaRecorder.onstop = async () => {
-        console.log('[Whisper] MediaRecorder stopped, processing audio...')
         isProcessingRef.current = true
 
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
-        console.log('[Whisper] Total audio size:', audioBlob.size, 'bytes')
 
         try {
           const text = await processAudio(audioBlob)
@@ -290,7 +255,6 @@ export const useWhisperSpeechToText = ({
       mediaRecorder.start(1000) // Collect data every second
       setIsListening(true)
       setWhisperState(prev => ({ ...prev, error: null }))
-      console.log('[Whisper] Recording started')
 
       // Optional: Set up silence detection
       // This will auto-stop after silenceThreshold seconds of silence
@@ -306,7 +270,6 @@ export const useWhisperSpeechToText = ({
         if (isSilent) {
           if (!silenceTimerRef.current) {
             silenceTimerRef.current = setTimeout(() => {
-              console.log('[Whisper] Silence detected, stopping...')
               stopListening()
             }, silenceThreshold * 1000)
           }
@@ -321,8 +284,8 @@ export const useWhisperSpeechToText = ({
       // Start silence detection loop
       const silenceCheckInterval = setInterval(checkSilence, 200)
 
-        // Store interval for cleanup
-        ; (mediaRecorder as any)._silenceCheckInterval = silenceCheckInterval
+      // Store interval for cleanup
+      ;(mediaRecorder as any)._silenceCheckInterval = silenceCheckInterval
     } catch (err) {
       console.error('[Whisper] Failed to start recording:', err)
       setWhisperState(prev => ({
@@ -334,8 +297,6 @@ export const useWhisperSpeechToText = ({
 
   // Stop recording
   const stopListening = useCallback(() => {
-    console.log('[Whisper] stopListening called')
-
     if (silenceTimerRef.current) {
       clearTimeout(silenceTimerRef.current)
       silenceTimerRef.current = null
@@ -364,12 +325,10 @@ export const useWhisperSpeechToText = ({
     }
 
     setIsListening(false)
-    console.log('[Whisper] Recording stopped')
   }, [])
 
   // Toggle listening
   const toggleListening = useCallback(() => {
-    console.log('[Whisper] toggleListening called, isListening:', isListening)
     if (isListening) {
       stopListening()
     } else {

@@ -130,6 +130,7 @@ const makeInitialState = (): ChatState => {
     },
     heimdall: {
       treeData: null,
+      subagentMap: {},
       loading: false,
       error: null,
       compactMode: false,
@@ -227,8 +228,6 @@ export const chatSlice = createSlice({
       const streamId = action.payload?.streamId ?? DEFAULT_STREAM_ID
       const streamType = action.payload?.streamType ?? 'primary'
       const lineage = action.payload?.lineage ?? {}
-
-      console.log('[sendingStarted] streamId:', streamId, 'lineage:', JSON.stringify(lineage))
 
       // Create new stream state
       state.streaming.byId[streamId] = {
@@ -372,9 +371,7 @@ export const chatSlice = createSlice({
             }
 
             // Only add to events if this tool call ID hasn't been logged yet (deduplication)
-            const eventExists = stream.events.some(
-              e => e.type === 'tool_call' && e.toolCall?.id === chunk.toolCall!.id
-            )
+            const eventExists = stream.events.some(e => e.type === 'tool_call' && e.toolCall?.id === chunk.toolCall!.id)
 
             if (!eventExists) {
               stream.events.push({
@@ -433,9 +430,7 @@ export const chatSlice = createSlice({
           }
 
           // Only add to events if this tool call ID hasn't been logged yet (deduplication)
-          const eventExists = stream.events.some(
-            e => e.type === 'tool_call' && e.toolCall?.id === chunk.toolCall!.id
-          )
+          const eventExists = stream.events.some(e => e.type === 'tool_call' && e.toolCall?.id === chunk.toolCall!.id)
 
           if (!eventExists) {
             stream.events.push({
@@ -469,7 +464,7 @@ export const chatSlice = createSlice({
       const hasStreamId = 'streamId' in action.payload
       const streamId = hasStreamId ? (action.payload as StreamCompletedPayload).streamId : DEFAULT_STREAM_ID
       const messageId = action.payload.messageId
-      const updatePath = hasStreamId ? (action.payload as StreamCompletedPayload).updatePath ?? true : true
+      const updatePath = hasStreamId ? ((action.payload as StreamCompletedPayload).updatePath ?? true) : true
 
       const stream = state.streaming.byId[streamId]
 
@@ -541,7 +536,6 @@ export const chatSlice = createSlice({
       const stream = state.streaming.byId[streamId]
       if (stream) {
         stream.lineage.rootMessageId = targetParentId
-        console.log('[streamLineageUpdated] streamId:', streamId.slice(-8), 'targetParentId:', String(targetParentId).slice(0, 8))
       }
     },
 
@@ -661,9 +655,7 @@ export const chatSlice = createSlice({
           : null
 
       const shouldSwitch =
-        newMessage.role === 'user' ||
-        state.conversation.currentPath.length === 0 ||
-        currentTip === newMessage.parent_id
+        newMessage.role === 'user' || state.conversation.currentPath.length === 0 || currentTip === newMessage.parent_id
 
       if (shouldSwitch) {
         state.conversation.currentPath = buildPathToMessage(newMessage.id)
@@ -698,8 +690,9 @@ export const chatSlice = createSlice({
       state.heimdall.loading = true
       state.heimdall.error = null
     },
-    heimdallDataLoaded: (state, action: PayloadAction<{ treeData: any }>) => {
+    heimdallDataLoaded: (state, action: PayloadAction<{ treeData: any; subagentMap?: Record<string, any[]> }>) => {
       state.heimdall.treeData = action.payload.treeData
+      state.heimdall.subagentMap = action.payload.subagentMap ?? {}
       state.heimdall.loading = false
       state.heimdall.error = null
     },

@@ -109,7 +109,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Listen for force logout events from API layer (when token refresh fails)
   useEffect(() => {
     const handleForceLogout = () => {
-      console.log('[AuthContext] Force logout event received, clearing auth state')
       setAuthState({
         user: null,
         session: null,

@@ -178,18 +178,29 @@ router.get(
   })
 )
 
-// Ephemeral generation endpoint for custom tools
+// Ephemeral generation endpoint for custom tools and subagent execution
 // This allows tool UIs to make one-off LLM generation requests without creating messages/conversations
-// Supports image input (attachmentsBase64) and image output (for image generation models)
+// Supports image input (attachmentsBase64), image output (for image generation models),
+// tool calling (for agentic subagents), and multi-turn conversation history
 router.post(
   '/generate/ephemeral',
   authenticatedRateLimiter,
   asyncHandler(async (req, res) => {
     const { userId } = await verifyAuth(req)
-    const { prompt, model, maxTokens, temperature, systemPrompt, attachmentsBase64 } = req.body
+    const {
+      prompt,
+      model,
+      maxTokens,
+      temperature,
+      systemPrompt,
+      attachmentsBase64,
+      tools,
+      messages: inputMessages,
+    } = req.body
 
-    if (!prompt) {
-      return res.status(400).json({ error: 'Missing prompt' })
+    // Either prompt or messages must be provided
+    if (!prompt && (!inputMessages || inputMessages.length === 0)) {
+      return res.status(400).json({ error: 'Missing prompt or messages' })
     }
 
     // Check if user can generate
@@ -216,8 +227,8 @@ router.post(
     })
 
     try {
-      // Create a simple message array for generation
-      const messages: any[] = [{ role: 'user', content: prompt }]
+      // Use provided messages or create from prompt
+      const messages: any[] = inputMessages?.length > 0 ? inputMessages : [{ role: 'user', content: prompt }]
 
       // Determine provider from model string
       let provider: 'openrouter' | 'anthropic' | 'openai' | 'gemini' = 'openrouter'
@@ -255,6 +266,16 @@ router.post(
               res.write(
                 `data: ${JSON.stringify({ image: parsed.url, mimeType: parsed.mimeType || 'image/png' })}\n\n`
               )
+            } else if (part === 'tool_call') {
+              // Handle tool call events for agentic subagents
+              if (parsed?.toolCall) {
+                res.write(`data: ${JSON.stringify({ toolCall: parsed.toolCall })}\n\n`)
+              }
+            } else if (part === 'tool_result') {
+              // Handle tool result events (for multi-turn tool execution)
+              if (parsed?.toolResult) {
+                res.write(`data: ${JSON.stringify({ toolResult: parsed.toolResult })}\n\n`)
+              }
             }
           } catch {
             // If chunk is not valid JSON, treat as raw text
@@ -274,8 +295,11 @@ router.post(
         userId,
         undefined, // conversationId
         'server',
-        'cloud',
-        false // isElectron
+        tools && tools.length > 0 ? 'local' : 'cloud', // Use local mode when tools are provided (subagent)
+        tools && tools.length > 0, // isElectron: true when tools provided to allow all tools
+        undefined, // imageConfig
+        undefined, // reasoningConfig
+        tools // tool definitions for agentic subagents
       )
 
       // If user doesn't have paid access, decrement free generation count
@@ -1570,8 +1594,10 @@ router.post(
 
     try {
       const repeats = Math.max(1, typeof repeatNum === 'number' ? repeatNum : parseInt(String(repeatNum), 10) || 1)
-      const { id: messageId, controller } = createGeneration(userMessage.id)
-      res.write(`data: ${JSON.stringify({ type: 'generation_started', messageId: userMessage.id })}\n\n`)
+      // Pre-generate assistant message ID so clients can use it as parent for subagent messages
+      const assistantMessageId = crypto.randomUUID()
+      const { id: messageId, controller } = createGeneration(assistantMessageId)
+      res.write(`data: ${JSON.stringify({ type: 'generation_started', messageId: assistantMessageId })}\n\n`)
 
       for (let i = 0; i < repeats; i++) {
         let assistantContent = ''
@@ -2144,9 +2170,10 @@ router.post(
       // Sequential events array to preserve order of chunks as received (for content_blocks)
       const contentBlocksEvents: any[] = []
 
-      // Don't create placeholder message - will create after streaming completes
-      const { id: messageId, controller } = createGeneration(userMessage.id)
-      res.write(`data: ${JSON.stringify({ type: 'generation_started', messageId: userMessage.id })}\n\n`)
+      // Pre-generate assistant message ID so clients can use it as parent for subagent messages
+      const assistantMessageId = crypto.randomUUID()
+      const { id: messageId, controller } = createGeneration(assistantMessageId)
+      res.write(`data: ${JSON.stringify({ type: 'generation_started', messageId: assistantMessageId })}\n\n`)
 
       try {
         await generateResponse(
@@ -2362,9 +2389,10 @@ router.post(
           // Check if local mode - skip Supabase saves
           if (isLocalMode) {
             // Create ephemeral assistant message object without saving to DB
+            // Use the pre-generated assistantMessageId so it matches what was sent in generation_started
             // console.log('[supaChat] Local mode - skipping Supabase save for assistant message')
             assistantMessage = {
-              id: crypto.randomUUID(),
+              id: assistantMessageId,
               conversation_id: conversationId,
               parent_id: userMessage.id,
               role: 'assistant',

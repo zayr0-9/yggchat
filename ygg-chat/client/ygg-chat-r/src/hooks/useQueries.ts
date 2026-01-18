@@ -522,17 +522,14 @@ export function useConversationStorageMode(conversationId: ConversationId | null
   return useQuery({
     queryKey: ['conversations', conversationId, 'storage_mode'],
     queryFn: async () => {
-      console.log('[useConversationStorageMode] queryFn START', { conversationId, environment })
       if (!conversationId) return 'cloud'
 
       // 1. Check all cached conversation lists
       const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
-      console.log('[useConversationStorageMode] checking caches, found queries:', allConversationQueries.length)
       for (const [_, data] of allConversationQueries) {
         if (Array.isArray(data)) {
           const match = data.find(c => String(c.id) === String(conversationId))
           if (match?.storage_mode) {
-            console.log('[useConversationStorageMode] FOUND in cache:', match.storage_mode)
             return match.storage_mode
           }
         }
@@ -540,21 +537,17 @@ export function useConversationStorageMode(conversationId: ConversationId | null
 
       // 2. If in Electron, try fetching from local server first (fastest for local)
       if (environment === 'electron') {
-        console.log('[useConversationStorageMode] trying local API...')
         try {
           const localConv = await localApi.get<Conversation>(`/local/conversations/${conversationId}`)
           if (localConv) {
-            console.log('[useConversationStorageMode] LOCAL found, storage_mode:', localConv.storage_mode || 'local')
             return localConv.storage_mode || 'local'
           }
         } catch (err) {
           // Not found locally, proceed to cloud check
-          console.log('[useConversationStorageMode] local fetch failed:', err)
         }
       }
 
       // 3. Default to cloud (or could fetch from cloud to be sure, but 'cloud' is safe default)
-      console.log('[useConversationStorageMode] defaulting to cloud')
       return 'cloud' as const
     },
     enabled: !!conversationId,
@@ -573,6 +566,44 @@ export function useConversationStorageMode(conversationId: ConversationId | null
  *
  * Returns: { messages: Message[], tree: ChatNode }
  */
+/**
+ * Recursively filter out ex_agent nodes from the message tree, promoting their children
+ */
+function filterExAgentNodes(node: any): any | null {
+  if (!node) return null
+
+  // If this is an ex_agent node, return its filtered children (promote them)
+  if (node.sender === 'ex_agent') {
+    if (node.children && node.children.length > 0) {
+      const filteredChildren = node.children.map(filterExAgentNodes).filter(Boolean)
+      // Return children directly (they'll be merged by parent)
+      return filteredChildren.length === 1
+        ? filteredChildren[0]
+        : { ...node, children: filteredChildren, _promoted: true }
+    }
+    return null
+  }
+
+  // Filter children recursively, flattening promoted nodes
+  if (node.children && node.children.length > 0) {
+    const newChildren: any[] = []
+    for (const child of node.children) {
+      const filtered = filterExAgentNodes(child)
+      if (filtered) {
+        if (filtered._promoted && Array.isArray(filtered.children)) {
+          // Flatten promoted children
+          newChildren.push(...filtered.children)
+        } else {
+          newChildren.push(filtered)
+        }
+      }
+    }
+    return { ...node, children: newChildren }
+  }
+
+  return node
+}
+
 export function useConversationMessages(conversationId: ConversationId | null, storageMode?: 'local' | 'cloud') {
   const { accessToken } = useAuth()
   const queryClient = useQueryClient()
@@ -631,9 +662,9 @@ export function useConversationMessages(conversationId: ConversationId | null, s
               tree: any
               meta?: { storage_mode: 'local' | 'cloud' }
             }>(`/local/conversations/${conversationId}/messages/tree`)
-            // If local API succeeds, return it
+            // If local API succeeds, return it with ex_agent nodes filtered from tree
             if (localResult) {
-              return localResult
+              return { ...localResult, tree: filterExAgentNodes(localResult.tree) }
             }
           } catch (err) {
             // Local not found, fall through to cloud
@@ -646,16 +677,20 @@ export function useConversationMessages(conversationId: ConversationId | null, s
 
       // Route to appropriate API based on storage mode
       if (effectiveStorageMode === 'local' && environment === 'electron') {
-        return localApi.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
-          `/local/conversations/${conversationId}/messages/tree`
-        )
+        const result = await localApi.get<{
+          messages: Message[]
+          tree: any
+          meta?: { storage_mode: 'local' | 'cloud' }
+        }>(`/local/conversations/${conversationId}/messages/tree`)
+        return { ...result, tree: filterExAgentNodes(result.tree) }
       }
 
       // Default to cloud API
-      return api.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
+      const result = await api.get<{ messages: Message[]; tree: any; meta?: { storage_mode: 'local' | 'cloud' } }>(
         `/conversations/${conversationId}/messages/tree`,
         accessToken
       )
+      return { ...result, tree: filterExAgentNodes(result.tree) }
     },
     enabled: !!conversationId && !!accessToken,
     staleTime: 30000, // 30 seconds - messages only change on user actions (send/edit/branch)
@@ -1319,7 +1354,6 @@ export function useSelectModel() {
       return { provider, model }
     },
     onSuccess: ({ provider, model }) => {
-      console.log('[useSelectModel] onSuccess - Updating cache for provider:', provider, 'with model:', model.name)
       // Update the React Query cache with selected model
 
       queryClient.setQueryData(['models', provider], (oldData: any) => {
