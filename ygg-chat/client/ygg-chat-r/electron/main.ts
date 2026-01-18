@@ -43,6 +43,9 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.yggdrasil.chat')
 }
 
+// Force dark mode for native UI elements (context menus, dialogs, etc.)
+nativeTheme.themeSource = 'dark'
+
 // Persistent storage for session data (initialized async)
 let store: any = null
 let storeInitialized = false

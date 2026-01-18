@@ -4,7 +4,8 @@ import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
 import 'katex/dist/katex.min.css'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
 import { useDispatch, useSelector } from 'react-redux'
 import rehypeHighlight from 'rehype-highlight'
@@ -15,7 +16,6 @@ import { chatSliceActions } from '../../features/chats/chatSlice'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { Button } from '../Button/button'
-import { ContextMenu, ContextMenuItem } from '../ContextMenu/ContextMenu'
 import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
@@ -956,10 +956,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     // Hover state for message actions visibility (fixes web mode hover detection)
     const [isHovering, setIsHovering] = useState(false)
     const moreButtonRef = useRef<HTMLDivElement | null>(null)
-    // Context menu states
+    // Context menu states (floating MessageActions)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
     const [selectedText, setSelectedText] = useState<string>('')
+    const floatingActionsRef = useRef<HTMLDivElement | null>(null)
     const [selectedArtifactUrl, setSelectedArtifactUrl] = useState<string | null>(null)
     // Explain input states
     const streamToolGroupsByIndex = useMemo(() => buildToolCallGroupsFromStream(streamEvents), [streamEvents])
@@ -1164,8 +1165,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const selection = window.getSelection()
       const text = selection?.toString().trim() || ''
 
-      // Always show custom context menu
+      // Store selected text for potential use
       setSelectedText(text)
+      // Show floating MessageActions at click position
       setContextMenuPosition({ x: e.clientX, y: e.clientY })
       setContextMenuOpen(true)
     }
@@ -1255,113 +1257,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return { x: Math.max(10, x), y: Math.max(10, y) }
     }
 
-    // Generate context menu items dynamically based on state
-    const getContextMenuItems = (): ContextMenuItem[] => {
-      const items: ContextMenuItem[] = []
-
-      // If text is selected, show selection-specific actions first
-      if (selectedText) {
-        items.push({
-          label: 'Add to note',
-          icon: <i className='bx bx-note' />,
-          onClick: handleAddToNoteClick,
-          disabled: !onAddToNote,
-        })
-        items.push({
-          label: 'Explain',
-          icon: <i className='bx bx-git-branch' />,
-          onClick: handleCreateBranchFromSelection,
-          disabled: !onExplainFromSelection,
-        })
-        items.push({
-          label: 'Copy selection',
-          icon: <i className='bx bx-copy' />,
-          onClick: handleCopySelectedText,
-          disabled: false,
-        })
-
-        // Add separator between selection actions and message actions
-        items.push({
-          label: '',
-          icon: undefined,
-          onClick: () => {},
-          separator: true,
-        })
-      }
-
-      // Message actions - always shown
-      const hasImage = contentBlocks?.some(b => b.type === 'image')
-      const copyLabel = hasImage ? (copied ? 'Saved!' : 'Save image') : copied ? 'Copied!' : 'Copy message'
-      const copyIcon = hasImage ? (
-        copied ? (
-          <i className='bx bx-check' />
-        ) : (
-          <i className='bx bx-download' />
-        )
-      ) : copied ? (
-        <i className='bx bx-check' />
-      ) : (
-        <i className='bx bx-copy' />
-      )
-
-      items.push({
-        label: copyLabel,
-        icon: copyIcon,
-        onClick: handleCopy,
-        disabled: false,
-      })
-
-      // Advanced mode only - Edit action
-      if (advancedMode && onEdit) {
-        items.push({
-          label: 'Edit message',
-          icon: <i className='bx bx-edit' />,
-          onClick: handleEdit,
-          disabled: editingState, // Disable if already editing
-        })
-      }
-
-      // Advanced mode only - Branch action (user messages)
-      if (advancedMode && role === 'user' && onBranch) {
-        items.push({
-          label: 'Branch message',
-          icon: <i className='bx bx-git-branch' />,
-          onClick: handleBranch,
-          disabled: editingState, // Disable if already editing
-        })
-      }
-
-      // Advanced mode only - Resend action (assistant messages)
-      if (advancedMode && role === 'assistant' && onResend) {
-        items.push({
-          label: 'Resend message',
-          icon: <i className='bx bx-refresh' />,
-          onClick: handleResend,
-          disabled: false,
-        })
-      }
-
-      // Always shown - Delete action
-      if (onDelete) {
-        items.push({
-          label: 'Delete message',
-          icon: <i className='bx bx-trash' />,
-          onClick: handleDelete,
-          disabled: false,
-        })
-      }
-
-      // Always shown - More Info option
-      items.push({
-        label: 'More info',
-        icon: <i className='bx bx-info-circle' />,
-        onClick: handleMoreClick,
-        disabled: false,
-      })
-
-      return items
-    }
-
     const handleMoreClick = () => {
       setShowMoreMenu(!showMoreMenu)
       setShowMoreInfo(false)
@@ -1417,6 +1312,32 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         setShowMoreInfo(false)
       }
     }, [contextMenuOpen])
+
+    // Click outside handler for floating MessageActions
+    const closeFloatingActions = useCallback(() => setContextMenuOpen(false), [])
+    useEffect(() => {
+      if (!contextMenuOpen) return
+
+      const handleClickOutside = (event: MouseEvent) => {
+        if (floatingActionsRef.current && !floatingActionsRef.current.contains(event.target as Node)) {
+          closeFloatingActions()
+        }
+      }
+
+      const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          closeFloatingActions()
+        }
+      }
+
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+        document.removeEventListener('keydown', handleEscape)
+      }
+    }, [contextMenuOpen, closeFloatingActions])
 
     // Compute dropdown placement - runs on mount and when menu state changes
     useEffect(() => {
@@ -2560,13 +2481,71 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           </div>
         )} */}
 
-        {/* Context Menu */}
-        <ContextMenu
-          isOpen={contextMenuOpen}
-          position={contextMenuPosition}
-          items={getContextMenuItems()}
-          onClose={() => setContextMenuOpen(false)}
-        />
+        {/* Floating MessageActions on Right-Click */}
+        {contextMenuOpen &&
+          contextMenuPosition &&
+          createPortal(
+            <AnimatePresence>
+              <motion.div
+                ref={floatingActionsRef}
+                initial={{ opacity: 0, scale: 0.95, y: 5 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 5 }}
+                transition={{ duration: 0.15 }}
+                className='fixed z-[100000]'
+                style={{
+                  left: `${contextMenuPosition.x}px`,
+                  top: `${contextMenuPosition.y}px`,
+                  transform: 'translate(-50%, -50%)',
+                }}
+              >
+                <MessageActions
+                  onEdit={() => {
+                    closeFloatingActions()
+                    handleEdit()
+                  }}
+                  onBranch={
+                    role === 'user'
+                      ? () => {
+                          closeFloatingActions()
+                          handleBranch()
+                        }
+                      : undefined
+                  }
+                  onDelete={() => {
+                    closeFloatingActions()
+                    handleDelete()
+                  }}
+                  onCopy={() => {
+                    handleCopy()
+                    // Don't close on copy to show feedback
+                  }}
+                  onSave={() => {
+                    closeFloatingActions()
+                    handleSave()
+                  }}
+                  onSaveBranch={() => {
+                    closeFloatingActions()
+                    handleSaveBranch()
+                  }}
+                  onCancel={() => {
+                    closeFloatingActions()
+                    handleCancel()
+                  }}
+                  onMore={() => {
+                    closeFloatingActions()
+                    handleMoreClick()
+                  }}
+                  isEditing={editingState}
+                  editMode={editMode}
+                  copied={copied}
+                  modelName={modelName}
+                  isVisible={true}
+                />
+              </motion.div>
+            </AnimatePresence>,
+            document.body
+          )}
 
         {/* Floating Explain Input */}
         <AnimatePresence>
