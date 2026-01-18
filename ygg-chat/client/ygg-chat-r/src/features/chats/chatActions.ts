@@ -710,6 +710,7 @@ const executeSubagentCall = async (
     maxTokens,
     temperature,
     maxTurns: requestedMaxTurns,
+    maxToolCalls: requestedMaxToolCalls,
     orchestratorMode = false,
     tools: requestedTools,
     inheritAutoApprove = true,
@@ -724,6 +725,10 @@ const executeSubagentCall = async (
 
   // Determine max turns (from args, localStorage, or default)
   const maxTurns = Math.min(Math.max(requestedMaxTurns || getDefaultMaxTurns(), 1), 50)
+
+  // Determine max tool calls quota (orchestrator can specify, default 5)
+  const maxToolCalls = Math.min(Math.max(requestedMaxToolCalls || 5, 1), 50)
+  let totalToolCallsUsed = 0
 
   // Get filtered tool definitions for this subagent
   const subagentTools = getSubagentToolDefinitions(orchestratorMode, requestedTools)
@@ -797,6 +802,7 @@ const executeSubagentCall = async (
       let turnText = ''
       let turnReasoning = ''
       const turnToolCalls: any[] = []
+      const serverToolResults: any[] = [] // Track tool results from server-executed tools (e.g., brave_search)
       let sseBuffer = ''
 
       // Parse SSE stream
@@ -822,6 +828,9 @@ const executeSubagentCall = async (
                 turnReasoning += parsed.reasoning
               } else if (parsed.toolCall) {
                 turnToolCalls.push(parsed.toolCall)
+              } else if (parsed.toolResult) {
+                // Server executed a server-only tool (e.g., brave_search)
+                serverToolResults.push(parsed.toolResult)
               }
             } catch {
               if (data.trim()) {
@@ -847,9 +856,16 @@ const executeSubagentCall = async (
         created_at: new Date().toISOString(),
       }
 
-      // If no tool calls, this is the final response
-      if (turnToolCalls.length === 0) {
+      // If no client tool calls AND no server tool results, this is the final response
+      if (turnToolCalls.length === 0 && serverToolResults.length === 0) {
         finalResponse = turnReasoning ? `<thinking>\n${turnReasoning}\n</thinking>\n\n${turnText}` : turnText
+
+        // Build content_blocks for final message (text only, no tool calls/results)
+        const finalContentBlocks: any[] = []
+        if (turnText) {
+          finalContentBlocks.push({ type: 'text', text: turnText })
+        }
+        assistantMessage.content_blocks = JSON.stringify(finalContentBlocks)
 
         // Persist final assistant message
         if (isLocalMode) {
@@ -862,15 +878,68 @@ const executeSubagentCall = async (
         break
       }
 
-      // Process tool calls
+      // If server executed tools (e.g., brave_search) but no client tools needed,
+      // we need to add the server results to conversation history and continue the loop
+      // so the model can process the results
+      if (turnToolCalls.length === 0 && serverToolResults.length > 0) {
+        // Track server-executed tools
+        for (const tr of serverToolResults) {
+          toolsExecuted.push({ name: tr.tool_name || 'server_tool', success: !tr.is_error })
+          totalToolCallsUsed++
+        }
+
+        // Add server tool results to conversation history
+        // The server already added the assistant message with tool_calls and executed them
+        // We just need to add the tool results so the model can continue
+        for (const tr of serverToolResults) {
+          conversationHistory.push({
+            role: 'tool',
+            tool_call_id: tr.tool_use_id,
+            content: tr.content,
+          })
+        }
+
+        lastAssistantMessageId = assistantMessageId
+        finalResponse = turnText
+
+        // Continue to next turn - model will process the tool results
+        continue
+      }
+
+      // Process client tool calls with quota enforcement
       const toolResults: any[] = []
 
-      for (const tc of turnToolCalls) {
+      // First, track any server-executed tool results (for mixed server+client tool calls)
+      // Build a set of tool IDs that were already executed by the server
+      const serverExecutedToolIds = new Set(serverToolResults.map(tr => tr.tool_use_id))
+      for (const tr of serverToolResults) {
+        toolsExecuted.push({ name: tr.tool_name || 'server_tool', success: !tr.is_error })
+        totalToolCallsUsed++
+      }
+
+      // Filter out tool calls that were already executed by the server
+      const clientToolCalls = turnToolCalls.filter(tc => !serverExecutedToolIds.has(tc.id))
+
+      for (let i = 0; i < clientToolCalls.length; i++) {
+        const tc = clientToolCalls[i]
+
         // Skip nested subagent calls
         if (tc.name === 'subagent') {
           toolResults.push({
             tool_use_id: tc.id,
             content: 'Error: Nested subagent calls are not allowed.',
+            is_error: true,
+          })
+          toolsExecuted.push({ name: tc.name, success: false })
+          continue
+        }
+
+        // Check if quota exhausted
+        if (totalToolCallsUsed >= maxToolCalls) {
+          toolResults.push({
+            tool_use_id: tc.id,
+            content:
+              'TOOL_QUOTA_EXHAUSTED: You have reached the maximum number of tool calls allowed. Do not attempt any more tool calls. You must now summarize all findings gathered so far and provide your final response to complete your task.',
             is_error: true,
           })
           toolsExecuted.push({ name: tc.name, success: false })
@@ -905,6 +974,7 @@ const executeSubagentCall = async (
             is_error: false,
           })
           toolsExecuted.push({ name: tc.name, success: true })
+          totalToolCallsUsed++
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err)
           toolResults.push({
@@ -916,6 +986,9 @@ const executeSubagentCall = async (
         }
       }
 
+      // Combine all tool results (server-executed + client-executed)
+      const allToolResults = [...serverToolResults, ...toolResults]
+
       // Build content_blocks with tool results
       const contentBlocks: any[] = []
       if (turnText) {
@@ -924,7 +997,7 @@ const executeSubagentCall = async (
       for (const tc of turnToolCalls) {
         contentBlocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments || tc.input })
       }
-      for (const tr of toolResults) {
+      for (const tr of allToolResults) {
         contentBlocks.push({ type: 'tool_result', tool_use_id: tr.tool_use_id, content: tr.content })
       }
 
@@ -951,7 +1024,8 @@ const executeSubagentCall = async (
       })
 
       // Add each tool result as a separate 'tool' message (same format as createToolResultMessage)
-      for (const tr of toolResults) {
+      // Include both server-executed and client-executed tool results
+      for (const tr of allToolResults) {
         conversationHistory.push({
           role: 'tool',
           tool_call_id: tr.tool_use_id,
@@ -977,7 +1051,7 @@ const executeSubagentCall = async (
   const toolSummary =
     toolsExecuted.length > 0 ? toolsExecuted.map(t => `${t.name} (${t.success ? '✓' : '✗'})`).join(', ') : 'none'
 
-  return `## Subagent Response (session: ${subagentSessionId.slice(0, 8)})\n\n${finalResponse || 'No response generated'}\n\n---\nTurns: ${turnsUsed}/${maxTurns} | Tools executed: ${toolSummary}`
+  return `## Subagent Response (session: ${subagentSessionId.slice(0, 8)})\n\n${finalResponse || 'No response generated'}\n\n---\nTurns: ${turnsUsed}/${maxTurns} | Tool calls: ${totalToolCallsUsed}/${maxToolCalls} | Tools: ${toolSummary}`
 }
 
 /**

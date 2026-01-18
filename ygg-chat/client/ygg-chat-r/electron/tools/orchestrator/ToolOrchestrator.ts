@@ -9,8 +9,8 @@
  * - Emits events for real-time UI updates
  */
 
-import { v4 as uuidv4 } from 'uuid'
 import type Database from 'better-sqlite3'
+import { v4 as uuidv4 } from 'uuid'
 import type { WebSocket } from 'ws'
 import {
   Job,
@@ -184,9 +184,7 @@ export class ToolOrchestrator {
     if (!this.db) return
 
     const rows = this.db
-      .prepare(
-        `SELECT * FROM tool_jobs WHERE status IN ('pending', 'running') ORDER BY created_at ASC`
-      )
+      .prepare(`SELECT * FROM tool_jobs WHERE status IN ('pending', 'running') ORDER BY created_at ASC`)
       .all() as any[]
 
     for (const row of rows) {
@@ -372,10 +370,7 @@ export class ToolOrchestrator {
    * Process the job queue
    */
   private processQueue(): void {
-    while (
-      this.activeJobs.size < this.config.concurrencyLimit &&
-      this.pendingQueue.length > 0
-    ) {
+    while (this.activeJobs.size < this.config.concurrencyLimit && this.pendingQueue.length > 0) {
       const jobId = this.pendingQueue.shift()
       if (!jobId) break
 
@@ -444,9 +439,7 @@ export class ToolOrchestrator {
         this.activeJobs.delete(job.id)
         this.persistJob(job)
 
-        console.log(
-          `[ToolOrchestrator] Job ${job.id} failed, retrying (${job.retriesRemaining} left): ${errorMsg}`
-        )
+        console.log(`[ToolOrchestrator] Job ${job.id} failed, retrying (${job.retriesRemaining} left): ${errorMsg}`)
 
         // Re-queue with delay
         setTimeout(() => {
@@ -479,7 +472,7 @@ export class ToolOrchestrator {
       timestamp: job.completedAt,
     })
 
-    console.log(`[ToolOrchestrator] Job completed: ${job.id}`)
+    // console.log(`[ToolOrchestrator] Job completed: ${job.id}`)
   }
 
   /**
@@ -498,7 +491,7 @@ export class ToolOrchestrator {
       timestamp: job.completedAt,
     })
 
-    console.log(`[ToolOrchestrator] Job failed: ${job.id} - ${error}`)
+    // console.log(`[ToolOrchestrator] Job failed: ${job.id} - ${error}`)
   }
 
   /**
@@ -524,7 +517,7 @@ export class ToolOrchestrator {
       timestamp: job.completedAt,
     })
 
-    console.log(`[ToolOrchestrator] Job cancelled: ${job.id}`)
+    // console.log(`[ToolOrchestrator] Job cancelled: ${job.id}`)
     return true
   }
 

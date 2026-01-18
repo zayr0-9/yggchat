@@ -294,7 +294,7 @@ router.post(
         undefined, // messageId
         userId,
         undefined, // conversationId
-        'server',
+        tools && tools.length > 0 ? 'client' : 'server', // Use client mode when tools provided so server executes SERVER_ONLY_TOOLS and returns others
         tools && tools.length > 0 ? 'local' : 'cloud', // Use local mode when tools are provided (subagent)
         tools && tools.length > 0, // isElectron: true when tools provided to allow all tools
         undefined, // imageConfig
