@@ -918,8 +918,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     onBranch,
     onDelete,
     onCopy,
-    onResend,
-    onAddToNote,
+    onResend: _onResend,
+    onAddToNote: _onAddToNote,
     onExplainFromSelection,
     onOpenToolHtmlModal,
     isEditing = false,
@@ -970,16 +970,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [explainInputValue, setExplainInputValue] = useState('')
     const explainInputPosition = useRef<{ x: number; y: number } | null>(null)
     const explainInputRef = useRef<HTMLDivElement | null>(null)
-    // Advanced mode state - controls visibility of advanced menu items
-    const [advancedMode] = useState(() => {
-      try {
-        const stored = localStorage.getItem('advanced_mode')
-        return stored === 'true'
-      } catch {
-        return false // Default to false
-      }
-    })
-
     // Get message data from Redux store
     const messageData = useSelector((state: RootState) =>
       state.chat.conversation.messages.find(m => String(m.id) === String(id))
@@ -1140,12 +1130,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
     }
 
-    const handleResend = () => {
-      if (onResend) {
-        onResend(id)
-      }
-    }
-
     const handleDeleteArtifact = (index: number) => {
       dispatch(chatSliceActions.messageArtifactDeleted({ messageId: id, index }))
     }
@@ -1170,41 +1154,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Show floating MessageActions at click position
       setContextMenuPosition({ x: e.clientX, y: e.clientY })
       setContextMenuOpen(true)
-    }
-
-    const handleAddToNoteClick = () => {
-      if (onAddToNote && selectedText) {
-        onAddToNote(selectedText)
-      }
-      setContextMenuOpen(false)
-    }
-
-    const handleCopySelectedText = async () => {
-      if (selectedText) {
-        // Try to get HTML from selection for rich paste support
-        let html: string | undefined
-        const selection = window.getSelection()
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0)
-          const container = document.createElement('div')
-          container.appendChild(range.cloneContents())
-          html = container.innerHTML
-        }
-        await copyRichText(selectedText, html)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1500)
-      }
-      setContextMenuOpen(false)
-    }
-
-    const handleCreateBranchFromSelection = () => {
-      if (onExplainFromSelection && selectedText) {
-        // Store position and show floating input instead of immediately creating branch
-        explainInputPosition.current = contextMenuPosition
-        setShowExplainInput(true)
-        setExplainInputValue('')
-      }
-      setContextMenuOpen(false)
     }
 
     const handleSendExplainInput = () => {
