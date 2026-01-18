@@ -975,7 +975,12 @@ ipcMain.handle('fs:abortReadFileStream', async (_event, streamId: string) => {
 ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string, encoding?: BufferEncoding) => {
   // console.log('[Electron IPC] Writing file:', filePath)
   try {
-    fs.writeFileSync(filePath, content, encoding || 'utf-8')
+    // Handle base64 encoding for binary files (e.g., PDFs, images)
+    if (encoding === 'base64') {
+      fs.writeFileSync(filePath, Buffer.from(content, 'base64'))
+    } else {
+      fs.writeFileSync(filePath, content, encoding || 'utf-8')
+    }
     return { success: true }
   } catch (error) {
     console.error('[Electron IPC] Failed to write file:', error)

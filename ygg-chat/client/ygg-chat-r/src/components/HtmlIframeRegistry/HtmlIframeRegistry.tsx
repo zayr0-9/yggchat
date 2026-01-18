@@ -511,6 +511,47 @@ const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => {
           response = { success: true, tenantId: authContext?.tenantId ?? null }
           break
         }
+        case 'RPC': {
+          // Generic RPC bridge - allows tools to call any electronAPI method
+          // Usage: send('RPC', { namespace: 'fs', method: 'writeFile', args: [path, content, encoding] })
+          const { namespace, method, args } = options || {}
+          if (!namespace || !method) {
+            response = { success: false, error: 'RPC requires namespace and method' }
+            break
+          }
+
+          // Allowed namespaces (whitelist for security)
+          const allowedNamespaces = ['fs', 'dialog', 'shell', 'exec', 'http', 'storage', 'platformInfo']
+          if (!allowedNamespaces.includes(namespace)) {
+            response = { success: false, error: `Namespace not allowed: ${namespace}` }
+            break
+          }
+
+          const api = (electronAPI as any)?.[namespace]
+          if (!api) {
+            response = { success: false, error: `Namespace not available: ${namespace} (not in Electron)` }
+            break
+          }
+
+          const fn = api[method]
+          if (typeof fn !== 'function') {
+            response = { success: false, error: `Method not found: ${namespace}.${method}` }
+            break
+          }
+
+          try {
+            const result = await fn(...(Array.isArray(args) ? args : []))
+            // Wrap result if it's not already in { success: ... } format
+            if (result && typeof result === 'object' && 'success' in result) {
+              response = result
+            } else {
+              response = { success: true, result }
+            }
+          } catch (err) {
+            response = { success: false, error: String(err) }
+          }
+          break
+        }
         case 'REQUEST_GENERATION': {
           const { prompt, model, maxTokens, temperature, systemPrompt, attachmentsBase64 } = options || {}
 
