@@ -104,6 +104,14 @@ export const ToolsSettings: React.FC = () => {
 
   const handleOpenCustomToolsFolder = async () => {
     setShowCustomToolsHelp(true)
+    // Also open the folder in the system file explorer
+    if (customToolsPath && window.electron?.shell?.openPath) {
+      try {
+        await window.electron.shell.openPath(customToolsPath)
+      } catch (err) {
+        console.error('[ToolsSettings] Failed to open custom tools folder:', err)
+      }
+    }
   }
 
   const handleReloadTools = async () => {
