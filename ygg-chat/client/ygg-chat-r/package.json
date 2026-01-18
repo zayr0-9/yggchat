@@ -1,7 +1,7 @@
 {
   "name": "yggdrasil",
   "private": true,
-  "version": "0.1.36",
+  "version": "0.1.37",
   "type": "module",
   "main": "electron/main.mjs",
   "overrides": {
