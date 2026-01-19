@@ -542,17 +542,17 @@ function Chat() {
   }
 
   // Helper: scroll to show latest message at top of viewport (for normal mode)
-  const scrollToShowLatestAtTop = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    // console.log('scrolling to top')
-    const container = messagesContainerRef.current
-    if (!container) return
+  // const scrollToShowLatestAtTop = useCallback((behavior: ScrollBehavior = 'smooth') => {
+  //   // console.log('scrolling to top')
+  //   const container = messagesContainerRef.current
+  //   if (!container) return
 
-    // Scroll to position the latest message near the top of the viewport
-    // We scroll to the bottom, which naturally shows the newest message
-    const targetScroll = container.scrollHeight - container.clientHeight
-    // console.log('targetScroll', targetScroll, container.scrollHeight, container.clientHeight)
-    container.scrollTo({ top: Math.max(0, targetScroll), behavior })
-  }, [])
+  //   // Scroll to position the latest message near the top of the viewport
+  //   // We scroll to the bottom, which naturally shows the newest message
+  //   const targetScroll = container.scrollHeight - container.clientHeight
+  //   // console.log('targetScroll', targetScroll, container.scrollHeight, container.clientHeight)
+  //   container.scrollTo({ top: Math.max(0, targetScroll), behavior })
+  // }, [])
 
   // Heimdall state from Redux
   const heimdallData = useAppSelector(selectHeimdallData)
