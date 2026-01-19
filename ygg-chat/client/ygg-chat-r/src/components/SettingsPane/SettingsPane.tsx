@@ -92,6 +92,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
 
   const [attachmentTarget, setAttachmentTarget] = useState<'system' | 'context'>('system')
   const attachmentInputRef = useRef<HTMLInputElement>(null)
+  const [promptContextExpanded, setPromptContextExpanded] = useState(false)
 
   // Font size offset state (persisted to localStorage)
   const [fontSizeOffset, setFontSizeOffset] = useState<number>(() => {
@@ -384,181 +385,203 @@ ${block}`
               aria-hidden='true'
             />
 
-            {/* System Prompt Section */}
+            {/* System Prompt and Context Collapsible Section */}
             <div className='space-y-2'>
-              <div className='flex items-center justify-between'>
-                <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>System prompt</span>
-                <button
-                  type='button'
-                  onClick={() => {
-                    setAttachmentTarget('system')
-                    attachmentInputRef.current?.click()
-                  }}
-                  className='flex items-center gap-1 text-sm text-blue-600 dark:text-blue-300 hover:underline'
-                >
-                  <i className='bx bx-paperclip text-lg' aria-hidden='true'></i>
-                  Attach File
-                </button>
-              </div>
+              <button
+                type='button'
+                onClick={() => setPromptContextExpanded(!promptContextExpanded)}
+                className='flex items-center justify-between w-full text-left'
+              >
+                <span className='text-[16px] font-medium text-stone-700 dark:text-stone-200'>
+                  System Prompt and Context
+                </span>
+                <i
+                  className={`bx bx-chevron-down text-xl text-neutral-500 dark:text-neutral-400 transition-transform duration-200 ${promptContextExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
 
-              {/* User System Prompts horizontal scrolling list */}
-              {userSystemPrompts.length > 0 && (
-                <div className='mb-2'>
-                  <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-2'>Select a saved prompt:</p>
-                  <div className='flex gap-2 overflow-x-auto pb-2 thin-scrollbar'>
-                    {userSystemPrompts.map(prompt => (
+              {promptContextExpanded && (
+                <div className='space-y-6 pl-1 pt-2'>
+                  {/* System Prompt Section */}
+                  <div className='space-y-2'>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>System prompt</span>
                       <button
-                        key={prompt.id}
-                        onClick={() => handleSelectPrompt(prompt)}
-                        className={`flex items-center justify-center gap-2 flex-shrink-0 h-10 px-4 rounded-xl border transition-all duration-150 ${
-                          selectedPromptId === prompt.id
-                            ? 'bg-sky-600/70 text-white border-transparent'
-                            : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-transparent dark:border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700'
-                        }`}
-                        title={prompt.description || prompt.content.substring(0, 100)}
+                        type='button'
+                        onClick={() => {
+                          setAttachmentTarget('system')
+                          attachmentInputRef.current?.click()
+                        }}
+                        className='flex items-center gap-1 text-sm text-blue-600 dark:text-blue-300 hover:underline'
                       >
-                        <span className='font-medium text-sm whitespace-nowrap'>{prompt.name}</span>
-                        {prompt.is_default && (
-                          <span className=' pt-0.5 text-xs opacity-70'>
-                            <i className='bx bxs-star text-base'></i>
-                          </span>
-                        )}
+                        <i className='bx bx-paperclip text-lg' aria-hidden='true'></i>
+                        Attach File
                       </button>
-                    ))}
+                    </div>
+
+                    {/* User System Prompts horizontal scrolling list */}
+                    {userSystemPrompts.length > 0 && (
+                      <div className='mb-2'>
+                        <p className='text-sm text-neutral-600 dark:text-neutral-400 mb-2'>Select a saved prompt:</p>
+                        <div className='flex gap-2 overflow-x-auto pb-2 thin-scrollbar'>
+                          {userSystemPrompts.map(prompt => (
+                            <button
+                              key={prompt.id}
+                              onClick={() => handleSelectPrompt(prompt)}
+                              className={`flex items-center justify-center gap-2 flex-shrink-0 h-10 px-4 rounded-xl border transition-all duration-150 ${
+                                selectedPromptId === prompt.id
+                                  ? 'bg-sky-600/70 text-white border-transparent'
+                                  : 'bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-transparent dark:border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                              }`}
+                              title={prompt.description || prompt.content.substring(0, 100)}
+                            >
+                              <span className='font-medium text-sm whitespace-nowrap'>{prompt.name}</span>
+                              {prompt.is_default && (
+                                <span className=' pt-0.5 text-xs opacity-70'>
+                                  <i className='bx bxs-star text-base'></i>
+                                </span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {promptsLoading && (
+                      <div className='mb-2 text-sm text-neutral-500 dark:text-neutral-400'>
+                        Loading saved prompts...
+                      </div>
+                    )}
+
+                    <InputTextArea
+                      placeholder='Enter a system prompt to guide the assistant...'
+                      value={systemPrompt}
+                      onChange={value => {
+                        handleChange(value)
+                        // Clear selection if user manually edits the prompt
+                        if (selectedPromptId) setSelectedPromptId(null)
+                      }}
+                      minRows={10}
+                      maxRows={16}
+                      width='w-full'
+                      showCharCount
+                      outline={true}
+                      showHelp={false}
+                      variant='outline'
+                      className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
+                    />
+
+                    {/* Save as Prompt / Make Default button */}
+                    {systemPrompt.trim() && (
+                      <div className='mt-3'>
+                        {isExistingPrompt ? (
+                          // Show "Make Default" or "Remove Default" button when prompt already exists
+                          matchingPrompt &&
+                          (matchingPrompt.is_default ? (
+                            <button
+                              type='button'
+                              onClick={handleRemoveDefault}
+                              disabled={removingDefault}
+                              className='flex items-center gap-2 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors disabled:opacity-50'
+                            >
+                              <i className='bx bxs-star text-base'></i>
+                              {removingDefault ? 'Removing...' : 'Remove Default'}
+                            </button>
+                          ) : (
+                            <button
+                              type='button'
+                              onClick={handleMakeDefault}
+                              disabled={makingDefault}
+                              className='flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors disabled:opacity-50'
+                            >
+                              <i className='bx bx-star text-base'></i>
+                              {makingDefault ? 'Setting...' : 'Make Default'}
+                            </button>
+                          ))
+                        ) : (
+                          // Show "Save as Prompt" when content doesn't match existing prompt
+                          <>
+                            {!showSavePromptInput ? (
+                              <button
+                                type='button'
+                                onClick={() => setShowSavePromptInput(true)}
+                                className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
+                              >
+                                <i className='bx bx-save text-base'></i>
+                                Save as Prompt
+                              </button>
+                            ) : (
+                              <div className='space-y-2'>
+                                <div className='flex items-center gap-2'>
+                                  <input
+                                    type='text'
+                                    value={savePromptName}
+                                    onChange={e => setSavePromptName(e.target.value)}
+                                    placeholder='Enter prompt name...'
+                                    maxLength={100}
+                                    className='flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-transparent'
+                                    autoFocus
+                                    onKeyDown={e => {
+                                      if (e.key === 'Enter') handleSaveAsPrompt()
+                                      if (e.key === 'Escape') resetSaveUI()
+                                    }}
+                                  />
+                                  <button
+                                    type='button'
+                                    onClick={handleSaveAsPrompt}
+                                    disabled={!savePromptName.trim() || savingPrompt}
+                                    className='px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                                  >
+                                    {savingPrompt ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    type='button'
+                                    onClick={resetSaveUI}
+                                    className='px-2 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
+                                  >
+                                    <i className='bx bx-x text-lg'></i>
+                                  </button>
+                                </div>
+                                {saveError && <p className='text-sm text-red-500 dark:text-red-400'>{saveError}</p>}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Context Section */}
+                  <div className='space-y-2'>
+                    <div className='flex items-center justify-between'>
+                      <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>Context</span>
+                      <button
+                        type='button'
+                        onClick={() => {
+                          setAttachmentTarget('context')
+                          attachmentInputRef.current?.click()
+                        }}
+                        className='flex items-center gap-1 text-sm text-blue-600 dark:text-blue-300 hover:underline'
+                      >
+                        <i className='bx bx-paperclip text-lg' aria-hidden='true'></i>
+                        Attach File
+                      </button>
+                    </div>
+                    <InputTextArea
+                      placeholder='Enter a context to augment your chat...'
+                      value={context}
+                      onChange={handleContextChange}
+                      minRows={10}
+                      maxRows={16}
+                      width='w-full'
+                      variant='outline'
+                      outline={true}
+                      showHelp={false}
+                      showCharCount={true}
+                      className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
+                    />
                   </div>
                 </div>
               )}
-              {promptsLoading && (
-                <div className='mb-2 text-sm text-neutral-500 dark:text-neutral-400'>Loading saved prompts...</div>
-              )}
-
-              <InputTextArea
-                placeholder='Enter a system prompt to guide the assistant...'
-                value={systemPrompt}
-                onChange={value => {
-                  handleChange(value)
-                  // Clear selection if user manually edits the prompt
-                  if (selectedPromptId) setSelectedPromptId(null)
-                }}
-                minRows={10}
-                maxRows={16}
-                width='w-full'
-                showCharCount
-                outline={true}
-                showHelp={false}
-                variant='outline'
-                className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
-              />
-
-              {/* Save as Prompt / Make Default button */}
-              {systemPrompt.trim() && (
-                <div className='mt-3'>
-                  {isExistingPrompt ? (
-                    // Show "Make Default" or "Remove Default" button when prompt already exists
-                    matchingPrompt &&
-                    (matchingPrompt.is_default ? (
-                      <button
-                        type='button'
-                        onClick={handleRemoveDefault}
-                        disabled={removingDefault}
-                        className='flex items-center gap-2 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors disabled:opacity-50'
-                      >
-                        <i className='bx bxs-star text-base'></i>
-                        {removingDefault ? 'Removing...' : 'Remove Default'}
-                      </button>
-                    ) : (
-                      <button
-                        type='button'
-                        onClick={handleMakeDefault}
-                        disabled={makingDefault}
-                        className='flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors disabled:opacity-50'
-                      >
-                        <i className='bx bx-star text-base'></i>
-                        {makingDefault ? 'Setting...' : 'Make Default'}
-                      </button>
-                    ))
-                  ) : (
-                    // Show "Save as Prompt" when content doesn't match existing prompt
-                    <>
-                      {!showSavePromptInput ? (
-                        <button
-                          type='button'
-                          onClick={() => setShowSavePromptInput(true)}
-                          className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
-                        >
-                          <i className='bx bx-save text-base'></i>
-                          Save as Prompt
-                        </button>
-                      ) : (
-                        <div className='space-y-2'>
-                          <div className='flex items-center gap-2'>
-                            <input
-                              type='text'
-                              value={savePromptName}
-                              onChange={e => setSavePromptName(e.target.value)}
-                              placeholder='Enter prompt name...'
-                              maxLength={100}
-                              className='flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-transparent'
-                              autoFocus
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') handleSaveAsPrompt()
-                                if (e.key === 'Escape') resetSaveUI()
-                              }}
-                            />
-                            <button
-                              type='button'
-                              onClick={handleSaveAsPrompt}
-                              disabled={!savePromptName.trim() || savingPrompt}
-                              className='px-3 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
-                            >
-                              {savingPrompt ? 'Saving...' : 'Save'}
-                            </button>
-                            <button
-                              type='button'
-                              onClick={resetSaveUI}
-                              className='px-2 py-2 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
-                            >
-                              <i className='bx bx-x text-lg'></i>
-                            </button>
-                          </div>
-                          {saveError && <p className='text-sm text-red-500 dark:text-red-400'>{saveError}</p>}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Context Section */}
-            <div className='space-y-2'>
-              <div className='flex items-center justify-between'>
-                <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>Context</span>
-                <button
-                  type='button'
-                  onClick={() => {
-                    setAttachmentTarget('context')
-                    attachmentInputRef.current?.click()
-                  }}
-                  className='flex items-center gap-1 text-sm text-blue-600 dark:text-blue-300 hover:underline'
-                >
-                  <i className='bx bx-paperclip text-lg' aria-hidden='true'></i>
-                  Attach File
-                </button>
-              </div>
-              <InputTextArea
-                placeholder='Enter a context to augment your chat...'
-                value={context}
-                onChange={handleContextChange}
-                minRows={10}
-                maxRows={16}
-                width='w-full'
-                variant='outline'
-                outline={true}
-                showHelp={false}
-                showCharCount={true}
-                className='drop-shadow-xl shadow-[0_0px_12px_3px_rgba(0,0,0,0.05),0_0px_2px_0px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.5),0_0px_2px_2px_rgba(0,0,0,0)]'
-              />
             </div>
 
             {/* Font Size Section */}

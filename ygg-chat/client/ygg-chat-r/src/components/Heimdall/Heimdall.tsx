@@ -2660,59 +2660,76 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       {/* Custom context menu after selection */}
       {showContextMenu && contextMenuPos && (
         <div
-          className='absolute z-30 min-w-[140px] rounded-xl shadow-lg border border-stone-200 bg-white dark:bg-yBlack-900 dark:border-neutral-700 '
+          className='absolute z-30 w-[240px] rounded-[20px] p-1.5 border border-stone-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 shadow-[0_30px_60px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_30px_60px_-12px_rgba(0,0,0,0.6)] animate-menuEntrance'
           style={{
-            left: Math.max(8, Math.min(contextMenuPos.x, Math.max(0, dimensions.width - 180))),
-            top: Math.max(8, Math.min(contextMenuPos.y, Math.max(0, dimensions.height - 140))),
+            left: Math.max(8, Math.min(contextMenuPos.x, Math.max(0, dimensions.width - 260))),
+            top: Math.max(8, Math.min(contextMenuPos.y, Math.max(0, dimensions.height - 220))),
           }}
           onMouseDown={e => e.stopPropagation()}
         >
-          <ul className='py-1 text-sm text-stone-800 dark:text-stone-200'>
-            <li>
-              <button
-                className='w-full text-left px-3 py-3 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-yBlack-900 rounded-xl hover:scale-103 active:scale-97 transition-all duration-100'
-                onClick={handleCopySelectedPaths}
-              >
-                Copy
-              </button>
-            </li>
-            {selectedNodes.length === 1 && (
-              <li>
-                <button
-                  className='w-full text-left px-3 py-3 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-yBlack-900 rounded-xl hover:scale-103 active:scale-97 transition-all duration-100'
-                  onClick={() => {
-                    const nodeId = String(selectedNodes[0])
+          <div className='font-mono text-[9px] uppercase tracking-[0.1em] text-stone-400 dark:text-neutral-500 px-3 py-2'>
+            Message Actions
+          </div>
 
-                    if (contextMenuPos) {
-                      handleOpenNoteDialog(nodeId, contextMenuPos)
-                    }
-                  }}
-                >
-                  {(() => {
-                    const message = getCurrentMessage(selectedNodes[0])
-                    const hasNote = message?.note && message.note.trim().length > 0
-                    return hasNote ? 'View Note' : 'Add Note'
-                  })()}
-                </button>
-              </li>
-            )}
-            <li>
-              <button
-                className='w-full text-left px-3 py-3 dark:text-stone-200 hover:bg-stone-100 rounded-xl dark:hover:bg-yBlack-900 hover:scale-103 active:scale-97 transition-all duration-100'
-                onClick={handleCreateNewChat}
-              >
-                Create New Chat
-              </button>
-            </li>
-            <li>
-              <button
-                className='w-full text-left px-3 py-3 hover:bg-stone-100 dark:hover:bg-yBlack-900 rounded-xl text-red-600 dark:text-red-400 hover:scale-103 active:scale-97'
-                onClick={handleDeleteNodes}
-              >
-                Delete
-              </button>
-            </li>
-          </ul>
+          <button
+            className='w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-stone-500 dark:text-neutral-400 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-stone-100 dark:hover:bg-neutral-800 hover:text-stone-900 dark:hover:text-white hover:pl-4 group'
+            onClick={handleCopySelectedPaths}
+          >
+            <svg className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+              <path d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z' />
+            </svg>
+            <span>Copy Text</span>
+            <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>⌘C</span>
+          </button>
+
+          {selectedNodes.length === 1 && (
+            <button
+              className='w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-stone-500 dark:text-neutral-400 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-stone-100 dark:hover:bg-neutral-800 hover:text-stone-900 dark:hover:text-white hover:pl-4 group'
+              onClick={() => {
+                const nodeId = String(selectedNodes[0])
+                if (contextMenuPos) {
+                  handleOpenNoteDialog(nodeId, contextMenuPos)
+                }
+              }}
+            >
+              <svg className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+                <path d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' />
+              </svg>
+              <span>
+                {(() => {
+                  const message = getCurrentMessage(selectedNodes[0])
+                  const hasNote = message?.note && message.note.trim().length > 0
+                  return hasNote ? 'View Note' : 'Add Note'
+                })()}
+              </span>
+              <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>N</span>
+            </button>
+          )}
+
+          <div className='h-px bg-stone-200 dark:bg-neutral-700 mx-2 my-1.5' />
+
+          <button
+            className='w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-stone-500 dark:text-neutral-400 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-stone-100 dark:hover:bg-neutral-800 hover:text-stone-900 dark:hover:text-white hover:pl-4 group'
+            onClick={handleCreateNewChat}
+          >
+            <svg className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+              <path d='M12 4v16m8-8H4' />
+            </svg>
+            <span>New Chat From Here</span>
+          </button>
+
+          <div className='h-px bg-stone-200 dark:bg-neutral-700 mx-2 my-1.5' />
+
+          <button
+            className='w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-stone-500 dark:text-neutral-400 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 dark:hover:text-red-400 hover:pl-4 group'
+            onClick={handleDeleteNodes}
+          >
+            <svg className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+              <path d='M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' />
+            </svg>
+            <span>Delete Permanently</span>
+            <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>DEL</span>
+          </button>
         </div>
       )}
       {selectedNode &&

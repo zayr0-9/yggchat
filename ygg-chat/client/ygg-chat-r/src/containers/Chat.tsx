@@ -1168,15 +1168,16 @@ function Chat() {
   }, [streamState.finished])
 
   // Scroll to show new message at top when stream starts (normal mode only)
-  useEffect(() => {
-    if (streamState.active && !ccMode) {
-      // Scroll to position new message at top of viewport
-      // setTimeout(() => {
-      //   scrollToShowLatestAtTop('smooth')
-      // }, 450)
-      scrollToShowLatestAtTop('smooth')
-    }
-  }, [streamState.active, ccMode, scrollToShowLatestAtTop])
+  // DISABLED: Auto-scroll temporarily disabled
+  // useEffect(() => {
+  //   if (streamState.active && !ccMode) {
+  //     // Scroll to position new message at top of viewport
+  //     // setTimeout(() => {
+  //     //   scrollToShowLatestAtTop('smooth')
+  //     // }, 450)
+  //     scrollToShowLatestAtTop('smooth')
+  //   }
+  // }, [streamState.active, ccMode, scrollToShowLatestAtTop])
 
   // Scroll to selected node when path changes (only for user-initiated selections)
   useEffect(() => {
@@ -1598,7 +1599,8 @@ function Chat() {
             const contentToRetrigger = lastUserMessage.content
 
             // Immediately scroll to bottom for CC mode retrigger
-            scrollToBottomNow('auto')
+            // DISABLED: Auto-scroll temporarily disabled
+            // scrollToBottomNow('auto')
 
             // Dispatch sendCCMessage with retrigger content
             dispatch(
@@ -1627,7 +1629,8 @@ function Chat() {
             setLocalInput('')
 
             // Immediately scroll to bottom for CC mode send
-            scrollToBottomNow('auto')
+            // DISABLED: Auto-scroll temporarily disabled
+            // scrollToBottomNow('auto')
 
             // Dispatch sendCCMessage
             dispatch(
@@ -3012,7 +3015,8 @@ function Chat() {
                         key='streaming'
                         id='message-streaming'
                         data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
+                        // DISABLED: Skip measuring during stream to prevent scroll jumps
+                        // ref={virtualizer.measureElement}
                         style={{
                           position: 'absolute',
                           top: 0,
