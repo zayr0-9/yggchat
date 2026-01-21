@@ -419,6 +419,12 @@ const LandingPage: React.FC = () => {
           >
             FAQ
           </button>
+          <button
+            onClick={() => handleNavigation('/blog')}
+            className={`${isInFeaturesSection ? 'text-black' : 'text-white'} dark:text-gray-200 hover:bg-neutral-200/30 rounded-2xl p-2 px-3 active:scale-97 dark:hover:text-neutral-50 transition-colors duration-200 font-medium`}
+          >
+            Blog
+          </button>
         </div>
 
         {/* Right Side - Theme Toggle & Login */}

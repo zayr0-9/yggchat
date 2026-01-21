@@ -1,3 +1,4 @@
+export { default as BlogPage } from './BlogPage'
 export { default as Chat } from './Chat'
 export { default as ConversationPage } from './ConversationPage'
 export { default as Homepage } from './Homepage'

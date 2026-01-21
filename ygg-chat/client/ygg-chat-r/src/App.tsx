@@ -11,6 +11,7 @@ import { TitleBar } from './components/TitleBar/TitleBar'
 import { UpdateModal } from './components/UpdateModal/UpdateModal'
 import VideoBackground from './components/VideoBackground'
 import {
+  BlogPage,
   Chat,
   ConversationPage,
   FAQPage,
@@ -46,6 +47,7 @@ const TOOL_VIEWER_HIDDEN_ROUTES = new Set([
   '/terms',
   '/refund-policy',
   '/privacy',
+  '/blog',
 ])
 
 const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
@@ -120,6 +122,8 @@ function AnimatedRoutes() {
         <Route path='/refund-policy' element={<RefundPolicy />} />
         {/* Public route */}
         <Route path='/privacy' element={<PrivacyPolicy />} />
+        {/* Public route */}
+        <Route path='/blog' element={<BlogPage />} />
         {/* Protected routes */}
         <Route
           path='/conversationPage'
