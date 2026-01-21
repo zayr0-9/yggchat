@@ -8,19 +8,32 @@ import { Hero } from '../components/landing/Hero'
 import { Navbar } from '../components/landing/Navbar'
 import { ScrollReveal } from '../components/landing/ScrollReveal'
 
+const getStoredTheme = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    const storedTheme = window.localStorage.getItem('theme')
+    return storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : null
+  } catch {
+    return null
+  }
+}
+
+const getSystemPrefersDark = () => {
+  if (typeof window === 'undefined') return true
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+}
+
 const LandingPage: React.FC = () => {
   const [scrollY, setScrollY] = useState(0)
   const [isAsciiActive, setIsAsciiActive] = useState(true)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const heroRef = useRef<HTMLDivElement>(null)
   const [isDark, setIsDark] = useState(() => {
-    if (typeof window === 'undefined') return true
-    const storedTheme = window.localStorage.getItem('theme')
-    if (storedTheme === 'dark' || storedTheme === 'light') {
-      return storedTheme === 'dark'
-    }
-    return document.documentElement.classList.contains('dark') || true
+    const storedTheme = getStoredTheme()
+    if (storedTheme) return storedTheme === 'dark'
+    return getSystemPrefersDark()
   })
+  const [hasExplicitTheme, setHasExplicitTheme] = useState(() => Boolean(getStoredTheme()))
 
   useEffect(() => {
     const container = scrollContainerRef.current
@@ -64,12 +77,39 @@ const LandingPage: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (hasExplicitTheme) return
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleChange = () => {
+      setIsDark(media.matches)
+    }
+
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', handleChange)
+    } else if (typeof (media as MediaQueryList).addListener === 'function') {
+      media.addListener(handleChange)
+    }
+
+    return () => {
+      if (typeof media.removeEventListener === 'function') {
+        media.removeEventListener('change', handleChange)
+      } else if (typeof (media as MediaQueryList).removeListener === 'function') {
+        media.removeListener(handleChange)
+      }
+    }
+  }, [hasExplicitTheme])
+
+  useEffect(() => {
     if (typeof document === 'undefined') return
     document.documentElement.classList.toggle('dark', isDark)
-    window.localStorage.setItem('theme', isDark ? 'dark' : 'light')
-  }, [isDark])
+    if (hasExplicitTheme) {
+      window.localStorage.setItem('theme', isDark ? 'dark' : 'light')
+    }
+  }, [hasExplicitTheme, isDark])
 
   const toggleTheme = () => {
+    setHasExplicitTheme(true)
     setIsDark(current => !current)
   }
 
