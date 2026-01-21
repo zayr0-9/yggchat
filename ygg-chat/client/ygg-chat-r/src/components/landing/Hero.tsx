@@ -20,7 +20,7 @@ export const Hero: React.FC = () => {
             V 1.0.0-STABLE
           </span>
           <h1
-            className={`text-[15vw] leading-[0.8] font-black tracking-tighter uppercase mb-4 transition-all duration-1000 delay-200 text-zinc-900 dark:text-white ${
+            className={`text-[15vw] leading-[0.8] font-inter font-black tracking-[-0.05em] uppercase mb-4 transition-all duration-1000 delay-200 text-zinc-900 dark:text-white ${
               active ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
             }`}
           >

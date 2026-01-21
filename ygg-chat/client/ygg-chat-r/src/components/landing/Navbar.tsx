@@ -1,3 +1,4 @@
+import 'boxicons/css/boxicons.min.css'
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { Logo } from './Logo'
@@ -12,7 +13,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleTheme, isDark }) => {
     <nav className='fixed top-0 left-0 w-full z-50 p-6 md:p-8 flex justify-between items-center transition-all'>
       <div className='flex items-center gap-3 text-zinc-900 dark:text-white'>
         <Logo className='w-8 h-8 md:w-10 md:h-10 transition-all duration-300' isDark={isDark} />
-        <span className='text-3xl font-black tracking-tighter uppercase'>Yggdrasil</span>
+        <span className='text-3xl font-inter font-black tracking-[-0.05em] uppercase'>Yggdrasil</span>
       </div>
 
       <div className='hidden md:flex items-center gap-8 flex-wrap font-bold uppercase text-xs tracking-widest text-zinc-900 dark:text-white'>
@@ -36,7 +37,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleTheme, isDark }) => {
           title='Toggle Theme'
           type='button'
         >
-          {isDark ? '☼' : '☾'}
+          <i className={`bx ${isDark ? 'bx-sun' : 'bx-moon'} text-lg`} aria-hidden='true' />
         </button>
 
         <Link
@@ -47,15 +48,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleTheme, isDark }) => {
         </Link>
       </div>
 
-      <div className='md:hidden'>
+      <div className='md:hidden flex items-center gap-3'>
         <button
           onClick={onToggleTheme}
-          className='p-2 border-2 border-zinc-900 dark:border-white text-zinc-900 dark:text-white'
+          className='p-1 border-2 border-zinc-900 dark:border-white text-zinc-900 dark:text-white'
           type='button'
           aria-label='Toggle Theme'
         >
-          {isDark ? '☼' : '☾'}
+          <i className={`pt-1 bx ${isDark ? 'bx-sun' : 'bx-moon'} text-xl`} aria-hidden='true' />
         </button>
+        <Link
+          to='/login'
+          className='bg-zinc-900 dark:bg-white text-white dark:text-black px-4 py-2 text-sm hover:bg-[#0052FF] dark:hover:bg-[#0052FF] dark:hover:text-white transition-all'
+        >
+          Login
+        </Link>
       </div>
     </nav>
   )
