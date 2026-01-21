@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
 @import './styles/mica.css';
 @import './styles/acrylic.css';
 
@@ -35,6 +36,34 @@
   font-family: 'Germania One', system-ui;
   font-weight: 400;
   font-style: normal;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: all 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.reveal.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delayed-1 {
+  transition-delay: 0.1s;
+}
+
+.reveal-delayed-2 {
+  transition-delay: 0.2s;
+}
+
+.reveal-delayed-3 {
+  transition-delay: 0.3s;
 }
 
 .overflow-left {

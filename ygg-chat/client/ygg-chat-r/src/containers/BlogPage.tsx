@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 interface BlogMeta {
   id: string
@@ -8,333 +9,163 @@ interface BlogMeta {
 }
 
 const BlogPage = () => {
-  const [isDark, setIsDark] = useState(true)
   const [blogs, setBlogs] = useState<BlogMeta[]>([])
   const [selectedBlog, setSelectedBlog] = useState<BlogMeta | null>(null)
   const [blogContent, setBlogContent] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
-  const accentColor = isDark ? '#00ff88' : '#3b82f6'
-
-  // Load blog index
   useEffect(() => {
+    let isActive = true
+
     fetch('/blogs/index.json')
       .then(res => res.json())
       .then((data: BlogMeta[]) => {
+        if (!isActive) return
         setBlogs(data)
         if (data.length > 0) {
           setSelectedBlog(data[0])
         }
         setLoading(false)
       })
-      .catch(() => setLoading(false))
+      .catch(() => {
+        if (!isActive) return
+        setLoading(false)
+      })
+
+    return () => {
+      isActive = false
+    }
   }, [])
 
-  // Load selected blog content
   useEffect(() => {
     if (!selectedBlog) return
     setBlogContent('')
+
     fetch(`/blogs/${selectedBlog.slug}.html`)
       .then(res => res.text())
       .then(html => setBlogContent(html))
       .catch(() => setBlogContent('<p>Failed to load blog content.</p>'))
   }, [selectedBlog])
 
-  const styles = {
-    container: {
-      position: 'fixed' as const,
-      inset: 0,
-      display: 'flex',
-      backgroundColor: isDark ? '#050505' : '#ffffff',
-      color: isDark ? '#9ca3af' : '#374151',
-      fontFamily: 'Inter, sans-serif',
-    },
-    sidebar: {
-      width: sidebarCollapsed ? '64px' : '280px',
-      minWidth: sidebarCollapsed ? '64px' : '280px',
-      borderRight: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-      padding: sidebarCollapsed ? '16px 8px' : '24px',
-      overflowY: 'auto' as const,
-      overflowX: 'hidden' as const,
-      display: 'flex',
-      flexDirection: 'column' as const,
-      zIndex: 20,
-      backgroundColor: isDark ? '#050505' : '#ffffff',
-      transition: 'all 0.3s ease',
-    },
-    collapseBtn: {
-      background: 'none',
-      border: 'none',
-      color: accentColor,
-      cursor: 'pointer',
-      fontSize: '16px',
-      fontFamily: 'JetBrains Mono, monospace',
-      opacity: 0.5,
-      transition: 'opacity 0.2s',
-      padding: 0,
-    },
-    sidebarHeader: {
-      fontSize: '10px',
-      fontFamily: 'JetBrains Mono, monospace',
-      letterSpacing: '0.2em',
-      textTransform: 'uppercase' as const,
-      color: accentColor,
-      marginBottom: '24px',
-      paddingBottom: '16px',
-      position: 'relative' as const,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    sidebarHeaderLine: {
-      position: 'absolute' as const,
-      bottom: 0,
-      left: 0,
-      right: 0,
-      height: '1px',
-      background: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-      overflow: 'hidden' as const,
-    },
-    sidebarHeaderGlow: {
-      position: 'absolute' as const,
-      top: 0,
-      left: 0,
-      width: '50%',
-      height: '100%',
-      background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`,
-      animation: 'scanLine 3s ease-in-out infinite',
-    },
-    blogItem: (isSelected: boolean) => ({
-      padding: '12px 16px',
-      marginBottom: '8px',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      backgroundColor: isSelected ? (isDark ? 'rgba(0,255,136,0.1)' : 'rgba(59,130,246,0.15)') : 'transparent',
-      borderLeft: isSelected ? `2px solid ${accentColor}` : '2px solid transparent',
-      transition: 'all 0.2s',
-    }),
-    blogItemTitle: {
-      fontSize: '14px',
-      fontWeight: 500,
-      color: isDark ? '#ffffff' : '#000000',
-      marginBottom: '4px',
-    },
-    blogItemDate: {
-      fontSize: '10px',
-      fontFamily: 'JetBrains Mono, monospace',
-      opacity: 0.5,
-    },
-    mainArea: {
-      flex: 1,
-      overflow: 'auto' as const,
-      position: 'relative' as const,
-    },
-    bgAmbient: {
-      position: 'fixed' as const,
-      top: 0,
-      left: sidebarCollapsed ? '64px' : '280px',
-      right: 0,
-      bottom: 0,
-      zIndex: 0,
-      background: isDark
-        ? 'radial-gradient(circle at 50% 50%, #0a0a0a, #000)'
-        : 'radial-gradient(circle at 50% 50%, #f9fafb, #fff)',
-      transition: 'left 0.3s ease',
-    },
-    orb: {
-      position: 'absolute' as const,
-      borderRadius: '50%',
-      filter: 'blur(100px)',
-      backgroundColor: accentColor,
-      opacity: isDark ? 0.12 : 0.04,
-    },
-    nav: {
-      position: 'sticky' as const,
-      top: 0,
-      zIndex: 50,
-      padding: '24px 32px',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      backgroundColor: isDark ? 'rgba(5,5,5,0.8)' : 'rgba(255,255,255,0.8)',
-      backdropFilter: 'blur(8px)',
-    },
-    navText: {
-      fontSize: '10px',
-      fontFamily: 'JetBrains Mono, monospace',
-      letterSpacing: '0.3em',
-      textTransform: 'uppercase' as const,
-      opacity: 0.4,
-    },
-    switchBtn: {
-      fontSize: '10px',
-      fontFamily: 'JetBrains Mono, monospace',
-      letterSpacing: '0.3em',
-      textTransform: 'uppercase' as const,
-      background: 'none',
-      border: 'none',
-      color: 'inherit',
-      cursor: 'pointer',
-    },
-    content: {
-      position: 'relative' as const,
-      zIndex: 10,
-    },
-    articleHeader: {
-      marginBottom: '48px',
-      paddingBottom: '24px',
-      borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-    },
-    articleNumber: {
-      fontSize: '10px',
-      fontFamily: 'JetBrains Mono, monospace',
-      color: accentColor,
-      marginBottom: '8px',
-    },
-    articleTitle: {
-      fontSize: '2.5rem',
-      fontFamily: 'Space Grotesk, sans-serif',
-      fontWeight: 700,
-      color: isDark ? '#ffffff' : '#000000',
-      marginBottom: '12px',
-      lineHeight: 1.1,
-    },
-    articleDate: {
-      fontSize: '12px',
-      fontFamily: 'JetBrains Mono, monospace',
-      opacity: 0.4,
-    },
-    articleBody: {
-      fontSize: '24px',
-      fontWeight: 300,
-      lineHeight: 1.8,
-    },
-  }
-
   return (
-    <div style={styles.container}>
-      <style>{`
-        @keyframes drift {
-          0% { transform: translate(-5%, -5%) scale(1); }
-          100% { transform: translate(15%, 15%) scale(1.3); }
-        }
-        @keyframes scanLine {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-      `}</style>
-
-      {/* Sidebar */}
-      <aside style={styles.sidebar}>
-        <div style={styles.sidebarHeader}>
-          {!sidebarCollapsed && <span>Journal Entries</span>}
-          <button
-            style={{
-              ...styles.collapseBtn,
-              margin: sidebarCollapsed ? '0 auto' : undefined,
-            }}
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-            onMouseLeave={e => (e.currentTarget.style.opacity = '0.5')}
-          >
-            {sidebarCollapsed ? '›' : '‹'}
-          </button>
-          {!sidebarCollapsed && (
-            <div style={styles.sidebarHeaderLine}>
-              <div style={styles.sidebarHeaderGlow} />
-            </div>
-          )}
-        </div>
-        {!sidebarCollapsed &&
-          (loading ? (
-            <div style={{ opacity: 0.5 }}>Loading...</div>
-          ) : (
-            blogs.map(blog => (
-              <div
-                key={blog.id}
-                style={styles.blogItem(selectedBlog?.id === blog.id)}
-                onClick={() => setSelectedBlog(blog)}
-                onMouseEnter={e => {
-                  if (selectedBlog?.id !== blog.id) {
-                    e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (selectedBlog?.id !== blog.id) {
-                    e.currentTarget.style.backgroundColor = 'transparent'
-                  }
-                }}
-              >
-                <div style={styles.blogItemTitle}>{blog.title}</div>
-                <div style={styles.blogItemDate}>
-                  #{blog.id} — {blog.date}
-                </div>
-              </div>
-            ))
-          ))}
-      </aside>
-
-      {/* Main Content Area */}
-      <div style={styles.mainArea}>
-        {/* Background */}
-        <div style={styles.bgAmbient}>
-          <div
-            style={{
-              ...styles.orb,
-              width: '600px',
-              height: '600px',
-              top: '-160px',
-              right: '-160px',
-              animation: 'drift 25s infinite alternate ease-in-out',
-            }}
-          />
-          <div
-            style={{
-              ...styles.orb,
-              width: '500px',
-              height: '500px',
-              bottom: 0,
-              left: '100px',
-              animation: 'drift 35s infinite alternate ease-in-out',
-            }}
-          />
-        </div>
-
-        {/* Nav */}
-        <nav style={styles.nav}>
-          <div style={styles.navText}>Yggdrasil // OS_Core</div>
-          <button
-            style={styles.switchBtn}
-            onClick={() => setIsDark(!isDark)}
-            onMouseEnter={e => (e.currentTarget.style.color = accentColor)}
-            onMouseLeave={e => (e.currentTarget.style.color = 'inherit')}
-          >
-            [ Switch_Mode ]
-          </button>
-        </nav>
-
-        {/* Content */}
-        <div
-          style={styles.content}
-          className='w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-5xl mx-auto px-6 pt-10 pb-32'
-        >
-          {selectedBlog ? (
-            <>
-              <header style={styles.articleHeader}>
-                <div style={styles.articleNumber}>#{selectedBlog.id}</div>
-                <h1 style={styles.articleTitle}>{selectedBlog.title}</h1>
-                <div style={styles.articleDate}>{selectedBlog.date}</div>
-              </header>
-              <div style={styles.articleBody} dangerouslySetInnerHTML={{ __html: blogContent }} />
-            </>
-          ) : (
-            <div style={{ textAlign: 'center', paddingTop: '100px', opacity: 0.5 }}>
-              Select a blog entry from the sidebar
-            </div>
-          )}
-        </div>
+    <div className='relative h-full min-h-screen w-full overflow-y-auto bg-white text-zinc-900 dark:bg-black dark:text-white'>
+      <div className='pointer-events-none absolute inset-0 opacity-80'>
+        <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(0,82,255,0.12),_transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(0,82,255,0.2),_transparent_55%)]' />
+        <div className='absolute inset-0 bg-[linear-gradient(to_right,rgba(24,24,27,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(24,24,27,0.08)_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:80px_80px]' />
       </div>
+
+      <header className='relative z-10 flex flex-wrap items-center justify-between gap-4 px-6 md:px-12 py-6 border-b border-zinc-200 dark:border-zinc-900'>
+        <Link
+          to='/'
+          className='mono text-[18px] tracking-[0.4em] text-white uppercase bg-zinc-900 px-3 py-2 hover:text-white/80 transition-colors'
+        >
+          ← Back
+        </Link>
+        <div className='flex items-center gap-3 text-[20px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+          <span className='mono'>Archive Node</span>
+          <span className='hidden sm:inline'>/</span>
+          <span className='mono'>Blog</span>
+        </div>
+        <Link
+          to='/login'
+          className='border-2 border-zinc-900 bg-zinc-900 px-4 py-2 text-xs font-bold uppercase tracking-[0.25em] text-white hover:bg-white hover:border-white hover:text-black transition-colors'
+        >
+          Sign In
+        </Link>
+      </header>
+
+      <main className='relative z-10 px-6 md:px-12 pb-24'>
+        <section className='max-w-6xl mx-auto pt-16 md:pt-24'>
+          <span className='mono text-[#0052FF] font-bold tracking-widest uppercase text-[16px]'>[ Research Logs ]</span>
+          <h1 className='text-5xl md:text-6xl font-black tracking-tighter mt-4'>Yggdrasil Journal</h1>
+          <p className='mt-6 text-lg text-zinc-600 dark:text-zinc-300 max-w-3xl leading-relaxed'>
+            Dispatches from the root system: product updates, research notes, and architecture deep dives.
+          </p>
+        </section>
+
+        <section className='max-w-6xl mx-auto mt-10 flex flex-col lg:flex-row gap-6'>
+          <aside
+            className={`border-2 border-zinc-200 dark:border-zinc-900 bg-white/80 dark:bg-zinc-950/70 backdrop-blur-sm transition-all duration-300 lg:sticky lg:top-6 ${
+              sidebarCollapsed ? 'lg:w-20' : 'lg:w-80'
+            }`}
+          >
+            <div className='flex items-center justify-between px-6 py-5 border-b border-zinc-200 dark:border-zinc-900'>
+              {!sidebarCollapsed && (
+                <div>
+                  <p className='mono text-[16px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+                    Archive
+                  </p>
+                  <h2 className='text-xl font-black uppercase tracking-tight'>Entries</h2>
+                </div>
+              )}
+              <button
+                type='button'
+                onClick={() => setSidebarCollapsed(current => !current)}
+                className='mono text-[#0052FF] text-lg hover:text-[#0052FF]/70 transition-colors'
+                aria-label={sidebarCollapsed ? 'Expand archive' : 'Collapse archive'}
+              >
+                {sidebarCollapsed ? '›' : '‹'}
+              </button>
+            </div>
+
+            <div className='px-4 py-4 max-h-[70vh] overflow-y-auto no-scrollbar'>
+              {loading && <p className='text-sm text-zinc-500'>Loading entries...</p>}
+              {!loading && blogs.length === 0 && <p className='text-sm text-zinc-500'>No blog entries found.</p>}
+              {!loading &&
+                blogs.map(blog => {
+                  const isSelected = selectedBlog?.id === blog.id
+                  return (
+                    <button
+                      key={blog.id}
+                      type='button'
+                      onClick={() => setSelectedBlog(blog)}
+                      className={`w-full text-left px-4 py-3 mb-2 border-l-2 transition-colors ${
+                        isSelected
+                          ? 'border-[#0052FF] bg-[#0052FF]/10'
+                          : 'border-transparent hover:bg-zinc-100/70 dark:hover:bg-white/5'
+                      }`}
+                    >
+                      <div className='flex items-center justify-between gap-3'>
+                        <span className='mono text-[12px] uppercase tracking-[0.3em] text-[#0052FF]'>#{blog.id}</span>
+                        {!sidebarCollapsed && (
+                          <span className='mono text-[12px] uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400'>
+                            {blog.date}
+                          </span>
+                        )}
+                      </div>
+                      {!sidebarCollapsed && (
+                        <div className='mt-2 text-sm font-semibold text-zinc-900 dark:text-white'>{blog.title}</div>
+                      )}
+                    </button>
+                  )
+                })}
+            </div>
+          </aside>
+
+          <article className='flex-1 border-2 border-zinc-200 dark:border-zinc-900 bg-white/80 dark:bg-zinc-950/70 backdrop-blur-sm px-6 py-8'>
+            {selectedBlog ? (
+              <>
+                <header className='border-b border-zinc-200/70 dark:border-zinc-800/70 pb-6 mb-6'>
+                  <span className='mono text-[16px] uppercase tracking-[0.3em] text-[#0052FF]'>#{selectedBlog.id}</span>
+                  <h2 className='text-3xl md:text-4xl font-black mt-3'>{selectedBlog.title}</h2>
+                  <p className='mono text-[16px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400 mt-2'>
+                    {selectedBlog.date}
+                  </p>
+                </header>
+                <div
+                  className='blog-entry prose prose-lg dark:prose-invert max-w-none text-zinc-700 dark:text-zinc-300'
+                  dangerouslySetInnerHTML={{ __html: blogContent }}
+                />
+              </>
+            ) : (
+              <div className='text-center text-zinc-500 dark:text-zinc-400 py-20'>
+                Select a blog entry from the archive.
+              </div>
+            )}
+          </article>
+        </section>
+      </main>
     </div>
   )
 }

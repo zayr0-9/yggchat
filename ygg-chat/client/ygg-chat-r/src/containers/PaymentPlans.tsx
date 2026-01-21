@@ -1,12 +1,11 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
-import { PLANS, PRICING_FEATURES } from '../constants/pricingData'
+import { getFeaturesForPlan, PLANS, PRICING_FEATURES } from '../constants/pricingData'
 
 const PaymentPlans: React.FC = () => {
-  // Data for 3 pricing plans
   const plans = PLANS
-
+  const features = PRICING_FEATURES
   const navigate = useNavigate()
 
   const handleNavigation = (path: string) => {
@@ -18,133 +17,164 @@ const PaymentPlans: React.FC = () => {
     }
   }
 
-  // Data for 6 features across plans with descriptive text
-  const features = PRICING_FEATURES
-
   return (
-    <div className='h-full overflow-y-auto min-h-screen text-neutral-900 dark:text-neutral-100 py-12 px-6'>
-      <div className='max-w-7xl mx-auto'>
-        {/* Back Button */}
-        <button
-          onClick={() => navigate('/')}
-          className='mb-6 flex items-center gap-2 text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 transition-colors duration-200'
+    <div className='relative h-full min-h-screen w-full overflow-y-auto bg-white text-zinc-900 dark:bg-black dark:text-white'>
+      <div className='pointer-events-none absolute inset-0 opacity-80'>
+        <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(0,82,255,0.12),_transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(0,82,255,0.2),_transparent_55%)]' />
+        <div className='absolute inset-0 bg-[linear-gradient(to_right,rgba(24,24,27,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(24,24,27,0.08)_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:80px_80px]' />
+      </div>
+
+      <header className='relative z-10 flex flex-wrap items-center justify-between gap-4 px-6 md:px-12 py-6 border-b border-zinc-200 dark:border-zinc-900'>
+        <Link
+          to='/'
+          className='mono text-[18px] tracking-[0.4em] text-white bg-zinc-900 px-3 py-2 uppercase hover:bg-zinc-800 hover:text-white/90 transition-colors'
         >
-          <i className='bx bx-arrow-back text-xl'></i>
-          <span className='font-medium'>Back</span>
-        </button>
-
-        {/* Header */}
-        <div className='text-center mb-12 acrylic-light rounded-2xl p-2'>
-          <h1 className='text-4xl md:text-5xl mt-4 font-medium text-stone-800 dark:text-neutral-100 mb-4 '>
-            Choose Your Plan
-          </h1>
-          <p className='text-lg text-neutral-900 dark:text-neutral-100 max-w-2xl mx-auto'>
-            Select the perfect plan for your needs. Upgrade or downgrade at any time.
-          </p>
+          ← Back
+        </Link>
+        <div className='flex items-center gap-3 text-[18px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+          <span className='mono'>Pricing Node</span>
+          <span className='hidden sm:inline'>/</span>
+          <span className='mono'>Plans</span>
         </div>
+        <Link
+          to='/login'
+          className='border-2 border-zinc-900 dark:border-white bg-zinc-900 px-4 py-2 text-xs font-bold uppercase tracking-[0.25em] text-white hover:bg-zinc-800 hover:border-zinc-800 dark:hover:border-white transition-colors'
+        >
+          Sign In
+        </Link>
+      </header>
 
-        {/* Plan Cards */}
-        <div className='grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-20 xl:gap-20 2xl:gap-24 mb-24'>
-          {plans.map(plan => (
-            <div
-              key={plan.id}
-              className={`relative text-[16px] rounded-2xl p-4 transition-all duration-300 transform flex flex-col ${
-                plan.featured
-                  ? 'bg-transparent acrylic-light text-neutral-900 dark:text-neutral-100'
-                  : 'bg-transparent acrylic-light text-neutral-900 dark:text-neutral-100'
-              }`}
-            >
-              {/* {plan.featured && (
-                <div className='absolute -top-6 left-1/2 transform -translate-x-1/2'>
-                  <span className='bg-transparent outline-1 acrylic-light dark:outline-neutral-700 text-neutral-900 dark:text-neutral-100 px-3 py-2 rounded-full text-[14px] font-semibold'>
+      <main className='relative z-10 px-6 md:px-12 pb-24'>
+        <section className='max-w-6xl mx-auto pt-16 md:pt-24'>
+          <span className='mono text-[#0052FF] font-bold tracking-widest uppercase text-xs'>[ Pricing Matrix ]</span>
+          <h1 className='text-5xl md:text-7xl font-black tracking-tighter mt-4'>RUNTIME PLANS</h1>
+          <p className='mt-6 text-lg text-zinc-600 dark:text-zinc-300 max-w-3xl leading-relaxed'>
+            Select the capacity that matches your workload. Every plan includes the full branching core and model
+            routing stack.
+          </p>
+        </section>
+
+        <section className='max-w-6xl mx-auto mt-12 grid gap-6 md:grid-cols-3'>
+          {plans.map(plan => {
+            const highlight = plan.featured
+            const featureList = getFeaturesForPlan(plan.id).slice(0, 5)
+
+            return (
+              <div
+                key={plan.id}
+                className={`relative flex h-full flex-col border-2 px-6 py-8 backdrop-blur-sm transition-transform duration-300 ${
+                  highlight
+                    ? 'border-[#0052FF] bg-white/90 dark:bg-zinc-950/80 shadow-[0_0_0_1px_rgba(0,82,255,0.35)]'
+                    : 'border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/60'
+                }`}
+              >
+                {highlight && (
+                  <span className='absolute -top-4 left-6 bg-[#0052FF] px-3 py-1 text-[10px] font-black uppercase tracking-[0.3em] text-white'>
                     Most Popular
                   </span>
-                </div>
-              )} */}
-
-              <div className='flex-1'>
-                <h3 className='text-[28px] font-bold mb-6'>{plan.name}</h3>
-                <div className='flex items-baseline mb-3'>
-                  <span
-                    className={`text-4xl mt-2 font-bold${plan.featured ? 'text-neutral-900 dark:text-neutral-100' : 'text-neutral-900 dark:text-neutral-100'}`}
-                  >
-                    ${plan.price}
+                )}
+                <div className='flex items-start justify-between'>
+                  <div>
+                    <p className='mono text-[14px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>Tier</p>
+                    <h2 className='text-2xl font-black uppercase tracking-tight'>{plan.name}</h2>
+                  </div>
+                  <span className='mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+                    {plan.id}
                   </span>
-                  <span
-                    className={`ml-2 mb-3 text-[18px] ${plan.featured ? 'text-neutral-900 dark:text-neutral-100/90' : 'text-neutral-900 dark:text-neutral-100'}`}
-                  >
+                </div>
+
+                <div className='mt-6 flex items-end gap-2'>
+                  <span className='text-4xl font-black'>${plan.price}</span>
+                  <span className='text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
                     {plan.billingCycle}
                   </span>
                 </div>
-                <p
-                  className={`mb-6 text-[18px] ${plan.featured ? 'text-neutral-900 dark:text-neutral-100/90' : 'text-neutral-900 dark:text-neutral-100'}`}
-                >
-                  {plan.description}
-                </p>
-              </div>
 
-              <button
-                className={`w-full py-3 mt-8 px-6 rounded-lg font-semibold transition-all duration-200 ${
-                  plan.featured
-                    ? 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100 '
-                    : 'bg-neutral-50/70 dark:bg-transparent border-2 hover:scale-101 border-neutral-300/50 dark:border-neutral-300/20 text-neutral-900 active:scale-99 dark:text-neutral-100'
-                }`}
-                onClick={() => handleNavigation('/login')}
-              >
-                {plan.cta}
-              </button>
-            </div>
-          ))}
-        </div>
+                <p className='mt-4 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed'>{plan.description}</p>
 
-        {/* Features Comparison Table */}
-        <div className='bg-transparent acrylic-light rounded-2xl overflow-hidden'>
-          <div className='py-6 px-4'>
-            <h1 className='text-2xl font-bold text-neutral-900 dark:text-neutral-100'>
-              Compare Plans — Billed Monthly
-            </h1>
-          </div>
-
-          <div className='overflow-x-auto'>
-            <table className='w-full mb-4'>
-              <thead>
-                <tr className='border-b border-neutral-700/20'>
-                  <th className='text-left py-4 px-6 text-neutral-900 text-[20px] dark:text-neutral-100 font-semibold'>
-                    Features
-                  </th>
-                  {plans.map(plan => (
-                    <th key={plan.id} className='py-4 px-6 text-center'>
-                      <span className='text-neutral-900 dark:text-neutral-100 text-[20px] font-bold'>{plan.name}</span>
-                    </th>
+                <ul className='mt-6 space-y-2 text-sm text-zinc-600 dark:text-zinc-300'>
+                  {featureList.map(feature => (
+                    <li key={feature} className='flex items-start gap-2'>
+                      <span className='mt-1 h-1.5 w-1.5 rounded-full bg-[#0052FF]' />
+                      <span>{feature}</span>
+                    </li>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {features.map(feature => (
-                  <tr key={feature.name} className={`border-b border-neutral-200/5`}>
-                    <td className='py-4 px-6 text-neutral-900 dark:text-neutral-100 text-[18px] font-medium'>
-                      {feature.name}
-                    </td>
+                </ul>
+
+                <button
+                  className={`mt-8 w-full border-2 px-4 py-3 text-xs font-bold uppercase tracking-[0.25em] transition-colors ${
+                    highlight
+                      ? 'border-[#0052FF] text-[#0052FF] hover:bg-[#0052FF] hover:text-white'
+                      : 'border-zinc-900 dark:border-white text-zinc-900 dark:text-white hover:bg-[#0052FF] hover:border-[#0052FF] hover:text-white'
+                  }`}
+                  onClick={() => handleNavigation('/login')}
+                  type='button'
+                >
+                  {plan.cta}
+                </button>
+              </div>
+            )
+          })}
+        </section>
+
+        <section className='max-w-6xl mx-auto mt-16'>
+          <div className='border-2 border-zinc-200 dark:border-zinc-900 bg-white/80 dark:bg-zinc-950/70 backdrop-blur-sm'>
+            <div className='flex flex-wrap items-center justify-between gap-6 px-6 py-6 border-b border-zinc-200 dark:border-zinc-900'>
+              <div className='flex items-center gap-4'>
+                <div className='w-1.5 h-10 bg-[#0052FF]' />
+                <div>
+                  <p className='mono text-[14px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+                    Comparison Grid
+                  </p>
+                  <h2 className='text-2xl font-black uppercase tracking-tight'>Plan Matrix</h2>
+                </div>
+              </div>
+              <span className='mono text-[14px] uppercase tracking-[0.3em] text-[#0052FF]'>Billed Monthly</span>
+            </div>
+
+            <div className='overflow-x-auto'>
+              <table className='min-w-[720px] w-full'>
+                <thead>
+                  <tr className='border-b border-zinc-200/70 dark:border-zinc-800/70'>
+                    <th className='text-left py-4 px-6 text-xs uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+                      Feature
+                    </th>
                     {plans.map(plan => (
-                      <td key={plan.id} className='py-4 px-6 text-center text-[17px]'>
-                        <span
-                          className={`font-medium ${
-                            feature.plans[plan.id] === 'Not included'
-                              ? 'text-neutral-900 dark:text-neutral-100/90'
-                              : 'dark:text-white/90 text-neutral-900'
-                          }`}
-                        >
-                          {feature.plans[plan.id] === 'Not included' ? 'x' : feature.plans[plan.id]}
-                        </span>
-                      </td>
+                      <th key={plan.id} className='py-4 px-6 text-center text-xs uppercase tracking-[0.3em]'>
+                        {plan.name}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {features.map(feature => (
+                    <tr key={feature.name} className='border-b border-zinc-200/40 dark:border-zinc-800/60'>
+                      <td className='py-4 px-6 text-sm font-semibold text-zinc-700 dark:text-zinc-200'>
+                        {feature.name}
+                      </td>
+                      {plans.map(plan => {
+                        const value = feature.plans[plan.id]
+                        const isMissing = value === 'Not included' || value === 'x'
+                        return (
+                          <td key={plan.id} className='py-4 px-6 text-center text-sm'>
+                            <span
+                              className={
+                                isMissing ? 'text-zinc-400 dark:text-zinc-600' : 'text-zinc-900 dark:text-white'
+                              }
+                            >
+                              {isMissing ? '—' : value}
+                            </span>
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   )
 }

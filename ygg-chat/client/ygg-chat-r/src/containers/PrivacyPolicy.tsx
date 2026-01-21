@@ -1,73 +1,91 @@
 import React from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 
 const PrivacyPolicy: React.FC = () => {
-  const navigate = useNavigate()
   return (
-    <div className='h-screen overflow-hidden flex flex-col text-neutral-900 dark:text-neutral-100'>
-      <div className='flex-1 overflow-y-auto py-12 px-6'>
-        <div className='max-w-4xl mx-auto'>
-          <button onClick={() => navigate('/')} className='mb-6 px-4 py-2 mica text-white rounded-lg transition-colors'>
-            ← Back to Home
-          </button>
-          {/* Header */}
-          <div className='text-left p-8 mb-12 mica rounded-2xl'>
-            <h1 className='text-4xl md:text-5xl font-bold text-stone-800 dark:text-neutral-100 mb-4'>
-              Privacy Policy — Yggchat
-            </h1>
-            <div className='text-lg text-neutral-900 px-2 dark:text-neutral-100 mx-auto space-y-2'>
-              <p>
-                <strong>Effective Date:</strong> 12 November 2025
-              </p>
-              <p>
-                <strong>Last Updated:</strong> 12 November 2025
-              </p>
-              <p>
-                <strong>Operator/Data Controller:</strong> An independent UK-based developer operating as Yggchat (“we”,
-                “our”, or “us”)
-              </p>
-              <p>
-                <strong>Contact:</strong> support@yggchat.com
-              </p>
-              <p>
-                <strong>Data Protection Officer:</strong> Not applicable (as a small UK-based developer); contact
-                support for data matters.
-              </p>
+    <div className='relative h-full min-h-screen w-full overflow-y-auto bg-white text-zinc-900 dark:bg-black dark:text-white'>
+      <div className='pointer-events-none absolute inset-0 opacity-80'>
+        <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(0,82,255,0.12),_transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(0,82,255,0.2),_transparent_55%)]' />
+        <div className='absolute inset-0 bg-[linear-gradient(to_right,rgba(24,24,27,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(24,24,27,0.08)_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:80px_80px]' />
+      </div>
+
+      <header className='relative z-10 flex flex-wrap items-center justify-between gap-4 px-6 md:px-12 py-6 border-b border-zinc-200 dark:border-zinc-900'>
+        <Link
+          to='/'
+          className='mono text-[18px] tracking-[0.4em] text-white bg-zinc-900 px-3 py-2 uppercase hover:bg-zinc-800 hover:text-white/90 transition-colors'
+        >
+          ← Back
+        </Link>
+        <div className='flex items-center gap-3 text-[20px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+          <span className='mono'>Legal Node</span>
+          <span className='hidden sm:inline'>/</span>
+          <span className='mono'>Privacy</span>
+        </div>
+        <Link
+          to='/login'
+          className='border-2 border-zinc-900 dark:border-white bg-zinc-900 px-4 py-2 text-xs font-bold uppercase tracking-[0.25em] text-white hover:bg-zinc-800 hover:border-zinc-800 dark:hover:border-white transition-colors'
+        >
+          Sign In
+        </Link>
+      </header>
+
+      <main className='relative z-10 px-6 md:px-12 pb-24'>
+        <section className='max-w-5xl mx-auto pt-16 md:pt-24'>
+          <span className='mono text-[#0052FF] font-bold tracking-widest uppercase text-[16px]'>[ Privacy Matrix ]</span>
+          <h1 className='text-5xl md:text-6xl font-black tracking-tighter mt-4'>Privacy Policy</h1>
+          <p className='mt-6 text-lg text-zinc-600 dark:text-zinc-300 max-w-3xl leading-relaxed'>
+            How Yggchat collects, stores, and protects information across web and desktop experiences.
+          </p>
+        </section>
+
+        <section className='max-w-5xl mx-auto mt-10 border-2 border-zinc-200 dark:border-zinc-900 bg-white/80 dark:bg-zinc-950/70 backdrop-blur-sm'>
+          <div className='flex flex-wrap items-center justify-between gap-6 px-6 py-6 border-b border-zinc-200 dark:border-zinc-900'>
+            <div>
+              <p className='mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>Effective Date</p>
+              <p className='text-lg font-semibold text-zinc-800 dark:text-zinc-100'>12 November 2025</p>
+            </div>
+            <div>
+              <p className='mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>Last Updated</p>
+              <p className='text-lg font-semibold text-zinc-800 dark:text-zinc-100'>12 November 2025</p>
+            </div>
+            <div>
+              <p className='mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>Contact</p>
+              <a href='mailto:support@yggchat.com' className='text-lg font-semibold text-[#0052FF]'>
+                support@yggchat.com
+              </a>
             </div>
           </div>
 
-          <div className='bg-transparent mica rounded-2xl p-8 md:p-12'>
-            <p className='mb-8 text-lg'>
-              This Privacy Policy explains how an independent UK-based developer operating Yggchat (“we”, “Service”, or
-              the “Platform”) collects, uses, stores, and protects your personal data when you use our online chat and
-              AI messaging service. We are committed to protecting your privacy and complying with the UK General Data
-              Protection Regulation (UK GDPR) and other applicable data protection laws. By using the Service, you
-              consent to the practices described here.
-            </p>
-            <p className='mb-8 text-lg'>
-              If you do not agree, please do not use the Service. For questions, contact support@yggchat.com. This
-              Policy forms part of our{' '}
-              <a href='/terms' className='text-blue-600 dark:text-blue-400 hover:underline'>
-                Terms of Service
-              </a>
-              .
-            </p>
-
-            <hr className='border-neutral-400 dark:border-neutral-600 my-8' />
-
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>1. Information We Collect</h2>
-              <p className='mb-4 text-lg'>
-                We collect the minimum data necessary to provide and improve the Service. Types of data include:
+          <div className='px-6 py-8 space-y-8 text-zinc-700 dark:text-zinc-300'>
+            <section className='space-y-3'>
+              <p>
+                This Privacy Policy explains how an independent UK-based developer operating Yggchat (“we”, “Service”,
+                or the “Platform”) collects, uses, stores, and protects your personal data when you use our online chat
+                and AI messaging service. We are committed to protecting your privacy and complying with the UK General
+                Data Protection Regulation (UK GDPR) and other applicable data protection laws.
               </p>
-              <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
+              <p>
+                If you do not agree, please do not use the Service. For questions, contact support@yggchat.com. This
+                Policy forms part of our{' '}
+                <Link to='/terms' className='underline hover:text-[#0052FF]'>
+                  Terms of Service
+                </Link>
+                .
+              </p>
+            </section>
+
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>1. Information We Collect</h2>
+              <p>We collect the minimum data necessary to provide and improve the Service. Types of data include:</p>
+              <ul className='list-disc ml-6 space-y-2'>
                 <li>
-                  <strong>Account and Profile Data</strong>: Email address, username, password (hashed), and age
-                  verification (to confirm 18+ eligibility).
+                  <strong>Account and Profile Data</strong>: Email address and username.
                 </li>
                 <li>
                   <strong>Usage and Content Data</strong>: Chat messages, AI interactions, and user-generated content
-                  you create or share. This is stored to enable platform functionality.
+                  you create or share <strong>only in cloud mode</strong>. This is stored to enable platform
+                  functionality. We collect no chat or AI interaction related information when the project is in
+                  <strong> Local Mode</strong>.
                 </li>
                 <li>
                   <strong>Payment Data</strong>: If you subscribe, billing details (e.g., name, email) via Stripe. We do
@@ -79,20 +97,21 @@ const PrivacyPolicy: React.FC = () => {
                 </li>
                 <li>
                   <strong>PC app Data (Desktop Feature)</strong>: In the <strong>PC app</strong>, enabling{' '}
-                  <strong>Privacy Mode</strong> allows chats and AI data to be collected and processed only on your
-                  device (locally stored). No data from the PC app in Privacy Mode is sent to our servers, which
-                  enhances privacy.
+                  <strong>Local Mode</strong> allows chats and AI data to be collected and processed only on your
+                  <strong> device (locally stored)</strong>. No data from the PC app in Local Mode is sent to our
+                  servers, which enhances privacy. When creating a project, select storage location as{' '}
+                  <strong>Local Only</strong>.
                 </li>
               </ul>
-              <p className='mb-4 text-lg'>
+              <p>
                 We do <strong>not</strong> intentionally collect sensitive personal data (e.g., health, political views)
                 unless you voluntarily share it in chats (which we advise against).
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>2. How We Collect Data</h2>
-              <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>2. How We Collect Data</h2>
+              <ul className='list-disc ml-6 space-y-2'>
                 <li>
                   <strong>Directly from You</strong>: During account creation, subscriptions, or chats.
                 </li>
@@ -105,16 +124,16 @@ const PrivacyPolicy: React.FC = () => {
                   Google Analytics if used—see Section 6). We do not buy or receive data from advertisers.
                 </li>
               </ul>
-              <p className='mb-4 text-lg'>
+              <p>
                 In the PC app with Privacy Mode enabled, data collection is device-local only—no server transmission
                 occurs unless you explicitly sync or export it.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>3. How We Use Your Data</h2>
-              <p className='mb-4 text-lg'>We use data solely to:</p>
-              <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>3. How We Use Your Data</h2>
+              <p>We use data solely to:</p>
+              <ul className='list-disc ml-6 space-y-2'>
                 <li>Provide and maintain the Service (e.g., hosting chats, AI responses).</li>
                 <li>Process payments and subscriptions (via Stripe).</li>
                 <li>Improve the platform (e.g., anonymized analytics for bug fixes and performance).</li>
@@ -122,16 +141,16 @@ const PrivacyPolicy: React.FC = () => {
                 <li>Ensure compliance (e.g., age checks, fraud detection).</li>
                 <li>Enforce our Terms (e.g., moderating prohibited content).</li>
               </ul>
-              <p className='mb-4 text-lg'>
+              <p>
                 Data is retained only as long as necessary for these purposes or until you delete your account (see
                 Section 5). In the PC app with Privacy Mode, local data is managed by you and is not retained by us
                 beyond what is necessary for any optional sync features you enable.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>4. Data Storage and Security</h2>
-              <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>4. Data Storage and Security</h2>
+              <ul className='list-disc ml-6 space-y-2'>
                 <li>
                   <strong>Storage Duration</strong>: We store your data until you delete your account or request erasure
                   (subject to legal retention, e.g., 6 years for billing under UK tax law). Upon deletion, all
@@ -150,20 +169,20 @@ const PrivacyPolicy: React.FC = () => {
                   only.
                 </li>
               </ul>
-              <p className='mb-4 text-lg'>
+              <p>
                 We store data primarily in the UK/EU (e.g., secure cloud providers compliant with GDPR adequacy).
                 Transfers outside (e.g., to US-based Stripe) rely on appropriate safeguards such as Standard Contractual
                 Clauses.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>5. Your Data Rights (GDPR)</h2>
-              <p className='mb-4 text-lg'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>5. Your Data Rights (GDPR)</h2>
+              <p>
                 Under UK GDPR, you have rights regarding your data. Email support@yggchat.com to exercise them—we
                 respond within 1 month (free, unless requests are excessive or repetitive):
               </p>
-              <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
+              <ul className='list-disc ml-6 space-y-2'>
                 <li>
                   <strong>Access</strong>: Request a copy of your data.
                 </li>
@@ -186,22 +205,22 @@ const PrivacyPolicy: React.FC = () => {
                   withdraw it at any time.
                 </li>
               </ul>
-              <p className='mb-4 text-lg'>
-                For account deletion: Log in &gt; Settings &gt; Delete Account (where available) or contact support.
-                This revokes access and erases server-side data. PC app data must be removed by you locally.
+              <p>
+                For account deletion: Log in &gt; Settings &gt; Delete Account (where available) or contact support. This
+                revokes access and erases server-side data. PC app data must be removed by you locally.
               </p>
-              <p className='mb-4 text-lg'>
-                If you are unhappy with our handling of your data, you can complain to the UK Information Commissioner's
-                Office (ICO) at ico.org.uk.
+              <p>
+                If you are unhappy with our handling of your data, you can complain to the UK Information
+                Commissioner's Office (ICO) at ico.org.uk.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>6. Sharing Your Data</h2>
-              <p className='mb-4 text-lg'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>6. Sharing Your Data</h2>
+              <p>
                 We do <strong>not</strong> sell your data. We share it only with:
               </p>
-              <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
+              <ul className='list-disc ml-6 space-y-2'>
                 <li>
                   <strong>Service Providers</strong>: Stripe (for payments), cloud hosting providers, and analytics or
                   error-reporting services (for aggregated or pseudonymised insights). All are required to follow data
@@ -216,16 +235,16 @@ const PrivacyPolicy: React.FC = () => {
                   may transfer to a successor entity, with notice given.
                 </li>
               </ul>
-              <p className='mb-4 text-lg'>
+              <p>
                 In the PC app with Privacy Mode, data is not shared with us or third parties unless you choose to sync
                 or export it.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>7. Cookies and Tracking</h2>
-              <p className='mb-4 text-lg'>We use:</p>
-              <ul className='list-disc ml-6 mb-4 text-lg space-y-2'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>7. Cookies and Tracking</h2>
+              <p>We use:</p>
+              <ul className='list-disc ml-6 space-y-2'>
                 <li>
                   <strong>Essential Cookies</strong>: Needed for login, security, and core functionality.
                 </li>
@@ -234,98 +253,79 @@ const PrivacyPolicy: React.FC = () => {
                   permitted and, if needed, with your consent).
                 </li>
               </ul>
-              <p className='mb-4 text-lg'>
+              <p>
                 You can manage cookies in your browser or device settings. For more details, contact
                 support@yggchat.com.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>8. Children's Privacy</h2>
-              <p className='mb-4 text-lg'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>8. Children's Privacy</h2>
+              <p>
                 The Service is intended for users <strong>18+</strong>. We do not knowingly collect data from anyone
                 under 18. If we learn that we have collected such data, we will delete it as soon as reasonably
                 possible.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>9. International Users</h2>
-              <p className='mb-4 text-lg'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>9. International Users</h2>
+              <p>
                 Your data may be processed in the UK or other countries with adequate protections (e.g., EU/EEA) or
                 under appropriate safeguards (e.g., Standard Contractual Clauses for transfers to the US).
               </p>
-              <p className='mb-4 text-lg'>
+              <p>
                 We apply UK GDPR standards regardless of where you are located and will try to respect additional local
                 rights where relevant.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>10. Changes to This Policy</h2>
-              <p className='mb-4 text-lg'>We may update this Privacy Policy from time to time.</p>
-              <p className='mb-4 text-lg'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>10. Changes to This Policy</h2>
+              <p>We may update this Privacy Policy from time to time.</p>
+              <p>
                 The current version is always available at:{' '}
-                <a href='https://yggchat.com/privacy' className='text-blue-600 dark:text-blue-400 hover:underline'>
+                <a href='https://yggchat.com/privacy' className='underline hover:text-[#0052FF]'>
                   https://yggchat.com/privacy
                 </a>
               </p>
-              <p className='mb-4 text-lg'>
+              <p>
                 If we make material changes, we will notify you by email or via prominent notice in the Service.
                 Continued use after changes means you accept the updated Policy.
               </p>
             </section>
 
-            <section className='mb-8'>
-              <h2 className='text-2xl font-bold mb-4'>11. Contact</h2>
-              <p className='mb-4 text-lg'>
+            <section className='space-y-3'>
+              <h2 className='text-xl font-bold text-zinc-900 dark:text-white'>11. Contact</h2>
+              <p>
                 For privacy questions, data requests, or concerns, contact:
                 <br />
                 <strong>Email:</strong> support@yggchat.com
               </p>
-              <p className='mb-4 text-lg'>
+              <p>
                 We aim to respond within <strong>5 business days</strong>. For unresolved issues relating to UK GDPR,
                 you may contact the ICO.
               </p>
             </section>
           </div>
-        </div>
-      </div>
-      <footer className='relative z-10 w-full border-t border-white/10 bg-neutral-900/30 backdrop-blur-md font-sans'>
-        <div className='max-w-[1400px] mx-auto px-6 py-4 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs'>
-          {/* LEFT SIDE: Copyright + Business Info (Merged perfectly) */}
-          <div className='flex flex-col md:flex-row items-center gap-2 md:gap-4 text-center md:text-left'>
-            {/* Copyright */}
-            <span className='text-neutral-300 font-medium'>© {new Date().getFullYear()} Yggchat</span>
-            {/* Desktop Divider */}
-            <span className='hidden md:block text-white/10 h-3 border-l border-white/10'></span>
+        </section>
 
-            {/* Business Details - Subtle & Horizontal */}
-            <div className='flex flex-wrap justify-center md:justify-start gap-x-3 text-neutral-500'>
-              <span>[Karanraj Singh] t/a Yggchat.com</span>
-              <span className='hidden sm:inline'>•</span>
-              <span>[225, Whittock Road, Bristol, BS14 8DB]</span>
-              <span className='hidden sm:inline'>•</span>
-              <a href='mailto:support@yggchat.com' className='hover:text-neutral-300 transition-colors'>
-                support@yggchat.com
-              </a>
-            </div>
+        <section className='max-w-5xl mx-auto mt-10 border-2 border-zinc-200 dark:border-zinc-900 bg-white/80 dark:bg-zinc-950/70 backdrop-blur-sm px-6 py-6'>
+          <p className='mono text-[10px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400 mb-2'>Need help?</p>
+          <div className='flex flex-wrap items-center justify-between gap-4'>
+            <p className='text-sm text-zinc-600 dark:text-zinc-300'>
+              If you have questions about privacy, contact our team.
+            </p>
+            <a
+              href='mailto:support@yggchat.com'
+              className='inline-flex items-center gap-2 border-2 border-[#0052FF] px-4 py-2 text-xs font-bold uppercase tracking-[0.25em] text-[#0052FF] hover:bg-[#0052FF] hover:text-white transition-colors'
+            >
+              Support
+              <i className='bx bx-right-arrow-alt text-lg'></i>
+            </a>
           </div>
-
-          {/* RIGHT SIDE: Legal Links (Using proper Link tags for Stripe bots) */}
-          <div className='flex items-center gap-6 text-neutral-400'>
-            <Link to='/terms' className='hover:text-white transition-colors'>
-              Terms
-            </Link>
-            <Link to='/privacy' className='hover:text-white transition-colors'>
-              Privacy
-            </Link>
-            <Link to='/refund-policy' className='hover:text-white transition-colors'>
-              Refunds
-            </Link>
-          </div>
-        </div>
-      </footer>
+        </section>
+      </main>
     </div>
   )
 }

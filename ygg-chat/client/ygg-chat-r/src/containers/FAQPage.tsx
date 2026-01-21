@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button } from '../components/Button/button'
 
 interface FaqItem {
   question: string
@@ -35,7 +34,7 @@ const FAQPage: React.FC = () => {
           {
             question: 'Who is Yggdrasil built for?',
             answer: [
-              'Developers, researchers, enterprises, and power users who need rigorous control over context, branching, and models.',
+              'Everyone, office work, developers, hobbyists, researchers, enterprises, and power users who need rigorous control over context, branching, and models.',
             ],
           },
           {
@@ -301,6 +300,15 @@ const FAQPage: React.FC = () => {
     })
     return initial
   })
+  const [openItems, setOpenItems] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {}
+    sections.forEach(section => {
+      section.items.forEach(item => {
+        initial[`${section.title}::${item.question}`] = true
+      })
+    })
+    return initial
+  })
   const [search, setSearch] = useState('')
 
   const filteredSections = useMemo(() => {
@@ -320,101 +328,164 @@ const FAQPage: React.FC = () => {
     setOpenSections(prev => ({ ...prev, [title]: !prev[title] }))
   }
 
+  const toggleItem = (key: string) => {
+    setOpenItems(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
   return (
-    <div className='h-full overflow-y-auto min-h-screen w-full text-gray-900 dark:text-gray-100'>
-      <header className='sticky top-0 z-30 flex items-center justify-between px-6 sm:px-8 py-3 bg-transparent dark:bg-transparent backdrop-blur-sm'>
-        <div className='flex items-center gap-3'>
-          <Link to='/' className='text-white font-semibold tracking-wide text-lg hover:text-gray-200'>
-            ← Back
-          </Link>
+    <div className='relative h-full min-h-screen w-full overflow-y-auto bg-white text-zinc-900 dark:bg-black dark:text-white'>
+      <div className='pointer-events-none absolute inset-0 opacity-80'>
+        <div className='absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(0,82,255,0.12),_transparent_55%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(0,82,255,0.2),_transparent_55%)]' />
+        <div className='absolute inset-0 bg-[linear-gradient(to_right,rgba(24,24,27,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(24,24,27,0.08)_1px,transparent_1px)] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-[size:80px_80px]' />
+      </div>
+
+      <header className='relative z-10 flex flex-wrap items-center justify-between gap-4 px-6 md:px-12 py-6 border-b border-zinc-200 dark:border-zinc-900'>
+        <Link
+          to='/'
+          className='mono text-[18px] tracking-[0.4em] text-white bg-zinc-900 px-3 py-2 uppercase hover:bg-zinc-800 hover:text-white/90 transition-colors'
+        >
+          ← Back
+        </Link>
+        <div className='flex items-center gap-3 text-[20px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+          <span className='mono'>Support Node</span>
+          <span className='hidden sm:inline'>/</span>
+          <span className='mono'>FAQ</span>
         </div>
-        <div className='flex items-center gap-2'>
-          <Link to='/login'>
-            <Button variant='outline2' size='large' className='hover:scale-105 text-white hover:bg-neutral-200/40'>
-              Login
-            </Button>
-          </Link>
-        </div>
+        <Link
+          to='/login'
+          className='border-2 border-zinc-900 dark:border-white bg-zinc-900 px-4 py-2 text-xs font-bold uppercase tracking-[0.25em] text-white hover:bg-zinc-800 hover:border-zinc-800 dark:hover:border-white transition-colors'
+        >
+          Sign In
+        </Link>
       </header>
 
-      <section className='max-w-6xl rounded-4xl acrylic mx-4 md:mx-6 lg:mx-auto px-4 sm:px-8 pt-16 pb-8 my-12'>
-        <p className='text-sm uppercase tracking-[0.2em] text-gray-800 dark:text-gray-300 mb-2'>Support</p>
-        <h1 className='text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-6'>Yggdrasil FAQ</h1>
-        <p className='text-lg text-gray-700 dark:text-gray-200 max-w-3xl mb-6'>
-          Answers to how branching, context control, agentic execution, and model routing work in Yggdrasil.
-        </p>
-        <div className='flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between'>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder='Search questions...'
-            className='w-full sm:w-2/3 px-4 py-3 rounded-xl bg-white/80 dark:bg-yBlack-700 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-white/10 focus:outline-none focus:ring-2 focus:ring-amber-400'
-          />
-          <div className='flex items-center gap-3 text-sm text-gray-600 dark:text-gray-300'>
-            <span>Still need help?</span>
-            <a
-              href='mailto:support@yggchat.com'
-              className='px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-400 transition'
-            >
-              Contact Support
-            </a>
-          </div>
-        </div>
-      </section>
+      <main className='relative z-10 px-6 md:px-12 pb-24'>
+        <section className='max-w-6xl mx-auto pt-16 md:pt-24'>
+          <span className='mono text-[#0052FF] font-bold tracking-widest uppercase text-[16px]'>[ Support Index ]</span>
+          <h1 className='text-5xl md:text-7xl font-black tracking-tighter mt-4'>FAQ NODE</h1>
+          <p className='mt-6 text-xl text-zinc-600 dark:text-zinc-300 max-w-3xl leading-relaxed'>
+            Direct answers to branching, context control, agentic execution, and routing. Search the knowledge base or
+            open a section to drill into operational detail.
+          </p>
 
-      <section className='max-w-6xl rounded-4xl acrylic-light mx-4 md:mx-6 lg:mx-auto px-4 sm:px-6 md:px-8 lg:px-10 pt-16 pb-8 my-12'>
-        <div className='space-y-6'>
+          <div className='mt-10 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-6'>
+            <div className='flex flex-col gap-3'>
+              <label className='mono text-[18px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+                Search the index
+              </label>
+              <div className='flex items-center gap-3 border-2 border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-black/60 px-4 py-3'>
+                <i className='bx bx-search text-zinc-400 text-lg' aria-hidden='true'></i>
+                <input
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder='Search questions...'
+                  className='w-full bg-transparent text-base text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none'
+                />
+              </div>
+            </div>
+
+            <div className='border-2 border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/70 px-6 py-6'>
+              <p className=' text-[16px] font-semibold uppercase tracking-[0.3em] text-[#0052FF] mb-4'>
+                Priority Support
+              </p>
+              <p className='text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed'>
+                If your question is not covered, route to the support channel and we will respond.
+              </p>
+              <a
+                href='mailto:support@yggchat.com'
+                className='mt-6 inline-flex items-center gap-2 border-2 border-[#0052FF] px-4 py-2 text-xs font-bold uppercase tracking-[0.25em] text-[#0052FF] hover:bg-[#0052FF] hover:text-white transition-colors'
+              >
+                Contact
+                <i className='bx bx-right-arrow-alt text-lg'></i>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section className='max-w-6xl mx-auto mt-12 space-y-8'>
           {filteredSections.map(section => (
             <div
               key={section.title}
-              className='rounded-2xl border border-gray-200/60 dark:border-white/10 bg-white/70 dark:bg-yBlack-800/70 shadow-lg backdrop-blur'
+              className='border-2 border-zinc-200 dark:border-zinc-900 bg-white/80 dark:bg-zinc-950/70 backdrop-blur-sm'
             >
               <button
                 onClick={() => toggleSection(section.title)}
-                className='w-full flex items-center justify-between px-6 pt-6 pb-4 text-left'
+                className='w-full flex flex-wrap items-center justify-between gap-4 px-6 py-6 text-left'
               >
-                <div>
-                  <p className='text-lg uppercase tracking-[0.15em] text-blue-600 dark:text-blue-400'>
-                    {section.title}
-                  </p>
+                <div className='flex items-center gap-4'>
+                  <div className='w-1.5 h-10 bg-[#0052FF]' />
+                  <div>
+                    <p className='mono text-[14px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+                      Section
+                    </p>
+                    <h2 className='text-xl md:text-2xl font-black uppercase tracking-tight'>{section.title}</h2>
+                  </div>
                 </div>
-                <i
-                  className={`bx bx-chevron-${openSections[section.title] ? 'up' : 'down'} text-3xl text-gray-700 dark:text-gray-200`}
-                ></i>
+                <div className='flex items-center gap-4 text-[14px] uppercase tracking-[0.3em] text-zinc-500 dark:text-zinc-400'>
+                  <span>{section.items.length} entries</span>
+                  <i
+                    className={`bx bx-chevron-${openSections[section.title] ? 'up' : 'down'} text-2xl text-zinc-500 dark:text-zinc-300`}
+                  ></i>
+                </div>
               </button>
 
               <div
-                className={`px-6 pb-6 divide-y divide-gray-200/60 dark:divide-white/10 overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
-                  openSections[section.title] ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+                className={`px-6 pb-6 border-t border-zinc-200/70 dark:border-zinc-800/70 overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
+                  openSections[section.title] ? 'max-h-[2400px] opacity-100' : 'max-h-0 opacity-0'
                 }`}
                 aria-hidden={!openSections[section.title]}
               >
-                <div className={openSections[section.title] ? 'pt-6' : 'pt-0'}>
-                  {section.items.map(item => (
-                    <details key={item.question} open className='group py-4'>
-                      <summary className='cursor-pointer text-lg font-semibold text-gray-900 dark:text-white flex items-start justify-between gap-4'>
-                        <span>{item.question}</span>
-                        <i className='bx bx-chevron-down text-xl text-gray-500 group-open:rotate-180 transition-transform duration-200'></i>
-                      </summary>
-                      <div className='mt-3 space-y-2 text-gray-700 dark:text-gray-300 leading-relaxed'>
-                        {item.answer.map((line, idx) => (
-                          <p key={idx}>{line}</p>
-                        ))}
+                <div className={openSections[section.title] ? 'pt-6 space-y-6' : 'pt-0'}>
+                  {section.items.map((item, itemIndex) => {
+                    const itemKey = `${section.title}::${item.question}`
+                    const isOpen = openItems[itemKey] ?? true
+                    const itemId = `faq-item-${section.title.replace(/\\s+/g, '-').toLowerCase()}-${itemIndex}`
+
+                    return (
+                      <div key={item.question} className='border-b border-zinc-200/70 dark:border-zinc-800/70 pb-6'>
+                        <button
+                          type='button'
+                          onClick={() => toggleItem(itemKey)}
+                          aria-expanded={isOpen}
+                          aria-controls={itemId}
+                          className='w-full text-left text-lg md:text-xl font-semibold text-zinc-900 dark:text-white flex items-start justify-between gap-4 transition-colors'
+                        >
+                          <span>{item.question}</span>
+                          <i
+                            className={`bx bx-chevron-down text-xl text-zinc-500 transition-transform duration-200 ${
+                              isOpen ? 'rotate-180' : ''
+                            }`}
+                          ></i>
+                        </button>
+                        <div
+                          id={itemId}
+                          className={`grid grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                            isOpen ? 'grid-rows-[1fr] opacity-100' : ''
+                          }`}
+                        >
+                          <div className='min-h-0 overflow-hidden'>
+                            <div className='mt-3 space-y-2 text-zinc-600 dark:text-zinc-300 leading-relaxed'>
+                              {item.answer.map((line, idx) => (
+                                <p key={idx}>{line}</p>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </details>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </div>
           ))}
 
           {filteredSections.length === 0 && (
-            <div className='text-center text-gray-600 dark:text-gray-300 py-12 rounded-2xl border border-dashed border-gray-300 dark:border-white/20'>
+            <div className='text-center text-zinc-500 dark:text-zinc-400 py-12 border-2 border-dashed border-zinc-300 dark:border-zinc-800'>
               No results. Try another keyword.
             </div>
           )}
-        </div>
-      </section>
+        </section>
+      </main>
     </div>
   )
 }
