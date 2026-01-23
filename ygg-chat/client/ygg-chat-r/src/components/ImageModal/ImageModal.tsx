@@ -1,6 +1,7 @@
 import 'boxicons'
 import 'boxicons/css/boxicons.min.css'
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '../Button/button'
 
 interface ImageModalProps {
@@ -12,7 +13,9 @@ interface ImageModalProps {
 export const ImageModal: React.FC<ImageModalProps> = ({ isOpen, imageUrl, onClose }) => {
   if (!isOpen || !imageUrl) return null
 
-  return (
+  // Use portal to render at document body level, escaping any transform containers
+  // that would otherwise constrain the fixed positioning
+  return createPortal(
     <div
       role='dialog'
       aria-modal='true'
@@ -39,7 +42,8 @@ export const ImageModal: React.FC<ImageModalProps> = ({ isOpen, imageUrl, onClos
           className='max-h-[90vh] w-full rounded-2xl border-2  border-neutral-200/60 dark:border-neutral-700 bg-black/80 object-contain shadow-[0_10px_30px_rgba(0,0,0,0.45)]'
         />
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

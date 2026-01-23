@@ -29,7 +29,7 @@ import {
   SendButtonLoadingAnimation,
 } from '../components/SettingsPane/SendButtonAnimationSettings'
 import {
-  abortStreaming,
+  abortGeneration,
   blobToDataURL,
   chatSliceActions,
   deleteMessage,
@@ -188,6 +188,7 @@ function Chat() {
   // Derived streamState object for compatibility (combines current view stream data)
   const streamState = useMemo(
     () => ({
+      id: currentViewStream?.id ?? null,
       active: currentViewStream?.active ?? false,
       buffer: currentViewStream?.buffer ?? '',
       thinkingBuffer: currentViewStream?.thinkingBuffer ?? '',
@@ -1831,11 +1832,15 @@ function Chat() {
   )
 
   const handleStopGeneration = useCallback(() => {
-    // Stop the current view's stream
-    if (streamState.streamingMessageId) {
-      dispatch(abortStreaming({ messageId: streamState.streamingMessageId }))
-    }
-  }, [streamState.streamingMessageId, dispatch])
+    if (!streamState.id && !streamState.streamingMessageId) return
+
+    dispatch(
+      abortGeneration({
+        streamId: streamState.id,
+        messageId: streamState.streamingMessageId,
+      })
+    )
+  }, [streamState.id, streamState.streamingMessageId, dispatch])
 
   const handleMessageEdit = useCallback(
     (id: string, newContent: string, newContentBlocks?: any) => {

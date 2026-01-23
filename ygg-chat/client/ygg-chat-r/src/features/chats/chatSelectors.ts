@@ -272,20 +272,25 @@ export const selectFocusedChatMessageId = createSelector(
 export const selectDisplayMessages = createSelector(
   [selectConversationMessages, selectCurrentPath],
   (messages, currentPath) => {
+    // Never display ex_agent messages in the chat list
+    const displayableMessages = messages.filter(message => message.role !== 'ex_agent')
+
     if (Array.isArray(currentPath) && currentPath.length > 0) {
-      const byId = new Map(messages.map(m => [m.id, m]))
-      const selected = currentPath.map(id => byId.get(id)).filter((m): m is (typeof messages)[number] => Boolean(m))
+      const byId = new Map(displayableMessages.map(m => [m.id, m]))
+      const selected = currentPath
+        .map(id => byId.get(id))
+        .filter((m): m is (typeof displayableMessages)[number] => Boolean(m))
       if (selected.length > 0) return selected
 
       const pathSet = new Set(currentPath)
-      const filtered = messages.filter(m => pathSet.has(m.id))
+      const filtered = displayableMessages.filter(m => pathSet.has(m.id))
       if (filtered.length > 0) {
         return filtered.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       }
     }
 
-    const unique = new Map<MessageId, (typeof messages)[number]>()
-    for (const m of messages) if (!unique.has(m.id)) unique.set(m.id, m)
+    const unique = new Map<MessageId, (typeof displayableMessages)[number]>()
+    for (const m of displayableMessages) if (!unique.has(m.id)) unique.set(m.id, m)
     return [...unique.values()].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
   }
 )

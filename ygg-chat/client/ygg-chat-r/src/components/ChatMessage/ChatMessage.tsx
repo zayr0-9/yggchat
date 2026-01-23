@@ -66,6 +66,9 @@ interface MessageActionsProps {
   onBranch?: () => void
   onDelete?: () => void
   onCopy?: () => void
+  onCopySelection?: () => void
+  onExplainSelection?: (position?: { x: number; y: number }) => void
+  onAddToNoteSelection?: () => void
   onResend?: () => void
   onSave?: () => void
   onCancel?: () => void
@@ -76,6 +79,8 @@ interface MessageActionsProps {
   copied?: boolean
   modelName?: string
   isVisible?: boolean
+  variant?: 'default' | 'selection'
+  layout?: 'pill' | 'menu'
 }
 
 const MessageActions: React.FC<MessageActionsProps> = ({
@@ -83,6 +88,9 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   onBranch,
   onDelete,
   onCopy,
+  onCopySelection,
+  onExplainSelection,
+  onAddToNoteSelection,
   // onResend - hidden from UI
   onSave,
   onCancel,
@@ -93,18 +101,38 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   copied = false,
   modelName,
   isVisible = false,
+  variant = 'default',
+  layout = 'pill',
 }) => {
+  const isSelectionVariant = variant === 'selection'
+  const isMenuLayout = layout === 'menu'
+  const showLabels = isMenuLayout
+  const containerClassName = isMenuLayout
+    ? 'flex flex-col items-stretch bg-neutral-100/90 dark:bg-neutral-900/90 backdrop-blur-xl border border-neutral-200/70 dark:border-white/[0.08] rounded-2xl p-1 gap-1 shadow-[0_12px_30px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_12px_30px_-10px_rgba(0,0,0,0.55)]'
+    : 'inline-flex items-center bg-neutral-100/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/50 dark:border-white/[0.08] rounded-full p-0 gap-0.5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]'
+  const baseButtonClassName = isMenuLayout
+    ? 'flex items-center gap-2 px-3 py-2 rounded-xl bg-transparent border-none cursor-pointer transition-all duration-200'
+    : 'p-2 rounded-full bg-transparent border-none cursor-pointer transition-all duration-200'
+
   return (
     <div
-      className={`inline-flex items-center bg-neutral-100/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/50 dark:border-white/[0.08] rounded-full p-0 gap-0.5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+      className={`${containerClassName} transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
         isVisible
           ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
           : 'opacity-0 translate-y-2 scale-[0.98] pointer-events-none'
       }`}
     >
       {/* Model ID Badge */}
-      {modelName && !isEditing && (
-        <div className='font-mono text-[10px] text-neutral-500 dark:text-neutral-400 tracking-wider px-3 border-r border-neutral-200 dark:border-white/[0.08] uppercase'>
+      {modelName && !isEditing && !isSelectionVariant && (
+        <div
+          className={`font-mono text-[10px] text-neutral-500 dark:text-neutral-400 tracking-wider uppercase ${
+            isMenuLayout ? 'px-3 py-2' : 'px-3'
+          } ${
+            isMenuLayout
+              ? 'border-b border-neutral-200 dark:border-white/[0.08]'
+              : 'border-r border-neutral-200 dark:border-white/[0.08]'
+          }`}
+        >
           {(() => {
             const displayName = modelName.includes('/') ? modelName.split('/').pop() || modelName : modelName
             return displayName.length > 20 ? displayName.slice(0, 20) + '...' : displayName
@@ -135,122 +163,214 @@ const MessageActions: React.FC<MessageActionsProps> = ({
         </>
       ) : (
         <>
-          {/* Copy Button */}
-          <button
-            onClick={onCopy}
-            className={`p-2 rounded-full bg-transparent border-none cursor-pointer transition-all duration-200 ${
-              copied
-                ? 'text-green-500'
-                : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
-            }`}
-            title={copied ? 'Copied' : 'Copy Content'}
-          >
-            {copied ? (
-              <svg
-                className='w-[15px] h-[15px]'
-                strokeWidth='1.8'
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
-              >
-                <path strokeLinecap='round' strokeLinejoin='round' d='M5 13l4 4L19 7' />
-              </svg>
-            ) : (
-              <svg
-                className='w-[15px] h-[15px]'
-                strokeWidth='1.8'
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
-              >
-                <path d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z' />
-              </svg>
-            )}
-          </button>
+          {isSelectionVariant ? (
+            <>
+              {onCopySelection && (
+                <button
+                  onClick={onCopySelection}
+                  className={`${baseButtonClassName} ${
+                    copied
+                      ? 'text-green-500'
+                      : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
+                  }`}
+                  title={copied ? 'Copied' : 'Copy selection'}
+                >
+                  {copied ? (
+                    <svg
+                      className='w-[15px] h-[15px]'
+                      strokeWidth='1.8'
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                    >
+                      <path strokeLinecap='round' strokeLinejoin='round' d='M5 13l4 4L19 7' />
+                    </svg>
+                  ) : (
+                    <svg
+                      className='w-[15px] h-[15px]'
+                      strokeWidth='1.8'
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                    >
+                      <path d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z' />
+                    </svg>
+                  )}
+                  {showLabels && <span className='text-sm'>Copy selection</span>}
+                </button>
+              )}
 
-          {/* Edit Button */}
-          {onEdit && (
-            <button
-              onClick={onEdit}
-              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200 transition-all duration-200'
-              title='Edit Prompt'
-            >
-              <svg
-                className='w-[15px] h-[15px]'
-                strokeWidth='1.8'
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
+              {onExplainSelection && (
+                <button
+                  onClick={event => onExplainSelection({ x: event.clientX, y: event.clientY })}
+                  className={`${baseButtonClassName} text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-blue-500`}
+                  title='Explain selection'
+                >
+                  <svg
+                    className='w-[15px] h-[15px]'
+                    strokeWidth='1.8'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M12 21a9 9 0 100-18 9 9 0 000 18z' />
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M9.5 9a2.5 2.5 0 115 0c0 2-2.5 2-2.5 4' />
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M12 17h.01' />
+                  </svg>
+                  {showLabels && <span className='text-sm'>Explain selection</span>}
+                </button>
+              )}
+
+              {onAddToNoteSelection && (
+                <button
+                  onClick={onAddToNoteSelection}
+                  className={`${baseButtonClassName} text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-amber-500`}
+                  title='Add selection to note'
+                >
+                  <svg
+                    className='w-[15px] h-[15px]'
+                    strokeWidth='1.8'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      d='M7 3h7l5 5v13a1 1 0 01-1 1H7a2 2 0 01-2-2V5a2 2 0 012-2z'
+                    />
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M14 3v6h6' />
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M8 13h8M8 17h5' />
+                  </svg>
+                  {showLabels && <span className='text-sm'>Add to note</span>}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Copy Button */}
+              <button
+                onClick={onCopy}
+                className={`${baseButtonClassName} ${
+                  copied
+                    ? 'text-green-500'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
+                }`}
+                title={copied ? 'Copied' : 'Copy Content'}
               >
-                <path d='M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' />
-              </svg>
-            </button>
-          )}
+                {copied ? (
+                  <svg
+                    className='w-[15px] h-[15px]'
+                    strokeWidth='1.8'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path strokeLinecap='round' strokeLinejoin='round' d='M5 13l4 4L19 7' />
+                  </svg>
+                ) : (
+                  <svg
+                    className='w-[15px] h-[15px]'
+                    strokeWidth='1.8'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z' />
+                  </svg>
+                )}
+                {showLabels && <span className='text-sm'>Copy</span>}
+              </button>
 
-          {/* Branch Button */}
-          {onBranch && (
-            <button
-              onClick={onBranch}
-              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-green-500 transition-all duration-200'
-              title='Branch message'
-            >
-              <svg
-                className='w-[15px] h-[15px]'
-                strokeWidth='1.8'
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
-              >
-                <path
-                  strokeLinecap='round'
-                  strokeLinejoin='round'
-                  d='M6 4v8a4 4 0 004 4h4M6 8a2 2 0 100-4 2 2 0 000 4zm8 8a2 2 0 100-4 2 2 0 000 4z'
-                />
-              </svg>
-            </button>
-          )}
+              {/* Edit Button */}
+              {onEdit && (
+                <button
+                  onClick={onEdit}
+                  className={`${baseButtonClassName} text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200`}
+                  title='Edit Prompt'
+                >
+                  <svg
+                    className='w-[15px] h-[15px]'
+                    strokeWidth='1.8'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path d='M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z' />
+                  </svg>
+                  {showLabels && <span className='text-sm'>Edit</span>}
+                </button>
+              )}
 
-          {/* Regenerate Button - currently hidden per user request */}
-          {/* {onResend && (
-            <button
-              onClick={onResend}
-              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-blue-500 transition-all duration-200'
-              title='Regenerate Response'
-            >
-              <svg className='w-[15px] h-[15px]' strokeWidth='1.8' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-              </svg>
-            </button>
-          )} */}
+              {/* Branch Button */}
+              {onBranch && (
+                <button
+                  onClick={onBranch}
+                  className={`${baseButtonClassName} text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-green-500`}
+                  title='Branch message'
+                >
+                  <svg
+                    className='w-[15px] h-[15px]'
+                    strokeWidth='1.8'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      d='M6 4v8a4 4 0 004 4h4M6 8a2 2 0 100-4 2 2 0 000 4zm8 8a2 2 0 100-4 2 2 0 000 4z'
+                    />
+                  </svg>
+                  {showLabels && <span className='text-sm'>Branch</span>}
+                </button>
+              )}
 
-          {/* Delete Button */}
-          {onDelete && (
-            <button
-              onClick={onDelete}
-              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200'
-              title='Delete'
-            >
-              <svg
-                className='w-[15px] h-[15px]'
-                strokeWidth='1.8'
-                fill='none'
-                stroke='currentColor'
-                viewBox='0 0 24 24'
-              >
-                <path d='M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' />
-              </svg>
-            </button>
-          )}
+              {/* Regenerate Button - currently hidden per user request */}
+              {/* {onResend && (
+                <button
+                  onClick={onResend}
+                  className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-blue-500 transition-all duration-200'
+                  title='Regenerate Response'
+                >
+                  <svg className='w-[15px] h-[15px]' strokeWidth='1.8' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                    <path d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                  </svg>
+                </button>
+              )} */}
 
-          {/* More Options Button */}
-          {onMore && (
-            <button
-              onClick={onMore}
-              className='p-2 rounded-full bg-transparent border-none cursor-pointer text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200 transition-all duration-200'
-              title='More options'
-            >
-              <i className='bx bx-dots-vertical-rounded text-[15px]'></i>
-            </button>
+              {/* Delete Button */}
+              {onDelete && (
+                <button
+                  onClick={onDelete}
+                  className={`${baseButtonClassName} text-neutral-500 dark:text-neutral-400 hover:bg-red-500/10 hover:text-red-400`}
+                  title='Delete'
+                >
+                  <svg
+                    className='w-[15px] h-[15px]'
+                    strokeWidth='1.8'
+                    fill='none'
+                    stroke='currentColor'
+                    viewBox='0 0 24 24'
+                  >
+                    <path d='M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' />
+                  </svg>
+                  {showLabels && <span className='text-sm'>Delete</span>}
+                </button>
+              )}
+
+              {/* More Options Button */}
+              {onMore && (
+                <button
+                  onClick={onMore}
+                  className={`${baseButtonClassName} text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200`}
+                  title='More options'
+                >
+                  <i className='bx bx-dots-vertical-rounded text-[15px]'></i>
+                  {showLabels && <span className='text-sm'>More</span>}
+                </button>
+              )}
+            </>
           )}
         </>
       )}
@@ -956,6 +1076,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     // Hover state for message actions visibility (fixes web mode hover detection)
     const [isHovering, setIsHovering] = useState(false)
     const moreButtonRef = useRef<HTMLDivElement | null>(null)
+    const messageRef = useRef<HTMLDivElement | null>(null)
     // Context menu states (floating MessageActions)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
@@ -1147,13 +1268,22 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
       // Get selected text
       const selection = window.getSelection()
-      const text = selection?.toString().trim() || ''
+      const rawText = selection?.toString() || ''
+      const container = messageRef.current
+      const anchorNode = selection?.anchorNode ?? null
+      const focusNode = selection?.focusNode ?? null
+      const selectionInsideMessage =
+        Boolean(rawText) &&
+        Boolean(container) &&
+        Boolean((anchorNode && container?.contains(anchorNode)) || (focusNode && container?.contains(focusNode)))
+      const text = selectionInsideMessage ? rawText.trim() : ''
 
       // Store selected text for potential use
       setSelectedText(text)
       // Show floating MessageActions at click position
       setContextMenuPosition({ x: e.clientX, y: e.clientY })
       setContextMenuOpen(true)
+      explainInputPosition.current = { x: e.clientX, y: e.clientY }
     }
 
     const handleSendExplainInput = () => {
@@ -1174,6 +1304,33 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       setSelectedText('')
     }
 
+    const handleCopySelection = async () => {
+      if (!selectedText) return
+      const ok = await copyRichText(selectedText)
+      if (ok) {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      } else {
+        console.error('Failed to copy selection')
+      }
+    }
+
+    const handleExplainSelection = (position?: { x: number; y: number }) => {
+      if (!selectedText || !onExplainFromSelection) return
+      if (position) {
+        explainInputPosition.current = { ...position }
+      } else if (contextMenuPosition) {
+        explainInputPosition.current = { ...contextMenuPosition }
+      }
+      setExplainInputValue('')
+      setShowExplainInput(true)
+    }
+
+    const handleAddSelectionToNote = () => {
+      if (!selectedText || !_onAddToNote) return
+      _onAddToNote(selectedText)
+    }
+
     // Get adjusted position for explain input to avoid viewport overflow
     const getAdjustedExplainInputPosition = () => {
       if (!explainInputPosition.current || !explainInputRef.current) return explainInputPosition.current
@@ -1181,6 +1338,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const inputRect = explainInputRef.current.getBoundingClientRect()
       const viewportWidth = window.innerWidth
       const viewportHeight = window.innerHeight
+      const offset = 12
 
       // On mobile, center the input in the viewport
       if (isMobile) {
@@ -1192,15 +1350,25 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
       // On desktop, position near the cursor but adjust to avoid viewport overflow
       let { x, y } = explainInputPosition.current
+      x = x - inputRect.width / 2
 
       // Adjust horizontal position
       if (x + inputRect.width > viewportWidth) {
         x = viewportWidth - inputRect.width - 10
       }
+      if (x < 10) {
+        x = 10
+      }
 
-      // Adjust vertical position
-      if (y + inputRect.height > viewportHeight) {
-        y = viewportHeight - inputRect.height - 10
+      // Prefer showing above the click position; fall back below if needed
+      const aboveY = y - inputRect.height - offset
+      const belowY = y + offset
+      if (aboveY >= 10) {
+        y = aboveY
+      } else if (belowY + inputRect.height <= viewportHeight - 10) {
+        y = belowY
+      } else {
+        y = Math.max(10, viewportHeight - inputRect.height - 10)
       }
 
       return { x: Math.max(10, x), y: Math.max(10, y) }
@@ -1251,6 +1419,24 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
       return () => {
         document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }, [showExplainInput])
+
+    // Focus explain textarea without scrolling the virtual list
+    useEffect(() => {
+      if (!showExplainInput) return
+      const focusTimer = window.setTimeout(() => {
+        const textarea = explainInputRef.current?.querySelector('textarea') as HTMLTextAreaElement | null
+        if (!textarea) return
+        try {
+          textarea.focus({ preventScroll: true })
+        } catch {
+          textarea.focus()
+        }
+      }, 0)
+
+      return () => {
+        window.clearTimeout(focusTimer)
       }
     }, [showExplainInput])
 
@@ -1829,10 +2015,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     // Style object for text content areas that should scale with fontSizeOffset
     const textContentStyle: React.CSSProperties | undefined =
       fontSizeOffset !== 0 ? { fontSize: `calc(1em + ${fontSizeOffset}px)` } : undefined
+    const hasSelection = selectedText.length > 0
 
     return (
       <div
         id={`message-${id}`}
+        ref={messageRef}
         className={`group px-0 sm:px-2 md:px-2 mb-0 sm:mb-0 md:mb-0 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
         onContextMenu={handleContextMenu}
         onMouseEnter={() => setIsHovering(true)}
@@ -2352,6 +2540,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 copied={copied}
                 modelName={modelName}
                 isVisible={isHovering}
+                variant='default'
               />
               {/* More menu dropdown */}
               {showMoreMenu && (
@@ -2449,111 +2638,164 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 }}
               >
                 <MessageActions
-                  onEdit={() => {
-                    closeFloatingActions()
-                    handleEdit()
-                  }}
+                  onEdit={
+                    !hasSelection
+                      ? () => {
+                          closeFloatingActions()
+                          handleEdit()
+                        }
+                      : undefined
+                  }
                   onBranch={
-                    role === 'user'
+                    !hasSelection && role === 'user'
                       ? () => {
                           closeFloatingActions()
                           handleBranch()
                         }
                       : undefined
                   }
-                  onDelete={() => {
-                    closeFloatingActions()
-                    handleDelete()
-                  }}
-                  onCopy={() => {
-                    handleCopy()
-                    // Don't close on copy to show feedback
-                  }}
-                  onSave={() => {
-                    closeFloatingActions()
-                    handleSave()
-                  }}
-                  onSaveBranch={() => {
-                    closeFloatingActions()
-                    handleSaveBranch()
-                  }}
-                  onCancel={() => {
-                    closeFloatingActions()
-                    handleCancel()
-                  }}
-                  onMore={() => {
-                    closeFloatingActions()
-                    handleMoreClick()
-                  }}
+                  onDelete={
+                    !hasSelection
+                      ? () => {
+                          closeFloatingActions()
+                          handleDelete()
+                        }
+                      : undefined
+                  }
+                  onCopy={
+                    !hasSelection
+                      ? () => {
+                          handleCopy()
+                          // Don't close on copy to show feedback
+                        }
+                      : undefined
+                  }
+                  onCopySelection={
+                    hasSelection
+                      ? () => {
+                          handleCopySelection()
+                          // Don't close on copy to show feedback
+                        }
+                      : undefined
+                  }
+                  onExplainSelection={
+                    hasSelection && onExplainFromSelection
+                      ? (position?: { x: number; y: number }) => {
+                          closeFloatingActions()
+                          handleExplainSelection(position)
+                        }
+                      : undefined
+                  }
+                  onAddToNoteSelection={
+                    hasSelection && _onAddToNote
+                      ? () => {
+                          closeFloatingActions()
+                          handleAddSelectionToNote()
+                        }
+                      : undefined
+                  }
+                  onSave={
+                    !hasSelection
+                      ? () => {
+                          closeFloatingActions()
+                          handleSave()
+                        }
+                      : undefined
+                  }
+                  onSaveBranch={
+                    !hasSelection
+                      ? () => {
+                          closeFloatingActions()
+                          handleSaveBranch()
+                        }
+                      : undefined
+                  }
+                  onCancel={
+                    !hasSelection
+                      ? () => {
+                          closeFloatingActions()
+                          handleCancel()
+                        }
+                      : undefined
+                  }
+                  onMore={
+                    !hasSelection
+                      ? () => {
+                          closeFloatingActions()
+                          handleMoreClick()
+                        }
+                      : undefined
+                  }
                   isEditing={editingState}
                   editMode={editMode}
                   copied={copied}
                   modelName={modelName}
                   isVisible={true}
+                  variant={hasSelection ? 'selection' : 'default'}
+                  layout='menu'
                 />
               </motion.div>
             </AnimatePresence>,
             document.body
           )}
 
-        {/* Floating Explain Input */}
-        <AnimatePresence>
-          {showExplainInput && explainInputPosition.current && (
-            <motion.div
-              ref={explainInputRef}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.15 }}
-              className='fixed z-[10000] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 [will-change:contents] [transform:translateZ(0)]'
-              style={{
-                left: `${getAdjustedExplainInputPosition()?.x || explainInputPosition.current.x}px`,
-                top: `${getAdjustedExplainInputPosition()?.y || explainInputPosition.current.y}px`,
-              }}
-            >
-              {/* <div className='mb-2 text-sm font-medium text-gray-700 dark:text-gray-300'>
-                Ask about selected text
-              </div> */}
-              {/* Display selected text */}
-              <div className='mb-2 p-2 rounded-md bg-neutral-50 dark:bg-yBlack-800 border border-neutral-200 dark:border-neutral-700 max-h-[100px] overflow-y-auto'>
-                <div className='text-xs text-gray-600 dark:text-gray-400 italic line-clamp-4'>"{selectedText}"</div>
-              </div>
-              <TextArea
-                value={explainInputValue}
-                onChange={setExplainInputValue}
-                placeholder='Ask a question about the selected text...'
-                autoFocus
-                width='w-full'
-                minRows={1}
-                maxRows={2}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSendExplainInput()
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault()
-                    handleCancelExplainInput()
-                  }
+        {/* Floating Explain Input - use portal to escape transform container */}
+        {showExplainInput &&
+          explainInputPosition.current &&
+          createPortal(
+            <AnimatePresence>
+              <motion.div
+                ref={explainInputRef}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.15 }}
+                className='fixed z-[100000] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 [will-change:contents] [transform:translateZ(0)]'
+                style={{
+                  left: `${getAdjustedExplainInputPosition()?.x || explainInputPosition.current.x}px`,
+                  top: `${getAdjustedExplainInputPosition()?.y || explainInputPosition.current.y}px`,
                 }}
-              />
-              <div className='mt-2 flex justify-end gap-2'>
-                <button
-                  onClick={handleCancelExplainInput}
-                  className='px-3 py-1.5 text-sm rounded-md text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors'
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSendExplainInput}
-                  disabled={!explainInputValue.trim()}
-                  className='px-3 py-1.5 text-sm rounded-md bg-blue-500 hover:bg-blue-600 disabled:bg-neutral-300 disabled:cursor-not-allowed dark:disabled:bg-neutral-700 text-white transition-colors'
-                >
-                  Send
-                </button>
-              </div>
-            </motion.div>
+              >
+                {/* Display selected text */}
+                <div className='mb-2 p-2 rounded-md bg-neutral-50 dark:bg-yBlack-800 border border-neutral-200 dark:border-neutral-700 max-h-[100px] overflow-y-auto'>
+                  <div className='text-xs text-gray-600 dark:text-gray-400 italic line-clamp-4'>"{selectedText}"</div>
+                </div>
+                <TextArea
+                  value={explainInputValue}
+                  onChange={setExplainInputValue}
+                  placeholder='Ask a question about the selected text...'
+                  width='w-full'
+                  minRows={1}
+                  maxRows={2}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSendExplainInput()
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault()
+                      handleCancelExplainInput()
+                    }
+                  }}
+                />
+                <div className='mt-2 flex justify-end gap-2'>
+                  <button
+                    onClick={handleCancelExplainInput}
+                    className='px-3 py-1.5 text-sm rounded-md text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors'
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSendExplainInput}
+                    disabled={!explainInputValue.trim()}
+                    className='px-3 py-1.5 text-sm rounded-md bg-blue-500 hover:bg-blue-600 disabled:bg-neutral-300 disabled:cursor-not-allowed dark:disabled:bg-neutral-700 text-white transition-colors'
+                  >
+                    Send
+                  </button>
+                </div>
+              </motion.div>
+            </AnimatePresence>,
+            document.body
           )}
-        </AnimatePresence>
         <ImageModal
           isOpen={Boolean(selectedArtifactUrl)}
           imageUrl={selectedArtifactUrl ?? ''}

@@ -643,6 +643,40 @@ const convertToServerToolFormat = (tool: ToolDefinition) => ({
   inputSchema: tool.inputSchema || { type: 'object', properties: {} },
 })
 
+const subagentAbortControllersByStream = new Map<string, Set<AbortController>>()
+
+const registerSubagentAbortController = (streamId: string | null | undefined, controller: AbortController) => {
+  if (!streamId) return () => {}
+  let controllers = subagentAbortControllersByStream.get(streamId)
+  if (!controllers) {
+    controllers = new Set()
+    subagentAbortControllersByStream.set(streamId, controllers)
+  }
+  controllers.add(controller)
+  return () => {
+    const set = subagentAbortControllersByStream.get(streamId)
+    if (!set) return
+    set.delete(controller)
+    if (set.size === 0) subagentAbortControllersByStream.delete(streamId)
+  }
+}
+
+const abortSubagentControllers = (streamId?: string | null) => {
+  if (streamId) {
+    const controllers = subagentAbortControllersByStream.get(streamId)
+    if (controllers) {
+      controllers.forEach(controller => controller.abort())
+      subagentAbortControllersByStream.delete(streamId)
+    }
+    return
+  }
+
+  for (const controllers of subagentAbortControllersByStream.values()) {
+    controllers.forEach(controller => controller.abort())
+  }
+  subagentAbortControllersByStream.clear()
+}
+
 /**
  * Get filtered tool definitions for subagent based on mode
  * Returns tools in server's expected format: { name, enabled, description, inputSchema }
@@ -698,6 +732,7 @@ const executeSubagentCall = async (
     getState: () => RootState
     conversationId: string
     parentMessageId: string
+    streamId?: string
     rootPath: string | null
     operationMode: OperationMode
   }
@@ -721,6 +756,7 @@ const executeSubagentCall = async (
   }
 
   const { dispatch, getState, conversationId, parentMessageId, rootPath, operationMode } = context
+  const streamId = context.streamId
   const state = getState()
 
   // Determine max turns (from args, localStorage, or default)
@@ -768,12 +804,24 @@ const executeSubagentCall = async (
   let finalResponse = ''
   let lastAssistantMessageId = promptMessageId
 
+  const subagentAbortController = new AbortController()
+  const unregisterAbortController = registerSubagentAbortController(streamId, subagentAbortController)
+  const isStreamActive = () => {
+    if (!streamId) return true
+    return getState().chat.streaming.byId[streamId]?.active ?? false
+  }
+
   // Agentic loop with hard limit
   let shouldContinue = true
-  for (let turn = 0; turn < maxTurns && shouldContinue; turn++) {
-    turnsUsed = turn + 1
+  try {
+    for (let turn = 0; turn < maxTurns && shouldContinue; turn++) {
+      turnsUsed = turn + 1
 
-    try {
+      if (!isStreamActive()) {
+        subagentAbortController.abort()
+        throw new Error('Subagent aborted')
+      }
+
       // Call ephemeral endpoint with tools and conversation history
       const response = await createStreamingRequest('/generate/ephemeral', accessToken, {
         method: 'POST',
@@ -786,6 +834,7 @@ const executeSubagentCall = async (
           systemPrompt,
           tools: subagentTools.length > 0 ? subagentTools : undefined,
         }),
+        signal: subagentAbortController.signal,
       })
 
       if (!response.ok) {
@@ -807,6 +856,11 @@ const executeSubagentCall = async (
 
       // Parse SSE stream
       while (true) {
+        if (!isStreamActive()) {
+          subagentAbortController.abort()
+          throw new Error('Subagent aborted')
+        }
+
         const { done, value } = await reader.read()
         if (done) break
 
@@ -1040,11 +1094,15 @@ const executeSubagentCall = async (
       if (turnsUsed >= maxTurns) {
         shouldContinue = false
       }
-    } catch (error) {
-      console.error('[subagent] Error in turn', turn + 1, ':', error)
-      shouldContinue = false
-      throw error
     }
+  } catch (error) {
+    if (subagentAbortController.signal.aborted) {
+      throw new Error('Subagent aborted')
+    }
+    console.error('[subagent] Error in subagent execution:', error)
+    throw error
+  } finally {
+    unregisterAbortController()
   }
 
   // Format return value
@@ -1086,6 +1144,7 @@ const executeLocalTool = async (
       getState: context.getState,
       conversationId: context.conversationId,
       parentMessageId: context.messageId,
+      streamId: context.streamId,
       rootPath,
       operationMode,
     })
@@ -5390,10 +5449,15 @@ export const fetchAttachmentById = createAsyncThunk<Attachment, { id: MessageId 
 // Abort a running generation
 export const abortStreaming = createAsyncThunk<
   { success: boolean; messageDeleted?: boolean },
-  { messageId: MessageId },
+  { messageId: MessageId; streamId?: string | null },
   { state: RootState; extra: ThunkExtraArgument }
->('chat/abortStreaming', async ({ messageId }, { dispatch, getState, extra, rejectWithValue }) => {
+>('chat/abortStreaming', async ({ messageId, streamId: providedStreamId }, { dispatch, getState, extra, rejectWithValue }) => {
   const { auth } = extra
+  const state = getState()
+  const streamId =
+    providedStreamId ??
+    Object.entries(state.chat.streaming.byId).find(([, stream]) => stream.streamingMessageId === messageId)?.[0] ??
+    null
   try {
     const response = await apiCall<{ success: boolean; messageDeleted?: boolean }>(
       `/messages/${messageId}/abort`,
@@ -5404,11 +5468,10 @@ export const abortStreaming = createAsyncThunk<
     )
 
     if (response.success) {
-      dispatch(chatSliceActions.streamingAborted())
+      dispatch(chatSliceActions.streamingAborted(streamId ? { streamId } : undefined))
 
       // If the assistant message was deleted, refetch messages to update the UI
       if (response.messageDeleted) {
-        const state = getState()
         const conversationId = state.chat.conversation.currentConversationId
         if (conversationId) {
           // Stabilize the currentPath first by truncating past the deleted leaf
@@ -5425,6 +5488,25 @@ export const abortStreaming = createAsyncThunk<
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to abort generation'
     return rejectWithValue(message)
+  }
+})
+
+// Abort local generation (including subagent runs) and optionally stop server streaming
+export const abortGeneration = createAsyncThunk<
+  void,
+  { streamId?: string | null; messageId?: MessageId | null },
+  { state: RootState }
+>('chat/abortGeneration', async ({ streamId, messageId }, { dispatch }) => {
+  abortSubagentControllers(streamId)
+
+  if (streamId) {
+    dispatch(chatSliceActions.streamingAborted({ streamId }))
+  } else {
+    dispatch(chatSliceActions.allStreamsAborted())
+  }
+
+  if (messageId) {
+    dispatch(abortStreaming({ messageId, streamId }))
   }
 })
 
