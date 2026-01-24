@@ -1,7 +1,7 @@
 // uiSlice.ts
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
-interface UiState {
+export interface UiState {
   rightBarCollapsed: boolean
 }
 
