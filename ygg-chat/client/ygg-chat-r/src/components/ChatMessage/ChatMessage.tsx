@@ -15,6 +15,7 @@ import remarkMath from 'remark-math'
 import { chatSliceActions } from '../../features/chats/chatSlice'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
+import { attachMessageBridge } from '../../utils/iframeBridge'
 import { Button } from '../Button/button'
 import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
@@ -799,7 +800,7 @@ const todoActionLabel = (action: string) => {
 }
 
 // Component to render HTML in an iframe using srcdoc for packaged Electron compatibility
-// Supports postMessage bridge for file dialogs and filesystem access from widget iframes
+// Uses shared iframeBridge for consistent IPC support across Tool Manager and Inline Chat
 const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fullHeight = false }) => {
   const { userId } = useAuth()
   const userIdRef = useRef<string | null>(null)
@@ -810,203 +811,11 @@ const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fu
   }, [userId])
 
   useEffect(() => {
-    const streamTargets = new Set<string>()
-    const pendingStreamEvents = new Map<string, Array<{ type: string; payload: any }>>()
-    let awaitingStreamResponse = 0
-    const electronAPI = (window as any).electronAPI
-
-    const emitStreamEvent = (type: string, payload: any) => {
-      const streamId = payload?.streamId
-      if (!streamId) return
-      iframeRef.current?.contentWindow?.postMessage({ type, ...payload }, '*')
-      if (
-        type === 'FS_READ_FILE_STREAM_END' ||
-        type === 'FS_READ_FILE_STREAM_ERROR' ||
-        type === 'FS_READ_FILE_STREAM_ABORTED'
-      ) {
-        streamTargets.delete(streamId)
-        pendingStreamEvents.delete(streamId)
-      }
-    }
-
-    const forwardStreamEvent = (type: string, payload: any) => {
-      const streamId = payload?.streamId
-      if (!streamId) return
-      if (!streamTargets.has(streamId)) {
-        if (awaitingStreamResponse > 0) {
-          const pending = pendingStreamEvents.get(streamId) || []
-          pending.push({ type, payload })
-          pendingStreamEvents.set(streamId, pending)
-        }
-        return
-      }
-      emitStreamEvent(type, payload)
-    }
-
-    const flushPendingEvents = (streamId: string) => {
-      const pending = pendingStreamEvents.get(streamId)
-      if (!pending || pending.length === 0) return
-      pending.forEach(entry => emitStreamEvent(entry.type, entry.payload))
-      pendingStreamEvents.delete(streamId)
-    }
-
-    const streamCleanupFns: Array<(() => void) | undefined> = []
-    if (electronAPI?.fs?.onReadFileStreamChunk) {
-      streamCleanupFns.push(
-        electronAPI.fs.onReadFileStreamChunk((payload: any) => forwardStreamEvent('FS_READ_FILE_STREAM_CHUNK', payload))
-      )
-    }
-    if (electronAPI?.fs?.onReadFileStreamProgress) {
-      streamCleanupFns.push(
-        electronAPI.fs.onReadFileStreamProgress((payload: any) =>
-          forwardStreamEvent('FS_READ_FILE_STREAM_PROGRESS', payload)
-        )
-      )
-    }
-    if (electronAPI?.fs?.onReadFileStreamEnd) {
-      streamCleanupFns.push(
-        electronAPI.fs.onReadFileStreamEnd((payload: any) => forwardStreamEvent('FS_READ_FILE_STREAM_END', payload))
-      )
-    }
-    if (electronAPI?.fs?.onReadFileStreamError) {
-      streamCleanupFns.push(
-        electronAPI.fs.onReadFileStreamError((payload: any) => forwardStreamEvent('FS_READ_FILE_STREAM_ERROR', payload))
-      )
-    }
-    if (electronAPI?.fs?.onReadFileStreamAborted) {
-      streamCleanupFns.push(
-        electronAPI.fs.onReadFileStreamAborted((payload: any) =>
-          forwardStreamEvent('FS_READ_FILE_STREAM_ABORTED', payload)
-        )
-      )
-    }
-
-    // Bridge for iframe postMessage -> Electron IPC
-    const handleMessage = async (event: MessageEvent) => {
-      // Only handle messages from our iframe
-      if (iframeRef.current && event.source !== iframeRef.current.contentWindow) {
-        return
-      }
-
-      const { type, requestId, options } = event.data || {}
-      if (!type || !requestId) return
-
-      let response: any = { success: false, error: 'Unknown request type' }
-
-      try {
-        switch (type) {
-          case 'DIALOG_OPEN_FILE':
-            if (electronAPI?.dialog?.openFile) {
-              response = await electronAPI.dialog.openFile(options)
-            } else {
-              response = { success: false, error: 'File dialog not available (not in Electron)' }
-            }
-            break
-          case 'DIALOG_SAVE_FILE':
-            if (electronAPI?.dialog?.saveFile) {
-              response = await electronAPI.dialog.saveFile(options)
-            } else {
-              response = { success: false, error: 'Save dialog not available (not in Electron)' }
-            }
-            break
-          case 'FS_READ_FILE':
-            if (electronAPI?.fs?.readFile) {
-              response = await electronAPI.fs.readFile(options?.filePath, options?.encoding)
-            } else {
-              response = { success: false, error: 'File read not available (not in Electron)' }
-            }
-            break
-          case 'FS_READ_FILE_STREAM':
-            if (electronAPI?.fs?.readFileStream) {
-              awaitingStreamResponse += 1
-              try {
-                response = await electronAPI.fs.readFileStream(options?.filePath, {
-                  encoding: options?.encoding,
-                  highWaterMark: options?.highWaterMark,
-                })
-                if (response?.success && response?.streamId) {
-                  streamTargets.add(response.streamId)
-                  flushPendingEvents(response.streamId)
-                }
-              } catch (err) {
-                response = { success: false, error: String(err) }
-              } finally {
-                awaitingStreamResponse = Math.max(0, awaitingStreamResponse - 1)
-                if (awaitingStreamResponse === 0) {
-                  pendingStreamEvents.clear()
-                }
-              }
-            } else {
-              response = { success: false, error: 'File stream not available (not in Electron)' }
-            }
-            break
-          case 'FS_STAT':
-            if (electronAPI?.fs?.stat) {
-              response = await electronAPI.fs.stat(options?.filePath)
-            } else {
-              response = { success: false, error: 'File stat not available (not in Electron)' }
-            }
-            break
-          case 'FS_ABORT':
-            if (electronAPI?.fs?.abortReadFileStream) {
-              response = await electronAPI.fs.abortReadFileStream(options?.streamId)
-            } else {
-              response = { success: false, error: 'Stream abort not available (not in Electron)' }
-            }
-            break
-          case 'FS_WRITE_FILE':
-            if (electronAPI?.fs?.writeFile) {
-              response = await electronAPI.fs.writeFile(options?.filePath, options?.content, options?.encoding)
-            } else {
-              response = { success: false, error: 'File write not available (not in Electron)' }
-            }
-            break
-          case 'FS_MKDIR':
-            if (electronAPI?.fs?.mkdir) {
-              response = await electronAPI.fs.mkdir(options?.dirPath)
-            } else {
-              response = { success: false, error: 'Mkdir not available (not in Electron)' }
-            }
-            break
-          case 'SHELL_EXEC':
-            if (electronAPI?.exec?.run) {
-              response = await electronAPI.exec.run(options?.command, { cwd: options?.cwd, timeout: options?.timeout })
-            } else {
-              response = { success: false, error: 'Shell exec not available (not in Electron)' }
-            }
-            break
-          case 'HTTP_REQUEST':
-            if (electronAPI?.http?.request) {
-              response = await electronAPI.http.request({
-                url: options?.url,
-                method: options?.method,
-                headers: options?.headers,
-                body: options?.body,
-                timeout: options?.timeout,
-              })
-            } else {
-              response = { success: false, error: 'HTTP request not available (not in Electron)' }
-            }
-            break
-          case 'AUTH_CONTEXT':
-            response = { success: true, tenantId: userIdRef.current ?? null }
-            break
-        }
-      } catch (err) {
-        response = { success: false, error: String(err) }
-      }
-
-      // Send response back to iframe
-      iframeRef.current?.contentWindow?.postMessage({ type: `${type}_RESPONSE`, requestId, ...response }, '*')
-    }
-
-    window.addEventListener('message', handleMessage)
-    return () => {
-      window.removeEventListener('message', handleMessage)
-      streamCleanupFns.forEach(cleanup => cleanup?.())
-      streamTargets.clear()
-      pendingStreamEvents.clear()
-    }
+    const cleanup = attachMessageBridge(
+      () => iframeRef.current,
+      () => userIdRef.current
+    )
+    return cleanup
   }, [])
 
   return (
