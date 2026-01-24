@@ -5,6 +5,7 @@ import { conversationsReducer } from '../features/conversations'
 import { ideContextReducer } from '../features/ideContext'
 import { default as projectsReducer } from '../features/projects/projectSlice'
 import { default as searchReducer } from '../features/search/searchSlice'
+import { uiReducer } from '../features/ui'
 import { usersReducer } from '../features/users'
 import { voiceSettingsReducer } from '../features/voiceSettings'
 import { thunkExtraArg } from './thunkExtra'
@@ -18,6 +19,7 @@ const rootReducer = {
   projects: projectsReducer,
   ideContext: ideContextReducer,
   voiceSettings: voiceSettingsReducer,
+  ui: uiReducer,
 }
 
 // Main store for the app

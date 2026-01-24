@@ -85,6 +85,7 @@ import {
   selectWorkspace,
 } from '../features/ideContext/ideContextSelectors'
 import { selectSelectedProject } from '../features/projects/projectSelectors'
+import { uiActions } from '../features/ui'
 import { refreshUserCredits, selectCurrentUser } from '../features/users'
 import { selectSttConfig, selectVoiceInputEnabled, selectWakeWordConfig } from '../features/voiceSettings'
 import {
@@ -2270,6 +2271,9 @@ function Chat() {
         console.warn('No active conversation to add note to')
         return
       }
+
+      // Expand the right bar to show the note
+      dispatch(uiActions.rightBarExpanded())
 
       // Get current research note from conversation
       const existingNote = currentConversation?.research_note || ''

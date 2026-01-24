@@ -1151,6 +1151,109 @@ ipcMain.handle(
   }
 )
 
+// Custom tool module execution - runs tool's index.js in Electron's Node.js environment
+// This allows custom tools with node_modules to work without user having Node.js installed
+const loadedToolModules = new Map<string, any>()
+
+ipcMain.handle(
+  'customTool:execute',
+  async (
+    _event,
+    toolPath: string,
+    args?: Record<string, any>
+  ): Promise<{ success: boolean; result?: any; error?: string }> => {
+    console.log('[Electron IPC] Executing custom tool module:', toolPath)
+
+    try {
+      // Validate path exists
+      if (!fs.existsSync(toolPath)) {
+        return { success: false, error: `Tool path does not exist: ${toolPath}` }
+      }
+
+      // Determine the entry point
+      let entryPoint = toolPath
+      const stats = fs.statSync(toolPath)
+
+      if (stats.isDirectory()) {
+        // Look for package.json to find main entry
+        const packageJsonPath = path.join(toolPath, 'package.json')
+        if (fs.existsSync(packageJsonPath)) {
+          try {
+            const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
+            entryPoint = path.join(toolPath, packageJson.main || 'index.js')
+          } catch {
+            entryPoint = path.join(toolPath, 'index.js')
+          }
+        } else {
+          entryPoint = path.join(toolPath, 'index.js')
+        }
+      }
+
+      if (!fs.existsSync(entryPoint)) {
+        return { success: false, error: `Entry point not found: ${entryPoint}` }
+      }
+
+      // Clear require cache to allow hot reloading during development
+      const resolvedPath = require.resolve(entryPoint)
+      if (loadedToolModules.has(resolvedPath)) {
+        // Use cached module for performance, but allow cache bust via args
+        if (!args?._bustCache) {
+          const cachedModule = loadedToolModules.get(resolvedPath)
+          if (typeof cachedModule?.execute === 'function') {
+            const result = await cachedModule.execute(args || {})
+            return { success: true, result }
+          }
+        }
+      }
+
+      // Clear from Node's require cache to get fresh module
+      delete require.cache[resolvedPath]
+
+      // Load the tool module using Electron's Node.js runtime
+      const toolModule = require(resolvedPath)
+      loadedToolModules.set(resolvedPath, toolModule)
+
+      // Check if module exports an execute function
+      if (typeof toolModule?.execute !== 'function') {
+        return {
+          success: false,
+          error: `Tool module must export an 'execute' function. Found: ${Object.keys(toolModule || {}).join(', ') || 'nothing'}`,
+        }
+      }
+
+      // Execute the tool with provided args
+      const result = await toolModule.execute(args || {})
+      return { success: true, result }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      const errorStack = error instanceof Error ? error.stack : ''
+      console.error('[Electron IPC] Custom tool execution failed:', errorMsg)
+      console.error('[Electron IPC] Stack:', errorStack)
+      return { success: false, error: errorMsg }
+    }
+  }
+)
+
+// Clear a specific tool from cache (for development/hot reload)
+ipcMain.handle('customTool:clearCache', async (_event, toolPath?: string) => {
+  if (toolPath) {
+    const resolvedPath = require.resolve(toolPath)
+    loadedToolModules.delete(resolvedPath)
+    delete require.cache[resolvedPath]
+    return { success: true, cleared: 1 }
+  } else {
+    const count = loadedToolModules.size
+    loadedToolModules.clear()
+    // Clear all tool modules from require cache
+    Object.keys(require.cache).forEach(key => {
+      if (key.includes('custom-tools')) {
+        delete require.cache[key]
+      }
+    })
+    return { success: true, cleared: count }
+  }
+})
+
 // Floating window controls
 ipcMain.handle('window:openFloating', async () => {
   // console.log('[Electron IPC] Opening floating window')

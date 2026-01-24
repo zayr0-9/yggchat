@@ -8,8 +8,10 @@ import { TextArea } from '../components/TextArea/TextArea'
 import { updateResearchNote } from '../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../features/conversations/conversationSelectors'
 import { Conversation } from '../features/conversations/conversationTypes'
+import { uiActions } from '../features/ui'
 import { useAuth } from '../hooks/useAuth'
 import { DirectoryFileEntry, ResearchNoteItem, useDirectoryFiles } from '../hooks/useQueries'
+import type { RootState } from '../store/store'
 
 interface RightBarProps {
   conversationId: ConversationId | null
@@ -40,20 +42,8 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
     }
   }, [ccCwd])
 
-  // Drawer collapse state with localStorage persistence
-  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
-    try {
-      if (typeof window === 'undefined') return true
-      const stored = localStorage.getItem('rightbar:collapsed')
-      if (stored !== null) {
-        return stored === 'true'
-      }
-      // Default to collapsed
-      return true
-    } catch {
-      return true
-    }
-  })
+  // Drawer collapse state from Redux (persisted to localStorage in slice)
+  const isCollapsed = useSelector((state: RootState) => state.ui.rightBarCollapsed)
 
   // Tab state: 'note' for single conversation note, 'list' for all notes
   const [activeTab, setActiveTab] = useState<'note' | 'list'>('note')
@@ -71,13 +61,6 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
       setLocalNote(conversation.research_note || '')
     }
   }, [conversation?.research_note])
-
-  // Persist collapse state
-  useEffect(() => {
-    try {
-      localStorage.setItem('rightbar:collapsed', String(isCollapsed))
-    } catch { }
-  }, [isCollapsed])
 
   // Debounced update function
   const debouncedUpdate = useCallback(
@@ -197,7 +180,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
   }, [])
 
   const toggleCollapse = () => {
-    setIsCollapsed(prev => !prev)
+    dispatch(uiActions.rightBarToggled())
   }
 
   const handleNoteClick = (noteItem: ResearchNoteItem) => {

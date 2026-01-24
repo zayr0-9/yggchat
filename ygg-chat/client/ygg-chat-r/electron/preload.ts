@@ -116,6 +116,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setOverlay: (payload: { color?: string; symbolColor?: string; height?: number }) =>
       ipcRenderer.invoke('titlebar:set-overlay', payload),
   },
+  customTool: {
+    execute: (toolPath: string, args?: Record<string, any>) =>
+      ipcRenderer.invoke('customTool:execute', toolPath, args),
+    clearCache: (toolPath?: string) => ipcRenderer.invoke('customTool:clearCache', toolPath),
+  },
   autoUpdater: {
     check: () => ipcRenderer.invoke('autoUpdater:check'),
     installNow: () => ipcRenderer.invoke('autoUpdater:installNow'),

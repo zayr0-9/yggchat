@@ -511,6 +511,35 @@ const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => {
           response = { success: true, tenantId: authContext?.tenantId ?? null }
           break
         }
+        case 'CUSTOM_TOOL_EXECUTE': {
+          // Execute a custom tool module directly in Electron's Node.js runtime
+          // This allows tools with node_modules to work without user having Node.js installed
+          // Usage: send('CUSTOM_TOOL_EXECUTE', { toolPath: '/path/to/tool', args: { ... } })
+          const { toolPath, args: toolArgs, bustCache } = options || {}
+          if (!toolPath) {
+            response = { success: false, error: 'Missing toolPath' }
+            break
+          }
+
+          if (electronAPI?.customTool?.execute) {
+            const execArgs = bustCache ? { ...toolArgs, _bustCache: true } : toolArgs
+            response = await electronAPI.customTool.execute(toolPath, execArgs)
+          } else {
+            response = { success: false, error: 'Custom tool execution not available (not in Electron)' }
+          }
+          break
+        }
+        case 'CUSTOM_TOOL_CLEAR_CACHE': {
+          // Clear cached tool modules (for development/hot reload)
+          // Usage: send('CUSTOM_TOOL_CLEAR_CACHE', { toolPath: '/path/to/tool' }) or omit toolPath to clear all
+          const { toolPath } = options || {}
+          if (electronAPI?.customTool?.clearCache) {
+            response = await electronAPI.customTool.clearCache(toolPath)
+          } else {
+            response = { success: false, error: 'Custom tool cache clear not available (not in Electron)' }
+          }
+          break
+        }
         case 'RPC': {
           // Generic RPC bridge - allows tools to call any electronAPI method
           // Usage: send('RPC', { namespace: 'fs', method: 'writeFile', args: [path, content, encoding] })

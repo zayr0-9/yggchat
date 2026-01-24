@@ -67,6 +67,13 @@ interface ElectronAPI {
     onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void
     onError: (callback: (error: string) => void) => () => void
   }
+  customTool: {
+    execute: (
+      toolPath: string,
+      args?: Record<string, any>
+    ) => Promise<{ success: boolean; result?: any; error?: string }>
+    clearCache: (toolPath?: string) => Promise<{ success: boolean; cleared?: number; error?: string }>
+  }
   platform: 'electron'
 }
 
