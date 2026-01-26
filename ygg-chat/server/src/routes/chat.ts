@@ -380,7 +380,7 @@ router.post(
 router.patch(
   '/tools/:toolName',
   asyncHandler(async (req, res) => {
-    const { toolName } = req.params
+    const toolName = req.params.toolName as string
     const { enabled } = req.body
 
     if (typeof enabled !== 'boolean') {
@@ -475,7 +475,7 @@ router.post(
 router.get(
   '/users/:userId/conversations',
   asyncHandler(async (req, res) => {
-    const userId = req.params.userId
+    const userId = req.params.userId as string
     const conversations = ConversationService.getByUser(userId)
     res.json(conversations)
   })
@@ -485,7 +485,7 @@ router.get(
 router.get(
   '/users/:userId/conversations/recent',
   asyncHandler(async (req, res) => {
-    const userId = req.params.userId
+    const userId = req.params.userId as string
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10
     const conversations = ConversationService.getRecentByUser(userId, limit)
     res.json(conversations)
@@ -496,7 +496,7 @@ router.get(
 router.get(
   '/users/:userId/research-notes',
   asyncHandler(async (req, res) => {
-    const userId = req.params.userId
+    const userId = req.params.userId as string
     const conversations = ConversationService.getByUser(userId)
     // Filter to only conversations with research notes
     const notesData = conversations
@@ -516,7 +516,7 @@ router.get(
 router.get(
   '/conversations/project/:projectId',
   asyncHandler(async (req, res) => {
-    const projectId = req.params.projectId
+    const projectId = req.params.projectId as string
     const conversations = ConversationService.getByProjectId(projectId)
     res.json(conversations)
   })
@@ -535,7 +535,7 @@ router.get(
 router.get(
   '/users/:id',
   asyncHandler(async (req, res) => {
-    const userId = req.params.id
+    const userId = req.params.id as string
     const user = UserService.getById(userId)
 
     if (!user) {
@@ -550,7 +550,7 @@ router.get(
 router.put(
   '/users/:id',
   asyncHandler(async (req, res) => {
-    const userId = req.params.id
+    const userId = req.params.id as string
     const { username } = req.body
 
     if (!username) {
@@ -570,7 +570,7 @@ router.put(
 router.delete(
   '/users/:id',
   asyncHandler(async (req, res) => {
-    const userId = req.params.id
+    const userId = req.params.id as string
 
     const user = UserService.getById(userId)
     if (!user) {
@@ -614,7 +614,7 @@ router.post(
 router.patch(
   '/conversations/:id/',
   asyncHandler(async (req, res) => {
-    const conversationId = req.params.id
+    const conversationId = req.params.id as string
     const { title } = req.body
 
     if (!title) {
@@ -635,7 +635,7 @@ router.patch(
 router.get(
   '/conversations/:id',
   asyncHandler(async (req, res) => {
-    const conversationId = req.params.id
+    const conversationId = req.params.id as string
     const conversation = ConversationService.getById(conversationId)
 
     if (!conversation) {
@@ -650,7 +650,7 @@ router.get(
 router.get(
   '/conversations/:id/system-prompt',
   asyncHandler(async (req, res) => {
-    const conversationId = req.params.id
+    const conversationId = req.params.id as string
     const conversation = ConversationService.getById(conversationId)
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' })
