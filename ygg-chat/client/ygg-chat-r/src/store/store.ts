@@ -1,6 +1,6 @@
 // store.ts
 import { configureStore } from '@reduxjs/toolkit'
-import { chatReducer, fetchCustomTools, fetchTools } from '../features/chats'
+import { chatReducer, fetchCustomTools, fetchMcpTools, fetchTools } from '../features/chats'
 import { conversationsReducer } from '../features/conversations'
 import { ideContextReducer } from '../features/ideContext'
 import { default as projectsReducer } from '../features/projects/projectSlice'
@@ -37,9 +37,12 @@ export const store = configureStore({
   devTools: process.env.NODE_ENV !== 'production',
 })
 
-// Initialize custom tools at app startup (before any component renders)
+// Initialize custom tools and MCP tools at app startup (before any component renders)
 // This ensures tools are available immediately when Chat component mounts
-store.dispatch(fetchCustomTools() as any).then(() => {
+Promise.all([
+  store.dispatch(fetchCustomTools() as any),
+  store.dispatch(fetchMcpTools() as any),
+]).then(() => {
   store.dispatch(fetchTools() as any)
 })
 

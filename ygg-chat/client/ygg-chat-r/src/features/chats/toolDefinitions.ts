@@ -19,6 +19,10 @@ export interface ToolDefinition {
   sourcePath?: string
   version?: string
   author?: string
+  // MCP tool metadata (set for MCP server tools)
+  isMcp?: boolean
+  mcpServerName?: string
+  mcpToolName?: string // Original tool name before namespacing
 }
 
 // Built-in tool definitions (static)
@@ -700,6 +704,83 @@ export const setCustomTools = (customTools: ToolDefinition[]): void => {
 }
 
 /**
+ * Set MCP tools from connected MCP servers.
+ * MCP tools are merged with built-in and custom tools.
+ * MCP tools cannot override built-in or custom tools with the same name.
+ * Preserves user's enabled/disabled state from localStorage and in-memory state.
+ */
+export const setMcpTools = (mcpTools: ToolDefinition[]): void => {
+  // Load persisted states from localStorage
+  const persistedStates = loadToolEnabledStates()
+
+  // Preserve current in-memory enabled state
+  const currentEnabledState = new Map<string, boolean>()
+  for (const tool of mergedToolDefinitions) {
+    currentEnabledState.set(tool.name, tool.enabled)
+  }
+
+  // Get existing non-MCP tools
+  const nonMcpTools = mergedToolDefinitions.filter(t => !t.isMcp)
+
+  // Filter out any MCP tools that would override existing tools
+  const existingNames = new Set(nonMcpTools.map(t => t.name))
+  const safeMcpTools = mcpTools.filter(mt => {
+    if (existingNames.has(mt.name)) {
+      console.warn(`[ToolDefinitions] MCP tool "${mt.name}" ignored: conflicts with existing tool`)
+      return false
+    }
+    return true
+  })
+
+  // Mark all MCP tools
+  const markedMcpTools = safeMcpTools.map(t => ({
+    ...cloneTool(t),
+    isMcp: true,
+  }))
+
+  // Merge: non-MCP tools + MCP tools
+  mergedToolDefinitions = [...nonMcpTools, ...markedMcpTools]
+
+  // Apply enabled state
+  for (const tool of mergedToolDefinitions) {
+    if (persistedStates[tool.name] !== undefined) {
+      tool.enabled = persistedStates[tool.name]
+    } else if (currentEnabledState.has(tool.name)) {
+      tool.enabled = currentEnabledState.get(tool.name)!
+    }
+  }
+}
+
+/**
+ * Clear all MCP tools (keep built-in and custom tools)
+ * Preserves user's enabled/disabled state.
+ */
+export const clearMcpTools = (): void => {
+  const persistedStates = loadToolEnabledStates()
+  const currentEnabledState = new Map<string, boolean>()
+  for (const tool of mergedToolDefinitions) {
+    currentEnabledState.set(tool.name, tool.enabled)
+  }
+
+  mergedToolDefinitions = mergedToolDefinitions.filter(t => !t.isMcp)
+
+  for (const tool of mergedToolDefinitions) {
+    if (persistedStates[tool.name] !== undefined) {
+      tool.enabled = persistedStates[tool.name]
+    } else if (currentEnabledState.has(tool.name)) {
+      tool.enabled = currentEnabledState.get(tool.name)!
+    }
+  }
+}
+
+/**
+ * Get MCP tools only
+ */
+export const getMcpTools = (): ToolDefinition[] => {
+  return mergedToolDefinitions.filter(t => t.isMcp)
+}
+
+/**
  * Clear all custom tools (reset to built-in only)
  * Preserves user's enabled/disabled state from localStorage and in-memory state.
  */
@@ -752,11 +833,13 @@ export const getCustomTools = (): ToolDefinition[] => {
 
 /**
  * Get tools to send to AI API.
- * Returns only built-in enabled tools (excludes custom tools).
+ * Returns enabled built-in tools and MCP tools (excludes custom tools).
  * Custom tools are accessed via the custom_tool_manager tool.
+ * MCP tools are sent directly since they're already namespaced (mcp__serverName__toolName).
  */
 export const getToolsForAI = (): ToolDefinition[] => {
-  // Use mergedToolDefinitions (mutable) to get current enabled state, filter out custom tools
+  // Use mergedToolDefinitions (mutable) to get current enabled state
+  // Include built-in and MCP tools, exclude custom tools (accessed via custom_tool_manager)
   const enabled = mergedToolDefinitions.filter(t => t.enabled && !t.isCustom)
   return enabled
 }

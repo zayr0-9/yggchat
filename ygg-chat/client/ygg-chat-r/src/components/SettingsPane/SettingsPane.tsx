@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import mammoth from 'mammoth'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { selectCurrentConversationId } from '../../features/chats'
+import { fetchMcpTools, selectCurrentConversationId } from '../../features/chats'
 import { convContextSet, systemPromptSet, updateContext, updateSystemPrompt } from '../../features/conversations'
 import type { Conversation } from '../../features/conversations/conversationTypes'
 import { selectSelectedProject } from '../../features/projects'
@@ -101,6 +101,24 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const [skillInstallMessage, setSkillInstallMessage] = useState('')
   const [installedSkills, setInstalledSkills] = useState<Array<{ name: string; description: string; enabled: boolean }>>([])
   const [skillsLoading, setSkillsLoading] = useState(false)
+
+  // MCP Servers section state
+  const [mcpExpanded, setMcpExpanded] = useState(false)
+  const [mcpServers, setMcpServers] = useState<Array<{
+    name: string
+    command: string
+    args: string[]
+    enabled: boolean
+    status: 'disconnected' | 'connecting' | 'connected' | 'error'
+    error?: string
+    toolCount: number
+  }>>([])
+  const [mcpLoading, setMcpLoading] = useState(false)
+  const [mcpAddMode, setMcpAddMode] = useState(false)
+  const [newServerName, setNewServerName] = useState('')
+  const [newServerCommand, setNewServerCommand] = useState('')
+  const [newServerArgs, setNewServerArgs] = useState('')
+  const [mcpActionStatus, setMcpActionStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Font size offset state (persisted to localStorage)
   const [fontSizeOffset, setFontSizeOffset] = useState<number>(() => {
@@ -268,6 +286,118 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       console.error('Failed to uninstall skill:', error)
     }
   }, [])
+
+  // Fetch MCP servers
+  const fetchMcpServers = useCallback(async () => {
+    setMcpLoading(true)
+    try {
+      const response = await fetch('http://127.0.0.1:3002/api/mcp/servers')
+      const data = await response.json()
+      if (data.success && data.servers) {
+        setMcpServers(data.servers)
+      }
+    } catch (error) {
+      console.error('Failed to fetch MCP servers:', error)
+    } finally {
+      setMcpLoading(false)
+    }
+  }, [])
+
+  // Fetch MCP servers when section is expanded
+  useEffect(() => {
+    if (mcpExpanded) {
+      fetchMcpServers()
+    }
+  }, [mcpExpanded, fetchMcpServers])
+
+  // Handle MCP server start/stop
+  const handleToggleMcpServer = useCallback(async (serverName: string, currentStatus: string) => {
+    const action = currentStatus === 'connected' ? 'stop' : 'start'
+    try {
+      const response = await fetch(`http://127.0.0.1:3002/api/mcp/servers/${encodeURIComponent(serverName)}/${action}`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+      if (data.success) {
+        setMcpActionStatus({ type: 'success', message: `Server ${action}ed successfully` })
+        fetchMcpServers()
+        // Refresh MCP tools with orchestrator and Redux after server state change
+        if (action === 'start') {
+          setTimeout(async () => {
+            // First refresh with orchestrator (backend registers tools)
+            await fetch('http://127.0.0.1:3002/api/mcp/refresh-tools', { method: 'POST' })
+            // Then refresh Redux state (frontend gets tool definitions)
+            dispatch(fetchMcpTools())
+          }, 1000) // Small delay to let server fully connect
+        } else {
+          dispatch(fetchMcpTools())
+        }
+        setTimeout(() => setMcpActionStatus(null), 3000)
+      } else {
+        setMcpActionStatus({ type: 'error', message: data.error || `Failed to ${action} server` })
+      }
+    } catch (error) {
+      setMcpActionStatus({ type: 'error', message: `Failed to ${action} server` })
+    }
+  }, [fetchMcpServers, dispatch])
+
+  // Handle MCP server removal
+  const handleRemoveMcpServer = useCallback(async (serverName: string) => {
+    if (!confirm(`Are you sure you want to remove "${serverName}"?`)) return
+
+    try {
+      const response = await fetch(`http://127.0.0.1:3002/api/mcp/servers/${encodeURIComponent(serverName)}`, {
+        method: 'DELETE',
+      })
+      const data = await response.json()
+      if (data.success) {
+        setMcpServers(prev => prev.filter(s => s.name !== serverName))
+        setMcpActionStatus({ type: 'success', message: 'Server removed' })
+        setTimeout(() => setMcpActionStatus(null), 3000)
+      }
+    } catch (error) {
+      console.error('Failed to remove MCP server:', error)
+    }
+  }, [])
+
+  // Handle adding new MCP server
+  const handleAddMcpServer = useCallback(async () => {
+    const name = newServerName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+    const command = newServerCommand.trim()
+    const args = newServerArgs.trim().split(/\s+/).filter(Boolean)
+
+    if (!name || !command) {
+      setMcpActionStatus({ type: 'error', message: 'Name and command are required' })
+      return
+    }
+
+    try {
+      const response = await fetch('http://127.0.0.1:3002/api/mcp/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, command, args, enabled: true }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        setMcpActionStatus({ type: 'success', message: `Server "${name}" added` })
+        setNewServerName('')
+        setNewServerCommand('')
+        setNewServerArgs('')
+        setMcpAddMode(false)
+        fetchMcpServers()
+        // Refresh MCP tools after adding server (backend auto-registers, then update Redux)
+        setTimeout(async () => {
+          await fetch('http://127.0.0.1:3002/api/mcp/refresh-tools', { method: 'POST' })
+          dispatch(fetchMcpTools())
+        }, 1500)
+        setTimeout(() => setMcpActionStatus(null), 3000)
+      } else {
+        setMcpActionStatus({ type: 'error', message: data.error || 'Failed to add server' })
+      }
+    } catch (error) {
+      setMcpActionStatus({ type: 'error', message: 'Network error' })
+    }
+  }, [newServerName, newServerCommand, newServerArgs, fetchMcpServers, dispatch])
 
   const handleAttachmentInputChange = useCallback(
     (target: 'system' | 'context') => async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -883,6 +1013,206 @@ ${block}`
                                 onClick={() => handleUninstallSkill(skill.name)}
                                 className='p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-neutral-400 hover:text-red-500'
                                 title='Uninstall skill'
+                              >
+                                <i className='bx bx-trash text-lg'></i>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* MCP Servers Section */}
+            <div className='space-y-2'>
+              <button
+                type='button'
+                onClick={() => setMcpExpanded(!mcpExpanded)}
+                className='flex items-center justify-between w-full text-left'
+              >
+                <span className='text-[16px] font-medium text-stone-700 dark:text-stone-200'>MCP Servers</span>
+                <i
+                  className={`bx bx-chevron-down text-xl text-neutral-500 dark:text-neutral-400 transition-transform duration-200 ${mcpExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {mcpExpanded && (
+                <div className='space-y-4 pl-1 pt-2'>
+                  <p className='text-sm text-neutral-600 dark:text-neutral-400'>
+                    Connect to MCP (Model Context Protocol) servers to add external tools. MCP servers provide tools
+                    that the AI can use directly.
+                  </p>
+
+                  {/* Status Message */}
+                  {mcpActionStatus && (
+                    <div
+                      className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
+                        mcpActionStatus.type === 'success'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                      }`}
+                    >
+                      <i
+                        className={`bx ${mcpActionStatus.type === 'success' ? 'bx-check-circle' : 'bx-error-circle'} text-base`}
+                      ></i>
+                      {mcpActionStatus.message}
+                    </div>
+                  )}
+
+                  {/* Add Server Button / Form */}
+                  {!mcpAddMode ? (
+                    <button
+                      type='button'
+                      onClick={() => setMcpAddMode(true)}
+                      className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
+                    >
+                      <i className='bx bx-plus text-base'></i>
+                      Add MCP Server
+                    </button>
+                  ) : (
+                    <div className='space-y-3 p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700'>
+                      <div className='space-y-2'>
+                        <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+                          Server Name
+                        </label>
+                        <input
+                          type='text'
+                          value={newServerName}
+                          onChange={e => setNewServerName(e.target.value)}
+                          placeholder='my-server'
+                          className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Command</label>
+                        <input
+                          type='text'
+                          value={newServerCommand}
+                          onChange={e => setNewServerCommand(e.target.value)}
+                          placeholder='npx'
+                          className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        />
+                      </div>
+                      <div className='space-y-2'>
+                        <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+                          Arguments (space-separated)
+                        </label>
+                        <input
+                          type='text'
+                          value={newServerArgs}
+                          onChange={e => setNewServerArgs(e.target.value)}
+                          placeholder='-y @anthropic/mcp-server-filesystem /path/to/dir'
+                          className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                        />
+                      </div>
+                      <div className='flex items-center gap-2'>
+                        <button
+                          type='button'
+                          onClick={handleAddMcpServer}
+                          disabled={!newServerName.trim() || !newServerCommand.trim()}
+                          className='px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                        >
+                          Add Server
+                        </button>
+                        <button
+                          type='button'
+                          onClick={() => {
+                            setMcpAddMode(false)
+                            setNewServerName('')
+                            setNewServerCommand('')
+                            setNewServerArgs('')
+                          }}
+                          className='px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Help text */}
+                  <p className='text-xs text-neutral-500 dark:text-neutral-500'>
+                    Example: Command "npx" with args "-y @modelcontextprotocol/server-filesystem /home/user/projects"
+                  </p>
+
+                  {/* Connected Servers List */}
+                  <div className='mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700'>
+                    <h4 className='text-sm font-medium text-stone-700 dark:text-stone-200 mb-3'>
+                      Configured Servers {!mcpLoading && `(${mcpServers.length})`}
+                    </h4>
+
+                    {mcpLoading ? (
+                      <div className='flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400'>
+                        <i className='bx bx-loader-alt animate-spin'></i>
+                        Loading servers...
+                      </div>
+                    ) : mcpServers.length === 0 ? (
+                      <p className='text-sm text-neutral-500 dark:text-neutral-400'>
+                        No MCP servers configured. Add one above to get started.
+                      </p>
+                    ) : (
+                      <div className='space-y-2'>
+                        {mcpServers.map(server => (
+                          <div
+                            key={server.name}
+                            className='flex items-center justify-between p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700'
+                          >
+                            <div className='flex-1 min-w-0'>
+                              <div className='flex items-center gap-2'>
+                                <span className='font-medium text-sm text-neutral-900 dark:text-neutral-100'>
+                                  {server.name}
+                                </span>
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded ${
+                                    server.status === 'connected'
+                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                      : server.status === 'connecting'
+                                        ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                                        : server.status === 'error'
+                                          ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                                          : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400'
+                                  }`}
+                                >
+                                  {server.status}
+                                </span>
+                                {server.status === 'connected' && server.toolCount > 0 && (
+                                  <span className='text-xs text-neutral-500 dark:text-neutral-400'>
+                                    {server.toolCount} tools
+                                  </span>
+                                )}
+                              </div>
+                              <p className='text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5'>
+                                {server.command} {server.args.join(' ')}
+                              </p>
+                              {server.error && (
+                                <p className='text-xs text-red-500 dark:text-red-400 mt-0.5'>{server.error}</p>
+                              )}
+                            </div>
+                            <div className='flex items-center gap-1 ml-2'>
+                              <button
+                                type='button'
+                                onClick={() => handleToggleMcpServer(server.name, server.status)}
+                                className='p-1.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors'
+                                title={server.status === 'connected' ? 'Stop server' : 'Start server'}
+                              >
+                                <i
+                                  className={`bx ${
+                                    server.status === 'connected'
+                                      ? 'bx-stop text-red-500'
+                                      : server.status === 'connecting'
+                                        ? 'bx-loader-alt animate-spin text-yellow-500'
+                                        : 'bx-play text-green-500'
+                                  } text-xl`}
+                                ></i>
+                              </button>
+                              <button
+                                type='button'
+                                onClick={() => handleRemoveMcpServer(server.name)}
+                                className='p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-neutral-400 hover:text-red-500'
+                                title='Remove server'
                               >
                                 <i className='bx bx-trash text-lg'></i>
                               </button>

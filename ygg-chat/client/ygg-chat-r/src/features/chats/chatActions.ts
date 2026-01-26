@@ -34,6 +34,7 @@ import {
   getAllTools,
   getToolsForAI,
   setCustomTools,
+  setMcpTools,
   updateToolEnabled as updateToolEnabledInDefinitions,
 } from './toolDefinitions'
 
@@ -5606,6 +5607,56 @@ export const reloadCustomTools = createAsyncThunk<{ success: boolean; count: num
     } catch (error) {
       console.error('[CustomTools] Failed to reload custom tools:', error)
       return { success: false, count: 0 }
+    }
+  }
+)
+
+// Fetch and merge MCP tools from connected MCP servers (Electron only)
+export const fetchMcpTools = createAsyncThunk<void, void, { state: RootState }>(
+  'chat/fetchMcpTools',
+  async (_, { dispatch }) => {
+    // Check if we're in Electron mode
+    const isElectronMode =
+      import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+      (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
+      (typeof window !== 'undefined' && (window as any).electronAPI)
+
+    if (!isElectronMode) {
+      // MCP tools only available in Electron mode
+      return
+    }
+
+    try {
+      const response = await fetch(`${LOCAL_API_BASE}/mcp/tools`)
+      if (!response.ok) {
+        console.warn('[McpTools] Failed to fetch MCP tools:', response.statusText)
+        return
+      }
+
+      const data = await response.json()
+      if (data.success && Array.isArray(data.tools)) {
+        // Transform MCP tools to ToolDefinition format
+        const mcpToolDefinitions = data.tools.map((tool: any) => ({
+          name: tool.qualifiedName || tool.name,
+          description: tool.description || `MCP tool from ${tool.serverName}`,
+          enabled: true,
+          inputSchema: tool.inputSchema || { type: 'object', properties: {} },
+          isMcp: true,
+          mcpServerName: tool.serverName,
+          mcpToolName: tool.name,
+        }))
+
+        // Merge MCP tools with existing tools
+        setMcpTools(mcpToolDefinitions)
+
+        // Update Redux state with merged tools
+        dispatch(chatSliceActions.setTools(getAllTools()))
+
+        console.log(`[McpTools] Loaded ${mcpToolDefinitions.length} MCP tools`)
+      }
+    } catch (error) {
+      // Silently fail - MCP tools are optional
+      console.warn('[McpTools] Failed to load MCP tools:', error)
     }
   }
 )

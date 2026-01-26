@@ -34,6 +34,8 @@ import { createTodoList, editTodoList, listTodoLists, readTodoList } from './too
 import { skillRegistry } from './skills/skillLoader.js'
 import { execute as executeSkillManager } from './skills/skillManager.js'
 import { registerSkillRoutes } from './skills/skillRoutes.js'
+import { mcpManager } from './mcp/mcpManager.js'
+import { registerMcpRoutes } from './mcp/mcpRoutes.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -1011,6 +1013,7 @@ function setupServer() {
   registerProxyRoutes(app)
   registerLocalOperationsRoutes(app)
   registerSkillRoutes(app)
+  registerMcpRoutes(app)
 
   // =====================================================
   // OpenAI ChatGPT OAuth Authentication Endpoints
@@ -2309,6 +2312,33 @@ function setupServer() {
       const builtInHandler = builtInTools.get(toolName)
       if (builtInHandler) {
         result = await builtInHandler(parsedArgs, toolOptions)
+      }
+      // Then check MCP tools (format: mcp__serverName__toolName)
+      else if (toolName.startsWith('mcp__')) {
+        console.log(`[LocalServer] MCP tool detected: ${toolName}`)
+        console.log(`[LocalServer] mcpManager exists: ${!!mcpManager}`)
+
+        if (!mcpManager) {
+          result = { success: false, error: 'MCP manager not initialized' }
+        } else {
+          try {
+            const mcpResult = await mcpManager.callTool(toolName, parsedArgs)
+            // Convert MCP result to standard ToolResult format
+            const textContent = mcpResult.content
+              .filter(c => c.type === 'text')
+              .map(c => c.text)
+              .join('\n')
+            result = {
+              success: !mcpResult.isError,
+              content: mcpResult.content,
+              text: textContent,
+              error: mcpResult.isError ? textContent : undefined,
+            }
+          } catch (mcpError) {
+            console.error(`[LocalServer] MCP tool error:`, mcpError)
+            result = { success: false, error: mcpError instanceof Error ? mcpError.message : String(mcpError) }
+          }
+        }
       }
       // Then check custom tools
       else if (customToolRegistry.hasCustomTool(toolName)) {
@@ -4740,6 +4770,7 @@ export async function startLocalServer(port: number = 3002, dbPath?: string): Pr
     initializeBuiltInToolRegistry()
     await customToolRegistry.initialize()
     await skillRegistry.initialize()
+    await mcpManager.initialize()
 
     // Initialize tool orchestrator with database and register tools
     toolOrchestrator.initialize(db!)
@@ -4759,6 +4790,41 @@ export async function startLocalServer(port: number = 3002, dbPath?: string): Pr
       })
     }
     console.log(`[LocalServer] Registered ${customToolRegistry.getDefinitions().length} custom tools with orchestrator`)
+
+    // Register MCP tools with the orchestrator
+    try {
+      const mcpTools = mcpManager.getAllTools()
+      console.log(`[LocalServer] Found ${mcpTools.length} MCP tools to register`)
+      for (const mcpTool of mcpTools) {
+        const qualifiedName = mcpTool.qualifiedName || mcpTool.name
+        console.log(`[LocalServer] Registering MCP tool: ${qualifiedName}`)
+        toolOrchestrator.registerTool(qualifiedName, async (args, _options) => {
+          try {
+            const mcpResult = await mcpManager.callTool(qualifiedName, args)
+            // Convert MCP result to standard ToolResult format
+            const textContent = mcpResult.content
+              .filter(c => c.type === 'text')
+              .map(c => c.text)
+              .join('\n')
+            return {
+              success: !mcpResult.isError,
+              content: mcpResult.content,
+              text: textContent,
+              error: mcpResult.isError ? textContent : undefined,
+            }
+          } catch (error) {
+            console.error(`[LocalServer] MCP tool execution error (${qualifiedName}):`, error)
+            return {
+              success: false,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          }
+        })
+      }
+      console.log(`[LocalServer] Registered ${mcpTools.length} MCP tools with orchestrator`)
+    } catch (error) {
+      console.error(`[LocalServer] Error registering MCP tools:`, error)
+    }
 
     setupServer()
 

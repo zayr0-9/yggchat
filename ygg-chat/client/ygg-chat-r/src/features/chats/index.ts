@@ -86,6 +86,7 @@ export {
   blobToDataURL,
   fetchConversationMessages,
   fetchCustomTools,
+  fetchMcpTools,
   fetchMessageTree,
   fetchTools,
   initializeConversationData,
