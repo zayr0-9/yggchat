@@ -31,6 +31,9 @@ import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
+import { skillRegistry } from './skills/skillLoader.js'
+import { execute as executeSkillManager } from './skills/skillManager.js'
+import { registerSkillRoutes } from './skills/skillRoutes.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -266,6 +269,10 @@ function initializeBuiltInToolRegistry() {
 
   builtInTools.set('custom_tool_manager', async args => {
     return await executeCustomToolManager(args)
+  })
+
+  builtInTools.set('skill_manager', async args => {
+    return await executeSkillManager(args)
   })
 
   console.log(`[LocalServer] Initialized ${builtInTools.size} built-in tools`)
@@ -1003,6 +1010,7 @@ function setupServer() {
   }
   registerProxyRoutes(app)
   registerLocalOperationsRoutes(app)
+  registerSkillRoutes(app)
 
   // =====================================================
   // OpenAI ChatGPT OAuth Authentication Endpoints
@@ -4731,6 +4739,7 @@ export async function startLocalServer(port: number = 3002, dbPath?: string): Pr
     // Initialize tool registries
     initializeBuiltInToolRegistry()
     await customToolRegistry.initialize()
+    await skillRegistry.initialize()
 
     // Initialize tool orchestrator with database and register tools
     toolOrchestrator.initialize(db!)

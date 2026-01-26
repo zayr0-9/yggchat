@@ -94,6 +94,14 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const [promptContextExpanded, setPromptContextExpanded] = useState(false)
 
+  // Skills section state
+  const [skillsExpanded, setSkillsExpanded] = useState(false)
+  const [skillUrl, setSkillUrl] = useState('')
+  const [skillInstallStatus, setSkillInstallStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [skillInstallMessage, setSkillInstallMessage] = useState('')
+  const [installedSkills, setInstalledSkills] = useState<Array<{ name: string; description: string; enabled: boolean }>>([])
+  const [skillsLoading, setSkillsLoading] = useState(false)
+
   // Font size offset state (persisted to localStorage)
   const [fontSizeOffset, setFontSizeOffset] = useState<number>(() => {
     try {
@@ -162,6 +170,104 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     },
     [dispatch]
   )
+
+  // Fetch installed skills
+  const fetchInstalledSkills = useCallback(async () => {
+    setSkillsLoading(true)
+    try {
+      const response = await fetch('http://127.0.0.1:3002/api/skills')
+      const data = await response.json()
+      if (data.success && data.skills) {
+        setInstalledSkills(data.skills)
+      }
+    } catch (error) {
+      console.error('Failed to fetch installed skills:', error)
+    } finally {
+      setSkillsLoading(false)
+    }
+  }, [])
+
+  // Fetch skills when section is expanded
+  useEffect(() => {
+    if (skillsExpanded) {
+      fetchInstalledSkills()
+    }
+  }, [skillsExpanded, fetchInstalledSkills])
+
+  // Handle skill installation from URL
+  const handleInstallSkill = useCallback(async () => {
+    const url = skillUrl.trim()
+    if (!url) return
+
+    setSkillInstallStatus('loading')
+    setSkillInstallMessage('Downloading and installing skill...')
+
+    try {
+      const response = await fetch('http://127.0.0.1:3002/api/skills/install/url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setSkillInstallStatus('success')
+        setSkillInstallMessage(`Successfully installed "${data.skillName}"`)
+        setSkillUrl('')
+        // Refresh skills list
+        fetchInstalledSkills()
+        // Auto-clear success message after 5 seconds
+        setTimeout(() => {
+          setSkillInstallStatus('idle')
+          setSkillInstallMessage('')
+        }, 5000)
+      } else {
+        setSkillInstallStatus('error')
+        setSkillInstallMessage(data.error || 'Installation failed')
+      }
+    } catch (error) {
+      setSkillInstallStatus('error')
+      setSkillInstallMessage(error instanceof Error ? error.message : 'Network error - is the local server running?')
+    }
+  }, [skillUrl, fetchInstalledSkills])
+
+  // Handle skill enable/disable toggle
+  const handleToggleSkill = useCallback(async (skillName: string, currentEnabled: boolean) => {
+    const action = currentEnabled ? 'disable' : 'enable'
+    try {
+      const response = await fetch(`http://127.0.0.1:3002/api/skills/${encodeURIComponent(skillName)}/${action}`, {
+        method: 'POST',
+      })
+      const data = await response.json()
+      if (data.success) {
+        // Update local state
+        setInstalledSkills(prev => prev.map(s =>
+          s.name === skillName ? { ...s, enabled: !currentEnabled } : s
+        ))
+      }
+    } catch (error) {
+      console.error(`Failed to ${action} skill:`, error)
+    }
+  }, [])
+
+  // Handle skill uninstall
+  const handleUninstallSkill = useCallback(async (skillName: string) => {
+    if (!confirm(`Are you sure you want to uninstall "${skillName}"?`)) return
+
+    try {
+      const response = await fetch(`http://127.0.0.1:3002/api/skills/${encodeURIComponent(skillName)}`, {
+        method: 'DELETE',
+      })
+      const data = await response.json()
+      if (data.success) {
+        // Remove from local state
+        setInstalledSkills(prev => prev.filter(s => s.name !== skillName))
+      }
+    } catch (error) {
+      console.error('Failed to uninstall skill:', error)
+    }
+  }, [])
 
   const handleAttachmentInputChange = useCallback(
     (target: 'system' | 'context') => async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -626,6 +732,168 @@ ${block}`
             {/* Tools Section */}
             <div>
               <ToolsSettings />
+            </div>
+
+            {/* Skills Section */}
+            <div className='space-y-2'>
+              <button
+                type='button'
+                onClick={() => setSkillsExpanded(!skillsExpanded)}
+                className='flex items-center justify-between w-full text-left'
+              >
+                <span className='text-[16px] font-medium text-stone-700 dark:text-stone-200'>Skills</span>
+                <i
+                  className={`bx bx-chevron-down text-xl text-neutral-500 dark:text-neutral-400 transition-transform duration-200 ${skillsExpanded ? 'rotate-180' : ''}`}
+                />
+              </button>
+
+              {skillsExpanded && (
+                <div className='space-y-4 pl-1 pt-2'>
+                  <p className='text-sm text-neutral-600 dark:text-neutral-400'>
+                    Install skills from{' '}
+                    <a
+                      href='https://clawdhub.com/skills'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-blue-600 dark:text-blue-400 hover:underline'
+                    >
+                      ClawdHub
+                    </a>{' '}
+                    or GitHub. Paste the skill page URL below.
+                  </p>
+
+                  {/* URL Input and Install Button */}
+                  <div className='flex items-center gap-2'>
+                    <input
+                      type='text'
+                      value={skillUrl}
+                      onChange={e => setSkillUrl(e.target.value)}
+                      placeholder='https://clawdhub.com/owner/skill-name'
+                      className='flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                      disabled={skillInstallStatus === 'loading'}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && skillUrl.trim()) {
+                          handleInstallSkill()
+                        }
+                      }}
+                    />
+                    <button
+                      type='button'
+                      onClick={handleInstallSkill}
+                      disabled={!skillUrl.trim() || skillInstallStatus === 'loading'}
+                      className='px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2'
+                    >
+                      {skillInstallStatus === 'loading' ? (
+                        <>
+                          <i className='bx bx-loader-alt animate-spin text-base'></i>
+                          Installing...
+                        </>
+                      ) : (
+                        <>
+                          <i className='bx bx-download text-base'></i>
+                          Install
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Status Message */}
+                  {skillInstallMessage && (
+                    <div
+                      className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
+                        skillInstallStatus === 'success'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : skillInstallStatus === 'error'
+                            ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                            : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'
+                      }`}
+                    >
+                      <i
+                        className={`bx ${
+                          skillInstallStatus === 'success'
+                            ? 'bx-check-circle'
+                            : skillInstallStatus === 'error'
+                              ? 'bx-error-circle'
+                              : 'bx-loader-alt animate-spin'
+                        } text-base`}
+                      ></i>
+                      {skillInstallMessage}
+                    </div>
+                  )}
+
+                  {/* Help text */}
+                  <p className='text-xs text-neutral-500 dark:text-neutral-500'>
+                    Supported URLs: ClawdHub pages (clawdhub.com/owner/skill), GitHub repos
+                  </p>
+
+                  {/* Installed Skills List */}
+                  <div className='mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700'>
+                    <h4 className='text-sm font-medium text-stone-700 dark:text-stone-200 mb-3'>
+                      Installed Skills {!skillsLoading && `(${installedSkills.length})`}
+                    </h4>
+
+                    {skillsLoading ? (
+                      <div className='flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400'>
+                        <i className='bx bx-loader-alt animate-spin'></i>
+                        Loading skills...
+                      </div>
+                    ) : installedSkills.length === 0 ? (
+                      <p className='text-sm text-neutral-500 dark:text-neutral-400'>
+                        No skills installed yet. Install one from ClawdHub or GitHub above.
+                      </p>
+                    ) : (
+                      <div className='space-y-2'>
+                        {installedSkills.map(skill => (
+                          <div
+                            key={skill.name}
+                            className='flex items-center justify-between p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700'
+                          >
+                            <div className='flex-1 min-w-0'>
+                              <div className='flex items-center gap-2'>
+                                <span className='font-medium text-sm text-neutral-900 dark:text-neutral-100'>
+                                  {skill.name}
+                                </span>
+                                <span
+                                  className={`text-xs px-1.5 py-0.5 rounded ${
+                                    skill.enabled
+                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                      : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-500 dark:text-neutral-400'
+                                  }`}
+                                >
+                                  {skill.enabled ? 'Enabled' : 'Disabled'}
+                                </span>
+                              </div>
+                              <p className='text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5'>
+                                {skill.description}
+                              </p>
+                            </div>
+                            <div className='flex items-center gap-1 ml-2'>
+                              <button
+                                type='button'
+                                onClick={() => handleToggleSkill(skill.name, skill.enabled)}
+                                className='p-1.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors'
+                                title={skill.enabled ? 'Disable skill' : 'Enable skill'}
+                              >
+                                <i
+                                  className={`bx ${skill.enabled ? 'bx-toggle-right text-green-500' : 'bx-toggle-left text-neutral-400'} text-xl`}
+                                ></i>
+                              </button>
+                              <button
+                                type='button'
+                                onClick={() => handleUninstallSkill(skill.name)}
+                                className='p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-neutral-400 hover:text-red-500'
+                                title='Uninstall skill'
+                              >
+                                <i className='bx bx-trash text-lg'></i>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

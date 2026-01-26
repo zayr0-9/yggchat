@@ -544,6 +544,33 @@ const builtInToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: 'skill_manager',
+    enabled: true,
+    description:
+      'Discover and activate specialized skills that provide detailed instructions for specific tasks. Use "list" to see available skills, "activate" to load a skill\'s instructions, or "load_resource" to fetch additional files (scripts, references, assets) from a skill.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'activate', 'load_resource'],
+          description:
+            'Action to perform: "list" = show all enabled skills; "activate" = load skill instructions; "load_resource" = fetch a resource file from the skill',
+        },
+        name: {
+          type: 'string',
+          description: 'Skill name (required for activate and load_resource actions)',
+        },
+        resourcePath: {
+          type: 'string',
+          description:
+            'Path to resource file within the skill (e.g., "references/FORMS.md"). Required for load_resource action.',
+        },
+      },
+      required: ['action'],
+    },
+  },
+  {
     name: 'subagent',
     enabled: true,
     description:

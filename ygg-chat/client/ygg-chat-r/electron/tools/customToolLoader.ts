@@ -144,8 +144,6 @@ class CustomToolRegistry {
     await this.ensureGuideFile()
     await this.loadAllTools()
     this.initialized = true
-
-    console.log(`[CustomToolLoader] Loaded ${this.tools.size} custom tools`)
   }
 
   private async ensureDirectory(): Promise<void> {
@@ -331,7 +329,10 @@ class CustomToolRegistry {
       const result = await Promise.race([
         tool.implementation.execute(args, options),
         new Promise<ToolResult>((_, reject) =>
-          setTimeout(() => reject(new Error(`Tool execution timed out after ${EXECUTION_TIMEOUT_MS}ms`)), EXECUTION_TIMEOUT_MS)
+          setTimeout(
+            () => reject(new Error(`Tool execution timed out after ${EXECUTION_TIMEOUT_MS}ms`)),
+            EXECUTION_TIMEOUT_MS
+          )
         ),
       ])
 

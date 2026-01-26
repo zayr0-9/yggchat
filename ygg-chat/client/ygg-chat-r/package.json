@@ -1,7 +1,7 @@
 {
   "name": "yggdrasil",
   "private": true,
-  "version": "0.1.43",
+  "version": "0.1.44",
   "type": "module",
   "main": "electron/main.mjs",
   "overrides": {
@@ -44,6 +44,7 @@
     "@types/three": "^0.182.0",
     "@vercel/analytics": "^1.6.1",
     "@xyflow/react": "^12.8.2",
+    "adm-zip": "^0.5.16",
     "ajv": "^8.17.1",
     "ajv-formats": "^2.1.1",
     "atomically": "^2.1.0",
@@ -86,7 +87,8 @@
     "unified": "^11.0.5",
     "unique-names-generator": "^4.7.1",
     "uuid": "^11.1.0",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "yaml": "^2.8.2"
   },
   "optionalDependencies": {
     "@electron/get": "^2.0.3",
@@ -102,6 +104,7 @@
   "devDependencies": {
     "@eslint/js": "^9.25.0",
     "@tailwindcss/typography": "^0.5.16",
+    "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
     "@types/dagre": "^0.7.53",
