@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '../Button/button'
 import { HtmlIframeSlot, useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
+import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
 
 export const HtmlToolsModal: React.FC = () => {
   const registry = useHtmlIframeRegistry()
@@ -23,6 +24,29 @@ export const HtmlToolsModal: React.FC = () => {
   const hibernatedEntries = useMemo(() => entries.filter(entry => entry.status === 'hibernated'), [entries])
   const activeKey = activeTab ?? activeEntries[0]?.key ?? null
   const maxBytesMb = useMemo(() => Math.round(registry.settings.maxBytes / (1024 * 1024)), [registry.settings.maxBytes])
+  const resolveEntryLabel = (entry: (typeof entries)[number]) =>
+    entry.label || (entry.kind === 'mcp' ? 'MCP App' : 'HTML Tool Output')
+  const displayLabels = useMemo(() => {
+    const labelCounts = new Map<string, number>()
+    const labelIndices = new Map<string, number>()
+    activeEntries.forEach(entry => {
+      const label = resolveEntryLabel(entry)
+      labelCounts.set(label, (labelCounts.get(label) || 0) + 1)
+    })
+    const result = new Map<string, string>()
+    activeEntries.forEach(entry => {
+      const label = resolveEntryLabel(entry)
+      const count = labelCounts.get(label) || 1
+      if (count > 1) {
+        const idx = (labelIndices.get(label) || 0) + 1
+        labelIndices.set(label, idx)
+        result.set(entry.key, `${label} (${idx})`)
+      } else {
+        result.set(entry.key, label)
+      }
+    })
+    return result
+  }, [activeEntries, resolveEntryLabel])
 
   const toggleFullscreen = (entryKey: string) => {
     setFullscreenKey(prev => (prev === entryKey ? null : entryKey))
@@ -83,6 +107,8 @@ export const HtmlToolsModal: React.FC = () => {
     const isHibernated = entry.status === 'hibernated'
     const isFavorite = entry.favorite
     const isFullscreen = fullscreenKey === entry.key
+    const mcpEntry = entry.kind === 'mcp' ? entry : null
+    const entryLabel = displayLabels.get(entry.key) ?? resolveEntryLabel(entry)
     const iframeHeightClass = isCollapsed
       ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
       : isFullscreen
@@ -103,8 +129,9 @@ export const HtmlToolsModal: React.FC = () => {
       >
         <div className='flex items-center gap-3 mb-3'>
           <div className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>
-            {entry.label || 'HTML Tool Output'}
+            {entryLabel}
           </div>
+          {mcpEntry && <span className='text-[10px] uppercase tracking-[0.15em] text-emerald-500'>MCP App</span>}
           <div className='flex items-center gap-2 min-w-0 ml-auto flex-1 justify-end'>
             <div className='text-[11px] text-neutral-500 dark:text-neutral-400 truncate max-w-[55%] min-w-0 text-right'>
               {entry.key}
@@ -174,7 +201,20 @@ export const HtmlToolsModal: React.FC = () => {
               className={`w-full ${iframeHeightClass}`}
               aria-hidden={isCollapsed}
             >
-              <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' />
+              {mcpEntry ? (
+                <McpAppIframe
+                  serverName={mcpEntry.serverName}
+                  qualifiedToolName={mcpEntry.qualifiedToolName}
+                  resourceUri={mcpEntry.resourceUri}
+                  toolArgs={mcpEntry.toolArgs ?? undefined}
+                  toolResult={mcpEntry.toolResult ?? undefined}
+                  toolDefinition={mcpEntry.toolDefinition}
+                  reloadToken={mcpEntry.reloadToken}
+                  className='h-full w-full'
+                />
+              ) : (
+                <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' />
+              )}
             </div>
           </>
         )}
@@ -363,7 +403,7 @@ export const HtmlToolsModal: React.FC = () => {
                         : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800'
                     }`}
                   >
-                    {entry.label || 'HTML Tool Output'}
+                    {displayLabels.get(entry.key) ?? resolveEntryLabel(entry)}
                   </button>
                 ))}
               </div>

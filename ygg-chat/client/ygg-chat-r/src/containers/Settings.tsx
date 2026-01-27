@@ -62,6 +62,7 @@ const Settings: React.FC = () => {
   const { accessToken } = useAuth()
   const providers = useAppSelector(selectProviderState)
   const htmlRegistry = useHtmlIframeRegistry()
+  const htmlEntries = htmlRegistry?.entries.filter(entry => entry.kind === 'html') ?? []
 
   // Tools state
   const tools = getAllTools()
@@ -542,7 +543,7 @@ const Settings: React.FC = () => {
                 </p>
               </div>
               <div className='flex items-center gap-2'>
-                <span className='text-sm text-stone-500 dark:text-stone-400'>{htmlRegistry.entries.length} cached</span>
+                <span className='text-sm text-stone-500 dark:text-stone-400'>{htmlEntries.length} cached</span>
                 <i
                   className={`bx bx-chevron-down text-2xl text-stone-500 dark:text-stone-400 transition-transform duration-200 ${
                     htmlToolsExpanded ? 'rotate-180' : ''
@@ -559,12 +560,12 @@ const Settings: React.FC = () => {
             >
               {/* Tools list */}
               <div className='space-y-2'>
-                {htmlRegistry.entries.length === 0 ? (
+                {htmlEntries.length === 0 ? (
                   <div className='rounded-xl border-2 border-dashed border-stone-200 bg-stone-50/80 p-6 text-center text-sm text-stone-500 dark:border-stone-700 dark:bg-zinc-900/60 dark:text-stone-400'>
                     No HTML tools cached. Tools will appear here when AI generates interactive outputs.
                   </div>
                 ) : (
-                  htmlRegistry.entries.map(entry => {
+                  htmlEntries.map(entry => {
                     const isHibernated = entry.status === 'hibernated'
                     const isFavorite = entry.favorite
                     const sizeKb = Math.round(entry.sizeBytes / 1024)
@@ -656,13 +657,13 @@ const Settings: React.FC = () => {
               </div>
 
               {/* Clear all button */}
-              {htmlRegistry.entries.length > 0 && (
+              {htmlEntries.length > 0 && (
                 <div className='mt-4 pt-3 flex justify-end'>
                   <Button
                     variant='outline2'
                     size='small'
                     onClick={() => {
-                      htmlRegistry.entries.forEach(entry => htmlRegistry.removeEntry(entry.key))
+                      htmlEntries.forEach(entry => htmlRegistry.removeEntry(entry.key))
                       showStatus({ type: 'success', text: 'All HTML tools cleared.' })
                     }}
                     className='text-rose-600 hover:text-rose-700 dark:text-rose-400'

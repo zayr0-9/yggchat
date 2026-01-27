@@ -1,4 +1,5 @@
 import type { ContentBlock, StreamEvent, ToolCall } from '@/features/chats/chatTypes'
+import type { ToolDefinition } from '@/features/chats/toolDefinitions'
 import type { RootState } from '@/store/store'
 import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
@@ -13,12 +14,15 @@ import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { chatSliceActions } from '../../features/chats/chatSlice'
+import { fetchMcpTools } from '../../features/chats/chatActions'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { attachMessageBridge } from '../../utils/iframeBridge'
+import { environment, localApi } from '../../utils/api'
 import { Button } from '../Button/button'
 import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
+import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { TextArea } from '../TextArea/TextArea'
 type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
@@ -799,6 +803,12 @@ const todoActionLabel = (action: string) => {
   }
 }
 
+const parseMcpQualifiedName = (qualifiedName: string) => {
+  const match = qualifiedName.match(/^mcp__([^_]+)__(.+)$/)
+  if (!match) return null
+  return { serverName: match[1], toolName: match[2] }
+}
+
 // Component to render HTML in an iframe using srcdoc for packaged Electron compatibility
 // Uses shared iframeBridge for consistent IPC support across Tool Manager and Inline Chat
 const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fullHeight = false }) => {
@@ -900,15 +910,36 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [explainInputValue, setExplainInputValue] = useState('')
     const explainInputPosition = useRef<{ x: number; y: number } | null>(null)
     const explainInputRef = useRef<HTMLDivElement | null>(null)
+    const [mcpLoadState, setMcpLoadState] = useState<Record<string, boolean>>({})
+    const [mcpReloadTokens, setMcpReloadTokens] = useState<Record<string, number>>({})
     // Get message data from Redux store
     const messageData = useSelector((state: RootState) =>
       state.chat.conversation.messages.find(m => String(m.id) === String(id))
     )
+    const toolDefinitions = useSelector((state: RootState) => state.chat.tools)
     const conversationId = messageData?.conversation_id ?? null
     const projectId = useSelector((state: RootState) => {
       if (!conversationId) return null
       return state.conversations.items.find(conv => conv.id === conversationId)?.project_id ?? null
     })
+
+    const handleLoadMcpApp = useCallback(
+      async (serverName: string, reloadKey: string) => {
+        if (environment !== 'electron') return
+        setMcpLoadState(prev => ({ ...prev, [reloadKey]: true }))
+        try {
+          await localApi.post(`/mcp/servers/${encodeURIComponent(serverName)}/start`)
+          await localApi.post('/mcp/refresh-tools')
+          dispatch(fetchMcpTools())
+          setMcpReloadTokens(prev => ({ ...prev, [reloadKey]: (prev[reloadKey] || 0) + 1 }))
+        } catch (err) {
+          console.error('[McpApp] Failed to load server', err)
+        } finally {
+          setMcpLoadState(prev => ({ ...prev, [reloadKey]: false }))
+        }
+      },
+      [dispatch]
+    )
 
     const hasContent = useMemo(() => {
       const hasSimpleContent = content && content.trim().length > 0
@@ -1605,6 +1636,49 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       </Button>
     )
 
+    const registerAndOpenMcpViewer = (
+      entryKey: string,
+      payload: {
+        serverName: string
+        resourceUri: string
+        qualifiedToolName: string
+        toolArgs?: Record<string, any> | null
+        toolResult?: { content: any; is_error?: boolean } | null
+        toolDefinition?: ToolDefinition
+        reloadToken?: number
+      },
+      label?: string | null
+    ) => {
+      if (!htmlRegistry || !onOpenToolHtmlModal) return
+      htmlRegistry.registerMcpEntry(entryKey, payload, label, { conversationId, projectId })
+      onOpenToolHtmlModal(entryKey)
+    }
+
+    const renderMcpViewerButton = (
+      entryKey: string,
+      payload: {
+        serverName: string
+        resourceUri: string
+        qualifiedToolName: string
+        toolArgs?: Record<string, any> | null
+        toolResult?: { content: any; is_error?: boolean } | null
+        toolDefinition?: ToolDefinition
+        reloadToken?: number
+      },
+      label?: string | null
+    ) => (
+      <Button
+        variant='outline2'
+        size='small'
+        onClick={() => registerAndOpenMcpViewer(entryKey, payload, label)}
+        disabled={!onOpenToolHtmlModal}
+        title='Open MCP app viewer'
+      >
+        <i className='bx bx-fullscreen text-base' aria-hidden='true'></i>
+        <span className='ml-1'>Fullscreen</span>
+      </Button>
+    )
+
     // Handle expand click - also registers HTML entries when expanding (not collapsing)
     const handleExpandToggle = (toggleKey: string, group: ToolCallRenderGroup) => {
       const isCurrentlyExpanded = expandedBlocks.toolCalls.has(toggleKey)
@@ -1659,6 +1733,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
 
       const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
+      const isMcpGroup = (group.name ?? '').startsWith('mcp__')
+      const parsedMcp = isMcpGroup ? parseMcpQualifiedName(group.name ?? '') : null
+      const mcpServerName = parsedMcp?.serverName
 
       // Special handling for html_renderer tool - always show rendered HTML
       const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
@@ -1699,6 +1776,70 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         )
       }
 
+      const mcpTool = toolDefinitions.find(t => t.isMcp && t.name === group.name)
+      const mcpResourceUri = mcpTool?.mcpUi?.resourceUri
+      if (mcpTool && mcpResourceUri) {
+        const parsed = parseMcpQualifiedName(group.name ?? '')
+        const serverName = mcpTool.mcpServerName || parsed?.serverName
+        if (serverName) {
+          const latestResult = group.results.length > 0 ? group.results[group.results.length - 1] : null
+          const normalizedResult = latestResult
+            ? { content: latestResult.content, is_error: latestResult.is_error }
+            : null
+          const reloadKey = `${id}-${group.id}-mcp`
+          const mcpEntryKey = `${id}-${group.id}-mcp-app`
+          const rawLabel = mcpTool.mcpToolName || parsed?.toolName || group.name || 'MCP App'
+          const mcpLabel = rawLabel.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+          const mcpViewerPayload = {
+            serverName,
+            resourceUri: mcpResourceUri,
+            qualifiedToolName: mcpTool.name,
+            toolArgs: group.args || undefined,
+            toolResult: normalizedResult,
+            toolDefinition: mcpTool,
+            reloadToken: mcpReloadTokens[reloadKey] || 0,
+          }
+          return (
+            <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+              <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
+              <div className='flex items-center gap-2 mb-2 flex-wrap'>
+                <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
+                  {group.name || 'mcp_app'}
+                </span>
+                <span className='text-[10px] uppercase tracking-[0.15em] text-emerald-600 dark:text-emerald-400'>
+                  MCP App
+                </span>
+                <div className='ml-auto flex items-center gap-2'>
+                  {renderMcpViewerButton(mcpEntryKey, mcpViewerPayload, mcpLabel)}
+                  <button
+                    type='button'
+                    onClick={() => handleLoadMcpApp(serverName, reloadKey)}
+                    disabled={mcpLoadState[reloadKey]}
+                    className='flex items-center gap-1 rounded border border-neutral-200 dark:border-neutral-700 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60'
+                  >
+                    <i
+                      className={`bx ${mcpLoadState[reloadKey] ? 'bx-loader-circle animate-spin' : 'bx-play-circle'}`}
+                    />
+                    Load app
+                  </button>
+                </div>
+              </div>
+              <div className='mt-2'>
+                <McpAppIframe
+                  serverName={serverName}
+                  qualifiedToolName={mcpTool.name}
+                  resourceUri={mcpResourceUri}
+                  toolArgs={group.args || undefined}
+                  toolResult={normalizedResult}
+                  toolDefinition={mcpTool}
+                  reloadToken={mcpReloadTokens[reloadKey] || 0}
+                />
+              </div>
+            </div>
+          )
+        }
+      }
+
       const pathParam = extractPathParam(group.args)
       const resultSummary = group.results.length > 0 ? formatToolResultSummary(group.results[0].content) : null
       const pathContent = pathParam || null
@@ -1725,7 +1866,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           />
 
           {/* Tool header row */}
-          <div className='flex items-center gap-2'>
+          <div className='flex items-center gap-2 flex-wrap'>
             <button
               onClick={() => handleExpandToggle(toggleKey, group)}
               className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
@@ -1763,6 +1904,21 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
               </svg>
             </button>
+            {isMcpGroup && mcpServerName && (
+              <button
+                type='button'
+                onClick={() => handleLoadMcpApp(mcpServerName, `${id}-${group.id}-mcp`)}
+                disabled={mcpLoadState[`${id}-${group.id}-mcp`]}
+                className='ml-auto flex items-center gap-1 rounded border border-neutral-200 dark:border-neutral-700 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60'
+              >
+                <i
+                  className={`bx ${
+                    mcpLoadState[`${id}-${group.id}-mcp`] ? 'bx-loader-circle animate-spin' : 'bx-play-circle'
+                  }`}
+                />
+                Load app
+              </button>
+            )}
             {primaryHtmlResultKey && renderHtmlViewerButton(primaryHtmlResultKey)}
           </div>
 

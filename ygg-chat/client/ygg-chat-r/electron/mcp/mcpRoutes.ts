@@ -45,6 +45,31 @@ async function refreshMcpToolsWithOrchestrator(): Promise<number> {
 
 export function registerMcpRoutes(app: Express): void {
 
+  // GET /api/mcp/settings - Get MCP settings
+  app.get('/api/mcp/settings', async (_req, res) => {
+    try {
+      await mcpManager.initialize()
+      const settings = mcpManager.getSettings()
+      res.json({ success: true, settings })
+    } catch (error) {
+      console.error('[McpRoutes] Error getting settings:', error)
+      res.status(500).json({ success: false, error: 'Failed to get MCP settings' })
+    }
+  })
+
+  // PUT /api/mcp/settings - Update MCP settings
+  app.put('/api/mcp/settings', async (req, res) => {
+    try {
+      await mcpManager.initialize()
+      const updates = req.body || {}
+      const settings = await mcpManager.updateSettings({ lazyStart: updates.lazyStart })
+      res.json({ success: true, settings })
+    } catch (error) {
+      console.error('[McpRoutes] Error updating settings:', error)
+      res.status(500).json({ success: false, error: 'Failed to update MCP settings' })
+    }
+  })
+
   // GET /api/mcp/status - Get status of all MCP servers
   app.get('/api/mcp/status', async (_req, res) => {
     try {

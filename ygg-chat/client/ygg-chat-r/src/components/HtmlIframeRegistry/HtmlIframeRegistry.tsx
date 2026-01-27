@@ -11,6 +11,7 @@ import React, {
 } from 'react'
 import type { ContentBlock, Message } from '../../features/chats/chatTypes'
 import type { Conversation } from '../../features/conversations/conversationTypes'
+import type { ToolDefinition } from '../../features/chats/toolDefinitions'
 import { useAuth } from '../../hooks/useAuth'
 import {
   getHtmlToolsFromCache,
@@ -21,9 +22,8 @@ import {
 import { environment, localApi } from '../../utils/api'
 import { attachMessageBridge as attachSharedMessageBridge } from '../../utils/iframeBridge'
 
-type HtmlIframeEntry = {
+type HtmlIframeEntryBase = {
   key: string
-  html: string
   label: string | null
   favorite: boolean
   status: 'active' | 'hibernated'
@@ -33,7 +33,26 @@ type HtmlIframeEntry = {
   lastUsedAt: number
   conversationId?: string | null
   projectId?: string | null
+  kind: 'html' | 'mcp'
 }
+
+type HtmlIframeHtmlEntry = HtmlIframeEntryBase & {
+  kind: 'html'
+  html: string
+}
+
+type HtmlIframeMcpEntry = HtmlIframeEntryBase & {
+  kind: 'mcp'
+  serverName: string
+  resourceUri: string
+  qualifiedToolName: string
+  toolArgs?: Record<string, any> | null
+  toolResult?: { content: any; is_error?: boolean } | null
+  toolDefinition?: ToolDefinition
+  reloadToken?: number
+}
+
+type HtmlIframeEntry = HtmlIframeHtmlEntry | HtmlIframeMcpEntry
 
 type HtmlToolsSettings = {
   maxActive: number
@@ -48,6 +67,20 @@ type HtmlIframeRegistryContextValue = {
   registerEntry: (
     key: string,
     html: string,
+    label?: string | null,
+    meta?: { conversationId?: string | null; projectId?: string | null }
+  ) => void
+  registerMcpEntry: (
+    key: string,
+    payload: {
+      serverName: string
+      resourceUri: string
+      qualifiedToolName: string
+      toolArgs?: Record<string, any> | null
+      toolResult?: { content: any; is_error?: boolean } | null
+      toolDefinition?: ToolDefinition
+      reloadToken?: number
+    },
     label?: string | null,
     meta?: { conversationId?: string | null; projectId?: string | null }
   ) => void
@@ -142,7 +175,11 @@ const getHtmlSizeBytes = (html: string) => {
 
 const normalizeLimit = (value: number) => (Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0)
 
-const toCacheRecord = (entry: HtmlIframeEntry, userId: string): HtmlToolRecord => ({
+const isHtmlEntry = (entry: HtmlIframeEntry): entry is HtmlIframeHtmlEntry => entry.kind !== 'mcp'
+
+const isMcpEntry = (entry: HtmlIframeEntry): entry is HtmlIframeMcpEntry => entry.kind === 'mcp'
+
+const toCacheRecord = (entry: HtmlIframeHtmlEntry, userId: string): HtmlToolRecord => ({
   key: entry.key,
   html: entry.html,
   label: entry.label,
@@ -157,8 +194,9 @@ const toCacheRecord = (entry: HtmlIframeEntry, userId: string): HtmlToolRecord =
   project_id: entry.projectId ?? null,
 })
 
-const fromCacheRecord = (record: HtmlToolRecord): HtmlIframeEntry => ({
+const fromCacheRecord = (record: HtmlToolRecord): HtmlIframeHtmlEntry => ({
   key: record.key,
+  kind: 'html',
   html: record.html,
   label: record.label ?? null,
   favorite: Boolean(record.favorite),
@@ -371,7 +409,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
   const authContextRef = useRef<{ tenantId?: string | null }>({ tenantId: userId ?? null })
   const getAuthContext = useCallback(() => authContextRef.current, [])
   const toolsQuery = useHtmlToolsCache(userId, isElectronEnv)
-  const pendingUpsertsRef = useRef<Map<string, HtmlIframeEntry>>(new Map())
+  const pendingUpsertsRef = useRef<Map<string, HtmlIframeHtmlEntry>>(new Map())
   const pendingDeletesRef = useRef<Set<string>>(new Set())
   const flushTimeoutRef = useRef<number | null>(null)
   const lastQuerySyncRef = useRef<string | null>(null)
@@ -386,6 +424,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
 
   const updateCacheEntry = useCallback(
     (entry: HtmlIframeEntry) => {
+      if (!isHtmlEntry(entry)) return
       if (!userId) return
       queryClient.setQueryData<HtmlToolRecord[]>(htmlToolsQueryKey(userId), prev => {
         const next = prev ? [...prev] : []
@@ -473,6 +512,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
 
   const queuePersistUpsert = useCallback(
     (entry: HtmlIframeEntry) => {
+      if (!isHtmlEntry(entry)) return
       if (!userId || !isElectronEnv) return
       pendingUpsertsRef.current.set(entry.key, entry)
       pendingDeletesRef.current.delete(entry.key)
@@ -544,12 +584,13 @@ export const HtmlIframeRegistryProvider: React.FC<{
 
   useEffect(() => {
     if (!userId || !isElectronEnv) return
-    const signature = entries.map(entry => `${entry.key}:${entry.updatedAt}`).join('|')
+    const htmlEntries = entries.filter(isHtmlEntry)
+    const signature = htmlEntries.map(entry => `${entry.key}:${entry.updatedAt}`).join('|')
     if (signature === lastQuerySyncRef.current) return
     lastQuerySyncRef.current = signature
     queryClient.setQueryData<HtmlToolRecord[]>(
       htmlToolsQueryKey(userId),
-      entries.map(entry => toCacheRecord(entry, userId))
+      htmlEntries.map(entry => toCacheRecord(entry, userId))
     )
   }, [entries, queryClient, userId])
 
@@ -570,8 +611,10 @@ export const HtmlIframeRegistryProvider: React.FC<{
       removeRecord(key)
       entriesRef.current.delete(key)
       targetsRef.current.delete(key)
-      removeCacheEntry(key)
-      queuePersistDelete(key)
+      if (isHtmlEntry(entry)) {
+        removeCacheEntry(key)
+        queuePersistDelete(key)
+      }
       if (focusKey === key) {
         setFocusKey(null)
       }
@@ -696,12 +739,16 @@ export const HtmlIframeRegistryProvider: React.FC<{
     ) => {
       const now = Date.now()
       const existingEntry = entriesRef.current.get(key)
+      const existingHtmlEntry = existingEntry && isHtmlEntry(existingEntry) ? existingEntry : null
       const nextLabel = label ?? existingEntry?.label ?? null
       const sizeBytes = getHtmlSizeBytes(html)
       const lastUsedAt =
-        existingEntry && existingEntry.html === html ? existingEntry.lastUsedAt : (existingEntry?.lastUsedAt ?? now)
-      const nextEntry: HtmlIframeEntry = {
+        existingHtmlEntry && existingHtmlEntry.html === html
+          ? existingHtmlEntry.lastUsedAt
+          : (existingEntry?.lastUsedAt ?? now)
+      const nextEntry: HtmlIframeHtmlEntry = {
         key,
+        kind: 'html',
         html,
         label: nextLabel,
         favorite: existingEntry?.favorite ?? false,
@@ -709,20 +756,20 @@ export const HtmlIframeRegistryProvider: React.FC<{
         sizeBytes,
         createdAt: existingEntry?.createdAt ?? now,
         updatedAt: now,
-        lastUsedAt: existingEntry && existingEntry.html === html ? lastUsedAt : now,
+        lastUsedAt: existingHtmlEntry && existingHtmlEntry.html === html ? lastUsedAt : now,
         conversationId: meta?.conversationId ?? existingEntry?.conversationId ?? null,
         projectId: meta?.projectId ?? existingEntry?.projectId ?? null,
       }
       if (
-        !existingEntry ||
-        existingEntry.html !== html ||
-        existingEntry.label !== nextLabel ||
-        existingEntry.favorite !== nextEntry.favorite ||
-        existingEntry.status !== nextEntry.status ||
-        existingEntry.sizeBytes !== nextEntry.sizeBytes ||
-        existingEntry.lastUsedAt !== nextEntry.lastUsedAt ||
-        existingEntry.conversationId !== nextEntry.conversationId ||
-        existingEntry.projectId !== nextEntry.projectId
+        !existingHtmlEntry ||
+        existingHtmlEntry.html !== html ||
+        existingEntry?.label !== nextLabel ||
+        existingEntry?.favorite !== nextEntry.favorite ||
+        existingEntry?.status !== nextEntry.status ||
+        existingEntry?.sizeBytes !== nextEntry.sizeBytes ||
+        existingEntry?.lastUsedAt !== nextEntry.lastUsedAt ||
+        existingEntry?.conversationId !== nextEntry.conversationId ||
+        existingEntry?.projectId !== nextEntry.projectId
       ) {
         entriesRef.current.set(key, nextEntry)
         updateCacheEntry(nextEntry)
@@ -732,6 +779,72 @@ export const HtmlIframeRegistryProvider: React.FC<{
       }
     },
     [enforceLimits, getAuthContext, queuePersistUpsert, syncEntries, updateCacheEntry]
+  )
+
+  const registerMcpEntry = useCallback(
+    (
+      key: string,
+      payload: {
+        serverName: string
+        resourceUri: string
+        qualifiedToolName: string
+        toolArgs?: Record<string, any> | null
+        toolResult?: { content: any; is_error?: boolean } | null
+        toolDefinition?: ToolDefinition
+        reloadToken?: number
+      },
+      label?: string | null,
+      meta?: { conversationId?: string | null; projectId?: string | null }
+    ) => {
+      const now = Date.now()
+      const existingEntry = entriesRef.current.get(key)
+      const existingMcpEntry = existingEntry && isMcpEntry(existingEntry) ? existingEntry : null
+      const nextLabel = label ?? existingEntry?.label ?? null
+      const nextEntry: HtmlIframeMcpEntry = {
+        key,
+        kind: 'mcp',
+        label: nextLabel,
+        favorite: existingEntry?.favorite ?? false,
+        status: existingEntry?.status ?? 'active',
+        sizeBytes: existingEntry?.sizeBytes ?? 0,
+        createdAt: existingEntry?.createdAt ?? now,
+        updatedAt: now,
+        lastUsedAt: existingEntry?.lastUsedAt ?? now,
+        conversationId: meta?.conversationId ?? existingEntry?.conversationId ?? null,
+        projectId: meta?.projectId ?? existingEntry?.projectId ?? null,
+        serverName: payload.serverName,
+        resourceUri: payload.resourceUri,
+        qualifiedToolName: payload.qualifiedToolName,
+        toolArgs: payload.toolArgs ?? null,
+        toolResult: payload.toolResult ?? null,
+        toolDefinition: payload.toolDefinition,
+        reloadToken: payload.reloadToken,
+      }
+
+      const changed =
+        !existingMcpEntry ||
+        existingMcpEntry.label !== nextLabel ||
+        existingMcpEntry.favorite !== nextEntry.favorite ||
+        existingMcpEntry.status !== nextEntry.status ||
+        existingMcpEntry.conversationId !== nextEntry.conversationId ||
+        existingMcpEntry.projectId !== nextEntry.projectId ||
+        existingMcpEntry.serverName !== nextEntry.serverName ||
+        existingMcpEntry.resourceUri !== nextEntry.resourceUri ||
+        existingMcpEntry.qualifiedToolName !== nextEntry.qualifiedToolName ||
+        existingMcpEntry.toolArgs !== nextEntry.toolArgs ||
+        existingMcpEntry.toolResult !== nextEntry.toolResult ||
+        existingMcpEntry.toolDefinition !== nextEntry.toolDefinition ||
+        existingMcpEntry.reloadToken !== nextEntry.reloadToken
+
+      if (changed) {
+        entriesRef.current.set(key, nextEntry)
+        updateCacheEntry(nextEntry)
+        queuePersistUpsert(nextEntry)
+        syncEntries()
+        enforceLimits(now)
+      }
+    },
+    [enforceLimits, queuePersistUpsert, syncEntries, updateCacheEntry]
   )
 
   const setTarget = useCallback((key: string, target: HTMLElement | null) => {
@@ -821,10 +934,12 @@ export const HtmlIframeRegistryProvider: React.FC<{
 
       const now = Date.now()
       const existingEntry = entriesRef.current.get(key)
+      const existingHtmlEntry = existingEntry && isHtmlEntry(existingEntry) ? existingEntry : null
       const nextLabel = label ?? existingEntry?.label ?? null
       const sizeBytes = getHtmlSizeBytes(html)
-      const nextEntry: HtmlIframeEntry = {
+      const nextEntry: HtmlIframeHtmlEntry = {
         key,
+        kind: 'html',
         html,
         label: nextLabel,
         favorite: existingEntry?.favorite ?? false,
@@ -837,14 +952,14 @@ export const HtmlIframeRegistryProvider: React.FC<{
         projectId: meta?.projectId ?? existingEntry?.projectId ?? null,
       }
       if (
-        !existingEntry ||
-        existingEntry.html !== html ||
-        existingEntry.label !== nextLabel ||
-        existingEntry.favorite !== nextEntry.favorite ||
-        existingEntry.status !== nextEntry.status ||
-        existingEntry.sizeBytes !== nextEntry.sizeBytes ||
-        existingEntry.conversationId !== nextEntry.conversationId ||
-        existingEntry.projectId !== nextEntry.projectId
+        !existingHtmlEntry ||
+        existingHtmlEntry.html !== html ||
+        existingEntry?.label !== nextLabel ||
+        existingEntry?.favorite !== nextEntry.favorite ||
+        existingEntry?.status !== nextEntry.status ||
+        existingEntry?.sizeBytes !== nextEntry.sizeBytes ||
+        existingEntry?.conversationId !== nextEntry.conversationId ||
+        existingEntry?.projectId !== nextEntry.projectId
       ) {
         entriesRef.current.set(key, nextEntry)
         updateCacheEntry(nextEntry)
@@ -1071,6 +1186,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
     () => ({
       entries,
       registerEntry,
+      registerMcpEntry,
       updateIframe,
       setTarget,
       isModalOpen,
@@ -1098,6 +1214,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       isModalOpen,
       openModal,
       registerEntry,
+      registerMcpEntry,
       removeEntry,
       restoreEntry,
       setTarget,

@@ -113,7 +113,9 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     error?: string
     toolCount: number
   }>>([])
+  const [mcpLazyStart, setMcpLazyStart] = useState(true)
   const [mcpLoading, setMcpLoading] = useState(false)
+  const [mcpRefreshing, setMcpRefreshing] = useState(false)
   const [mcpAddMode, setMcpAddMode] = useState(false)
   const [newServerName, setNewServerName] = useState('')
   const [newServerCommand, setNewServerCommand] = useState('')
@@ -303,12 +305,25 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     }
   }, [])
 
+  const fetchMcpSettings = useCallback(async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:3002/api/mcp/settings')
+      const data = await response.json()
+      if (data.success && data.settings) {
+        setMcpLazyStart(Boolean(data.settings.lazyStart))
+      }
+    } catch (error) {
+      console.error('Failed to fetch MCP settings:', error)
+    }
+  }, [])
+
   // Fetch MCP servers when section is expanded
   useEffect(() => {
     if (mcpExpanded) {
       fetchMcpServers()
+      fetchMcpSettings()
     }
-  }, [mcpExpanded, fetchMcpServers])
+  }, [mcpExpanded, fetchMcpServers, fetchMcpSettings])
 
   // Handle MCP server start/stop
   const handleToggleMcpServer = useCallback(async (serverName: string, currentStatus: string) => {
@@ -398,6 +413,55 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       setMcpActionStatus({ type: 'error', message: 'Network error' })
     }
   }, [newServerName, newServerCommand, newServerArgs, fetchMcpServers, dispatch])
+
+  const handleRefreshMcpTools = useCallback(async () => {
+    setMcpRefreshing(true)
+    try {
+      const response = await fetch('http://127.0.0.1:3002/api/mcp/refresh-tools', { method: 'POST' })
+      const data = await response.json()
+      if (data.success) {
+        dispatch(fetchMcpTools())
+        fetchMcpServers()
+        setMcpActionStatus({ type: 'success', message: 'MCP tools refreshed' })
+      } else {
+        setMcpActionStatus({ type: 'error', message: data.error || 'Failed to refresh MCP tools' })
+      }
+    } catch (error) {
+      setMcpActionStatus({ type: 'error', message: 'Failed to refresh MCP tools' })
+    } finally {
+      setMcpRefreshing(false)
+      setTimeout(() => setMcpActionStatus(null), 3000)
+    }
+  }, [dispatch, fetchMcpServers])
+
+  const handleToggleMcpLazyStart = useCallback(async () => {
+    const nextValue = !mcpLazyStart
+    setMcpLazyStart(nextValue)
+    try {
+      const response = await fetch('http://127.0.0.1:3002/api/mcp/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lazyStart: nextValue }),
+      })
+      const data = await response.json()
+      if (data.success) {
+        setMcpActionStatus({
+          type: 'success',
+          message: nextValue
+            ? 'Lazy start enabled (servers won’t auto-start)'
+            : 'Auto-start enabled (restart app to start servers)',
+        })
+      } else {
+        setMcpActionStatus({ type: 'error', message: data.error || 'Failed to update MCP settings' })
+        setMcpLazyStart(!nextValue)
+      }
+    } catch (error) {
+      setMcpActionStatus({ type: 'error', message: 'Failed to update MCP settings' })
+      setMcpLazyStart(!nextValue)
+    } finally {
+      setTimeout(() => setMcpActionStatus(null), 3000)
+    }
+  }, [mcpLazyStart])
 
   const handleAttachmentInputChange = useCallback(
     (target: 'system' | 'context') => async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1046,6 +1110,25 @@ ${block}`
                     that the AI can use directly.
                   </p>
 
+                  <div className='flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2'>
+                    <div>
+                      <p className='text-sm font-medium text-neutral-700 dark:text-neutral-200'>Lazy start MCP servers</p>
+                      <p className='text-xs text-neutral-500 dark:text-neutral-400'>
+                        When enabled, servers won’t auto-start on launch.
+                      </p>
+                    </div>
+                    <button
+                      type='button'
+                      onClick={handleToggleMcpLazyStart}
+                      className='p-1.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors'
+                      title={mcpLazyStart ? 'Disable lazy start' : 'Enable lazy start'}
+                    >
+                      <i
+                        className={`bx ${mcpLazyStart ? 'bx-toggle-right text-green-500' : 'bx-toggle-left text-neutral-400'} text-xl`}
+                      ></i>
+                    </button>
+                  </div>
+
                   {/* Status Message */}
                   {mcpActionStatus && (
                     <div
@@ -1064,14 +1147,25 @@ ${block}`
 
                   {/* Add Server Button / Form */}
                   {!mcpAddMode ? (
-                    <button
-                      type='button'
-                      onClick={() => setMcpAddMode(true)}
-                      className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
-                    >
-                      <i className='bx bx-plus text-base'></i>
-                      Add MCP Server
-                    </button>
+                    <div className='flex flex-wrap items-center gap-3'>
+                      <button
+                        type='button'
+                        onClick={() => setMcpAddMode(true)}
+                        className='flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors'
+                      >
+                        <i className='bx bx-plus text-base'></i>
+                        Add MCP Server
+                      </button>
+                      <button
+                        type='button'
+                        onClick={handleRefreshMcpTools}
+                        disabled={mcpRefreshing}
+                        className='flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors disabled:opacity-60'
+                      >
+                        <i className={`bx ${mcpRefreshing ? 'bx-loader-circle animate-spin' : 'bx-refresh'} text-base`} />
+                        Refresh MCP Tools
+                      </button>
+                    </div>
                   ) : (
                     <div className='space-y-3 p-3 rounded-lg bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700'>
                       <div className='space-y-2'>

@@ -23,6 +23,10 @@ export interface ToolDefinition {
   isMcp?: boolean
   mcpServerName?: string
   mcpToolName?: string // Original tool name before namespacing
+  mcpUi?: {
+    resourceUri?: string
+    visibility?: Array<'model' | 'app'>
+  }
 }
 
 // Built-in tool definitions (static)
@@ -548,6 +552,27 @@ const builtInToolDefinitions: ToolDefinition[] = [
     },
   },
   {
+    name: 'mcp_manager',
+    enabled: true,
+    description:
+      'Discover MCP servers on demand. Use "list" to see configured servers, "get" for details, "stop" to stop a server, and "list_tools" to start a server if needed and retrieve its tools.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['list', 'get', 'stop', 'list_tools'],
+          description: 'Action to perform',
+        },
+        name: {
+          type: 'string',
+          description: 'MCP server name (required for get/start/stop/restart/list_tools)',
+        },
+      },
+      required: ['action'],
+    },
+  },
+  {
     name: 'skill_manager',
     enabled: true,
     description:
@@ -644,6 +669,7 @@ const cloneTool = (tool: ToolDefinition): ToolDefinition => ({
     properties: { ...tool.inputSchema.properties },
     required: tool.inputSchema.required ? [...tool.inputSchema.required] : undefined,
   },
+  mcpUi: tool.mcpUi ? { ...tool.mcpUi, visibility: tool.mcpUi.visibility ? [...tool.mcpUi.visibility] : undefined } : undefined,
 })
 
 // Mutable array that holds merged tools (built-in + custom)
@@ -841,7 +867,12 @@ export const getToolsForAI = (): ToolDefinition[] => {
   // Use mergedToolDefinitions (mutable) to get current enabled state
   // Include built-in and MCP tools, exclude custom tools (accessed via custom_tool_manager)
   const enabled = mergedToolDefinitions.filter(t => t.enabled && !t.isCustom)
-  return enabled
+  return enabled.filter(t => {
+    if (!t.isMcp) return true
+    const visibility = t.mcpUi?.visibility
+    if (!Array.isArray(visibility)) return true
+    return visibility.includes('model')
+  })
 }
 
 // Get tool by name

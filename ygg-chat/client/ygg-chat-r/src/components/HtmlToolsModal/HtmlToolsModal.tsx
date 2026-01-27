@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { HtmlIframeSlot, useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
+import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
 
 // Ghost Pill Button Component
 const GhostPill: React.FC<{
@@ -103,17 +104,19 @@ export const HtmlToolsModal: React.FC = () => {
   const favoriteEntries = useMemo(() => entries.filter(entry => entry.favorite), [entries])
   const activeKey = activeTab ?? activeEntries[0]?.key ?? null
   const maxBytesMb = useMemo(() => Math.round(registry.settings.maxBytes / (1024 * 1024)), [registry.settings.maxBytes])
+  const resolveEntryLabel = (entry: (typeof entries)[number]) =>
+    entry.label || (entry.kind === 'mcp' ? 'MCP App' : 'HTML Tool Output')
 
   const displayLabels = useMemo(() => {
     const labelCounts = new Map<string, number>()
     const labelIndices = new Map<string, number>()
     activeEntries.forEach(entry => {
-      const label = entry.label || 'App'
+      const label = resolveEntryLabel(entry)
       labelCounts.set(label, (labelCounts.get(label) || 0) + 1)
     })
     const result = new Map<string, string>()
     activeEntries.forEach(entry => {
-      const label = entry.label || 'App'
+      const label = resolveEntryLabel(entry)
       const count = labelCounts.get(label) || 1
       if (count > 1) {
         const idx = (labelIndices.get(label) || 0) + 1
@@ -124,7 +127,7 @@ export const HtmlToolsModal: React.FC = () => {
       }
     })
     return result
-  }, [activeEntries])
+  }, [activeEntries, resolveEntryLabel])
 
   const toggleFullscreen = (entryKey: string) => {
     const isExiting = fullscreenKey === entryKey
@@ -209,7 +212,9 @@ export const HtmlToolsModal: React.FC = () => {
     const isHibernated = entry.status === 'hibernated'
     const isFavorite = entry.favorite
     const isFullscreen = fullscreenKey === entry.key
+    const mcpEntry = entry.kind === 'mcp' ? entry : null
     const isCompact = options?.compactView === true
+    const entryLabel = displayLabels.get(entry.key) ?? resolveEntryLabel(entry)
     const iframeHeightClass = isCollapsed
       ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
       : isFullscreen
@@ -246,8 +251,13 @@ export const HtmlToolsModal: React.FC = () => {
         <div className={`flex items-center gap-3 ${isCompact ? '' : 'mb-4'}`}>
           <div className='flex items-center gap-3 min-w-0 flex-1'>
             <span className='text-[15px] font-medium text-neutral-800 dark:text-neutral-200 tracking-tight'>
-              {entry.label || 'HTML Tool Output'}
+              {entryLabel}
             </span>
+            {mcpEntry && (
+              <span className='text-[10px] uppercase tracking-[0.15em] text-emerald-600 dark:text-emerald-400'>
+                MCP App
+              </span>
+            )}
             <span className='font-mono text-[10px] px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'>
               ID: {truncatedKey}
             </span>
@@ -303,12 +313,25 @@ export const HtmlToolsModal: React.FC = () => {
               <div className='font-mono text-xs text-neutral-500 dark:text-neutral-600'>Output collapsed.</div>
             )}
             <div className={`w-full ${iframeHeightClass}`} aria-hidden={isCollapsed}>
-              <HtmlIframeSlot
-                iframeKey={entry.key}
-                html={entry.html}
-                fullHeight
-                className='h-full w-full rounded-xl overflow-hidden'
-              />
+              {mcpEntry ? (
+                <McpAppIframe
+                  serverName={mcpEntry.serverName}
+                  qualifiedToolName={mcpEntry.qualifiedToolName}
+                  resourceUri={mcpEntry.resourceUri}
+                  toolArgs={mcpEntry.toolArgs ?? undefined}
+                  toolResult={mcpEntry.toolResult ?? undefined}
+                  toolDefinition={mcpEntry.toolDefinition}
+                  reloadToken={mcpEntry.reloadToken}
+                  className='h-full w-full rounded-xl overflow-hidden'
+                />
+              ) : (
+                <HtmlIframeSlot
+                  iframeKey={entry.key}
+                  html={entry.html}
+                  fullHeight
+                  className='h-full w-full rounded-xl overflow-hidden'
+                />
+              )}
             </div>
           </>
         )}
@@ -458,7 +481,7 @@ export const HtmlToolsModal: React.FC = () => {
                   }
                 `}
               >
-                {entry.label || 'HTML Tool Output'}
+                {displayLabels.get(entry.key) ?? resolveEntryLabel(entry)}
               </button>
             ))}
           </div>
@@ -590,7 +613,7 @@ export const HtmlToolsModal: React.FC = () => {
                   >
                     <span className='flex items-center gap-1.5'>
                       {entry.favorite && <i className='bx bxs-star text-amber-500 dark:text-amber-400 text-[10px]' />}
-                      {displayLabels.get(entry.key) || entry.label || 'App'}
+                      {displayLabels.get(entry.key) || resolveEntryLabel(entry)}
                     </span>
                   </button>
                   {/* Tab context menu trigger */}
@@ -743,7 +766,7 @@ export const HtmlToolsModal: React.FC = () => {
                             }}
                           >
                             <i className='bx bx-play' />
-                            <span className='truncate flex-1'>{entry.label || 'App'}</span>
+                            <span className='truncate flex-1'>{resolveEntryLabel(entry)}</span>
                           </button>
                         ))}
                       </>

@@ -18,6 +18,13 @@ export interface ToolDefinition {
   enabled: boolean
   description: string
   inputSchema: ToolInputSchema
+  isMcp?: boolean
+  mcpServerName?: string
+  mcpToolName?: string
+  mcpUi?: {
+    resourceUri?: string
+    visibility?: Array<'model' | 'app'>
+  }
 }
 
 export interface SelectedFileContent {

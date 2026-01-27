@@ -435,6 +435,14 @@ export interface ToolDefinition {
   sourcePath?: string
   version?: string
   author?: string
+  // MCP tool metadata (set for MCP server tools)
+  isMcp?: boolean
+  mcpServerName?: string
+  mcpToolName?: string
+  mcpUi?: {
+    resourceUri?: string
+    visibility?: Array<'model' | 'app'>
+  }
 }
 
 // Alias for backwards compatibility

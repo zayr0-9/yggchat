@@ -21,6 +21,7 @@ import { CCResponse, executeClaudeCode, getAvailableSlashCommands, getSession, s
 import { createTextFile } from './tools/createFile.js'
 import { customToolRegistry, ToolResult } from './tools/customToolLoader.js'
 import { execute as executeCustomToolManager } from './tools/customToolManager.js'
+import { execute as executeMcpManagerTool } from './tools/mcpManagerTool.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
 import { editFile } from './tools/editFile.js'
@@ -271,6 +272,10 @@ function initializeBuiltInToolRegistry() {
 
   builtInTools.set('custom_tool_manager', async args => {
     return await executeCustomToolManager(args)
+  })
+
+  builtInTools.set('mcp_manager', async args => {
+    return await executeMcpManagerTool(args)
   })
 
   builtInTools.set('skill_manager', async args => {

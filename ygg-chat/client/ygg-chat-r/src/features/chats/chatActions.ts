@@ -1167,6 +1167,20 @@ const executeLocalTool = async (
       priority: context?.priority ?? 'normal',
       timeoutMs,
     })
+    const action = toolCall?.arguments?.action
+    if (
+      toolCall?.name === 'mcp_manager' &&
+      context?.dispatch &&
+      typeof action === 'string' &&
+      ['stop', 'list_tools'].includes(action) &&
+      result &&
+      typeof result === 'object' &&
+      (result as any).success
+    ) {
+      setTimeout(() => {
+        context.dispatch(fetchMcpTools() as any)
+      }, 500)
+    }
     return result
   } catch (error) {
     console.error(`Tool execution error:`, error)
@@ -5612,6 +5626,10 @@ export const reloadCustomTools = createAsyncThunk<{ success: boolean; count: num
 )
 
 // Fetch and merge MCP tools from connected MCP servers (Electron only)
+let mcpToolsRetryCount = 0
+const MAX_MCP_TOOLS_RETRIES = 2
+const MCP_TOOLS_RETRY_DELAY_MS = 2000
+
 export const fetchMcpTools = createAsyncThunk<void, void, { state: RootState }>(
   'chat/fetchMcpTools',
   async (_, { dispatch }) => {
@@ -5627,6 +5645,12 @@ export const fetchMcpTools = createAsyncThunk<void, void, { state: RootState }>(
     }
 
     try {
+      try {
+        await fetch(`${LOCAL_API_BASE}/mcp/refresh-tools`, { method: 'POST' })
+      } catch {
+        // Ignore refresh errors; we'll still try to read tools
+      }
+
       const response = await fetch(`${LOCAL_API_BASE}/mcp/tools`)
       if (!response.ok) {
         console.warn('[McpTools] Failed to fetch MCP tools:', response.statusText)
@@ -5636,15 +5660,26 @@ export const fetchMcpTools = createAsyncThunk<void, void, { state: RootState }>(
       const data = await response.json()
       if (data.success && Array.isArray(data.tools)) {
         // Transform MCP tools to ToolDefinition format
-        const mcpToolDefinitions = data.tools.map((tool: any) => ({
-          name: tool.qualifiedName || tool.name,
-          description: tool.description || `MCP tool from ${tool.serverName}`,
-          enabled: true,
-          inputSchema: tool.inputSchema || { type: 'object', properties: {} },
-          isMcp: true,
-          mcpServerName: tool.serverName,
-          mcpToolName: tool.name,
-        }))
+        const mcpToolDefinitions = data.tools.map((tool: any) => {
+          const metaUi = tool?._meta?.ui || (tool?._meta?.['ui/resourceUri'] ? { resourceUri: tool._meta['ui/resourceUri'] } : undefined)
+          const visibility = Array.isArray(metaUi?.visibility) ? metaUi.visibility : ['model', 'app']
+          const enabled = visibility.includes('model')
+          return {
+            name: tool.qualifiedName || tool.name,
+            description: tool.description || `MCP tool from ${tool.serverName}`,
+            enabled,
+            inputSchema: tool.inputSchema || { type: 'object', properties: {} },
+            isMcp: true,
+            mcpServerName: tool.serverName,
+            mcpToolName: tool.name,
+            mcpUi: metaUi
+              ? {
+                  resourceUri: metaUi.resourceUri,
+                  visibility,
+                }
+              : undefined,
+          }
+        })
 
         // Merge MCP tools with existing tools
         setMcpTools(mcpToolDefinitions)
@@ -5653,6 +5688,15 @@ export const fetchMcpTools = createAsyncThunk<void, void, { state: RootState }>(
         dispatch(chatSliceActions.setTools(getAllTools()))
 
         console.log(`[McpTools] Loaded ${mcpToolDefinitions.length} MCP tools`)
+
+        if (mcpToolDefinitions.length > 0) {
+          mcpToolsRetryCount = 0
+        } else if (mcpToolsRetryCount < MAX_MCP_TOOLS_RETRIES) {
+          mcpToolsRetryCount += 1
+          setTimeout(() => {
+            dispatch(fetchMcpTools())
+          }, MCP_TOOLS_RETRY_DELAY_MS)
+        }
       }
     } catch (error) {
       // Silently fail - MCP tools are optional

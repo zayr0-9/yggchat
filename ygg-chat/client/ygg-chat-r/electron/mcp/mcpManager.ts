@@ -29,6 +29,13 @@ export interface McpToolDefinition {
     properties?: Record<string, any>
     required?: string[]
   }
+  _meta?: {
+    ui?: {
+      resourceUri?: string
+      visibility?: Array<'model' | 'app'>
+    }
+    'ui/resourceUri'?: string
+  }
   // Added by manager
   serverName?: string
   qualifiedName?: string // mcp__serverName__toolName
@@ -235,6 +242,11 @@ class McpClient extends EventEmitter {
       capabilities: {
         roots: { listChanged: true },
         sampling: {},
+        extensions: {
+          'io.modelcontextprotocol/ui': {
+            mimeTypes: ['text/html;profile=mcp-app'],
+          },
+        },
       },
       clientInfo: {
         name: 'ygg-chat',
@@ -414,6 +426,9 @@ class McpClient extends EventEmitter {
 const MCP_CONFIG_FILE = 'mcp-servers.json'
 
 interface McpConfigFile {
+  settings?: {
+    lazyStart?: boolean
+  }
   servers: Record<string, Omit<McpServerConfig, 'name' | 'enabled'> & { enabled?: boolean }>
 }
 
@@ -422,6 +437,11 @@ class McpManager extends EventEmitter {
   private configPath: string = ''
   private initialized = false
   private initPromise: Promise<void> | null = null
+  private settings: { lazyStart: boolean } = { lazyStart: true }
+
+  getSettings(): { lazyStart: boolean } {
+    return { ...this.settings }
+  }
 
   getConfigDirectory(): string {
     try {
@@ -454,14 +474,18 @@ class McpManager extends EventEmitter {
     // Load and start servers
     const configs = await this.loadConfig()
 
-    for (const config of configs) {
-      if (config.enabled && config.autoStart !== false) {
-        try {
-          await this.startServer(config)
-        } catch (err) {
-          console.error(`[McpManager] Failed to start ${config.name}:`, err)
+    if (!this.settings.lazyStart) {
+      for (const config of configs) {
+        if (config.enabled && config.autoStart !== false) {
+          try {
+            await this.startServer(config)
+          } catch (err) {
+            console.error(`[McpManager] Failed to start ${config.name}:`, err)
+          }
         }
       }
+    } else {
+      console.log('[McpManager] Lazy start enabled: skipping auto-start')
     }
 
     this.initialized = true
@@ -469,31 +493,44 @@ class McpManager extends EventEmitter {
   }
 
   private async loadConfig(): Promise<McpServerConfig[]> {
+    const config = await this.loadConfigFile()
+    this.settings = { lazyStart: config.settings?.lazyStart ?? true }
+
+    return Object.entries(config.servers).map(([name, serverConfig]) => ({
+      name,
+      enabled: serverConfig.enabled !== false,
+      autoStart: serverConfig.autoStart,
+      command: serverConfig.command,
+      args: serverConfig.args,
+      env: serverConfig.env,
+    }))
+  }
+
+  private async loadConfigFile(): Promise<McpConfigFile> {
     try {
       const content = await fs.readFile(this.configPath, 'utf-8')
-      const config: McpConfigFile = JSON.parse(content)
-
-      return Object.entries(config.servers).map(([name, serverConfig]) => ({
-        name,
-        enabled: serverConfig.enabled !== false,
-        autoStart: serverConfig.autoStart,
-        command: serverConfig.command,
-        args: serverConfig.args,
-        env: serverConfig.env,
-      }))
+      const parsed: McpConfigFile = JSON.parse(content)
+      return {
+        settings: parsed.settings,
+        servers: parsed.servers || {},
+      }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        // Create default config
-        await this.saveConfig([])
-        return []
+        const defaultConfig: McpConfigFile = {
+          settings: { lazyStart: true },
+          servers: {},
+        }
+        await fs.writeFile(this.configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8')
+        return defaultConfig
       }
       console.error('[McpManager] Failed to load config:', err)
-      return []
+      return { settings: { lazyStart: true }, servers: {} }
     }
   }
 
-  private async saveConfig(configs: McpServerConfig[]): Promise<void> {
+  private async saveConfig(configs: McpServerConfig[], settings?: { lazyStart?: boolean }): Promise<void> {
     const configFile: McpConfigFile = {
+      settings: settings ?? this.settings,
       servers: {},
     }
 
@@ -508,6 +545,17 @@ class McpManager extends EventEmitter {
     }
 
     await fs.writeFile(this.configPath, JSON.stringify(configFile, null, 2), 'utf-8')
+  }
+
+  async updateSettings(updates: { lazyStart?: boolean }): Promise<{ lazyStart: boolean }> {
+    const config = await this.loadConfigFile()
+    const nextSettings = {
+      lazyStart: updates.lazyStart ?? config.settings?.lazyStart ?? true,
+    }
+    config.settings = nextSettings
+    await fs.writeFile(this.configPath, JSON.stringify(config, null, 2), 'utf-8')
+    this.settings = nextSettings
+    return this.getSettings()
   }
 
   async startServer(config: McpServerConfig): Promise<void> {
@@ -555,10 +603,10 @@ class McpManager extends EventEmitter {
     }
 
     configs.push(config)
-    await this.saveConfig(configs)
+    await this.saveConfig(configs, this.settings)
 
     // Start if enabled
-    if (config.enabled && config.autoStart !== false) {
+    if (!this.settings.lazyStart && config.enabled && config.autoStart !== false) {
       await this.startServer(config)
     }
   }
@@ -572,7 +620,7 @@ class McpManager extends EventEmitter {
     }
 
     configs[index] = { ...configs[index], ...updates }
-    await this.saveConfig(configs)
+    await this.saveConfig(configs, this.settings)
 
     // Restart if running
     const client = this.clients.get(name)
@@ -588,7 +636,7 @@ class McpManager extends EventEmitter {
     // Remove from config
     const configs = await this.loadConfig()
     const filtered = configs.filter(c => c.name !== name)
-    await this.saveConfig(filtered)
+    await this.saveConfig(filtered, this.settings)
   }
 
   // ============================================================================
@@ -605,6 +653,29 @@ class McpManager extends EventEmitter {
     return tools
   }
 
+  private async ensureServerConnected(serverName: string): Promise<McpClient> {
+    const existing = this.clients.get(serverName)
+    if (existing && existing.status === 'connected') {
+      return existing
+    }
+
+    const configs = await this.loadConfig()
+    const config = configs.find(c => c.name === serverName)
+    if (!config) {
+      throw new Error(`MCP server '${serverName}' not found`)
+    }
+    if (!config.enabled) {
+      throw new Error(`MCP server '${serverName}' is disabled`)
+    }
+
+    await this.startServer(config)
+    const client = this.clients.get(serverName)
+    if (!client || client.status !== 'connected') {
+      throw new Error(`MCP server '${serverName}' failed to connect`)
+    }
+    return client
+  }
+
   async callTool(qualifiedName: string, args: any): Promise<McpToolCallResult> {
     // Parse qualified name: mcp__serverName__toolName
     const match = qualifiedName.match(/^mcp__([^_]+)__(.+)$/)
@@ -613,17 +684,8 @@ class McpManager extends EventEmitter {
     }
 
     const [, serverName, toolName] = match
-    const client = this.clients.get(serverName)
-
-    if (!client) {
-      throw new Error(`MCP server '${serverName}' not found`)
-    }
-
-    if (client.status !== 'connected') {
-      throw new Error(`MCP server '${serverName}' is not connected (status: ${client.status})`)
-    }
-
-    return await client.callTool(toolName, args)
+    const client = await this.ensureServerConnected(serverName)
+    return client.callTool(toolName, args)
   }
 
   // Check if a tool name is an MCP tool
@@ -646,11 +708,8 @@ class McpManager extends EventEmitter {
   }
 
   async readResource(serverName: string, uri: string): Promise<any> {
-    const client = this.clients.get(serverName)
-    if (!client || client.status !== 'connected') {
-      throw new Error(`MCP server '${serverName}' is not connected`)
-    }
-    return await client.readResource(uri)
+    const client = await this.ensureServerConnected(serverName)
+    return client.readResource(uri)
   }
 
   // ============================================================================
@@ -668,11 +727,8 @@ class McpManager extends EventEmitter {
   }
 
   async getPrompt(serverName: string, promptName: string, args?: Record<string, string>): Promise<any> {
-    const client = this.clients.get(serverName)
-    if (!client || client.status !== 'connected') {
-      throw new Error(`MCP server '${serverName}' is not connected`)
-    }
-    return await client.getPrompt(promptName, args)
+    const client = await this.ensureServerConnected(serverName)
+    return client.getPrompt(promptName, args)
   }
 
   // ============================================================================
