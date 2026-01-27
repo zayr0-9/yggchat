@@ -8,13 +8,14 @@ import 'katex/dist/katex.min.css'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
-import { useDispatch, useSelector } from 'react-redux'
+import { useSelector } from 'react-redux'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { chatSliceActions } from '../../features/chats/chatSlice'
 import { fetchMcpTools } from '../../features/chats/chatActions'
+import { useAppDispatch } from '../../hooks/redux'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { attachMessageBridge } from '../../utils/iframeBridge'
@@ -869,7 +870,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     artifacts = [],
     fontSizeOffset = 0,
   }) => {
-    const dispatch = useDispatch()
+    const dispatch = useAppDispatch()
     const isMobile = useIsMobile()
     const [editingState, setEditingState] = useState(isEditing)
     const [editContent, setEditContent] = useState(content)

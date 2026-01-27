@@ -196,20 +196,17 @@ export const HtmlToolsModal: React.FC = () => {
             {isCollapsed && (
               <div className='text-xs text-neutral-500 dark:text-neutral-400'>Output collapsed.</div>
             )}
-            <div
-              className={`w-full ${iframeHeightClass}`}
-              aria-hidden={isCollapsed}
-            >
-              {mcpEntry ? (
+            <div className={`w-full ${iframeHeightClass}`} aria-hidden={isCollapsed}>
+              {entry.kind === 'mcp' ? (
                 <McpAppIframeSlot
                   iframeKey={entry.key}
-                  serverName={mcpEntry.serverName}
-                  qualifiedToolName={mcpEntry.qualifiedToolName}
-                  resourceUri={mcpEntry.resourceUri}
-                  toolArgs={mcpEntry.toolArgs ?? undefined}
-                  toolResult={mcpEntry.toolResult ?? undefined}
-                  toolDefinition={mcpEntry.toolDefinition}
-                  reloadToken={mcpEntry.reloadToken}
+                  serverName={entry.serverName}
+                  qualifiedToolName={entry.qualifiedToolName}
+                  resourceUri={entry.resourceUri}
+                  toolArgs={entry.toolArgs ?? undefined}
+                  toolResult={entry.toolResult ?? undefined}
+                  toolDefinition={entry.toolDefinition}
+                  reloadToken={entry.reloadToken}
                   className='h-full w-full'
                   priority={1}
                 />

@@ -784,7 +784,6 @@ const createMcpIframeRecord = (
     if (!message || (message as any).jsonrpc !== '2.0') return
 
     if ('method' in message) {
-      const method = message.method
       if ('id' in message && message.id !== undefined) {
         void handleRequest(message as JsonRpcRequest)
       } else {

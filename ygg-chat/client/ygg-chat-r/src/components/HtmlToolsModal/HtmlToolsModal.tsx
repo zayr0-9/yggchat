@@ -312,16 +312,16 @@ export const HtmlToolsModal: React.FC = () => {
               <div className='font-mono text-xs text-neutral-500 dark:text-neutral-600'>Output collapsed.</div>
             )}
             <div className={`w-full ${iframeHeightClass}`} aria-hidden={isCollapsed}>
-              {mcpEntry ? (
+              {entry.kind === 'mcp' ? (
                 <McpAppIframeSlot
                   iframeKey={entry.key}
-                  serverName={mcpEntry.serverName}
-                  qualifiedToolName={mcpEntry.qualifiedToolName}
-                  resourceUri={mcpEntry.resourceUri}
-                  toolArgs={mcpEntry.toolArgs ?? undefined}
-                  toolResult={mcpEntry.toolResult ?? undefined}
-                  toolDefinition={mcpEntry.toolDefinition}
-                  reloadToken={mcpEntry.reloadToken}
+                  serverName={entry.serverName}
+                  qualifiedToolName={entry.qualifiedToolName}
+                  resourceUri={entry.resourceUri}
+                  toolArgs={entry.toolArgs ?? undefined}
+                  toolResult={entry.toolResult ?? undefined}
+                  toolDefinition={entry.toolDefinition}
+                  reloadToken={entry.reloadToken}
                   className='h-full w-full rounded-xl overflow-hidden'
                   priority={1}
                 />
@@ -804,7 +804,22 @@ export const HtmlToolsModal: React.FC = () => {
                 data-tab-key={entry.key}
                 className={`absolute inset-0 ${entry.key === activeKey ? 'block' : 'hidden'}`}
               >
-                <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' priority={1} />
+                {entry.kind === 'mcp' ? (
+                  <McpAppIframeSlot
+                    iframeKey={entry.key}
+                    serverName={entry.serverName}
+                    qualifiedToolName={entry.qualifiedToolName}
+                    resourceUri={entry.resourceUri}
+                    toolArgs={entry.toolArgs ?? undefined}
+                    toolResult={entry.toolResult ?? undefined}
+                    toolDefinition={entry.toolDefinition}
+                    reloadToken={entry.reloadToken}
+                    className='h-full w-full'
+                    priority={1}
+                  />
+                ) : (
+                  <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' priority={1} />
+                )}
               </div>
             ))
           )}
