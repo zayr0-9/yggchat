@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build:client",
   "outputDirectory": "client/ygg-chat-r/dist",
-  "installCommand": "npm install",
+  "installCommand": "npm ci",
   "framework": null,
   "devCommand": null,
   "headers": [
