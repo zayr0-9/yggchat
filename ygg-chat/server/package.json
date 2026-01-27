@@ -58,7 +58,6 @@
     "@playwright/test": "^1.55.0",
     "@types/compression": "^1.7.2",
     "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
     "@types/glob": "^8.1.0",
     "@types/morgan": "^1.9.4",
     "@types/multer": "^2.0.0",
