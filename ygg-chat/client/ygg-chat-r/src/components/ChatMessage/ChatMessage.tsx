@@ -20,9 +20,9 @@ import { useIsMobile } from '../../hooks/useMediaQuery'
 import { attachMessageBridge } from '../../utils/iframeBridge'
 import { environment, localApi } from '../../utils/api'
 import { Button } from '../Button/button'
+import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
 import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
-import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { TextArea } from '../TextArea/TextArea'
 type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
@@ -1833,6 +1833,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   toolResult={normalizedResult}
                   toolDefinition={mcpTool}
                   reloadToken={mcpReloadTokens[reloadKey] || 0}
+                  className='w-full min-h-[600px] rounded-lg bg-white'
                 />
               </div>
             </div>

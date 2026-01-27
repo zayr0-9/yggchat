@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '../Button/button'
-import { HtmlIframeSlot, useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
-import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
+import { HtmlIframeSlot, McpAppIframeSlot, useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 
 export const HtmlToolsModal: React.FC = () => {
   const registry = useHtmlIframeRegistry()
@@ -202,7 +201,8 @@ export const HtmlToolsModal: React.FC = () => {
               aria-hidden={isCollapsed}
             >
               {mcpEntry ? (
-                <McpAppIframe
+                <McpAppIframeSlot
+                  iframeKey={entry.key}
                   serverName={mcpEntry.serverName}
                   qualifiedToolName={mcpEntry.qualifiedToolName}
                   resourceUri={mcpEntry.resourceUri}
@@ -211,9 +211,10 @@ export const HtmlToolsModal: React.FC = () => {
                   toolDefinition={mcpEntry.toolDefinition}
                   reloadToken={mcpEntry.reloadToken}
                   className='h-full w-full'
+                  priority={1}
                 />
               ) : (
-                <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' />
+                <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' priority={1} />
               )}
             </div>
           </>

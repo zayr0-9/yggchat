@@ -11,7 +11,7 @@ import React, {
 } from 'react'
 import type { ContentBlock, Message } from '../../features/chats/chatTypes'
 import type { Conversation } from '../../features/conversations/conversationTypes'
-import type { ToolDefinition } from '../../features/chats/toolDefinitions'
+import { getMcpTools, type ToolDefinition } from '../../features/chats/toolDefinitions'
 import { useAuth } from '../../hooks/useAuth'
 import {
   getHtmlToolsFromCache,
@@ -21,6 +21,16 @@ import {
 } from '../../hooks/useQueries'
 import { environment, localApi } from '../../utils/api'
 import { attachMessageBridge as attachSharedMessageBridge } from '../../utils/iframeBridge'
+import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
+import {
+  buildCspValue,
+  buildIframeAllow,
+  decodeResourceHtml,
+  injectCspMeta,
+  type McpUiMeta,
+  type McpUiPermissions,
+  type McpUiResource,
+} from '../../utils/mcpApps'
 
 type HtmlIframeEntryBase = {
   key: string
@@ -91,7 +101,20 @@ type HtmlIframeRegistryContextValue = {
     label?: string | null,
     meta?: { conversationId?: string | null; projectId?: string | null }
   ) => void
-  setTarget: (key: string, target: HTMLElement | null) => void
+  updateMcpIframe: (
+    key: string,
+    payload: {
+      serverName: string
+      resourceUri: string
+      qualifiedToolName: string
+      toolArgs?: Record<string, any> | null
+      toolResult?: { content: any; is_error?: boolean } | null
+      toolDefinition?: ToolDefinition
+      reloadToken?: number
+      className?: string
+    }
+  ) => void
+  setTarget: (key: string, target: HTMLElement | null, ownerId: string, priority?: number) => void
   isModalOpen: boolean
   focusKey: string | null
   openModal: (focusKey?: string | null) => void
@@ -114,7 +137,54 @@ type IframeRecord = {
   fullHeight: boolean
   cleanup: () => void
   positionCleanup?: () => void
+  activeTarget?: HTMLElement | null
 }
+
+type McpIframeRecord = {
+  iframe: HTMLIFrameElement
+  cleanup: () => void
+  positionCleanup?: () => void
+  activeTarget?: HTMLElement | null
+  serverName: string
+  resourceUri: string
+  qualifiedToolName: string
+  toolArgs?: Record<string, any> | null
+  toolResult?: { content: any; is_error?: boolean } | null
+  toolDefinition?: ToolDefinition
+  reloadToken?: number
+  className?: string
+  uiMeta?: McpUiMeta
+  appReady: boolean
+  toolInputSent: boolean
+  lastResultHash: string | null
+  hostRequestId: number
+  loadSeq: number
+  sendToolResult: (result: { content: any; is_error?: boolean } | null) => void
+  ensureReadyAndSend: () => void
+  sendRequest: (method: string, params?: any) => void
+}
+
+type JsonRpcRequest = {
+  jsonrpc: '2.0'
+  id: number | string
+  method: string
+  params?: any
+}
+
+type JsonRpcNotification = {
+  jsonrpc: '2.0'
+  method: string
+  params?: any
+}
+
+type JsonRpcResponse = {
+  jsonrpc: '2.0'
+  id: number | string
+  result?: any
+  error?: { code: number; message: string; data?: any }
+}
+
+type TargetEntry = { target: HTMLElement; priority: number; order: number }
 
 const HtmlIframeRegistryContext = createContext<HtmlIframeRegistryContextValue | null>(null)
 
@@ -178,6 +248,72 @@ const normalizeLimit = (value: number) => (Number.isFinite(value) ? Math.max(0, 
 const isHtmlEntry = (entry: HtmlIframeEntry): entry is HtmlIframeHtmlEntry => entry.kind !== 'mcp'
 
 const isMcpEntry = (entry: HtmlIframeEntry): entry is HtmlIframeMcpEntry => entry.kind === 'mcp'
+
+const MCP_APP_MIME_TYPE = 'text/html;profile=mcp-app'
+const BASE_ALLOW =
+  'fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
+
+const normalizeToolResult = (result?: { content: any; is_error?: boolean } | null) => {
+  if (!result) return null
+  const payload: any = {}
+  if (result.is_error) payload.isError = true
+  const raw = result.content
+  if (raw && typeof raw === 'object' && Array.isArray(raw.content)) {
+    return { ...raw, ...payload }
+  }
+  if (Array.isArray(raw)) {
+    return { content: raw, ...payload }
+  }
+  if (typeof raw === 'string') {
+    return { content: [{ type: 'text', text: raw }], ...payload }
+  }
+  if (raw && typeof raw === 'object') {
+    return { content: [{ type: 'text', text: JSON.stringify(raw) }], ...payload }
+  }
+  return { content: [{ type: 'text', text: String(raw ?? '') }], ...payload }
+}
+
+const buildHostContext = (toolDefinition?: ToolDefinition, fallbackToolName?: string) => {
+  const isDark = document.documentElement.classList.contains('dark')
+  const theme = isDark ? 'dark' : 'light'
+  const locale = typeof navigator !== 'undefined' ? navigator.language : undefined
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return {
+    toolInfo: toolDefinition
+      ? {
+          tool: {
+            name: toolDefinition.name,
+            description: toolDefinition.description,
+            inputSchema: toolDefinition.inputSchema,
+          },
+        }
+      : fallbackToolName
+        ? { tool: { name: fallbackToolName } }
+        : undefined,
+    theme,
+    platform: environment === 'electron' ? 'desktop' : 'web',
+    locale,
+    timeZone,
+    userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+    displayMode: 'inline',
+    availableDisplayModes: ['inline'],
+  }
+}
+
+const buildHostCapabilities = (uiMeta?: McpUiMeta) => {
+  const sandboxPermissions = uiMeta?.permissions
+  const csp = uiMeta?.csp
+  return {
+    openLinks: {},
+    serverTools: {},
+    serverResources: {},
+    logging: {},
+    sandbox: {
+      permissions: sandboxPermissions,
+      csp,
+    },
+  }
+}
 
 const toCacheRecord = (entry: HtmlIframeHtmlEntry, userId: string): HtmlToolRecord => ({
   key: entry.key,
@@ -390,12 +526,296 @@ const createIframeRecord = (
   return { iframe, html, fullHeight, cleanup }
 }
 
+const configureMcpIframeElement = (iframe: HTMLIFrameElement, className?: string) => {
+  iframe.style.border = 'none'
+  iframe.title = 'MCP App'
+  iframe.className = className ?? 'w-full h-full bg-white'
+  iframe.setAttribute('allow', BASE_ALLOW)
+  iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin')
+  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation')
+}
+
+const createMcpIframeRecord = (
+  payload: {
+    serverName: string
+    resourceUri: string
+    qualifiedToolName: string
+    toolArgs?: Record<string, any> | null
+    toolResult?: { content: any; is_error?: boolean } | null
+    toolDefinition?: ToolDefinition
+    reloadToken?: number
+    className?: string
+  }
+): McpIframeRecord => {
+  const iframe = document.createElement('iframe')
+  configureMcpIframeElement(iframe, payload.className)
+
+  const record: McpIframeRecord = {
+    iframe,
+    serverName: payload.serverName,
+    resourceUri: payload.resourceUri,
+    qualifiedToolName: payload.qualifiedToolName,
+    toolArgs: payload.toolArgs ?? null,
+    toolResult: payload.toolResult ?? null,
+    toolDefinition: payload.toolDefinition,
+    reloadToken: payload.reloadToken,
+    className: payload.className,
+    uiMeta: undefined,
+    appReady: false,
+    toolInputSent: false,
+    lastResultHash: null,
+    hostRequestId: 1,
+    loadSeq: 0,
+    sendToolResult: () => {},
+    ensureReadyAndSend: () => {},
+    sendRequest: () => {},
+    cleanup: () => {},
+  }
+
+  const sendMessage = (msg: JsonRpcRequest | JsonRpcNotification | JsonRpcResponse) => {
+    iframe.contentWindow?.postMessage(msg, '*')
+  }
+
+  const sendNotification = (method: string, params?: any) => {
+    sendMessage({ jsonrpc: '2.0', method, params })
+  }
+
+  const sendRequest = (method: string, params?: any) => {
+    const id = record.hostRequestId++
+    sendMessage({ jsonrpc: '2.0', id, method, params })
+  }
+
+  const sendToolInput = () => {
+    if (record.toolInputSent) return
+    sendNotification('ui/notifications/tool-input', { arguments: record.toolArgs || {} })
+    record.toolInputSent = true
+  }
+
+  const sendToolResult = (result: { content: any; is_error?: boolean } | null) => {
+    if (!result) return
+    const normalized = normalizeToolResult(result)
+    if (!normalized) return
+    const hash = JSON.stringify(normalized)
+    if (record.lastResultHash === hash) return
+    sendNotification('ui/notifications/tool-result', normalized)
+    record.lastResultHash = hash
+  }
+
+  const ensureReadyAndSend = () => {
+    if (!record.appReady) return
+    sendToolInput()
+    sendToolResult(record.toolResult ?? null)
+  }
+
+  const handleRequest = async (request: JsonRpcRequest) => {
+    const respond = (payload: JsonRpcResponse) => sendMessage(payload)
+    const fail = (id: number | string, messageText: string) =>
+      respond({ jsonrpc: '2.0', id, error: { code: -32000, message: messageText } })
+
+    switch (request.method) {
+      case 'ui/initialize': {
+        const result = {
+          protocolVersion: '2025-06-18',
+          hostCapabilities: buildHostCapabilities(record.uiMeta),
+          hostInfo: { name: 'ygg-chat', version: '1.0.0' },
+          hostContext: buildHostContext(record.toolDefinition, record.qualifiedToolName),
+        }
+        respond({ jsonrpc: '2.0', id: request.id, result })
+        return
+      }
+
+      case 'tools/call': {
+        const name = request.params?.name
+        const args = request.params?.arguments ?? {}
+        if (!name || typeof name !== 'string') {
+          fail(request.id, 'Missing tool name')
+          return
+        }
+        const qualified = name.startsWith('mcp__') ? name : `mcp__${record.serverName}__${name}`
+        if (!qualified.startsWith(`mcp__${record.serverName}__`)) {
+          fail(request.id, 'Cross-server tool calls are not allowed')
+          return
+        }
+        const toolMeta = getMcpTools().find(t => t.name === qualified)
+        const visibility = toolMeta?.mcpUi?.visibility
+        if (Array.isArray(visibility) && !visibility.includes('app')) {
+          fail(request.id, 'Tool not available to app')
+          return
+        }
+        try {
+          const response = await localApi.post<{ success: boolean; result?: any; error?: string }>(
+            '/mcp/tools/call',
+            { name: qualified, arguments: args }
+          )
+          if (!response?.success) {
+            fail(request.id, response?.error || 'Tool call failed')
+            return
+          }
+          respond({ jsonrpc: '2.0', id: request.id, result: response.result })
+        } catch (err) {
+          fail(request.id, err instanceof Error ? err.message : String(err))
+        }
+        return
+      }
+
+      case 'tools/list': {
+        try {
+          const response = await localApi.get<{ success: boolean; tools?: any[] }>('/mcp/tools')
+          if (!response?.success || !Array.isArray(response.tools)) {
+            fail(request.id, 'Failed to list tools')
+            return
+          }
+          const tools = response.tools
+            .filter(tool => tool.serverName === record.serverName)
+            .filter(tool => {
+              const visibility = tool?._meta?.ui?.visibility
+              return !Array.isArray(visibility) || visibility.includes('app')
+            })
+            .map(tool => ({
+              name: tool.name,
+              description: tool.description,
+              inputSchema: tool.inputSchema,
+              _meta: tool._meta,
+            }))
+          respond({ jsonrpc: '2.0', id: request.id, result: { tools } })
+        } catch (err) {
+          fail(request.id, err instanceof Error ? err.message : String(err))
+        }
+        return
+      }
+
+      case 'resources/read': {
+        const uri = request.params?.uri
+        if (!uri || typeof uri !== 'string') {
+          fail(request.id, 'Missing resource uri')
+          return
+        }
+        try {
+          const response = await localApi.post<{ success: boolean; result?: any; error?: string }>(
+            '/mcp/resources/read',
+            { serverName: record.serverName, uri }
+          )
+          if (!response?.success) {
+            fail(request.id, response?.error || 'Resource read failed')
+            return
+          }
+          respond({ jsonrpc: '2.0', id: request.id, result: response.result })
+        } catch (err) {
+          fail(request.id, err instanceof Error ? err.message : String(err))
+        }
+        return
+      }
+
+      case 'resources/list': {
+        try {
+          const response = await localApi.get<{ success: boolean; resources?: any[] }>('/mcp/resources')
+          if (!response?.success || !Array.isArray(response.resources)) {
+            fail(request.id, 'Failed to list resources')
+            return
+          }
+          const resources = response.resources.filter(r => r.serverName === record.serverName)
+          respond({ jsonrpc: '2.0', id: request.id, result: { resources } })
+        } catch (err) {
+          fail(request.id, err instanceof Error ? err.message : String(err))
+        }
+        return
+      }
+
+      case 'ui/open-link': {
+        const url = request.params?.url
+        if (!url || typeof url !== 'string') {
+          fail(request.id, 'Invalid URL')
+          return
+        }
+        try {
+          const electronApi = (window as any).electronAPI
+          if (electronApi?.auth?.openExternal) {
+            await electronApi.auth.openExternal(url)
+          } else {
+            window.open(url, '_blank', 'noopener')
+          }
+          respond({ jsonrpc: '2.0', id: request.id, result: {} })
+        } catch (err) {
+          fail(request.id, err instanceof Error ? err.message : String(err))
+        }
+        return
+      }
+
+      case 'ui/request-display-mode': {
+        respond({ jsonrpc: '2.0', id: request.id, result: { mode: 'inline' } })
+        return
+      }
+
+      case 'ui/message':
+      case 'ui/update-model-context':
+        respond({ jsonrpc: '2.0', id: request.id, result: {} })
+        return
+
+      case 'ping':
+        respond({ jsonrpc: '2.0', id: request.id, result: {} })
+        return
+
+      case 'ui/resource-teardown':
+        respond({ jsonrpc: '2.0', id: request.id, result: {} })
+        return
+
+      default:
+        fail(request.id, `Unsupported method: ${request.method}`)
+    }
+  }
+
+  const handleNotification = (notification: JsonRpcNotification) => {
+    switch (notification.method) {
+      case 'ui/notifications/initialized':
+        record.appReady = true
+        ensureReadyAndSend()
+        break
+      case 'notifications/message':
+        console.log('[McpApp] message', notification.params)
+        break
+      default:
+        break
+    }
+  }
+
+  const handleMessage = (event: MessageEvent) => {
+    if (event.source !== iframe.contentWindow) return
+    const message = event.data as JsonRpcRequest | JsonRpcNotification | JsonRpcResponse
+    if (!message || (message as any).jsonrpc !== '2.0') return
+
+    if ('method' in message) {
+      const method = message.method
+      if ('id' in message && message.id !== undefined) {
+        void handleRequest(message as JsonRpcRequest)
+      } else {
+        handleNotification(message as JsonRpcNotification)
+      }
+      return
+    }
+  }
+
+  window.addEventListener('message', handleMessage)
+
+  record.cleanup = () => {
+    sendRequest('ui/resource-teardown', { reason: 'unmount' })
+    window.removeEventListener('message', handleMessage)
+  }
+
+  record.sendToolResult = sendToolResult
+  record.ensureReadyAndSend = ensureReadyAndSend
+  record.sendRequest = sendRequest
+
+  return record
+}
+
 export const HtmlIframeRegistryProvider: React.FC<{
   children: React.ReactNode
   resetKey?: string | number | null
 }> = ({ children, resetKey }) => {
   const recordsRef = useRef<Map<string, IframeRecord>>(new Map())
-  const targetsRef = useRef<Map<string, HTMLElement | null>>(new Map())
+  const mcpRecordsRef = useRef<Map<string, McpIframeRecord>>(new Map())
+  const targetsRef = useRef<Map<string, Map<string, TargetEntry>>>(new Map())
+  const targetOrderRef = useRef(0)
   const entriesRef = useRef<Map<string, HtmlIframeEntry>>(new Map())
   const [entries, setEntries] = useState<HtmlIframeEntry[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -540,13 +960,23 @@ export const HtmlIframeRegistryProvider: React.FC<{
   )
 
   const removeRecord = useCallback((key: string) => {
-    const record = recordsRef.current.get(key)
-    if (!record) return
-    logHtmlTools('iframe-remove', { key })
-    record.positionCleanup?.()
-    record.cleanup()
-    record.iframe.remove()
-    recordsRef.current.delete(key)
+    const htmlRecord = recordsRef.current.get(key)
+    if (htmlRecord) {
+      logHtmlTools('iframe-remove', { key })
+      htmlRecord.positionCleanup?.()
+      htmlRecord.cleanup()
+      htmlRecord.iframe.remove()
+      recordsRef.current.delete(key)
+    }
+
+    const mcpRecord = mcpRecordsRef.current.get(key)
+    if (mcpRecord) {
+      logHtmlTools('iframe-remove', { key })
+      mcpRecord.positionCleanup?.()
+      mcpRecord.cleanup()
+      mcpRecord.iframe.remove()
+      mcpRecordsRef.current.delete(key)
+    }
   }, [])
 
   useEffect(() => {
@@ -556,6 +986,12 @@ export const HtmlIframeRegistryProvider: React.FC<{
       record.iframe.remove()
     })
     recordsRef.current.clear()
+    mcpRecordsRef.current.forEach(record => {
+      record.positionCleanup?.()
+      record.cleanup()
+      record.iframe.remove()
+    })
+    mcpRecordsRef.current.clear()
     targetsRef.current.clear()
     entriesRef.current.clear()
     pendingUpsertsRef.current.clear()
@@ -847,21 +1283,49 @@ export const HtmlIframeRegistryProvider: React.FC<{
     [enforceLimits, queuePersistUpsert, syncEntries, updateCacheEntry]
   )
 
-  const setTarget = useCallback((key: string, target: HTMLElement | null) => {
-    targetsRef.current.set(key, target)
-    const record = recordsRef.current.get(key)
+  const setTarget = useCallback((key: string, target: HTMLElement | null, ownerId: string, priority = 0) => {
+    const map = targetsRef.current.get(key) ?? new Map<string, TargetEntry>()
+    if (target) {
+      const order = ++targetOrderRef.current
+      map.set(ownerId, { target, priority, order })
+    } else {
+      map.delete(ownerId)
+    }
+    if (map.size > 0) {
+      targetsRef.current.set(key, map)
+    } else {
+      targetsRef.current.delete(key)
+    }
+
+    const record = recordsRef.current.get(key) ?? mcpRecordsRef.current.get(key)
     if (!record) return
+
+    let activeTarget: HTMLElement | null = null
+    let activePriority = Number.NEGATIVE_INFINITY
+    let activeOrder = Number.NEGATIVE_INFINITY
+    map.forEach(entry => {
+      if (entry.priority > activePriority || (entry.priority === activePriority && entry.order > activeOrder)) {
+        activeTarget = entry.target
+        activePriority = entry.priority
+        activeOrder = entry.order
+      }
+    })
+
+    if (record.activeTarget === activeTarget) {
+      if (!activeTarget) return
+    }
 
     // Clean up previous position tracking
     record.positionCleanup?.()
     record.positionCleanup = undefined
+    record.activeTarget = activeTarget
 
     // Always keep iframe in hidden container (never inside slot to avoid unmount issues)
     if (!record.iframe.parentElement || record.iframe.parentElement !== hiddenHostRef.current) {
       hiddenHostRef.current?.appendChild(record.iframe)
     }
 
-    if (!target) {
+    if (!activeTarget) {
       // No target slot - hide iframe
       record.iframe.style.display = 'none'
       record.iframe.style.position = ''
@@ -876,7 +1340,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
 
     // Position iframe over the target slot using fixed positioning
     const updatePosition = () => {
-      const rect = target.getBoundingClientRect()
+      const rect = activeTarget.getBoundingClientRect()
       record.iframe.style.position = 'fixed'
       record.iframe.style.left = `${rect.left}px`
       record.iframe.style.top = `${rect.top}px`
@@ -891,7 +1355,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
 
     // Track position changes with ResizeObserver and scroll/resize events
     const resizeObserver = new ResizeObserver(updatePosition)
-    resizeObserver.observe(target)
+    resizeObserver.observe(activeTarget)
 
     const scrollHandler = () => requestAnimationFrame(updatePosition)
     window.addEventListener('scroll', scrollHandler, true)
@@ -972,6 +1436,98 @@ export const HtmlIframeRegistryProvider: React.FC<{
       // Positioning is handled by setTarget via CSS overlay
     },
     [enforceLimits, getAuthContext, queuePersistUpsert, syncEntries, updateCacheEntry]
+  )
+
+  const loadMcpResource = useCallback(async (record: McpIframeRecord) => {
+    const loadId = ++record.loadSeq
+    try {
+      const response = await localApi.post<{ success: boolean; result?: { contents?: McpUiResource[] } }>(
+        '/mcp/resources/read',
+        { serverName: record.serverName, uri: record.resourceUri }
+      )
+      if (!response?.success) {
+        throw new Error('Failed to read MCP resource')
+      }
+      const resource = response.result?.contents?.[0]
+      if (!resource) {
+        throw new Error('No resource content returned')
+      }
+      if (record.loadSeq !== loadId) return
+      const resourceHtml = decodeResourceHtml(resource)
+      if (!resourceHtml) {
+        throw new Error('Resource HTML missing or invalid')
+      }
+      if (resource.mimeType && resource.mimeType !== MCP_APP_MIME_TYPE) {
+        console.warn(`[McpApp] Unexpected mimeType: ${resource.mimeType}`)
+      }
+      const resourceUi = resource._meta?.ui
+      const cspValue = buildCspValue(resourceUi?.csp)
+      const htmlWithCsp = injectCspMeta(resourceHtml, cspValue)
+      record.uiMeta = resourceUi
+      const allowAttr = buildIframeAllow(resourceUi?.permissions as McpUiPermissions | undefined, BASE_ALLOW)
+      record.iframe.setAttribute('allow', allowAttr)
+      record.iframe.srcdoc = htmlWithCsp
+      record.appReady = false
+      record.toolInputSent = false
+      record.lastResultHash = null
+    } catch (err) {
+      console.error('[McpApp] Failed to load resource', err)
+    }
+  }, [])
+
+  const updateMcpIframe = useCallback(
+    (
+      key: string,
+      payload: {
+        serverName: string
+        resourceUri: string
+        qualifiedToolName: string
+        toolArgs?: Record<string, any> | null
+        toolResult?: { content: any; is_error?: boolean } | null
+        toolDefinition?: ToolDefinition
+        reloadToken?: number
+        className?: string
+      }
+    ) => {
+      let record = mcpRecordsRef.current.get(key)
+      const isNew = !record
+      if (!record) {
+        record = createMcpIframeRecord(payload)
+        mcpRecordsRef.current.set(key, record)
+        record.iframe.style.display = 'none'
+        hiddenHostRef.current?.appendChild(record.iframe)
+        logHtmlTools('mcp-iframe-create', { key })
+      }
+
+      if (payload.className && record.className !== payload.className) {
+        record.className = payload.className
+        record.iframe.className = payload.className
+      }
+
+      const shouldReload =
+        isNew ||
+        record.serverName !== payload.serverName ||
+        record.resourceUri !== payload.resourceUri ||
+        record.reloadToken !== payload.reloadToken
+
+      record.serverName = payload.serverName
+      record.resourceUri = payload.resourceUri
+      record.qualifiedToolName = payload.qualifiedToolName
+      record.toolArgs = payload.toolArgs ?? null
+      record.toolResult = payload.toolResult ?? null
+      record.toolDefinition = payload.toolDefinition
+      record.reloadToken = payload.reloadToken
+
+      if (shouldReload) {
+        record.appReady = false
+        record.toolInputSent = false
+        record.lastResultHash = null
+        void loadMcpResource(record)
+      } else if (record.appReady) {
+        record.sendToolResult(record.toolResult ?? null)
+      }
+    },
+    [loadMcpResource]
   )
 
   const touchEntry = useCallback(
@@ -1188,6 +1744,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       registerEntry,
       registerMcpEntry,
       updateIframe,
+      updateMcpIframe,
       setTarget,
       isModalOpen,
       focusKey,
@@ -1222,6 +1779,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       toggleFavorite,
       touchEntry,
       updateIframe,
+      updateMcpIframe,
       updateSettings,
     ]
   )
@@ -1240,10 +1798,12 @@ export const HtmlIframeSlot: React.FC<{
   html: string
   fullHeight?: boolean
   className?: string
-}> = ({ iframeKey, html, fullHeight = false, className }) => {
+  priority?: number
+}> = ({ iframeKey, html, fullHeight = false, className, priority }) => {
   const registry = useHtmlIframeRegistry()
   const registryRef = useRef(registry)
   const slotRef = useRef<HTMLDivElement | null>(null)
+  const ownerIdRef = useRef(`slot-${Math.random().toString(36).slice(2)}`)
 
   useEffect(() => {
     registryRef.current = registry
@@ -1266,11 +1826,11 @@ export const HtmlIframeSlot: React.FC<{
   useLayoutEffect(() => {
     const node = slotRef.current
     if (!node || !registryRef.current) return
-    registryRef.current.setTarget(iframeKey, node)
+    registryRef.current.setTarget(iframeKey, node, ownerIdRef.current, priority ?? 0)
     return () => {
-      registryRef.current?.setTarget(iframeKey, null)
+      registryRef.current?.setTarget(iframeKey, null, ownerIdRef.current, priority ?? 0)
     }
-  }, [iframeKey])
+  }, [iframeKey, priority])
 
   if (!registry) {
     return (
@@ -1285,6 +1845,138 @@ export const HtmlIframeSlot: React.FC<{
           sandbox='allow-scripts allow-same-origin allow-forms allow-popups allow-presentation'
         />
       </div>
+    )
+  }
+
+  return <div ref={slotRef} className={className} />
+}
+
+export const McpAppIframeSlot: React.FC<{
+  iframeKey: string
+  serverName: string
+  resourceUri: string
+  qualifiedToolName: string
+  toolArgs?: Record<string, any> | null
+  toolResult?: { content: any; is_error?: boolean } | null
+  toolDefinition?: ToolDefinition
+  reloadToken?: number
+  className?: string
+  label?: string | null
+  meta?: { conversationId?: string | null; projectId?: string | null }
+  priority?: number
+}> = ({
+  iframeKey,
+  serverName,
+  resourceUri,
+  qualifiedToolName,
+  toolArgs,
+  toolResult,
+  toolDefinition,
+  reloadToken,
+  className,
+  label,
+  meta,
+  priority,
+}) => {
+  const registry = useHtmlIframeRegistry()
+  const registryRef = useRef(registry)
+  const slotRef = useRef<HTMLDivElement | null>(null)
+  const ownerIdRef = useRef(`mcp-slot-${Math.random().toString(36).slice(2)}`)
+  const payloadHash = useMemo(() => {
+    const safeStringify = (value: unknown) => {
+      try {
+        return JSON.stringify(value)
+      } catch {
+        return String(value)
+      }
+    }
+    return [
+      serverName,
+      resourceUri,
+      qualifiedToolName,
+      reloadToken ?? '',
+      label ?? '',
+      meta?.conversationId ?? '',
+      meta?.projectId ?? '',
+      safeStringify(toolArgs ?? null),
+      safeStringify(toolResult ?? null),
+    ].join('|')
+  }, [
+    label,
+    meta?.conversationId,
+    meta?.projectId,
+    qualifiedToolName,
+    reloadToken,
+    resourceUri,
+    serverName,
+    toolArgs,
+    toolResult,
+  ])
+
+  useEffect(() => {
+    registryRef.current = registry
+  }, [registry])
+
+  useEffect(() => {
+    if (!registryRef.current) return
+    registryRef.current.registerMcpEntry(
+      iframeKey,
+      {
+        serverName,
+        resourceUri,
+        qualifiedToolName,
+        toolArgs,
+        toolResult,
+        toolDefinition,
+        reloadToken,
+      },
+      label,
+      meta
+    )
+  }, [iframeKey, payloadHash])
+
+  useEffect(() => {
+    logHtmlTools('mcp-slot-mount', { key: iframeKey })
+    return () => {
+      logHtmlTools('mcp-slot-unmount', { key: iframeKey })
+    }
+  }, [iframeKey])
+
+  useLayoutEffect(() => {
+    if (!registryRef.current) return
+    registryRef.current.updateMcpIframe(iframeKey, {
+      serverName,
+      resourceUri,
+      qualifiedToolName,
+      toolArgs,
+      toolResult,
+      toolDefinition,
+      reloadToken,
+      className,
+    })
+  }, [className, iframeKey, qualifiedToolName, reloadToken, resourceUri, serverName, toolArgs, toolDefinition, toolResult])
+
+  useLayoutEffect(() => {
+    const node = slotRef.current
+    if (!node || !registryRef.current) return
+    registryRef.current.setTarget(iframeKey, node, ownerIdRef.current, priority ?? 0)
+    return () => {
+      registryRef.current?.setTarget(iframeKey, null, ownerIdRef.current, priority ?? 0)
+    }
+  }, [iframeKey, priority])
+
+  if (!registry) {
+    return (
+      <McpAppIframe
+        serverName={serverName}
+        qualifiedToolName={qualifiedToolName}
+        resourceUri={resourceUri}
+        toolArgs={toolArgs ?? undefined}
+        toolResult={toolResult ?? undefined}
+        toolDefinition={toolDefinition}
+        reloadToken={reloadToken}
+        className={className}
+      />
     )
   }
 

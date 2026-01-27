@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { HtmlIframeSlot, useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
-import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
+import { HtmlIframeSlot, McpAppIframeSlot, useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 
 // Ghost Pill Button Component
 const GhostPill: React.FC<{
@@ -314,7 +313,8 @@ export const HtmlToolsModal: React.FC = () => {
             )}
             <div className={`w-full ${iframeHeightClass}`} aria-hidden={isCollapsed}>
               {mcpEntry ? (
-                <McpAppIframe
+                <McpAppIframeSlot
+                  iframeKey={entry.key}
                   serverName={mcpEntry.serverName}
                   qualifiedToolName={mcpEntry.qualifiedToolName}
                   resourceUri={mcpEntry.resourceUri}
@@ -323,6 +323,7 @@ export const HtmlToolsModal: React.FC = () => {
                   toolDefinition={mcpEntry.toolDefinition}
                   reloadToken={mcpEntry.reloadToken}
                   className='h-full w-full rounded-xl overflow-hidden'
+                  priority={1}
                 />
               ) : (
                 <HtmlIframeSlot
@@ -330,6 +331,7 @@ export const HtmlToolsModal: React.FC = () => {
                   html={entry.html}
                   fullHeight
                   className='h-full w-full rounded-xl overflow-hidden'
+                  priority={1}
                 />
               )}
             </div>
@@ -802,7 +804,7 @@ export const HtmlToolsModal: React.FC = () => {
                 data-tab-key={entry.key}
                 className={`absolute inset-0 ${entry.key === activeKey ? 'block' : 'hidden'}`}
               >
-                <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' />
+                <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' priority={1} />
               </div>
             ))
           )}
