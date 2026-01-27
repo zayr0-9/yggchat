@@ -95,7 +95,7 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     'first-party': null,
     community: null,
   })
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list')
   const [firstPartyLoading, setFirstPartyLoading] = useState(false)
   const [firstPartyError, setFirstPartyError] = useState<string | null>(null)
   const [communityLoading, setCommunityLoading] = useState(false)
@@ -540,7 +540,7 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
           </div>
 
           <div className='grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] gap-6'>
-            <div className='space-y-4'>
+            <div className='flex flex-col gap-4 min-h-0'>
               {!isElectron && (
                 <div className='rounded-xl border border-amber-200/70 bg-amber-50/70 px-4 py-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'>
                   App installs are available in the desktop app. You can still browse the catalog here.
@@ -685,78 +685,84 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                 </div>
               )}
 
-              <div
-                className={
-                  viewMode === 'grid'
-                    ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4'
-                    : 'space-y-3'
-                }
-              >
-                {activeApps.map(app => {
-                  const displayName = getAppDisplayName(app)
-                  const summary = getAppSummary(app.description)
-                  const publisher =
-                    app.source === 'community'
-                      ? app.uploader?.username || app.uploader?.id || 'Community uploader'
-                      : app.description.publisher || 'Unknown publisher'
-                  const version = app.description.version ? `v${app.description.version}` : null
-                  const isSelected = selectedApp?.id === app.id
-                  const iconUrl = app.description.iconUrl || app.description.icon
-                  const isInstalled = isAppInstalled(app)
+              <div className='flex-1 min-h-0 max-h-[52vh] overflow-y-auto thin-scrollbar pr-1'>
+                <div
+                  className={
+                    viewMode === 'grid'
+                      ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5'
+                      : 'flex flex-col gap-4'
+                  }
+                >
+                  {activeApps.map(app => {
+                    const displayName = getAppDisplayName(app)
+                    const summary = getAppSummary(app.description)
+                    const publisher =
+                      app.source === 'community'
+                        ? app.uploader?.username || app.uploader?.id || 'Community uploader'
+                        : app.description.publisher || 'Unknown publisher'
+                    const version = app.description.version ? `v${app.description.version}` : null
+                    const isSelected = selectedApp?.id === app.id
+                    const iconUrl = app.description.iconUrl || app.description.icon
+                    const isInstalled = isAppInstalled(app)
 
-                  return (
-                    <button
-                      key={app.id}
-                      onClick={() => handleSelectApp(app.id)}
-                      className={`text-left rounded-2xl border p-4 transition-all duration-200 hover:border-blue-300/60 dark:hover:border-blue-400/50 ${
-                        isSelected
-                          ? 'border-blue-400 bg-blue-50/60 dark:bg-blue-500/10 shadow-sm'
-                          : 'border-neutral-200/70 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/60'
-                      } ${viewMode === 'list' ? 'flex items-start gap-4' : 'flex flex-col gap-3'}`}
-                    >
-                      <div className='flex items-start gap-3'>
-                        {iconUrl ? (
-                          <img
-                            src={iconUrl}
-                            alt={`${displayName} icon`}
-                            className='h-10 w-10 rounded-lg object-cover border border-neutral-200 dark:border-neutral-700'
-                          />
-                        ) : (
-                          <div className='h-10 w-10 rounded-lg bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-sm font-semibold text-neutral-700 dark:text-neutral-200'>
-                            {displayName.slice(0, 1).toUpperCase()}
+                    return (
+                      <button
+                        key={app.id}
+                        onClick={() => handleSelectApp(app.id)}
+                        className={`text-left rounded-2xl border p-5 overflow-hidden transition-all duration-200 hover:border-blue-300/60 dark:hover:border-blue-400/50 ${
+                          isSelected
+                            ? 'border-blue-400 bg-blue-50/60 dark:bg-blue-500/10 shadow-sm'
+                            : 'border-neutral-200/70 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/60'
+                        } ${viewMode === 'list' ? 'w-full flex flex-col gap-4 min-h-[120px]' : 'flex flex-col gap-4 min-h-[150px]'}`}
+                      >
+                        <div className='flex items-start gap-4 min-w-0'>
+                          {iconUrl ? (
+                            <img
+                              src={iconUrl}
+                              alt={`${displayName} icon`}
+                              className='h-12 w-12 rounded-full object-cover border border-neutral-200 dark:border-neutral-700 flex-shrink-0'
+                            />
+                          ) : (
+                            <div className='h-12 w-12 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-sm font-semibold text-neutral-700 dark:text-neutral-200 flex-shrink-0'>
+                              {displayName.slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <div className='min-w-0 flex-1'>
+                            <p
+                              className={`text-sm font-semibold text-neutral-900 dark:text-neutral-100 ${
+                                viewMode === 'grid' ? 'line-clamp-2 break-words' : 'truncate'
+                              }`}
+                            >
+                              {displayName}
+                            </p>
+                            <p className='text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2'>{summary}</p>
                           </div>
-                        )}
-                        <div className='min-w-0'>
-                          <p className='text-sm font-semibold text-neutral-900 dark:text-neutral-100 truncate'>
-                            {displayName}
-                          </p>
-                          <p className='text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2'>{summary}</p>
                         </div>
-                      </div>
-                      <div className='mt-2 flex items-center justify-between text-xs text-neutral-400 dark:text-neutral-500'>
-                        <span className='truncate'>{publisher}</span>
-                        <span className='flex items-center gap-2'>
-                          {app.source === 'community' && (
-                            <span className='px-2 py-0.5 rounded-full bg-indigo-100/70 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold uppercase tracking-wide'>
-                              Community
-                            </span>
-                          )}
-                          {app.containsExecutables && (
-                            <span className='px-2 py-0.5 rounded-full bg-amber-100/70 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-semibold uppercase tracking-wide'>
-                              Executable
-                            </span>
-                          )}
-                          {isInstalled && (
-                            <span className='px-2 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold uppercase tracking-wide'>
-                              Installed
-                            </span>
-                          )}
-                          {version && <span>{version}</span>}
-                        </span>
-                      </div>
-                    </button>
-                  )
-                })}
+                        <div className='mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-400 dark:text-neutral-500'>
+                          <span className='truncate flex-1 min-w-0'>{publisher}</span>
+                          <span className='flex items-center flex-wrap gap-2 ml-auto'>
+                            {app.source === 'community' && (
+                              <span className='px-2 py-0.5 rounded-full bg-indigo-100/70 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold uppercase tracking-wide'>
+                                Community
+                              </span>
+                            )}
+                            {app.containsExecutables && (
+                              <span className='px-2 py-0.5 rounded-full bg-amber-100/70 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-semibold uppercase tracking-wide'>
+                                Executable
+                              </span>
+                            )}
+                            {isInstalled && (
+                              <span className='px-2 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold uppercase tracking-wide'>
+                                Installed
+                              </span>
+                            )}
+                            {version && <span>{version}</span>}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 
