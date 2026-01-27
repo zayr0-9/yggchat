@@ -89,7 +89,7 @@ function sanitizeZipEntryName(entryName: string): string {
 const EXECUTABLE_EXTENSIONS = new Set(['.exe', '.bat', '.sh'])
 const MAX_UPLOAD_ENTRIES = 500
 const MAX_UPLOAD_UNPACKED_BYTES = 500 * 1024 * 1024
-const REMOTE_API_BASE = (process.env.VITE_API_URL || 'http://localhost:3001/api').replace(/\/$/, '')
+const REMOTE_API_BASE = 'https://webdrasil-production.up.railway.app/api'
 
 function buildRemoteApiUrl(pathname: string): string {
   if (pathname.startsWith('/')) {
