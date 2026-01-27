@@ -2,9 +2,11 @@
 // Embedded local SQLite server for dual-sync in Electron mode
 // This server runs on port 3002 and handles sync operations from Railway to local SQLite
 
+import AdmZip from 'adm-zip'
 import Database from 'better-sqlite3'
 import cors from 'cors'
 import crypto from 'crypto'
+import { app as electronApp } from 'electron'
 import express from 'express'
 import fs from 'fs'
 import path from 'path'
@@ -78,6 +80,59 @@ function validateAndResolvePath(
   }
 
   return resolvedPath
+}
+
+function sanitizeZipEntryName(entryName: string): string {
+  return entryName.replace(/\\/g, '/').replace(/^\/+/, '')
+}
+
+function detectZipStripPrefix(entries: { entryName: string }[]): string | null {
+  const normalized = entries.map(entry => sanitizeZipEntryName(entry.entryName)).filter(Boolean)
+  if (normalized.length === 0) return null
+  const prefix = 'custom-tools/'
+  if (normalized.every(name => name.startsWith(prefix))) {
+    return prefix
+  }
+  return null
+}
+
+async function extractZipBufferToDirectory(
+  zipBuffer: Buffer,
+  destDir: string
+): Promise<{ extracted: number; skipped: number; strippedPrefix?: string | null }> {
+  const zip = new AdmZip(zipBuffer)
+  const entries = zip.getEntries()
+  const stripPrefix = detectZipStripPrefix(entries)
+  const rootDir = path.resolve(destDir)
+  let extracted = 0
+  let skipped = 0
+
+  for (const entry of entries) {
+    let entryName = sanitizeZipEntryName(entry.entryName)
+    if (stripPrefix && entryName.startsWith(stripPrefix)) {
+      entryName = entryName.slice(stripPrefix.length)
+    }
+    if (!entryName || entryName === '.' || entryName === '..') {
+      continue
+    }
+
+    const targetPath = path.resolve(rootDir, entryName)
+    if (!targetPath.startsWith(rootDir + path.sep) && targetPath !== rootDir) {
+      skipped += 1
+      continue
+    }
+
+    if (entry.isDirectory) {
+      await fs.promises.mkdir(targetPath, { recursive: true })
+      continue
+    }
+
+    await fs.promises.mkdir(path.dirname(targetPath), { recursive: true })
+    await fs.promises.writeFile(targetPath, entry.getData())
+    extracted += 1
+  }
+
+  return { extracted, skipped, strippedPrefix: stripPrefix }
 }
 
 // Built-in tool handler type
@@ -2419,6 +2474,157 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Error reloading custom tools:', error)
       res.status(500).json({ success: false, error: 'Failed to reload custom tools' })
+    }
+  })
+
+  // ============================================================================
+  // App Store API Endpoints
+  // ============================================================================
+
+  // POST /api/app-store/install - Download and install an app package into custom tools
+  app.post('/api/app-store/install', async (req, res) => {
+    try {
+      const { zipUrl, appId, appName } = req.body || {}
+
+      if (!zipUrl || typeof zipUrl !== 'string') {
+        res.status(400).json({ success: false, error: 'zipUrl is required' })
+        return
+      }
+
+      const response = await fetch(zipUrl)
+      if (!response.ok) {
+        res.status(400).json({
+          success: false,
+          error: `Failed to download app package (${response.status} ${response.statusText})`,
+        })
+        return
+      }
+
+      const arrayBuffer = await response.arrayBuffer()
+      const zipBuffer = Buffer.from(arrayBuffer)
+      const customToolsDir = customToolRegistry.getCustomToolsDirectoryPath()
+
+      await fs.promises.mkdir(customToolsDir, { recursive: true })
+      const { extracted, skipped, strippedPrefix } = await extractZipBufferToDirectory(zipBuffer, customToolsDir)
+
+      await customToolRegistry.reload()
+      const definitions = customToolRegistry.getDefinitions()
+
+      // Re-register custom tools with the orchestrator
+      for (const customToolDef of definitions) {
+        toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
+          return customToolRegistry.executeTool(customToolDef.name, args, {
+            cwd: options?.rootPath,
+            rootPath: options?.rootPath,
+            operationMode: options?.operationMode,
+            conversationId: options?.conversationId,
+            messageId: options?.messageId,
+            streamId: options?.streamId,
+          })
+        })
+      }
+
+      res.json({
+        success: true,
+        appId,
+        appName,
+        extracted,
+        skipped,
+        strippedPrefix,
+        toolCount: definitions.length,
+        restartRequired: true,
+        message: 'App installed. Restart recommended to ensure everything loads correctly.',
+      })
+    } catch (error) {
+      console.error('[LocalServer] App store install error:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/app-store/uninstall - Remove an app package from custom tools
+  app.post('/api/app-store/uninstall', async (req, res) => {
+    try {
+      const { appId } = req.body || {}
+
+      if (!appId || typeof appId !== 'string') {
+        res.status(400).json({ success: false, error: 'appId is required' })
+        return
+      }
+
+      if (appId.includes('/') || appId.includes('\\')) {
+        res.status(400).json({ success: false, error: 'Invalid appId' })
+        return
+      }
+
+      const customToolsDir = customToolRegistry.getCustomToolsDirectoryPath()
+      const targetPath = validateAndResolvePath(appId, customToolsDir, false)
+
+      let stats: fs.Stats | null = null
+      try {
+        stats = await fs.promises.stat(targetPath)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          res.status(404).json({ success: false, error: 'App not installed' })
+          return
+        }
+        throw error
+      }
+
+      if (!stats?.isDirectory()) {
+        res.status(400).json({ success: false, error: 'App path is not a directory' })
+        return
+      }
+
+      await fs.promises.rm(targetPath, { recursive: true, force: true })
+
+      await customToolRegistry.reload()
+      const definitions = customToolRegistry.getDefinitions()
+
+      // Re-register custom tools with the orchestrator
+      for (const customToolDef of definitions) {
+        toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
+          return customToolRegistry.executeTool(customToolDef.name, args, {
+            cwd: options?.rootPath,
+            rootPath: options?.rootPath,
+            operationMode: options?.operationMode,
+            conversationId: options?.conversationId,
+            messageId: options?.messageId,
+            streamId: options?.streamId,
+          })
+        })
+      }
+
+      res.json({
+        success: true,
+        appId,
+        toolCount: definitions.length,
+        restartRequired: false,
+        message: 'App uninstalled.',
+      })
+    } catch (error) {
+      console.error('[LocalServer] App store uninstall error:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/app/restart - Relaunch the Electron app
+  app.post('/api/app/restart', (_req, res) => {
+    try {
+      res.json({ success: true, message: 'Restarting app' })
+      setTimeout(() => {
+        try {
+          electronApp.relaunch()
+          electronApp.exit(0)
+        } catch (error) {
+          console.error('[LocalServer] Failed to restart app:', error)
+        }
+      }, 300)
+    } catch (error) {
+      console.error('[LocalServer] Restart request failed:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
     }
   })
 

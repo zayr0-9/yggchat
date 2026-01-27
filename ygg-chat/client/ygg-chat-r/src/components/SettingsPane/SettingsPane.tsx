@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import mammoth from 'mammoth'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { AppStoreModal } from '../../containers/appStore'
 import { fetchMcpTools, selectCurrentConversationId } from '../../features/chats'
 import { convContextSet, systemPromptSet, updateContext, updateSystemPrompt } from '../../features/conversations'
 import type { Conversation } from '../../features/conversations/conversationTypes'
@@ -93,6 +94,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const [attachmentTarget, setAttachmentTarget] = useState<'system' | 'context'>('system')
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const [promptContextExpanded, setPromptContextExpanded] = useState(false)
+  const [appStoreOpen, setAppStoreOpen] = useState(false)
 
   // Skills section state
   const [skillsExpanded, setSkillsExpanded] = useState(false)
@@ -647,6 +649,12 @@ ${block}`
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [open, onClose])
 
+  useEffect(() => {
+    if (!open) {
+      setAppStoreOpen(false)
+    }
+  }, [open])
+
   if (!open) return null
 
   return (
@@ -668,9 +676,19 @@ ${block}`
         >
           <div className='flex justify-between items-center mb-3 py-4'>
             <h2 className='text-2xl font-semibold text-stone-800 dark:text-stone-200'>Chat Settings</h2>
-            <button onClick={onClose} className='p-1 rounded-md transition-colors' aria-label='Close settings'>
-              <i className='bx bx-x text-2xl text-gray-600 dark:text-gray-400 active:scale-95'></i>
-            </button>
+            <div className='flex items-center gap-2'>
+              <button
+                onClick={() => setAppStoreOpen(true)}
+                className='p-1 rounded-md transition-colors'
+                aria-label='Open App Store'
+                title='App Store'
+              >
+                <i className='bx bx-store-alt text-2xl text-gray-600 dark:text-gray-400 active:scale-95'></i>
+              </button>
+              <button onClick={onClose} className='p-1 rounded-md transition-colors' aria-label='Close settings'>
+                <i className='bx bx-x text-2xl text-gray-600 dark:text-gray-400 active:scale-95'></i>
+              </button>
+            </div>
           </div>
 
           <div className='space-y-6'>
@@ -1322,6 +1340,8 @@ ${block}`
           </div>
         </div>
       </div>
+
+      <AppStoreModal open={appStoreOpen} onClose={() => setAppStoreOpen(false)} />
     </div>
   )
 }

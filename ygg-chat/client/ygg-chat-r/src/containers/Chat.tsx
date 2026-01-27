@@ -4012,7 +4012,6 @@ function Chat() {
       )}
 
       <SettingsPane open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-
       {/* Centered custom delete confirmation modal */}
       {pendingDeleteId && confirmDel && (
         <div className='fixed inset-0 z-[100] flex items-center justify-center bg-black/50' onClick={closeDeleteModal}>
