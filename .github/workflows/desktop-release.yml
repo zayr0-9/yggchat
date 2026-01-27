@@ -32,8 +32,6 @@ jobs:
         run: |
           cd ygg-chat
           npm install
-          npm --prefix client/ygg-chat-r install
-          npm --prefix server install
 
       - name: Configure environment variables
         run: |
