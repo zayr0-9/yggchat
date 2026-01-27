@@ -86,6 +86,68 @@ function sanitizeZipEntryName(entryName: string): string {
   return entryName.replace(/\\/g, '/').replace(/^\/+/, '')
 }
 
+const EXECUTABLE_EXTENSIONS = new Set(['.exe', '.bat', '.sh'])
+const MAX_UPLOAD_ENTRIES = 500
+const MAX_UPLOAD_UNPACKED_BYTES = 500 * 1024 * 1024
+const REMOTE_API_BASE = (process.env.VITE_API_URL || 'http://localhost:3001/api').replace(/\/$/, '')
+
+function buildRemoteApiUrl(pathname: string): string {
+  if (pathname.startsWith('/')) {
+    return `${REMOTE_API_BASE}${pathname}`
+  }
+  return `${REMOTE_API_BASE}/${pathname}`
+}
+
+function isValidToolName(name: string): boolean {
+  return /^[a-z][a-z0-9_]*$/.test(name)
+}
+
+function validateToolDefinition(definition: any): string | null {
+  if (!definition || typeof definition !== 'object') return 'definition.json must be an object.'
+  if (typeof definition.name !== 'string' || !isValidToolName(definition.name)) {
+    return 'definition.json must include a valid "name" (lowercase letters, numbers, underscores).'
+  }
+  if (typeof definition.description !== 'string' || definition.description.trim().length === 0) {
+    return 'definition.json must include a non-empty "description".'
+  }
+  if (!definition.inputSchema || typeof definition.inputSchema !== 'object') {
+    return 'definition.json must include an "inputSchema" object.'
+  }
+  if (definition.inputSchema.type !== 'object') {
+    return 'definition.json "inputSchema.type" must be "object".'
+  }
+  if (!definition.inputSchema.properties || typeof definition.inputSchema.properties !== 'object') {
+    return 'definition.json "inputSchema.properties" must be an object.'
+  }
+  if (definition.enabled !== undefined && typeof definition.enabled !== 'boolean') {
+    return 'definition.json "enabled" must be a boolean if provided.'
+  }
+  return null
+}
+
+function validateDescription(description: any): string | null {
+  if (!description || typeof description !== 'object') return 'description.json must be an object.'
+  const title = typeof description.title === 'string' ? description.title.trim() : ''
+  const name = typeof description.name === 'string' ? description.name.trim() : ''
+  if (!title && !name) {
+    return 'description.json must include a "title" or "name".'
+  }
+  if (description.gitLink !== undefined) {
+    if (typeof description.gitLink !== 'string' || !description.gitLink.trim()) {
+      return 'description.json "gitLink" must be a non-empty string when provided.'
+    }
+    try {
+      const url = new URL(description.gitLink)
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        return 'description.json "gitLink" must be an http(s) URL.'
+      }
+    } catch {
+      return 'description.json "gitLink" must be a valid URL.'
+    }
+  }
+  return null
+}
+
 function detectZipStripPrefix(entries: { entryName: string }[]): string | null {
   const normalized = entries.map(entry => sanitizeZipEntryName(entry.entryName)).filter(Boolean)
   if (normalized.length === 0) return null
@@ -1056,6 +1118,7 @@ function setupServer() {
         'x-tool-id',
         'x-session-id',
         'x-proxy-admin-key',
+        'x-app-store-filename',
       ],
       exposedHeaders: ['Authorization'],
     })
@@ -2480,6 +2543,238 @@ function setupServer() {
   // ============================================================================
   // App Store API Endpoints
   // ============================================================================
+
+  // GET /api/app-store/community - Proxy community app list from remote server
+  app.get('/api/app-store/community', async (_req, res) => {
+    try {
+      const response = await fetch(buildRemoteApiUrl('/app-store/community'))
+      const data = await response.json()
+      res.status(response.status).json(data)
+    } catch (error) {
+      console.error('[LocalServer] Failed to fetch community apps:', error)
+      res.status(500).json({ success: false, error: 'Failed to fetch community apps' })
+    }
+  })
+
+  // POST /api/app-store/community/upload - Proxy community upload to remote server
+  app.post(
+    '/api/app-store/community/upload',
+    express.raw({ type: 'application/zip', limit: '500mb' }),
+    async (req, res) => {
+    try {
+      if (!req.body || (req.body as Buffer).length === 0) {
+        res.status(400).json({ success: false, error: 'Zip payload is required.' })
+        return
+      }
+
+      const authHeader = req.headers.authorization
+      if (!authHeader) {
+        res.status(401).json({ success: false, error: 'Authorization header is required.' })
+        return
+      }
+
+      const zipBuffer = req.body instanceof Buffer ? req.body : Buffer.from(req.body)
+      const filenameHeader = req.headers['x-app-store-filename']
+
+      const response = await fetch(buildRemoteApiUrl('/app-store/community/upload'), {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/zip',
+          ...(filenameHeader ? { 'x-app-store-filename': String(filenameHeader) } : {}),
+        },
+        body: zipBuffer,
+      })
+
+      const data = await response.json()
+      res.status(response.status).json(data)
+    } catch (error) {
+      console.error('[LocalServer] Failed to upload community app:', error)
+      res.status(500).json({ success: false, error: 'Failed to upload community app' })
+    }
+  })
+
+  // POST /api/app-store/validate-upload - Validate community app zip before upload
+  app.post(
+    '/api/app-store/validate-upload',
+    express.raw({ type: 'application/zip', limit: '500mb' }),
+    async (req, res) => {
+    try {
+      if (!req.body || (req.body as Buffer).length === 0) {
+        res.status(400).json({ success: false, error: 'Zip payload is required.' })
+        return
+      }
+
+      const zipBuffer = req.body instanceof Buffer ? req.body : Buffer.from(req.body)
+
+      const zip = new AdmZip(zipBuffer)
+      const entries = zip.getEntries()
+
+      if (!entries || entries.length === 0) {
+        res.status(400).json({ success: false, error: 'Zip file is empty.' })
+        return
+      }
+
+      if (entries.length > MAX_UPLOAD_ENTRIES) {
+        res.status(400).json({ success: false, error: 'Zip file contains too many entries.' })
+        return
+      }
+
+      const stripPrefix = detectZipStripPrefix(entries)
+      const topLevel = new Set<string>()
+      let totalUnpacked = 0
+      let containsExecutables = false
+      let hasRootFile = false
+      const normalizedEntries: Array<{ entry: any; name: string }> = []
+
+      for (const entry of entries) {
+        let entryName = sanitizeZipEntryName(entry.entryName)
+        if (stripPrefix && entryName.startsWith(stripPrefix)) {
+          entryName = entryName.slice(stripPrefix.length)
+        }
+        if (!entryName) continue
+        const lowerName = entryName.toLowerCase()
+        if (lowerName.startsWith('__macosx/')) {
+          continue
+        }
+        if (lowerName.endsWith('.ds_store') || lowerName.endsWith('thumbs.db')) {
+          continue
+        }
+        if (entryName.split('/').some(part => part === '..')) {
+          res.status(400).json({ success: false, error: 'Zip contains invalid path traversal entries.' })
+          return
+        }
+
+        const isDirectory = entry.isDirectory || entryName.endsWith('/')
+        if (!entryName.includes('/') && !isDirectory) {
+          hasRootFile = true
+        }
+
+        const parts = entryName.split('/')
+        if (parts[0]) topLevel.add(parts[0])
+
+        if (!isDirectory) {
+          totalUnpacked += entry.header.size
+          const ext = path.extname(entryName).toLowerCase()
+          if (EXECUTABLE_EXTENSIONS.has(ext)) {
+            containsExecutables = true
+          }
+        }
+
+        normalizedEntries.push({ entry, name: entryName })
+      }
+
+      if (totalUnpacked > MAX_UPLOAD_UNPACKED_BYTES) {
+        res.status(400).json({ success: false, error: 'Zip file is too large when extracted.' })
+        return
+      }
+
+      if (topLevel.size !== 1 || hasRootFile) {
+        res.status(400).json({
+          success: false,
+          error: 'Zip must contain a single top-level folder that holds your tool files.',
+        })
+        return
+      }
+
+      const toolDir = Array.from(topLevel)[0]
+      if (!toolDir || toolDir === '.' || toolDir === '..') {
+        res.status(400).json({ success: false, error: 'Invalid tool directory name in zip.' })
+        return
+      }
+
+      const definitionPath = `${toolDir}/definition.json`
+      const descriptionPath = `${toolDir}/description.json`
+      const indexPath = `${toolDir}/index.js`
+
+      const definitionEntry = normalizedEntries.find(item => item.name === definitionPath)
+      const descriptionEntry = normalizedEntries.find(item => item.name === descriptionPath)
+      const indexEntry = normalizedEntries.find(item => item.name === indexPath)
+
+      if (!definitionEntry || !descriptionEntry) {
+        res.status(400).json({
+          success: false,
+          error: 'Zip must include definition.json and description.json in the tool folder root.',
+        })
+        return
+      }
+
+      if (!indexEntry) {
+        res.status(400).json({ success: false, error: 'Zip must include index.js in the tool folder root.' })
+        return
+      }
+
+      const extraDefinition = normalizedEntries.find(
+        item => item.name.endsWith('/definition.json') && item.name !== definitionPath
+      )
+      if (extraDefinition) {
+        res.status(400).json({ success: false, error: 'Zip must include only one definition.json file.' })
+        return
+      }
+
+      const extraDescription = normalizedEntries.find(
+        item => item.name.endsWith('/description.json') && item.name !== descriptionPath
+      )
+      if (extraDescription) {
+        res.status(400).json({ success: false, error: 'Zip must include only one description.json file.' })
+        return
+      }
+
+      const definitionRaw = definitionEntry.entry.getData().toString('utf-8')
+      const descriptionRaw = descriptionEntry.entry.getData().toString('utf-8')
+
+      let definitionJson: any
+      let descriptionJson: any
+
+      try {
+        definitionJson = JSON.parse(definitionRaw)
+      } catch {
+        res.status(400).json({ success: false, error: 'definition.json must be valid JSON.' })
+        return
+      }
+
+      try {
+        descriptionJson = JSON.parse(descriptionRaw)
+      } catch {
+        res.status(400).json({ success: false, error: 'description.json must be valid JSON.' })
+        return
+      }
+
+      const definitionError = validateToolDefinition(definitionJson)
+      if (definitionError) {
+        res.status(400).json({ success: false, error: definitionError })
+        return
+      }
+
+      const descriptionError = validateDescription(descriptionJson)
+      if (descriptionError) {
+        res.status(400).json({ success: false, error: descriptionError })
+        return
+      }
+
+      const warnings: string[] = []
+      if (
+        definitionJson.name !== toolDir &&
+        definitionJson.name !== toolDir.replace(/-/g, '_')
+      ) {
+        warnings.push('Tool folder name does not match definition.json name.')
+      }
+
+      res.json({
+        success: true,
+        appId: definitionJson.name,
+        toolDir,
+        description: descriptionJson,
+        definition: definitionJson,
+        containsExecutables,
+        warnings,
+      })
+    } catch (error) {
+      console.error('[LocalServer] App store upload validation error:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
 
   // POST /api/app-store/install - Download and install an app package into custom tools
   app.post('/api/app-store/install', async (req, res) => {

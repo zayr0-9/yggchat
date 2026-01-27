@@ -1,14 +1,18 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { reloadCustomTools } from '../features/chats/chatActions'
 import { useAppDispatch } from '../hooks/redux'
 import {
   AppStoreApp,
   AppStoreDescription,
+  CommunityAppUploadValidation,
   fetchAppStoreApps,
   fetchInstalledCustomTools,
+  fetchPublicAppStoreApps,
   installAppFromStore,
   restartDesktopApp,
+  uploadCommunityApp,
   uninstallAppFromStore,
+  validateCommunityAppUpload,
 } from '../services/appStore'
 import { environment } from '../utils/api'
 
@@ -26,6 +30,13 @@ type AppActionStatus = {
 type AppActionState = {
   appId: string
   type: 'install' | 'uninstall'
+}
+
+type StoreTab = 'first-party' | 'community'
+
+type UploadStatus = {
+  type: 'idle' | 'validating' | 'ready' | 'uploading' | 'success' | 'error'
+  message: string
 }
 
 const formatSize = (size?: number | string) => {
@@ -77,23 +88,41 @@ const collectInstalledToolIndex = (tools: Array<{ name?: string; sourcePath?: st
 export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) => {
   const isElectron = environment === 'electron'
   const dispatch = useAppDispatch()
-  const [apps, setApps] = useState<AppStoreApp[]>([])
-  const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
+  const [storeTab, setStoreTab] = useState<StoreTab>('first-party')
+  const [firstPartyApps, setFirstPartyApps] = useState<AppStoreApp[]>([])
+  const [communityApps, setCommunityApps] = useState<AppStoreApp[]>([])
+  const [selectedAppIds, setSelectedAppIds] = useState<Record<StoreTab, string | null>>({
+    'first-party': null,
+    community: null,
+  })
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [firstPartyLoading, setFirstPartyLoading] = useState(false)
+  const [firstPartyError, setFirstPartyError] = useState<string | null>(null)
+  const [communityLoading, setCommunityLoading] = useState(false)
+  const [communityError, setCommunityError] = useState<string | null>(null)
   const [installedToolIds, setInstalledToolIds] = useState<Set<string>>(new Set())
   const [installedToolIndex, setInstalledToolIndex] = useState<Record<string, string>>({})
   const [installedLoading, setInstalledLoading] = useState(false)
   const [installedError, setInstalledError] = useState<string | null>(null)
   const [actionState, setActionState] = useState<AppActionState | null>(null)
   const [actionStatus, setActionStatus] = useState<AppActionStatus | null>(null)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadValidation, setUploadValidation] = useState<CommunityAppUploadValidation | null>(null)
+  const [uploadStatus, setUploadStatus] = useState<UploadStatus | null>(null)
+  const uploadInputRef = useRef<HTMLInputElement | null>(null)
+
+  const activeApps = useMemo(
+    () => (storeTab === 'first-party' ? firstPartyApps : communityApps),
+    [communityApps, firstPartyApps, storeTab]
+  )
+
+  const selectedAppId = selectedAppIds[storeTab]
 
   const selectedApp = useMemo(() => {
-    if (!apps.length) return null
-    const found = apps.find(app => app.id === selectedAppId)
-    return found || apps[0]
-  }, [apps, selectedAppId])
+    if (!activeApps.length) return null
+    const found = activeApps.find(app => app.id === selectedAppId)
+    return found || activeApps[0]
+  }, [activeApps, selectedAppId])
 
   useEffect(() => {
     if (!open) return
@@ -110,28 +139,48 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     if (!open) return
     let cancelled = false
 
-    setLoading(true)
-    setError(null)
     setActionStatus(null)
 
-    fetchAppStoreApps()
-      .then(data => {
-        if (cancelled) return
-        setApps(data)
-        setSelectedAppId(current => {
-          if (current && data.some(app => app.id === current)) return current
-          return data[0]?.id || null
-        })
-      })
-      .catch(err => {
-        if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Failed to load apps')
-      })
-      .finally(() => {
+    const loadFirstParty = async () => {
+      setFirstPartyLoading(true)
+      setFirstPartyError(null)
+      try {
+        const data = await fetchAppStoreApps()
         if (!cancelled) {
-          setLoading(false)
+          setFirstPartyApps(data)
         }
-      })
+      } catch (err) {
+        if (!cancelled) {
+          setFirstPartyError(err instanceof Error ? err.message : 'Failed to load apps')
+        }
+      } finally {
+        if (!cancelled) {
+          setFirstPartyLoading(false)
+        }
+      }
+    }
+
+    const loadCommunity = async () => {
+      setCommunityLoading(true)
+      setCommunityError(null)
+      try {
+        const data = await fetchPublicAppStoreApps()
+        if (!cancelled) {
+          setCommunityApps(data)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCommunityError(err instanceof Error ? err.message : 'Failed to load community apps')
+        }
+      } finally {
+        if (!cancelled) {
+          setCommunityLoading(false)
+        }
+      }
+    }
+
+    void loadFirstParty()
+    void loadCommunity()
 
     return () => {
       cancelled = true
@@ -162,10 +211,42 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     }
   }, [isElectron])
 
+  const reloadCommunityApps = useCallback(async () => {
+    setCommunityLoading(true)
+    setCommunityError(null)
+    try {
+      const data = await fetchPublicAppStoreApps()
+      setCommunityApps(data)
+    } catch (err) {
+      setCommunityError(err instanceof Error ? err.message : 'Failed to load community apps')
+    } finally {
+      setCommunityLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (!open) return
     void reloadInstalledTools()
   }, [open, reloadInstalledTools])
+
+  useEffect(() => {
+    if (!open) return
+    const list = storeTab === 'first-party' ? firstPartyApps : communityApps
+    setSelectedAppIds(prev => {
+      const current = prev[storeTab]
+      if (current && list.some(app => app.id === current)) {
+        return prev
+      }
+      return { ...prev, [storeTab]: list[0]?.id || null }
+    })
+  }, [communityApps, firstPartyApps, open, storeTab])
+
+  const handleSelectApp = useCallback(
+    (appId: string) => {
+      setSelectedAppIds(prev => ({ ...prev, [storeTab]: appId }))
+    },
+    [storeTab]
+  )
 
   const isAppInstalled = useCallback(
     (app: AppStoreApp) => {
@@ -187,13 +268,6 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     },
     [installedToolIndex]
   )
-
-  useEffect(() => {
-    if (!open) {
-      setActionState(null)
-      setActionStatus(null)
-    }
-  }, [open])
 
   const handleInstall = useCallback(async () => {
     if (!selectedApp || !selectedApp.zipUrl) {
@@ -293,6 +367,90 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     }
   }, [])
 
+  const resetUploadState = useCallback(() => {
+    setUploadFile(null)
+    setUploadValidation(null)
+    if (uploadInputRef.current) {
+      uploadInputRef.current.value = ''
+    }
+  }, [])
+
+  const handleUploadFileChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0] || null
+      setUploadStatus(null)
+      setUploadValidation(null)
+      setUploadFile(file)
+
+      if (!file) {
+        return
+      }
+
+      if (!isElectron) {
+        setUploadStatus({
+          type: 'error',
+          message: 'Uploads are only available in the desktop app.',
+        })
+        return
+      }
+
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        setUploadStatus({
+          type: 'error',
+          message: 'Please choose a .zip file.',
+        })
+        return
+      }
+
+      setUploadStatus({ type: 'validating', message: 'Validating zip contents...' })
+
+      try {
+        const validation = await validateCommunityAppUpload(file)
+        setUploadValidation(validation)
+        setUploadStatus({ type: 'ready', message: 'Zip validated. Ready to upload.' })
+      } catch (err) {
+        setUploadStatus({
+          type: 'error',
+          message: err instanceof Error ? err.message : 'Failed to validate zip',
+        })
+      }
+    },
+    [isElectron]
+  )
+
+  const handleUploadSubmit = useCallback(async () => {
+    if (!uploadFile || !uploadValidation) {
+      setUploadStatus({
+        type: 'error',
+        message: 'Select a zip file and validate it before uploading.',
+      })
+      return
+    }
+
+    setUploadStatus({ type: 'uploading', message: 'Uploading to community store...' })
+
+    try {
+      await uploadCommunityApp(uploadFile)
+      setUploadStatus({ type: 'success', message: 'Uploaded successfully. Your app is now live.' })
+      resetUploadState()
+      await reloadCommunityApps()
+    } catch (err) {
+      setUploadStatus({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Upload failed',
+      })
+    }
+  }, [reloadCommunityApps, resetUploadState, uploadFile, uploadValidation])
+
+  useEffect(() => {
+    if (!open) {
+      setActionState(null)
+      setActionStatus(null)
+      setUploadStatus(null)
+      resetUploadState()
+    }
+  }, [open, resetUploadState])
+
   const selectedAppInstalled = useMemo(() => {
     if (!selectedApp) return false
     return isAppInstalled(selectedApp)
@@ -301,6 +459,8 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
   const isActionInProgress = selectedApp ? actionState?.appId === selectedApp.id : false
   const isInstalling = isActionInProgress && actionState?.type === 'install'
   const isUninstalling = isActionInProgress && actionState?.type === 'uninstall'
+  const activeLoading = storeTab === 'first-party' ? firstPartyLoading : communityLoading
+  const activeError = storeTab === 'first-party' ? firstPartyError : communityError
 
   if (!open) return null
 
@@ -320,7 +480,33 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
           <div className='flex flex-wrap items-center justify-between gap-4 mb-3 py-4'>
             <div>
               <h2 className='text-2xl font-semibold text-stone-800 dark:text-stone-200'>App Store</h2>
-              <p className='text-sm text-neutral-500 dark:text-neutral-400'>Browse and install first-party tools.</p>
+              <p className='text-sm text-neutral-500 dark:text-neutral-400'>
+                {storeTab === 'first-party'
+                  ? 'Browse and install first-party tools.'
+                  : 'Explore community apps shared by other creators.'}
+              </p>
+              <div className='mt-3 inline-flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/60 p-1'>
+                <button
+                  onClick={() => setStoreTab('first-party')}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wide transition-colors ${
+                    storeTab === 'first-party'
+                      ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
+                      : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+                  }`}
+                >
+                  First-party
+                </button>
+                <button
+                  onClick={() => setStoreTab('community')}
+                  className={`px-3 py-1 rounded-md text-xs font-semibold uppercase tracking-wide transition-colors ${
+                    storeTab === 'community'
+                      ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
+                      : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+                  }`}
+                >
+                  Community
+                </button>
+              </div>
             </div>
             <div className='flex items-center gap-2'>
               <div className='flex items-center gap-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/60 p-1'>
@@ -361,6 +547,112 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                 </div>
               )}
 
+              {storeTab === 'community' && (
+                <div className='rounded-xl border border-neutral-200/70 bg-white/70 px-4 py-3 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-300'>
+                  Community apps are user-submitted and not reviewed. Install only what you trust.
+                </div>
+              )}
+
+              {storeTab === 'community' && (
+                <div className='rounded-2xl border border-neutral-200/70 dark:border-neutral-700 bg-white/70 dark:bg-neutral-900/60 p-4 space-y-3'>
+                  <div>
+                    <h3 className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>Upload a community app</h3>
+                    <p className='text-xs text-neutral-500 dark:text-neutral-400'>
+                      Zip must contain a single top-level tool folder with definition.json, description.json, and
+                      index.js.
+                    </p>
+                  </div>
+
+                  <input
+                    ref={uploadInputRef}
+                    type='file'
+                    accept='.zip'
+                    onChange={handleUploadFileChange}
+                    className='block w-full text-xs text-neutral-600 dark:text-neutral-300 file:mr-3 file:rounded-lg file:border-0 file:bg-neutral-200/70 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-neutral-700 dark:file:bg-neutral-800 dark:file:text-neutral-200'
+                    disabled={!isElectron}
+                  />
+                  {!isElectron && (
+                    <p className='text-[11px] text-amber-700 dark:text-amber-200'>
+                      Uploads are available in the desktop app only.
+                    </p>
+                  )}
+
+                  {uploadValidation && (
+                    <div className='rounded-lg border border-neutral-200/70 dark:border-neutral-700 bg-neutral-50/80 dark:bg-neutral-950/30 p-3 text-xs text-neutral-600 dark:text-neutral-300 space-y-2'>
+                      <div className='flex items-center justify-between gap-3'>
+                        <span className='uppercase tracking-[0.12em] text-[10px] text-neutral-400'>Tool ID</span>
+                        <span className='font-mono text-xs text-neutral-700 dark:text-neutral-200'>
+                          {uploadValidation.appId || 'n/a'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className='uppercase tracking-[0.12em] text-[10px] text-neutral-400'>Name</span>
+                        <p className='text-sm text-neutral-800 dark:text-neutral-100'>
+                          {uploadValidation.description?.title || uploadValidation.description?.name}
+                        </p>
+                      </div>
+                      {uploadValidation.description?.gitLink && (
+                        <a
+                          href={uploadValidation.description.gitLink}
+                          target='_blank'
+                          rel='noreferrer'
+                          className='text-xs text-blue-600 dark:text-blue-400 hover:underline'
+                        >
+                          View repository
+                        </a>
+                      )}
+                      {uploadValidation.containsExecutables && (
+                        <div className='rounded-lg bg-amber-50/80 dark:bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-200'>
+                          This zip contains executable files (.exe/.bat/.sh). A warning will be shown on install.
+                        </div>
+                      )}
+                      {uploadValidation.warnings && uploadValidation.warnings.length > 0 && (
+                        <ul className='text-[11px] text-amber-700 dark:text-amber-200 space-y-1'>
+                          {uploadValidation.warnings.map(warning => (
+                            <li key={warning}>• {warning}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  <div className='flex items-center gap-2'>
+                    <button
+                      onClick={handleUploadSubmit}
+                      disabled={!isElectron || !uploadValidation || uploadStatus?.type === 'uploading'}
+                      className='px-4 py-2 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                    >
+                      {uploadStatus?.type === 'uploading' ? 'Uploading...' : 'Upload to Community'}
+                    </button>
+                    {uploadFile && (
+                      <button
+                        onClick={() => {
+                          setUploadStatus(null)
+                          resetUploadState()
+                        }}
+                        className='px-3 py-2 text-xs rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300 hover:border-neutral-300 dark:hover:border-neutral-500 transition-colors'
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {uploadStatus && (
+                    <div
+                      className={`text-xs ${
+                        uploadStatus.type === 'error'
+                          ? 'text-red-500'
+                          : uploadStatus.type === 'success'
+                          ? 'text-green-600 dark:text-green-400'
+                          : 'text-neutral-500 dark:text-neutral-400'
+                      }`}
+                    >
+                      {uploadStatus.message}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {installedLoading && (
                 <div className='flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400'>
                   <i className='bx bx-loader-alt animate-spin'></i>
@@ -374,20 +666,20 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                 </div>
               )}
 
-              {loading && (
+              {activeLoading && (
                 <div className='flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400'>
                   <i className='bx bx-loader-alt animate-spin'></i>
                   Loading apps...
                 </div>
               )}
 
-              {error && (
+              {activeError && (
                 <div className='rounded-xl border border-red-200/70 bg-red-50/70 px-4 py-3 text-sm text-red-600 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300'>
-                  {error}
+                  {activeError}
                 </div>
               )}
 
-              {!loading && !error && apps.length === 0 && (
+              {!activeLoading && !activeError && activeApps.length === 0 && (
                 <div className='rounded-xl border border-neutral-200/70 bg-white/70 px-4 py-6 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400'>
                   No apps published yet.
                 </div>
@@ -400,10 +692,13 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                     : 'space-y-3'
                 }
               >
-                {apps.map(app => {
+                {activeApps.map(app => {
                   const displayName = getAppDisplayName(app)
                   const summary = getAppSummary(app.description)
-                  const publisher = app.description.publisher || 'Unknown publisher'
+                  const publisher =
+                    app.source === 'community'
+                      ? app.uploader?.username || app.uploader?.id || 'Community uploader'
+                      : app.description.publisher || 'Unknown publisher'
                   const version = app.description.version ? `v${app.description.version}` : null
                   const isSelected = selectedApp?.id === app.id
                   const iconUrl = app.description.iconUrl || app.description.icon
@@ -412,7 +707,7 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                   return (
                     <button
                       key={app.id}
-                      onClick={() => setSelectedAppId(app.id)}
+                      onClick={() => handleSelectApp(app.id)}
                       className={`text-left rounded-2xl border p-4 transition-all duration-200 hover:border-blue-300/60 dark:hover:border-blue-400/50 ${
                         isSelected
                           ? 'border-blue-400 bg-blue-50/60 dark:bg-blue-500/10 shadow-sm'
@@ -441,6 +736,16 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                       <div className='mt-2 flex items-center justify-between text-xs text-neutral-400 dark:text-neutral-500'>
                         <span className='truncate'>{publisher}</span>
                         <span className='flex items-center gap-2'>
+                          {app.source === 'community' && (
+                            <span className='px-2 py-0.5 rounded-full bg-indigo-100/70 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold uppercase tracking-wide'>
+                              Community
+                            </span>
+                          )}
+                          {app.containsExecutables && (
+                            <span className='px-2 py-0.5 rounded-full bg-amber-100/70 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-semibold uppercase tracking-wide'>
+                              Executable
+                            </span>
+                          )}
                           {isInstalled && (
                             <span className='px-2 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[10px] font-semibold uppercase tracking-wide'>
                               Installed
@@ -464,11 +769,15 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                         {getAppDisplayName(selectedApp)}
                       </h3>
                       <p className='text-sm text-neutral-500 dark:text-neutral-400'>
-                        {selectedApp.description.publisher || 'Publisher not listed'}
+                        {selectedApp.source === 'community'
+                          ? selectedApp.uploader?.username || selectedApp.uploader?.id || 'Uploader not listed'
+                          : selectedApp.description.publisher || 'Publisher not listed'}
                       </p>
                     </div>
                     <span className='text-xs font-mono uppercase tracking-[0.15em] text-neutral-400'>
-                      {selectedApp.description.category || 'Tool'}
+                      {selectedApp.source === 'community'
+                        ? 'Community'
+                        : selectedApp.description.category || 'Tool'}
                     </span>
                   </div>
 
@@ -501,6 +810,27 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                         {selectedApp.updatedAt ? new Date(selectedApp.updatedAt).toLocaleDateString() : 'n/a'}
                       </p>
                     </div>
+                    {selectedApp.source === 'community' && (
+                      <div>
+                        <p className='uppercase tracking-[0.12em] text-[10px]'>Uploader</p>
+                        <p className='text-sm text-neutral-700 dark:text-neutral-200 truncate'>
+                          {selectedApp.uploader?.username || selectedApp.uploader?.id || 'n/a'}
+                        </p>
+                      </div>
+                    )}
+                    {selectedApp.description.gitLink && (
+                      <div>
+                        <p className='uppercase tracking-[0.12em] text-[10px]'>Repo</p>
+                        <a
+                          href={selectedApp.description.gitLink}
+                          target='_blank'
+                          rel='noreferrer'
+                          className='text-sm text-blue-600 dark:text-blue-400 hover:underline truncate block'
+                        >
+                          View repository
+                        </a>
+                      </div>
+                    )}
                   </div>
 
                   {selectedApp.description.tags && selectedApp.description.tags.length > 0 && (
@@ -513,6 +843,13 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                           {tag}
                         </span>
                       ))}
+                    </div>
+                  )}
+
+                  {selectedApp.source === 'community' && selectedApp.containsExecutables && (
+                    <div className='mt-4 rounded-xl border border-amber-200/70 bg-amber-50/70 px-4 py-3 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'>
+                      This community app contains executable files (.exe/.bat/.sh). Install only if you trust the
+                      source.
                     </div>
                   )}
 

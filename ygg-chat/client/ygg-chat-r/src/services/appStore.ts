@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase'
-import { environment, localApi } from '../utils/api'
+import { getSessionFromStorage } from '../lib/jwtUtils'
+import { apiCall, environment, localApi, LOCAL_API_BASE } from '../utils/api'
 
 const APP_STORE_BUCKET = 'updates'
 const APP_STORE_ROOT = 'apps'
@@ -22,6 +23,12 @@ export interface AppStoreDescription {
   bundle?: string
   file?: string
   download?: string
+  gitLink?: string
+}
+
+export interface AppUploader {
+  id?: string | null
+  username?: string | null
 }
 
 export interface AppStoreApp {
@@ -32,6 +39,9 @@ export interface AppStoreApp {
   zipName: string | null
   zipUrl: string | null
   updatedAt: string | null
+  source?: 'first-party' | 'community'
+  containsExecutables?: boolean
+  uploader?: AppUploader
 }
 
 export interface AppStoreInstallResult {
@@ -59,6 +69,41 @@ export interface CustomToolDefinition {
   sourcePath?: string
 }
 
+export interface CustomToolDefinitionFile {
+  name: string
+  description: string
+  version?: string
+  enabled?: boolean
+  inputSchema: {
+    type: 'object'
+    properties: Record<string, any>
+    required?: string[]
+  }
+}
+
+export interface CommunityAppUploadValidation {
+  success: boolean
+  error?: string
+  warnings?: string[]
+  appId?: string
+  toolDir?: string
+  description?: AppStoreDescription
+  definition?: CustomToolDefinitionFile
+  containsExecutables?: boolean
+}
+
+type PublicAppApiRecord = {
+  app_id: string
+  description: AppStoreDescription
+  description_url: string
+  zip_url: string
+  contains_executables: boolean
+  created_at?: string | null
+  updated_at?: string | null
+  uploader_user_id?: string | null
+  uploader?: { username?: string | null }
+}
+
 export type AppStoreManifestEntry =
   | string
   | (AppStoreDescription & {
@@ -67,6 +112,13 @@ export type AppStoreManifestEntry =
       zipUrl?: string
       updatedAt?: string
     })
+
+type AppStoreManifestEntryObject = AppStoreDescription & {
+  id: string
+  descriptionUrl?: string
+  zipUrl?: string
+  updatedAt?: string
+}
 
 export interface AppStoreManifest {
   apps: AppStoreManifestEntry[]
@@ -132,7 +184,7 @@ export async function fetchAppStoreApps(): Promise<AppStoreApp[]> {
       let description: AppStoreDescription = { name: appId }
 
       if (!isStringEntry) {
-        const entryObject = entry as AppStoreDescription & AppStoreManifestEntry
+        const entryObject = entry as AppStoreManifestEntryObject
         const { descriptionUrl, zipUrl, updatedAt, ...rest } = entryObject
         if ('id' in rest) {
           delete (rest as Record<string, unknown>).id
@@ -191,11 +243,116 @@ export async function fetchAppStoreApps(): Promise<AppStoreApp[]> {
         zipName,
         zipUrl,
         updatedAt: manifestUpdatedAt || null,
+        source: 'first-party',
       } as AppStoreApp
     })
   )
 
   return apps
+}
+
+export async function fetchPublicAppStoreApps(): Promise<AppStoreApp[]> {
+  const response =
+    environment === 'electron'
+      ? await localApi.get<{ success: boolean; apps?: PublicAppApiRecord[] }>('/app-store/community')
+      : await apiCall<{ success: boolean; apps?: PublicAppApiRecord[] }>('/app-store/community', null, {
+          method: 'GET',
+        })
+
+  const records = response.apps || []
+
+  return records.map(record => {
+    const description = (record.description || { name: record.app_id }) as AppStoreDescription
+    const displayName = description.title || description.name || record.app_id
+    return {
+      id: record.app_id,
+      name: displayName,
+      description,
+      descriptionUrl: record.description_url || null,
+      zipName: null,
+      zipUrl: record.zip_url || null,
+      updatedAt: record.updated_at || record.created_at || null,
+      source: 'community',
+      containsExecutables: Boolean(record.contains_executables),
+      uploader: {
+        id: record.uploader_user_id || null,
+        username: record.uploader?.username ?? null,
+      },
+    } as AppStoreApp
+  })
+}
+
+export async function validateCommunityAppUpload(file: File): Promise<CommunityAppUploadValidation> {
+  if (environment !== 'electron') {
+    throw new Error('Community app uploads are only available in the desktop app.')
+  }
+
+  const buffer = await file.arrayBuffer()
+  const response = await fetch(`${LOCAL_API_BASE}/app-store/validate-upload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/zip',
+      'x-app-store-filename': file.name,
+    },
+    body: buffer,
+  })
+
+  const data = (await response.json()) as CommunityAppUploadValidation
+
+  if (!response.ok || !data.success) {
+    throw new Error(data.error || `Upload validation failed (${response.status})`)
+  }
+
+  return data
+}
+
+export async function uploadCommunityApp(file: File): Promise<AppStoreApp> {
+  if (environment !== 'electron') {
+    throw new Error('Community app uploads are only available in the desktop app.')
+  }
+
+  const session = getSessionFromStorage()
+  const token = session?.access_token
+  if (!token) {
+    throw new Error('You must be signed in to upload apps.')
+  }
+
+  const buffer = await file.arrayBuffer()
+  const response = await fetch(`${LOCAL_API_BASE}/app-store/community/upload`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/zip',
+      'x-app-store-filename': file.name,
+    },
+    body: buffer,
+  })
+
+  const data = (await response.json()) as { success: boolean; app?: PublicAppApiRecord; error?: string }
+
+  if (!response.ok || !data.success || !data.app) {
+    throw new Error(data.error || `Upload failed (${response.status})`)
+  }
+
+  const record = data.app
+  const description = (record.description || { name: record.app_id }) as AppStoreDescription
+  const displayName = description.title || description.name || record.app_id
+
+  return {
+    id: record.app_id,
+    name: displayName,
+    description,
+    descriptionUrl: record.description_url || null,
+    zipName: null,
+    zipUrl: record.zip_url || null,
+    updatedAt: record.updated_at || record.created_at || null,
+    source: 'community',
+    containsExecutables: Boolean(record.contains_executables),
+    uploader: {
+      id: record.uploader_user_id || null,
+      username: record.uploader?.username ?? null,
+    },
+  } as AppStoreApp
 }
 
 export async function installAppFromStore(payload: {
