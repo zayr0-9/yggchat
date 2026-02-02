@@ -4,7 +4,7 @@ import express from 'express'
 import fs from 'fs'
 import multer from 'multer'
 import path from 'path'
-import { SendMessageRequest } from '../../../shared/types'
+import type { SendMessageRequest, ToolDefinition } from '../../../shared/types'
 import {
   AttachmentService,
   buildMessageTree,
@@ -249,16 +249,21 @@ router.post(
           }))
         : undefined
 
-      const normalizedTools = Array.isArray(tools)
+      const normalizedTools: ToolDefinition[] = Array.isArray(tools)
         ? tools
-            .map((tool: any) => {
+            .map((tool: any): ToolDefinition | null => {
               const name = tool?.name || tool?.tool?.name
               if (!name) return null
               const serverTool = getToolByName(name)
-              if (serverTool) return serverTool
-              return null
+              if (!serverTool) return null
+              return {
+                name: serverTool.name,
+                enabled: serverTool.enabled,
+                description: serverTool.tool?.description ?? '',
+                inputSchema: serverTool.tool?.inputSchema ?? { type: 'object', properties: {} },
+              }
             })
-            .filter(Boolean)
+            .filter((tool): tool is ToolDefinition => tool !== null)
         : []
 
       const effectiveTools = normalizedTools.length > 0 ? normalizedTools : undefined
