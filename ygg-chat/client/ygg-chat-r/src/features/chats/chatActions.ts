@@ -853,7 +853,70 @@ const executeSubagentCall = async (
       let turnReasoning = ''
       const turnToolCalls: any[] = []
       const serverToolResults: any[] = [] // Track tool results from server-executed tools (e.g., brave_search)
+      const seenToolCallIds = new Set<string>()
+      const seenToolResultIds = new Set<string>()
       let sseBuffer = ''
+
+      const appendText = (value?: any) => {
+        if (typeof value === 'string' && value.length > 0) {
+          turnText += value
+        }
+      }
+
+      const appendReasoning = (value?: any) => {
+        if (typeof value === 'string' && value.length > 0) {
+          turnReasoning += value
+        }
+      }
+
+      const addToolCall = (toolCall?: any) => {
+        if (!toolCall) return
+        if (toolCall.id && seenToolCallIds.has(toolCall.id)) return
+        if (toolCall.id) seenToolCallIds.add(toolCall.id)
+        turnToolCalls.push(toolCall)
+      }
+
+      const addToolResult = (toolResult?: any) => {
+        if (!toolResult) return
+        if (toolResult.tool_use_id && seenToolResultIds.has(toolResult.tool_use_id)) return
+        if (toolResult.tool_use_id) seenToolResultIds.add(toolResult.tool_use_id)
+        serverToolResults.push(toolResult)
+      }
+
+      const buildContentBlocks = (toolResults: any[], includeToolUsesForResults = false) => {
+        const blocks: any[] = []
+        if (turnReasoning) {
+          blocks.push({ type: 'thinking', content: turnReasoning })
+        }
+        if (turnText) {
+          blocks.push({ type: 'text', content: turnText })
+        }
+        for (const tc of turnToolCalls) {
+          blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments || tc.input })
+        }
+        if (includeToolUsesForResults && toolResults.length > 0) {
+          const existingToolUseIds = new Set(turnToolCalls.map(tc => tc.id))
+          for (const tr of toolResults) {
+            if (tr?.tool_use_id && !existingToolUseIds.has(tr.tool_use_id) && tr.tool_name) {
+              blocks.push({
+                type: 'tool_use',
+                id: tr.tool_use_id,
+                name: tr.tool_name,
+                input: tr.input ?? tr.args ?? tr.arguments,
+              })
+            }
+          }
+        }
+        for (const tr of toolResults) {
+          blocks.push({
+            type: 'tool_result',
+            tool_use_id: tr.tool_use_id,
+            content: tr.content,
+            is_error: tr.is_error,
+          })
+        }
+        return blocks
+      }
 
       // Parse SSE stream
       while (true) {
@@ -877,15 +940,33 @@ const executeSubagentCall = async (
             if (data === '[DONE]') continue
             try {
               const parsed = JSON.parse(data)
-              if (parsed.text) {
-                turnText += parsed.text
-              } else if (parsed.reasoning) {
-                turnReasoning += parsed.reasoning
-              } else if (parsed.toolCall) {
-                turnToolCalls.push(parsed.toolCall)
-              } else if (parsed.toolResult) {
+              if (parsed?.type === 'chunk' && parsed?.part) {
+                if (parsed.part === 'text') {
+                  appendText(parsed.delta ?? parsed.content ?? parsed.text)
+                } else if (parsed.part === 'reasoning') {
+                  appendReasoning(parsed.delta ?? parsed.reasoning)
+                } else if (parsed.part === 'tool_call') {
+                  addToolCall(parsed.toolCall)
+                } else if (parsed.part === 'tool_result') {
+                  addToolResult(parsed.toolResult)
+                }
+              } else if (parsed?.type === 'tool_call') {
+                addToolCall(parsed.toolCall || parsed.tool_call || parsed)
+              } else if (parsed?.type === 'tool_result') {
+                addToolResult(parsed.toolResult || parsed.tool_result || parsed)
+              } else if (parsed?.toolCall) {
+                addToolCall(parsed.toolCall)
+              } else if (parsed?.toolResult) {
                 // Server executed a server-only tool (e.g., brave_search)
-                serverToolResults.push(parsed.toolResult)
+                addToolResult(parsed.toolResult)
+              } else if (parsed?.reasoning) {
+                appendReasoning(parsed.reasoning)
+              } else if (parsed?.text) {
+                appendText(parsed.text)
+              } else if (parsed?.delta) {
+                appendText(parsed.delta)
+              } else if (parsed?.content) {
+                appendText(parsed.content)
               }
             } catch {
               if (data.trim()) {
@@ -916,10 +997,7 @@ const executeSubagentCall = async (
         finalResponse = turnReasoning ? `<thinking>\n${turnReasoning}\n</thinking>\n\n${turnText}` : turnText
 
         // Build content_blocks for final message (text only, no tool calls/results)
-        const finalContentBlocks: any[] = []
-        if (turnText) {
-          finalContentBlocks.push({ type: 'text', text: turnText })
-        }
+        const finalContentBlocks = buildContentBlocks([])
         assistantMessage.content_blocks = JSON.stringify(finalContentBlocks)
 
         // Persist final assistant message
@@ -937,6 +1015,24 @@ const executeSubagentCall = async (
       // we need to add the server results to conversation history and continue the loop
       // so the model can process the results
       if (turnToolCalls.length === 0 && serverToolResults.length > 0) {
+        const contentBlocks = buildContentBlocks(serverToolResults, true)
+        assistantMessage.content_blocks = JSON.stringify(contentBlocks)
+
+        if (isLocalMode) {
+          try {
+            await localApi.post('/sync/message', assistantMessage)
+          } catch (err) {
+            console.warn('[subagent] Failed to persist assistant message (server tools only):', err)
+          }
+        }
+
+        if (turnText || turnReasoning) {
+          conversationHistory.push({
+            role: 'assistant',
+            content: turnText || null,
+          })
+        }
+
         // Track server-executed tools
         for (const tr of serverToolResults) {
           toolsExecuted.push({ name: tr.tool_name || 'server_tool', success: !tr.is_error })
@@ -1045,17 +1141,7 @@ const executeSubagentCall = async (
       const allToolResults = [...serverToolResults, ...toolResults]
 
       // Build content_blocks with tool results
-      const contentBlocks: any[] = []
-      if (turnText) {
-        contentBlocks.push({ type: 'text', text: turnText })
-      }
-      for (const tc of turnToolCalls) {
-        contentBlocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.arguments || tc.input })
-      }
-      for (const tr of allToolResults) {
-        contentBlocks.push({ type: 'tool_result', tool_use_id: tr.tool_use_id, content: tr.content })
-      }
-
+      const contentBlocks = buildContentBlocks(allToolResults)
       assistantMessage.content_blocks = JSON.stringify(contentBlocks)
 
       // Persist assistant message with tool calls and results

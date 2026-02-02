@@ -30,6 +30,7 @@ import stripMarkdownToText from '../../utils/markdownStripper'
 // import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { TextArea } from '../TextArea/TextArea'
 import { TextField } from '../TextField/TextField'
+import { environment, localApi } from '../../utils/api'
 
 // Type definitions
 interface ChatNode {
@@ -37,6 +38,13 @@ interface ChatNode {
   message: string
   sender: 'user' | 'assistant' | 'ex_agent'
   children: ChatNode[]
+}
+
+interface SubagentNode {
+  id: string
+  message?: string
+  sender?: string
+  content_blocks?: any[]
 }
 
 interface Position {
@@ -103,6 +111,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const [selectedNode, setSelectedNode] = useState<ChatNode | null>(null)
   const [subagentPanel, setSubagentPanel] = useState<{ parentId: string; x: number; y: number } | null>(null)
+  const [subagentModalData, setSubagentModalData] = useState<{
+    parentId: string
+    nodes: SubagentNode[]
+    loading: boolean
+    error?: string | null
+  } | null>(null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [isSelecting, setIsSelecting] = useState<boolean>(false)
@@ -184,148 +198,164 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     [flatMessages]
   )
 
-  const subagentMapByParent = useMemo(() => {
-    // We compute the map directly from allMessages to ensure it works even when
-    // nodes are filtered from the tree (e.g. "Filter Empty Messages" is ON).
-    // This handles both:
-    // 1. Legacy: Messages with role="ex_agent" and ex_agent_type="subagent" (grouped by session)
-    // 2. New: Assistant messages containing "subagent" tool calls
-    const map: Record<string, Array<{ id: string; message?: string; sender?: string; content_blocks?: any[] }>> = {}
-
-    // Build a message lookup map for efficient parent traversal
-    const messageById = new Map(allMessages.map(m => [String(m.id), m]))
-
-    // Helper: Find the originating user message by following parent chain
-    const findUserParent = (msgId: string): string | null => {
-      let currentId: string | null = msgId
-      const visited = new Set<string>()
-      while (currentId && !visited.has(currentId)) {
-        visited.add(currentId)
-        const msg = messageById.get(currentId)
-        if (!msg) return null
-        if (msg.role === 'user') return currentId
-        currentId = msg.parent_id ? String(msg.parent_id) : null
+  const normalizeContentBlocks = useCallback((blocks: any): any[] => {
+    if (!blocks) return []
+    if (Array.isArray(blocks)) return blocks
+    if (typeof blocks === 'string') {
+      try {
+        const parsed = JSON.parse(blocks)
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
       }
-      return null
     }
+    return []
+  }, [])
 
-    // 1. Group ex_agent messages with ex_agent_type="subagent" by session
-    const sessionMessages: Record<string, typeof allMessages> = {}
-    allMessages.forEach(msg => {
-      if (msg.role === 'ex_agent' && msg.ex_agent_type === 'subagent' && msg.ex_agent_session_id) {
-        const sessionId = msg.ex_agent_session_id
-        if (!sessionMessages[sessionId]) sessionMessages[sessionId] = []
-        sessionMessages[sessionId].push(msg)
+  const buildSubagentMap = useCallback(
+    (messages: Message[]) => {
+      // We compute the map directly from messages to ensure it works even when
+      // nodes are filtered from the tree (e.g. "Filter Empty Messages" is ON).
+      // This handles both:
+      // 1. Legacy: Messages with role="ex_agent" and ex_agent_type="subagent" (grouped by session)
+      // 2. New: Assistant messages containing "subagent" tool calls
+      const map: Record<string, SubagentNode[]> = {}
+
+      // Build a message lookup map for efficient parent traversal
+      const messageById = new Map(messages.map(m => [String(m.id), m]))
+
+      // Helper: Find the originating user message by following parent chain
+      const findUserParent = (msgId: string): string | null => {
+        let currentId: string | null = msgId
+        const visited = new Set<string>()
+        while (currentId && !visited.has(currentId)) {
+          visited.add(currentId)
+          const msg = messageById.get(currentId)
+          if (!msg) return null
+          if (msg.role === 'user') return currentId
+          currentId = msg.parent_id ? String(msg.parent_id) : null
+        }
+        return null
       }
-    })
 
-    // For each session, find the user parent and map all session messages to it
-    Object.entries(sessionMessages).forEach(([sessionId, messages]) => {
-      if (messages.length === 0) return
-
-      // Find the root message of this session (the one whose parent is NOT an ex_agent in this session)
-      const sessionIds = new Set(messages.map(m => String(m.id)))
-      const rootMsg = messages.find(m => !m.parent_id || !sessionIds.has(String(m.parent_id)))
-      if (!rootMsg) return
-
-      // Find the user message that initiated this subagent session
-      const userParentId = findUserParent(rootMsg.parent_id ? String(rootMsg.parent_id) : '')
-      if (!userParentId) return
-
-      if (!map[userParentId]) map[userParentId] = []
-
-      // Add session as a single entry with all messages combined
-      // Sort messages by created_at to maintain order
-      const sortedMessages = [...messages].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      )
-
-      // Combine all content_blocks from session messages
-      const combinedBlocks: any[] = []
-      sortedMessages.forEach(msg => {
-        // Add message content as a text block if present
-        // Skip if content_blocks already has text blocks (avoid duplication)
-        const hasTextBlocks =
-          Array.isArray(msg.content_blocks) && msg.content_blocks.some((b: any) => b.type === 'text')
-        if (msg.content && msg.content.trim() && !hasTextBlocks) {
-          combinedBlocks.push({ type: 'text', content: msg.content })
-        }
-        // Note: Skip tool_calls - they're already in content_blocks as tool_use blocks
-        // Add content_blocks if present
-        if (Array.isArray(msg.content_blocks)) {
-          combinedBlocks.push(...msg.content_blocks)
+      // 1. Group ex_agent messages with ex_agent_type="subagent" by session
+      const sessionMessages: Record<string, Message[]> = {}
+      messages.forEach(msg => {
+        if (msg.role === 'ex_agent' && msg.ex_agent_type === 'subagent' && msg.ex_agent_session_id) {
+          const sessionId = msg.ex_agent_session_id
+          if (!sessionMessages[sessionId]) sessionMessages[sessionId] = []
+          sessionMessages[sessionId].push(msg)
         }
       })
 
-      map[userParentId].push({
-        id: `session_${sessionId}`,
-        message: sortedMessages[0]?.content || 'Subagent Session',
-        sender: 'ex_agent',
-        content_blocks: combinedBlocks,
-      })
-    })
+      // For each session, find the user parent and map all session messages to it
+      Object.entries(sessionMessages).forEach(([sessionId, session]) => {
+        if (session.length === 0) return
 
-    // 2. Subagent tool calls in assistant messages
-    // Skip if there's already an ex_agent session for this assistant (avoid double counting)
-    allMessages.forEach(msg => {
-      if (msg.role === 'assistant' && Array.isArray(msg.content_blocks) && msg.parent_id) {
-        const subagentCalls = msg.content_blocks.filter(
-          (block: any) => block.type === 'tool_use' && block.name === 'subagent'
+        // Find the root message of this session (the one whose parent is NOT an ex_agent in this session)
+        const sessionIds = new Set(session.map(m => String(m.id)))
+        const rootMsg = session.find(m => !m.parent_id || !sessionIds.has(String(m.parent_id)))
+        if (!rootMsg) return
+
+        // Find the user message that initiated this subagent session
+        const userParentId = findUserParent(rootMsg.parent_id ? String(rootMsg.parent_id) : '')
+        if (!userParentId) return
+
+        if (!map[userParentId]) map[userParentId] = []
+
+        // Add session as a single entry with all messages combined
+        // Sort messages by created_at to maintain order
+        const sortedMessages = [...session].sort(
+          (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         )
 
-        if (subagentCalls.length > 0) {
-          // Check if this assistant message has ex_agent subagent children (session already captured)
-          const hasExAgentSession = allMessages.some(
-            m => m.role === 'ex_agent' && m.ex_agent_type === 'subagent' && String(m.parent_id) === String(msg.id)
-          )
+        // Combine all content_blocks from session messages
+        const combinedBlocks: any[] = []
+        sortedMessages.forEach(msg => {
+          const blocks = normalizeContentBlocks(msg.content_blocks)
+          // Add message content as a text block if present
+          // Skip if content_blocks already has text blocks (avoid duplication)
+          const hasTextBlocks = blocks.some((b: any) => b.type === 'text')
+          if (msg.content && msg.content.trim() && !hasTextBlocks) {
+            combinedBlocks.push({ type: 'text', content: msg.content })
+          }
+          // Add content_blocks if present
+          if (blocks.length > 0) {
+            combinedBlocks.push(...blocks)
+          }
+        })
 
-          // Skip if ex_agent session exists - it's already counted in case 1
-          if (hasExAgentSession) return
+        map[userParentId].push({
+          id: `session_${sessionId}`,
+          message: sortedMessages[0]?.content || 'Subagent Session',
+          sender: 'ex_agent',
+          content_blocks: combinedBlocks,
+        })
+      })
 
-          const parentId = String(msg.parent_id)
-          if (!map[parentId]) map[parentId] = []
+      // 2. Subagent tool calls in assistant messages
+      // Skip if there's already an ex_agent session for this assistant (avoid double counting)
+      messages.forEach(msg => {
+        const blocks = normalizeContentBlocks(msg.content_blocks)
+        if (msg.role === 'assistant' && blocks.length > 0 && msg.parent_id) {
+          const subagentCalls = blocks.filter((block: any) => block.type === 'tool_use' && block.name === 'subagent')
 
-          subagentCalls.forEach((call: any, idx: number) => {
-            // Filter content_blocks to include:
-            // 1. All blocks between this subagent's tool_use and its tool_result (inclusive)
-            //    This captures any tool calls the subagent made during execution
-            // 2. Any thinking/text blocks that appear before this tool_use (until previous tool_result or start)
-            const toolUseId = call.id
-            const blocks = msg.content_blocks
-            const toolUseIndex = blocks.findIndex((b: any) => b.type === 'tool_use' && b.id === toolUseId)
-            const toolResultIndex = blocks.findIndex(
-              (b: any) => b.type === 'tool_result' && b.tool_use_id === toolUseId
+          if (subagentCalls.length > 0) {
+            // Check if this assistant message has ex_agent subagent children (session already captured)
+            const hasExAgentSession = messages.some(
+              m => m.role === 'ex_agent' && m.ex_agent_type === 'subagent' && String(m.parent_id) === String(msg.id)
             )
 
-            // Find preceding thinking/text blocks (go backwards until we hit a tool_result or start)
-            const precedingBlocks: any[] = []
-            for (let i = toolUseIndex - 1; i >= 0; i--) {
-              const block = blocks[i]
-              if (block.type === 'tool_result') break // Stop at previous tool's result
-              if (block.type === 'thinking' || block.type === 'text') {
-                precedingBlocks.unshift(block) // Add to front to maintain order
+            // Skip if ex_agent session exists - it's already counted in case 1
+            if (hasExAgentSession) return
+
+            const parentId = String(msg.parent_id)
+            if (!map[parentId]) map[parentId] = []
+
+            subagentCalls.forEach((call: any, idx: number) => {
+              // Filter content_blocks to include:
+              // 1. All blocks between this subagent's tool_use and its tool_result (inclusive)
+              //    This captures any tool calls the subagent made during execution
+              // 2. Any thinking/text blocks that appear before this tool_use (until previous tool_result or start)
+              const toolUseId = call.id
+              const toolUseIndex = blocks.findIndex((b: any) => b.type === 'tool_use' && b.id === toolUseId)
+              const toolResultIndex = blocks.findIndex(
+                (b: any) => b.type === 'tool_result' && b.tool_use_id === toolUseId
+              )
+
+              // Find preceding thinking/text blocks (go backwards until we hit a tool_result or start)
+              const precedingBlocks: any[] = []
+              for (let i = toolUseIndex - 1; i >= 0; i--) {
+                const block = blocks[i]
+                if (block.type === 'tool_result') break // Stop at previous tool's result
+                if (block.type === 'thinking' || block.type === 'text') {
+                  precedingBlocks.unshift(block) // Add to front to maintain order
+                }
               }
-            }
 
-            // Get all blocks from tool_use to tool_result (inclusive)
-            // This includes any intermediate tool calls the subagent made
-            const endIndex = toolResultIndex >= 0 ? toolResultIndex + 1 : toolUseIndex + 1
-            const subagentBlocks = blocks.slice(toolUseIndex, endIndex)
+              // Get all blocks from tool_use to tool_result (inclusive)
+              // This includes any intermediate tool calls the subagent made
+              const endIndex = toolResultIndex >= 0 ? toolResultIndex + 1 : toolUseIndex + 1
+              const subagentBlocks = blocks.slice(toolUseIndex, endIndex)
 
-            const filteredBlocks = [...precedingBlocks, ...subagentBlocks]
+              const filteredBlocks = [...precedingBlocks, ...subagentBlocks]
 
-            map[parentId].push({
-              id: `${msg.id}_subagent_${idx}`, // Virtual ID for the badge count
-              message: call.input?.prompt || 'Subagent Call',
-              sender: 'ex_agent',
-              content_blocks: filteredBlocks,
+              map[parentId].push({
+                id: `${msg.id}_subagent_${idx}`, // Virtual ID for the badge count
+                message: call.input?.prompt || 'Subagent Call',
+                sender: 'ex_agent',
+                content_blocks: filteredBlocks,
+              })
             })
-          })
+          }
         }
-      }
-    })
-    return map
-  }, [allMessages])
+      })
+      return map
+    },
+    [normalizeContentBlocks]
+  )
+
+  const subagentMapByParent = useMemo(() => buildSubagentMap(allMessages), [allMessages, buildSubagentMap])
 
   const handleSubagentBadgeClick = useCallback((event: React.MouseEvent<SVGGElement>, parentId: string) => {
     event.stopPropagation()
@@ -341,6 +371,60 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
     setSubagentPanel(prev => (prev?.parentId === parentId ? null : nextPos))
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const fetchSubagentMessages = async (parentId: string) => {
+      // Default to whatever we already have from the filtered store
+      setSubagentModalData({
+        parentId,
+        nodes: subagentMapByParent[parentId] || [],
+        loading: true,
+        error: null,
+      })
+
+      if (environment !== 'electron' || !conversationId) {
+        setSubagentModalData({
+          parentId,
+          nodes: subagentMapByParent[parentId] || [],
+          loading: false,
+          error: null,
+        })
+        return
+      }
+
+      try {
+        const result = await localApi.get<{ messages: Message[] }>(`/local/conversations/${conversationId}/messages/tree`)
+        if (cancelled) return
+        const map = buildSubagentMap(Array.isArray(result?.messages) ? result.messages : [])
+        setSubagentModalData({
+          parentId,
+          nodes: map[parentId] || [],
+          loading: false,
+          error: null,
+        })
+      } catch (err) {
+        if (cancelled) return
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load subagent messages'
+        setSubagentModalData({
+          parentId,
+          nodes: subagentMapByParent[parentId] || [],
+          loading: false,
+          error: errorMsg,
+        })
+      }
+    }
+
+    if (subagentPanel?.parentId) {
+      fetchSubagentMessages(subagentPanel.parentId)
+    } else {
+      setSubagentModalData(null)
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [subagentPanel, conversationId, subagentMapByParent, buildSubagentMap])
 
   const getSubagentBadgeMetrics = (count: number) => {
     const label = `${count} SUB-CALL${count === 1 ? '' : 'S'}`
@@ -2908,7 +2992,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       {subagentPanel &&
         (() => {
           const parentId = subagentPanel.parentId
-          const subagentNodes = subagentMapByParent[parentId] || []
+          const subagentNodes =
+            subagentModalData?.parentId === parentId ? subagentModalData.nodes : subagentMapByParent[parentId] || []
+          const isSubagentLoading = subagentModalData?.parentId === parentId && subagentModalData.loading
+          const subagentError = subagentModalData?.parentId === parentId ? subagentModalData.error : null
 
           // Find parent node message to display
           const parentMessage = allMessages.find(m => String(m.id) === parentId)
@@ -2939,6 +3026,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
                 {/* Scrollable content */}
                 <div className='overflow-y-auto flex-1 thin-scrollbar' data-heimdall-wheel-exempt='true'>
+                  {isSubagentLoading && (
+                    <div className='px-5 py-3 text-xs text-stone-500 dark:text-stone-400'>Loading subagent data...</div>
+                  )}
+                  {!isSubagentLoading && subagentError && (
+                    <div className='px-5 py-3 text-xs text-red-600 dark:text-red-400'>{subagentError}</div>
+                  )}
                   {/* Parent task context */}
                   <div className='px-5 py-4 border-b border-stone-100 dark:border-neutral-800 bg-stone-50 dark:bg-neutral-900/50'>
                     <div className='text-xs font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-2'>
@@ -2983,14 +3076,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                             <div className='space-y-3 mt-3'>
                               {blocks.map((block: any, blockIdx: number) => {
                                 // Text block
-                                if (block.type === 'text' && block.content) {
+                                if (block.type === 'text') {
+                                  const textContent = block.content ?? block.text
+                                  if (!textContent) return null
                                   return (
                                     <div
                                       key={blockIdx}
                                       className='prose prose-sm dark:prose-invert max-w-none text-stone-700 dark:text-stone-300 prose-p:my-1 prose-pre:my-2 prose-pre:bg-stone-100 dark:prose-pre:bg-neutral-800 prose-code:text-orange-600 dark:prose-code:text-orange-400 prose-pre:text-xs prose-pre:overflow-x-auto'
                                     >
                                       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                                        {block.content}
+                                        {textContent}
                                       </ReactMarkdown>
                                     </div>
                                   )
