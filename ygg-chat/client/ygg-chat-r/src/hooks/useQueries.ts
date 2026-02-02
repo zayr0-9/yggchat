@@ -1848,6 +1848,16 @@ export interface DirectoryListingResponse {
 }
 
 /**
+ * Global Agent hooks - re-export from dedicated files
+ */
+export {
+  useGlobalAgentMessages,
+  useGlobalAgentStreamBuffer,
+  useGlobalAgentOptimisticMessage
+} from './useGlobalAgentMessages'
+export type { GlobalAgentMessagesData } from './useGlobalAgentMessages'
+
+/**
  * Fetch files from a directory path
  * Cache key: ['directory-files', path]
  *

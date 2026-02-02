@@ -6,6 +6,12 @@ import { selectProviderState } from '../features/chats'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../features/chats/chatActions'
 import { getAllTools } from '../features/chats/toolDefinitions'
 import {
+  AGENT_SETTINGS_CHANGE_EVENT,
+  AgentSettings,
+  loadAgentSettings,
+  saveAgentSettings,
+} from '../helpers/agentSettingsStorage'
+import {
   loadProviderSettings,
   PROVIDER_SETTINGS_CHANGE_EVENT,
   ProviderSettings,
@@ -24,6 +30,7 @@ import {
 } from '../helpers/videoBackgroundStorage'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
+import { useModels } from '../hooks/useQueries'
 import { API_BASE } from '../utils/api'
 
 const MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024 // 8MB
@@ -68,6 +75,7 @@ const Settings: React.FC = () => {
   const tools = getAllTools()
   const [toolsExpanded, setToolsExpanded] = useState(false)
   const [htmlToolsExpanded, setHtmlToolsExpanded] = useState(false)
+  const [agentToolsExpanded, setAgentToolsExpanded] = useState(false)
   const [updatingTools, setUpdatingTools] = useState<Set<string>>(new Set())
   const [reloadingTools, setReloadingTools] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -80,6 +88,20 @@ const Settings: React.FC = () => {
   const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null)
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(() => loadProviderSettings())
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>({
+    heartbeatTime: null,
+    agentName: 'Global Agent',
+    model: null,
+    modelContextLength: null,
+    loopIntervalMs: 60000,
+    autoResume: true,
+    toolAllowlist: null,
+  })
+  const [loopIntervalInput, setLoopIntervalInput] = useState('60000')
+  const [loopIntervalTouched, setLoopIntervalTouched] = useState(false)
+  const [agentSettingsLoading, setAgentSettingsLoading] = useState(true)
+  const [agentSettingsSaving, setAgentSettingsSaving] = useState(false)
+  const { data: openRouterModelsData } = useModels('OpenRouter')
 
   // Fetch Google Drive connection status
   const fetchGoogleDriveStatus = async () => {
@@ -186,6 +208,163 @@ const Settings: React.FC = () => {
     }
 
     timeoutRef.current = window.setTimeout(() => setStatusMessage(null), 4000)
+  }
+
+  useEffect(() => {
+    if (import.meta.env.VITE_ENVIRONMENT !== 'electron') {
+      setAgentSettingsLoading(false)
+      return
+    }
+
+    let isActive = true
+
+    loadAgentSettings()
+      .then(settings => {
+        if (!isActive) return
+        setAgentSettings(settings)
+      })
+      .catch(error => {
+        console.error('Failed to load agent settings:', error)
+        if (isActive) {
+          showStatus({ type: 'error', text: 'Failed to load global agent settings.' })
+        }
+      })
+      .finally(() => {
+        if (isActive) {
+          setAgentSettingsLoading(false)
+        }
+      })
+
+    const handleAgentSettingsChange = (e: CustomEvent<AgentSettings>) => {
+      if (!isActive) return
+      setAgentSettings(e.detail)
+    }
+
+    window.addEventListener(AGENT_SETTINGS_CHANGE_EVENT, handleAgentSettingsChange as EventListener)
+    return () => {
+      isActive = false
+      window.removeEventListener(AGENT_SETTINGS_CHANGE_EVENT, handleAgentSettingsChange as EventListener)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (agentSettingsLoading || import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+    if (agentSettings.toolAllowlist && agentSettings.toolAllowlist.length > 0) return
+
+    const defaultAllowlist = tools
+      .filter(tool => tool.enabled || tool.name === 'bash')
+      .map(tool => tool.name)
+
+    if (defaultAllowlist.length === 0) return
+
+    const nextSettings = { ...agentSettings, toolAllowlist: defaultAllowlist }
+    setAgentSettings(nextSettings)
+    saveAgentSettings(nextSettings).catch(error => {
+      console.error('Failed to persist default global agent tools:', error)
+    })
+  }, [agentSettings, agentSettingsLoading, tools])
+
+  useEffect(() => {
+    if (loopIntervalTouched) return
+    setLoopIntervalInput(String(agentSettings.loopIntervalMs ?? 60000))
+  }, [agentSettings.loopIntervalMs, loopIntervalTouched])
+
+  const persistAgentSettings = async (nextSettings: AgentSettings, successText: string, errorText: string) => {
+    setAgentSettings(nextSettings)
+
+    if (import.meta.env.VITE_ENVIRONMENT !== 'electron') {
+      return
+    }
+
+    setAgentSettingsSaving(true)
+    try {
+      const saved = await saveAgentSettings(nextSettings)
+      setAgentSettings(saved)
+      showStatus({ type: 'success', text: successText })
+    } catch (error) {
+      console.error('Failed to save agent settings:', error)
+      showStatus({ type: 'error', text: errorText })
+      try {
+        const refreshed = await loadAgentSettings()
+        setAgentSettings(refreshed)
+      } catch (refreshError) {
+        console.error('Failed to reload agent settings:', refreshError)
+      }
+    } finally {
+      setAgentSettingsSaving(false)
+    }
+  }
+
+  const handleHeartbeatTimeChange = async (value: string) => {
+    const nextHeartbeat = value.trim().length > 0 ? value : null
+    const nextSettings = { ...agentSettings, heartbeatTime: nextHeartbeat }
+    await persistAgentSettings(
+      nextSettings,
+      nextHeartbeat ? 'Heartbeat time updated.' : 'Heartbeat disabled.',
+      'Failed to update heartbeat time.'
+    )
+  }
+
+  const handleAgentNameChange = async (value: string) => {
+    const nextName = value.trim().length > 0 ? value.trim() : 'Global Agent'
+    await persistAgentSettings(
+      { ...agentSettings, agentName: nextName },
+      'Global agent name updated.',
+      'Failed to update agent name.'
+    )
+  }
+
+  const handleModelChange = async (value: string) => {
+    const trimmed = value.trim()
+    const modelEntry = openRouterModelsData?.models?.find(model => model.name === trimmed)
+    const contextLength = modelEntry?.contextLength ?? agentSettings.modelContextLength ?? null
+    await persistAgentSettings(
+      { ...agentSettings, model: trimmed || null, modelContextLength: contextLength },
+      'Global agent model updated.',
+      'Failed to update agent model.'
+    )
+  }
+
+  const handleLoopIntervalInputChange = (value: string) => {
+    setLoopIntervalInput(value)
+    setLoopIntervalTouched(true)
+  }
+
+  const commitLoopIntervalChange = async (value: string) => {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setLoopIntervalTouched(false)
+      setLoopIntervalInput(String(agentSettings.loopIntervalMs ?? 60000))
+      return
+    }
+
+    const nextInterval = Math.floor(parsed)
+    setLoopIntervalTouched(false)
+    await persistAgentSettings(
+      { ...agentSettings, loopIntervalMs: nextInterval },
+      'Loop cadence updated.',
+      'Failed to update loop cadence.'
+    )
+  }
+
+  const handleAutoResumeToggle = async () => {
+    await persistAgentSettings(
+      { ...agentSettings, autoResume: !agentSettings.autoResume },
+      'Auto-resume updated.',
+      'Failed to update auto-resume.'
+    )
+  }
+
+  const handleAgentToolToggle = async (toolName: string) => {
+    const current = agentSettings.toolAllowlist ?? []
+    const next = current.includes(toolName)
+      ? current.filter(name => name !== toolName)
+      : [...current, toolName]
+    await persistAgentSettings(
+      { ...agentSettings, toolAllowlist: next },
+      'Global agent tools updated.',
+      'Failed to update global agent tools.'
+    )
   }
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -430,6 +609,201 @@ const Settings: React.FC = () => {
                   )}
                 </div>
               )}
+            </div>
+          </section>
+        )}
+
+        {/* Global Agent Settings Section */}
+        {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
+          <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+            <div className='flex flex-col gap-1'>
+              <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Global Agent</h2>
+              <p className='text-sm text-stone-500 dark:text-stone-200'>
+                Configure the background agent loop, model, and heartbeat schedule.
+              </p>
+            </div>
+
+            <div className='mt-4 flex flex-col gap-5'>
+              <div className='flex flex-col gap-2'>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Agent Name</p>
+                <input
+                  type='text'
+                  value={agentSettings.agentName ?? ''}
+                  onChange={e => handleAgentNameChange(e.target.value)}
+                  disabled={agentSettingsLoading || agentSettingsSaving}
+                  className='w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+                />
+              </div>
+
+              <div className='flex flex-col gap-2'>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Model (OpenRouter)</p>
+                <Select
+                  value={agentSettings.model || ''}
+                  onChange={handleModelChange}
+                  options={(openRouterModelsData?.models || []).map(model => model.name)}
+                  placeholder='Select a model...'
+                  disabled={agentSettingsLoading || agentSettingsSaving}
+                  className='max-w-full'
+                />
+                <p className='text-xs text-stone-500 dark:text-stone-400'>
+                  Non-OpenRouter models can be set later. TODO: add provider-aware context limits.
+                </p>
+              </div>
+
+              <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                <div>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Loop Cadence (ms)</p>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>
+                    How often the agent checks its queue.
+                  </p>
+                </div>
+                <input
+                  type='number'
+                  min={1000}
+                  step={1000}
+                  value={loopIntervalInput}
+                  onChange={e => handleLoopIntervalInputChange(e.target.value)}
+                  onBlur={e => commitLoopIntervalChange(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  disabled={agentSettingsLoading || agentSettingsSaving}
+                  className='w-40 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+                />
+              </div>
+
+              <div className='flex items-center justify-between'>
+                <div>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Auto Resume</p>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>
+                    Resume the global agent after app restart.
+                  </p>
+                </div>
+                <button
+                  onClick={handleAutoResumeToggle}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    agentSettings.autoResume ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      agentSettings.autoResume ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+                <div>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Daily Heartbeat Time</p>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>
+                    Uses your local time zone. Leave blank to disable.
+                  </p>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <input
+                    type='time'
+                    value={agentSettings.heartbeatTime ?? ''}
+                    onChange={e => handleHeartbeatTimeChange(e.target.value)}
+                    disabled={agentSettingsLoading || agentSettingsSaving}
+                    className='rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+                  />
+                  {agentSettings.heartbeatTime && (
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => handleHeartbeatTimeChange('')}
+                      disabled={agentSettingsLoading || agentSettingsSaving}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {agentSettingsLoading && (
+                <p className='text-xs text-stone-500 dark:text-stone-400'>Loading agent settings…</p>
+              )}
+            </div>
+
+            <div className='mt-6 border-t border-stone-200 dark:border-stone-700 pt-4'>
+              <button
+                onClick={() => setAgentToolsExpanded(!agentToolsExpanded)}
+                className='w-full flex items-center justify-between text-left'
+              >
+                <div className='flex flex-col gap-1'>
+                  <h3 className='text-lg font-semibold text-stone-900 dark:text-stone-100'>Global Agent Tools</h3>
+                  <p className='text-sm text-stone-500 dark:text-stone-200'>
+                    Select which tools the global agent can call.
+                  </p>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <span className='text-sm text-stone-500 dark:text-stone-400'>
+                    {agentSettings.toolAllowlist?.length || 0}/{tools.length} enabled
+                  </span>
+                  <i
+                    className={`bx bx-chevron-down text-2xl text-stone-500 dark:text-stone-400 transition-transform duration-200 ${
+                      agentToolsExpanded ? 'rotate-180' : ''
+                    }`}
+                  ></i>
+                </div>
+              </button>
+
+              <div
+                className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                  agentToolsExpanded ? ' opacity-100 my-4' : 'max-h-0 opacity-0'
+                }`}
+              >
+                <div className='space-y-2'>
+                  {tools.map(tool => {
+                    const enabled = agentSettings.toolAllowlist?.includes(tool.name) ?? false
+                    return (
+                      <div
+                        key={tool.name}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          tool.isCustom
+                            ? 'border-orange-300 dark:border-orange-600/50 bg-orange-50/50 dark:bg-orange-900/10'
+                            : 'border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/30'
+                        }`}
+                      >
+                        <div className='flex-1 min-w-0'>
+                          <div className='flex items-center gap-2'>
+                            <span className='font-medium text-stone-800 dark:text-stone-200 truncate'>
+                              {tool.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            </span>
+                            {tool.isCustom && (
+                              <span className='text-xs px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-900/40 text-orange-600 dark:text-orange-300 flex-shrink-0'>
+                                Custom
+                              </span>
+                            )}
+                            {tool.isMcp && (
+                              <span className='text-xs px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex-shrink-0'>
+                                MCP
+                              </span>
+                            )}
+                          </div>
+                          <p className='text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5'>{tool.description}</p>
+                        </div>
+                        <button
+                          onClick={() => handleAgentToolToggle(tool.name)}
+                          disabled={agentSettingsSaving || agentSettingsLoading}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ml-3 flex-shrink-0 ${
+                            enabled ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                          } ${agentSettingsSaving ? 'opacity-50 cursor-wait' : ''}`}
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              enabled ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           </section>
         )}

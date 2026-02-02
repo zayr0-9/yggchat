@@ -1116,7 +1116,7 @@ const executeSubagentCall = async (
 /**
  * Execute a tool via orchestrator (blocking, immediate execution)
  */
-const executeLocalTool = async (
+export const executeLocalTool = async (
   toolCall: any,
   rootPath: string | null,
   operationMode: OperationMode,

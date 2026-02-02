@@ -116,8 +116,8 @@ import { cloneConversation } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
 import { extractTextFromPdf } from '../utils/pdfUtils'
-import RightBar from './rightBar'
 import SideBar from './sideBar'
+import RightBar from './rightBar'
 
 function Chat() {
   const dispatch = useAppDispatch()

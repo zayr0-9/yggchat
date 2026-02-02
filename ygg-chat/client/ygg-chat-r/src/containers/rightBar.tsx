@@ -3,14 +3,27 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { ConversationId } from '../../../../shared/types'
-import { Button } from '../components'
+import { Button, ChatMessage } from '../components'
 import { TextArea } from '../components/TextArea/TextArea'
 import { updateResearchNote } from '../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../features/conversations/conversationSelectors'
 import { Conversation } from '../features/conversations/conversationTypes'
+import { loadAgentSettings } from '../helpers/agentSettingsStorage'
 import { uiActions } from '../features/ui'
 import { useAuth } from '../hooks/useAuth'
-import { DirectoryFileEntry, ResearchNoteItem, useDirectoryFiles } from '../hooks/useQueries'
+import {
+  DirectoryFileEntry,
+  ResearchNoteItem,
+  useDirectoryFiles,
+  useGlobalAgentMessages,
+  useGlobalAgentStreamBuffer,
+  useGlobalAgentOptimisticMessage
+} from '../hooks/useQueries'
+import {
+  setGlobalAgentOptimisticMessage,
+  clearGlobalAgentOptimisticMessage
+} from '../hooks/useGlobalAgentCache'
+import { globalAgentLoop, GlobalAgentState } from '../services'
 import type { RootState } from '../store/store'
 
 interface RightBarProps {
@@ -45,12 +58,53 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
   // Drawer collapse state from Redux (persisted to localStorage in slice)
   const isCollapsed = useSelector((state: RootState) => state.ui.rightBarCollapsed)
 
-  // Tab state: 'note' for single conversation note, 'list' for all notes
-  const [activeTab, setActiveTab] = useState<'note' | 'list'>('note')
+  // Tab state: 'note' for single conversation note, 'list' for all notes, 'global' for agent
+  const [activeTab, setActiveTab] = useState<'note' | 'list' | 'global'>('note')
 
   // Local note state for debounced updates
   const [localNote, setLocalNote] = useState('')
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Global agent state
+  const [agentState, setAgentState] = useState<GlobalAgentState>(globalAgentLoop.getState())
+  const [agentSettingsName, setAgentSettingsName] = useState<string>('Global Agent')
+  const [agentInput, setAgentInput] = useState<string>('')
+
+  // Use React Query hooks for agent messages
+  const { data: agentData } = useGlobalAgentMessages()
+  const agentMessages = agentData?.messages || []
+  const agentConversationDate = agentData?.conversationDate
+    ? new Date(agentData.conversationDate).toLocaleDateString()
+    : null
+
+  // Subscribe to live streaming updates (triggers re-render on stream buffer changes)
+  const agentStreamBuffer = useGlobalAgentStreamBuffer()
+  const optimisticMessage = useGlobalAgentOptimisticMessage()
+
+  const parseJsonSafe = useCallback(<T,>(value: any, fallback: T): T => {
+    if (!value) return fallback
+    if (typeof value === 'object') return value as T
+    if (typeof value !== 'string') return fallback
+    try {
+      return JSON.parse(value) as T
+    } catch {
+      return fallback
+    }
+  }, [])
+
+  // Normalize content blocks to handle both old format (text) and new format (content)
+  const normalizeContentBlocks = useCallback((blocks: any[]): any[] => {
+    return blocks.map((block, idx) => {
+      if (block.type === 'text') {
+        return {
+          ...block,
+          index: block.index ?? idx,
+          content: block.content ?? block.text ?? '', // Handle both formats
+        }
+      }
+      return { ...block, index: block.index ?? idx }
+    })
+  }, [])
 
   // Get conversation data using selector
   const conversation = useSelector(conversationId ? makeSelectConversationById(conversationId) : () => null)
@@ -61,6 +115,36 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
       setLocalNote(conversation.research_note || '')
     }
   }, [conversation?.research_note])
+
+  useEffect(() => {
+    if (isWeb) return
+    let mounted = true
+
+    loadAgentSettings()
+      .then(settings => {
+        if (!mounted) return
+        setAgentSettingsName(settings.agentName || 'Global Agent')
+      })
+      .catch(error => {
+        console.error('Failed to load agent settings:', error)
+      })
+
+    // Subscribe to agent state changes only
+    // Stream and message events now update React Query cache directly in GlobalAgentLoop
+    const unsubscribe = globalAgentLoop.on(event => {
+      if (!mounted) return
+      if (event.type === 'state') {
+        setAgentState(event.state)
+      }
+      // Note: stream and message events are handled by GlobalAgentLoop updating the cache
+      // No need to manually refetch or update state here
+    })
+
+    return () => {
+      mounted = false
+      unsubscribe()
+    }
+  }, [])
 
   // Debounced update function
   const debouncedUpdate = useCallback(
@@ -212,6 +296,36 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
     }
   }
 
+  const handleAgentSend = async () => {
+    if (isWeb) return
+    const trimmed = agentInput.trim()
+    if (!trimmed) return
+
+    try {
+      // Create optimistic message for instant UI feedback
+      const optimisticUserMessage = {
+        id: `temp-${Date.now()}`,
+        role: 'user',
+        content: trimmed,
+        created_at: new Date().toISOString(),
+        _optimistic: true  // Flag for styling
+      }
+
+      // Add to cache immediately for instant UI update
+      setGlobalAgentOptimisticMessage(queryClient, optimisticUserMessage)
+
+      // Clear input
+      setAgentInput('')
+
+      // Enqueue task (async) - GlobalAgentLoop will clear optimistic message when real message is persisted
+      await globalAgentLoop.enqueueTask(trimmed)
+    } catch (error) {
+      console.error('Failed to enqueue agent task:', error)
+      // Clear optimistic message on error
+      clearGlobalAgentOptimisticMessage(queryClient)
+    }
+  }
+
   // Get the display name for current path (relative to ccCwd)
   const getDisplayPath = () => {
     if (!currentPath || !ccCwd) return ''
@@ -333,21 +447,33 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
           <div className='flex gap-2 px-3 py-2 flex-shrink-0'>
             <button
               onClick={() => setActiveTab('note')}
-              className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === 'note'
-                ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)]'
-                : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
-                }`}
+              className={`flex-1 px-2 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+                activeTab === 'note'
+                  ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)]'
+                  : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+              }`}
             >
               Note
             </button>
             <button
               onClick={() => setActiveTab('list')}
-              className={`flex-1 px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === 'list'
-                ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)]'
-                : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
-                }`}
+              className={`flex-1 px-2 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+                activeTab === 'list'
+                  ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)]'
+                  : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+              }`}
             >
               List
+            </button>
+            <button
+              onClick={() => setActiveTab('global')}
+              className={`flex-1 px-2 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+                activeTab === 'global'
+                  ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 border-neutral-300 scale-102 dark:border-neutral-600 shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.35)]'
+                  : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-400 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+              }`}
+            >
+              Global
             </button>
           </div>
         )}
@@ -425,6 +551,122 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
               </div>
             ))}
           </>
+        ) : activeTab === 'global' ? (
+          <div className='flex flex-col h-full'>
+            <div className='flex items-center justify-between mb-2 gap-2'>
+              <div className='flex flex-col'>
+                <span className='text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-[0.2em]'>
+                  {agentConversationDate ? `${agentSettingsName} - ${agentConversationDate}` : agentSettingsName}
+                </span>
+                <span className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>
+                  Status: {agentState.status}
+                </span>
+              </div>
+              <div className='flex gap-1'>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={() => globalAgentLoop.start()}
+                  disabled={isWeb}
+                  className='text-xs'
+                >
+                  Start
+                </Button>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={() => globalAgentLoop.pause()}
+                  disabled={isWeb}
+                  className='text-xs'
+                >
+                  Pause
+                </Button>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={() => globalAgentLoop.startNewSession()}
+                  disabled={isWeb}
+                  className='text-xs'
+                >
+                  New Session
+                </Button>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={() => globalAgentLoop.stop()}
+                  disabled={isWeb}
+                  className='text-xs'
+                >
+                  Stop
+                </Button>
+              </div>
+            </div>
+
+            <div className='flex-1 overflow-y-auto no-scrollbar space-y-2 pr-1'>
+              {agentMessages.length === 0 && !optimisticMessage && (
+                <div className='text-xs text-neutral-500 dark:text-neutral-400'>No global agent messages yet.</div>
+              )}
+
+              {/* Persisted messages from React Query cache */}
+              {agentMessages
+                .filter(message => message.role !== 'tool')
+                .map(message => (
+                <ChatMessage
+                  key={message.id}
+                  id={message.id}
+                  role={message.role}
+                  content={message.content || ''}
+                  thinking={message.thinking_block || undefined}
+                  toolCalls={parseJsonSafe(message.tool_calls, [])}
+                  contentBlocks={normalizeContentBlocks(parseJsonSafe(message.content_blocks, []))}
+                  timestamp={message.created_at}
+                  width='w-full'
+                  colored={false}
+                  modelName={message.model_name}
+                />
+              ))}
+
+              {/* Optimistic user message (shown while task is enqueued) */}
+              {optimisticMessage && (
+                <ChatMessage
+                  key={optimisticMessage.id}
+                  id={optimisticMessage.id}
+                  role={optimisticMessage.role}
+                  content={optimisticMessage.content}
+                  timestamp={optimisticMessage.created_at}
+                  width='w-full'
+                  colored={false}
+                  className='opacity-70'  // Visual feedback for optimistic state
+                />
+              )}
+
+              {/* Streaming assistant response from React Query cache */}
+              {agentStreamBuffer && (
+                <ChatMessage
+                  id='global-agent-streaming'
+                  role='assistant'
+                  content={agentStreamBuffer}
+                  contentBlocks={[{ type: 'text', index: 0, content: agentStreamBuffer }]}
+                  width='w-full'
+                  colored={false}
+                />
+              )}
+            </div>
+
+            <div className='mt-2 flex flex-col gap-2'>
+              <TextArea
+                value={agentInput}
+                onChange={setAgentInput}
+                placeholder='Queue a task for the global agent...'
+                className='w-full resize-none'
+                minRows={2}
+                maxRows={4}
+              />
+              <Button variant='outline2' size='small' onClick={handleAgentSend}>
+                Send
+              </Button>
+            </div>
+          </div>
         ) : (
           // Note tab - show current conversation note editor
           <>

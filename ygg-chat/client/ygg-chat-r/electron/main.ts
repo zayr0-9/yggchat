@@ -1,6 +1,6 @@
-import { ChildProcess, spawn } from 'child_process'
+import { ChildProcess } from 'child_process'
 import Conf from 'conf'
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell, Tray } from 'electron'
 import autoUpdaterPkg from 'electron-updater'
 import fs from 'fs'
 import os from 'os'
@@ -16,6 +16,8 @@ const { autoUpdater } = autoUpdaterPkg
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 let mainWindow: BrowserWindow | null = null
 let floatingWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+let isQuitting = false
 let compactMode = false
 let savedBounds: Electron.Rectangle | null = null
 let serverProcess: ChildProcess | null = null
@@ -180,50 +182,50 @@ function clearStore(): boolean {
 }
 
 // Start embedded Express server
-function startServer(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // In production, server is bundled separately
-    // In development, it's running separately via npm run dev:electron
-    // Use app.isPackaged for reliable detection (true when running from installer)
-    const isDev = !app.isPackaged
+// function startServer(): Promise<void> {
+//   return new Promise((resolve, reject) => {
+//     // In production, server is bundled separately
+//     // In development, it's running separately via npm run dev:electron
+//     // Use app.isPackaged for reliable detection (true when running from installer)
+//     const isDev = !app.isPackaged
 
-    if (isDev) {
-      console.log('[Electron] Development mode - assuming server is already running on port 3001')
-      resolve()
-      return
-    }
+//     if (isDev) {
+//       console.log('[Electron] Development mode - assuming server is already running on port 3001')
+//       resolve()
+//       return
+//     }
 
-    // Production: Start the bundled server
-    const serverPath = path.join(process.resourcesPath, 'server', 'dist', 'server', 'src', 'index.js')
+//     // Production: Start the bundled server
+//     const serverPath = path.join(process.resourcesPath, 'server', 'dist', 'server', 'src', 'index.js')
 
-    console.log('[Electron] Starting embedded server from:', serverPath)
+//     console.log('[Electron] Starting embedded server from:', serverPath)
 
-    serverProcess = spawn(process.execPath, [serverPath], {
-      env: {
-        ...process.env,
-        VITE_ENVIRONMENT: 'electron',
-        PORT: '3001',
-        NODE_ENV: 'production',
-      },
-      stdio: 'inherit',
-    })
+//     serverProcess = spawn(process.execPath, [serverPath], {
+//       env: {
+//         ...process.env,
+//         VITE_ENVIRONMENT: 'electron',
+//         PORT: '3001',
+//         NODE_ENV: 'production',
+//       },
+//       stdio: 'inherit',
+//     })
 
-    serverProcess.on('error', (err: Error) => {
-      console.error('[Electron] Server failed to start:', err)
-      reject(err)
-    })
+//     serverProcess.on('error', (err: Error) => {
+//       console.error('[Electron] Server failed to start:', err)
+//       reject(err)
+//     })
 
-    serverProcess.on('exit', (code, signal) => {
-      console.log(`[Electron] Server process exited with code ${code} and signal ${signal}`)
-    })
+//     serverProcess.on('exit', (code, signal) => {
+//       console.log(`[Electron] Server process exited with code ${code} and signal ${signal}`)
+//     })
 
-    // Wait a bit for server to start
-    setTimeout(() => {
-      console.log('[Electron] Server should be ready')
-      resolve()
-    }, 2000)
-  })
-}
+//     // Wait a bit for server to start
+//     setTimeout(() => {
+//       console.log('[Electron] Server should be ready')
+//       resolve()
+//     }, 2000)
+//   })
+// }
 
 // Helper to get icon path
 function getIconPath(_isDark?: boolean) {
@@ -338,6 +340,13 @@ function createWindow() {
     }
   }
 
+  mainWindow.on('close', event => {
+    if (!isQuitting) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -378,6 +387,43 @@ function createWindow() {
 
     Menu.buildFromTemplate(menuItems).popup()
   })
+}
+
+function createTray() {
+  if (tray) return
+  const iconPath = getIconPath(nativeTheme.shouldUseDarkColors)
+  tray = new Tray(iconPath)
+  tray.setToolTip('Yggdrasil')
+  tray.on('click', () => {
+    if (mainWindow) {
+      mainWindow.show()
+      mainWindow.focus()
+    } else {
+      createWindow()
+    }
+  })
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show()
+          mainWindow.focus()
+        } else {
+          createWindow()
+        }
+      },
+    },
+    {
+      label: 'Quit',
+      click: () => {
+        isQuitting = true
+        app.quit()
+      },
+    },
+  ])
+  tray.setContextMenu(contextMenu)
 }
 
 // Create a floating popup window (like picture-in-picture)
@@ -541,7 +587,7 @@ app.whenReady().then(async () => {
     // console.log('[Electron] App ready, initializing storage...')
     await initializeStore()
     // console.log('[Electron] Storage initialized, starting server...')
-    await startServer()
+    // await startServer()
     // console.log('[Electron] Server started, starting local sync server...')
 
     // Start local SQLite server for dual-sync (port 3002)
@@ -557,6 +603,7 @@ app.whenReady().then(async () => {
 
     // console.log('[Electron] Creating window...')
     createWindow()
+    createTray()
     configureAutoUpdater()
   } catch (error) {
     console.error('[Electron] Failed to start:', error)
@@ -565,6 +612,9 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  if (!isQuitting) {
+    return
+  }
   // Kill server when app closes
   if (serverProcess) {
     console.log('[Electron] Killing server process...')
@@ -591,6 +641,7 @@ app.on('activate', () => {
 })
 
 app.on('before-quit', () => {
+  isQuitting = true
   // Ensure server is killed
   if (serverProcess) {
     serverProcess.kill()
@@ -601,6 +652,11 @@ app.on('before-quit', () => {
   if (localServerStarted) {
     stopLocalServer().catch(err => console.error('[Electron] Error stopping local server on quit:', err))
     localServerStarted = false
+  }
+
+  if (tray) {
+    tray.destroy()
+    tray = null
   }
 })
 

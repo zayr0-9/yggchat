@@ -112,7 +112,16 @@
 /* Base app-content styling - always applied */
 .app-content {
   height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   overflow: hidden;
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Add padding to app content to account for title bar */

@@ -249,6 +249,20 @@ router.post(
           }))
         : undefined
 
+      const normalizedTools = Array.isArray(tools)
+        ? tools
+            .map((tool: any) => {
+              const name = tool?.name || tool?.tool?.name
+              if (!name) return null
+              const serverTool = getToolByName(name)
+              if (serverTool) return serverTool
+              return null
+            })
+            .filter(Boolean)
+        : []
+
+      const effectiveTools = normalizedTools.length > 0 ? normalizedTools : undefined
+
       await generateResponse(
         messages,
         chunk => {
@@ -294,12 +308,12 @@ router.post(
         undefined, // messageId
         userId,
         undefined, // conversationId
-        tools && tools.length > 0 ? 'client' : 'server', // Use client mode when tools provided so server executes SERVER_ONLY_TOOLS and returns others
-        tools && tools.length > 0 ? 'local' : 'cloud', // Use local mode when tools are provided (subagent)
-        tools && tools.length > 0, // isElectron: true when tools provided to allow all tools
+        effectiveTools && effectiveTools.length > 0 ? 'client' : 'server', // Use client mode when tools provided so server executes SERVER_ONLY_TOOLS and returns others
+        effectiveTools && effectiveTools.length > 0 ? 'local' : 'cloud', // Use local mode when tools are provided (subagent)
+        !!(effectiveTools && effectiveTools.length > 0), // isElectron: true when tools provided to allow all tools
         undefined, // imageConfig
         undefined, // reasoningConfig
-        tools // tool definitions for agentic subagents
+        effectiveTools // tool definitions for agentic subagents
       )
 
       // If user doesn't have paid access, decrement free generation count

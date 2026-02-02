@@ -25,10 +25,13 @@ import {
   Settings,
   TermsOfService,
 } from './containers'
+import RightBar from './containers/rightBar'
 import { selectCurrentUser } from './features/users'
 import { useAppSelector } from './hooks/redux'
 import { useIsMobile } from './hooks/useMediaQuery'
+import { useResearchNotes } from './hooks/useQueries'
 import IdeContextBootstrap from './IdeContextBootstrap'
+import GlobalAgentBootstrap from './GlobalAgentBootstrap'
 
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
 // Use BrowserRouter for web (standard HTML5 history API)
@@ -49,6 +52,8 @@ const TOOL_VIEWER_HIDDEN_ROUTES = new Set([
   '/privacy',
   '/blog',
 ])
+
+const RIGHTBAR_HIDDEN_ROUTES = new Set(['/landingpage', '/login'])
 
 const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
   const location = useLocation()
@@ -99,6 +104,28 @@ const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
         </button>
       )}
     </>
+  )
+}
+
+const RightBarShell = () => {
+  const location = useLocation()
+  const isMobile = useIsMobile()
+  const { data: notes = [], isLoading: isLoadingNotes } = useResearchNotes()
+
+  if (isMobile) return null
+  if (RIGHTBAR_HIDDEN_ROUTES.has(location.pathname)) return null
+
+  const match = location.pathname.match(/^\/chat\/[^/]+\/([^/]+)$/)
+  if (match) return null
+  const conversationId = null
+
+  return (
+    <RightBar
+      conversationId={conversationId}
+      notes={notes}
+      isLoadingNotes={isLoadingNotes}
+      ccCwd={''}
+    />
   )
 }
 
@@ -188,10 +215,15 @@ function App() {
       <LiquidGlassSVG />
       {/* Establish IDE Context WebSocket globally so it's not tied to any specific page */}
       <IdeContextBootstrap />
+      {/* Initialize global agent loop (Electron only) */}
+      <GlobalAgentBootstrap />
       {/* Global update modal for Electron auto-updates */}
       <UpdateModal />
       <div className='app-content'>
-        <AnimatedRoutes />
+        <div className='app-main'>
+          <AnimatedRoutes />
+        </div>
+        <RightBarShell />
       </div>
       <HtmlToolsShell enabled={isElectron} />
     </>

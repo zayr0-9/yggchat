@@ -6,3 +6,4 @@
 
 export * from './ToolJobManager'
 export * from './appStore'
+export * from './GlobalAgentLoop'
