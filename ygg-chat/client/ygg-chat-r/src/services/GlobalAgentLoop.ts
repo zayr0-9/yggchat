@@ -67,6 +67,7 @@ class GlobalAgentLoop {
   private queryClient: QueryClient | null = null
   private dispatch: any = null
   private reduxGetState: (() => RootState) | null = null
+  private streamAbortController: AbortController | null = null
 
   static getInstance(): GlobalAgentLoop {
     if (!GlobalAgentLoop.instance) {
@@ -176,6 +177,27 @@ class GlobalAgentLoop {
     }
     await localApi.put('/agent/state', { status: 'stopped' })
     this.emit({ type: 'state', state: { ...this.state } })
+  }
+
+  async abortCurrentGeneration(): Promise<void> {
+    if (this.streamAbortController) {
+      this.streamAbortController.abort()
+      this.streamAbortController = null
+    }
+
+    if (this.queryClient) {
+      clearGlobalAgentStreamBuffer(this.queryClient)
+    }
+
+    if (this.state.streamId) {
+      this.state.streamId = null
+      try {
+        await localApi.put('/agent/state', { streamId: null })
+      } catch (error) {
+        console.warn('[GlobalAgentLoop] Failed to clear streamId after abort:', error)
+      }
+      this.emit({ type: 'state', state: { ...this.state } })
+    }
   }
 
   async startNewSession(reason: string = 'manual'): Promise<void> {
@@ -488,6 +510,7 @@ class GlobalAgentLoop {
     const streamId = uuidv4()
     this.state.streamId = streamId
     await localApi.put('/agent/state', { streamId })
+    this.emit({ type: 'state', state: { ...this.state } })
 
     const userMessageId = uuidv4()
     const lastMessageId = messages.length > 0 ? messages[messages.length - 1].id : null
@@ -517,273 +540,311 @@ class GlobalAgentLoop {
     let parentId = userMessageId
     let currentHistory = [...history, { role: 'user', content: prompt }]
 
+    let aborted = false
     for (let turn = 0; turn < 3; turn += 1) {
-      const response = await createStreamingRequest('/generate/ephemeral', this.accessToken, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: currentHistory,
-          model: this.settings?.model || 'google/gemini-3-flash-preview',
-          maxTokens: this.settings?.modelContextLength ? Math.min(this.settings.modelContextLength, 16384) : 4096,
-          temperature: 0.7,
-          systemPrompt,
-          tools: allowedTools.length > 0 ? allowedTools : undefined,
-        }),
-      })
+      try {
+        this.streamAbortController = new AbortController()
+        const response = await createStreamingRequest('/generate/ephemeral', this.accessToken, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: currentHistory,
+            model: this.settings?.model || 'google/gemini-3-flash-preview',
+            maxTokens: this.settings?.modelContextLength ? Math.min(this.settings.modelContextLength, 16384) : 4096,
+            temperature: 0.7,
+            systemPrompt,
+            tools: allowedTools.length > 0 ? allowedTools : undefined,
+          }),
+          signal: this.streamAbortController.signal,
+        })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        throw new Error(`Global agent generation failed: HTTP ${response.status}: ${errorText}`)
-      }
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Global agent generation failed: HTTP ${response.status}: ${errorText}`)
+        }
 
-      const reader = response.body?.getReader()
-      if (!reader) {
-        throw new Error('No response body from global agent')
-      }
+        const reader = response.body?.getReader()
+        if (!reader) {
+          throw new Error('No response body from global agent')
+        }
 
-      const decoder = new TextDecoder()
-      let sseBuffer = ''
-      let turnText = ''
-      let turnReasoning = ''
-      const toolCalls: any[] = []
-      const serverToolResults: any[] = [] // Track server-executed tools (e.g., brave_search)
+        const decoder = new TextDecoder()
+        let sseBuffer = ''
+        let turnText = ''
+        let turnReasoning = ''
+        const toolCalls: any[] = []
+        const serverToolResults: any[] = [] // Track server-executed tools (e.g., brave_search)
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        sseBuffer += chunk
-        const lines = sseBuffer.split('\n')
-        sseBuffer = lines.pop() || ''
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const chunk = decoder.decode(value, { stream: true })
+          sseBuffer += chunk
+          const lines = sseBuffer.split('\n')
+          sseBuffer = lines.pop() || ''
 
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          const data = line.slice(6)
-          if (data === '[DONE]') continue
-          try {
-            const parsed = JSON.parse(data)
-            if (parsed.text) {
-              turnText += parsed.text
-              this.emit({ type: 'stream', data: { streamId, delta: parsed.text, kind: 'text' } })
-              // Update React Query cache buffer
-              if (this.queryClient) {
-                const currentBuffer = getGlobalAgentStreamBuffer(this.queryClient)
-                updateGlobalAgentStreamBuffer(this.queryClient, currentBuffer + parsed.text)
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.text) {
+                turnText += parsed.text
+                this.emit({ type: 'stream', data: { streamId, delta: parsed.text, kind: 'text' } })
+                // Update React Query cache buffer
+                if (this.queryClient) {
+                  const currentBuffer = getGlobalAgentStreamBuffer(this.queryClient)
+                  updateGlobalAgentStreamBuffer(this.queryClient, currentBuffer + parsed.text)
+                }
+              } else if (parsed.reasoning) {
+                turnReasoning += parsed.reasoning
+                this.emit({ type: 'stream', data: { streamId, delta: parsed.reasoning, kind: 'reasoning' } })
+              } else if (parsed.toolCall) {
+                toolCalls.push(parsed.toolCall)
+                this.emit({ type: 'stream', data: { streamId, delta: '', kind: 'tool_call' } })
+              } else if (parsed.toolResult) {
+                // Server executed a tool (e.g., brave_search) and sent back the result
+                serverToolResults.push(parsed.toolResult)
+                this.emit({
+                  type: 'stream',
+                  data: { streamId, delta: JSON.stringify(parsed.toolResult), kind: 'tool_result' },
+                })
               }
-            } else if (parsed.reasoning) {
-              turnReasoning += parsed.reasoning
-              this.emit({ type: 'stream', data: { streamId, delta: parsed.reasoning, kind: 'reasoning' } })
-            } else if (parsed.toolCall) {
-              toolCalls.push(parsed.toolCall)
-              this.emit({ type: 'stream', data: { streamId, delta: '', kind: 'tool_call' } })
-            } else if (parsed.toolResult) {
-              // Server executed a tool (e.g., brave_search) and sent back the result
-              serverToolResults.push(parsed.toolResult)
-              this.emit({ type: 'stream', data: { streamId, delta: JSON.stringify(parsed.toolResult), kind: 'tool_result' } })
-            }
-          } catch {
-            if (data.trim()) {
-              turnText += data
-              this.emit({ type: 'stream', data: { streamId, delta: data, kind: 'text' } })
-              // Update React Query cache buffer
-              if (this.queryClient) {
-                const currentBuffer = getGlobalAgentStreamBuffer(this.queryClient)
-                updateGlobalAgentStreamBuffer(this.queryClient, currentBuffer + data)
+            } catch {
+              if (data.trim()) {
+                turnText += data
+                this.emit({ type: 'stream', data: { streamId, delta: data, kind: 'text' } })
+                // Update React Query cache buffer
+                if (this.queryClient) {
+                  const currentBuffer = getGlobalAgentStreamBuffer(this.queryClient)
+                  updateGlobalAgentStreamBuffer(this.queryClient, currentBuffer + data)
+                }
               }
             }
           }
         }
-      }
 
-      const assistantMessageId = uuidv4()
-      const contentBlocks: any[] = []
-      if (turnText) {
-        contentBlocks.push({ type: 'text', index: 0, content: turnText })
-      }
-      if (toolCalls.length > 0) {
-        for (const toolCall of toolCalls) {
-          contentBlocks.push({
-            type: 'tool_use',
-            index: contentBlocks.length,
-            id: toolCall.id,
-            name: toolCall.name,
-            input: toolCall.arguments ?? {},
-          })
+        const assistantMessageId = uuidv4()
+        const contentBlocks: any[] = []
+        if (turnText) {
+          contentBlocks.push({ type: 'text', index: 0, content: turnText })
         }
-      }
+        if (toolCalls.length > 0) {
+          for (const toolCall of toolCalls) {
+            contentBlocks.push({
+              type: 'tool_use',
+              index: contentBlocks.length,
+              id: toolCall.id,
+              name: toolCall.name,
+              input: toolCall.arguments ?? {},
+            })
+          }
+        }
 
-      const assistantMessage = {
-        id: assistantMessageId,
-        conversation_id: conversationId,
-        parent_id: parentId,
-        role: 'ex_agent',
-        content: turnText,
-        plain_text_content: turnText,
-        thinking_block: turnReasoning || null,
-        tool_calls: toolCalls.length > 0 ? JSON.stringify(toolCalls) : null,
-        content_blocks: contentBlocks.length > 0 ? JSON.stringify(contentBlocks) : null,
-        model_name: this.settings?.model || 'unknown',
-        ex_agent_session_id: this.state.sessionId ? String(this.state.sessionId) : null,
-        ex_agent_type: 'persistent_agent',
-        created_at: new Date().toISOString(),
-        user_id: this.userId,
-      }
-      await localApi.post('/sync/message', assistantMessage)
-
-      // Update React Query cache immediately
-      if (this.queryClient) {
-        updateGlobalAgentMessageCache(this.queryClient, assistantMessage)
-        // Clear stream buffer after short delay to ensure UI picks up the persisted message
-        setTimeout(() => clearGlobalAgentStreamBuffer(this.queryClient), 150)
-      }
-
-      this.emit({
-        type: 'message',
-        data: { messageId: assistantMessageId, role: 'ex_agent', content: turnText },
-      })
-
-      // If no tool calls and no server tool results, we're done
-      if (toolCalls.length === 0 && serverToolResults.length === 0) break
-
-      const toolResults: { role: 'tool'; tool_call_id: string; content: string }[] = []
-
-      // First, handle server-executed tools (e.g., brave_search)
-      // These tools were already executed by the server and sent back as toolResult events
-      const serverToolCallIds = new Set(serverToolResults.map((tr: any) => tr.tool_use_id || tr.id))
-
-      for (const serverToolResult of serverToolResults) {
-        const toolCallId = serverToolResult.tool_use_id || serverToolResult.id
-        const toolContent = typeof serverToolResult.content === 'string'
-          ? serverToolResult.content
-          : JSON.stringify(serverToolResult.content)
-
-        // Persist server tool result message to SQLite
-        const toolMessageId = uuidv4()
-        const toolMessage = {
-          id: toolMessageId,
+        const assistantMessage = {
+          id: assistantMessageId,
           conversation_id: conversationId,
-          parent_id: assistantMessageId,
-          role: 'tool',
-          content: toolContent,
-          plain_text_content: toolContent,
-          tool_call_id: toolCallId,
-          content_blocks: JSON.stringify([
-            {
-              type: 'tool_result',
-              index: 0,
-              tool_use_id: toolCallId,
-              content: toolContent,
-              is_error: serverToolResult.is_error || false,
-            },
-          ]),
+          parent_id: parentId,
+          role: 'ex_agent',
+          content: turnText,
+          plain_text_content: turnText,
+          thinking_block: turnReasoning || null,
+          tool_calls: toolCalls.length > 0 ? JSON.stringify(toolCalls) : null,
+          content_blocks: contentBlocks.length > 0 ? JSON.stringify(contentBlocks) : null,
           model_name: this.settings?.model || 'unknown',
           ex_agent_session_id: this.state.sessionId ? String(this.state.sessionId) : null,
           ex_agent_type: 'persistent_agent',
           created_at: new Date().toISOString(),
           user_id: this.userId,
         }
-        await localApi.post('/sync/message', toolMessage)
+        await localApi.post('/sync/message', assistantMessage)
 
-        // Update React Query cache with tool message
+        // Update React Query cache immediately
         if (this.queryClient) {
-          updateGlobalAgentMessageCache(this.queryClient, toolMessage)
+          updateGlobalAgentMessageCache(this.queryClient, assistantMessage)
+          // Clear stream buffer after short delay to ensure UI picks up the persisted message
+          setTimeout(() => clearGlobalAgentStreamBuffer(this.queryClient), 150)
         }
-
-        contentBlocks.push({
-          type: 'tool_result',
-          index: contentBlocks.length,
-          tool_use_id: toolCallId,
-          content: toolContent,
-          is_error: serverToolResult.is_error || false,
-        })
-
-        toolResults.push({ role: 'tool', tool_call_id: toolCallId, content: toolContent })
-      }
-
-      // Then, execute remaining tools locally (tools not executed by server)
-      for (const toolCall of toolCalls) {
-        // Skip if this tool was already executed by the server
-        if (serverToolCallIds.has(toolCall.id)) {
-          continue
-        }
-
-        const result = await executeLocalTool(toolCall, null, 'execute', {
-          conversationId,
-          messageId: assistantMessageId,
-          streamId,
-          accessToken: this.accessToken,
-          dispatch: this.dispatch,
-          getState: this.reduxGetState,
-        })
 
         this.emit({
-          type: 'stream',
-          data: { streamId, delta: JSON.stringify(result), kind: 'tool_result' },
+          type: 'message',
+          data: { messageId: assistantMessageId, role: 'ex_agent', content: turnText },
         })
 
-        const toolMessageId = uuidv4()
-        const toolContent = typeof result === 'string' ? result : JSON.stringify(result)
-        const toolMessage = {
-          id: toolMessageId,
+        // If no tool calls and no server tool results, we're done
+        if (toolCalls.length === 0 && serverToolResults.length === 0) break
+
+        const toolResults: { role: 'tool'; tool_call_id: string; content: string }[] = []
+
+        // First, handle server-executed tools (e.g., brave_search)
+        // These tools were already executed by the server and sent back as toolResult events
+        const serverToolCallIds = new Set(serverToolResults.map((tr: any) => tr.tool_use_id || tr.id))
+
+        for (const serverToolResult of serverToolResults) {
+          const toolCallId = serverToolResult.tool_use_id || serverToolResult.id
+          const toolContent =
+            typeof serverToolResult.content === 'string'
+              ? serverToolResult.content
+              : JSON.stringify(serverToolResult.content)
+
+          // Persist server tool result message to SQLite
+          const toolMessageId = uuidv4()
+          const toolMessage = {
+            id: toolMessageId,
+            conversation_id: conversationId,
+            parent_id: assistantMessageId,
+            role: 'tool',
+            content: toolContent,
+            plain_text_content: toolContent,
+            tool_call_id: toolCallId,
+            content_blocks: JSON.stringify([
+              {
+                type: 'tool_result',
+                index: 0,
+                tool_use_id: toolCallId,
+                content: toolContent,
+                is_error: serverToolResult.is_error || false,
+              },
+            ]),
+            model_name: this.settings?.model || 'unknown',
+            ex_agent_session_id: this.state.sessionId ? String(this.state.sessionId) : null,
+            ex_agent_type: 'persistent_agent',
+            created_at: new Date().toISOString(),
+            user_id: this.userId,
+          }
+          await localApi.post('/sync/message', toolMessage)
+
+          // Update React Query cache with tool message
+          if (this.queryClient) {
+            updateGlobalAgentMessageCache(this.queryClient, toolMessage)
+          }
+
+          contentBlocks.push({
+            type: 'tool_result',
+            index: contentBlocks.length,
+            tool_use_id: toolCallId,
+            content: toolContent,
+            is_error: serverToolResult.is_error || false,
+          })
+
+          toolResults.push({ role: 'tool', tool_call_id: toolCallId, content: toolContent })
+        }
+
+        // Then, execute remaining tools locally (tools not executed by server)
+        for (const toolCall of toolCalls) {
+          // Skip if this tool was already executed by the server
+          if (serverToolCallIds.has(toolCall.id)) {
+            continue
+          }
+
+          const result = await executeLocalTool(toolCall, null, 'execute', {
+            conversationId,
+            messageId: assistantMessageId,
+            streamId,
+            accessToken: this.accessToken,
+            dispatch: this.dispatch,
+            getState: this.reduxGetState,
+          })
+
+          this.emit({
+            type: 'stream',
+            data: { streamId, delta: JSON.stringify(result), kind: 'tool_result' },
+          })
+
+          const toolMessageId = uuidv4()
+          const toolContent = typeof result === 'string' ? result : JSON.stringify(result)
+          const toolMessage = {
+            id: toolMessageId,
+            conversation_id: conversationId,
+            parent_id: assistantMessageId,
+            role: 'tool',
+            content: toolContent,
+            plain_text_content: toolContent,
+            tool_call_id: toolCall.id,
+            content_blocks: JSON.stringify([
+              {
+                type: 'tool_result',
+                index: 0,
+                tool_use_id: toolCall.id,
+                content: toolContent,
+                is_error: false,
+              },
+            ]),
+            model_name: this.settings?.model || 'unknown',
+            ex_agent_session_id: this.state.sessionId ? String(this.state.sessionId) : null,
+            ex_agent_type: 'persistent_agent',
+            created_at: new Date().toISOString(),
+            user_id: this.userId,
+          }
+
+          await localApi.post('/sync/message', toolMessage)
+
+          // Update React Query cache with tool message
+          if (this.queryClient) {
+            updateGlobalAgentMessageCache(this.queryClient, toolMessage)
+          }
+
+          contentBlocks.push({
+            type: 'tool_result',
+            index: contentBlocks.length,
+            tool_use_id: toolCall.id,
+            content: toolContent,
+            is_error: false,
+          })
+
+          toolResults.push({ role: 'tool', tool_call_id: toolCall.id, content: toolContent })
+        }
+
+        parentId = assistantMessageId
+        currentHistory = [...currentHistory, { role: 'assistant', content: turnText }, ...toolResults]
+
+        await localApi.post('/sync/message', {
+          id: assistantMessageId,
           conversation_id: conversationId,
-          parent_id: assistantMessageId,
-          role: 'tool',
-          content: toolContent,
-          plain_text_content: toolContent,
-          tool_call_id: toolCall.id,
-          content_blocks: JSON.stringify([
-            {
-              type: 'tool_result',
-              index: 0,
-              tool_use_id: toolCall.id,
-              content: toolContent,
-              is_error: false,
-            },
-          ]),
+          parent_id: parentId,
+          role: 'ex_agent',
+          content: turnText,
+          plain_text_content: turnText,
+          thinking_block: turnReasoning || null,
+          tool_calls: toolCalls.length > 0 ? JSON.stringify(toolCalls) : null,
+          content_blocks: contentBlocks.length > 0 ? JSON.stringify(contentBlocks) : null,
           model_name: this.settings?.model || 'unknown',
           ex_agent_session_id: this.state.sessionId ? String(this.state.sessionId) : null,
           ex_agent_type: 'persistent_agent',
           created_at: new Date().toISOString(),
           user_id: this.userId,
-        }
-
-        await localApi.post('/sync/message', toolMessage)
-
-        // Update React Query cache with tool message
-        if (this.queryClient) {
-          updateGlobalAgentMessageCache(this.queryClient, toolMessage)
-        }
-
-        contentBlocks.push({
-          type: 'tool_result',
-          index: contentBlocks.length,
-          tool_use_id: toolCall.id,
-          content: toolContent,
-          is_error: false,
         })
+      } catch (error) {
+        const isAbort =
+          (error instanceof DOMException && error.name === 'AbortError') ||
+          (error instanceof Error && error.message.toLowerCase().includes('aborted'))
 
-        toolResults.push({ role: 'tool', tool_call_id: toolCall.id, content: toolContent })
+        if (isAbort) {
+          if (this.queryClient) {
+            clearGlobalAgentStreamBuffer(this.queryClient)
+          }
+          aborted = true
+          break
+        }
+        throw error
+      } finally {
+        this.streamAbortController = null
       }
+    }
 
-      parentId = assistantMessageId
-      currentHistory = [...currentHistory, { role: 'assistant', content: turnText }, ...toolResults]
+    if (this.state.streamId) {
+      this.state.streamId = null
+      try {
+        await localApi.put('/agent/state', { streamId: null })
+      } catch (error) {
+        console.warn('[GlobalAgentLoop] Failed to clear streamId:', error)
+      }
+      this.emit({ type: 'state', state: { ...this.state } })
+    }
 
-      await localApi.post('/sync/message', {
-        id: assistantMessageId,
-        conversation_id: conversationId,
-        parent_id: parentId,
-        role: 'ex_agent',
-        content: turnText,
-        plain_text_content: turnText,
-        thinking_block: turnReasoning || null,
-        tool_calls: toolCalls.length > 0 ? JSON.stringify(toolCalls) : null,
-        content_blocks: contentBlocks.length > 0 ? JSON.stringify(contentBlocks) : null,
-        model_name: this.settings?.model || 'unknown',
-        ex_agent_session_id: this.state.sessionId ? String(this.state.sessionId) : null,
-        ex_agent_type: 'persistent_agent',
-        created_at: new Date().toISOString(),
-        user_id: this.userId,
-      })
+    if (aborted) {
+      return
     }
   }
 }

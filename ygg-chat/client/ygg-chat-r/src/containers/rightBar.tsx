@@ -82,6 +82,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
   // Subscribe to live streaming updates (triggers re-render on stream buffer changes)
   const agentStreamBuffer = useGlobalAgentStreamBuffer()
   const optimisticMessage = useGlobalAgentOptimisticMessage()
+  const isAgentStreaming = Boolean(agentStreamBuffer) || Boolean(agentState.streamId)
 
   const parseJsonSafe = useCallback(<T,>(value: any, fallback: T): T => {
     if (!value) return fallback
@@ -398,6 +399,15 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
       console.error('Failed to enqueue agent task:', error)
       // Clear optimistic message on error
       clearGlobalAgentOptimisticMessage(queryClient)
+    }
+  }
+
+  const handleAgentAbort = async () => {
+    if (isWeb) return
+    try {
+      await globalAgentLoop.abortCurrentGeneration()
+    } catch (error) {
+      console.error('Failed to abort agent generation:', error)
     }
   }
 
@@ -738,9 +748,25 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
                 minRows={2}
                 maxRows={4}
               />
-              <Button variant='outline2' size='small' onClick={handleAgentSend}>
-                Send
-              </Button>
+              <div className='flex items-center gap-2'>
+                <Button variant='outline2' size='small' onClick={handleAgentSend}>
+                  Send
+                </Button>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={handleAgentAbort}
+                  disabled={!isAgentStreaming}
+                  className={
+                    isAgentStreaming
+                      ? 'border-rose-500 text-rose-100 bg-rose-600 hover:bg-rose-700 dark:border-rose-500/70'
+                      : 'opacity-60'
+                  }
+                  title={isAgentStreaming ? 'Stop current agent generation' : 'No active generation'}
+                >
+                  Stop
+                </Button>
+              </div>
             </div>
           </div>
         ) : (
