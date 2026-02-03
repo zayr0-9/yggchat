@@ -329,6 +329,7 @@ export const HtmlToolsModal: React.FC = () => {
                 <HtmlIframeSlot
                   iframeKey={entry.key}
                   html={entry.html}
+                  toolName={entry.toolName ?? null}
                   fullHeight
                   className='h-full w-full rounded-xl overflow-hidden'
                   priority={1}
@@ -818,7 +819,14 @@ export const HtmlToolsModal: React.FC = () => {
                     priority={1}
                   />
                 ) : (
-                  <HtmlIframeSlot iframeKey={entry.key} html={entry.html} fullHeight className='h-full w-full' priority={1} />
+                  <HtmlIframeSlot
+                    iframeKey={entry.key}
+                    html={entry.html}
+                    toolName={entry.toolName ?? null}
+                    fullHeight
+                    className='h-full w-full'
+                    priority={1}
+                  />
                 )}
               </div>
             ))

@@ -812,9 +812,14 @@ const parseMcpQualifiedName = (qualifiedName: string) => {
 
 // Component to render HTML in an iframe using srcdoc for packaged Electron compatibility
 // Uses shared iframeBridge for consistent IPC support across Tool Manager and Inline Chat
-const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fullHeight = false }) => {
+const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean; toolName?: string | null }> = ({
+  html,
+  fullHeight = false,
+  toolName = null,
+}) => {
   const { userId } = useAuth()
   const userIdRef = useRef<string | null>(null)
+  const toolNameRef = useRef<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   useEffect(() => {
@@ -822,9 +827,14 @@ const HtmlIframe: React.FC<{ html: string; fullHeight?: boolean }> = ({ html, fu
   }, [userId])
 
   useEffect(() => {
+    toolNameRef.current = toolName ?? null
+  }, [toolName])
+
+  useEffect(() => {
     const cleanup = attachMessageBridge(
       () => iframeRef.current,
-      () => userIdRef.current
+      () => userIdRef.current,
+      () => ({ toolName: toolNameRef.current })
     )
     return cleanup
   }, [])
@@ -1524,33 +1534,39 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return words.slice(0, maxWords).join(' ') + '...'
     }
 
-    const extractHtmlFromToolResult = (content: any): string | null => {
-      if (!content) return null
+const extractHtmlFromToolResult = (content: any): { html: string; toolName?: string | null } | null => {
+  if (!content) return null
 
-      let resolved = content
-      if (typeof resolved === 'string') {
-        try {
-          resolved = JSON.parse(resolved)
-        } catch {
-          return null
-        }
-      }
-
-      if (typeof resolved === 'object' && resolved !== null && 'html' in resolved) {
-        return (resolved as any).html
-      }
-
-      if (
-        typeof resolved === 'object' &&
-        resolved !== null &&
-        (resolved as any).type === 'text/html' &&
-        typeof (resolved as any).content === 'string'
-      ) {
-        return (resolved as any).content
-      }
-
+  let resolved = content
+  if (typeof resolved === 'string') {
+    try {
+      resolved = JSON.parse(resolved)
+    } catch {
       return null
     }
+  }
+
+  if (typeof resolved === 'object' && resolved !== null && 'html' in resolved) {
+    return {
+      html: (resolved as any).html,
+      toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
+    }
+  }
+
+  if (
+    typeof resolved === 'object' &&
+    resolved !== null &&
+    (resolved as any).type === 'text/html' &&
+    typeof (resolved as any).content === 'string'
+  ) {
+    return {
+      html: (resolved as any).content,
+      toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
+    }
+  }
+
+  return null
+}
 
     // Build a lookup map of HTML entries for on-demand registration.
     // Entries are NOT auto-registered - only when user clicks "Open Viewer" or expands.
@@ -1564,11 +1580,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
 
       const normalizeHtml = (html: string) => html.trim()
-      const addEntry = (key: string, html: string, label: string) => {
+      const addEntry = (key: string, html: string, label: string, toolName?: string | null) => {
         if (typeof html !== 'string') return
         const normalized = normalizeHtml(html)
         if (normalized.length > 0) {
-          entriesMap.set(key, { key, html: normalized, label })
+          entriesMap.set(key, { key, html: normalized, label, toolName: toolName ?? null })
         }
       }
 
@@ -1584,24 +1600,30 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           // Format label: replace underscores with spaces and title case
           const rawName = group.name || 'Tool Result'
           const toolLabel = rawName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+          const toolName = group.name ?? null
           const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
           if (isHtmlRenderer && typeof group.args?.html === 'string') {
             const normalized = normalizeHtml(group.args.html)
             if (normalized.length > 0) {
               htmlSeen.add(normalized)
-              addEntry(`${id}-html-renderer-${group.id}`, normalized, toolLabel)
+              addEntry(`${id}-html-renderer-${group.id}`, normalized, toolLabel, toolName)
             }
           }
 
           group.results.forEach((result, resultIdx) => {
             const maybeHtml = extractHtmlFromToolResult(result.content)
-            if (typeof maybeHtml === 'string') {
-              const normalized = normalizeHtml(maybeHtml)
+            if (maybeHtml?.html) {
+              const normalized = normalizeHtml(maybeHtml.html)
               if (normalized.length === 0 || htmlSeen.has(normalized)) {
                 return
               }
               htmlSeen.add(normalized)
-              addEntry(`${id}-${group.id}-result-${resultIdx}`, normalized, toolLabel)
+              addEntry(
+                `${id}-${group.id}-result-${resultIdx}`,
+                normalized,
+                toolLabel,
+                maybeHtml.toolName ?? toolName
+              )
             }
           })
         })
@@ -1617,7 +1639,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Find the entry in our map and register it before opening
       const entry = htmlRegistryEntriesMap.get(entryKey)
       if (entry) {
-        htmlRegistry.registerEntry(entry.key, entry.html, entry.label, { conversationId, projectId })
+        htmlRegistry.registerEntry(entry.key, entry.html, entry.label, {
+          conversationId,
+          projectId,
+          toolName: entry.toolName ?? null,
+        })
       }
 
       // Open the modal
@@ -1692,18 +1718,26 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           const entryKey = `${id}-html-renderer-${group.id}`
           const entry = htmlRegistryEntriesMap.get(entryKey)
           if (entry) {
-            htmlRegistry.registerEntry(entry.key, entry.html, entry.label, { conversationId, projectId })
+            htmlRegistry.registerEntry(entry.key, entry.html, entry.label, {
+              conversationId,
+              projectId,
+              toolName: entry.toolName ?? null,
+            })
           }
         }
 
         // Register HTML results
         group.results.forEach((result, resultIdx) => {
           const maybeHtml = extractHtmlFromToolResult(result.content)
-          if (typeof maybeHtml === 'string') {
+          if (maybeHtml?.html) {
             const entryKey = `${id}-${group.id}-result-${resultIdx}`
             const entry = htmlRegistryEntriesMap.get(entryKey)
             if (entry) {
-              htmlRegistry.registerEntry(entry.key, entry.html, entry.label, { conversationId, projectId })
+              htmlRegistry.registerEntry(entry.key, entry.html, entry.label, {
+                conversationId,
+                projectId,
+                toolName: entry.toolName ?? null,
+              })
             }
           }
         })
@@ -1751,7 +1785,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       })()
       const hasHtmlOutput =
         (isHtmlRenderer && typeof extractedHtml === 'string') ||
-        group.results.some(result => typeof extractHtmlFromToolResult(result.content) === 'string')
+        group.results.some(result => Boolean(extractHtmlFromToolResult(result.content)?.html))
 
       // Render html_renderer tool with always-visible HTML
       if (isHtmlRenderer && typeof extractedHtml === 'string') {
@@ -1771,7 +1805,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
             {/* Always show HTML output */}
             <div className='mt-2'>
-              <HtmlIframe html={extractedHtml} />
+              <HtmlIframe html={extractedHtml} toolName={group.name ?? null} />
             </div>
           </div>
         )
@@ -1847,7 +1881,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const pathContent = pathParam || null
       const htmlResultKeys = group.results
         .map((result, resultIdx) =>
-          typeof extractHtmlFromToolResult(result.content) === 'string' ? `${id}-${group.id}-result-${resultIdx}` : null
+          extractHtmlFromToolResult(result.content)?.html ? `${id}-${group.id}-result-${resultIdx}` : null
         )
         .filter((key): key is string => Boolean(key))
       const primaryHtmlResultKey = htmlResultKeys[0]
@@ -1948,8 +1982,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     const resultKey = `${id}-${group.id}-result-${resultIdx}`
                     const maybeHtml = extractHtmlFromToolResult(result.content)
 
-                    if (typeof maybeHtml === 'string') {
-                      return <HtmlIframe key={resultKey} html={maybeHtml} />
+                    if (maybeHtml?.html) {
+                      return (
+                        <HtmlIframe
+                          key={resultKey}
+                          html={maybeHtml.html}
+                          toolName={maybeHtml.toolName ?? group.name ?? null}
+                        />
+                      )
                     }
 
                     const renderedContent = formatToolResultContent(result.content)
@@ -2118,7 +2158,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
                 const pathParam = extractPathParam(toolCall.arguments)
                 const isHtmlToolCall = (toolCall.name ?? '').toLowerCase() === 'html_renderer'
-                const hasHtmlOutput = isHtmlToolCall || typeof extractHtmlFromToolResult(toolCall.result) === 'string'
+                const hasHtmlOutput = isHtmlToolCall || Boolean(extractHtmlFromToolResult(toolCall.result)?.html)
 
                 return (
                   <div

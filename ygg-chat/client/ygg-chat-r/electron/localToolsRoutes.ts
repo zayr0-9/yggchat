@@ -20,6 +20,7 @@ export const initializeToolsSchema = (db: Database.Database) => {
       user_id TEXT NOT NULL,
       html TEXT NOT NULL,
       label TEXT,
+      tool_name TEXT,
       favorite INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL CHECK (status IN ('active','hibernated')) DEFAULT 'active',
       size_bytes INTEGER NOT NULL DEFAULT 0,
@@ -38,6 +39,16 @@ export const initializeToolsSchema = (db: Database.Database) => {
     CREATE INDEX IF NOT EXISTS idx_html_tools_updated ON html_tools(updated_at);
     CREATE INDEX IF NOT EXISTS idx_html_tools_favorite ON html_tools(favorite);
   `)
+
+  try {
+    const columns = db.prepare(`PRAGMA table_info(html_tools)`).all() as { name: string }[]
+    const columnNames = new Set(columns.map(column => column.name))
+    if (!columnNames.has('tool_name')) {
+      db.exec(`ALTER TABLE html_tools ADD COLUMN tool_name TEXT`)
+    }
+  } catch (error) {
+    console.warn('[LocalServer] Failed to migrate html_tools table:', error)
+  }
 }
 
 export const createToolsStatements = (db: Database.Database) => ({
@@ -47,6 +58,7 @@ export const createToolsStatements = (db: Database.Database) => ({
       user_id,
       html,
       label,
+      tool_name,
       favorite,
       status,
       size_bytes,
@@ -56,10 +68,11 @@ export const createToolsStatements = (db: Database.Database) => ({
       conversation_id,
       project_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(key, user_id) DO UPDATE SET
       html = excluded.html,
       label = excluded.label,
+      tool_name = excluded.tool_name,
       favorite = excluded.favorite,
       status = excluded.status,
       size_bytes = excluded.size_bytes,
@@ -118,6 +131,7 @@ export const registerToolsRoutes = (app: Express, db: Database.Database, stateme
         userId,
         html,
         label,
+        toolName,
         favorite,
         status,
         sizeBytes,
@@ -139,6 +153,7 @@ export const registerToolsRoutes = (app: Express, db: Database.Database, stateme
         user_id: userId,
         html,
         label: label ?? null,
+        tool_name: toolName ?? null,
         favorite: normalizeBool(favorite),
         status: status === 'hibernated' ? 'hibernated' : 'active',
         size_bytes: Number.isFinite(sizeBytes) ? sizeBytes : getHtmlSizeBytes(html),
@@ -154,6 +169,7 @@ export const registerToolsRoutes = (app: Express, db: Database.Database, stateme
         record.user_id,
         record.html,
         record.label,
+        record.tool_name,
         record.favorite,
         record.status,
         record.size_bytes,
@@ -189,6 +205,7 @@ export const registerToolsRoutes = (app: Express, db: Database.Database, stateme
             user_id: userId,
             html: item.html,
             label: item.label ?? null,
+            tool_name: item.toolName ?? null,
             favorite: normalizeBool(item.favorite),
             status: item.status === 'hibernated' ? 'hibernated' : 'active',
             size_bytes: Number.isFinite(item.sizeBytes) ? item.sizeBytes : getHtmlSizeBytes(item.html),
@@ -203,6 +220,7 @@ export const registerToolsRoutes = (app: Express, db: Database.Database, stateme
             record.user_id,
             record.html,
             record.label,
+            record.tool_name,
             record.favorite,
             record.status,
             record.size_bytes,
@@ -231,6 +249,7 @@ export const registerToolsRoutes = (app: Express, db: Database.Database, stateme
         userId,
         html,
         label,
+        toolName,
         favorite,
         status,
         sizeBytes,
@@ -256,6 +275,11 @@ export const registerToolsRoutes = (app: Express, db: Database.Database, stateme
       } else if (sizeBytes !== undefined) {
         updates.push('size_bytes = ?')
         values.push(sizeBytes)
+      }
+
+      if (toolName !== undefined) {
+        updates.push('tool_name = ?')
+        values.push(toolName)
       }
 
       if (label !== undefined) {

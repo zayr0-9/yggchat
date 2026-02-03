@@ -1796,6 +1796,7 @@ export interface HtmlToolRecord {
   key: string
   html: string
   label: string | null
+  tool_name?: string | null
   favorite: number
   status: 'active' | 'hibernated'
   size_bytes: number

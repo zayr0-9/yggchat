@@ -8,13 +8,13 @@ Custom tools run inside Yggdrasil's Electron sandbox using **Electron's bundled 
 custom-tools/
 └── my_tool/
     ├── definition.json   ← Tool metadata (required)
-    ├── index.js          ← Server logic (required, ES modules)
+    ├── index.js          ← Server logic (required, CommonJS)
     └── ui.html           ← Optional UI
 ```
 
 **Key Rules:**
 
-- Use **ES imports** (`import`/`export`), NOT CommonJS (`require`/`module.exports`)
+- Use **CommonJS** (`require`/`module.exports`), NOT ES modules (`import`/`export`)
 - `name` must be lowercase with underscores: `my_tool`, not `MyTool`
 - Use `inputSchema` (camelCase), not `input_schema`
 
@@ -26,6 +26,9 @@ custom-tools/
 {
   "name": "my_tool",
   "description": "What this tool does. List available headless actions here.",
+  "appPermissions": {
+    "agent": "read"
+  },
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -47,85 +50,197 @@ custom-tools/
 }
 ```
 
+**Optional appPermissions**
+
+- `agent: "read"` allows the UI to read the current persistent agent session.
+- `agent: "write"` allows the UI to enqueue tasks into the persistent agent queue.
+- Omit `appPermissions` to deny agent access.
+
 ---
 
-## File 2: index.js (ES Module)
+---
 
-```javascript
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
+## UI Pattern (Componentized, No Build Tools)
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+UI runs in an iframe. Keep `ui.html` tiny and load components at runtime using `FS_READ_FILE`. This makes large apps easier to maintain without bundlers.
 
-const ACTIONS = {
-  list: async args => ({ success: true, items: ['a', 'b'] }),
-  process: async args => {
-    if (!args.input) return { success: false, error: 'Missing input' }
-    return { success: true, result: `Processed: ${args.input}` }
-  },
-}
+**Recommended Structure**
 
-export async function execute(args) {
-  const mode = args.mode || 'headless'
+```
+my_tool/
+├── ui.html
+└── ui/
+    ├── manifest.json
+    └── components/
+        ├── header/
+        │   ├── component.html
+        │   ├── component.css
+        │   └── component.js
+        ├── controls/
+        │   ├── component.html
+        │   ├── component.css
+        │   └── component.js
+        └── app/
+            └── component.js
+```
 
-  if (mode === 'headless') {
-    const fn = ACTIONS[args.action]
-    if (!fn) {
-      return {
-        type: 'application/json',
-        content: JSON.stringify({ error: 'Invalid action', available: Object.keys(ACTIONS) }),
-      }
-    }
-    return { type: 'application/json', content: JSON.stringify(await fn(args)) }
-  }
+**manifest.json (ordered list of components)**
 
-  // UI mode
-  let html = fs.readFileSync(path.join(__dirname, 'ui.html'), 'utf-8')
-  html = html.replace('{{CONFIG}}', JSON.stringify({ ...args, toolDir: __dirname }))
-  return { type: 'text/html', content: html }
+```json
+{
+  "version": 1,
+  "components": [
+    { "id": "base", "css": "components/base/component.css" },
+    {
+      "id": "header",
+      "mount": "header",
+      "html": "components/header/component.html",
+      "css": "components/header/component.css"
+    },
+    {
+      "id": "controls",
+      "mount": "controls",
+      "html": "components/controls/component.html",
+      "css": "components/controls/component.css",
+      "js": "components/controls/component.js"
+    },
+    { "id": "app", "js": "components/app/component.js" }
+  ]
 }
 ```
 
----
-
-## File 3: ui.html - IPC Bridge
-
-UI runs in an iframe. Communicate with Electron via `postMessage`:
+**ui.html (loader + IPC bridge + mounts)**
 
 ```html
 <!DOCTYPE html>
 <html>
   <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Tool</title>
+  </head>
+  <body>
+    <div data-mount="header"></div>
+    <div data-mount="controls"></div>
+    <div data-mount="main"></div>
+
     <script>
       const CONFIG = {{CONFIG}};
 
       // IPC Request System
-      let reqId = 0
-      const pending = new Map()
+      let reqId = 0;
+      const pending = new Map();
 
       function send(type, options = {}) {
         return new Promise((resolve, reject) => {
-          const id = `r${++reqId}_${Date.now()}`
-          pending.set(id, { resolve, reject })
-          window.parent.postMessage({ type, requestId: id, options }, '*')
-        })
+          const id = `r${++reqId}_${Date.now()}`;
+          pending.set(id, { resolve, reject });
+          window.parent.postMessage({ type, requestId: id, options }, "*");
+          setTimeout(() => {
+            if (pending.has(id)) {
+              pending.delete(id);
+              reject(new Error("Request timeout"));
+            }
+          }, 60000);
+        });
       }
 
-      window.addEventListener('message', (e) => {
+      window.addEventListener("message", (e) => {
         if (e.data?.requestId && pending.has(e.data.requestId)) {
-          if (e.data.type?.endsWith('_RESPONSE')) {
-            pending.get(e.data.requestId).resolve(e.data)
-            pending.delete(e.data.requestId)
-          }
+          pending.get(e.data.requestId).resolve(e.data);
+          pending.delete(e.data.requestId);
         }
-      })
+      });
+
+      window.APP = {
+        config: CONFIG,
+        send,
+        state: {},
+        on: (event, handler) => {
+          window.APP._events = window.APP._events || new Map();
+          if (!window.APP._events.has(event)) {
+            window.APP._events.set(event, new Set());
+          }
+          window.APP._events.get(event).add(handler);
+        },
+        emit: (event, payload) => {
+          const handlers = window.APP._events?.get(event);
+          if (!handlers) return;
+          handlers.forEach((fn) => fn(payload));
+        }
+      };
+
+      const toolDir = CONFIG.toolDir || "";
+      const sep = toolDir.includes("\\\\") ? "\\\\" : "/";
+      const uiDir = toolDir ? `${toolDir}${sep}ui` : "";
+      const manifestPath = uiDir ? `${uiDir}${sep}manifest.json` : "";
+
+      function resolvePath(filePath) {
+        if (!filePath || !uiDir) return filePath;
+        if (/^[A-Za-z]:[\\\\/]/.test(filePath) || filePath.startsWith("\\\\")) {
+          return filePath;
+        }
+        return `${uiDir}${sep}${filePath.replace(/^[/\\\\]+/, "")}`;
+      }
+
+      async function readText(filePath) {
+        const res = await send("FS_READ_FILE", { filePath, encoding: "utf-8" });
+        if (!res?.success) throw new Error(res?.error || "Read failed");
+        return res.content || "";
+      }
+
+      async function loadComponent(entry) {
+        if (entry.css) {
+          const css = await readText(resolvePath(entry.css));
+          const style = document.createElement("style");
+          style.dataset.component = entry.id || "";
+          style.textContent = css;
+          document.head.appendChild(style);
+        }
+
+        if (entry.html) {
+          const mount = document.querySelector(`[data-mount="${entry.mount}"]`);
+          const html = await readText(resolvePath(entry.html));
+          if (entry.mode === "replace") mount.innerHTML = html;
+          else mount.insertAdjacentHTML("beforeend", html);
+        }
+
+        if (entry.js) {
+          const js = await readText(resolvePath(entry.js));
+          const script = document.createElement("script");
+          script.dataset.component = entry.id || "";
+          script.textContent = js;
+          document.body.appendChild(script);
+        }
+      }
+
+      async function loadManifest() {
+        const manifestText = await readText(manifestPath);
+        const manifest = JSON.parse(manifestText);
+        for (const entry of manifest.components || []) {
+          await loadComponent(entry);
+        }
+      }
+
+      loadManifest();
     </script>
-  </head>
-  <body>
-    <!-- Your UI here -->
   </body>
 </html>
+```
+
+**Reload Button (hot reload without tooling)**
+
+Add a simple reload button in any component:
+
+```html
+<button id="reloadUi" type="button">RELOAD UI</button>
+```
+
+And wire it in your JS:
+
+```javascript
+const reloadUi = document.getElementById('reloadUi')
+reloadUi.addEventListener('click', () => window.location.reload())
 ```
 
 ---
@@ -265,8 +380,16 @@ const platform = await send('RPC', {
 // Returns: { success, result: { platform: 'win32', arch: 'x64', ... } }
 
 // Example: Storage
-await send('RPC', { namespace: 'storage', method: 'set', args: ['myKey', { data: 123 }] })
-const stored = await send('RPC', { namespace: 'storage', method: 'get', args: ['myKey'] })
+await send('RPC', {
+  namespace: 'storage',
+  method: 'set',
+  args: ['myKey', { data: 123 }],
+})
+const stored = await send('RPC', {
+  namespace: 'storage',
+  method: 'get',
+  args: ['myKey'],
+})
 ```
 
 ### Auth Context
@@ -276,6 +399,39 @@ const res = await send('AUTH_CONTEXT', {})
 // Returns: { success: true, tenantId: 'user-tenant-id' }
 ```
 
+### Global Agent Context (Persistent Agent)
+
+Requires `appPermissions.agent` in `definition.json`.
+
+```javascript
+// Read current agent state (conversationId, sessionId, status)
+const state = await send('AGENT_CONTEXT', {})
+
+// Read current agent conversation messages (latest 50)
+const messages = await send('AGENT_MESSAGES', { limit: 50 })
+
+// Read agent task queue (pending by default)
+const tasks = await send('AGENT_TASKS', { status: 'pending' })
+
+// Enqueue a task (requires appPermissions.agent = "write")
+await send('AGENT_ENQUEUE_TASK', {
+  description: 'Summarize today\'s weather and post a short update.',
+  payload: { city: 'San Francisco', cadence: 'hourly' },
+})
+
+// Subscribe to agent events (state/stream/message)
+const sub = await send('AGENT_SUBSCRIBE', {})
+window.addEventListener('message', e => {
+  if (e.data?.type !== 'AGENT_EVENT') return
+  if (e.data.subscriptionId !== sub.subscriptionId) return
+  // e.data.event = { type: 'state' | 'stream' | 'message' | 'error', ... }
+  console.log('Agent event:', e.data.event)
+})
+
+// Unsubscribe
+await send('AGENT_UNSUBSCRIBE', {})
+```
+
 ### Execute Tool (Electron's Node.js - No Install Required!)
 
 **This is the recommended way** for UI to call tool actions. Runs your tool's `index.js` directly in Electron's bundled Node.js runtime with full `node_modules` support.
@@ -283,26 +439,26 @@ const res = await send('AUTH_CONTEXT', {})
 ```javascript
 // Execute tool's index.js directly
 const res = await send('CUSTOM_TOOL_EXECUTE', {
-  toolPath: CONFIG.toolDir,  // Path to your tool directory
+  toolPath: CONFIG.toolDir, // Path to your tool directory
   args: {
     mode: 'headless',
     action: 'list',
     // ... other action params
-  }
+  },
 })
 // Returns: result from your tool's execute() function
 
 // Example: Call note_taker's list action
 const notes = await send('CUSTOM_TOOL_EXECUTE', {
   toolPath: CONFIG.toolDir,
-  args: { mode: 'headless', action: 'list' }
+  args: { mode: 'headless', action: 'list' },
 })
-console.log(notes.notes)  // [{ id: 123, text: '...' }, ...]
+console.log(notes.notes) // [{ id: 123, text: '...' }, ...]
 
 // Example: Add a note
 await send('CUSTOM_TOOL_EXECUTE', {
   toolPath: CONFIG.toolDir,
-  args: { mode: 'headless', action: 'add', text: 'New note!' }
+  args: { mode: 'headless', action: 'add', text: 'New note!' },
 })
 ```
 
@@ -319,6 +475,7 @@ await send('CUSTOM_TOOL_CLEAR_CACHE', {})
 ```
 
 **Benefits over SHELL_EXEC:**
+
 - ✅ No Node.js installation required on user's system
 - ✅ Uses Electron's bundled Node.js (like VS Code extensions)
 - ✅ Supports `node_modules` in your tool directory
@@ -463,7 +620,11 @@ if (result.success) {
   "inputSchema": {
     "type": "object",
     "properties": {
-      "mode": { "type": "string", "enum": ["headless", "ui"], "default": "headless" },
+      "mode": {
+        "type": "string",
+        "enum": ["headless", "ui"],
+        "default": "headless"
+      },
       "action": { "type": "string", "enum": ["list", "add", "clear"] },
       "text": { "type": "string" }
     }
@@ -474,11 +635,9 @@ if (result.success) {
 ### index.js
 
 ```javascript
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
+const fs = require('fs')
+const path = require('path')
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const NOTES_FILE = path.join(__dirname, 'notes.json')
 
 const loadNotes = () => {
@@ -496,7 +655,11 @@ const ACTIONS = {
   add: async args => {
     if (!args.text) return { success: false, error: 'Missing text' }
     const notes = loadNotes()
-    notes.push({ id: Date.now(), text: args.text, created: new Date().toISOString() })
+    notes.push({
+      id: Date.now(),
+      text: args.text,
+      created: new Date().toISOString(),
+    })
     saveNotes(notes)
     return { success: true }
   },
@@ -506,17 +669,26 @@ const ACTIONS = {
   },
 }
 
-export async function execute(args) {
+async function execute(args) {
   if (args.mode !== 'ui') {
     const fn = ACTIONS[args.action]
-    if (!fn) return { type: 'application/json', content: JSON.stringify({ error: 'Invalid action' }) }
-    return { type: 'application/json', content: JSON.stringify(await fn(args)) }
+    if (!fn)
+      return {
+        type: 'application/json',
+        content: JSON.stringify({ error: 'Invalid action' }),
+      }
+    return {
+      type: 'application/json',
+      content: JSON.stringify(await fn(args)),
+    }
   }
 
   let html = fs.readFileSync(path.join(__dirname, 'ui.html'), 'utf-8')
   html = html.replace('{{CONFIG}}', JSON.stringify({ toolDir: __dirname, notes: loadNotes() }))
   return { type: 'text/html', content: html }
 }
+
+module.exports = { execute }
 ```
 
 ### ui.html
@@ -595,13 +767,13 @@ export async function execute(args) {
         // Call headless action via Electron's Node.js (no install required!)
         await send('CUSTOM_TOOL_EXECUTE', {
           toolPath: CONFIG.toolDir,
-          args: { mode: 'headless', action: 'add', text }
+          args: { mode: 'headless', action: 'add', text },
         })
 
         // Refresh list
         const res = await send('CUSTOM_TOOL_EXECUTE', {
           toolPath: CONFIG.toolDir,
-          args: { mode: 'headless', action: 'list' }
+          args: { mode: 'headless', action: 'list' },
         })
         render(res.notes || [])
         input.value = ''

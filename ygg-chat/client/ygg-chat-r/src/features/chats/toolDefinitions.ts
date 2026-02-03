@@ -27,6 +27,10 @@ export interface ToolDefinition {
     resourceUri?: string
     visibility?: Array<'model' | 'app'>
   }
+  // Custom app permissions (used by iframe bridge for custom tool UIs)
+  appPermissions?: {
+    agent?: 'read' | 'write'
+  }
 }
 
 // Built-in tool definitions (static)
@@ -670,6 +674,7 @@ const cloneTool = (tool: ToolDefinition): ToolDefinition => ({
     required: tool.inputSchema.required ? [...tool.inputSchema.required] : undefined,
   },
   mcpUi: tool.mcpUi ? { ...tool.mcpUi, visibility: tool.mcpUi.visibility ? [...tool.mcpUi.visibility] : undefined } : undefined,
+  appPermissions: tool.appPermissions ? { ...tool.appPermissions } : undefined,
 })
 
 // Mutable array that holds merged tools (built-in + custom)

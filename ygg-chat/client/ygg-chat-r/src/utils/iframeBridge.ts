@@ -4,7 +4,9 @@
  * to ensure consistent IPC handler support across all contexts.
  */
 
-import { createStreamingRequest } from './api'
+import { createStreamingRequest, environment, localApi } from './api'
+import { getToolByName } from '../features/chats/toolDefinitions'
+import { globalAgentLoop } from '../services'
 
 type StreamState = {
   targets: Set<string>
@@ -12,9 +14,19 @@ type StreamState = {
   awaitingResponse: number
 }
 
+type ToolContext = {
+  toolName?: string | null
+}
+
+type AgentBridgeState = {
+  subscriptionId: string | null
+  unsubscribe: (() => void) | null
+}
+
 type BridgeContext = {
   getIframe: () => HTMLIFrameElement | null
   getUserId: () => string | null
+  getToolContext?: () => ToolContext | null
 }
 
 /**
@@ -23,9 +35,29 @@ type BridgeContext = {
 export function createMessageHandler(
   context: BridgeContext,
   streamState: StreamState,
-  flushPendingEvents: (streamId: string) => void
+  flushPendingEvents: (streamId: string) => void,
+  agentState: AgentBridgeState
 ) {
   const electronAPI = (window as any).electronAPI
+  const isElectron = environment === 'electron'
+
+  const resolveAgentAccess = (): 'none' | 'read' | 'write' => {
+    const toolName = context.getToolContext?.()?.toolName
+    if (!toolName) return 'none'
+    const tool = getToolByName(toolName)
+    if (!tool?.isCustom) return 'none'
+    const access = tool.appPermissions?.agent
+    if (access === 'write') return 'write'
+    if (access === 'read') return 'read'
+    return 'none'
+  }
+
+  const hasAgentReadAccess = () => {
+    const access = resolveAgentAccess()
+    return access === 'read' || access === 'write'
+  }
+
+  const hasAgentWriteAccess = () => resolveAgentAccess() === 'write'
 
   return async (event: MessageEvent) => {
     const iframe = context.getIframe()
@@ -146,6 +178,124 @@ export function createMessageHandler(
         case 'AUTH_CONTEXT': {
           const userId = context.getUserId()
           response = { success: true, tenantId: userId ?? null }
+          break
+        }
+
+        case 'AGENT_CONTEXT': {
+          if (!isElectron) {
+            response = { success: false, error: 'Global agent is only available in Electron' }
+            break
+          }
+          if (!hasAgentReadAccess()) {
+            response = { success: false, error: 'Agent access not permitted' }
+            break
+          }
+          response = { success: true, state: globalAgentLoop.getState() }
+          break
+        }
+
+        case 'AGENT_MESSAGES': {
+          if (!isElectron) {
+            response = { success: false, error: 'Global agent is only available in Electron' }
+            break
+          }
+          if (!hasAgentReadAccess()) {
+            response = { success: false, error: 'Agent access not permitted' }
+            break
+          }
+          const state = globalAgentLoop.getState()
+          const conversationId = state.conversationId
+          if (!conversationId) {
+            response = { success: false, error: 'No active agent conversation' }
+            break
+          }
+          const messages = await localApi.get<any[]>(`/local/conversations/${conversationId}/messages`)
+          const limit = Number.isFinite(options?.limit) ? Math.max(0, Math.floor(options.limit)) : null
+          const sliced = limit && limit > 0 ? messages.slice(-limit) : messages
+          response = { success: true, conversationId, messages: sliced }
+          break
+        }
+
+        case 'AGENT_TASKS': {
+          if (!isElectron) {
+            response = { success: false, error: 'Global agent is only available in Electron' }
+            break
+          }
+          if (!hasAgentReadAccess()) {
+            response = { success: false, error: 'Agent access not permitted' }
+            break
+          }
+          const status = typeof options?.status === 'string' ? options.status : 'pending'
+          const endpoint = status ? `/agent/tasks?status=${encodeURIComponent(status)}` : '/agent/tasks'
+          const result = await localApi.get<{ success: boolean; tasks?: any[] }>(endpoint)
+          let tasks = Array.isArray(result?.tasks) ? result.tasks : []
+          const limit = Number.isFinite(options?.limit) ? Math.max(0, Math.floor(options.limit)) : null
+          if (limit && limit > 0) {
+            tasks = tasks.slice(0, limit)
+          }
+          response = { success: true, tasks }
+          break
+        }
+
+        case 'AGENT_ENQUEUE_TASK': {
+          if (!isElectron) {
+            response = { success: false, error: 'Global agent is only available in Electron' }
+            break
+          }
+          if (!hasAgentWriteAccess()) {
+            response = { success: false, error: 'Agent write access not permitted' }
+            break
+          }
+          const description =
+            typeof options?.description === 'string' ? options.description.trim() : ''
+          if (!description) {
+            response = { success: false, error: 'Missing task description' }
+            break
+          }
+          const toolName = context.getToolContext?.()?.toolName ?? null
+          const source = toolName ? `app:${toolName}` : 'app'
+          await globalAgentLoop.enqueueTask(description, options?.payload, source)
+          response = { success: true }
+          break
+        }
+
+        case 'AGENT_SUBSCRIBE': {
+          if (!isElectron) {
+            response = { success: false, error: 'Global agent is only available in Electron' }
+            break
+          }
+          if (!hasAgentReadAccess()) {
+            response = { success: false, error: 'Agent access not permitted' }
+            break
+          }
+          if (agentState.unsubscribe) {
+            response = { success: true, subscriptionId: agentState.subscriptionId }
+            break
+          }
+          const subscriptionId = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+          agentState.subscriptionId = subscriptionId
+          agentState.unsubscribe = globalAgentLoop.on(event => {
+            iframe.contentWindow?.postMessage({ type: 'AGENT_EVENT', subscriptionId, event }, '*')
+          })
+          iframe.contentWindow?.postMessage(
+            { type: 'AGENT_EVENT', subscriptionId, event: { type: 'state', state: globalAgentLoop.getState() } },
+            '*'
+          )
+          response = { success: true, subscriptionId }
+          break
+        }
+
+        case 'AGENT_UNSUBSCRIBE': {
+          if (!isElectron) {
+            response = { success: false, error: 'Global agent is only available in Electron' }
+            break
+          }
+          if (agentState.unsubscribe) {
+            agentState.unsubscribe()
+            agentState.unsubscribe = null
+            agentState.subscriptionId = null
+          }
+          response = { success: true }
           break
         }
 
@@ -459,23 +609,33 @@ export function createFlushPendingEvents(
  */
 export function attachMessageBridge(
   getIframe: () => HTMLIFrameElement | null,
-  getUserId: () => string | null
+  getUserId: () => string | null,
+  getToolContext?: () => ToolContext | null
 ): () => void {
   const streamState: StreamState = {
     targets: new Set(),
     pendingEvents: new Map(),
     awaitingResponse: 0,
   }
+  const agentState: AgentBridgeState = {
+    subscriptionId: null,
+    unsubscribe: null,
+  }
 
-  const context: BridgeContext = { getIframe, getUserId }
+  const context: BridgeContext = { getIframe, getUserId, getToolContext }
   const flushPendingEvents = createFlushPendingEvents(getIframe, streamState)
   const streamCleanupFns = setupStreamForwarding(getIframe, streamState)
-  const handleMessage = createMessageHandler(context, streamState, flushPendingEvents)
+  const handleMessage = createMessageHandler(context, streamState, flushPendingEvents, agentState)
 
   window.addEventListener('message', handleMessage)
 
   return () => {
     window.removeEventListener('message', handleMessage)
+    if (agentState.unsubscribe) {
+      agentState.unsubscribe()
+      agentState.unsubscribe = null
+      agentState.subscriptionId = null
+    }
     streamCleanupFns.forEach(cleanup => cleanup?.())
     streamState.targets.clear()
     streamState.pendingEvents.clear()

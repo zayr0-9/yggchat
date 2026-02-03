@@ -66,6 +66,9 @@ export interface CustomToolDefinition {
   name: string
   version?: string
   description?: string
+  appPermissions?: {
+    agent?: 'read' | 'write'
+  }
   sourcePath?: string
 }
 
@@ -74,6 +77,9 @@ export interface CustomToolDefinitionFile {
   description: string
   version?: string
   enabled?: boolean
+  appPermissions?: {
+    agent?: 'read' | 'write'
+  }
   inputSchema: {
     type: 'object'
     properties: Record<string, any>

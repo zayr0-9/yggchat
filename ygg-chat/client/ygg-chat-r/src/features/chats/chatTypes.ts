@@ -443,6 +443,10 @@ export interface ToolDefinition {
     resourceUri?: string
     visibility?: Array<'model' | 'app'>
   }
+  // Custom app permissions (used by iframe bridge for custom tool UIs)
+  appPermissions?: {
+    agent?: 'read' | 'write'
+  }
 }
 
 // Alias for backwards compatibility

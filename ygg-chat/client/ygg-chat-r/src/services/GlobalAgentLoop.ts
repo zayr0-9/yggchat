@@ -218,8 +218,8 @@ class GlobalAgentLoop {
     this.emit({ type: 'state', state: { ...this.state } })
   }
 
-  async enqueueTask(description: string, payload?: any): Promise<void> {
-    await localApi.post('/agent/tasks', { description, payload })
+  async enqueueTask(description: string, payload?: any, source?: string): Promise<void> {
+    await localApi.post('/agent/tasks', { description, payload, source })
     await this.runTick()
   }
 

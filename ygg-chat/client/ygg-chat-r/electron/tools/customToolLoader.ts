@@ -59,6 +59,9 @@ export interface CustomToolDefinition {
   version?: string
   enabled: boolean
   description: string
+  appPermissions?: {
+    agent?: 'read' | 'write'
+  }
   author?: string
   inputSchema: {
     type: 'object'
@@ -265,6 +268,7 @@ class CustomToolRegistry {
         version: definition.version,
         enabled: definition.enabled !== false, // Default to true
         description: definition.description,
+        appPermissions: definition.appPermissions,
         author: definition.author,
         inputSchema: definition.inputSchema,
         isCustom: true,

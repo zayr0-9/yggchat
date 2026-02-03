@@ -59,7 +59,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
   const isCollapsed = useSelector((state: RootState) => state.ui.rightBarCollapsed)
 
   // Tab state: 'note' for single conversation note, 'list' for all notes, 'global' for agent
-  const [activeTab, setActiveTab] = useState<'note' | 'list' | 'global'>('note')
+  const [activeTab, setActiveTab] = useState<'note' | 'list' | 'global'>('global')
 
   // Local note state for debounced updates
   const [localNote, setLocalNote] = useState('')

@@ -501,6 +501,123 @@ const parseContentBlocks = (blocks: string | any[] | undefined): any[] => {
   return []
 }
 
+const looksLikeHtmlString = (text: string): boolean => {
+  if (!text) return false
+  const trimmed = text.trimStart()
+  return /^<!doctype\s+html\b/i.test(trimmed) || /^<html\b/i.test(trimmed)
+}
+
+const extractHtmlPayload = (content: any): { html: string; toolName?: string | null } | null => {
+  if (!content) return null
+
+  let resolved: any = content
+  if (typeof resolved === 'string') {
+    if (looksLikeHtmlString(resolved)) {
+      return { html: resolved }
+    }
+    try {
+      resolved = JSON.parse(resolved)
+    } catch {
+      return null
+    }
+  }
+
+  if (typeof resolved === 'string') {
+    if (looksLikeHtmlString(resolved)) {
+      return { html: resolved }
+    }
+    return null
+  }
+
+  if (typeof resolved === 'object' && resolved !== null) {
+    if (typeof (resolved as any).html === 'string') {
+      return {
+        html: (resolved as any).html,
+        toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
+      }
+    }
+    if ((resolved as any).type === 'text/html' && typeof (resolved as any).content === 'string') {
+      return {
+        html: (resolved as any).content,
+        toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
+      }
+    }
+  }
+
+  return null
+}
+
+const getToolCallName = (tc: any): string => {
+  if (!tc) return ''
+  if (typeof tc.name === 'string') return tc.name
+  if (typeof tc?.function?.name === 'string') return tc.function.name
+  return ''
+}
+
+const buildToolNameMap = (history: Message[]): Map<string, string> => {
+  const map = new Map<string, string>()
+  for (const msg of history) {
+    if (!msg || msg.role !== 'assistant') continue
+    const toolCalls = (msg as any).tool_calls
+    if (!Array.isArray(toolCalls)) continue
+    for (const tc of toolCalls) {
+      const id = tc?.id
+      const name = getToolCallName(tc)
+      if (id && name) {
+        map.set(id, name)
+      }
+    }
+  }
+  return map
+}
+
+const sanitizeToolResultContentForModel = (content: any, toolName?: string | null): any => {
+  const htmlPayload = extractHtmlPayload(content)
+  if (htmlPayload?.html) {
+    const resolvedName = toolName ?? htmlPayload.toolName ?? null
+    return `displaying ${resolvedName || 'custom tool'} ui now`
+  }
+  return content
+}
+
+const sanitizeContentBlocksForModel = (
+  blocks: string | any[] | undefined,
+  toolCalls?: any[]
+): string | any[] | undefined => {
+  if (!blocks) return blocks
+  const parsed = parseContentBlocks(blocks)
+  if (parsed.length === 0) return blocks
+
+  const toolNameById = new Map<string, string>()
+  if (Array.isArray(toolCalls)) {
+    for (const tc of toolCalls) {
+      const id = tc?.id
+      const name = getToolCallName(tc)
+      if (id && name) {
+        toolNameById.set(id, name)
+      }
+    }
+  }
+
+  const sanitized = parsed.map(block => {
+    if (block?.type !== 'tool_result') return block
+    const toolName = typeof block.tool_use_id === 'string' ? toolNameById.get(block.tool_use_id) : null
+    const sanitizedContent = sanitizeToolResultContentForModel(block.content, toolName ?? null)
+    if (sanitizedContent === block.content) return block
+    return { ...block, content: sanitizedContent }
+  })
+
+  if (Array.isArray(blocks)) return sanitized
+  if (typeof blocks === 'string') {
+    try {
+      return JSON.stringify(sanitized)
+    } catch {
+      return blocks
+    }
+  }
+  return blocks
+}
+
 /**
  * Resolve timeout for a tool call (default 60s; long-duration defaults to 5m)
  */
@@ -1793,6 +1910,7 @@ export const sendMessage = createAsyncThunk<
 
         if (repeatNum > 1 && turnCount === 1) {
           if (shouldUseLmStudio) {
+            const toolNameById = buildToolNameMap(currentTurnHistory)
             const lmMessages: any[] = []
             if (systemPrompt && systemPrompt.trim()) {
               lmMessages.push({ role: 'system', content: systemPrompt })
@@ -1815,10 +1933,12 @@ export const sendMessage = createAsyncThunk<
                 }
                 lmMessages.push(assistantMsg)
               } else if (m.role === 'tool' && m.tool_call_id) {
+                const toolName = toolNameById.get(m.tool_call_id)
+                const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName ?? null)
                 lmMessages.push({
                   role: 'tool',
                   tool_call_id: m.tool_call_id,
-                  content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                  content: typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent),
                 })
               }
             }
@@ -1964,6 +2084,7 @@ export const sendMessage = createAsyncThunk<
 
           // OpenAI ChatGPT: handle repeat locally via OAuth tokens
           if (shouldUseOpenAIChatGPT) {
+            const toolNameById = buildToolNameMap(currentTurnHistory)
             const chatgptMessages: any[] = []
             if (systemPrompt && systemPrompt.trim()) {
               chatgptMessages.push({ role: 'system', content: systemPrompt })
@@ -1982,7 +2103,7 @@ export const sendMessage = createAsyncThunk<
                 const assistantMsg: any = {
                   role: 'assistant',
                   content: m.content || '',
-                  content_blocks: m.content_blocks,
+                  content_blocks: sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls),
                 }
                 if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                   assistantMsg.tool_calls = m.tool_calls.map(tc => ({
@@ -1993,10 +2114,12 @@ export const sendMessage = createAsyncThunk<
                 }
                 chatgptMessages.push(assistantMsg)
               } else if (m.role === 'tool' && m.tool_call_id) {
+                const toolName = toolNameById.get(m.tool_call_id)
+                const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName ?? null)
                 chatgptMessages.push({
                   role: 'tool',
                   tool_call_id: m.tool_call_id,
-                  content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                  content: typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent),
                 })
               }
             }
@@ -2125,27 +2248,55 @@ export const sendMessage = createAsyncThunk<
 
           // Cloud server handles LLM generation; storageMode in body tells it whether to save to cloud DB
           const endpoint = `/conversations/${conversationId}/messages/repeat`
+          const toolNameById = buildToolNameMap(currentTurnHistory)
 
           response = await createStreamingRequest(endpoint, auth.accessToken, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              messages: currentTurnHistory.map(m => ({
-                id: m.id,
-                conversation_id: m.conversation_id,
-                parent_id: m.parent_id,
-                children_ids: m.children_ids,
-                role: m.role,
-                thinking_block: m.thinking_block,
-                tool_calls: m.tool_calls,
-                content_blocks: m.content_blocks,
-                content: m.content,
-                content_plain_text: m.content_plain_text,
-                created_at: m.created_at,
-                model_name: m.model_name,
-                partial: m.partial,
-                artifacts: m.artifacts,
-              })),
+              messages: currentTurnHistory.map(m => {
+                const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
+                if (m.role === 'tool' && m.tool_call_id) {
+                  const toolName = toolNameById.get(m.tool_call_id) ?? null
+                  const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
+                  if (sanitizedContent !== m.content) {
+                    const contentPlain =
+                      typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
+                    return {
+                      id: m.id,
+                      conversation_id: m.conversation_id,
+                      parent_id: m.parent_id,
+                      children_ids: m.children_ids,
+                      role: m.role,
+                      thinking_block: m.thinking_block,
+                      tool_calls: m.tool_calls,
+                      content_blocks: contentBlocks,
+                      content: sanitizedContent,
+                      content_plain_text: contentPlain,
+                      created_at: m.created_at,
+                      model_name: m.model_name,
+                      partial: m.partial,
+                      artifacts: m.artifacts,
+                    }
+                  }
+                }
+                return {
+                  id: m.id,
+                  conversation_id: m.conversation_id,
+                  parent_id: m.parent_id,
+                  children_ids: m.children_ids,
+                  role: m.role,
+                  thinking_block: m.thinking_block,
+                  tool_calls: m.tool_calls,
+                  content_blocks: contentBlocks,
+                  content: m.content,
+                  content_plain_text: m.content_plain_text,
+                  created_at: m.created_at,
+                  model_name: m.model_name,
+                  partial: m.partial,
+                  artifacts: m.artifacts,
+                }
+              }),
               content: currentTurnContent,
               modelName: modelName,
               // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
@@ -2170,6 +2321,7 @@ export const sendMessage = createAsyncThunk<
           })
         } else {
           if (shouldUseLmStudio) {
+            const toolNameById = buildToolNameMap(currentTurnHistory)
             const lmMessages: any[] = []
             if (systemPrompt && systemPrompt.trim()) {
               lmMessages.push({ role: 'system', content: systemPrompt })
@@ -2194,10 +2346,12 @@ export const sendMessage = createAsyncThunk<
                 lmMessages.push(assistantMsg)
               } else if (m.role === 'tool' && m.tool_call_id) {
                 // Tool result message
+                const toolName = toolNameById.get(m.tool_call_id)
+                const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName ?? null)
                 lmMessages.push({
                   role: 'tool',
                   tool_call_id: m.tool_call_id,
-                  content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                  content: typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent),
                 })
               }
             }
@@ -2347,6 +2501,7 @@ export const sendMessage = createAsyncThunk<
 
           // OpenAI ChatGPT: handle locally via OAuth tokens (personal use only)
           if (shouldUseOpenAIChatGPT) {
+            const toolNameById = buildToolNameMap(currentTurnHistory)
             const chatgptMessages: any[] = []
             if (systemPrompt && systemPrompt.trim()) {
               chatgptMessages.push({ role: 'system', content: systemPrompt })
@@ -2359,7 +2514,7 @@ export const sendMessage = createAsyncThunk<
                 const assistantMsg: any = {
                   role: 'assistant',
                   content: m.content || '',
-                  content_blocks: m.content_blocks,
+                  content_blocks: sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls),
                 }
                 if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                   assistantMsg.tool_calls = m.tool_calls.map(tc => ({
@@ -2370,10 +2525,12 @@ export const sendMessage = createAsyncThunk<
                 }
                 chatgptMessages.push(assistantMsg)
               } else if (m.role === 'tool' && m.tool_call_id) {
+                const toolName = toolNameById.get(m.tool_call_id)
+                const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName ?? null)
                 chatgptMessages.push({
                   role: 'tool',
                   tool_call_id: m.tool_call_id,
-                  content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                  content: typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent),
                 })
               }
             }
@@ -2526,27 +2683,55 @@ export const sendMessage = createAsyncThunk<
 
           // Cloud server handles LLM generation; storageMode in body tells it whether to save to cloud DB
           const endpoint = `/conversations/${conversationId}/messages`
+          const toolNameById = buildToolNameMap(currentTurnHistory)
 
           response = await createStreamingRequest(endpoint, auth.accessToken, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              messages: currentTurnHistory.map(m => ({
-                id: m.id,
-                conversation_id: m.conversation_id,
-                parent_id: m.parent_id,
-                children_ids: m.children_ids,
-                role: m.role,
-                thinking_block: m.thinking_block,
-                tool_calls: m.tool_calls,
-                content_blocks: m.content_blocks,
-                content: m.content,
-                content_plain_text: m.content_plain_text,
-                created_at: m.created_at,
-                model_name: m.model_name,
-                partial: m.partial,
-                artifacts: m.artifacts,
-              })),
+              messages: currentTurnHistory.map(m => {
+                const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
+                if (m.role === 'tool' && m.tool_call_id) {
+                  const toolName = toolNameById.get(m.tool_call_id) ?? null
+                  const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
+                  if (sanitizedContent !== m.content) {
+                    const contentPlain =
+                      typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
+                    return {
+                      id: m.id,
+                      conversation_id: m.conversation_id,
+                      parent_id: m.parent_id,
+                      children_ids: m.children_ids,
+                      role: m.role,
+                      thinking_block: m.thinking_block,
+                      tool_calls: m.tool_calls,
+                      content_blocks: contentBlocks,
+                      content: sanitizedContent,
+                      content_plain_text: contentPlain,
+                      created_at: m.created_at,
+                      model_name: m.model_name,
+                      partial: m.partial,
+                      artifacts: m.artifacts,
+                    }
+                  }
+                }
+                return {
+                  id: m.id,
+                  conversation_id: m.conversation_id,
+                  parent_id: m.parent_id,
+                  children_ids: m.children_ids,
+                  role: m.role,
+                  thinking_block: m.thinking_block,
+                  tool_calls: m.tool_calls,
+                  content_blocks: contentBlocks,
+                  content: m.content,
+                  content_plain_text: m.content_plain_text,
+                  created_at: m.created_at,
+                  model_name: m.model_name,
+                  partial: m.partial,
+                  artifacts: m.artifacts,
+                }
+              }),
               content: currentTurnContent, // Empty for tool continuation
               modelName: modelName,
               // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
@@ -3345,6 +3530,7 @@ export const editMessageWithBranching = createAsyncThunk<
 
         // LM Studio branch: handle locally like sendMessage does
         if (shouldUseLmStudio) {
+          const toolNameById = buildToolNameMap(currentTurnHistory)
           // Synthesize user message locally on first turn
           if (turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
             const newUserMessage: Message = {
@@ -3412,10 +3598,12 @@ export const editMessageWithBranching = createAsyncThunk<
               }
               lmMessages.push(assistantMsg)
             } else if (m.role === 'tool' && m.tool_call_id) {
+              const toolName = toolNameById.get(m.tool_call_id)
+              const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName ?? null)
               lmMessages.push({
                 role: 'tool',
                 tool_call_id: m.tool_call_id,
-                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                content: typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent),
               })
             }
           }
@@ -3537,6 +3725,7 @@ export const editMessageWithBranching = createAsyncThunk<
 
         // OpenAI ChatGPT branch: handle locally via OAuth tokens
         if (shouldUseOpenAIChatGPT) {
+          const toolNameById = buildToolNameMap(currentTurnHistory)
           // Synthesize user message locally on first turn
           if (turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
             const newUserMessage: Message = {
@@ -3601,7 +3790,7 @@ export const editMessageWithBranching = createAsyncThunk<
               const assistantMsg: any = {
                 role: 'assistant',
                 content: m.content || '',
-                content_blocks: m.content_blocks,
+                content_blocks: sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls),
               }
               if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                 assistantMsg.tool_calls = m.tool_calls.map(tc => ({
@@ -3612,10 +3801,12 @@ export const editMessageWithBranching = createAsyncThunk<
               }
               chatgptMessages.push(assistantMsg)
             } else if (m.role === 'tool' && m.tool_call_id) {
+              const toolName = toolNameById.get(m.tool_call_id)
+              const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName ?? null)
               chatgptMessages.push({
                 role: 'tool',
                 tool_call_id: m.tool_call_id,
-                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                content: typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent),
               })
             }
           }
@@ -3733,26 +3924,54 @@ export const editMessageWithBranching = createAsyncThunk<
         }
 
         // Create new user message as a branch (or continuation) - cloud server handles LLM, storageMode in body controls DB
+        const toolNameById = buildToolNameMap(currentTurnHistory)
         const response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: currentTurnHistory.map(m => ({
-              id: m.id,
-              conversation_id: m.conversation_id,
-              parent_id: m.parent_id,
-              children_ids: m.children_ids,
-              role: m.role,
-              thinking_block: m.thinking_block,
-              tool_calls: m.tool_calls,
-              content_blocks: m.content_blocks,
-              content: m.content,
-              content_plain_text: m.content_plain_text,
-              created_at: m.created_at,
-              model_name: m.model_name,
-              partial: m.partial,
-              artifacts: m.artifacts,
-            })),
+            messages: currentTurnHistory.map(m => {
+              const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
+              if (m.role === 'tool' && m.tool_call_id) {
+                const toolName = toolNameById.get(m.tool_call_id) ?? null
+                const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
+                if (sanitizedContent !== m.content) {
+                  const contentPlain =
+                    typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
+                  return {
+                    id: m.id,
+                    conversation_id: m.conversation_id,
+                    parent_id: m.parent_id,
+                    children_ids: m.children_ids,
+                    role: m.role,
+                    thinking_block: m.thinking_block,
+                    tool_calls: m.tool_calls,
+                    content_blocks: contentBlocks,
+                    content: sanitizedContent,
+                    content_plain_text: contentPlain,
+                    created_at: m.created_at,
+                    model_name: m.model_name,
+                    partial: m.partial,
+                    artifacts: m.artifacts,
+                  }
+                }
+              }
+              return {
+                id: m.id,
+                conversation_id: m.conversation_id,
+                parent_id: m.parent_id,
+                children_ids: m.children_ids,
+                role: m.role,
+                thinking_block: m.thinking_block,
+                tool_calls: m.tool_calls,
+                content_blocks: contentBlocks,
+                content: m.content,
+                content_plain_text: m.content_plain_text,
+                created_at: m.created_at,
+                model_name: m.model_name,
+                partial: m.partial,
+                artifacts: m.artifacts,
+              }
+            }),
             content: currentTurnContent,
             modelName,
             parentId: activeParentId, // Branch from the same parent as original (or updated parent)
@@ -4317,6 +4536,7 @@ export const sendMessageToBranch = createAsyncThunk<
 
         // LM Studio branch: handle locally
         if (shouldUseLmStudio) {
+          const toolNameById = buildToolNameMap(currentTurnHistory)
           // Synthesize user message locally on first turn
           if (turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
             const newUserMessage: Message = {
@@ -4382,10 +4602,12 @@ export const sendMessageToBranch = createAsyncThunk<
               }
               lmMessages.push(assistantMsg)
             } else if (m.role === 'tool' && m.tool_call_id) {
+              const toolName = toolNameById.get(m.tool_call_id)
+              const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName ?? null)
               lmMessages.push({
                 role: 'tool',
                 tool_call_id: m.tool_call_id,
-                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                content: typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent),
               })
             }
           }
@@ -4506,6 +4728,7 @@ export const sendMessageToBranch = createAsyncThunk<
 
         // OpenAI ChatGPT branch: handle locally via OAuth tokens
         if (shouldUseOpenAIChatGPT) {
+          const toolNameById = buildToolNameMap(currentTurnHistory)
           // Synthesize user message locally on first turn
           if (turnCount === 1 && currentTurnContent && currentTurnContent.trim()) {
             const newUserMessage: Message = {
@@ -4560,7 +4783,7 @@ export const sendMessageToBranch = createAsyncThunk<
               const assistantMsg: any = {
                 role: 'assistant',
                 content: m.content || '',
-                content_blocks: m.content_blocks,
+                content_blocks: sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls),
               }
               if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                 assistantMsg.tool_calls = m.tool_calls.map(tc => ({
@@ -4571,10 +4794,12 @@ export const sendMessageToBranch = createAsyncThunk<
               }
               chatgptMessages.push(assistantMsg)
             } else if (m.role === 'tool' && m.tool_call_id) {
+              const toolName = toolNameById.get(m.tool_call_id)
+              const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName ?? null)
               chatgptMessages.push({
                 role: 'tool',
                 tool_call_id: m.tool_call_id,
-                content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+                content: typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent),
               })
             }
           }

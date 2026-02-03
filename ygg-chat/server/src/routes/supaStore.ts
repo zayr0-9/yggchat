@@ -8,7 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler'
 const router = express.Router()
 
 const EXECUTABLE_EXTENSIONS = new Set(['.exe', '.bat', '.sh'])
-const MAX_UPLOAD_ENTRIES = 500
+const MAX_UPLOAD_ENTRIES = 5000
 const MAX_UPLOAD_UNPACKED_BYTES = 500 * 1024 * 1024
 
 function sanitizeZipEntryName(entryName: string): string {

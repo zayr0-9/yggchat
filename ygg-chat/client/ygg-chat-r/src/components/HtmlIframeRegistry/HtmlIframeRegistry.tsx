@@ -43,6 +43,7 @@ type HtmlIframeEntryBase = {
   lastUsedAt: number
   conversationId?: string | null
   projectId?: string | null
+  toolName?: string | null
   kind: 'html' | 'mcp'
 }
 
@@ -78,7 +79,7 @@ type HtmlIframeRegistryContextValue = {
     key: string,
     html: string,
     label?: string | null,
-    meta?: { conversationId?: string | null; projectId?: string | null }
+    meta?: { conversationId?: string | null; projectId?: string | null; toolName?: string | null }
   ) => void
   registerMcpEntry: (
     key: string,
@@ -99,7 +100,7 @@ type HtmlIframeRegistryContextValue = {
     html: string,
     fullHeight: boolean,
     label?: string | null,
-    meta?: { conversationId?: string | null; projectId?: string | null }
+    meta?: { conversationId?: string | null; projectId?: string | null; toolName?: string | null }
   ) => void
   updateMcpIframe: (
     key: string,
@@ -135,6 +136,7 @@ type IframeRecord = {
   iframe: HTMLIFrameElement
   html: string
   fullHeight: boolean
+  toolName?: string | null
   cleanup: () => void
   positionCleanup?: () => void
   activeTarget?: HTMLElement | null
@@ -319,6 +321,7 @@ const toCacheRecord = (entry: HtmlIframeHtmlEntry, userId: string): HtmlToolReco
   key: entry.key,
   html: entry.html,
   label: entry.label,
+  tool_name: entry.toolName ?? null,
   favorite: entry.favorite ? 1 : 0,
   status: entry.status,
   size_bytes: entry.sizeBytes,
@@ -335,6 +338,7 @@ const fromCacheRecord = (record: HtmlToolRecord): HtmlIframeHtmlEntry => ({
   kind: 'html',
   html: record.html,
   label: record.label ?? null,
+  toolName: record.tool_name ?? null,
   favorite: Boolean(record.favorite),
   status: record.status === 'hibernated' ? 'hibernated' : 'active',
   sizeBytes: Number.isFinite(record.size_bytes) ? record.size_bytes : getHtmlSizeBytes(record.html),
@@ -410,7 +414,7 @@ const buildToolCallGroupsFromBlocks = (blocks?: ContentBlock[]) => {
   return mapByIndex
 }
 
-const extractHtmlFromToolResult = (content: any): string | null => {
+const extractHtmlFromToolResult = (content: any): { html: string; toolName?: string | null } | null => {
   if (!content) return null
 
   let resolved = content
@@ -423,7 +427,10 @@ const extractHtmlFromToolResult = (content: any): string | null => {
   }
 
   if (typeof resolved === 'object' && resolved !== null && 'html' in resolved) {
-    return (resolved as any).html
+    return {
+      html: (resolved as any).html,
+      toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
+    }
   }
 
   if (
@@ -432,14 +439,23 @@ const extractHtmlFromToolResult = (content: any): string | null => {
     (resolved as any).type === 'text/html' &&
     typeof (resolved as any).content === 'string'
   ) {
-    return (resolved as any).content
+    return {
+      html: (resolved as any).content,
+      toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
+    }
   }
 
   return null
 }
 
 const buildHtmlEntriesFromMessages = (messages: Message[]) => {
-  const entries: Array<{ key: string; html: string; label: string; conversationId?: string | null }> = []
+  const entries: Array<{
+    key: string
+    html: string
+    label: string
+    conversationId?: string | null
+    toolName?: string | null
+  }> = []
 
   const normalizeHtml = (html: string) => html.trim()
 
@@ -456,6 +472,7 @@ const buildHtmlEntriesFromMessages = (messages: Message[]) => {
 
       const htmlSeen = new Set<string>()
       const toolLabel = group.name || 'Tool Result'
+      const toolName = group.name ?? null
       const isHtmlRenderer = (group.name ?? '').toLowerCase() === 'html_renderer'
       if (isHtmlRenderer && typeof group.args?.html === 'string') {
         const normalized = normalizeHtml(group.args.html)
@@ -466,14 +483,15 @@ const buildHtmlEntriesFromMessages = (messages: Message[]) => {
             html: normalized,
             label: toolLabel,
             conversationId: message.conversation_id ?? null,
+            toolName,
           })
         }
       }
 
       group.results.forEach((result, resultIdx) => {
         const maybeHtml = extractHtmlFromToolResult(result.content)
-        if (typeof maybeHtml !== 'string') return
-        const normalized = normalizeHtml(maybeHtml)
+        if (!maybeHtml?.html) return
+        const normalized = normalizeHtml(maybeHtml.html)
         if (!normalized || htmlSeen.has(normalized)) return
         htmlSeen.add(normalized)
         entries.push({
@@ -481,6 +499,7 @@ const buildHtmlEntriesFromMessages = (messages: Message[]) => {
           html: normalized,
           label: `${toolLabel} result ${resultIdx + 1}`,
           conversationId: message.conversation_id ?? null,
+          toolName: maybeHtml.toolName ?? toolName,
         })
       })
     })
@@ -505,25 +524,39 @@ const configureIframeElement = (iframe: HTMLIFrameElement) => {
 }
 
 // Uses shared iframeBridge for consistent IPC support
-const attachMessageBridge = (iframe: HTMLIFrameElement, getAuthContext?: () => { tenantId?: string | null }) => {
+const attachMessageBridge = (
+  iframe: HTMLIFrameElement,
+  getAuthContext?: () => { tenantId?: string | null },
+  getToolContext?: () => { toolName?: string | null }
+) => {
   return attachSharedMessageBridge(
     () => iframe,
-    () => getAuthContext?.()?.tenantId ?? null
+    () => getAuthContext?.()?.tenantId ?? null,
+    getToolContext
   )
 }
 
 const createIframeRecord = (
   html: string,
   fullHeight: boolean,
-  getAuthContext?: () => { tenantId?: string | null }
+  getAuthContext?: () => { tenantId?: string | null },
+  toolName?: string | null
 ): IframeRecord => {
   const iframe = document.createElement('iframe')
   configureIframeElement(iframe)
   iframe.className = getIframeClassName(fullHeight)
   iframe.srcdoc = html
-  const cleanup = attachMessageBridge(iframe, getAuthContext)
+  const record: IframeRecord = {
+    iframe,
+    html,
+    fullHeight,
+    toolName,
+    cleanup: () => {},
+  }
+  const cleanup = attachMessageBridge(iframe, getAuthContext, () => ({ toolName: record.toolName ?? null }))
+  record.cleanup = cleanup
 
-  return { iframe, html, fullHeight, cleanup }
+  return record
 }
 
 const configureMcpIframeElement = (iframe: HTMLIFrameElement, className?: string) => {
@@ -905,6 +938,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
             key: entry.key,
             html: entry.html,
             label: entry.label,
+            toolName: entry.toolName ?? null,
             favorite: entry.favorite,
             status: entry.status,
             sizeBytes: entry.sizeBytes,
@@ -1170,12 +1204,13 @@ export const HtmlIframeRegistryProvider: React.FC<{
       key: string,
       html: string,
       label?: string | null,
-      meta?: { conversationId?: string | null; projectId?: string | null }
+      meta?: { conversationId?: string | null; projectId?: string | null; toolName?: string | null }
     ) => {
       const now = Date.now()
       const existingEntry = entriesRef.current.get(key)
       const existingHtmlEntry = existingEntry && isHtmlEntry(existingEntry) ? existingEntry : null
       const nextLabel = label ?? existingEntry?.label ?? null
+      const nextToolName = meta?.toolName ?? existingEntry?.toolName ?? null
       const sizeBytes = getHtmlSizeBytes(html)
       const lastUsedAt =
         existingHtmlEntry && existingHtmlEntry.html === html
@@ -1194,11 +1229,13 @@ export const HtmlIframeRegistryProvider: React.FC<{
         lastUsedAt: existingHtmlEntry && existingHtmlEntry.html === html ? lastUsedAt : now,
         conversationId: meta?.conversationId ?? existingEntry?.conversationId ?? null,
         projectId: meta?.projectId ?? existingEntry?.projectId ?? null,
+        toolName: nextToolName,
       }
       if (
         !existingHtmlEntry ||
         existingHtmlEntry.html !== html ||
         existingEntry?.label !== nextLabel ||
+        existingEntry?.toolName !== nextEntry.toolName ||
         existingEntry?.favorite !== nextEntry.favorite ||
         existingEntry?.status !== nextEntry.status ||
         existingEntry?.sizeBytes !== nextEntry.sizeBytes ||
@@ -1373,11 +1410,11 @@ export const HtmlIframeRegistryProvider: React.FC<{
       html: string,
       fullHeight: boolean,
       label?: string | null,
-      meta?: { conversationId?: string | null; projectId?: string | null }
+      meta?: { conversationId?: string | null; projectId?: string | null; toolName?: string | null }
     ) => {
       let record = recordsRef.current.get(key)
       if (!record) {
-        record = createIframeRecord(html, fullHeight, getAuthContext)
+        record = createIframeRecord(html, fullHeight, getAuthContext, meta?.toolName ?? null)
         recordsRef.current.set(key, record)
         // Initially hidden until a slot targets it
         record.iframe.style.display = 'none'
@@ -1385,6 +1422,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
         hiddenHostRef.current?.appendChild(record.iframe)
         logHtmlTools('iframe-create', { key, fullHeight })
       } else {
+        record.toolName = meta?.toolName ?? record.toolName ?? null
         if (record.html !== html) {
           record.iframe.srcdoc = html
           record.html = html
@@ -1399,6 +1437,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
       const existingEntry = entriesRef.current.get(key)
       const existingHtmlEntry = existingEntry && isHtmlEntry(existingEntry) ? existingEntry : null
       const nextLabel = label ?? existingEntry?.label ?? null
+      const nextToolName = meta?.toolName ?? existingEntry?.toolName ?? null
       const sizeBytes = getHtmlSizeBytes(html)
       const nextEntry: HtmlIframeHtmlEntry = {
         key,
@@ -1413,11 +1452,13 @@ export const HtmlIframeRegistryProvider: React.FC<{
         lastUsedAt: existingEntry?.lastUsedAt ?? now,
         conversationId: meta?.conversationId ?? existingEntry?.conversationId ?? null,
         projectId: meta?.projectId ?? existingEntry?.projectId ?? null,
+        toolName: nextToolName,
       }
       if (
         !existingHtmlEntry ||
         existingHtmlEntry.html !== html ||
         existingEntry?.label !== nextLabel ||
+        existingEntry?.toolName !== nextEntry.toolName ||
         existingEntry?.favorite !== nextEntry.favorite ||
         existingEntry?.status !== nextEntry.status ||
         existingEntry?.sizeBytes !== nextEntry.sizeBytes ||
@@ -1660,7 +1701,10 @@ export const HtmlIframeRegistryProvider: React.FC<{
               if (added >= maxEntries) return
               if (seenKeys.has(entry.key) || entriesRef.current.has(entry.key)) return
               seenKeys.add(entry.key)
-              registerEntry(entry.key, entry.html, entry.label, { conversationId: entry.conversationId ?? null })
+              registerEntry(entry.key, entry.html, entry.label, {
+                conversationId: entry.conversationId ?? null,
+                toolName: entry.toolName ?? null,
+              })
               added += 1
             })
           } catch (err) {
@@ -1798,7 +1842,8 @@ export const HtmlIframeSlot: React.FC<{
   fullHeight?: boolean
   className?: string
   priority?: number
-}> = ({ iframeKey, html, fullHeight = false, className, priority }) => {
+  toolName?: string | null
+}> = ({ iframeKey, html, fullHeight = false, className, priority, toolName = null }) => {
   const registry = useHtmlIframeRegistry()
   const registryRef = useRef(registry)
   const slotRef = useRef<HTMLDivElement | null>(null)
@@ -1819,8 +1864,8 @@ export const HtmlIframeSlot: React.FC<{
   // This ensures the iframe record exists before we try to position it.
   useLayoutEffect(() => {
     if (!registryRef.current) return
-    registryRef.current.updateIframe(iframeKey, html, fullHeight)
-  }, [iframeKey, html, fullHeight])
+    registryRef.current.updateIframe(iframeKey, html, fullHeight, undefined, { toolName })
+  }, [iframeKey, html, fullHeight, toolName])
 
   useLayoutEffect(() => {
     const node = slotRef.current
