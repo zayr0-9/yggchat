@@ -1851,6 +1851,7 @@ export const sendMessage = createAsyncThunk<
           dispatch(chatSliceActions.messageAdded(newUserMessage))
           dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
           updateMessageCache(extra.queryClient, conversationId, newUserMessage)
+          dispatch(chatSliceActions.optimisticMessageCleared())
 
           // Save to local DB if in local storage mode
           if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
@@ -3554,6 +3555,7 @@ export const editMessageWithBranching = createAsyncThunk<
             dispatch(chatSliceActions.messageAdded(newUserMessage))
             dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
             updateMessageCache(extra.queryClient, conversationId, newUserMessage)
+            dispatch(chatSliceActions.optimisticBranchMessageCleared())
 
             // Sync to local SQLite
             localApi
@@ -3749,6 +3751,7 @@ export const editMessageWithBranching = createAsyncThunk<
             dispatch(chatSliceActions.messageAdded(newUserMessage))
             dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
             updateMessageCache(extra.queryClient, conversationId, newUserMessage)
+            dispatch(chatSliceActions.optimisticBranchMessageCleared())
 
             localApi
               .post('/sync/message', {
