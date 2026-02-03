@@ -1572,7 +1572,7 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
     // Entries are NOT auto-registered - only when user clicks "Open Viewer" or expands.
     // This prevents polluting the registry with every tool found on the page.
     const htmlRegistryEntriesMap = useMemo(() => {
-      const entriesMap = new Map<string, { key: string; html: string; label: string }>()
+      const entriesMap = new Map<string, { key: string; html: string; label: string; toolName?: string | null }>()
 
       // Skip if we're in streaming mode - only available after message is persisted
       if (Array.isArray(streamEvents) && streamEvents.length > 0) {
