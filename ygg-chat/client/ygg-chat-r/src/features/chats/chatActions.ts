@@ -1196,6 +1196,131 @@ const executeSubagentCall = async (
   const toolSummary =
     toolsExecuted.length > 0 ? toolsExecuted.map(t => `${t.name} (${t.success ? '✓' : '✗'})`).join(', ') : 'none'
 
+  // Deterministic finalization: if tools ran but no text response, force one more turn
+  const hasTools = toolsExecuted.length > 0 || totalToolCallsUsed > 0
+  const hasFinalText = typeof finalResponse === 'string' && finalResponse.trim().length > 0
+
+  if (hasTools && !hasFinalText && !subagentAbortController.signal.aborted) {
+    if (!isStreamActive()) {
+      subagentAbortController.abort()
+      throw new Error('Subagent aborted')
+    }
+
+    // Append a finalization instruction in subagent-only context
+    conversationHistory.push({
+      role: 'user',
+      content:
+        'Summarize the tool results above and provide the final answer. Do not call tools. Be concise and complete.',
+    })
+
+    const finalizeResponse = await createStreamingRequest('/generate/ephemeral', accessToken, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: conversationHistory,
+        model: model || 'google/gemini-3-flash-preview',
+        maxTokens: Math.min(maxTokens || 1024, 4096),
+        temperature: temperature ?? 0.3,
+        systemPrompt,
+        tools: undefined, // Force no tool calls for finalization
+      }),
+      signal: subagentAbortController.signal,
+    })
+
+    if (!finalizeResponse.ok) {
+      const errorText = await finalizeResponse.text()
+      throw new Error(`Subagent finalization failed: HTTP ${finalizeResponse.status}: ${errorText}`)
+    }
+
+    const finalizeReader = finalizeResponse.body?.getReader()
+    if (!finalizeReader) {
+      throw new Error('No response body from subagent finalization')
+    }
+
+    const finalizeDecoder = new TextDecoder()
+    let finalizeText = ''
+    let finalizeReasoning = ''
+    let finalizeBuffer = ''
+
+    while (true) {
+      if (!isStreamActive()) {
+        subagentAbortController.abort()
+        throw new Error('Subagent aborted')
+      }
+
+      const { done, value } = await finalizeReader.read()
+      if (done) break
+
+      const chunk = finalizeDecoder.decode(value, { stream: true })
+      finalizeBuffer += chunk
+
+      const lines = finalizeBuffer.split('\n')
+      finalizeBuffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6)
+        if (data === '[DONE]') continue
+        try {
+          const parsed = JSON.parse(data)
+          if (parsed?.type === 'chunk' && parsed?.part) {
+            if (parsed.part === 'text') {
+              const delta = parsed.delta ?? parsed.content ?? parsed.text
+              if (typeof delta === 'string') finalizeText += delta
+            } else if (parsed.part === 'reasoning') {
+              const delta = parsed.delta ?? parsed.reasoning
+              if (typeof delta === 'string') finalizeReasoning += delta
+            }
+          } else if (parsed?.text) {
+            if (typeof parsed.text === 'string') finalizeText += parsed.text
+          } else if (parsed?.reasoning) {
+            if (typeof parsed.reasoning === 'string') finalizeReasoning += parsed.reasoning
+          } else if (parsed?.delta) {
+            if (typeof parsed.delta === 'string') finalizeText += parsed.delta
+          } else if (parsed?.content) {
+            if (typeof parsed.content === 'string') finalizeText += parsed.content
+          }
+        } catch {
+          if (data.trim()) {
+            finalizeText += data
+          }
+        }
+      }
+    }
+
+    const finalizeMessageId = uuidv4()
+    const finalizeMessage: any = {
+      id: finalizeMessageId,
+      conversation_id: conversationId,
+      parent_id: lastAssistantMessageId,
+      role: 'ex_agent',
+      content: finalizeText,
+      ex_agent_type: 'subagent',
+      ex_agent_session_id: subagentSessionId,
+      thinking_block: finalizeReasoning || null,
+      created_at: new Date().toISOString(),
+    }
+
+    const finalizeBlocks: any[] = []
+    if (finalizeReasoning) finalizeBlocks.push({ type: 'thinking', content: finalizeReasoning })
+    if (finalizeText) finalizeBlocks.push({ type: 'text', content: finalizeText })
+    finalizeMessage.content_blocks = JSON.stringify(finalizeBlocks)
+
+    if (isLocalMode) {
+      try {
+        await localApi.post('/sync/message', finalizeMessage)
+      } catch (err) {
+        console.warn('[subagent] Failed to persist finalization message:', err)
+      }
+    }
+
+    finalResponse = finalizeReasoning
+      ? `<thinking>\n${finalizeReasoning}\n</thinking>\n\n${finalizeText}`
+      : finalizeText
+    lastAssistantMessageId = finalizeMessageId
+    turnsUsed += 1
+  }
+
   return `## Subagent Response (session: ${subagentSessionId.slice(0, 8)})\n\n${finalResponse || 'No response generated'}\n\n---\nTurns: ${turnsUsed}/${maxTurns} | Tool calls: ${totalToolCallsUsed}/${maxToolCalls} | Tools: ${toolSummary}`
 }
 
