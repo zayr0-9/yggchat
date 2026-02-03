@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { ConversationId } from '../../../../shared/types'
 import { Button, ChatMessage } from '../components'
+import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import { TextArea } from '../components/TextArea/TextArea'
 import { updateResearchNote } from '../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../features/conversations/conversationSelectors'
@@ -41,6 +42,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
   const queryClient = useQueryClient()
   const { userId } = useAuth()
   const isWeb = import.meta.env.VITE_ENVIRONMENT === 'web'
+  const htmlRegistry = useHtmlIframeRegistry()
 
   // File browser state
   const [currentPath, setCurrentPath] = useState<string>(ccCwd)
@@ -105,6 +107,79 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
       return { ...block, index: block.index ?? idx }
     })
   }, [])
+
+  const mergedAgentMessages = useMemo(() => {
+    if (!agentMessages.length) return []
+
+    const merged: any[] = []
+    const toolUseIndex = new Map<string, number>()
+
+    const parseBlocks = (value: any): any[] => {
+      const parsed = parseJsonSafe<any[]>(value, [])
+      return Array.isArray(parsed) ? parsed : []
+    }
+
+    const registerToolUses = (blocks: any[], index: number) => {
+      blocks.forEach(block => {
+        if (block?.type === 'tool_use') {
+          const id = block.id || block.tool_use_id
+          if (typeof id === 'string' && id.length > 0) {
+            toolUseIndex.set(id, index)
+          }
+        }
+      })
+    }
+
+    const registerToolCalls = (toolCallsValue: any, index: number) => {
+      const toolCalls = parseJsonSafe<any[]>(toolCallsValue, [])
+      if (!Array.isArray(toolCalls)) return
+      toolCalls.forEach(call => {
+        if (typeof call?.id === 'string' && call.id.length > 0) {
+          toolUseIndex.set(call.id, index)
+        }
+      })
+    }
+
+    agentMessages.forEach(message => {
+      const role = message.role
+      const contentBlocks = parseBlocks(message.content_blocks)
+
+      if (role === 'tool') {
+        const toolCallId =
+          typeof message.tool_call_id === 'string' && message.tool_call_id.length > 0
+            ? message.tool_call_id
+            : contentBlocks.find(block => block?.type === 'tool_result' && block.tool_use_id)?.tool_use_id
+
+        if (toolCallId && toolUseIndex.has(toolCallId)) {
+          const targetIndex = toolUseIndex.get(toolCallId)!
+          const target = merged[targetIndex]
+          if (target) {
+            const targetBlocks = parseBlocks(target.content_blocks)
+            const mergedBlocks = [...targetBlocks, ...contentBlocks]
+            target.content_blocks = mergedBlocks
+          }
+          return
+        }
+      }
+
+      const nextMessage = { ...message, content_blocks: contentBlocks }
+      merged.push(nextMessage)
+
+      const mergedIndex = merged.length - 1
+      registerToolUses(contentBlocks, mergedIndex)
+      registerToolCalls(message.tool_calls, mergedIndex)
+    })
+
+    return merged
+  }, [agentMessages, parseJsonSafe])
+
+  const handleOpenToolHtmlModal = useCallback(
+    (key?: string) => {
+      htmlRegistry?.openModal(key)
+    },
+    [htmlRegistry]
+  )
+  const openToolHtmlModal = htmlRegistry ? handleOpenToolHtmlModal : undefined
 
   // Get conversation data using selector
   const conversation = useSelector(conversationId ? makeSelectConversationById(conversationId) : () => null)
@@ -608,9 +683,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
               )}
 
               {/* Persisted messages from React Query cache */}
-              {agentMessages
-                .filter(message => message.role !== 'tool')
-                .map(message => (
+              {mergedAgentMessages.map(message => (
                 <ChatMessage
                   key={message.id}
                   id={message.id}
@@ -623,6 +696,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
                   width='w-full'
                   colored={false}
                   modelName={message.model_name}
+                  onOpenToolHtmlModal={openToolHtmlModal}
                 />
               ))}
 
@@ -637,6 +711,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
                   width='w-full'
                   colored={false}
                   className='opacity-70'  // Visual feedback for optimistic state
+                  onOpenToolHtmlModal={openToolHtmlModal}
                 />
               )}
 
@@ -649,6 +724,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
                   contentBlocks={[{ type: 'text', index: 0, content: agentStreamBuffer }]}
                   width='w-full'
                   colored={false}
+                  onOpenToolHtmlModal={openToolHtmlModal}
                 />
               )}
             </div>

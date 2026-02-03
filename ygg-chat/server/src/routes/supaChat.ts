@@ -254,13 +254,27 @@ router.post(
             .map((tool: any): ToolDefinition | null => {
               const name = tool?.name || tool?.tool?.name
               if (!name) return null
+
               const serverTool = getToolByName(name)
-              if (!serverTool) return null
+              if (serverTool) {
+                return {
+                  name: serverTool.name,
+                  enabled: serverTool.enabled,
+                  description: serverTool.tool?.description ?? '',
+                  inputSchema: serverTool.tool?.inputSchema ?? { type: 'object', properties: {} },
+                }
+              }
+
+              // Allow client-provided tool definitions for local-only tools (Electron):
+              // custom_tool_manager, mcp_manager, skill_manager, and user-defined tools.
+              const clientTool = tool?.tool ?? tool
+              if (!clientTool?.inputSchema) return null
+
               return {
-                name: serverTool.name,
-                enabled: serverTool.enabled,
-                description: serverTool.tool?.description ?? '',
-                inputSchema: serverTool.tool?.inputSchema ?? { type: 'object', properties: {} },
+                name,
+                enabled: typeof clientTool.enabled === 'boolean' ? clientTool.enabled : true,
+                description: clientTool.description ?? '',
+                inputSchema: clientTool.inputSchema ?? { type: 'object', properties: {} },
               }
             })
             .filter((tool): tool is ToolDefinition => tool !== null)
