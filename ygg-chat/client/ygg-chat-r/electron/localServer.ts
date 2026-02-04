@@ -2929,6 +2929,7 @@ function setupServer() {
   app.post('/api/tools/execute', async (req, res) => {
     try {
       const { toolName, args, rootPath, operationMode } = req.body
+      const normalizedToolName = typeof toolName === 'string' ? toolName.trim() : toolName
       // console.log(`[LocalServer] Executing tool: ${toolName} (operationMode: ${operationMode || 'execute'})`)
 
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
@@ -2937,20 +2938,20 @@ function setupServer() {
       let result: ToolResult
 
       // Check built-in tools first
-      const builtInHandler = builtInTools.get(toolName)
+      const builtInHandler = builtInTools.get(normalizedToolName)
       if (builtInHandler) {
         result = await builtInHandler(parsedArgs, toolOptions)
       }
       // Then check MCP tools (format: mcp__serverName__toolName)
-      else if (toolName.startsWith('mcp__')) {
-        console.log(`[LocalServer] MCP tool detected: ${toolName}`)
+      else if (typeof normalizedToolName === 'string' && normalizedToolName.startsWith('mcp__')) {
+        console.log(`[LocalServer] MCP tool detected: ${normalizedToolName}`)
         console.log(`[LocalServer] mcpManager exists: ${!!mcpManager}`)
 
         if (!mcpManager) {
           result = { success: false, error: 'MCP manager not initialized' }
         } else {
           try {
-            const mcpResult = await mcpManager.callTool(toolName, parsedArgs)
+            const mcpResult = await mcpManager.callTool(normalizedToolName, parsedArgs)
             // Convert MCP result to standard ToolResult format
             const textContent = mcpResult.content
               .filter(c => c.type === 'text')
@@ -2969,8 +2970,8 @@ function setupServer() {
         }
       }
       // Then check custom tools
-      else if (customToolRegistry.hasCustomTool(toolName)) {
-        result = await customToolRegistry.executeTool(toolName, parsedArgs, {
+      else if (customToolRegistry.hasCustomTool(normalizedToolName)) {
+        result = await customToolRegistry.executeTool(normalizedToolName, parsedArgs, {
           rootPath,
           operationMode: operationMode as 'plan' | 'execute' | undefined,
           cwd: rootPath,
@@ -2978,8 +2979,8 @@ function setupServer() {
       }
       // Unknown tool
       else {
-        console.warn(`[LocalServer] Unknown tool: ${toolName}`)
-        result = { success: false, error: `Unknown tool: ${toolName}` }
+        console.warn(`[LocalServer] Unknown tool: ${normalizedToolName}`)
+        result = { success: false, error: `Unknown tool: ${normalizedToolName}` }
       }
 
       res.json({ result })

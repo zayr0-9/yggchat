@@ -56,6 +56,14 @@ custom-tools/
 - `agent: "write"` allows the UI to enqueue tasks into the persistent agent queue.
 - Omit `appPermissions` to deny agent access.
 
+**Optional JS runtime config (for tools that call yt-dlp or similar)**
+
+- `jsRuntimeMode` controls host-provided JS runtime injection during headless execution:
+  - `"electron"` (default): injects `YT_DLP_JS_RUNTIMES=node:<electron exe>` and sets `ELECTRON_RUN_AS_NODE=1`
+  - `"custom"`: uses `jsRuntimes` as provided
+  - `"none"`: disables host runtime injection
+- `jsRuntimes` is passed through as `YT_DLP_JS_RUNTIMES` (example: `node:C:\\Program Files\\nodejs\\node.exe`)
+
 ---
 
 ---
@@ -481,6 +489,7 @@ await send('CUSTOM_TOOL_CLEAR_CACHE', {})
 - ✅ Supports `node_modules` in your tool directory
 - ✅ Faster execution (no process spawn overhead)
 - ✅ Hot reload with cache clearing
+- ✅ Inherits host JS runtime injection for tools like yt-dlp
 
 ---
 

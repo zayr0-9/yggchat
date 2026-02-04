@@ -447,6 +447,8 @@ export interface ToolDefinition {
   appPermissions?: {
     agent?: 'read' | 'write'
   }
+  jsRuntimeMode?: 'electron' | 'custom' | 'none'
+  jsRuntimes?: string
 }
 
 // Alias for backwards compatibility

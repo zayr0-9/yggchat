@@ -62,6 +62,8 @@ export interface CustomToolDefinition {
   appPermissions?: {
     agent?: 'read' | 'write'
   }
+  jsRuntimeMode?: 'electron' | 'custom' | 'none'
+  jsRuntimes?: string
   author?: string
   inputSchema: {
     type: 'object'
@@ -116,6 +118,38 @@ function validateDefinition(def: any): def is Omit<CustomToolDefinition, 'isCust
   // enabled defaults to true if not specified
   if (def.enabled !== undefined && typeof def.enabled !== 'boolean') return false
   return true
+}
+
+type JsRuntimeMode = 'electron' | 'custom' | 'none'
+
+function resolveRuntimeEnv(definition: CustomToolDefinition): {
+  jsRuntimes?: string
+  setElectronRunAsNode: boolean
+} | null {
+  const mode: JsRuntimeMode = definition.jsRuntimeMode || 'electron'
+
+  if (mode === 'none') return null
+  if (mode === 'custom') {
+    const jsRuntimes = definition.jsRuntimes?.trim()
+    if (!jsRuntimes) return null
+    return { jsRuntimes, setElectronRunAsNode: false }
+  }
+
+  return { jsRuntimes: `node:${process.execPath}`, setElectronRunAsNode: true }
+}
+
+function snapshotEnv(key: string): { hasKey: boolean; value?: string } {
+  const hasKey = Object.prototype.hasOwnProperty.call(process.env, key)
+  return { hasKey, value: hasKey ? process.env[key] : undefined }
+}
+
+function restoreEnv(key: string, snapshot: { hasKey: boolean; value?: string }): void {
+  if (snapshot.hasKey && snapshot.value !== undefined) {
+    process.env[key] = snapshot.value
+    return
+  }
+
+  delete process.env[key]
 }
 
 /**
@@ -269,6 +303,8 @@ class CustomToolRegistry {
         enabled: definition.enabled !== false, // Default to true
         description: definition.description,
         appPermissions: definition.appPermissions,
+        jsRuntimeMode: definition.jsRuntimeMode,
+        jsRuntimes: definition.jsRuntimes,
         author: definition.author,
         inputSchema: definition.inputSchema,
         isCustom: true,
@@ -328,6 +364,19 @@ class CustomToolRegistry {
       return { success: false, error: `Custom tool '${name}' is disabled` }
     }
 
+    const envPatch = resolveRuntimeEnv(tool.definition)
+    const prevJsRuntimes = snapshotEnv('YT_DLP_JS_RUNTIMES')
+    const prevElectronRunAsNode = snapshotEnv('ELECTRON_RUN_AS_NODE')
+
+    if (envPatch) {
+      if (envPatch.jsRuntimes) {
+        process.env.YT_DLP_JS_RUNTIMES = envPatch.jsRuntimes
+      }
+      if (envPatch.setElectronRunAsNode) {
+        process.env.ELECTRON_RUN_AS_NODE = '1'
+      }
+    }
+
     try {
       // Execute with timeout
       const result = await Promise.race([
@@ -346,6 +395,9 @@ class CustomToolRegistry {
         success: false,
         error: error instanceof Error ? error.message : String(error),
       }
+    } finally {
+      restoreEnv('YT_DLP_JS_RUNTIMES', prevJsRuntimes)
+      restoreEnv('ELECTRON_RUN_AS_NODE', prevElectronRunAsNode)
     }
   }
 

@@ -69,6 +69,8 @@ export interface CustomToolDefinition {
   appPermissions?: {
     agent?: 'read' | 'write'
   }
+  jsRuntimeMode?: 'electron' | 'custom' | 'none'
+  jsRuntimes?: string
   sourcePath?: string
 }
 
@@ -80,6 +82,8 @@ export interface CustomToolDefinitionFile {
   appPermissions?: {
     agent?: 'read' | 'write'
   }
+  jsRuntimeMode?: 'electron' | 'custom' | 'none'
+  jsRuntimes?: string
   inputSchema: {
     type: 'object'
     properties: Record<string, any>
