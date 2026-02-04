@@ -45,6 +45,9 @@ import {
 const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
 // Remote API base for syncing from cloud (Railway)
 const REMOTE_API_BASE = import.meta.env.VITE_API_URL || 'https://webdrasil-production.up.railway.app/api'
+// Tools that should not prompt for user permission before execution.
+// Server-executed tools (e.g., brave_search) are already excluded upstream.
+const TOOL_PERMISSION_BYPASS = new Set(['custom_tool_manager', 'skill_manager', 'mcp_manager'])
 
 /**
  * Creates a Message object for tool results to be used in LM Studio conversation history.
@@ -1641,6 +1644,10 @@ const executeToolWithPermissionCheck = async (
     ...context,
     dispatch,
     getState,
+  }
+
+  if (toolCall?.name && TOOL_PERMISSION_BYPASS.has(toolCall.name)) {
+    return await executeLocalTool(toolCall, rootPath, operationMode, extendedContext)
   }
 
   if (autoApprove) {

@@ -44,6 +44,8 @@ type ToolHandler = (
   }
 ) => Promise<any>
 
+const normalizeToolName = (name: unknown): string => (typeof name === 'string' ? name.trim() : '')
+
 export class ToolOrchestrator {
   private jobs: Map<string, Job> = new Map()
   private pendingQueue: string[] = [] // Job IDs ordered by priority
@@ -210,7 +212,7 @@ export class ToolOrchestrator {
   private rowToJob(row: any): Job {
     return {
       id: row.id,
-      toolName: row.tool_name,
+      toolName: normalizeToolName(row.tool_name),
       args: JSON.parse(row.args || '{}'),
       status: row.status as JobStatus,
       priority: row.priority as JobPriority,
@@ -238,7 +240,7 @@ export class ToolOrchestrator {
    * Register a tool handler
    */
   registerTool(name: string, handler: ToolHandler): void {
-    this.toolHandlers.set(name, handler)
+    this.toolHandlers.set(normalizeToolName(name), handler)
   }
 
   /**
@@ -246,7 +248,7 @@ export class ToolOrchestrator {
    */
   registerTools(tools: Map<string, ToolHandler>): void {
     for (const [name, handler] of tools) {
-      this.toolHandlers.set(name, handler)
+      this.toolHandlers.set(normalizeToolName(name), handler)
     }
   }
 
@@ -303,10 +305,14 @@ export class ToolOrchestrator {
   submit(toolName: string, args: Record<string, any>, options: JobOptions = {}): Job {
     const id = uuidv4()
     const now = new Date().toISOString()
+    const normalizedToolName = normalizeToolName(toolName)
+    if (!normalizedToolName) {
+      throw new Error('toolName is required')
+    }
 
     const job: Job = {
       id,
-      toolName,
+      toolName: normalizedToolName,
       args,
       status: 'pending',
       priority: options.priority ?? 'normal',
