@@ -465,11 +465,27 @@ function initializeLocalDatabase(dbPath: string) {
       research_note TEXT,
       cwd TEXT,
       storage_mode TEXT NOT NULL CHECK (storage_mode IN ('cloud','local')) DEFAULT 'cloud',
+      favorite INTEGER NOT NULL DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
+  `)
+
+  // Ensure favorite column exists for older DBs
+  try {
+    const columns = db.prepare(`PRAGMA table_info(conversations)`).all() as { name: string }[]
+    const columnNames = new Set(columns.map(col => col.name))
+    if (!columnNames.has('favorite')) {
+      db.exec(`ALTER TABLE conversations ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0`)
+    }
+  } catch (error) {
+    console.warn('[LocalServer] Failed to migrate conversations table:', error)
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_favorite ON conversations(user_id, favorite);
   `)
 
   db.exec(`
@@ -712,6 +728,12 @@ function initializeLocalDatabase(dbPath: string) {
     getLocalConversations: db.prepare(
       "SELECT * FROM conversations WHERE user_id = ? AND storage_mode = 'local' ORDER BY updated_at DESC"
     ),
+    getFavoriteConversations: db.prepare(
+      'SELECT * FROM conversations WHERE user_id = ? AND favorite = 1 ORDER BY updated_at DESC'
+    ),
+    getFavoriteConversationsLimited: db.prepare(
+      'SELECT * FROM conversations WHERE user_id = ? AND favorite = 1 ORDER BY updated_at DESC LIMIT ?'
+    ),
     updateConversationResearchNote: db.prepare(
       'UPDATE conversations SET research_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ),
@@ -722,6 +744,7 @@ function initializeLocalDatabase(dbPath: string) {
     updateConversationProjectId: db.prepare(
       'UPDATE conversations SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ),
+    updateConversationFavorite: db.prepare('UPDATE conversations SET favorite = ? WHERE id = ?'),
 
     // Messages
     upsertMessage: db.prepare(`
@@ -4173,6 +4196,28 @@ function setupServer() {
     }
   })
 
+  // GET /api/local/conversations/favorites?userId=xxx&limit=xx
+  app.get('/api/local/conversations/favorites', (req, res) => {
+    try {
+      const userId = req.query.userId as string
+      const limitParam = req.query.limit as string | undefined
+      if (!userId) {
+        res.status(400).json({ error: 'userId required' })
+        return
+      }
+
+      const limit = limitParam ? Number(limitParam) : undefined
+      const conversations = Number.isFinite(limit)
+        ? statements.getFavoriteConversationsLimited.all(userId, limit)
+        : statements.getFavoriteConversations.all(userId)
+
+      res.json(conversations)
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error fetching favorite conversations:', error)
+      res.status(500).json({ error: 'Failed to fetch favorite conversations' })
+    }
+  })
+
   // POST /api/local/conversations
   app.post('/api/local/conversations', (req, res) => {
     try {
@@ -4265,6 +4310,35 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Error updating conversation:', error)
       res.status(500).json({ error: 'Failed to update conversation' })
+    }
+  })
+
+  // PATCH /api/local/conversations/:id/favorite
+  app.patch('/api/local/conversations/:id/favorite', (req, res) => {
+    try {
+      const { id } = req.params
+      const { favorite } = req.body || {}
+
+      if (favorite === undefined) {
+        res.status(400).json({ error: 'favorite required' })
+        return
+      }
+
+      const existing = statements.getConversationById.get(id)
+      if (!existing) {
+        res.status(404).json({ error: 'Conversation not found' })
+        return
+      }
+
+      const normalizedFavorite =
+        favorite === true || favorite === 1 || favorite === '1' || favorite === 'true' ? 1 : 0
+
+      statements.updateConversationFavorite.run(normalizedFavorite, id)
+      const updated = statements.getConversationById.get(id)
+      res.json(updated)
+    } catch (error) {
+      console.error('[LocalServer] Error updating conversation favorite:', error)
+      res.status(500).json({ error: 'Failed to update favorite' })
     }
   })
 

@@ -474,6 +474,36 @@ export function useRecentConversations(limit: number = 8) {
 }
 
 /**
+ * Fetch favorited conversations (local-only)
+ * Cache key: ['conversations', 'favorites', limit]
+ */
+export function useFavoritedConversations(limit: number | null = 8) {
+  const { userId: authUserId } = useAuth()
+  const userId = authUserId
+  const hasLimit = typeof limit === 'number' && Number.isFinite(limit)
+  const keyLimit = hasLimit ? limit : 'all'
+
+  return useQuery({
+    queryKey: ['conversations', 'favorites', keyLimit],
+    queryFn: async () => {
+      if (!userId) throw new Error('User not authenticated')
+      if (environment !== 'electron') return []
+
+      const params = new URLSearchParams({ userId })
+      if (hasLimit) {
+        params.set('limit', String(limit))
+      }
+      return localApi.get<Conversation[]>(`/local/conversations/favorites?${params}`)
+    },
+    enabled: !!userId && environment === 'electron',
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+/**
  * Fetch all data for a conversation (messages, tree, system prompt, context)
  * Cache key: ['conversations', conversationId, 'data']
  */

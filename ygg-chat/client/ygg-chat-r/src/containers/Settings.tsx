@@ -17,6 +17,7 @@ import {
   ProviderSettings,
   saveProviderSettings,
 } from '../helpers/providerSettingsStorage'
+import { loadDefaultConversationTab, saveDefaultConversationTab, type ConversationTab } from '../helpers/sidebarPreferences'
 import {
   addCustomVideo,
   clearCustomVideoLibrary,
@@ -88,6 +89,7 @@ const Settings: React.FC = () => {
   const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null)
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(() => loadProviderSettings())
+  const [defaultConversationTab, setDefaultConversationTab] = useState<ConversationTab>(() => loadDefaultConversationTab())
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     heartbeatTime: null,
     agentName: 'Global Agent',
@@ -208,6 +210,16 @@ const Settings: React.FC = () => {
     }
 
     timeoutRef.current = window.setTimeout(() => setStatusMessage(null), 4000)
+  }
+
+  const handleDefaultConversationTabChange = (value: string) => {
+    const nextTab: ConversationTab = value === 'favorites' ? 'favorites' : 'recent'
+    saveDefaultConversationTab(nextTab)
+    setDefaultConversationTab(nextTab)
+    showStatus({
+      type: 'success',
+      text: nextTab === 'favorites' ? 'Sidebar default set to Favorites.' : 'Sidebar default set to Recent.',
+    })
   }
 
   useEffect(() => {
@@ -549,6 +561,30 @@ const Settings: React.FC = () => {
         </header>
 
         {renderStatus()}
+
+        <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+          <div className='flex flex-col gap-1'>
+            <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Sidebar</h2>
+            <p className='text-sm text-stone-500 dark:text-stone-200'>
+              Choose which conversation tab opens by default.
+            </p>
+          </div>
+
+          <div className='mt-4 flex flex-col gap-3'>
+            <div className='flex flex-col gap-2'>
+              <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Default Conversation Tab</p>
+              <Select
+                value={defaultConversationTab}
+                onChange={handleDefaultConversationTabChange}
+                options={[
+                  { value: 'recent', label: 'Recent' },
+                  { value: 'favorites', label: 'Favorites' },
+                ]}
+                className='max-w-xs'
+              />
+            </div>
+          </div>
+        </section>
 
         {/* Provider Settings Section */}
         {import.meta.env.VITE_ENVIRONMENT === 'electron' && (

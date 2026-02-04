@@ -26,12 +26,14 @@ import {
   PaginatedConversationsResponse,
   useConversationsByProjectInfinite,
   useConversationsInfinite,
+  useFavoritedConversations,
   useMoveConversationToProject,
   useProject,
   useProjects,
   useResearchNotes,
   useSearchConversations,
 } from '../hooks/useQueries'
+import { localApi } from '../utils/api'
 import { parseId } from '../utils/helpers'
 import { DownloadAppModal } from './downloadApp'
 import EditProject from './EditProject'
@@ -80,6 +82,7 @@ const ConversationPage: React.FC = () => {
 
   // Fetch research notes for display in LowBar
   const { data: researchNotes = [], isLoading: notesLoading } = useResearchNotes()
+  const { data: favoriteConversations = [] } = useFavoritedConversations(null)
 
   // Flatten pages into single array for rendering
   const projectConversations = useMemo(
@@ -100,6 +103,10 @@ const ConversationPage: React.FC = () => {
   const fetchNextPage = projectId ? fetchNextProjectPage : fetchNextAllPage
   const hasNextPage = projectId ? hasNextProjectPage : hasNextAllPage
   const isFetchingNextPage = projectId ? isFetchingNextProjectPage : isFetchingNextAllPage
+  const favoriteConversationIds = useMemo(
+    () => new Set(favoriteConversations.map(conversation => conversation.id)),
+    [favoriteConversations]
+  )
 
   // Intersection observer for infinite scroll
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -258,6 +265,22 @@ const ConversationPage: React.FC = () => {
     e.stopPropagation()
     setConversationToMove(conv)
     setShowMoveModal(true)
+  }
+
+  const handleToggleFavorite = async (e: React.MouseEvent, conv: Conversation) => {
+    e.stopPropagation()
+    if (!isElectronMode) return
+
+    const nextFavorite = favoriteConversationIds.has(conv.id) ? 0 : 1
+
+    try {
+      await localApi.patch(`/local/conversations/${conv.id}/favorite`, { favorite: nextFavorite })
+      refetchConversations()
+      queryClient.invalidateQueries({ queryKey: ['conversations', 'favorites'] })
+      queryClient.invalidateQueries({ queryKey: ['conversations', 'recent'] })
+    } catch (error) {
+      console.error('Failed to update conversation favorite:', error)
+    }
   }
 
   const handleSelectDestinationProject = (project: { id: string; name: string }) => {
@@ -636,64 +659,85 @@ const ConversationPage: React.FC = () => {
                     )}
                   </li>
                 )}
-                {displayedConversations.map((conv, index) => (
-                  <li
-                    key={conv.id}
-                    className='rounded-4xl px-3 py-3 sm:p-2 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 cursor-pointer border-indigo-100 dark:border-red-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-700/50 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-700 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
-                    onClick={() => handleSelect(conv)}
-                  >
-                    <div className='flex items-center justify-between'>
-                      <div className='flex items-center gap-2 flex-1 min-w-0'>
-                        <span className='font-semibold dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] truncate'>
-                          {String(index + 1).padStart(2, '0')}. {conv.title || `Conversation ${conv.id}`}
-                        </span>
-                        {conv.storage_mode === 'local' && (
-                          <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 shrink-0'>
-                            Local
-                          </span>
-                        )}
-                        {isElectronMode && conv.storage_mode === 'cloud' && (
-                          <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 shrink-0'>
-                            Cloud
-                          </span>
-                        )}
-                      </div>
-                      <div className='flex items-center gap-1 relative'>
-                        {/* Edit Button */}
-                        <Button
-                          variant='outline2'
-                          size='circle'
-                          rounded='full'
-                          className='px-3 py-3 acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
-                          onClick={e => handleEditClick(e, conv)}
-                        >
-                          <i className='bx bx-dots-horizontal-rounded text-lg' aria-hidden='true'></i>
-                        </Button>
+                {displayedConversations.map((conv, index) => {
+                  const isFavorite = favoriteConversationIds.has(conv.id)
 
-                        {/* Delete Button */}
-                        <Button
-                          variant='outline2'
-                          size='circle'
-                          rounded='full'
-                          className='px-3 py-3 acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
-                          onClick={
-                            (e => {
-                              ;(e as unknown as React.MouseEvent).stopPropagation()
-                              handleDelete(conv)
-                            }) as unknown as () => void
-                          }
-                        >
-                          <i className='bx bx-trash-alt text-lg' aria-hidden='true'></i>
-                        </Button>
+                  return (
+                    <li
+                      key={conv.id}
+                      className='rounded-4xl px-3 py-3 sm:p-2 md:px-4 acrylic-light md:py-2 lg:px-3.5 lg:pt-2 lg:pb-2.5 xl:px-4 xl:py-3 2xl:px-4 2xl:py-4 3xl:p-4 4xl:p-4 mb-4 sm:mb-3 md:mb-3 lg:mb-3 xl:mb-4 2xl:mb-4 3xl:mb-6 bg-neutral-50 cursor-pointer border-indigo-100 dark:border-red-600 dark:bg-yBlack-900 hover:bg-neutral-100 dark:outline-1 dark:outline-neutral-700/50 dark:hover:bg-yBlack-800 dark:hover:outline-neutral-700 group shadow-[0px_0px_8px_-2px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_8px_1px_rgba(0,0,0,0.65)]'
+                      onClick={() => handleSelect(conv)}
+                    >
+                      <div className='flex items-center justify-between'>
+                        <div className='flex items-center gap-2 flex-1 min-w-0'>
+                          <span className='font-semibold dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[14px] sm:text-[13px] md:text-[13px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] truncate'>
+                            {String(index + 1).padStart(2, '0')}. {conv.title || `Conversation ${conv.id}`}
+                          </span>
+                          {conv.storage_mode === 'local' && (
+                            <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 shrink-0'>
+                              Local
+                            </span>
+                          )}
+                          {isElectronMode && conv.storage_mode === 'cloud' && (
+                            <span className='inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 shrink-0'>
+                              Cloud
+                            </span>
+                          )}
+                        </div>
+                        <div className='flex items-center gap-1 relative'>
+                          {isElectronMode && (
+                            <Button
+                              variant='outline2'
+                              size='circle'
+                              rounded='full'
+                              className='px-3 py-3 acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
+                              onClick={e => handleToggleFavorite(e, conv)}
+                              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                            >
+                              <i
+                                className={`bx ${isFavorite ? 'bxs-star' : 'bx-star'} text-lg ${
+                                  isFavorite ? 'text-yellow-500' : ''
+                                }`}
+                                aria-hidden='true'
+                              ></i>
+                            </Button>
+                          )}
+                          {/* Edit Button */}
+                          <Button
+                            variant='outline2'
+                            size='circle'
+                            rounded='full'
+                            className='px-3 py-3 acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
+                            onClick={e => handleEditClick(e, conv)}
+                          >
+                            <i className='bx bx-dots-horizontal-rounded text-lg' aria-hidden='true'></i>
+                          </Button>
+
+                          {/* Delete Button */}
+                          <Button
+                            variant='outline2'
+                            size='circle'
+                            rounded='full'
+                            className='px-3 py-3 acrylic-ultra-light dark:shadow-[0px_0px_4px_1px_rgba(0,0,0,0.15)] hover:scale-105 transition-transform duration-300 active:scale-95 shrink-0'
+                            onClick={
+                              (e => {
+                                ;(e as unknown as React.MouseEvent).stopPropagation()
+                                handleDelete(conv)
+                              }) as unknown as () => void
+                            }
+                          >
+                            <i className='bx bx-trash-alt text-lg' aria-hidden='true'></i>
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    {conv.created_at && (
-                      <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[11px] md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[16px]'>
-                        {new Date(conv.created_at).toLocaleString()}
-                      </div>
-                    )}
-                  </li>
-                ))}
+                      {conv.created_at && (
+                        <div className='text-xs mt-2 text-neutral-900 dark:text-neutral-300 transition-transform duration-100 group-active:scale-99 text-[12px] sm:text-[11px] md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[16px]'>
+                          {new Date(conv.created_at).toLocaleString()}
+                        </div>
+                      )}
+                    </li>
+                  )
+                })}
                 {/* {displayedConversations.length === 0 && !loading && !isSearching && (
                   <p className='dark:text-neutral-300 rounded-3xl p-4 acrylic-light'>
                     {isShowingSearchResults ? `No conversations found for "${searchQuery}"` : 'No conversations yet.'}

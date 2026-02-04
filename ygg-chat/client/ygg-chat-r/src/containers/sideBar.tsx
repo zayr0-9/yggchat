@@ -4,9 +4,14 @@ import { ConversationId, Project } from '../../../../shared/types'
 import { Button, TextField } from '../components'
 import { chatSliceActions } from '../features/chats'
 import { activeConversationIdSet } from '../features/conversations'
+import {
+  loadDefaultConversationTab,
+  SIDEBAR_DEFAULT_TAB_CHANGE_EVENT,
+  type ConversationTab,
+} from '../helpers/sidebarPreferences'
 // import { searchActions, selectSearchLoading, selectSearchQuery, selectSearchResults } from '../features/search'
 import { useAppDispatch } from '../hooks/redux'
-import { useProjects, useRecentConversations } from '../hooks/useQueries'
+import { useFavoritedConversations, useProjects, useRecentConversations } from '../hooks/useQueries'
 
 interface SideBarProps {
   limit?: number
@@ -26,6 +31,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
   // Search state for filtering projects
   const [searchQuery, setSearchQuery] = useState('')
+  const [conversationTab, setConversationTab] = useState<ConversationTab>(() => loadDefaultConversationTab())
 
   // Fetch projects using React Query
   const { data: fetchedProjects = [], isLoading: projectsLoading, error: projectsError } = useProjects()
@@ -42,12 +48,37 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
     )
   }, [fetchedProjects, searchQuery])
 
-  // Fetch recent conversations using React Query (cached for 5 minutes)
-  const { data: conversations = [], isLoading: conversationsLoading, error: queryError } = useRecentConversations(limit)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleDefaultTabChange = (event: CustomEvent<ConversationTab>) => {
+      setConversationTab(event.detail)
+    }
+    window.addEventListener(SIDEBAR_DEFAULT_TAB_CHANGE_EVENT, handleDefaultTabChange as EventListener)
+    return () => {
+      window.removeEventListener(SIDEBAR_DEFAULT_TAB_CHANGE_EVENT, handleDefaultTabChange as EventListener)
+    }
+  }, [])
+
+  // Fetch recent and favorited conversations using React Query (cached for 5 minutes)
+  const { data: recentConversations = [], isLoading: recentLoading, error: recentError } = useRecentConversations(limit)
+  const { data: favoriteConversations = [], isLoading: favoritesLoading, error: favoritesError } =
+    useFavoritedConversations(limit)
+
+  const visibleConversations = conversationTab === 'favorites' ? favoriteConversations : recentConversations
 
   // Use appropriate loading/error state based on page
-  const loading = isChatPage ? projectsLoading : conversationsLoading
-  const error = isChatPage ? (projectsError ? String(projectsError) : null) : queryError ? String(queryError) : null
+  const loading = isChatPage ? projectsLoading : conversationTab === 'favorites' ? favoritesLoading : recentLoading
+  const error = isChatPage
+    ? projectsError
+      ? String(projectsError)
+      : null
+    : conversationTab === 'favorites'
+      ? favoritesError
+        ? String(favoritesError)
+        : null
+      : recentError
+        ? String(recentError)
+        : null
 
   // Search functionality
   // const searchLoading = useAppSelector(selectSearchLoading)
@@ -112,7 +143,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
   }
 
   const handleSelect = (id: ConversationId) => {
-    const conversation = conversations.find(c => c.id === id)
+    const conversation = visibleConversations.find(c => c.id === id)
     dispatch(chatSliceActions.conversationSet(id))
     dispatch(activeConversationIdSet(id))
     navigate(`/chat/${conversation?.project_id || 'unknown'}/${id}`)
@@ -145,13 +176,15 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
   return (
     <aside
       className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-md rounded-r-xl border-r border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-16 ' : 'w-64 md:w-72 lg:w-80 xl:w-90 '} ${className}`}
-      aria-label={isChatPage ? 'Projects' : 'Recent conversations'}
+      aria-label={
+        isChatPage ? 'Projects' : conversationTab === 'favorites' ? 'Favorite conversations' : 'Recent conversations'
+      }
     >
       {/* Toggle Button */}
       <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
         {!isCollapsed && (
           <h2 className='text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] pl-2 font-semibold text-neutral-700 dark:text-neutral-200 truncate'>
-            {isChatPage ? 'Projects' : 'Recent Chats'}
+            {isChatPage ? 'Projects' : conversationTab === 'favorites' ? 'Favorites' : 'Recent Chats'}
           </h2>
         )}
         <Button
@@ -165,6 +198,35 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
           <i className={`bx ${isCollapsed ? 'bx-chevron-right' : 'bx-chevron-left'} text-2xl `} aria-hidden='true'></i>
         </Button>
       </div>
+
+      {!isChatPage && !isCollapsed && (
+        <div className='px-2 pb-2'>
+          <div className='flex items-center gap-1 rounded-full bg-neutral-200/60 dark:bg-neutral-800/60 p-1'>
+            <button
+              type='button'
+              onClick={() => setConversationTab('recent')}
+              className={`flex-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                conversationTab === 'recent'
+                  ? 'bg-white/80 text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100'
+                  : 'text-neutral-600 hover:bg-white/40 dark:text-neutral-300 dark:hover:bg-neutral-700/60'
+              }`}
+            >
+              Recent
+            </button>
+            <button
+              type='button'
+              onClick={() => setConversationTab('favorites')}
+              className={`flex-1 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                conversationTab === 'favorites'
+                  ? 'bg-white/80 text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100'
+                  : 'text-neutral-600 hover:bg-white/40 dark:text-neutral-300 dark:hover:bg-neutral-700/60'
+              }`}
+            >
+              Favorites
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Search Section */}
       {!isCollapsed && isChatPage && (
@@ -284,7 +346,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
         ) : (
           // Recent Conversations List
           <>
-            {conversations.map(conv => {
+            {visibleConversations.map(conv => {
               const isActive = activeConversationId === conv.id
               const projectName = conv.project_id ? projects.find(p => p.id === conv.project_id)?.name : undefined
 
@@ -347,11 +409,11 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                 </div>
               )
             })}
-            {conversations.length === 0 && !loading && !error && (
+            {visibleConversations.length === 0 && !loading && !error && (
               <div
                 className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${isCollapsed ? 'hidden' : ''}`}
               >
-                No recent conversations
+                {conversationTab === 'favorites' ? 'No favorite conversations' : 'No recent conversations'}
               </div>
             )}
           </>

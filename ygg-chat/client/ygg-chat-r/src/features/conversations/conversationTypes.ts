@@ -12,6 +12,7 @@ export interface Conversation {
   research_note: string | null
   storage_mode?: StorageMode
   cwd?: string | null
+  favorite?: number
 }
 
 export interface ConversationsState {

@@ -162,6 +162,7 @@ export interface ConversationRecord {
   conversation_context: string | null
   research_note: string | null
   cwd?: string | null
+  favorite?: number
   created_at: string
   updated_at: string
   storage_mode?: StorageMode
