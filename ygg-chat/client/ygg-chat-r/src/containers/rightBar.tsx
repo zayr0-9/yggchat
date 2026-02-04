@@ -535,7 +535,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
               className={`flex-1 px-2 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
                 activeTab === 'note'
                   ? 'bg-neutral-100 dark:bg-neutral-900 text-stone-800 dark:text-stone-200 border-1 scale-102 border-neutral-300 dark:border-neutral-600 shadow-[0px_0.5px_3px_1px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.25)]'
-                  : 'bg-neutral-100 dark:bg-neutral-900 text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
+                  : 'bg-transparent text-stone-600 dark:text-stone-400 hover:scale-101 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 border-1 border-neutral-300 dark:border-neutral-800'
               }`}
             >
               Note
