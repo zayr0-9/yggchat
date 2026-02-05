@@ -2148,7 +2148,7 @@ export const sendMessage = createAsyncThunk<
                 modelName,
                 systemPrompt,
                 messages: chatgptMessages,
-                tools: getAllTools(),
+                tools: getToolsForAI(),
                 reasoningConfig,
               },
               {
@@ -2559,7 +2559,7 @@ export const sendMessage = createAsyncThunk<
                 modelName,
                 systemPrompt,
                 messages: chatgptMessages,
-                tools: getAllTools(),
+                tools: getToolsForAI(),
                 reasoningConfig,
               },
               {
