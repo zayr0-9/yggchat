@@ -2692,11 +2692,16 @@ function Chat() {
   // Calculate token limits: shared context budget between input and output
   const tokenLimits = useMemo(() => {
     const usdValue = current_credits / 100 // Convert credits to USD
+    const providerSlug = (providers.currentProvider || '').toLowerCase().replace(/\s+/g, '')
+    const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
 
     // Model context limit (shared between input + output)
     const totalContextLimit = selectedModel?.contextLength || 128_000
-    // Hard cap on output tokens (some models have this limit regardless of context)
-    const maxCompletionCap = selectedModel?.maxCompletionTokens || totalContextLimit
+    // For OpenAI ChatGPT, use the full context window as the hard cap.
+    // Other providers may enforce a stricter completion cap.
+    const maxCompletionCap = isOpenAIChatGPT
+      ? totalContextLimit
+      : (selectedModel?.maxCompletionTokens ?? totalContextLimit)
 
     // Cost is per 1K tokens: cost = (tokens / 1000) * costPer1K
     // So: tokens = (usd * 1000) / costPer1K
@@ -2729,6 +2734,7 @@ function Chat() {
     selectedModel?.completionCost,
     selectedModel?.contextLength,
     selectedModel?.maxCompletionTokens,
+    providers.currentProvider,
     current_credits,
     tokenUsage.inputTokens,
     tokenUsage.outputTokens,

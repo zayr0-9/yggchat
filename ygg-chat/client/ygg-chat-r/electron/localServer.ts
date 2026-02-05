@@ -16,29 +16,29 @@ import { WebSocket, WebSocketServer } from 'ws'
 // Tool imports
 import { registerLocalOperationsRoutes } from './localOperations.js'
 import { createToolsStatements, initializeToolsSchema, pruneOldTools, registerToolsRoutes } from './localToolsRoutes.js'
+import { mcpManager } from './mcp/mcpManager.js'
+import { registerMcpRoutes } from './mcp/mcpRoutes.js'
 import { registerProxyRoutes } from './proxyGateway.js'
+import { skillRegistry } from './skills/skillLoader.js'
+import { execute as executeSkillManager } from './skills/skillManager.js'
+import { registerSkillRoutes } from './skills/skillRoutes.js'
 import { runBashCommand } from './tools/bash.js'
 import { browseWeb } from './tools/browseWeb.js'
 import { CCResponse, executeClaudeCode, getAvailableSlashCommands, getSession, setSession } from './tools/claudeCode.js'
 import { createTextFile } from './tools/createFile.js'
 import { customToolRegistry, ToolResult } from './tools/customToolLoader.js'
 import { execute as executeCustomToolManager } from './tools/customToolManager.js'
-import { execute as executeMcpManagerTool } from './tools/mcpManagerTool.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
 import { editFile } from './tools/editFile.js'
 import { globSearch } from './tools/glob.js'
 import htmlRenderer from './tools/htmlRenderer.js'
+import { execute as executeMcpManagerTool } from './tools/mcpManagerTool.js'
 import { JobFilter, JobOptions, toolOrchestrator } from './tools/orchestrator/index.js'
 import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
-import { skillRegistry } from './skills/skillLoader.js'
-import { execute as executeSkillManager } from './skills/skillManager.js'
-import { registerSkillRoutes } from './skills/skillRoutes.js'
-import { mcpManager } from './mcp/mcpManager.js'
-import { registerMcpRoutes } from './mcp/mcpRoutes.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -843,9 +843,7 @@ function initializeLocalDatabase(dbPath: string) {
     endAgentSession: db.prepare(
       'UPDATE agent_sessions SET ended_at = ?, summary_message_id = ?, rollover_reason = ? WHERE id = ?'
     ),
-    getLatestAgentSession: db.prepare(
-      'SELECT * FROM agent_sessions ORDER BY started_at DESC LIMIT 1'
-    ),
+    getLatestAgentSession: db.prepare('SELECT * FROM agent_sessions ORDER BY started_at DESC LIMIT 1'),
     getAgentSessionById: db.prepare('SELECT * FROM agent_sessions WHERE id = ?'),
 
     // Agent Tasks
@@ -854,9 +852,7 @@ function initializeLocalDatabase(dbPath: string) {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `),
     getAgentTasks: db.prepare('SELECT * FROM agent_tasks ORDER BY created_at ASC'),
-    getAgentTasksByStatus: db.prepare(
-      'SELECT * FROM agent_tasks WHERE status = ? ORDER BY created_at ASC'
-    ),
+    getAgentTasksByStatus: db.prepare('SELECT * FROM agent_tasks WHERE status = ? ORDER BY created_at ASC'),
     getAgentTaskById: db.prepare('SELECT * FROM agent_tasks WHERE id = ?'),
     updateAgentTaskStatus: db.prepare(`
         UPDATE agent_tasks
@@ -1386,27 +1382,19 @@ function setupServer() {
         return
       }
 
-      const {
-        heartbeatTime,
-        agentName,
-        model,
-        modelContextLength,
-        loopIntervalMs,
-        autoResume,
-        toolAllowlist,
-      } = req.body as {
-        heartbeatTime?: string | null
-        agentName?: string | null
-        model?: string | null
-        modelContextLength?: number | null
-        loopIntervalMs?: number | null
-        autoResume?: boolean | number | null
-        toolAllowlist?: string[] | null
-      }
+      const { heartbeatTime, agentName, model, modelContextLength, loopIntervalMs, autoResume, toolAllowlist } =
+        req.body as {
+          heartbeatTime?: string | null
+          agentName?: string | null
+          model?: string | null
+          modelContextLength?: number | null
+          loopIntervalMs?: number | null
+          autoResume?: boolean | number | null
+          toolAllowlist?: string[] | null
+        }
       const normalized =
         typeof heartbeatTime === 'string' && heartbeatTime.trim().length > 0 ? heartbeatTime.trim() : null
-      const normalizedAgentName =
-        typeof agentName === 'string' && agentName.trim().length > 0 ? agentName.trim() : null
+      const normalizedAgentName = typeof agentName === 'string' && agentName.trim().length > 0 ? agentName.trim() : null
       const normalizedModel = typeof model === 'string' && model.trim().length > 0 ? model.trim() : null
       const normalizedModelContext =
         typeof modelContextLength === 'number' && Number.isFinite(modelContextLength) && modelContextLength > 0
@@ -1416,8 +1404,7 @@ function setupServer() {
         typeof loopIntervalMs === 'number' && Number.isFinite(loopIntervalMs) && loopIntervalMs > 0
           ? Math.floor(loopIntervalMs)
           : null
-      const normalizedAutoResume =
-        autoResume === null || autoResume === undefined ? null : autoResume ? 1 : 0
+      const normalizedAutoResume = autoResume === null || autoResume === undefined ? null : autoResume ? 1 : 0
       const normalizedAllowlist =
         Array.isArray(toolAllowlist) && toolAllowlist.length > 0 ? JSON.stringify(toolAllowlist) : null
 
@@ -1436,7 +1423,9 @@ function setupServer() {
         normalizedAllowlist
       )
 
-      const row = statements.getAgentSettings.get() as { heartbeat_time?: string | null; updated_at?: string } | undefined
+      const row = statements.getAgentSettings.get() as
+        | { heartbeat_time?: string | null; updated_at?: string }
+        | undefined
       res.json({ success: true, settings: row })
     } catch (error) {
       console.error('[LocalServer] ❌ Error updating agent settings:', error)
@@ -1476,14 +1465,7 @@ function setupServer() {
         res.status(500).json({ error: 'Database not initialized' })
         return
       }
-      const {
-        status,
-        sessionId,
-        conversationId,
-        streamId,
-        lastRunAt,
-        nextRunAt,
-      } = req.body as {
+      const { status, sessionId, conversationId, streamId, lastRunAt, nextRunAt } = req.body as {
         status?: string
         sessionId?: number | null
         conversationId?: string | null
@@ -1524,7 +1506,13 @@ function setupServer() {
         res.status(500).json({ error: 'Database not initialized' })
         return
       }
-      const { description, priority = 'normal', source = 'user', payload, sessionId } = req.body as {
+      const {
+        description,
+        priority = 'normal',
+        source = 'user',
+        payload,
+        sessionId,
+      } = req.body as {
         description?: string
         priority?: string
         source?: string
@@ -2188,6 +2176,14 @@ function setupServer() {
   app.get('/api/openai/models', (_req, res) => {
     // Return hardcoded list of ChatGPT models available with Plus/Pro subscription
     const models = [
+      {
+        id: 'gpt-5.3-codex',
+        name: 'GPT-5.3 Codex',
+        displayName: 'GPT-5.3 Codex',
+        description: 'Latest GPT-5.3 Codex model for coding tasks',
+        contextLength: 200000,
+        maxCompletionTokens: 16384,
+      },
       {
         id: 'gpt-5.2-codex',
         name: 'GPT-5.2 Codex',
@@ -3090,220 +3086,219 @@ function setupServer() {
     '/api/app-store/community/upload',
     express.raw({ type: 'application/zip', limit: '500mb' }),
     async (req, res) => {
-    try {
-      if (!req.body || (req.body as Buffer).length === 0) {
-        res.status(400).json({ success: false, error: 'Zip payload is required.' })
-        return
+      try {
+        if (!req.body || (req.body as Buffer).length === 0) {
+          res.status(400).json({ success: false, error: 'Zip payload is required.' })
+          return
+        }
+
+        const authHeader = req.headers.authorization
+        if (!authHeader) {
+          res.status(401).json({ success: false, error: 'Authorization header is required.' })
+          return
+        }
+
+        const zipBuffer = req.body instanceof Buffer ? req.body : Buffer.from(req.body)
+        const filenameHeader = req.headers['x-app-store-filename']
+
+        const response = await fetch(buildRemoteApiUrl('/app-store/community/upload'), {
+          method: 'POST',
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/zip',
+            ...(filenameHeader ? { 'x-app-store-filename': String(filenameHeader) } : {}),
+          },
+          body: zipBuffer,
+        })
+
+        const data = await response.json()
+        res.status(response.status).json(data)
+      } catch (error) {
+        console.error('[LocalServer] Failed to upload community app:', error)
+        res.status(500).json({ success: false, error: 'Failed to upload community app' })
       }
-
-      const authHeader = req.headers.authorization
-      if (!authHeader) {
-        res.status(401).json({ success: false, error: 'Authorization header is required.' })
-        return
-      }
-
-      const zipBuffer = req.body instanceof Buffer ? req.body : Buffer.from(req.body)
-      const filenameHeader = req.headers['x-app-store-filename']
-
-      const response = await fetch(buildRemoteApiUrl('/app-store/community/upload'), {
-        method: 'POST',
-        headers: {
-          Authorization: authHeader,
-          'Content-Type': 'application/zip',
-          ...(filenameHeader ? { 'x-app-store-filename': String(filenameHeader) } : {}),
-        },
-        body: zipBuffer,
-      })
-
-      const data = await response.json()
-      res.status(response.status).json(data)
-    } catch (error) {
-      console.error('[LocalServer] Failed to upload community app:', error)
-      res.status(500).json({ success: false, error: 'Failed to upload community app' })
     }
-  })
+  )
 
   // POST /api/app-store/validate-upload - Validate community app zip before upload
   app.post(
     '/api/app-store/validate-upload',
     express.raw({ type: 'application/zip', limit: '500mb' }),
     async (req, res) => {
-    try {
-      if (!req.body || (req.body as Buffer).length === 0) {
-        res.status(400).json({ success: false, error: 'Zip payload is required.' })
-        return
-      }
-
-      const zipBuffer = req.body instanceof Buffer ? req.body : Buffer.from(req.body)
-
-      const zip = new AdmZip(zipBuffer)
-      const entries = zip.getEntries()
-
-      if (!entries || entries.length === 0) {
-        res.status(400).json({ success: false, error: 'Zip file is empty.' })
-        return
-      }
-
-      if (entries.length > MAX_UPLOAD_ENTRIES) {
-        res.status(400).json({ success: false, error: 'Zip file contains too many entries.' })
-        return
-      }
-
-      const stripPrefix = detectZipStripPrefix(entries)
-      const topLevel = new Set<string>()
-      let totalUnpacked = 0
-      let containsExecutables = false
-      let hasRootFile = false
-      const normalizedEntries: Array<{ entry: any; name: string }> = []
-
-      for (const entry of entries) {
-        let entryName = sanitizeZipEntryName(entry.entryName)
-        if (stripPrefix && entryName.startsWith(stripPrefix)) {
-          entryName = entryName.slice(stripPrefix.length)
-        }
-        if (!entryName) continue
-        const lowerName = entryName.toLowerCase()
-        if (lowerName.startsWith('__macosx/')) {
-          continue
-        }
-        if (lowerName.endsWith('.ds_store') || lowerName.endsWith('thumbs.db')) {
-          continue
-        }
-        if (entryName.split('/').some(part => part === '..')) {
-          res.status(400).json({ success: false, error: 'Zip contains invalid path traversal entries.' })
+      try {
+        if (!req.body || (req.body as Buffer).length === 0) {
+          res.status(400).json({ success: false, error: 'Zip payload is required.' })
           return
         }
 
-        const isDirectory = entry.isDirectory || entryName.endsWith('/')
-        if (!entryName.includes('/') && !isDirectory) {
-          hasRootFile = true
+        const zipBuffer = req.body instanceof Buffer ? req.body : Buffer.from(req.body)
+
+        const zip = new AdmZip(zipBuffer)
+        const entries = zip.getEntries()
+
+        if (!entries || entries.length === 0) {
+          res.status(400).json({ success: false, error: 'Zip file is empty.' })
+          return
         }
 
-        const parts = entryName.split('/')
-        if (parts[0]) topLevel.add(parts[0])
+        if (entries.length > MAX_UPLOAD_ENTRIES) {
+          res.status(400).json({ success: false, error: 'Zip file contains too many entries.' })
+          return
+        }
 
-        if (!isDirectory) {
-          totalUnpacked += entry.header.size
-          const ext = path.extname(entryName).toLowerCase()
-          if (EXECUTABLE_EXTENSIONS.has(ext)) {
-            containsExecutables = true
+        const stripPrefix = detectZipStripPrefix(entries)
+        const topLevel = new Set<string>()
+        let totalUnpacked = 0
+        let containsExecutables = false
+        let hasRootFile = false
+        const normalizedEntries: Array<{ entry: any; name: string }> = []
+
+        for (const entry of entries) {
+          let entryName = sanitizeZipEntryName(entry.entryName)
+          if (stripPrefix && entryName.startsWith(stripPrefix)) {
+            entryName = entryName.slice(stripPrefix.length)
           }
+          if (!entryName) continue
+          const lowerName = entryName.toLowerCase()
+          if (lowerName.startsWith('__macosx/')) {
+            continue
+          }
+          if (lowerName.endsWith('.ds_store') || lowerName.endsWith('thumbs.db')) {
+            continue
+          }
+          if (entryName.split('/').some(part => part === '..')) {
+            res.status(400).json({ success: false, error: 'Zip contains invalid path traversal entries.' })
+            return
+          }
+
+          const isDirectory = entry.isDirectory || entryName.endsWith('/')
+          if (!entryName.includes('/') && !isDirectory) {
+            hasRootFile = true
+          }
+
+          const parts = entryName.split('/')
+          if (parts[0]) topLevel.add(parts[0])
+
+          if (!isDirectory) {
+            totalUnpacked += entry.header.size
+            const ext = path.extname(entryName).toLowerCase()
+            if (EXECUTABLE_EXTENSIONS.has(ext)) {
+              containsExecutables = true
+            }
+          }
+
+          normalizedEntries.push({ entry, name: entryName })
         }
 
-        normalizedEntries.push({ entry, name: entryName })
-      }
+        if (totalUnpacked > MAX_UPLOAD_UNPACKED_BYTES) {
+          res.status(400).json({ success: false, error: 'Zip file is too large when extracted.' })
+          return
+        }
 
-      if (totalUnpacked > MAX_UPLOAD_UNPACKED_BYTES) {
-        res.status(400).json({ success: false, error: 'Zip file is too large when extracted.' })
-        return
-      }
+        if (topLevel.size !== 1 || hasRootFile) {
+          res.status(400).json({
+            success: false,
+            error: 'Zip must contain a single top-level folder that holds your tool files.',
+          })
+          return
+        }
 
-      if (topLevel.size !== 1 || hasRootFile) {
-        res.status(400).json({
-          success: false,
-          error: 'Zip must contain a single top-level folder that holds your tool files.',
+        const toolDir = Array.from(topLevel)[0]
+        if (!toolDir || toolDir === '.' || toolDir === '..') {
+          res.status(400).json({ success: false, error: 'Invalid tool directory name in zip.' })
+          return
+        }
+
+        const definitionPath = `${toolDir}/definition.json`
+        const descriptionPath = `${toolDir}/description.json`
+        const indexPath = `${toolDir}/index.js`
+
+        const definitionEntry = normalizedEntries.find(item => item.name === definitionPath)
+        const descriptionEntry = normalizedEntries.find(item => item.name === descriptionPath)
+        const indexEntry = normalizedEntries.find(item => item.name === indexPath)
+
+        if (!definitionEntry || !descriptionEntry) {
+          res.status(400).json({
+            success: false,
+            error: 'Zip must include definition.json and description.json in the tool folder root.',
+          })
+          return
+        }
+
+        if (!indexEntry) {
+          res.status(400).json({ success: false, error: 'Zip must include index.js in the tool folder root.' })
+          return
+        }
+
+        const extraDefinition = normalizedEntries.find(
+          item => item.name.endsWith('/definition.json') && item.name !== definitionPath
+        )
+        if (extraDefinition) {
+          res.status(400).json({ success: false, error: 'Zip must include only one definition.json file.' })
+          return
+        }
+
+        const extraDescription = normalizedEntries.find(
+          item => item.name.endsWith('/description.json') && item.name !== descriptionPath
+        )
+        if (extraDescription) {
+          res.status(400).json({ success: false, error: 'Zip must include only one description.json file.' })
+          return
+        }
+
+        const definitionRaw = definitionEntry.entry.getData().toString('utf-8')
+        const descriptionRaw = descriptionEntry.entry.getData().toString('utf-8')
+
+        let definitionJson: any
+        let descriptionJson: any
+
+        try {
+          definitionJson = JSON.parse(definitionRaw)
+        } catch {
+          res.status(400).json({ success: false, error: 'definition.json must be valid JSON.' })
+          return
+        }
+
+        try {
+          descriptionJson = JSON.parse(descriptionRaw)
+        } catch {
+          res.status(400).json({ success: false, error: 'description.json must be valid JSON.' })
+          return
+        }
+
+        const definitionError = validateToolDefinition(definitionJson)
+        if (definitionError) {
+          res.status(400).json({ success: false, error: definitionError })
+          return
+        }
+
+        const descriptionError = validateDescription(descriptionJson)
+        if (descriptionError) {
+          res.status(400).json({ success: false, error: descriptionError })
+          return
+        }
+
+        const warnings: string[] = []
+        if (definitionJson.name !== toolDir && definitionJson.name !== toolDir.replace(/-/g, '_')) {
+          warnings.push('Tool folder name does not match definition.json name.')
+        }
+
+        res.json({
+          success: true,
+          appId: definitionJson.name,
+          toolDir,
+          description: descriptionJson,
+          definition: definitionJson,
+          containsExecutables,
+          warnings,
         })
-        return
+      } catch (error) {
+        console.error('[LocalServer] App store upload validation error:', error)
+        const msg = error instanceof Error ? error.message : String(error)
+        res.status(500).json({ success: false, error: msg })
       }
-
-      const toolDir = Array.from(topLevel)[0]
-      if (!toolDir || toolDir === '.' || toolDir === '..') {
-        res.status(400).json({ success: false, error: 'Invalid tool directory name in zip.' })
-        return
-      }
-
-      const definitionPath = `${toolDir}/definition.json`
-      const descriptionPath = `${toolDir}/description.json`
-      const indexPath = `${toolDir}/index.js`
-
-      const definitionEntry = normalizedEntries.find(item => item.name === definitionPath)
-      const descriptionEntry = normalizedEntries.find(item => item.name === descriptionPath)
-      const indexEntry = normalizedEntries.find(item => item.name === indexPath)
-
-      if (!definitionEntry || !descriptionEntry) {
-        res.status(400).json({
-          success: false,
-          error: 'Zip must include definition.json and description.json in the tool folder root.',
-        })
-        return
-      }
-
-      if (!indexEntry) {
-        res.status(400).json({ success: false, error: 'Zip must include index.js in the tool folder root.' })
-        return
-      }
-
-      const extraDefinition = normalizedEntries.find(
-        item => item.name.endsWith('/definition.json') && item.name !== definitionPath
-      )
-      if (extraDefinition) {
-        res.status(400).json({ success: false, error: 'Zip must include only one definition.json file.' })
-        return
-      }
-
-      const extraDescription = normalizedEntries.find(
-        item => item.name.endsWith('/description.json') && item.name !== descriptionPath
-      )
-      if (extraDescription) {
-        res.status(400).json({ success: false, error: 'Zip must include only one description.json file.' })
-        return
-      }
-
-      const definitionRaw = definitionEntry.entry.getData().toString('utf-8')
-      const descriptionRaw = descriptionEntry.entry.getData().toString('utf-8')
-
-      let definitionJson: any
-      let descriptionJson: any
-
-      try {
-        definitionJson = JSON.parse(definitionRaw)
-      } catch {
-        res.status(400).json({ success: false, error: 'definition.json must be valid JSON.' })
-        return
-      }
-
-      try {
-        descriptionJson = JSON.parse(descriptionRaw)
-      } catch {
-        res.status(400).json({ success: false, error: 'description.json must be valid JSON.' })
-        return
-      }
-
-      const definitionError = validateToolDefinition(definitionJson)
-      if (definitionError) {
-        res.status(400).json({ success: false, error: definitionError })
-        return
-      }
-
-      const descriptionError = validateDescription(descriptionJson)
-      if (descriptionError) {
-        res.status(400).json({ success: false, error: descriptionError })
-        return
-      }
-
-      const warnings: string[] = []
-      if (
-        definitionJson.name !== toolDir &&
-        definitionJson.name !== toolDir.replace(/-/g, '_')
-      ) {
-        warnings.push('Tool folder name does not match definition.json name.')
-      }
-
-      res.json({
-        success: true,
-        appId: definitionJson.name,
-        toolDir,
-        description: descriptionJson,
-        definition: definitionJson,
-        containsExecutables,
-        warnings,
-      })
-    } catch (error) {
-      console.error('[LocalServer] App store upload validation error:', error)
-      const msg = error instanceof Error ? error.message : String(error)
-      res.status(500).json({ success: false, error: msg })
     }
-  })
+  )
 
   // POST /api/app-store/install - Download and install an app package into custom tools
   app.post('/api/app-store/install', async (req, res) => {
@@ -4330,8 +4325,7 @@ function setupServer() {
         return
       }
 
-      const normalizedFavorite =
-        favorite === true || favorite === 1 || favorite === '1' || favorite === 'true' ? 1 : 0
+      const normalizedFavorite = favorite === true || favorite === 1 || favorite === '1' || favorite === 'true' ? 1 : 0
 
       statements.updateConversationFavorite.run(normalizedFavorite, id)
       const updated = statements.getConversationById.get(id)

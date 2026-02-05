@@ -765,6 +765,7 @@ const convertToServerToolFormat = (tool: ToolDefinition) => ({
 })
 
 const subagentAbortControllersByStream = new Map<string, Set<AbortController>>()
+const generationAbortControllersByStream = new Map<string, Set<AbortController>>()
 
 const registerSubagentAbortController = (streamId: string | null | undefined, controller: AbortController) => {
   if (!streamId) return () => {}
@@ -796,6 +797,38 @@ const abortSubagentControllers = (streamId?: string | null) => {
     controllers.forEach(controller => controller.abort())
   }
   subagentAbortControllersByStream.clear()
+}
+
+const registerGenerationAbortController = (streamId: string | null | undefined, controller: AbortController) => {
+  if (!streamId) return () => {}
+  let controllers = generationAbortControllersByStream.get(streamId)
+  if (!controllers) {
+    controllers = new Set()
+    generationAbortControllersByStream.set(streamId, controllers)
+  }
+  controllers.add(controller)
+  return () => {
+    const set = generationAbortControllersByStream.get(streamId)
+    if (!set) return
+    set.delete(controller)
+    if (set.size === 0) generationAbortControllersByStream.delete(streamId)
+  }
+}
+
+const abortGenerationControllers = (streamId?: string | null) => {
+  if (streamId) {
+    const controllers = generationAbortControllersByStream.get(streamId)
+    if (controllers) {
+      controllers.forEach(controller => controller.abort())
+      generationAbortControllersByStream.delete(streamId)
+    }
+    return
+  }
+
+  for (const controllers of generationAbortControllersByStream.values()) {
+    controllers.forEach(controller => controller.abort())
+  }
+  generationAbortControllersByStream.clear()
 }
 
 /**
@@ -1714,10 +1747,12 @@ export const sendMessage = createAsyncThunk<
     )
 
     let controller: AbortController | undefined
+    let unregisterGenerationAbortController = () => {}
 
     try {
       controller = new AbortController()
       signal.addEventListener('abort', () => controller?.abort())
+      unregisterGenerationAbortController = registerGenerationAbortController(streamId, controller)
 
       const state = getState() as RootState
       const { messages: currentMessages } = state.chat.conversation
@@ -2178,6 +2213,7 @@ export const sendMessage = createAsyncThunk<
                     currentTurnHistory.push(assistantMsg)
                   }
                 },
+                signal: controller.signal,
               }
             )
 
@@ -2592,6 +2628,7 @@ export const sendMessage = createAsyncThunk<
                     currentTurnHistory.push(chunk.message)
                   }
                 },
+                signal: controller.signal,
               }
             )
 
@@ -3190,6 +3227,8 @@ export const sendMessage = createAsyncThunk<
       const message = error instanceof Error ? error.message : 'Failed to send message'
       dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
+    } finally {
+      unregisterGenerationAbortController()
     }
   }
 )
@@ -3384,10 +3423,12 @@ export const editMessageWithBranching = createAsyncThunk<
     )
 
     let controller: AbortController | undefined
+    let unregisterGenerationAbortController = () => {}
 
     try {
       controller = new AbortController()
       signal.addEventListener('abort', () => controller?.abort())
+      unregisterGenerationAbortController = registerGenerationAbortController(streamId, controller)
 
       const currentPathIds = state.chat.conversation.currentPath.filter(id => id !== 'root')
       // Truncate path to only include messages strictly before the originalMessageId
@@ -3857,6 +3898,7 @@ export const editMessageWithBranching = createAsyncThunk<
                   currentTurnHistory.push(assistantMsg)
                 }
               },
+              signal: controller.signal,
             }
           )
 
@@ -4407,6 +4449,8 @@ export const editMessageWithBranching = createAsyncThunk<
       const message = error instanceof Error ? error.message : 'Failed to edit message'
       dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
+    } finally {
+      unregisterGenerationAbortController()
     }
   }
 )
@@ -4438,10 +4482,12 @@ export const sendMessageToBranch = createAsyncThunk<
     )
 
     let controller: AbortController | undefined
+    let unregisterGenerationAbortController = () => {}
 
     try {
       controller = new AbortController()
       signal.addEventListener('abort', () => controller?.abort())
+      unregisterGenerationAbortController = registerGenerationAbortController(streamId, controller)
 
       const state = getState() as RootState
 
@@ -4849,6 +4895,7 @@ export const sendMessageToBranch = createAsyncThunk<
                   currentTurnHistory.push(assistantMsg)
                 }
               },
+              signal: controller.signal,
             }
           )
 
@@ -5322,6 +5369,8 @@ export const sendMessageToBranch = createAsyncThunk<
       const message = error instanceof Error ? error.message : 'Failed to send message'
       dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
+    } finally {
+      unregisterGenerationAbortController()
     }
   }
 )
@@ -5958,6 +6007,7 @@ export const abortGeneration = createAsyncThunk<
   { streamId?: string | null; messageId?: MessageId | null },
   { state: RootState }
 >('chat/abortGeneration', async ({ streamId, messageId }, { dispatch }) => {
+  abortGenerationControllers(streamId)
   abortSubagentControllers(streamId)
 
   if (streamId) {
@@ -6288,10 +6338,12 @@ export const sendCCMessage = createAsyncThunk<
     )
 
     let controller: AbortController | undefined
+    let unregisterGenerationAbortController = () => {}
 
     try {
       controller = new AbortController()
       signal.addEventListener('abort', () => controller?.abort())
+      unregisterGenerationAbortController = registerGenerationAbortController(streamId, controller)
 
       // Prepare request body
       const requestBody: any = {
@@ -6441,6 +6493,8 @@ export const sendCCMessage = createAsyncThunk<
       const message = error instanceof Error ? error.message : 'Failed to send CC message'
       dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
+    } finally {
+      unregisterGenerationAbortController()
     }
   }
 )
@@ -6483,10 +6537,12 @@ export const sendCCBranch = createAsyncThunk<
     )
 
     let controller: AbortController | undefined
+    let unregisterGenerationAbortController = () => {}
 
     try {
       controller = new AbortController()
       signal.addEventListener('abort', () => controller?.abort())
+      unregisterGenerationAbortController = registerGenerationAbortController(streamId, controller)
 
       if (!parentId) {
         throw new Error('parentId is required for CC branching')
@@ -6639,6 +6695,8 @@ export const sendCCBranch = createAsyncThunk<
       const message = error instanceof Error ? error.message : 'Failed to send CC branch message'
       dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
       return rejectWithValue(message)
+    } finally {
+      unregisterGenerationAbortController()
     }
   }
 )

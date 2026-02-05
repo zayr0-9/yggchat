@@ -22,7 +22,10 @@ function mapTools(tools: SharedToolDefinition[]) {
 
 // Normalize model names to what ChatGPT backend expects
 function normalizeModel(model: string): string {
-  const m = model.toLowerCase()
+  const m = model.toLowerCase().replace(/\s+/g, '-')
+
+  // GPT-5.3 Codex variants
+  if (m.includes('gpt-5.3-codex')) return 'gpt-5.3-codex'
 
   // GPT-5.2 Codex variants
   if (m.includes('gpt-5.2-codex')) return 'gpt-5.2-codex'
@@ -164,6 +167,7 @@ function buildAssistantMessage(params: {
 
 export interface OpenAIChatGPTStreamHandlers {
   onChunk: (chunk: any) => void
+  signal?: AbortSignal
 }
 
 export interface OpenAIChatGPTRequestPayload {
@@ -362,7 +366,7 @@ export async function createOpenAIChatGPTStreamingRequest(
   payload: OpenAIChatGPTRequestPayload,
   handlers: OpenAIChatGPTStreamHandlers
 ) {
-  const { onChunk } = handlers
+  const { onChunk, signal } = handlers
 
   // Get valid tokens (refreshes if needed)
   const tokens = await getValidTokens()
@@ -399,8 +403,12 @@ export async function createOpenAIChatGPTStreamingRequest(
         accept: 'text/event-stream',
       },
       body: JSON.stringify(body),
+      signal,
     })
   } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw e
+    }
     throw new Error(`ChatGPT API not reachable: ${e instanceof Error ? e.message : String(e)}`)
   }
 
