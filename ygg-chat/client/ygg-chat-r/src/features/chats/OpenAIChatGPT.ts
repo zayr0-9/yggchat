@@ -92,6 +92,15 @@ interface ChatGPTResponseOutputItem {
   call_id?: string
   name?: string
   output_index?: number
+  outputIndex?: number
+  summary?: Array<{
+    type?: string
+    text?: string
+  }>
+  content?: Array<{
+    type?: string
+    text?: string
+  }>
 }
 
 // Accumulator for incremental tool call building
@@ -539,6 +548,79 @@ export async function createOpenAIChatGPTStreamingRequest(
     return { toolCalls: finalToolCalls, contentBlocks: finalContentBlocks }
   }
 
+  // Track reasoning fragments by stream key to avoid duplicate appends when both
+  // delta and done events are emitted for the same reasoning segment.
+  const reasoningByKey = new Map<string, string>()
+
+  const emitReasoning = (delta: string) => {
+    if (!delta) return
+    assistantReasoning += delta
+    onChunk({ type: 'chunk', part: 'reasoning', delta })
+  }
+
+  const applyReasoningDelta = (key: string, delta: string) => {
+    if (!delta) return
+    const prev = reasoningByKey.get(key) || ''
+    reasoningByKey.set(key, prev + delta)
+    emitReasoning(delta)
+  }
+
+  const applyReasoningDone = (key: string, fullText: string) => {
+    if (!fullText) return
+
+    const prev = reasoningByKey.get(key) || ''
+    reasoningByKey.set(key, fullText)
+
+    // Typical path: .done carries the complete text; append only the missing tail.
+    if (fullText.startsWith(prev)) {
+      emitReasoning(fullText.slice(prev.length))
+      return
+    }
+
+    // Fallback: if we never saw deltas for this key, append whole text once.
+    if (!prev) {
+      emitReasoning(fullText)
+      return
+    }
+
+    // Last resort for mismatched snapshots: append full text only if absent.
+    if (!assistantReasoning.includes(fullText)) {
+      emitReasoning(fullText)
+    }
+  }
+
+  const extractItemId = (evt: any): string => {
+    const raw = evt?.item_id ?? evt?.itemId ?? evt?.id ?? ''
+    return typeof raw === 'string' ? raw : ''
+  }
+
+  const extractIndex = (evt: any, snakeKey: string, camelKey: string): number => {
+    const raw = evt?.[snakeKey] ?? evt?.[camelKey]
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0
+  }
+
+  const extractReasoningFromOutputItem = (item?: ChatGPTResponseOutputItem) => {
+    if (!item || item.type !== 'reasoning') return
+
+    const itemId = typeof item.id === 'string' ? item.id : 'unknown-reasoning-item'
+
+    if (Array.isArray(item.content)) {
+      item.content.forEach((part, contentIndex) => {
+        if (part?.type === 'reasoning_text' && typeof part.text === 'string' && part.text) {
+          applyReasoningDone(`reasoning_text:${itemId}:${contentIndex}`, part.text)
+        }
+      })
+    }
+
+    if (Array.isArray(item.summary)) {
+      item.summary.forEach((part, summaryIndex) => {
+        if (typeof part?.text === 'string' && part.text) {
+          applyReasoningDone(`reasoning_summary:${itemId}:${summaryIndex}`, part.text)
+        }
+      })
+    }
+  }
+
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -584,12 +666,64 @@ export async function createOpenAIChatGPTStreamingRequest(
           continue
         }
 
-        if (parsed.type === 'response.reasoning.delta') {
-          // Reasoning delta
-          const delta = (parsed as any).delta || ''
-          if (delta) {
-            assistantReasoning += delta
-            onChunk({ type: 'chunk', part: 'reasoning', delta })
+        if (
+          parsed.type === 'response.reasoning.delta' ||
+          parsed.type === 'response.reasoning_text.delta' ||
+          parsed.type === 'response.reasoning_summary_text.delta'
+        ) {
+          const evt = parsed as any
+          const delta = typeof evt.delta === 'string' ? evt.delta : ''
+          if (!delta) continue
+
+          const itemId = extractItemId(evt) || 'reasoning'
+          if (parsed.type === 'response.reasoning_summary_text.delta') {
+            const summaryIndex = extractIndex(evt, 'summary_index', 'summaryIndex')
+            applyReasoningDelta(`reasoning_summary:${itemId}:${summaryIndex}`, delta)
+          } else if (parsed.type === 'response.reasoning_text.delta') {
+            const contentIndex = extractIndex(evt, 'content_index', 'contentIndex')
+            applyReasoningDelta(`reasoning_text:${itemId}:${contentIndex}`, delta)
+          } else {
+            // Legacy/nonstandard backend event.
+            applyReasoningDelta(`reasoning_legacy:${itemId}`, delta)
+          }
+          continue
+        }
+
+        if (parsed.type === 'response.reasoning_text.done' || parsed.type === 'response.reasoning_summary_text.done') {
+          const evt = parsed as any
+          const text = typeof evt.text === 'string' ? evt.text : ''
+          if (!text) continue
+
+          const itemId = extractItemId(evt) || 'reasoning'
+          if (parsed.type === 'response.reasoning_summary_text.done') {
+            const summaryIndex = extractIndex(evt, 'summary_index', 'summaryIndex')
+            applyReasoningDone(`reasoning_summary:${itemId}:${summaryIndex}`, text)
+          } else {
+            const contentIndex = extractIndex(evt, 'content_index', 'contentIndex')
+            applyReasoningDone(`reasoning_text:${itemId}:${contentIndex}`, text)
+          }
+          continue
+        }
+
+        if (parsed.type === 'response.reasoning_summary_part.done') {
+          const evt = parsed as any
+          const part = evt.part
+          const text = typeof part?.text === 'string' ? part.text : ''
+          if (!text) continue
+
+          const itemId = extractItemId(evt) || 'reasoning'
+          const summaryIndex = extractIndex(evt, 'summary_index', 'summaryIndex')
+          applyReasoningDone(`reasoning_summary:${itemId}:${summaryIndex}`, text)
+          continue
+        }
+
+        if (parsed.type === 'response.content_part.done') {
+          const evt = parsed as any
+          const part = evt.part
+          if (part?.type === 'reasoning_text' && typeof part.text === 'string' && part.text) {
+            const itemId = extractItemId(evt) || 'reasoning'
+            const contentIndex = extractIndex(evt, 'content_index', 'contentIndex')
+            applyReasoningDone(`reasoning_text:${itemId}:${contentIndex}`, part.text)
           }
           continue
         }
@@ -637,6 +771,7 @@ export async function createOpenAIChatGPTStreamingRequest(
           if (item?.type === 'function_call' && item.id) {
             addOrUpdateResponseToolCall(item.id, item)
           }
+          extractReasoningFromOutputItem(item)
           continue
         }
 
