@@ -85,6 +85,68 @@ function hasBOM(buf: Buffer): boolean {
   return buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF
 }
 
+function resolveWslLikeAbsolutePath(inputPath: string, cwd?: string): string {
+  const normalizedInput = toWslPath(inputPath)
+
+  if (normalizedInput.startsWith('/')) {
+    return path.posix.normalize(normalizedInput)
+  }
+
+  const normalizedBase = cwd ? toWslPath(cwd) : toWslPath(process.cwd())
+  const basePath = normalizedBase.startsWith('/')
+    ? normalizedBase
+    : path.posix.resolve('/', normalizedBase)
+
+  return path.posix.resolve(basePath, normalizedInput)
+}
+
+function assertWithinWorkspace(inputPath: string, resolvedPath: string, cwd: string, usePosix: boolean): void {
+  if (usePosix) {
+    const workspace = resolveWslLikeAbsolutePath(cwd)
+    const target = resolveWslLikeAbsolutePath(resolvedPath)
+    const rel = path.posix.relative(workspace, target)
+
+    if (rel.startsWith('..') || path.posix.isAbsolute(rel)) {
+      throw new Error(
+        `Access denied: Path '${inputPath}' resolves to '${resolvedPath}' which is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+      )
+    }
+    return
+  }
+
+  const workspace = path.resolve(cwd)
+  const target = path.resolve(resolvedPath)
+  const rel = path.relative(workspace, target)
+
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(
+      `Access denied: Path '${inputPath}' resolves to '${resolvedPath}' which is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+    )
+  }
+}
+
+function validateLineRangeValues(options: ReadFileOptions): void {
+  const validateLineNumber = (name: string, value: number) => {
+    if (!Number.isInteger(value) || value < 1) {
+      throw new Error(`${name} must be an integer >= 1`)
+    }
+  }
+
+  if (options.startLine !== undefined) {
+    validateLineNumber('startLine', options.startLine)
+  }
+  if (options.endLine !== undefined) {
+    validateLineNumber('endLine', options.endLine)
+  }
+
+  if (options.ranges) {
+    for (let i = 0; i < options.ranges.length; i++) {
+      const range = options.ranges[i]
+      validateLineNumber(`ranges[${i}].startLine`, range.startLine)
+      validateLineNumber(`ranges[${i}].endLine`, range.endLine)
+    }
+  }
+}
 
 export async function readTextFile(
   inputPath: string,
@@ -93,18 +155,16 @@ export async function readTextFile(
   const maxBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 200 * 1024
   const includeHash = options.includeHash !== false // default to true
 
+  validateLineRangeValues(options)
+
   // Resolve absolute path and track path type
   let abs = inputPath
   let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
   const willBeWsl = isWSLPath(inputPath)
 
-  // For WSL paths, resolve to absolute Linux path first (for validation)
   if (willBeWsl) {
     pathType = 'wsl'
-    // Make path absolute using POSIX rules (before UNC conversion)
-    if (!inputPath.startsWith('/')) {
-      abs = options.cwd ? `${options.cwd.replace(/\/$/, '')}/${inputPath}` : inputPath
-    }
+    abs = resolveWslLikeAbsolutePath(inputPath, options.cwd)
   } else {
     const basePath = options.cwd || process.cwd()
     abs = path.isAbsolute(inputPath) ? inputPath : path.resolve(basePath, inputPath)
@@ -113,26 +173,11 @@ export async function readTextFile(
     }
   }
 
-  // Workspace validation BEFORE UNC conversion (compare Linux to Linux)
   if (options.cwd) {
-    if (pathType === 'wsl') {
-      // Both are Linux paths - compare directly using POSIX rules
-      const normalizedCwd = options.cwd.replace(/\/$/, '')
-      const normalizedAbs = abs.replace(/\/$/, '')
-      if (!normalizedAbs.startsWith(normalizedCwd + '/') && normalizedAbs !== normalizedCwd) {
-        throw new Error(`Access denied: Path '${inputPath}' resolves to '${abs}' which is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`)
-      }
-    } else {
-      // Windows or native paths - use Node's path module
-      const normalizedCwd = path.resolve(options.cwd)
-      const normalizedAbs = path.resolve(abs)
-      if (!normalizedAbs.startsWith(normalizedCwd + path.sep) && normalizedAbs !== normalizedCwd) {
-        throw new Error(`Access denied: Path '${inputPath}' resolves to '${abs}' which is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`)
-      }
-    }
+    assertWithinWorkspace(inputPath, abs, options.cwd, pathType === 'wsl')
   }
 
-  // NOW convert to UNC for filesystem access
+  // Convert to UNC for filesystem access
   if (pathType === 'wsl') {
     abs = await resolveToWindowsPath(abs)
   }

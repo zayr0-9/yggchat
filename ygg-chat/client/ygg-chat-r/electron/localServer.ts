@@ -216,18 +216,29 @@ function initializeBuiltInToolRegistry() {
   })
 
   builtInTools.set('read_file', async (args, { rootPath }) => {
-    const { path: filePath, maxBytes, startLine, endLine, ranges } = args
+    const { path: filePath, maxBytes, startLine, endLine, ranges, includeHash } = args
     if (!filePath) throw new Error('path is required')
-    const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges, cwd: rootPath })
+    const fileRes = await readTextFile(filePath, {
+      maxBytes,
+      startLine,
+      endLine,
+      ranges,
+      includeHash,
+      cwd: rootPath,
+    })
     return { success: true, ...fileRes }
   })
 
   builtInTools.set('read_file_continuation', async (args, { rootPath }) => {
-    const { path: filePath, afterLine, numLines, maxBytes } = args
+    const { path: filePath, afterLine, numLines, maxBytes, includeHash } = args
     if (!filePath) throw new Error('path is required')
     if (afterLine === undefined) throw new Error('afterLine is required')
     if (!numLines) throw new Error('numLines is required')
-    const fileRes = await readFileContinuation(filePath, afterLine, numLines, { maxBytes, cwd: rootPath })
+    const fileRes = await readFileContinuation(filePath, afterLine, numLines, {
+      maxBytes,
+      includeHash,
+      cwd: rootPath,
+    })
     return { success: true, ...fileRes }
   })
 
@@ -5806,186 +5817,4 @@ function setupServer() {
       const { id } = req.params
       const { title, cwd, project_id, research_note } = req.body
 
-      const conversation = statements.getConversationById.get(id) as any
-      if (!conversation) {
-        res.status(404).json({ success: false, error: 'Conversation not found' })
-        return
-      }
-
-      const now = new Date().toISOString()
-
-      if (title !== undefined) {
-        db!.prepare('UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?').run(title, now, id)
-      }
-      if (cwd !== undefined) {
-        statements.updateConversationCwd.run(cwd || null, id)
-      }
-      if (project_id !== undefined) {
-        // Verify project exists if not null
-        if (project_id !== null) {
-          const project = statements.getProjectById.get(project_id)
-          if (!project) {
-            res.status(404).json({ success: false, error: 'Project not found' })
-            return
-          }
-        }
-        statements.updateConversationProjectId.run(project_id, id)
-      }
-      if (research_note !== undefined) {
-        statements.updateConversationResearchNote.run(research_note || null, id)
-      }
-
-      const updated = statements.getConversationById.get(id)
-      res.json({ success: true, conversation: updated })
-    } catch (error) {
-      console.error('[LocalServer] App API - Error updating conversation:', error)
-      const msg = error instanceof Error ? error.message : String(error)
-      res.status(500).json({ success: false, error: msg })
-    }
-  })
-
-  // Start the OAuth callback server on port 1455
-  startOAuthCallbackServer()
-}
-
-// Start the server
-export async function startLocalServer(port: number = 3002, dbPath?: string): Promise<void> {
-  try {
-    const actualDbPath = dbPath || path.join(process.cwd(), 'data', 'local-sync.db')
-    initializeLocalDatabase(actualDbPath)
-
-    // Initialize tool registries
-    initializeBuiltInToolRegistry()
-    await customToolRegistry.initialize()
-    await skillRegistry.initialize()
-    await mcpManager.initialize()
-
-    // Initialize tool orchestrator with database and register tools
-    toolOrchestrator.initialize(db!)
-    toolOrchestrator.registerTools(builtInTools)
-
-    // Register custom tools with the orchestrator
-    for (const customToolDef of customToolRegistry.getDefinitions()) {
-      toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
-        return customToolRegistry.executeTool(customToolDef.name, args, {
-          cwd: options?.rootPath,
-          rootPath: options?.rootPath,
-          operationMode: options?.operationMode,
-          conversationId: options?.conversationId,
-          messageId: options?.messageId,
-          streamId: options?.streamId,
-        })
-      })
-    }
-    console.log(`[LocalServer] Registered ${customToolRegistry.getDefinitions().length} custom tools with orchestrator`)
-
-    // Register MCP tools with the orchestrator
-    try {
-      const mcpTools = mcpManager.getAllTools()
-      console.log(`[LocalServer] Found ${mcpTools.length} MCP tools to register`)
-      for (const mcpTool of mcpTools) {
-        const qualifiedName = mcpTool.qualifiedName || mcpTool.name
-        console.log(`[LocalServer] Registering MCP tool: ${qualifiedName}`)
-        toolOrchestrator.registerTool(qualifiedName, async (args, _options) => {
-          try {
-            const mcpResult = await mcpManager.callTool(qualifiedName, args)
-            // Convert MCP result to standard ToolResult format
-            const textContent = mcpResult.content
-              .filter(c => c.type === 'text')
-              .map(c => c.text)
-              .join('\n')
-            return {
-              success: !mcpResult.isError,
-              content: mcpResult.content,
-              text: textContent,
-              error: mcpResult.isError ? textContent : undefined,
-            }
-          } catch (error) {
-            console.error(`[LocalServer] MCP tool execution error (${qualifiedName}):`, error)
-            return {
-              success: false,
-              error: error instanceof Error ? error.message : String(error),
-            }
-          }
-        })
-      }
-      console.log(`[LocalServer] Registered ${mcpTools.length} MCP tools with orchestrator`)
-    } catch (error) {
-      console.error(`[LocalServer] Error registering MCP tools:`, error)
-    }
-
-    setupServer()
-
-    return new Promise((resolve, reject) => {
-      server = app.listen(port, '0.0.0.0', () => {
-        // console.log(`[LocalServer] Local sync server running on http://0.0.0.0:${port}`)
-        // console.log(`[LocalServer] Database path: ${actualDbPath}`)
-
-        // Initialize WebSocket Server after HTTP server is running
-        initializeWebSocketServer(server)
-
-        resolve()
-      })
-
-      server.on('error', (err: NodeJS.ErrnoException) => {
-        if (err.code === 'EADDRINUSE') {
-          console.error(`[LocalServer] Port ${port} is already in use`)
-          reject(new Error(`Port ${port} is already in use`))
-        } else {
-          console.error('[LocalServer] Server error:', err)
-          reject(err)
-        }
-      })
-    })
-  } catch (error) {
-    console.error('[LocalServer] Failed to start:', error)
-    throw error
-  }
-}
-
-// Stop the server
-export function stopLocalServer(): Promise<void> {
-  return new Promise(resolve => {
-    // Shutdown tool orchestrator first
-    toolOrchestrator.shutdown()
-
-    // Close OAuth callback server if running
-    if (oauthCallbackServer) {
-      oauthCallbackServer.close(() => {
-        console.log('[OAuthServer] OAuth callback server closed')
-      })
-      oauthCallbackServer = null
-    }
-
-    if (server) {
-      // Close WebSocket server first
-      if (wss) {
-        wss.close(() => {
-          console.log('[LocalServer] WebSocket server closed')
-        })
-        // Also close all client connections
-        clients.forEach(client => {
-          if (client.ws.readyState === WebSocket.OPEN) {
-            client.ws.close()
-          }
-        })
-        clients.clear()
-      }
-
-      server.close(() => {
-        console.log('[LocalServer] Server stopped')
-        if (db) {
-          db.close()
-          db = null
-        }
-        server = null
-        resolve()
-      })
-    } else {
-      resolve()
-    }
-  })
-}
-
-// Export for direct usage
-export { app, db }
+      const conversation = statements.getConversationB
