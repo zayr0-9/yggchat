@@ -263,6 +263,10 @@ function initializeBuiltInToolRegistry() {
       enableFuzzyMatching,
       fuzzyThreshold,
       preserveIndentation,
+      interpretEscapeSequences,
+      validateContent,
+      expectedHash,
+      expectedMetadata,
     } = args
     if (!filePath) throw new Error('path is required')
     return await editFile(filePath, operation, {
@@ -274,6 +278,10 @@ function initializeBuiltInToolRegistry() {
       enableFuzzyMatching,
       fuzzyThreshold,
       preserveIndentation,
+      interpretEscapeSequences,
+      validateContent,
+      expectedHash,
+      expectedMetadata,
       operationMode,
       cwd: rootPath,
     })

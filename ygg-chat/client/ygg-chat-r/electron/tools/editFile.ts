@@ -156,56 +156,60 @@ export async function editFileSearchReplace(
     let replacements: number
     let matchStrategy: MatchStrategy | undefined
     let attemptedStrategies: string[] = []
+    const processedSearchPattern = interpretEscapeSequences(searchPattern, shouldInterpretEscapes)
 
-    if (searchPattern === replacement) {
-      // No change needed
-      newContent = originalContent
-      replacements = 0
-    } else {
-      // Try layered matching strategies
-      const matchResult = findMatchWithStrategies(
-        originalContent,
-        searchPattern,
-        enableFuzzyMatching,
-        fuzzyThreshold,
-        shouldInterpretEscapes
-      )
-      attemptedStrategies = matchResult.attemptedStrategies
+    // Try layered matching strategies
+    const matchResult = findMatchWithStrategies(
+      originalContent,
+      searchPattern,
+      enableFuzzyMatching,
+      fuzzyThreshold,
+      shouldInterpretEscapes
+    )
+    attemptedStrategies = matchResult.attemptedStrategies
 
-      if (!matchResult.found) {
-        return {
-          success: false,
-          sizeBytes: fileData.sizeBytes,
-          replacements: 0,
-          message: `Search pattern not found in file. Attempted strategies: ${attemptedStrategies.join(', ')}`,
-          attemptedStrategies,
-        }
+    if (!matchResult.found) {
+      return {
+        success: false,
+        sizeBytes: fileData.sizeBytes,
+        replacements: 0,
+        message: `Search pattern not found in file. Attempted strategies: ${attemptedStrategies.join(', ')}`,
+        attemptedStrategies,
       }
+    }
 
-      matchStrategy = matchResult.strategy
+    matchStrategy = matchResult.strategy
 
-      // Apply indentation preservation if enabled and using non-exact match
-      let finalReplacement = replacement
-      if (preserveIndentation && matchResult.strategy !== 'exact') {
-        const originalIndentation = captureIndentation(matchResult.matchedText)
-        finalReplacement = applyIndentation(replacement, originalIndentation)
-      }
+    // Apply indentation preservation if enabled and using non-exact match
+    let finalReplacement = replacement
+    if (preserveIndentation && matchResult.strategy !== 'exact') {
+      const originalIndentation = captureIndentation(matchResult.matchedText)
+      finalReplacement = applyIndentation(replacement, originalIndentation)
+    }
 
-      // Interpret escape sequences in replacement
-      finalReplacement = interpretEscapeSequences(finalReplacement, shouldInterpretEscapes)
+    // Interpret escape sequences in replacement
+    finalReplacement = interpretEscapeSequences(finalReplacement, shouldInterpretEscapes)
 
-      // For global replacement, we need to handle multiple occurrences
-      // First, count all exact matches using the processed pattern
-      const processedSearchPattern = interpretEscapeSequences(searchPattern, shouldInterpretEscapes)
-      const exactRegex = new RegExp(escapeRegExp(processedSearchPattern), 'g')
-      const exactMatches = originalContent.match(exactRegex)
+    // For global replacement, we need to handle multiple occurrences
+    // First, count all exact matches using the processed pattern
+    const exactRegex = new RegExp(escapeRegExp(processedSearchPattern), 'g')
+    const exactMatches = originalContent.match(exactRegex)
 
-      if (exactMatches && exactMatches.length > 0) {
+    if (exactMatches && exactMatches.length > 0) {
+      if (processedSearchPattern === finalReplacement) {
+        newContent = originalContent
+        replacements = 0
+      } else {
         // If exact matches exist, use traditional global replacement
         replacements = exactMatches.length
         newContent = originalContent.replace(exactRegex, finalReplacement)
+      }
+    } else {
+      // Use the matched text from layered strategy for single replacement
+      if (matchResult.matchedText === finalReplacement) {
+        newContent = originalContent
+        replacements = 0
       } else {
-        // Use the matched text from layered strategy for single replacement
         replacements = 1
         newContent =
           originalContent.substring(0, matchResult.startIndex) +
@@ -379,21 +383,25 @@ export async function editFileSearchReplaceFirst(
     // Interpret escape sequences in replacement
     finalReplacement = interpretEscapeSequences(finalReplacement, shouldInterpretEscapes)
 
-    const newContent =
-      originalContent.substring(0, matchResult.startIndex) +
-      finalReplacement +
-      originalContent.substring(matchResult.endIndex)
+    const hasChanges = finalReplacement !== matchResult.matchedText
+    const newContent = hasChanges
+      ? originalContent.substring(0, matchResult.startIndex) +
+        finalReplacement +
+        originalContent.substring(matchResult.endIndex)
+      : originalContent
 
     // Create backup if requested
     let backupPath: string | undefined
-    if (createBackup) {
+    if (createBackup && hasChanges) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
       backupPath = `${fsPath}.backup.${timestamp}`
       await fs.promises.writeFile(backupPath, originalContent, encoding)
     }
 
-    // Write the modified content
-    await fs.promises.writeFile(fsPath, newContent, encoding)
+    // Write the modified content if needed
+    if (hasChanges) {
+      await fs.promises.writeFile(fsPath, newContent, encoding)
+    }
 
     const newStats = await fs.promises.stat(fsPath)
 
@@ -403,8 +411,10 @@ export async function editFileSearchReplaceFirst(
     return {
       success: true,
       sizeBytes: newStats.size,
-      replacements: 1,
-      message: `Successfully replaced first occurrence${strategyMessage} in ${filePath}`,
+      replacements: hasChanges ? 1 : 0,
+      message: hasChanges
+        ? `Successfully replaced first occurrence${strategyMessage} in ${filePath}`
+        : `No changes needed in ${filePath}`,
       backup: backupPath ? (pathType === 'windows' ? backupPath : toWslPath(backupPath)) : undefined,
       matchStrategy: matchResult.strategy,
       attemptedStrategies: matchResult.attemptedStrategies,
@@ -576,7 +586,7 @@ export async function editFile(
       return editFileSearchReplaceFirst(filePath, searchPattern, replacement, options)
 
     case 'append':
-      if (!content) {
+      if (content === undefined) {
         return {
           success: false,
           sizeBytes: 0,
@@ -700,8 +710,12 @@ function normalizeLineEndings(str: string): string {
 function normalizeWhitespace(str: string): string {
   return str
     .split('\n')
-    .map(line => line.trim().replace(/\s+/g, ' '))
+    .map(normalizeWhitespaceLine)
     .join('\n')
+}
+
+function normalizeWhitespaceLine(line: string): string {
+  return line.trim().replace(/\s+/g, ' ')
 }
 
 /**
@@ -829,10 +843,13 @@ function applyIndentation(replacement: string, originalIndentation: string[]): s
       if (trimmedLine === '') return '' // Keep empty lines empty
 
       // Calculate how much this line is indented relative to the first replacement line
-      const relativeIndent = lineIndent.length - replacementBaseIndent.length
+      const relativeIndent =
+        lineIndent.length <= replacementBaseIndent.length
+          ? ''
+          : lineIndent.slice(replacementBaseIndent.length)
 
-      // Apply original base indent plus relative indent
-      const newIndent = baseIndent + ' '.repeat(Math.max(0, relativeIndent))
+      // Apply original base indent while preserving tabs/spaces from relative indentation
+      const newIndent = baseIndent + relativeIndent
       return newIndent + trimmedLine
     })
     .join('\n')
@@ -873,16 +890,17 @@ function findMatchWithStrategies(
   const normalizedPattern = normalizeLineEndings(processedPattern)
   const lineEndingIndex = normalizedContent.indexOf(normalizedPattern)
   if (lineEndingIndex !== -1) {
-    // Find the actual position in original content
-    const actualStartIndex = findActualPosition(content, lineEndingIndex)
-    const matchedText = content.substring(
-      actualStartIndex,
-      actualStartIndex + normalizedPattern.length
+    // Map both normalized start/end indices back to original content.
+    const actualStartIndex = mapNormalizedIndexToOriginal(content, lineEndingIndex)
+    const actualEndIndex = mapNormalizedIndexToOriginal(
+      content,
+      lineEndingIndex + normalizedPattern.length
     )
+    const matchedText = content.substring(actualStartIndex, actualEndIndex)
     return {
       found: true,
       startIndex: actualStartIndex,
-      endIndex: actualStartIndex + matchedText.length,
+      endIndex: actualEndIndex,
       matchedText,
       strategy: 'line_ending_normalized',
       attemptedStrategies,
@@ -939,7 +957,7 @@ function findMatchWithStrategies(
 /**
  * Find actual position in original string given position in normalized string
  */
-function findActualPosition(original: string, normalizedIndex: number): number {
+function mapNormalizedIndexToOriginal(original: string, normalizedIndex: number): number {
   // Simple approach: count characters accounting for \r\n -> \n conversion
   let originalIndex = 0
   let normalizedCount = 0
@@ -957,6 +975,21 @@ function findActualPosition(original: string, normalizedIndex: number): number {
   return originalIndex
 }
 
+function getLineStartIndices(lines: string[]): number[] {
+  const starts: number[] = []
+  let offset = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    starts.push(offset)
+    offset += lines[i].length
+    if (i < lines.length - 1) {
+      offset += 1 // account for normalized \n separator
+    }
+  }
+
+  return starts
+}
+
 /**
  * Find original text that matches a whitespace-normalized pattern
  */
@@ -964,27 +997,29 @@ function findOriginalTextForNormalizedMatch(
   content: string,
   pattern: string
 ): { found: boolean; startIndex: number; endIndex: number; matchedText: string } {
-  const patternLines = normalizeLineEndings(pattern).split('\n')
-  const contentLines = normalizeLineEndings(content).split('\n')
-
-  // Try to match line by line with trimmed content
-  const patternTrimmed = patternLines.map(l => l.trim())
+  const normalizedContent = normalizeLineEndings(content)
+  const normalizedPattern = normalizeLineEndings(pattern)
+  const patternLines = normalizedPattern.split('\n')
+  const contentLines = normalizedContent.split('\n')
+  const patternNormalizedLines = patternLines.map(normalizeWhitespaceLine)
+  const contentLineStarts = getLineStartIndices(contentLines)
 
   for (let i = 0; i <= contentLines.length - patternLines.length; i++) {
     let matches = true
     for (let j = 0; j < patternLines.length; j++) {
-      if (contentLines[i + j].trim() !== patternTrimmed[j]) {
+      if (normalizeWhitespaceLine(contentLines[i + j]) !== patternNormalizedLines[j]) {
         matches = false
         break
       }
     }
 
     if (matches) {
-      // Calculate actual indices
-      const linesBeforeMatch = contentLines.slice(0, i).join('\n')
-      const startIndex = linesBeforeMatch.length + (i > 0 ? 1 : 0)
-      const matchedText = contentLines.slice(i, i + patternLines.length).join('\n')
-      const endIndex = startIndex + matchedText.length
+      const normalizedStart = contentLineStarts[i]
+      const lastLineIndex = i + patternLines.length - 1
+      const normalizedEnd = contentLineStarts[lastLineIndex] + contentLines[lastLineIndex].length
+      const startIndex = mapNormalizedIndexToOriginal(content, normalizedStart)
+      const endIndex = mapNormalizedIndexToOriginal(content, normalizedEnd)
+      const matchedText = content.substring(startIndex, endIndex)
 
       return { found: true, startIndex, endIndex, matchedText }
     }

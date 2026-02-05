@@ -23,6 +23,9 @@
     "build:mac": "npm run build:server && npm run build:electron && npm run build:electron:main && electron-builder --mac",
     "build:all": "npm run build:electron && npm run build:electron:main && electron-builder --win --linux",
     "lint": "eslint .",
+    "test:tools": "vitest run --config vitest.tools.config.ts",
+    "test:tools:watch": "vitest --config vitest.tools.config.ts",
+    "test:tools:coverage": "vitest run --config vitest.tools.config.ts --coverage",
     "preview": "vite preview",
     "predev": "node scripts/check-env.js",
     "electron": "electron .",
@@ -116,6 +119,7 @@
     "@types/sanitize-html": "^2.16.0",
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react-swc": "^3.9.0",
+    "@vitest/coverage-v8": "^2.1.8",
     "autoprefixer": "^10.4.21",
     "cross-env": "^7.0.3",
     "esbuild": "^0.27.1",
@@ -128,6 +132,7 @@
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.30.1",
     "vite": "^6.3.5",
-    "vite-plugin-static-copy": "^3.1.4"
+    "vite-plugin-static-copy": "^3.1.4",
+    "vitest": "^2.1.8"
   }
 }
