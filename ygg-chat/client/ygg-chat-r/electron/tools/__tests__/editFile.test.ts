@@ -322,6 +322,27 @@ describe('editFile layered matching strategies', () => {
     expect(await harness.readFile('whitespace-crlf.txt')).toBe('head\r\nitems_done\r\ntail\r\n')
   })
 
+  it('uses single-span replacement for replace when strategy is whitespace_normalized', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'whitespace-replace-scope.txt',
+      'head\r\nitem   one\r\nitem\t two\r\nmid\r\nitem   one\r\nitem\t two\r\ntail\r\n'
+    )
+
+    const result = await editFile('whitespace-replace-scope.txt', 'replace', {
+      searchPattern: 'item one\nitem two',
+      replacement: 'items_done',
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(result.matchStrategy).toBe('whitespace_normalized')
+    expect(await harness.readFile('whitespace-replace-scope.txt')).toBe(
+      'head\r\nitems_done\r\nmid\r\nitem   one\r\nitem\t two\r\ntail\r\n'
+    )
+  })
+
   it('uses fuzzy strategy when exact/normalized strategies fail but similarity is high', async () => {
     const harness = await createToolFsHarness()
     await harness.writeFile('fuzzy-success.txt', 'const status = "ready";\nconsole.log(status);\n')
@@ -336,6 +357,27 @@ describe('editFile layered matching strategies', () => {
     expect(result.replacements).toBe(1)
     expect(result.matchStrategy).toBe('fuzzy')
     expect(await harness.readFile('fuzzy-success.txt')).toBe('const status = "done";\nconsole.log(status);\n')
+  })
+
+  it('uses single-span replacement for replace when strategy is fuzzy', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'fuzzy-replace-scope.txt',
+      'const status = "ready";\nconsole.log(status);\n\nconst status = "running";\nconsole.log(status);\n'
+    )
+
+    const result = await editFile('fuzzy-replace-scope.txt', 'replace', {
+      searchPattern: 'const status = "raedy";\nconsole.log(status);',
+      replacement: 'const status = "done";\nconsole.log(status);',
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(result.matchStrategy).toBe('fuzzy')
+    expect(await harness.readFile('fuzzy-replace-scope.txt')).toBe(
+      'const status = "done";\nconsole.log(status);\n\nconst status = "running";\nconsole.log(status);\n'
+    )
   })
 
   it('fails when fuzzy matching is disabled and only fuzzy matching would succeed', async () => {
@@ -410,6 +452,121 @@ describe('editFile indentation preservation', () => {
     expect(result.success).toBe(true)
     expect(result.matchStrategy).toBe('whitespace_normalized')
     expect(await harness.readFile('indent-no-preserve.txt')).toBe(expected)
+  })
+})
+
+describe('editFile replace regressions on localServer-sized fixture', () => {
+  const fixturePath = path.resolve(process.cwd(), 'electron/tools/__tests__/dummyfile.ts.test')
+
+  it('keeps exact strategy global for repeated tokens in large fixture', async () => {
+    const harness = await createToolFsHarness()
+    const original = await fs.readFile(fixturePath, 'utf8')
+    await harness.writeFile('fixture-exact-global.ts', original)
+
+    const originalCount = (original.match(/run\(now, conversationId\)/g) || []).length
+    expect(originalCount).toBeGreaterThan(1)
+
+    const result = await editFile('fixture-exact-global.ts', 'replace', {
+      searchPattern: 'run(now, conversationId)',
+      replacement: 'run(now, updatedConversationId)',
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('fixture-exact-global.ts')
+    const updatedCount = (updated.match(/run\(now, updatedConversationId\)/g) || []).length
+
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('exact')
+    expect(result.replacements).toBe(originalCount)
+    expect(updatedCount).toBe(originalCount)
+    expect(updated).not.toContain('run(now, conversationId)')
+  })
+
+  it('uses single-span replacement for line-ending normalized matches in large fixture', async () => {
+    const harness = await createToolFsHarness()
+    const original = await fs.readFile(fixturePath, 'utf8')
+    const crlfFixture = original.replace(/\n/g, '\r\n')
+    const tailSnapshot = crlfFixture.slice(-12000)
+    await harness.writeFile('fixture-line-ending-scope.ts', crlfFixture)
+
+    const result = await editFile('fixture-line-ending-scope.ts', 'replace', {
+      searchPattern:
+        "// Update conversation updated_at timestamp\n      if (db) {\n        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)\n      }\n\n      console.log(",
+      replacement: '/*line-ending-marker*/',
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('fixture-line-ending-scope.ts')
+
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('line_ending_normalized')
+    expect(result.replacements).toBe(1)
+    expect((updated.match(/\/\*line-ending-marker\*\//g) || []).length).toBe(1)
+    expect(updated).toContain("db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)")
+    expect(updated.endsWith(tailSnapshot)).toBe(true)
+  })
+
+  it('uses single-span replacement for whitespace-normalized matches in large fixture', async () => {
+    const harness = await createToolFsHarness()
+    const original = await fs.readFile(fixturePath, 'utf8')
+    await harness.writeFile('fixture-whitespace-scope.ts', original)
+
+    const result = await editFile('fixture-whitespace-scope.ts', 'replace', {
+      searchPattern:
+        "// Update conversation updated_at timestamp\nif (db) {\ndb.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)\n}\n\nconsole.log(",
+      replacement: '/*whitespace-marker*/',
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('fixture-whitespace-scope.ts')
+
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('whitespace_normalized')
+    expect(result.replacements).toBe(1)
+    expect((updated.match(/\/\*whitespace-marker\*\//g) || []).length).toBe(1)
+    expect(updated).toContain("db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)")
+  })
+
+  it('is a no-op for whitespace-normalized replace when replacement resolves to matched text', async () => {
+    const harness = await createToolFsHarness()
+    const original = await fs.readFile(fixturePath, 'utf8')
+    await harness.writeFile('fixture-whitespace-noop.ts', original)
+
+    const unindentedBlock =
+      "// Update conversation updated_at timestamp\nif (db) {\n  db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)\n}\n\nconsole.log("
+
+    const result = await editFile('fixture-whitespace-noop.ts', 'replace', {
+      searchPattern: unindentedBlock,
+      replacement: unindentedBlock,
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('whitespace_normalized')
+    expect(result.replacements).toBe(0)
+    expect(await harness.readFile('fixture-whitespace-noop.ts')).toBe(original)
+  })
+
+  it('uses single-span replacement for fuzzy matches in large fixture', async () => {
+    const harness = await createToolFsHarness()
+    const original = await fs.readFile(fixturePath, 'utf8')
+    await harness.writeFile('fixture-fuzzy-scope.ts', original)
+
+    const result = await editFile('fixture-fuzzy-scope.ts', 'replace', {
+      searchPattern:
+        "console.log(\n        '[LocalServer] ✅ Bulk insreted',\n        createdMessages.length,\n        'messages into conversation:',\n        conversationId\n      )",
+      replacement:
+        "console.log(\n        '[LocalServer] ✅ Bulk inserted [patched]',\n        createdMessages.length,\n        'messages into conversation:',\n        conversationId\n      )",
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('fixture-fuzzy-scope.ts')
+
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('fuzzy')
+    expect(result.replacements).toBe(1)
+    expect((updated.match(/Bulk inserted \[patched\]/g) || []).length).toBe(1)
+    expect(updated).toContain('[LocalServer] ✅ Bulk inserted')
   })
 })
 

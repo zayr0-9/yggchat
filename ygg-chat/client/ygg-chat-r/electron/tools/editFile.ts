@@ -178,10 +178,10 @@ export async function editFileSearchReplace(
     // Try layered matching strategies
     const matchResult = findMatchWithStrategies(
       originalContent,
-      searchPattern,
+      processedSearchPattern,
       enableFuzzyMatching,
       fuzzyThreshold,
-      shouldInterpretEscapes
+      false
     )
     attemptedStrategies = matchResult.attemptedStrategies
 
@@ -207,22 +207,18 @@ export async function editFileSearchReplace(
     // Interpret escape sequences in replacement
     finalReplacement = interpretEscapeSequences(finalReplacement, shouldInterpretEscapes)
 
-    // For global replacement, we need to handle multiple occurrences
-    // First, count all exact matches using the processed pattern
-    const exactRegex = new RegExp(escapeRegExp(processedSearchPattern), 'g')
-    const exactMatches = originalContent.match(exactRegex)
-
-    if (exactMatches && exactMatches.length > 0) {
-      if (processedSearchPattern === finalReplacement) {
+    // Keep replacement scope aligned with the strategy that actually matched.
+    if (matchResult.strategy === 'exact') {
+      const exactRegex = new RegExp(escapeRegExp(processedSearchPattern), 'g')
+      const exactMatches = originalContent.match(exactRegex)
+      if (!exactMatches || exactMatches.length === 0 || processedSearchPattern === finalReplacement) {
         newContent = originalContent
         replacements = 0
       } else {
-        // If exact matches exist, use traditional global replacement
         replacements = exactMatches.length
         newContent = originalContent.replace(exactRegex, finalReplacement)
       }
     } else {
-      // Use the matched text from layered strategy for single replacement
       if (matchResult.matchedText === finalReplacement) {
         newContent = originalContent
         replacements = 0
@@ -372,12 +368,13 @@ export async function editFileSearchReplaceFirst(
     }
 
     // Try layered matching strategies
+    const processedSearchPattern = interpretEscapeSequences(searchPattern, shouldInterpretEscapes)
     const matchResult = findMatchWithStrategies(
       originalContent,
-      searchPattern,
+      processedSearchPattern,
       enableFuzzyMatching,
       fuzzyThreshold,
-      shouldInterpretEscapes
+      false
     )
 
     if (!matchResult.found) {

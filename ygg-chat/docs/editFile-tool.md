@@ -15,7 +15,7 @@ Located at `client/ygg-chat-r/electron/tools/editFile.ts`, this helper is a ligh
 ### `editFile(filePath, operation, options)`
 - Normalizes the requested path, enforces workspace (`cwd`) restrictions, and refuses edits when `operationMode` is `'plan'`.
 - Delegates to one of three helpers depending on `operation`:
-  - `replace`: Replaces every match of `searchPattern` with `replacement` (via `editFileSearchReplace`).
+  - `replace`: Replaces every exact match globally, or one matched span for non-exact strategies (via `editFileSearchReplace`).
   - `replace_first`: Replaces just the first match (`editFileSearchReplaceFirst`).
   - `append`: Appends `content` to the end (`appendToFile`).
 
@@ -40,7 +40,8 @@ Each helper performs its own path handling, optional validation, backup creation
 ### Search & Replace Logic
 - Escape sequences (`\n`, `\t`, etc.) are interpreted in both the search pattern and replacement text when `interpretEscapeSequences` is `true`.
 - `preserveIndentation` can reapply the indentation style of the replaced block if a fuzzy or normalized match succeeds.
-- When `replace` finds one or more exact literal matches of the (processed) search pattern, it performs a global replacement. Otherwise it falls back to the single match returned by the layered strategy.
+- `replace` performs global replacement only when the winning strategy is `exact`.
+- If the winning strategy is `line_ending_normalized`, `whitespace_normalized`, or `fuzzy`, `replace` applies a single replacement at the matched span returned by the layered matcher.
 
 ### Match Strategies
 Implementing several fallbacks makes searches more resilient:

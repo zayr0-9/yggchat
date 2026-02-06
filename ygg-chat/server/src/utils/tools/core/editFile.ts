@@ -109,17 +109,18 @@ export async function editFileSearchReplace(
         finalReplacement = applyIndentation(replacement, originalIndentation)
       }
 
-      // For global replacement, we need to handle multiple occurrences
-      // First, count all exact matches
-      const exactRegex = new RegExp(escapeRegExp(searchPattern), 'g')
-      const exactMatches = originalContent.match(exactRegex)
-
-      if (exactMatches && exactMatches.length > 0) {
-        // If exact matches exist, use traditional global replacement
-        replacements = exactMatches.length
-        newContent = originalContent.replace(exactRegex, finalReplacement)
+      // Keep replacement scope aligned with the strategy that actually matched.
+      if (matchResult.strategy === 'exact') {
+        const exactRegex = new RegExp(escapeRegExp(searchPattern), 'g')
+        const exactMatches = originalContent.match(exactRegex)
+        if (!exactMatches || exactMatches.length === 0) {
+          replacements = 0
+          newContent = originalContent
+        } else {
+          replacements = exactMatches.length
+          newContent = originalContent.replace(exactRegex, finalReplacement)
+        }
       } else {
-        // Use the matched text from layered strategy for single replacement
         replacements = 1
         newContent =
           originalContent.substring(0, matchResult.startIndex) +
