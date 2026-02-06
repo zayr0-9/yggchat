@@ -2,6 +2,7 @@
 import { Express } from 'express'
 import fs from 'fs'
 import path from 'path'
+import { detectPathType, isWindows, resolveToWindowsPath, toWslPath } from './utils/wslBridge.js'
 
 /**
  * Register local file operation routes
@@ -19,8 +20,15 @@ export function registerLocalOperationsRoutes(app: Express) {
     }
 
     try {
-      // Resolve to absolute path
-      const resolvedPath = path.resolve(dirPath)
+      const requestedPath = dirPath.trim()
+      const requestedPathType = detectPathType(requestedPath)
+
+      // Resolve to filesystem path (Windows can receive Linux/WSL style paths)
+      let fsPath = requestedPath
+      if (isWindows() && requestedPathType === 'linux') {
+        fsPath = await resolveToWindowsPath(requestedPath)
+      }
+      const resolvedPath = path.resolve(fsPath)
 
       // Check if path exists and is a directory
       const stats = await fs.promises.stat(resolvedPath)
@@ -28,6 +36,12 @@ export function registerLocalOperationsRoutes(app: Express) {
         res.status(400).json({ error: 'Path is not a directory' })
         return
       }
+
+      // Keep response path style stable for UI navigation when user provided WSL/Linux path
+      const useWslStyleResponse = isWindows() && requestedPathType === 'linux'
+      const responseBasePath = useWslStyleResponse
+        ? toWslPath(requestedPath).replace(/\/+$/, '') || '/'
+        : resolvedPath
 
       // Read directory entries with file types
       const entries = await fs.promises.readdir(resolvedPath, { withFileTypes: true })
@@ -40,7 +54,9 @@ export function registerLocalOperationsRoutes(app: Express) {
         .map(entry => ({
           name: entry.name,
           isDirectory: entry.isDirectory(),
-          path: path.join(resolvedPath, entry.name),
+          path: useWslStyleResponse
+            ? path.posix.join(responseBasePath === '/' ? '/' : responseBasePath, entry.name)
+            : path.join(resolvedPath, entry.name),
         }))
         .sort((a, b) => {
           // Directories first, then alphabetical
@@ -50,7 +66,7 @@ export function registerLocalOperationsRoutes(app: Express) {
           return a.name.localeCompare(b.name)
         })
 
-      res.json({ path: resolvedPath, files })
+      res.json({ path: responseBasePath, files })
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         res.status(404).json({ error: 'Directory not found' })
