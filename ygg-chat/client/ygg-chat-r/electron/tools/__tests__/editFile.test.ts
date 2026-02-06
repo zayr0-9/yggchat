@@ -1,4 +1,5 @@
 import { promises as fs } from 'fs'
+import * as path from 'path'
 import { describe, expect, it, test } from 'vitest'
 import { editFile } from '../editFile.js'
 import { readTextFile } from '../readFile.js'
@@ -132,6 +133,60 @@ describe('editFile replace and replace_first behavior', () => {
     expect(result.replacements).toBe(0)
     expect(result.message).toContain('No changes needed')
     expect(await harness.readFile('replace-first-noop.txt')).toBe(original)
+  })
+
+  it('replace_first preserves full content for files larger than 200KB', async () => {
+    const harness = await createToolFsHarness()
+    const search = 'target-marker'
+    const replacement = 'target-marker-updated'
+    const tailSentinel = 'TAIL-SENTINEL\n'
+    const fillerLine = `${'0123456789abcdef'.repeat(16)}\n`
+    const original = `HEADER ${search}\n${fillerLine.repeat(900)}${tailSentinel}`
+    await harness.writeFile('replace-first-large.txt', original)
+
+    const result = await editFile('replace-first-large.txt', 'replace_first', {
+      searchPattern: search,
+      replacement,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('replace-first-large.txt')
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(updated.startsWith(`HEADER ${replacement}\n`)).toBe(true)
+    expect(updated.endsWith(tailSentinel)).toBe(true)
+    expect(updated.length).toBe(original.length + (replacement.length - search.length))
+  })
+
+  it('replace_first preserves tail when editing the localServer-sized fixture file', async () => {
+    const harness = await createToolFsHarness()
+    const fixturePath = path.resolve(process.cwd(), 'electron/tools/__tests__/dummyfile.ts.test')
+    const original = await fs.readFile(fixturePath, 'utf8')
+    const tailSnapshot = original.slice(-12000)
+
+    expect(original.length).toBeGreaterThan(200 * 1024)
+
+    await harness.writeFile('fixture-localServer.ts', original)
+
+    const searchPattern =
+      "// Update conversation updated_at timestamp\n      if (db) {\n        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)\n      }\n\n      console.log("
+    const replacement =
+      "// Update conversation updated_at timestamp\n      if (db) {\n        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)\n\n        // Update project timestamp if this conversation belongs to a project\n        const projectConversation = conversation as any\n        if (projectConversation?.project_id) {\n          db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, projectConversation.project_id)\n        }\n      }\n\n      console.log("
+
+    const result = await editFile('fixture-localServer.ts', 'replace_first', {
+      searchPattern,
+      replacement,
+      interpretEscapeSequences: true,
+      validateContent: false,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('fixture-localServer.ts')
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(updated).toContain('projectConversation?.project_id')
+    expect(updated.endsWith(tailSnapshot)).toBe(true)
   })
 
   it('creates backup only when replace applies a change', async () => {
@@ -567,7 +622,3 @@ describe('editFile workspace restrictions (POSIX)', () => {
     expect(result.message).toContain('Access denied')
   })
 })
-
-test.todo(
-  'document large-file truncation limitation: edit_file reads via readTextFile defaults, so >200KB paths need dedicated coverage and likely implementation hardening'
-)

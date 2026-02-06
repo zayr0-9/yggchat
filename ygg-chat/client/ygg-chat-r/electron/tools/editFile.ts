@@ -4,6 +4,8 @@ import * as crypto from 'crypto'
 import { readTextFile, FileMetadata } from './readFile.js'
 import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
 
+const FULL_FILE_READ_MAX_BYTES = Number.MAX_SAFE_INTEGER
+
 export interface EditFileOptions {
   createBackup?: boolean
   encoding?: BufferEncoding
@@ -49,6 +51,21 @@ export interface EditFileResult {
   matchStrategy?: MatchStrategy // Which strategy succeeded
   attemptedStrategies?: string[] // For debugging failed matches
   validation?: FileValidationResult // Validation result if performed
+}
+
+async function readFullTextFileForEdit(filePath: string, cwd?: string) {
+  const fileData = await readTextFile(filePath, {
+    cwd,
+    maxBytes: FULL_FILE_READ_MAX_BYTES,
+  })
+
+  if (fileData.truncated) {
+    throw new Error(
+      `Refusing to edit '${filePath}' because the file read was truncated.`
+    )
+  }
+
+  return fileData
 }
 
 /**
@@ -133,7 +150,7 @@ export async function editFileSearchReplace(
     }
 
     // Read the file first
-    const fileData = await readTextFile(filePath, { cwd: options.cwd })
+    const fileData = await readFullTextFileForEdit(filePath, options.cwd)
     const originalContent = fileData.content
 
     // Validate file content if requested
@@ -336,7 +353,7 @@ export async function editFileSearchReplaceFirst(
       fsPath = await resolveToWindowsPath(fsPath)
     }
 
-    const fileData = await readTextFile(filePath, { cwd: options.cwd })
+    const fileData = await readFullTextFileForEdit(filePath, options.cwd)
     const originalContent = fileData.content
 
     // Validate file content if requested
@@ -499,7 +516,7 @@ export async function appendToFile(
     let fileExists = true
 
     try {
-      const fileData = await readTextFile(filePath, { cwd: options.cwd })
+      const fileData = await readFullTextFileForEdit(filePath, options.cwd)
       originalContent = fileData.content
       // Note: fileData.absolutePath is already in WSL format, don't use it for fs operations
     } catch {
