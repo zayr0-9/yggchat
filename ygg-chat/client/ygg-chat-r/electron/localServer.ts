@@ -2526,6 +2526,8 @@ function setupServer() {
         console.warn('[LocalServer] No user context for message sync, conversation may not exist:', conversation_id)
       }
 
+      const messageCreatedAt = created_at || new Date().toISOString()
+
       statements.upsertMessage.run(
         id,
         conversation_id,
@@ -2542,8 +2544,25 @@ function setupServer() {
         ex_agent_session_id || null,
         ex_agent_type || null,
         typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null),
-        created_at || new Date().toISOString()
+        messageCreatedAt
       )
+
+      // Update conversation/project timestamps to reflect recent activity
+      if (db) {
+        db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(messageCreatedAt, conversation_id)
+
+        let projectIdToTouch = effectiveProjectId
+        if (!projectIdToTouch) {
+          const conversationRow = db
+            .prepare('SELECT project_id FROM conversations WHERE id = ?')
+            .get(conversation_id) as { project_id: string | null } | undefined
+          projectIdToTouch = conversationRow?.project_id || null
+        }
+
+        if (projectIdToTouch) {
+          db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(messageCreatedAt, projectIdToTouch)
+        }
+      }
 
       // Process any image content_blocks and save them locally
       const parsedBlocks = typeof content_blocks === 'string' ? JSON.parse(content_blocks) : content_blocks
