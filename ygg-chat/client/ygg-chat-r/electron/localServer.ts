@@ -3829,6 +3829,12 @@ function setupServer() {
       // Update conversation timestamp
       db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversation_id)
 
+      // Update project timestamp if this conversation belongs to a project
+      const conversation = statements.getConversationById.get(conversation_id) as any
+      if (conversation?.project_id) {
+        db!.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, conversation.project_id)
+      }
+
       const message = statements.getMessageById.get(messageId)
       res.status(201).json({ success: true, message })
     } catch (error) {
@@ -3880,6 +3886,12 @@ function setupServer() {
 
       // Update conversation timestamp
       db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, parentMessage.conversation_id)
+
+      // Update project timestamp if this conversation belongs to a project
+      const conversation = statements.getConversationById.get(parentMessage.conversation_id) as any
+      if (conversation?.project_id) {
+        db!.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, conversation.project_id)
+      }
 
       const message = statements.getMessageById.get(messageId)
       res.status(201).json({ success: true, message, parent_id: id })
@@ -5565,6 +5577,12 @@ function setupServer() {
       // Update conversation timestamp
       db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversation_id)
 
+      // Update project timestamp if this conversation belongs to a project
+      const projectConversation = conversation as any
+      if (projectConversation?.project_id) {
+        db!.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, projectConversation.project_id)
+      }
+
       const message = statements.getMessageById.get(messageId)
 
       // Note: trigger_response would require integration with LLM streaming
@@ -5670,6 +5688,12 @@ function setupServer() {
 
       // Update conversation timestamp
       db!.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
+
+      // Update project timestamp if this conversation belongs to a project
+      const conversation = statements.getConversationById.get(conversationId) as any
+      if (conversation?.project_id) {
+        db!.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, conversation.project_id)
+      }
 
       const message = statements.getMessageById.get(newMessageId)
       res.status(201).json({ success: true, message, branched_from: message_id })

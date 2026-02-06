@@ -256,11 +256,35 @@ function getToolCallNameAndArgs(tc: any): { name: string; args: any } {
   return { name, args }
 }
 
+function collectToolOutputCallIds(messages: any[]): Set<string> {
+  const ids = new Set<string>()
+
+  for (const msg of messages) {
+    // Tool outputs encoded in assistant content_blocks (tool_result entries)
+    if (msg?.role === 'assistant' && msg?.content_blocks) {
+      const contentBlocks = parseContentBlocks(msg.content_blocks)
+      for (const block of contentBlocks) {
+        if (block?.type !== 'tool_result') continue
+        const callId = typeof block.tool_use_id === 'string' ? block.tool_use_id : ''
+        if (callId) ids.add(callId)
+      }
+    }
+
+    // Tool outputs encoded as explicit tool-role messages
+    if (msg?.role === 'tool' && typeof msg?.tool_call_id === 'string' && msg.tool_call_id) {
+      ids.add(msg.tool_call_id)
+    }
+  }
+
+  return ids
+}
+
 // Transform messages to ChatGPT backend (responses API) format
 function transformMessagesForChatGPT(messages: any[], developerPrompt?: string): any[] {
   const input: any[] = []
   const toolCallIds = new Set<string>()
   const toolOutputIds = new Set<string>()
+  const availableToolOutputCallIds = collectToolOutputCallIds(messages)
 
   if (developerPrompt && developerPrompt.trim()) {
     input.push({
@@ -293,16 +317,29 @@ function transformMessagesForChatGPT(messages: any[], developerPrompt?: string):
 
       if (msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0) {
         for (const tc of msg.tool_calls) {
+          const callId = typeof tc?.id === 'string' ? tc.id : ''
+          if (!callId) {
+            console.warn('[OpenAI ChatGPT] Skipping tool call without id:', tc)
+            continue
+          }
+
+          // Guard: Responses API rejects histories where a function_call has no corresponding output.
+          // If we don't have tool output for this call id in history, omit the call entirely.
+          if (!availableToolOutputCallIds.has(callId)) {
+            console.warn('[OpenAI ChatGPT] Dropping tool call without output:', callId)
+            continue
+          }
+
           const { name, args } = getToolCallNameAndArgs(tc)
           if (!name) {
             console.warn('[OpenAI ChatGPT] Skipping tool call without name:', tc)
             continue
           }
           const serializedArgs = typeof args === 'string' ? args : JSON.stringify(args || {})
-          toolCallIds.add(tc.id)
+          toolCallIds.add(callId)
           input.push({
             type: 'function_call',
-            call_id: tc.id,
+            call_id: callId,
             name,
             arguments: serializedArgs,
           })
@@ -577,15 +614,16 @@ export async function createOpenAIChatGPTStreamingRequest(
       return
     }
 
-    // Fallback: if we never saw deltas for this key, append whole text once.
-    if (!prev) {
-      emitReasoning(fullText)
+    // If deltas were already streamed but the .done text differs (formatting or normalization),
+    // don't append a second full copy. This avoids duplicate reasoning blocks/content.
+    if (prev) {
       return
     }
 
-    // Last resort for mismatched snapshots: append full text only if absent.
-    if (!assistantReasoning.includes(fullText)) {
+    // If we never saw deltas for this key, append whole text once.
+    if (!prev) {
       emitReasoning(fullText)
+      return
     }
   }
 

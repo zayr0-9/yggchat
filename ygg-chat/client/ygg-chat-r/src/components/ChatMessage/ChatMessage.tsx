@@ -2024,6 +2024,31 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
       fontSizeOffset !== 0 ? { fontSize: `calc(1em + ${fontSizeOffset}px)` } : undefined
     const hasSelection = selectedText.length > 0
 
+    const isHiddenStreamSeparator = (event: StreamEvent, index: number): boolean => {
+      const groupedTool = streamToolGroupsByIndex.get(index)
+
+      // Tool events that are not rendered (deduped by anchor) should not split text/reasoning groups.
+      if (groupedTool && groupedTool.anchorIndex !== index) return true
+
+      // Empty deltas create invisible events; they should not split groups either.
+      if ((event.type === 'text' || event.type === 'reasoning') && !event.delta) return true
+
+      return false
+    }
+
+    const getPreviousVisibleStreamType = (index: number): StreamEvent['type'] | null => {
+      if (!Array.isArray(streamEvents) || streamEvents.length === 0) return null
+
+      for (let i = index - 1; i >= 0; i--) {
+        const prevEvent = streamEvents[i]
+        if (!prevEvent) continue
+        if (isHiddenStreamSeparator(prevEvent, i)) continue
+        return prevEvent.type
+      }
+
+      return null
+    }
+
     return (
       <div
         id={`message-${id}`}
@@ -2089,14 +2114,19 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
                 // Accumulate consecutive reasoning events into one block
                 let accumulatedReasoning = event.delta || ''
                 for (let i = idx + 1; i < streamEvents.length; i++) {
-                  if (streamEvents[i].type === 'reasoning' && streamEvents[i].delta) {
-                    accumulatedReasoning += streamEvents[i].delta
+                  const nextEvent = streamEvents[i]
+
+                  if (nextEvent.type === 'reasoning' && nextEvent.delta) {
+                    accumulatedReasoning += nextEvent.delta
+                  } else if (isHiddenStreamSeparator(nextEvent, i)) {
+                    // Skip non-visible separators so we don't create duplicate reasoning cards.
+                    continue
                   } else {
                     break
                   }
                 }
-                // Only render if this is the first reasoning event in the sequence
-                if (idx === 0 || streamEvents[idx - 1].type !== 'reasoning') {
+                // Only render if the previous visible event is not reasoning.
+                if (getPreviousVisibleStreamType(idx) !== 'reasoning') {
                   const isExpanded = expandedBlocks.reasoning.has(idx)
                   const reasoningSummary = truncateWords(accumulatedReasoning)
 
