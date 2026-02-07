@@ -481,14 +481,14 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const searchTokensLower = useMemo(() => searchTokens.map(token => token.toLowerCase()), [searchTokens])
   const filteredResults = useMemo(() => {
     const q = (searchQuery || '').trim().toLowerCase()
-    if (!q) return [] as { id: number; content: string; role: string; plain: string }[]
+    if (!q) return [] as { id: MessageId; content: string; role: string; plain: string }[]
     const res = (plainMessages as any[])
       .filter(m => {
         const plain = (m?.content_plain_text || m?.plain_text_content || m?.content || '').toLowerCase()
         return typeof plain === 'string' && plain.includes(q)
       })
       .map(m => ({
-        id: m.id,
+        id: parseId(m.id),
         content: m.content,
         role: m.role,
         plain: m?.content_plain_text || m?.plain_text_content || m?.content || '',
@@ -516,7 +516,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     [searchTokens, searchTokensLower]
   )
   const handleSelectSearchResult = useCallback(
-    (item: { id: number }) => {
+    (item: { id: MessageId }) => {
       if (!item) return
       searchFocusPendingRef.current = true
       const path = buildBranchPathForMessage(flatMessages as any, item.id)

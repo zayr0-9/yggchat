@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { estimateTokenCount } from 'tokenx'
-import { ImageConfig, MessageId, ReasoningConfig } from '../../../../shared/types'
+import { ConversationId, ImageConfig, MessageId, ReasoningConfig } from '../../../../shared/types'
 import {
   ActionPopover,
   Button,
