@@ -216,7 +216,8 @@ export async function editFileSearchReplace(
         replacements = 0
       } else {
         replacements = exactMatches.length
-        newContent = originalContent.replace(exactRegex, finalReplacement)
+        // Use a replacer function so replacement text is treated literally (no $&/$1 interpolation).
+        newContent = originalContent.replace(exactRegex, () => finalReplacement)
       }
     } else {
       if (matchResult.matchedText === finalReplacement) {

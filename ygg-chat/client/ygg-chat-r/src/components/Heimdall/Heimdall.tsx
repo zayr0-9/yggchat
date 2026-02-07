@@ -28,9 +28,9 @@ import type { RootState } from '../../store/store'
 import { parseId } from '../../utils/helpers'
 import stripMarkdownToText from '../../utils/markdownStripper'
 // import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
+import { environment, localApi } from '../../utils/api'
 import { TextArea } from '../TextArea/TextArea'
 import { TextField } from '../TextField/TextField'
-import { environment, localApi } from '../../utils/api'
 
 // Type definitions
 interface ChatNode {
@@ -59,6 +59,8 @@ interface Bounds {
   minY: number
   maxY: number
 }
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // interface TreeStats {
 //   totalNodes: number
@@ -394,7 +396,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
 
       try {
-        const result = await localApi.get<{ messages: Message[] }>(`/local/conversations/${conversationId}/messages/tree`)
+        const result = await localApi.get<{ messages: Message[] }>(
+          `/local/conversations/${conversationId}/messages/tree`
+        )
         if (cancelled) return
         const map = buildSubagentMap(Array.isArray(result?.messages) ? result.messages : [])
         setSubagentModalData({
@@ -473,19 +477,64 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [searchOpen, setSearchOpen] = useState<boolean>(false)
   const [searchHoverIndex, setSearchHoverIndex] = useState<number>(-1)
+  const searchTokens = useMemo(() => (searchQuery || '').trim().split(/\s+/).filter(Boolean), [searchQuery])
+  const searchTokensLower = useMemo(() => searchTokens.map(token => token.toLowerCase()), [searchTokens])
   const filteredResults = useMemo(() => {
     const q = (searchQuery || '').trim().toLowerCase()
-    if (!q) return [] as { id: number; content: string }[]
-    // Filter by content; show up to 12 results
+    if (!q) return [] as { id: number; content: string; role: string; plain: string }[]
     const res = (plainMessages as any[])
       .filter(m => {
         const plain = (m?.content_plain_text || m?.plain_text_content || m?.content || '').toLowerCase()
         return typeof plain === 'string' && plain.includes(q)
       })
-      .slice(0, 12)
-      .map(m => ({ id: m.id, content: m.content, role: m.role }))
+      .map(m => ({
+        id: m.id,
+        content: m.content,
+        role: m.role,
+        plain: m?.content_plain_text || m?.plain_text_content || m?.content || '',
+      }))
     return res
   }, [searchQuery, plainMessages])
+  const renderHighlightedText = useCallback(
+    (text: string) => {
+      if (!searchTokens.length) return text
+      const regex = new RegExp(`(${searchTokens.map(escapeRegExp).join('|')})`, 'gi')
+      const parts = (text || '').split(regex)
+      return parts.map((part, idx) =>
+        searchTokensLower.includes(part.toLowerCase()) ? (
+          <mark
+            key={`hl-${idx}`}
+            className='bg-amber-200/70 text-stone-900 dark:bg-amber-400/40 dark:text-amber-100 rounded px-0.5'
+          >
+            {part}
+          </mark>
+        ) : (
+          <span key={`hl-${idx}`}>{part}</span>
+        )
+      )
+    },
+    [searchTokens, searchTokensLower]
+  )
+  const handleSelectSearchResult = useCallback(
+    (item: { id: number }) => {
+      if (!item) return
+      searchFocusPendingRef.current = true
+      const path = buildBranchPathForMessage(flatMessages as any, item.id)
+      if (path.length > 0) {
+        dispatch(chatSliceActions.conversationPathSet(path))
+        dispatch(chatSliceActions.selectedNodePathSet(path.map(id => String(id))))
+      }
+      dispatch(chatSliceActions.focusedChatMessageSet(item.id))
+      setSearchOpen(false)
+      setSearchQuery('')
+      setSearchHoverIndex(-1)
+    },
+    [dispatch, flatMessages]
+  )
+  const handleSearchClose = useCallback(() => {
+    setSearchOpen(false)
+    setSearchHoverIndex(-1)
+  }, [])
   const lastCenteredIdRef = useRef<string | null>(null)
   // Only center when focus comes from the search bar, not other sources
   const searchFocusPendingRef = useRef<boolean>(false)
@@ -2549,109 +2598,14 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         </button>
       </div>
       <div className='absolute top-4 right-8 ml-100 z-10 flex flex-col gap-2 items-end'>
-        {/* Search bar for messages in the current chat */}
-        <div className='w-full min-w-[200px] max-w-[400px] relative mb-2 shadow-[0_20px_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.2)]'>
-          <TextField
-            placeholder='Search'
-            value={searchQuery}
-            onChange={val => {
-              setSearchQuery(val)
-              setSearchOpen(!!val.trim())
-              setSearchHoverIndex(-1)
-            }}
-            onKeyDown={e => {
-              if (e.key === 'ArrowDown') {
-                e.preventDefault()
-                setSearchHoverIndex(prev => Math.min(prev + 1, Math.max(0, filteredResults.length - 1)))
-              } else if (e.key === 'ArrowUp') {
-                e.preventDefault()
-                setSearchHoverIndex(prev => Math.max(-1, prev - 1))
-              } else if (e.key === 'Enter') {
-                // Enter selects the highlighted result or the first one
-                const item = filteredResults[searchHoverIndex >= 0 ? searchHoverIndex : 0]
-                if (item) {
-                  searchFocusPendingRef.current = true
-                  const path = buildBranchPathForMessage(flatMessages as any, item.id)
-                  if (path.length > 0) {
-                    dispatch(chatSliceActions.conversationPathSet(path))
-                    dispatch(chatSliceActions.selectedNodePathSet(path.map(id => String(id))))
-                  }
-                  dispatch(chatSliceActions.focusedChatMessageSet(item.id))
-                  setSearchOpen(false)
-                  setSearchQuery('')
-                }
-              } else if (e.key === 'Escape') {
-                setSearchOpen(false)
-              }
-            }}
-            size='small'
-            showSearchIcon
-            onSearchClick={() => {
-              if (filteredResults.length > 0) {
-                const item = filteredResults[0]
-                searchFocusPendingRef.current = true
-                const path = buildBranchPathForMessage(flatMessages as any, item.id)
-                if (path.length > 0) {
-                  dispatch(chatSliceActions.conversationPathSet(path))
-                  dispatch(chatSliceActions.selectedNodePathSet(path.map(id => String(id))))
-                }
-                dispatch(chatSliceActions.focusedChatMessageSet(item.id))
-                setSearchOpen(false)
-                setSearchQuery('')
-              }
-            }}
-            className='bg-amber-50 dark:bg-neutral-700'
-          />
-          {searchOpen && searchQuery.trim() && (
-            <div
-              className='absolute right-0 mt-1 max-h-72 overflow-auto rounded-md border border-stone-200 bg-white dark:bg-neutral-900 dark:border-stone-700 z-20 thin-scrollbar shadow-[0_12px_12px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_0px_24px_2px_rgba(0,0,0,0.2)]'
-              data-heimdall-wheel-exempt='true'
-            >
-              {filteredResults.length === 0 ? (
-                <div className='px-3 py-2 text-sm text-neutral-500 dark:text-stone-300 '>No matches</div>
-              ) : (
-                <ul className='py-1 text-sm text-stone-800 dark:text-stone-300'>
-                  {filteredResults.map((item, idx) => {
-                    const content = (item.content || '').replace(/\s+/g, ' ').trim()
-                    const snippet = content.length > 160 ? content.slice(0, 160) + '…' : content
-                    return (
-                      <li key={item.id}>
-                        <button
-                          type='button'
-                          onClick={() => {
-                            searchFocusPendingRef.current = true
-                            const path = buildBranchPathForMessage(flatMessages as any, item.id)
-                            if (path.length > 0) {
-                              dispatch(chatSliceActions.conversationPathSet(path))
-                              dispatch(chatSliceActions.selectedNodePathSet(path.map(id => String(id))))
-                            }
-                            dispatch(chatSliceActions.focusedChatMessageSet(item.id))
-                            setSearchOpen(false)
-                            setSearchQuery('')
-                          }}
-                          onMouseEnter={() => setSearchHoverIndex(idx)}
-                          className={`w-full text-left px-3 py-4 hover:bg-stone-100 dark:hover:bg-neutral-800 ${
-                            idx === searchHoverIndex ? 'bg-stone-100 dark:bg-neutral-800' : ''
-                          }`}
-                        >
-                          <div className='items-start gap-2'>
-                            <span className='line-clamp-2'>{snippet || '(empty message)'}</span>
-                            <span
-                              className={`shrink-0 text-xs my-2 py-2 text-neutral-500 dark:text-neutral-400 ${item.role === 'user' ? 'text-neutral-500 dark:text-stone-200' : 'text-neutral-500 dark:text-yBrown-0'}`}
-                            >
-                              {' '}
-                              {item.role}
-                            </span>
-                          </div>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
+        <button
+          type='button'
+          onClick={() => setSearchOpen(true)}
+          className='flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-stone-300 dark:border-stone-700  text-stone-800 dark:text-stone-200 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition'
+        >
+          <i className='bx bx-search text-lg' />
+          <span className='text-sm font-medium'>Search Messages</span>
+        </button>
         {/* <div className='bg-neutral-100 text-stone-800 dark:text-stone-200 px-3 py-1 rounded-lg text-sm border-2 border-stone-300 dark:border-stone-700 drop-shadow-xl shadow-[0_0px_6px_-12px_rgba(0,0,0,0.05)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] dark:bg-yBlack-900'>
           Zoom: {Math.round(zoom * 100)}%
         </div> */}
@@ -2741,6 +2695,101 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           />
         )}
       </svg>
+      {searchOpen && (
+        <div
+          className='absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-[2px]'
+          onClick={handleSearchClose}
+        >
+          <div
+            className='bg-neutral-50 dark:bg-zinc-900 border border-stone-200 dark:border-neutral-700 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] w-[95%] sm:w-[90%] max-w-6xl'
+            onClick={e => e.stopPropagation()}
+            data-heimdall-wheel-exempt='true'
+          >
+            <div className='flex items-center justify-between px-5 py-4 border-b border-stone-200 dark:border-neutral-800 shrink-0'>
+              <div>
+                <h3 className='text-base font-semibold text-stone-800 dark:text-stone-100'>Search Messages</h3>
+                <p className='text-xs text-stone-500 dark:text-stone-400'>Search across this conversation.</p>
+              </div>
+              <button
+                onClick={handleSearchClose}
+                className='p-1.5 hover:bg-stone-200 dark:hover:bg-neutral-800 rounded-full transition-colors'
+                aria-label='Close search'
+              >
+                <svg className='w-5 h-5 text-stone-500' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                </svg>
+              </button>
+            </div>
+            <div className='px-5 py-4 border-b border-stone-200 dark:border-neutral-800'>
+              <TextField
+                placeholder='Search for words or phrases'
+                value={searchQuery}
+                onChange={val => {
+                  setSearchQuery(val)
+                  setSearchHoverIndex(-1)
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setSearchHoverIndex(prev => Math.min(prev + 1, Math.max(0, filteredResults.length - 1)))
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setSearchHoverIndex(prev => Math.max(-1, prev - 1))
+                  } else if (e.key === 'Enter') {
+                    const item = filteredResults[searchHoverIndex >= 0 ? searchHoverIndex : 0]
+                    if (item) {
+                      handleSelectSearchResult(item)
+                    }
+                  } else if (e.key === 'Escape') {
+                    handleSearchClose()
+                  }
+                }}
+                size='small'
+                className='bg-amber-50 dark:bg-neutral-700'
+              />
+              <div className='mt-2 text-xs text-stone-500 dark:text-stone-400'>
+                {searchQuery.trim()
+                  ? `${filteredResults.length} result${filteredResults.length === 1 ? '' : 's'}`
+                  : 'Start typing to see matching messages.'}
+              </div>
+            </div>
+            <div className='overflow-y-auto flex-1 thin-scrollbar px-5 py-4' data-heimdall-wheel-exempt='true'>
+              {!searchQuery.trim() && (
+                <div className='text-sm text-stone-500 dark:text-stone-400'>Enter a search term to begin.</div>
+              )}
+              {searchQuery.trim() && filteredResults.length === 0 && (
+                <div className='text-sm text-stone-500 dark:text-stone-400'>No matches found.</div>
+              )}
+              {searchQuery.trim() && filteredResults.length > 0 && (
+                <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3'>
+                  {filteredResults.map((item, idx) => {
+                    const messageText = (item.plain || item.content || '').trim() || '(empty message)'
+                    return (
+                      <button
+                        key={item.id}
+                        type='button'
+                        onClick={() => handleSelectSearchResult(item)}
+                        onMouseEnter={() => setSearchHoverIndex(idx)}
+                        className={`text-left rounded-xl border border-stone-200 dark:border-neutral-800 bg-white/90 dark:bg-neutral-900/60 p-3 shadow-sm hover:shadow-md transition-all ${
+                          idx === searchHoverIndex ? 'ring-2 ring-amber-300/80 dark:ring-amber-400/60' : ''
+                        }`}
+                      >
+                        <div className='flex items-center justify-between text-[11px] uppercase tracking-wide text-stone-500 dark:text-stone-400'>
+                          <span className='font-semibold'>{item.role}</span>
+                          <span>#{idx + 1}</span>
+                        </div>
+                        <div className='mt-2 text-sm text-stone-700 dark:text-stone-200 max-h-48 sm:max-h-52 md:max-h-60 lg:max-h-64 overflow-y-auto thin-scrollbar whitespace-pre-wrap'>
+                          {renderHighlightedText(messageText)}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Custom context menu after selection */}
       {showContextMenu && contextMenuPos && (
         <div
@@ -2759,11 +2808,19 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             className='w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-stone-500 dark:text-neutral-400 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-stone-100 dark:hover:bg-neutral-800 hover:text-stone-900 dark:hover:text-white hover:pl-4 group'
             onClick={handleCopySelectedPaths}
           >
-            <svg className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+            <svg
+              className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity'
+              fill='none'
+              viewBox='0 0 24 24'
+              stroke='currentColor'
+              strokeWidth={2}
+            >
               <path d='M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z' />
             </svg>
             <span>Copy Text</span>
-            <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>⌘C</span>
+            <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>
+              ⌘C
+            </span>
           </button>
 
           {selectedNodes.length === 1 && (
@@ -2776,7 +2833,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 }
               }}
             >
-              <svg className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+              <svg
+                className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity'
+                fill='none'
+                viewBox='0 0 24 24'
+                stroke='currentColor'
+                strokeWidth={2}
+              >
                 <path d='M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' />
               </svg>
               <span>
@@ -2786,7 +2849,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                   return hasNote ? 'View Note' : 'Add Note'
                 })()}
               </span>
-              <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>N</span>
+              <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>
+                N
+              </span>
             </button>
           )}
 
@@ -2796,7 +2861,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             className='w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-stone-500 dark:text-neutral-400 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-stone-100 dark:hover:bg-neutral-800 hover:text-stone-900 dark:hover:text-white hover:pl-4 group'
             onClick={handleCreateNewChat}
           >
-            <svg className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+            <svg
+              className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity'
+              fill='none'
+              viewBox='0 0 24 24'
+              stroke='currentColor'
+              strokeWidth={2}
+            >
               <path d='M12 4v16m8-8H4' />
             </svg>
             <span>New Chat From Here</span>
@@ -2808,11 +2879,19 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             className='w-full flex items-center gap-3 px-3 py-2.5 rounded-[14px] text-stone-500 dark:text-neutral-400 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-950 hover:text-red-600 dark:hover:text-red-400 hover:pl-4 group'
             onClick={handleDeleteNodes}
           >
-            <svg className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity' fill='none' viewBox='0 0 24 24' stroke='currentColor' strokeWidth={2}>
+            <svg
+              className='w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity'
+              fill='none'
+              viewBox='0 0 24 24'
+              stroke='currentColor'
+              strokeWidth={2}
+            >
               <path d='M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' />
             </svg>
             <span>Delete Permanently</span>
-            <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>DEL</span>
+            <span className='ml-auto font-mono text-[10px] tracking-[0.05em] text-stone-400 dark:text-neutral-500'>
+              DEL
+            </span>
           </button>
         </div>
       )}

@@ -226,6 +226,40 @@ describe('editFile replace and replace_first behavior', () => {
     expect(result.replacements).toBe(0)
     expect(await harness.listBackups('replace-noop-backup.txt')).toHaveLength(0)
   })
+
+  it('keeps $& literal in exact replace for Heimdall-style interface insertion', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'src/components/Heimdall/Heimdall.tsx',
+      [
+        'interface Bounds { minX: number maxX: number minY: number maxY: number }',
+        '',
+        'export const Heimdall = () => null',
+        '',
+      ].join('\n')
+    )
+
+    const searchPattern = 'interface Bounds { minX: number maxX: number minY: number maxY: number }'
+    const replacement =
+      "interface Bounds { minX: number maxX: number minY: number maxY: number } const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')"
+
+    const result = await editFile('src/components/Heimdall/Heimdall.tsx', 'replace', {
+      searchPattern,
+      replacement,
+      interpretEscapeSequences: false,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('src/components/Heimdall/Heimdall.tsx')
+    const interfaceCount = (updated.match(/interface Bounds/g) || []).length
+
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('exact')
+    expect(result.replacements).toBe(1)
+    expect(updated).toContain(replacement)
+    expect(updated).not.toContain('\\interface Bounds')
+    expect(interfaceCount).toBe(1)
+  })
 })
 
 describe('editFile escape sequence behavior', () => {

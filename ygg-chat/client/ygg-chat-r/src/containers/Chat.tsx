@@ -154,6 +154,9 @@ function Chat() {
 
   // Claude Code working directory input (disabled in web mode)
   const [ccCwd, setCcCwd] = useState('')
+  const isCwdDirtyRef = useRef(false)
+  const latestCcCwdRef = useRef(ccCwd)
+  const lastCwdConversationIdRef = useRef<ConversationId | null>(null)
 
   // Image generation configuration (aspect ratio and size for Gemini image models)
   const [imageConfig, setImageConfig] = useState<ImageConfig>({})
@@ -581,11 +584,34 @@ function Chat() {
   const currentConversation = useAppSelector(
     currentConversationId ? makeSelectConversationById(currentConversationId) : () => null
   )
+
+  const idsMatch = useCallback((a: ConversationId | null | undefined, b: ConversationId | null | undefined) => {
+    if (a == null || b == null) return false
+    return String(a) === String(b)
+  }, [])
+
+  const setCcCwdFromUser = useCallback((nextValue: string) => {
+    isCwdDirtyRef.current = true
+    setCcCwd(nextValue)
+  }, [])
+
+  const setCcCwdFromSystem = useCallback((nextValue: string) => {
+    isCwdDirtyRef.current = false
+    setCcCwd(nextValue)
+  }, [])
   // Fetch conversations for the current project using React Query
   // Use projectId from URL first (ensures correct cache is active on page refresh)
   const { data: projectConversations = [] } = useConversationsByProject(
     projectIdFromUrl || selectedProject?.id || currentConversation?.project_id || null
   )
+
+  const findConversationForCurrent = useCallback(() => {
+    if (!currentConversationId) return null
+    const fromProject = projectConversations.find(c => idsMatch(c.id, currentConversationId))
+    if (fromProject) return fromProject
+    if (currentConversation && idsMatch(currentConversation.id, currentConversationId)) return currentConversation
+    return null
+  }, [currentConversationId, projectConversations, currentConversation, idsMatch])
 
   // Fetch all projects for SideBar
   const { data: allProjects = [] } = useProjects()
@@ -940,36 +966,53 @@ function Chat() {
   // Sync system prompt and context from current conversation
   // Read directly from React Query projectConversations to avoid Redux sync race conditions
   useEffect(() => {
-    if (currentConversationId) {
-      // Find the current conversation in projectConversations (React Query cache)
-      const conversation = projectConversations.find(c => c.id === currentConversationId)
-      // Extract system_prompt and conversation_context from the found conversation
-      dispatch(systemPromptSet(conversation?.system_prompt ?? null))
-      dispatch(convContextSet(conversation?.conversation_context ?? null))
-    } else {
+    if (!currentConversationId) {
       // If no conversation is selected, clear prompts and context
       dispatch(systemPromptSet(null))
       dispatch(convContextSet(null))
+      return
     }
-  }, [currentConversationId, projectConversations, dispatch])
+
+    const conversation = findConversationForCurrent()
+    if (!conversation) return
+
+    // Extract system_prompt and conversation_context from the found conversation
+    dispatch(systemPromptSet(conversation.system_prompt ?? null))
+    dispatch(convContextSet(conversation.conversation_context ?? null))
+  }, [currentConversationId, findConversationForCurrent, dispatch])
 
   // Load cwd from conversation when conversation changes
   // This populates the Claude Code working directory from cached conversation data
   useEffect(() => {
-    if (currentConversationId && projectConversations.length > 0) {
-      // Find the current conversation in projectConversations (React Query cache)
-      const conversation = projectConversations.find(c => c.id === currentConversationId)
-
-      // Extract cwd from the conversation, default to empty string if not set
-      const conversationCwd = conversation?.cwd ?? ''
-
-      // Update ccCwd state with the loaded value
-      setCcCwd(conversationCwd)
-    } else {
+    if (!currentConversationId) {
       // If no conversation is selected, clear cwd
-      setCcCwd('')
+      lastCwdConversationIdRef.current = null
+      setCcCwdFromSystem('')
+      return
     }
-  }, [currentConversationId, projectConversations])
+
+    const conversationChanged = !idsMatch(lastCwdConversationIdRef.current, currentConversationId)
+    if (conversationChanged) {
+      lastCwdConversationIdRef.current = currentConversationId
+      isCwdDirtyRef.current = false
+    }
+
+    const conversation = findConversationForCurrent()
+    if (!conversation) return
+
+    // Never clobber manual typing for the active conversation.
+    if (!conversationChanged && isCwdDirtyRef.current) {
+      return
+    }
+
+    // Extract cwd from the conversation, default to empty string if not set
+    const conversationCwd = conversation.cwd ?? ''
+    setCcCwdFromSystem(conversationCwd)
+  }, [currentConversationId, findConversationForCurrent, idsMatch, setCcCwdFromSystem])
+
+  useEffect(() => {
+    latestCcCwdRef.current = ccCwd
+  }, [ccCwd])
 
   // Auto-sync cwd from IDE extension when connected
   // Only sync once when workspace connects - don't include ccCwd in deps to avoid infinite loop
@@ -984,13 +1027,14 @@ function Chat() {
       ideContext?.extensionConnected &&
       workspace?.rootPath &&
       currentConversationId &&
+      !isCwdDirtyRef.current &&
       hasAutoSyncedCwd.current !== `${currentConversationId}:${workspace.rootPath}`
     ) {
       // Mark as synced to prevent re-running
       hasAutoSyncedCwd.current = `${currentConversationId}:${workspace.rootPath}`
 
       // Update local state
-      setCcCwd(workspace.rootPath)
+      setCcCwdFromSystem(workspace.rootPath)
 
       // Persist to local database (cwd is Electron-only feature)
       dispatch(
@@ -1001,7 +1045,7 @@ function Chat() {
         })
       )
     }
-  }, [ideContext?.extensionConnected, workspace?.rootPath, currentConversationId, dispatch])
+  }, [ideContext?.extensionConnected, workspace?.rootPath, currentConversationId, dispatch, setCcCwdFromSystem])
 
   // Debounce cwd updates to save manual input to database
   // Similar pattern to title update debounce (lines 503-556)
@@ -1009,26 +1053,35 @@ function Chat() {
     if (!currentConversationId) return
 
     // Find current conversation to compare against stored value
-    const conversation = projectConversations.find(c => c.id === currentConversationId)
+    const conversation = findConversationForCurrent()
     const storedCwd = conversation?.cwd ?? ''
 
     // Normalize for comparison (treat empty string same as null/undefined)
     const normalizedCcCwd = ccCwd.trim()
     const normalizedStoredCwd = (storedCwd || '').trim()
 
-    // No-op if unchanged
-    if (normalizedCcCwd === normalizedStoredCwd) return
+    // No-op if unchanged (also release dirty lock once backend catches up)
+    if (normalizedCcCwd === normalizedStoredCwd) {
+      isCwdDirtyRef.current = false
+      return
+    }
 
     const handle = setTimeout(() => {
+      const targetConversationId = currentConversationId
+      const targetCwd = normalizedCcCwd
       dispatch(
         updateCwd({
-          id: currentConversationId,
-          cwd: normalizedCcCwd || null, // Convert empty string to null
+          id: targetConversationId,
+          cwd: targetCwd || null, // Convert empty string to null
           storageMode: 'local', // cwd is Electron-only feature
         })
       )
         .unwrap()
         .then(() => {
+          if (latestCcCwdRef.current.trim() === targetCwd) {
+            isCwdDirtyRef.current = false
+          }
+
           // Update React Query caches to reflect the new cwd
           const projectId = selectedProject?.id || conversation?.project_id
 
@@ -1038,7 +1091,7 @@ function Chat() {
             queryClient.setQueryData(
               ['conversations'],
               conversationsCache.map(conv =>
-                conv.id === currentConversationId ? { ...conv, cwd: normalizedCcCwd || null } : conv
+                idsMatch(conv.id, targetConversationId) ? { ...conv, cwd: targetCwd || null } : conv
               )
             )
           }
@@ -1054,7 +1107,7 @@ function Chat() {
               queryClient.setQueryData(
                 ['conversations', 'project', projectId],
                 projectConversationsCache.map(conv =>
-                  conv.id === currentConversationId ? { ...conv, cwd: normalizedCcCwd || null } : conv
+                  idsMatch(conv.id, targetConversationId) ? { ...conv, cwd: targetCwd || null } : conv
                 )
               )
             }
@@ -1066,7 +1119,7 @@ function Chat() {
     }, 1000) // 1 second debounce (same as title)
 
     return () => clearTimeout(handle)
-  }, [ccCwd, currentConversationId, projectConversations, dispatch, queryClient, selectedProject?.id])
+  }, [ccCwd, currentConversationId, findConversationForCurrent, dispatch, queryClient, selectedProject?.id, idsMatch])
 
   // Query invalidation is now handled directly in sendMessage and editMessageWithBranching success handlers
   // This prevents aggressive refetching and duplicate API requests
@@ -3437,7 +3490,7 @@ function Chat() {
                               <input
                                 type='text'
                                 value={ccCwd}
-                                onChange={e => setCcCwd(e.target.value)}
+                                onChange={e => setCcCwdFromUser(e.target.value)}
                                 placeholder='Working directory (optional)'
                                 className='flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
                                 title='Specify the working directory for Claude Code agent'
@@ -3447,7 +3500,7 @@ function Chat() {
                                 onClick={async () => {
                                   const result = await window.electronAPI?.dialog?.selectFolder()
                                   if (result?.success && result.path) {
-                                    setCcCwd(result.path)
+                                    setCcCwdFromUser(result.path)
                                   }
                                 }}
                                 className='px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
