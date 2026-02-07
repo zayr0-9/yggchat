@@ -907,6 +907,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [isHovering, setIsHovering] = useState(false)
     const moreButtonRef = useRef<HTMLDivElement | null>(null)
     const messageRef = useRef<HTMLDivElement | null>(null)
+    const handleMobileMessageActivate = useCallback(() => {
+      if (!isMobile) return
+      setIsHovering(true)
+    }, [isMobile])
     // Context menu states (floating MessageActions)
     const [contextMenuOpen, setContextMenuOpen] = useState(false)
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null)
@@ -1324,6 +1328,25 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         document.removeEventListener('keydown', handleEscape)
       }
     }, [contextMenuOpen, closeFloatingActions])
+
+    // Mobile: hide inline actions when tapping outside the message
+    useEffect(() => {
+      if (!isMobile) return
+
+      const handleTapOutside = (event: MouseEvent | TouchEvent) => {
+        if (messageRef.current && !messageRef.current.contains(event.target as Node)) {
+          setIsHovering(false)
+        }
+      }
+
+      document.addEventListener('mousedown', handleTapOutside)
+      document.addEventListener('touchstart', handleTapOutside)
+
+      return () => {
+        document.removeEventListener('mousedown', handleTapOutside)
+        document.removeEventListener('touchstart', handleTapOutside)
+      }
+    }, [isMobile])
 
     // Compute dropdown placement - runs on mount and when menu state changes
     useEffect(() => {
@@ -2057,6 +2080,8 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
         onContextMenu={handleContextMenu}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
+        onClick={handleMobileMessageActivate}
+        onTouchStart={handleMobileMessageActivate}
       >
         {/* Header with role */}
         {role === 'user' && (
