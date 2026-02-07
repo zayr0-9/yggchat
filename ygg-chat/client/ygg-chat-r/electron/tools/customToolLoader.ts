@@ -2,15 +2,19 @@
 // Dynamic loader for user-defined custom tools from userData/custom-tools/
 
 import { app } from 'electron'
-import fs from 'fs/promises'
+import { EventEmitter } from 'events'
+import fs, { FSWatcher } from 'fs'
+import fsPromises from 'fs/promises'
 import path from 'path'
 import { pathToFileURL } from 'url'
 
 const CUSTOM_TOOLS_DIR_NAME = 'custom-tools'
 const CUSTOM_TOOLS_GUIDE_FILE = 'CUSTOM_TOOLS_GUIIDE.md'
+const CUSTOM_TOOLS_STATE_FILE = 'custom-tools-state.json'
 const DEFINITION_FILE = 'definition.json'
 const IMPLEMENTATION_FILE = 'index.js'
 const EXECUTION_TIMEOUT_MS = 60000 // 60 seconds
+const DEFAULT_REFRESH_DEBOUNCE_MS = 500
 
 // Cached base directory
 let cachedBaseDir: string | null = null
@@ -41,6 +45,10 @@ function getCustomToolsDirectory(): string {
   return path.join(resolveBaseDir(), CUSTOM_TOOLS_DIR_NAME)
 }
 
+function getCustomToolsStatePath(): string {
+  return path.join(resolveBaseDir(), CUSTOM_TOOLS_STATE_FILE)
+}
+
 function resolveGuideSourcePath(): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
@@ -51,6 +59,16 @@ function resolveGuideSourcePath(): string {
   } catch {
     return path.join(process.cwd(), CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
   }
+}
+
+function isWithinDirectory(targetPath: string, parentPath: string): boolean {
+  const relative = path.relative(parentPath, targetPath)
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
+function normalizeDebounce(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_REFRESH_DEBOUNCE_MS
+  return Math.min(5000, Math.max(100, Math.floor(value)))
 }
 
 // Tool definition interface (matches toolDefinitions.ts pattern)
@@ -72,6 +90,44 @@ export interface CustomToolDefinition {
   }
   isCustom: true // Flag to distinguish from built-in
   sourcePath: string
+  directoryName: string
+}
+
+export interface CustomToolLifecycleSettings {
+  autoRefresh: boolean
+  refreshDebounceMs: number
+}
+
+export interface CustomToolStatus {
+  name: string
+  enabled: boolean
+  description: string
+  sourcePath: string
+  directoryName: string
+  loaded: boolean
+  loadError?: string
+  lastLoadedAt?: string
+}
+
+export interface AddCustomToolOptions {
+  directoryName?: string
+  overwrite?: boolean
+}
+
+export interface AddCustomToolResult {
+  targetPath: string
+  loadedToolNames: string[]
+}
+
+export interface RemoveCustomToolResult {
+  removedPath: string
+  removedToolNames: string[]
+}
+
+export interface CustomToolsChangedEvent {
+  reason: string
+  totalCount: number
+  tools: CustomToolDefinition[]
 }
 
 // Tool execution options (matches built-in tools pattern, extended with context)
@@ -99,7 +155,19 @@ export interface CustomToolImplementation {
 
 interface LoadedCustomTool {
   definition: CustomToolDefinition
-  implementation: CustomToolImplementation
+  implementationPath: string
+  cacheToken: string
+  implementation?: CustomToolImplementation
+  loadError?: string
+  lastLoadedAt?: string
+}
+
+interface CustomToolsStateFile {
+  settings?: {
+    autoRefresh?: boolean
+    refreshDebounceMs?: number
+  }
+  tools?: Record<string, { enabled?: boolean }>
 }
 
 // Validate tool name format (lowercase alphanumeric with underscores)
@@ -108,7 +176,7 @@ function isValidToolName(name: string): boolean {
 }
 
 // Validate definition structure
-function validateDefinition(def: any): def is Omit<CustomToolDefinition, 'isCustom' | 'sourcePath'> {
+function validateDefinition(def: any): def is Omit<CustomToolDefinition, 'isCustom' | 'sourcePath' | 'directoryName'> {
   if (typeof def !== 'object' || def === null) return false
   if (typeof def.name !== 'string' || !isValidToolName(def.name)) return false
   if (typeof def.description !== 'string' || def.description.length === 0) return false
@@ -152,20 +220,47 @@ function restoreEnv(key: string, snapshot: { hasKey: boolean; value?: string }):
   delete process.env[key]
 }
 
+function cloneDefinition(definition: CustomToolDefinition): CustomToolDefinition {
+  return {
+    ...definition,
+    inputSchema: {
+      ...definition.inputSchema,
+      properties: { ...definition.inputSchema.properties },
+      required: definition.inputSchema.required ? [...definition.inputSchema.required] : undefined,
+    },
+    appPermissions: definition.appPermissions ? { ...definition.appPermissions } : undefined,
+  }
+}
+
 /**
  * Custom Tool Registry
  * Manages loading, storing, and executing user-defined custom tools
  */
-class CustomToolRegistry {
+class CustomToolRegistry extends EventEmitter {
   private tools: Map<string, LoadedCustomTool> = new Map()
   private initialized: boolean = false
   private initPromise: Promise<void> | null = null
+  private reloadPromise: Promise<void> | null = null
+  private stateOverrides: Map<string, boolean> = new Map()
+  private settings: CustomToolLifecycleSettings = {
+    autoRefresh: true,
+    refreshDebounceMs: DEFAULT_REFRESH_DEBOUNCE_MS,
+  }
+  private reloadGeneration = 0
+
+  private watcherMode: 'none' | 'recursive' | 'shallow' = 'none'
+  private rootWatcher: FSWatcher | null = null
+  private toolWatchers: Map<string, FSWatcher> = new Map()
+  private watcherDebounceTimer: NodeJS.Timeout | null = null
 
   /**
    * Initialize the registry by scanning the custom tools directory
    */
   async initialize(): Promise<void> {
-    if (this.initialized) return
+    if (this.initialized) {
+      this.updateWatchers()
+      return
+    }
     if (this.initPromise) return this.initPromise
 
     this.initPromise = this._doInitialize()
@@ -179,14 +274,16 @@ class CustomToolRegistry {
 
     await this.ensureDirectory()
     await this.ensureGuideFile()
-    await this.loadAllTools()
+    await this.loadStateFile()
+    await this.loadAllTools(this.tools)
+    this.updateWatchers()
     this.initialized = true
   }
 
   private async ensureDirectory(): Promise<void> {
     const dir = getCustomToolsDirectory()
     try {
-      await fs.mkdir(dir, { recursive: true })
+      await fsPromises.mkdir(dir, { recursive: true })
     } catch (error) {
       console.error('[CustomToolLoader] Failed to create directory:', error)
     }
@@ -196,7 +293,7 @@ class CustomToolRegistry {
     const targetPath = path.join(getCustomToolsDirectory(), CUSTOM_TOOLS_GUIDE_FILE)
 
     try {
-      await fs.access(targetPath)
+      await fsPromises.access(targetPath)
       return
     } catch {
       // File does not exist; seed it below.
@@ -204,57 +301,109 @@ class CustomToolRegistry {
 
     const sourcePath = resolveGuideSourcePath()
     try {
-      await fs.access(sourcePath)
+      await fsPromises.access(sourcePath)
     } catch (error) {
       console.warn('[CustomToolLoader] Guide file not found at:', sourcePath, error)
       return
     }
 
     try {
-      await fs.copyFile(sourcePath, targetPath)
+      await fsPromises.copyFile(sourcePath, targetPath)
       console.log('[CustomToolLoader] Seeded custom tools guide at:', targetPath)
     } catch (error) {
       console.error('[CustomToolLoader] Failed to seed guide file:', error)
     }
   }
 
+  private async loadStateFile(): Promise<void> {
+    const statePath = getCustomToolsStatePath()
+    let parsed: CustomToolsStateFile = {}
+
+    try {
+      const content = await fsPromises.readFile(statePath, 'utf-8')
+      parsed = JSON.parse(content) as CustomToolsStateFile
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.warn('[CustomToolLoader] Failed to read state file:', error)
+      }
+    }
+
+    this.settings = {
+      autoRefresh: parsed.settings?.autoRefresh !== false,
+      refreshDebounceMs: normalizeDebounce(parsed.settings?.refreshDebounceMs),
+    }
+
+    this.stateOverrides.clear()
+    const toolEntries = parsed.tools || {}
+    for (const [toolName, toolState] of Object.entries(toolEntries)) {
+      if (typeof toolState?.enabled === 'boolean') {
+        this.stateOverrides.set(toolName, toolState.enabled)
+      }
+    }
+  }
+
+  private async saveStateFile(): Promise<void> {
+    const statePath = getCustomToolsStatePath()
+    await fsPromises.mkdir(path.dirname(statePath), { recursive: true })
+
+    const tools: Record<string, { enabled: boolean }> = {}
+    for (const [toolName, enabled] of Array.from(this.stateOverrides.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0])
+    )) {
+      tools[toolName] = { enabled }
+    }
+
+    const payload: CustomToolsStateFile = {
+      settings: {
+        autoRefresh: this.settings.autoRefresh,
+        refreshDebounceMs: this.settings.refreshDebounceMs,
+      },
+      tools,
+    }
+
+    await fsPromises.writeFile(statePath, JSON.stringify(payload, null, 2), 'utf-8')
+  }
+
   /**
-   * Load all tools from the custom tools directory
+   * Load all tools from the custom tools directory.
+   * Note: implementations are lazy-loaded on first execution.
    */
-  private async loadAllTools(): Promise<void> {
-    this.tools.clear()
+  private async loadAllTools(previousTools: Map<string, LoadedCustomTool>): Promise<void> {
+    const nextTools: Map<string, LoadedCustomTool> = new Map()
     const dir = getCustomToolsDirectory()
 
     try {
-      const entries = await fs.readdir(dir, { withFileTypes: true })
-
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          await this.loadTool(entry.name)
-        }
-      }
+      const entries = await fsPromises.readdir(dir, { withFileTypes: true })
+      const toolEntries = entries.filter(entry => entry.isDirectory())
+      await Promise.all(toolEntries.map(entry => this.loadTool(entry.name, nextTools, previousTools)))
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.error('[CustomToolLoader] Error scanning tools directory:', error)
       }
     }
+
+    this.tools = nextTools
   }
 
   /**
-   * Load a single tool from its directory
+   * Load a single tool's definition from its directory.
    */
-  private async loadTool(toolDirName: string): Promise<void> {
+  private async loadTool(
+    toolDirName: string,
+    nextTools: Map<string, LoadedCustomTool>,
+    previousTools: Map<string, LoadedCustomTool>
+  ): Promise<void> {
     const toolPath = path.join(getCustomToolsDirectory(), toolDirName)
     const definitionPath = path.join(toolPath, DEFINITION_FILE)
     const implementationPath = path.join(toolPath, IMPLEMENTATION_FILE)
 
     try {
       // Check both files exist
-      await fs.access(definitionPath)
-      await fs.access(implementationPath)
+      await fsPromises.access(definitionPath)
+      await fsPromises.access(implementationPath)
 
       // Load and parse definition
-      const definitionRaw = await fs.readFile(definitionPath, 'utf-8')
+      const definitionRaw = await fsPromises.readFile(definitionPath, 'utf-8')
       let definition: any
       try {
         definition = JSON.parse(definitionRaw)
@@ -280,27 +429,28 @@ class CustomToolRegistry {
         )
       }
 
-      // Load implementation using dynamic import
-      const implementationUrl = pathToFileURL(implementationPath).href
-      let implementation: any
-      try {
-        implementation = await import(implementationUrl)
-      } catch (importError) {
-        console.warn(`[CustomToolLoader] Failed to import ${toolDirName}/index.js:`, importError)
+      if (nextTools.has(definition.name)) {
+        console.warn(`[CustomToolLoader] Duplicate tool name "${definition.name}" detected. Later entry ignored.`)
         return
       }
 
-      // Validate implementation has execute function
-      if (typeof implementation.execute !== 'function') {
-        console.warn(`[CustomToolLoader] Missing or invalid 'execute' function in ${toolDirName}/index.js`)
-        return
-      }
+      const implementationStat = await fsPromises.stat(implementationPath)
+      const cacheToken = `${implementationStat.mtimeMs}:${implementationStat.size}:${this.reloadGeneration}`
+      const previous = previousTools.get(definition.name)
+      const canReuseImplementation =
+        previous &&
+        previous.definition.sourcePath === toolPath &&
+        previous.implementationPath === implementationPath &&
+        previous.cacheToken === cacheToken
 
-      // Build custom definition with metadata
+      const enabled = this.stateOverrides.has(definition.name)
+        ? this.stateOverrides.get(definition.name)!
+        : definition.enabled !== false
+
       const customDefinition: CustomToolDefinition = {
         name: definition.name,
         version: definition.version,
-        enabled: definition.enabled !== false, // Default to true
+        enabled,
         description: definition.description,
         appPermissions: definition.appPermissions,
         jsRuntimeMode: definition.jsRuntimeMode,
@@ -309,15 +459,17 @@ class CustomToolRegistry {
         inputSchema: definition.inputSchema,
         isCustom: true,
         sourcePath: toolPath,
+        directoryName: toolDirName,
       }
 
-      // Register the tool
-      this.tools.set(definition.name, {
+      nextTools.set(definition.name, {
         definition: customDefinition,
-        implementation: implementation as CustomToolImplementation,
+        implementationPath,
+        cacheToken,
+        implementation: canReuseImplementation ? previous?.implementation : undefined,
+        loadError: canReuseImplementation ? previous?.loadError : undefined,
+        lastLoadedAt: canReuseImplementation ? previous?.lastLoadedAt : undefined,
       })
-
-      console.log(`[CustomToolLoader] Loaded custom tool: ${definition.name}`)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         console.warn(
@@ -329,18 +481,178 @@ class CustomToolRegistry {
     }
   }
 
+  private async loadImplementation(tool: LoadedCustomTool): Promise<CustomToolImplementation> {
+    if (tool.implementation) {
+      return tool.implementation
+    }
+
+    const implementationUrl = `${pathToFileURL(tool.implementationPath).href}?v=${encodeURIComponent(tool.cacheToken)}`
+    let implementationModule: any
+    try {
+      implementationModule = await import(implementationUrl)
+    } catch (importError) {
+      tool.loadError = importError instanceof Error ? importError.message : String(importError)
+      throw new Error(`Failed to import ${tool.definition.name}: ${tool.loadError}`)
+    }
+
+    if (typeof implementationModule.execute !== 'function') {
+      tool.loadError = `Missing or invalid 'execute' function in ${tool.definition.directoryName}/${IMPLEMENTATION_FILE}`
+      throw new Error(tool.loadError)
+    }
+
+    tool.implementation = implementationModule as CustomToolImplementation
+    tool.loadError = undefined
+    tool.lastLoadedAt = new Date().toISOString()
+    return tool.implementation
+  }
+
+  private scheduleWatcherReload(trigger: string): void {
+    if (!this.settings.autoRefresh) return
+    if (this.watcherDebounceTimer) {
+      clearTimeout(this.watcherDebounceTimer)
+    }
+
+    this.watcherDebounceTimer = setTimeout(() => {
+      this.watcherDebounceTimer = null
+      this.reload(`watch:${trigger}`).catch(error => {
+        console.error('[CustomToolLoader] Auto-refresh reload failed:', error)
+      })
+    }, this.settings.refreshDebounceMs)
+  }
+
+  private closeToolWatchers(): void {
+    for (const watcher of this.toolWatchers.values()) {
+      watcher.close()
+    }
+    this.toolWatchers.clear()
+  }
+
+  private syncToolWatchers(): void {
+    if (this.watcherMode !== 'shallow') {
+      this.closeToolWatchers()
+      return
+    }
+
+    const toolDirs = new Set(Array.from(this.tools.values()).map(tool => tool.definition.sourcePath))
+
+    for (const [dirPath, watcher] of this.toolWatchers.entries()) {
+      if (!toolDirs.has(dirPath)) {
+        watcher.close()
+        this.toolWatchers.delete(dirPath)
+      }
+    }
+
+    for (const dirPath of toolDirs) {
+      if (this.toolWatchers.has(dirPath)) continue
+      try {
+        const watcher = fs.watch(dirPath, { recursive: true }, () => this.scheduleWatcherReload('tool'))
+        watcher.on('error', error => {
+          console.warn(`[CustomToolLoader] Tool watcher error (${dirPath}):`, error)
+          this.scheduleWatcherReload('tool_error')
+        })
+        this.toolWatchers.set(dirPath, watcher)
+      } catch {
+        try {
+          const watcher = fs.watch(dirPath, () => this.scheduleWatcherReload('tool'))
+          watcher.on('error', error => {
+            console.warn(`[CustomToolLoader] Tool watcher error (${dirPath}):`, error)
+            this.scheduleWatcherReload('tool_error')
+          })
+          this.toolWatchers.set(dirPath, watcher)
+        } catch (error) {
+          console.warn(`[CustomToolLoader] Failed to watch tool directory (${dirPath}):`, error)
+        }
+      }
+    }
+  }
+
+  private startWatcher(): void {
+    if (this.rootWatcher || !this.settings.autoRefresh) return
+
+    const dir = getCustomToolsDirectory()
+    try {
+      this.rootWatcher = fs.watch(dir, { recursive: true }, (_event, filename) => {
+        const name = typeof filename === 'string' ? filename : filename?.toString()
+        if (name && name.endsWith(CUSTOM_TOOLS_GUIDE_FILE)) return
+        this.scheduleWatcherReload('root_recursive')
+      })
+      this.watcherMode = 'recursive'
+      console.log('[CustomToolLoader] Auto-refresh watcher enabled (recursive)')
+    } catch {
+      this.rootWatcher = fs.watch(dir, (_event, filename) => {
+        const name = typeof filename === 'string' ? filename : filename?.toString()
+        if (name && name.endsWith(CUSTOM_TOOLS_GUIDE_FILE)) return
+        this.scheduleWatcherReload('root')
+      })
+      this.watcherMode = 'shallow'
+      this.syncToolWatchers()
+      console.log('[CustomToolLoader] Auto-refresh watcher enabled (root + per-tool)')
+    }
+
+    this.rootWatcher.on('error', error => {
+      console.warn('[CustomToolLoader] Root watcher error:', error)
+      this.scheduleWatcherReload('root_error')
+    })
+  }
+
+  private stopWatcher(): void {
+    if (this.watcherDebounceTimer) {
+      clearTimeout(this.watcherDebounceTimer)
+      this.watcherDebounceTimer = null
+    }
+    if (this.rootWatcher) {
+      this.rootWatcher.close()
+      this.rootWatcher = null
+    }
+    this.closeToolWatchers()
+    this.watcherMode = 'none'
+  }
+
+  private updateWatchers(): void {
+    if (!this.settings.autoRefresh) {
+      this.stopWatcher()
+      return
+    }
+
+    if (!this.rootWatcher) {
+      this.startWatcher()
+    } else {
+      this.syncToolWatchers()
+    }
+  }
+
+  private emitToolsChanged(reason: string): void {
+    const tools = this.getDefinitions()
+    const payload: CustomToolsChangedEvent = {
+      reason,
+      totalCount: tools.length,
+      tools,
+    }
+    this.emit('toolsChanged', payload)
+  }
+
   /**
    * Get all custom tool definitions
    */
   getDefinitions(): CustomToolDefinition[] {
-    return Array.from(this.tools.values()).map(t => t.definition)
+    return Array.from(this.tools.values())
+      .map(tool => cloneDefinition(tool.definition))
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  /**
-   * Get a specific tool's implementation
-   */
-  getImplementation(name: string): CustomToolImplementation | undefined {
-    return this.tools.get(name)?.implementation
+  getStatuses(): CustomToolStatus[] {
+    return Array.from(this.tools.values())
+      .map(tool => ({
+        name: tool.definition.name,
+        enabled: tool.definition.enabled,
+        description: tool.definition.description,
+        sourcePath: tool.definition.sourcePath,
+        directoryName: tool.definition.directoryName,
+        loaded: Boolean(tool.implementation),
+        loadError: tool.loadError,
+        lastLoadedAt: tool.lastLoadedAt,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
   }
 
   /**
@@ -351,7 +663,7 @@ class CustomToolRegistry {
   }
 
   /**
-   * Execute a custom tool with timeout protection
+   * Execute a custom tool with lazy loading and timeout protection
    */
   async executeTool(name: string, args: any, options: ToolExecutionOptions): Promise<ToolResult> {
     const tool = this.tools.get(name)
@@ -362,6 +674,16 @@ class CustomToolRegistry {
     // Check if tool is enabled
     if (!tool.definition.enabled) {
       return { success: false, error: `Custom tool '${name}' is disabled` }
+    }
+
+    let implementation: CustomToolImplementation
+    try {
+      implementation = await this.loadImplementation(tool)
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      }
     }
 
     const envPatch = resolveRuntimeEnv(tool.definition)
@@ -380,7 +702,7 @@ class CustomToolRegistry {
     try {
       // Execute with timeout
       const result = await Promise.race([
-        tool.implementation.execute(args, options),
+        implementation.execute(args, options),
         new Promise<ToolResult>((_, reject) =>
           setTimeout(
             () => reject(new Error(`Tool execution timed out after ${EXECUTION_TIMEOUT_MS}ms`)),
@@ -402,12 +724,151 @@ class CustomToolRegistry {
   }
 
   /**
-   * Reload all custom tools from disk
+   * Reload all custom tool definitions from disk.
    */
-  async reload(): Promise<void> {
-    console.log('[CustomToolLoader] Reloading custom tools...')
-    this.initialized = false
+  async reload(reason: string = 'manual'): Promise<void> {
     await this.initialize()
+    if (this.reloadPromise) {
+      return this.reloadPromise
+    }
+
+    this.reloadPromise = (async () => {
+      this.reloadGeneration += 1
+      const previousTools = this.tools
+      await this.loadStateFile()
+      await this.loadAllTools(previousTools)
+      this.updateWatchers()
+      this.emitToolsChanged(reason)
+    })().finally(() => {
+      this.reloadPromise = null
+    })
+
+    return this.reloadPromise
+  }
+
+  /**
+   * Enable or disable a tool without editing definition.json.
+   */
+  async setToolEnabled(name: string, enabled: boolean): Promise<CustomToolDefinition | null> {
+    await this.initialize()
+    const tool = this.tools.get(name)
+    if (!tool) {
+      return null
+    }
+
+    tool.definition.enabled = enabled
+    this.stateOverrides.set(name, enabled)
+    await this.saveStateFile()
+    this.emitToolsChanged(enabled ? 'enable' : 'disable')
+    return cloneDefinition(tool.definition)
+  }
+
+  getSettings(): CustomToolLifecycleSettings {
+    return { ...this.settings }
+  }
+
+  async updateSettings(updates: Partial<CustomToolLifecycleSettings>): Promise<CustomToolLifecycleSettings> {
+    await this.initialize()
+
+    if (updates.autoRefresh !== undefined) {
+      this.settings.autoRefresh = Boolean(updates.autoRefresh)
+    }
+    if (updates.refreshDebounceMs !== undefined) {
+      this.settings.refreshDebounceMs = normalizeDebounce(updates.refreshDebounceMs)
+    }
+
+    await this.saveStateFile()
+    this.updateWatchers()
+    this.emitToolsChanged('settings')
+    return this.getSettings()
+  }
+
+  /**
+   * Copy a tool folder into the managed custom-tools directory.
+   */
+  async addToolFromDirectory(sourcePath: string, options: AddCustomToolOptions = {}): Promise<AddCustomToolResult> {
+    await this.initialize()
+    const resolvedSource = path.resolve(sourcePath)
+    const sourceStat = await fsPromises.stat(resolvedSource)
+    if (!sourceStat.isDirectory()) {
+      throw new Error('sourcePath must be a directory')
+    }
+
+    const directoryNameRaw = (options.directoryName || path.basename(resolvedSource)).trim()
+    if (!directoryNameRaw) {
+      throw new Error('directoryName resolved to empty string')
+    }
+    if (directoryNameRaw.includes('/') || directoryNameRaw.includes('\\')) {
+      throw new Error('directoryName must not contain path separators')
+    }
+
+    const toolsDir = getCustomToolsDirectory()
+    const targetPath = path.join(toolsDir, directoryNameRaw)
+    if (!isWithinDirectory(targetPath, toolsDir)) {
+      throw new Error('Resolved target directory is outside of custom tools directory')
+    }
+
+    const overwrite = options.overwrite === true
+    try {
+      await fsPromises.access(targetPath)
+      if (!overwrite) {
+        throw new Error(`Target directory already exists: ${targetPath}`)
+      }
+      await fsPromises.rm(targetPath, { recursive: true, force: true })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error
+      }
+    }
+
+    await fsPromises.cp(resolvedSource, targetPath, { recursive: true })
+    await this.reload('add')
+
+    const loadedToolNames = this.getDefinitions()
+      .filter(def => path.resolve(def.sourcePath) === path.resolve(targetPath))
+      .map(def => def.name)
+
+    return {
+      targetPath,
+      loadedToolNames,
+    }
+  }
+
+  /**
+   * Remove a tool by tool name (preferred) or directory name.
+   */
+  async removeTool(nameOrDirectory: string): Promise<RemoveCustomToolResult> {
+    await this.initialize()
+
+    const toolsDir = getCustomToolsDirectory()
+    const toolByName = this.tools.get(nameOrDirectory)
+    const targetPath = toolByName ? toolByName.definition.sourcePath : path.join(toolsDir, nameOrDirectory)
+
+    if (!isWithinDirectory(path.resolve(targetPath), path.resolve(toolsDir))) {
+      throw new Error('Resolved target directory is outside of custom tools directory')
+    }
+
+    const removedToolNames = Array.from(this.tools.values())
+      .filter(tool => path.resolve(tool.definition.sourcePath) === path.resolve(targetPath))
+      .map(tool => tool.definition.name)
+
+    const targetStat = await fsPromises.stat(targetPath)
+    if (!targetStat.isDirectory()) {
+      throw new Error('Target to remove must be a directory')
+    }
+
+    await fsPromises.rm(targetPath, { recursive: true, force: true })
+
+    for (const toolName of removedToolNames) {
+      this.stateOverrides.delete(toolName)
+    }
+    await this.saveStateFile()
+    await this.reload('remove')
+
+    return {
+      removedPath: targetPath,
+      removedToolNames,
+    }
   }
 
   /**
@@ -418,10 +879,17 @@ class CustomToolRegistry {
   }
 
   /**
-   * Get count of loaded tools
+   * Get count of loaded tool definitions.
    */
   getToolCount(): number {
     return this.tools.size
+  }
+
+  /**
+   * Stop file watchers (used during app shutdown).
+   */
+  shutdown(): void {
+    this.stopWatcher()
   }
 }
 

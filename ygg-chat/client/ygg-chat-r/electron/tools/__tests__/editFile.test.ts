@@ -293,6 +293,162 @@ describe('editFile escape sequence behavior', () => {
     expect(result.replacements).toBe(1)
     expect(await harness.readFile('escape-literal.txt')).toBe('literal [NL] marker\n')
   })
+
+  it('preserves escaped backslashes in regex literals during replacement', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'escape-regex-replace.txt',
+      "audioPageAudioEl = new Audio('file:///' + audioPageAudioPath.replace(/\\\\/g, '-'));\n"
+    )
+
+    const result = await editFile('escape-regex-replace.txt', 'replace_first', {
+      searchPattern: "audioPageAudioEl = new Audio('file:///' + audioPageAudioPath.replace(/\\\\/g, '-'));",
+      replacement: "audioPageAudioEl = new Audio('file:///' + audioPageAudioPath.replace(/\\\\/g, '/'));",
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('escape-regex-replace.txt')).toBe(
+      "audioPageAudioEl = new Audio('file:///' + audioPageAudioPath.replace(/\\\\/g, '/'));\n"
+    )
+  })
+
+  it('matches and updates regex character classes with escaped path separators', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'escape-regex-charclass.txt',
+      'const audioName = audioPageAudioPath.split(/[\\\\/]/).pop();\n'
+    )
+
+    const result = await editFile('escape-regex-charclass.txt', 'replace_first', {
+      searchPattern: 'const audioName = audioPageAudioPath.split(/[\\\\/]/).pop();',
+      replacement: 'const audioName = audioPageAudioPath.split(/[\\\\/]/).at(-1);',
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('escape-regex-charclass.txt')).toBe(
+      'const audioName = audioPageAudioPath.split(/[\\\\/]/).at(-1);\n'
+    )
+  })
+})
+
+describe('editFile regex literal handling', () => {
+  it('replace updates all exact regex-like occurrences that normalize path slashes', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'regex-global-replace.txt',
+      [
+        String.raw`const one = audioPath.replace(/\\/g, '/');`,
+        String.raw`const two = imagePath.replace(/\\/g, '/');`,
+        '',
+      ].join('\n')
+    )
+
+    const searchPattern = String.raw`.replace(/\\/g, '/')`
+    const replacement = String.raw`.replace(/[\\/]+/g, '/')`
+
+    const result = await editFile('regex-global-replace.txt', 'replace', {
+      searchPattern,
+      replacement,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('regex-global-replace.txt')
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(2)
+    expect(updated).toContain(String.raw`const one = audioPath.replace(/[\\/]+/g, '/');`)
+    expect(updated).toContain(String.raw`const two = imagePath.replace(/[\\/]+/g, '/');`)
+    expect(updated).not.toContain(String.raw`.replace(/\\/g, '/')`)
+  })
+
+  it('replace_first only updates the first escaped-forward-slash regex literal', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'regex-forward-slash-first.txt',
+      [
+        String.raw`const one = '/foo/bar'.replace(/\//g, '-');`,
+        String.raw`const two = '/bar/baz'.replace(/\//g, '-');`,
+        '',
+      ].join('\n')
+    )
+
+    const result = await editFile('regex-forward-slash-first.txt', 'replace_first', {
+      searchPattern: String.raw`.replace(/\//g, '-')`,
+      replacement: String.raw`.replace(/\//g, '_')`,
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('regex-forward-slash-first.txt')).toBe(
+      [
+        String.raw`const one = '/foo/bar'.replace(/\//g, '_');`,
+        String.raw`const two = '/bar/baz'.replace(/\//g, '-');`,
+        '',
+      ].join('\n')
+    )
+  })
+
+  it('preserves double-backslash regex literals during replacement', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'regex-double-backslash.txt',
+      `${String.raw`const collapse = value.replace(/\\\\/g, '/');`}\n`
+    )
+
+    const result = await editFile('regex-double-backslash.txt', 'replace_first', {
+      searchPattern: String.raw`const collapse = value.replace(/\\\\/g, '/');`,
+      replacement: String.raw`const collapse = value.replace(/\\\\/g, '-');`,
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('regex-double-backslash.txt')).toBe(
+      `${String.raw`const collapse = value.replace(/\\\\/g, '-');`}\n`
+    )
+  })
+
+  it('keeps $ capture tokens literal in regex-style exact replacement text', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'regex-dollar-literals.txt',
+      `${String.raw`const normalized = value.replace(/\\/g, '/');`}\n`
+    )
+
+    const result = await editFile('regex-dollar-literals.txt', 'replace', {
+      searchPattern: String.raw`const normalized = value.replace(/\\/g, '/');`,
+      replacement: String.raw`const normalized = value.replace(/[\\/]/g, '$1::$&');`,
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('regex-dollar-literals.txt')).toBe(
+      `${String.raw`const normalized = value.replace(/[\\/]/g, '$1::$&');`}\n`
+    )
+  })
+
+  it('edits regex literals containing \\n escapes when interpretEscapeSequences is disabled', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('regex-literal-newline-escape.txt', `${String.raw`const newlineRegex = /\n/g;`}\n`)
+
+    const result = await editFile('regex-literal-newline-escape.txt', 'replace_first', {
+      searchPattern: String.raw`const newlineRegex = /\n/g;`,
+      replacement: String.raw`const newlineRegex = /\r?\n/g;`,
+      interpretEscapeSequences: false,
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('regex-literal-newline-escape.txt')).toBe(
+      `${String.raw`const newlineRegex = /\r?\n/g;`}\n`
+    )
+  })
 })
 
 describe('editFile layered matching strategies', () => {

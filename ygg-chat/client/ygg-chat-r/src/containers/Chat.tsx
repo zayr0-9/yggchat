@@ -2750,11 +2750,16 @@ function Chat() {
 
     // Model context limit (shared between input + output)
     const totalContextLimit = selectedModel?.contextLength || 128_000
+    const configuredCompletionCap = selectedModel?.maxCompletionTokens
+    const hasValidCompletionCap =
+      typeof configuredCompletionCap === 'number' &&
+      Number.isFinite(configuredCompletionCap) &&
+      configuredCompletionCap > 0
     // For OpenAI ChatGPT, use the full context window as the hard cap.
     // Other providers may enforce a stricter completion cap.
     const maxCompletionCap = isOpenAIChatGPT
       ? totalContextLimit
-      : (selectedModel?.maxCompletionTokens ?? totalContextLimit)
+      : (hasValidCompletionCap ? configuredCompletionCap : totalContextLimit)
 
     // Cost is per 1K tokens: cost = (tokens / 1000) * costPer1K
     // So: tokens = (usd * 1000) / costPer1K
@@ -2794,8 +2799,12 @@ function Chat() {
   ])
 
   // Calculate progress percentages
-  const inputProgress = Math.min((tokenUsage.inputTokens / tokenLimits.maxInputTokens) * 100, 100)
-  const outputProgress = Math.min((tokenUsage.outputTokens / tokenLimits.maxOutputTokens) * 100, 100)
+  const inputProgress =
+    tokenLimits.maxInputTokens > 0 ? Math.min((tokenUsage.inputTokens / tokenLimits.maxInputTokens) * 100, 100) : 0
+  const outputProgress =
+    tokenLimits.maxOutputTokens > 0
+      ? Math.min((tokenUsage.outputTokens / tokenLimits.maxOutputTokens) * 100, 100)
+      : 0
 
   // Handler to refresh user credits
   const handleRefreshCredits = useCallback(async () => {

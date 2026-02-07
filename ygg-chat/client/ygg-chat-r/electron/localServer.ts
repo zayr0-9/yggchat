@@ -26,7 +26,7 @@ import { runBashCommand } from './tools/bash.js'
 import { browseWeb } from './tools/browseWeb.js'
 import { CCResponse, executeClaudeCode, getAvailableSlashCommands, getSession, setSession } from './tools/claudeCode.js'
 import { createTextFile } from './tools/createFile.js'
-import { customToolRegistry, ToolResult } from './tools/customToolLoader.js'
+import { customToolRegistry, type CustomToolsChangedEvent, ToolResult } from './tools/customToolLoader.js'
 import { execute as executeCustomToolManager } from './tools/customToolManager.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
@@ -419,6 +419,35 @@ function initializeBuiltInToolRegistry() {
   })
 
   console.log(`[LocalServer] Initialized ${builtInTools.size} built-in tools`)
+}
+
+function registerCustomToolsWithOrchestrator(): number {
+  const definitions = customToolRegistry.getDefinitions()
+  for (const customToolDef of definitions) {
+    toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
+      return customToolRegistry.executeTool(customToolDef.name, args, {
+        cwd: options?.rootPath,
+        rootPath: options?.rootPath,
+        operationMode: options?.operationMode,
+        conversationId: options?.conversationId,
+        messageId: options?.messageId,
+        streamId: options?.streamId,
+      })
+    })
+  }
+  console.log(`[LocalServer] Registered ${definitions.length} custom tools with orchestrator`)
+  return definitions.length
+}
+
+let customToolsListenerBound = false
+function bindCustomToolsLifecycleListener(): void {
+  if (customToolsListenerBound) return
+  customToolsListenerBound = true
+
+  customToolRegistry.on('toolsChanged', (event: CustomToolsChangedEvent) => {
+    registerCustomToolsWithOrchestrator()
+    console.log(`[LocalServer] Custom tools changed (${event.reason}); total=${event.totalCount}`)
+  })
 }
 
 const app = express()
@@ -3054,7 +3083,8 @@ function setupServer() {
   app.get('/api/custom-tools', async (_req, res) => {
     try {
       const definitions = customToolRegistry.getDefinitions()
-      res.json({ success: true, tools: definitions })
+      const statuses = customToolRegistry.getStatuses()
+      res.json({ success: true, tools: definitions, statuses, settings: customToolRegistry.getSettings() })
     } catch (error) {
       console.error('[LocalServer] Error getting custom tools:', error)
       res.status(500).json({ success: false, error: 'Failed to get custom tools' })
@@ -3072,29 +3102,99 @@ function setupServer() {
     }
   })
 
+  // GET /api/custom-tools/settings - Get custom tools lifecycle settings
+  app.get('/api/custom-tools/settings', (_req, res) => {
+    try {
+      res.json({ success: true, settings: customToolRegistry.getSettings() })
+    } catch (error) {
+      console.error('[LocalServer] Error getting custom tools settings:', error)
+      res.status(500).json({ success: false, error: 'Failed to get custom tools settings' })
+    }
+  })
+
+  // PUT /api/custom-tools/settings - Update custom tools lifecycle settings
+  app.put('/api/custom-tools/settings', async (req, res) => {
+    try {
+      const updates = req.body || {}
+      const settings = await customToolRegistry.updateSettings({
+        autoRefresh: updates.autoRefresh,
+        refreshDebounceMs: updates.refreshDebounceMs,
+      })
+      res.json({ success: true, settings })
+    } catch (error) {
+      console.error('[LocalServer] Error updating custom tools settings:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(400).json({ success: false, error: msg })
+    }
+  })
+
+  // PATCH /api/custom-tools/:name - Enable/disable a custom tool
+  app.patch('/api/custom-tools/:name', async (req, res) => {
+    try {
+      const { enabled } = req.body || {}
+      if (typeof enabled !== 'boolean') {
+        res.status(400).json({ success: false, error: 'enabled boolean is required' })
+        return
+      }
+
+      const updated = await customToolRegistry.setToolEnabled(req.params.name, enabled)
+      if (!updated) {
+        res.status(404).json({ success: false, error: `Custom tool "${req.params.name}" not found` })
+        return
+      }
+
+      res.json({ success: true, tool: updated })
+    } catch (error) {
+      console.error('[LocalServer] Error updating custom tool enabled state:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ success: false, error: msg })
+    }
+  })
+
+  // POST /api/custom-tools/add - Add a custom tool directory into managed tools
+  app.post('/api/custom-tools/add', async (req, res) => {
+    try {
+      const { sourcePath, directoryName, overwrite } = req.body || {}
+      if (!sourcePath || typeof sourcePath !== 'string') {
+        res.status(400).json({ success: false, error: 'sourcePath is required' })
+        return
+      }
+
+      const added = await customToolRegistry.addToolFromDirectory(sourcePath, {
+        directoryName: typeof directoryName === 'string' ? directoryName : undefined,
+        overwrite: overwrite === true,
+      })
+      res.json({ success: true, ...added })
+    } catch (error) {
+      console.error('[LocalServer] Error adding custom tool:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(400).json({ success: false, error: msg })
+    }
+  })
+
+  // DELETE /api/custom-tools/:name - Remove custom tool by name or directory
+  app.delete('/api/custom-tools/:name', async (req, res) => {
+    try {
+      const removed = await customToolRegistry.removeTool(req.params.name)
+      res.json({ success: true, ...removed })
+    } catch (error) {
+      console.error('[LocalServer] Error removing custom tool:', error)
+      const msg = error instanceof Error ? error.message : String(error)
+      res.status(400).json({ success: false, error: msg })
+    }
+  })
+
   // POST /api/custom-tools/reload - Reload all custom tools from disk
   app.post('/api/custom-tools/reload', async (_req, res) => {
     try {
-      await customToolRegistry.reload()
+      await customToolRegistry.reload('api_reload')
       const definitions = customToolRegistry.getDefinitions()
-
-      // Re-register custom tools with the orchestrator
-      for (const customToolDef of definitions) {
-        toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
-          return customToolRegistry.executeTool(customToolDef.name, args, {
-            cwd: options?.rootPath,
-            rootPath: options?.rootPath,
-            operationMode: options?.operationMode,
-            conversationId: options?.conversationId,
-            messageId: options?.messageId,
-            streamId: options?.streamId,
-          })
-        })
-      }
 
       res.json({
         success: true,
         tools: definitions,
+        statuses: customToolRegistry.getStatuses(),
+        settings: customToolRegistry.getSettings(),
         message: `Reloaded ${definitions.length} custom tools`,
       })
     } catch (error) {
@@ -3364,22 +3464,8 @@ function setupServer() {
       await fs.promises.mkdir(customToolsDir, { recursive: true })
       const { extracted, skipped, strippedPrefix } = await extractZipBufferToDirectory(zipBuffer, customToolsDir)
 
-      await customToolRegistry.reload()
+      await customToolRegistry.reload('app_store_install')
       const definitions = customToolRegistry.getDefinitions()
-
-      // Re-register custom tools with the orchestrator
-      for (const customToolDef of definitions) {
-        toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
-          return customToolRegistry.executeTool(customToolDef.name, args, {
-            cwd: options?.rootPath,
-            rootPath: options?.rootPath,
-            operationMode: options?.operationMode,
-            conversationId: options?.conversationId,
-            messageId: options?.messageId,
-            streamId: options?.streamId,
-          })
-        })
-      }
 
       res.json({
         success: true,
@@ -3389,8 +3475,8 @@ function setupServer() {
         skipped,
         strippedPrefix,
         toolCount: definitions.length,
-        restartRequired: true,
-        message: 'App installed. Restart recommended to ensure everything loads correctly.',
+        restartRequired: false,
+        message: 'App installed and loaded.',
       })
     } catch (error) {
       console.error('[LocalServer] App store install error:', error)
@@ -3435,22 +3521,8 @@ function setupServer() {
 
       await fs.promises.rm(targetPath, { recursive: true, force: true })
 
-      await customToolRegistry.reload()
+      await customToolRegistry.reload('app_store_uninstall')
       const definitions = customToolRegistry.getDefinitions()
-
-      // Re-register custom tools with the orchestrator
-      for (const customToolDef of definitions) {
-        toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
-          return customToolRegistry.executeTool(customToolDef.name, args, {
-            cwd: options?.rootPath,
-            rootPath: options?.rootPath,
-            operationMode: options?.operationMode,
-            conversationId: options?.conversationId,
-            messageId: options?.messageId,
-            streamId: options?.streamId,
-          })
-        })
-      }
 
       res.json({
         success: true,
@@ -5917,21 +5989,10 @@ export async function startLocalServer(port: number = 3002, dbPath?: string): Pr
     // Initialize tool orchestrator with database and register tools
     toolOrchestrator.initialize(db!)
     toolOrchestrator.registerTools(builtInTools)
+    bindCustomToolsLifecycleListener()
 
     // Register custom tools with the orchestrator
-    for (const customToolDef of customToolRegistry.getDefinitions()) {
-      toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
-        return customToolRegistry.executeTool(customToolDef.name, args, {
-          cwd: options?.rootPath,
-          rootPath: options?.rootPath,
-          operationMode: options?.operationMode,
-          conversationId: options?.conversationId,
-          messageId: options?.messageId,
-          streamId: options?.streamId,
-        })
-      })
-    }
-    console.log(`[LocalServer] Registered ${customToolRegistry.getDefinitions().length} custom tools with orchestrator`)
+    registerCustomToolsWithOrchestrator()
 
     // Register MCP tools with the orchestrator
     try {
@@ -6002,6 +6063,7 @@ export function stopLocalServer(): Promise<void> {
   return new Promise(resolve => {
     // Shutdown tool orchestrator first
     toolOrchestrator.shutdown()
+    customToolRegistry.shutdown()
 
     // Close OAuth callback server if running
     if (oauthCallbackServer) {

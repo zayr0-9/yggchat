@@ -535,21 +535,47 @@ const builtInToolDefinitions: ToolDefinition[] = [
     name: 'custom_tool_manager',
     enabled: true,
     description:
-      'Query and discover custom tools. Use "list" to see all available custom tools with brief descriptions, or "get" to retrieve full definitions for specific tools by name. Custom tools extend AI capabilities with user-defined functionality.',
+      'Manage custom tools on demand. Actions: list/get definitions, enable/disable tools, add/remove tools, reload definitions, and configure auto-refresh watcher settings.',
     inputSchema: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'get'],
+          enum: ['list', 'get', 'enable', 'disable', 'add', 'remove', 'reload', 'settings'],
           description:
-            'Action to perform: "list" = show all custom tools with brief descriptions; "get" = retrieve full definitions for specific tools',
+            'Action to perform: "list" and "get" discover tools, "enable"/"disable" toggle availability, "add"/"remove" manage tool folders, "reload" re-scan tools, and "settings" gets/updates auto-refresh watcher settings.',
         },
         names: {
           type: 'array',
           items: { type: 'string' },
           description:
             'For "get" action: array of tool names to retrieve full definitions for. Example: ["my_tool", "another_tool"]',
+        },
+        name: {
+          type: 'string',
+          description: 'Tool name for "enable", "disable", or "remove" actions.',
+        },
+        sourcePath: {
+          type: 'string',
+          description: 'For "add" action: source directory path containing definition.json and index.js.',
+        },
+        directoryName: {
+          type: 'string',
+          description: 'Optional target directory name inside the managed custom-tools folder when using "add".',
+        },
+        overwrite: {
+          type: 'boolean',
+          description: 'For "add" action: overwrite existing target directory if true.',
+        },
+        autoRefresh: {
+          type: 'boolean',
+          description: 'For "settings" action: enable or disable filesystem auto-refresh watcher.',
+        },
+        refreshDebounceMs: {
+          type: 'integer',
+          minimum: 100,
+          maximum: 5000,
+          description: 'For "settings" action: debounce delay in milliseconds for watcher-triggered reloads.',
         },
       },
       required: ['action'],

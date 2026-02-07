@@ -684,7 +684,7 @@ function escapeRegExp(string: string): string {
  * - \\n → newline
  * - \\r → carriage return
  * - \\t → tab
- * - \\\\ → backslash
+ * - \\\\ → preserved as literal backslashes
  * - \\' → single quote
  * - \\" → double quote
  *
@@ -707,8 +707,8 @@ function interpretEscapeSequences(str: string, enable: boolean = true): string {
     .replace(/\\t/g, '\t')
     .replace(/\\'/g, "'")
     .replace(/\\"/g, '"')
-    // Finally, restore literal backslashes
-    .replace(new RegExp(BACKSLASH_PLACEHOLDER, 'g'), '\\')
+    // Finally, restore literal backslashes without collapsing them
+    .replace(new RegExp(BACKSLASH_PLACEHOLDER, 'g'), '\\\\')
 }
 
 /**
