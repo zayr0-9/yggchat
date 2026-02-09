@@ -406,20 +406,20 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
 
 /**
  * Fetch recent conversations with a limit
- * Cache key: ['conversations', 'recent']
- * Note: limit only affects the API call, not the cache key
+ * Cache key: ['conversations', 'recent', userId, limit]
  */
-export function useRecentConversations(limit: number = 8) {
+export function useRecentConversations(limit: number = 18) {
   const { accessToken, userId: authUserId } = useAuth()
 
   // Use userId from AuthContext (works for both local mode with UUID and web mode)
   const userId = authUserId
+  const safeLimit = Math.max(1, Math.floor(Number.isFinite(limit) ? limit : 8))
 
   return useQuery({
-    queryKey: ['conversations', 'recent'],
+    queryKey: ['conversations', 'recent', userId, safeLimit],
     queryFn: async () => {
       if (!userId) throw new Error('User not authenticated')
-      const query = new URLSearchParams({ limit: String(limit) }).toString()
+      const query = new URLSearchParams({ limit: String(safeLimit) }).toString()
 
       // In Electron mode, fetch both cloud and local conversations
       if (environment === 'electron') {
@@ -445,7 +445,7 @@ export function useRecentConversations(limit: number = 8) {
         // Merge, sort by updated_at, and take the most recent `limit` conversations
         const merged = [...normalizedCloud, ...localConversations]
           .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-          .slice(0, limit)
+          .slice(0, safeLimit)
 
         return merged
       }
@@ -1883,8 +1883,8 @@ export interface DirectoryListingResponse {
  */
 export {
   useGlobalAgentMessages,
+  useGlobalAgentOptimisticMessage,
   useGlobalAgentStreamBuffer,
-  useGlobalAgentOptimisticMessage
 } from './useGlobalAgentMessages'
 export type { GlobalAgentMessagesData } from './useGlobalAgentMessages'
 

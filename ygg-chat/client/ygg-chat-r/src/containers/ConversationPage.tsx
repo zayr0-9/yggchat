@@ -365,7 +365,7 @@ const ConversationPage: React.FC = () => {
       return old ? old.filter(c => c.id !== id) : []
     })
 
-    queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
+    queryClient.setQueriesData<Conversation[]>({ queryKey: ['conversations', 'recent'] }, old => {
       return old ? old.filter(c => c.id !== id) : []
     })
 
@@ -446,7 +446,7 @@ const ConversationPage: React.FC = () => {
       return old ? [result, ...old] : [result]
     })
 
-    queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
+    queryClient.setQueriesData<Conversation[]>({ queryKey: ['conversations', 'recent'] }, old => {
       return old ? [result, ...old] : [result]
     })
 

@@ -20,6 +20,8 @@ interface SideBarProps {
   activeConversationId?: ConversationId | null
 }
 
+const LOCAL_MODE_RECENT_PROJECTS_LIMIT = 100
+
 const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects = [], activeConversationId = null }) => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
@@ -47,6 +49,17 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
         project.context?.toLowerCase().includes(query)
     )
   }, [fetchedProjects, searchQuery])
+
+  const visibleProjects = useMemo(() => {
+    if (isWeb) return filteredProjects
+
+    let localProjectsShown = 0
+    return filteredProjects.filter(project => {
+      if (project.storage_mode !== 'local') return true
+      localProjectsShown += 1
+      return localProjectsShown <= LOCAL_MODE_RECENT_PROJECTS_LIMIT
+    })
+  }, [filteredProjects, isWeb])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -277,7 +290,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
         {isChatPage ? (
           // Projects List
           <>
-            {filteredProjects.map(project => (
+            {visibleProjects.map(project => (
               <div key={project.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
                 <div
                   role='button'
@@ -335,7 +348,7 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
                 )}
               </div>
             ))}
-            {filteredProjects.length === 0 && !loading && !error && (
+            {visibleProjects.length === 0 && !loading && !error && (
               <div
                 className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${isCollapsed ? 'hidden' : ''}`}
               >

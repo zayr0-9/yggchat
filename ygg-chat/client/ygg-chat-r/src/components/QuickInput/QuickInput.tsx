@@ -184,7 +184,7 @@ export const QuickInput: React.FC = () => {
         return old ? [result, ...old] : [result]
       })
 
-      queryClient.setQueryData(['conversations', 'recent'], (old: Conversation[] | undefined) => {
+      queryClient.setQueriesData<Conversation[]>({ queryKey: ['conversations', 'recent'] }, old => {
         return old ? [result, ...old] : [result]
       })
 

@@ -402,6 +402,79 @@ const touchProjectTimestampInCache = (
   }
 }
 
+interface ConversationInfinitePage {
+  conversations: Conversation[]
+}
+
+interface ConversationInfiniteData {
+  pages: ConversationInfinitePage[]
+  pageParams: unknown[]
+}
+
+const updateConversationTitleInArray = (
+  conversations: Conversation[] | undefined,
+  conversationId: ConversationId,
+  title: string | null
+): Conversation[] | undefined => {
+  if (!Array.isArray(conversations)) return conversations
+
+  return conversations.map(conv =>
+    String(conv.id) === String(conversationId) ? { ...conv, title } : conv
+  )
+}
+
+const updateConversationTitleInInfinite = (
+  data: ConversationInfiniteData | undefined,
+  conversationId: ConversationId,
+  title: string | null
+): ConversationInfiniteData | undefined => {
+  if (!data?.pages) return data
+
+  return {
+    ...data,
+    pages: data.pages.map(page => ({
+      ...page,
+      conversations: updateConversationTitleInArray(page.conversations, conversationId, title) || page.conversations,
+    })),
+  }
+}
+
+/**
+ * Keep all conversation list caches in sync after title updates.
+ * Includes ConversationPage's infinite-query keys.
+ */
+const syncConversationTitleAcrossCaches = (queryClient: QueryClient | null, updatedConversation: Conversation): void => {
+  if (!queryClient) return
+
+  const conversationId = updatedConversation.id
+  const title = updatedConversation.title ?? null
+
+  queryClient.setQueryData<Conversation[]>(['conversations'], old =>
+    updateConversationTitleInArray(old, conversationId, title)
+  )
+
+  queryClient.setQueriesData<Conversation[]>({ queryKey: ['conversations', 'recent'] }, old =>
+    updateConversationTitleInArray(old, conversationId, title)
+  )
+
+  // Update both project flat lists and project infinite lists in one pass.
+  queryClient.setQueriesData({ queryKey: ['conversations', 'project'] }, old => {
+    if (Array.isArray(old)) {
+      return updateConversationTitleInArray(old as Conversation[], conversationId, title)
+    }
+
+    if (old && typeof old === 'object' && Array.isArray((old as ConversationInfiniteData).pages)) {
+      return updateConversationTitleInInfinite(old as ConversationInfiniteData, conversationId, title)
+    }
+
+    return old
+  })
+
+  queryClient.setQueryData<ConversationInfiniteData>(['conversations', 'infinite'], old =>
+    updateConversationTitleInInfinite(old, conversationId, title)
+  )
+}
+
 // Utility function for API calls
 // const apiCall = async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
 //   const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -5807,14 +5880,18 @@ export const updateConversationTitle = createAsyncThunk<
 
     // Route to appropriate API based on storage mode
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      return await localApi.patch<Conversation>(`/local/conversations/${id}`, { title })
+      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { title })
+      syncConversationTitleAcrossCaches(extra.queryClient, updated)
+      return updated
     }
 
     // Default to cloud API
-    return await apiCall<Conversation>(`/conversations/${id}/`, auth.accessToken, {
+    const updated = await apiCall<Conversation>(`/conversations/${id}/`, auth.accessToken, {
       method: 'PATCH',
       body: JSON.stringify({ title }),
     })
+    syncConversationTitleAcrossCaches(extra.queryClient, updated)
+    return updated
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update conversation'
     return rejectWithValue(message)

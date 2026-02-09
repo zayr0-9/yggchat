@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import './TitleBar.css'
 
 export const TitleBar = () => {
   const location = useLocation()
+  const navigate = useNavigate()
   const [platform, setPlatform] = useState<string>('')
   const [isElectron, setIsElectron] = useState(false)
   const [isCompact, setIsCompact] = useState(false)
@@ -73,8 +75,49 @@ export const TitleBar = () => {
   return (
     <div className={`titlebar ${isChatPage ? 'titlebar-chat' : ''}`}>
       <div className='titlebar-drag-region'>
-        <div className='titlebar-title'>
-          <span>Yggdrasil</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <button
+            onClick={() => navigate(-1)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'inherit',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '4px',
+              borderRadius: '6px',
+              opacity: 0.8,
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1', e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8', e.currentTarget.style.backgroundColor = 'transparent')}
+            title="Go Back"
+          >
+            <ChevronLeft size={16} strokeWidth={2} />
+          </button>
+          <button
+            onClick={() => navigate(1)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'inherit',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '4px',
+              borderRadius: '6px',
+              opacity: 0.8,
+              transition: 'all 0.2s ease'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1', e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8', e.currentTarget.style.backgroundColor = 'transparent')}
+            title="Go Forward"
+          >
+            <ChevronRight size={16} strokeWidth={2} />
+          </button>
         </div>
       </div>
       <div className='titlebar-controls'>
@@ -82,8 +125,8 @@ export const TitleBar = () => {
           className='titlebar-button titlebar-compact'
           onClick={handleToggleCompact}
           disabled={isCompactLoading}
-          aria-label={isCompact ? 'Exit compact mode' : 'Enter compact mode'}
-          title={isCompact ? 'Exit compact mode' : 'Enter compact mode'}
+          aria-label={isCompact ? 'Disable Floating Mode' : 'Enable Floating Mode'}
+          title={isCompact ? 'Disable Floating Mode' : 'Enable Floating Mode'}
         >
           {isCompactLoading ? (
             <svg width='10' height='10' viewBox='0 0 10 10' className='animate-spin'>

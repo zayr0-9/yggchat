@@ -13,19 +13,21 @@ import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import { chatSliceActions } from '../../features/chats/chatSlice'
 import { fetchMcpTools } from '../../features/chats/chatActions'
+import { chatSliceActions } from '../../features/chats/chatSlice'
 import { useAppDispatch } from '../../hooks/redux'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useMediaQuery'
-import { attachMessageBridge } from '../../utils/iframeBridge'
 import { environment, localApi } from '../../utils/api'
+import { attachMessageBridge } from '../../utils/iframeBridge'
 import { Button } from '../Button/button'
-import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
+import { EditFileDiffView } from '../EditFileDiffView/EditFileDiffView'
 import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
+import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
 import { TextArea } from '../TextArea/TextArea'
+
 type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
 // Updated to use valid Tailwind classes
 type ChatMessageWidth =
@@ -122,22 +124,19 @@ const MessageActions: React.FC<MessageActionsProps> = ({
 
   return (
     <div
-      className={`${containerClassName} transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
-        isVisible
-          ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
-          : 'opacity-0 translate-y-2 scale-[0.98] pointer-events-none'
-      }`}
+      className={`${containerClassName} transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isVisible
+        ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
+        : 'opacity-0 translate-y-2 scale-[0.98] pointer-events-none'
+        }`}
     >
       {/* Model ID Badge */}
       {modelName && !isEditing && !isSelectionVariant && (
         <div
-          className={`font-mono text-[10px] text-neutral-500 dark:text-neutral-400 tracking-wider uppercase ${
-            isMenuLayout ? 'px-3 py-2' : 'px-3'
-          } ${
-            isMenuLayout
+          className={`font-mono text-[10px] text-neutral-500 dark:text-neutral-400 tracking-wider uppercase ${isMenuLayout ? 'px-3 py-2' : 'px-3'
+            } ${isMenuLayout
               ? 'border-b border-neutral-200 dark:border-white/[0.08]'
               : 'border-r border-neutral-200 dark:border-white/[0.08]'
-          }`}
+            }`}
         >
           {(() => {
             const displayName = modelName.includes('/') ? modelName.split('/').pop() || modelName : modelName
@@ -174,11 +173,10 @@ const MessageActions: React.FC<MessageActionsProps> = ({
               {onCopySelection && (
                 <button
                   onClick={onCopySelection}
-                  className={`${baseButtonClassName} ${
-                    copied
-                      ? 'text-green-500'
-                      : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
-                  }`}
+                  className={`${baseButtonClassName} ${copied
+                    ? 'text-green-500'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
+                    }`}
                   title={copied ? 'Copied' : 'Copy selection'}
                 >
                   {copied ? (
@@ -257,11 +255,10 @@ const MessageActions: React.FC<MessageActionsProps> = ({
               {/* Copy Button */}
               <button
                 onClick={onCopy}
-                className={`${baseButtonClassName} ${
-                  copied
-                    ? 'text-green-500'
-                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
-                }`}
+                className={`${baseButtonClassName} ${copied
+                  ? 'text-green-500'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
+                  }`}
                 title={copied ? 'Copied' : 'Copy Content'}
               >
                 {copied ? (
@@ -1512,7 +1509,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           }
           <pre
             ref={preRef}
-            className={`not-prose thin-scrollbar pb-10 overflow-auto rounded-2xl ring-0 outline-none bg-gray-100 text-sm lg:text-lg text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
+            className={`not-prose thin-scrollbar pb-10 overflow-auto rounded-2xl ring-0 outline-none bg-gray-100 text-[0.8em] text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
             {...props}
           >
             {children}
@@ -1557,39 +1554,37 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return words.slice(0, maxWords).join(' ') + '...'
     }
 
-const extractHtmlFromToolResult = (content: any): { html: string; toolName?: string | null } | null => {
-  if (!content) return null
+    const extractHtmlFromToolResult = (content: any): { html: string; toolName?: string | null } | null => {
+      if (!content) return null
 
-  let resolved = content
-  if (typeof resolved === 'string') {
-    try {
-      resolved = JSON.parse(resolved)
-    } catch {
+      let resolved = content
+      if (typeof resolved === 'string') {
+        try {
+          resolved = JSON.parse(resolved)
+        } catch {
+          return null
+        }
+      }
+      if (typeof resolved === 'object' && resolved !== null && 'html' in resolved) {
+        return {
+          html: (resolved as any).html,
+          toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
+        }
+      }
+
+      if (
+        typeof resolved === 'object' &&
+        resolved !== null &&
+        (resolved as any).type === 'text/html' &&
+        typeof (resolved as any).content === 'string'
+      ) {
+        return {
+          html: (resolved as any).content,
+          toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
+        }
+      }
       return null
     }
-  }
-
-  if (typeof resolved === 'object' && resolved !== null && 'html' in resolved) {
-    return {
-      html: (resolved as any).html,
-      toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
-    }
-  }
-
-  if (
-    typeof resolved === 'object' &&
-    resolved !== null &&
-    (resolved as any).type === 'text/html' &&
-    typeof (resolved as any).content === 'string'
-  ) {
-    return {
-      html: (resolved as any).content,
-      toolName: (resolved as any).toolName ?? (resolved as any).tool_name ?? null,
-    }
-  }
-
-  return null
-}
 
     // Build a lookup map of HTML entries for on-demand registration.
     // Entries are NOT auto-registered - only when user clicks "Open Viewer" or expands.
@@ -1641,12 +1636,7 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
                 return
               }
               htmlSeen.add(normalized)
-              addEntry(
-                `${id}-${group.id}-result-${resultIdx}`,
-                normalized,
-                toolLabel,
-                maybeHtml.toolName ?? toolName
-              )
+              addEntry(`${id}-${group.id}-result-${resultIdx}`, normalized, toolLabel, maybeHtml.toolName ?? toolName)
             }
           })
         })
@@ -1858,7 +1848,10 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
             reloadToken: mcpReloadTokens[reloadKey] || 0,
           }
           return (
-            <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+            <div
+              key={toggleKey}
+              className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
+            >
               <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
               <div className='flex items-center gap-2 mb-2 flex-wrap'>
                 <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
@@ -1912,16 +1905,51 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
       // Check for failure: either structured failure response OR is_error flag on any result
       const hasResults = group.results.length > 0
       const hasError = group.results.some(r => r.is_error) || resultSummary === 'failure'
+      // Special handling for edit_file tool - render EditFileDiffView
+      const isEditFileTool = (group.name ?? '').toLowerCase() === 'edit_file'
+      const isReplaceOperation = group.args?.searchPattern || group.args?.replacement
+      const isAppendOperation = (group.args?.operation ?? '').toLowerCase() === 'append' && group.args?.content
+      if (isEditFileTool && group.args && (isReplaceOperation || isAppendOperation)) {
+        const editResult = group.results.length > 0 ? group.results[0].content : {}
+        return (
+          <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+            {/* Status pip indicator */}
+            <div
+              className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${hasResults && hasError
+                ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+                : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+                }`}
+            />
+            {/* Tool header */}
+            <div className='flex items-center gap-2 mb-3'>
+              <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
+                {group.name || 'edit_file'}
+              </span>
+            </div>
+            {/* EditFileDiffView */}
+            <EditFileDiffView
+              args={{
+                path: group.args.path,
+                operation: group.args.operation,
+                searchPattern: group.args.searchPattern,
+                replacement: group.args.replacement,
+                content: group.args.content,
+                validateContent: group.args.validateContent,
+              }}
+              result={editResult}
+            />
+          </div>
+        )
+      }
 
       return (
         <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
           {/* Status pip indicator - green for success/executing, red for error */}
           <div
-            className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
-              hasResults && hasError
-                ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
-                : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
-            }`}
+            className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${hasResults && hasError
+              ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+              : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+              }`}
           />
 
           {/* Tool header row */}
@@ -1971,9 +1999,8 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
                 className='ml-auto flex items-center gap-1 rounded border border-neutral-200 dark:border-neutral-700 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60'
               >
                 <i
-                  className={`bx ${
-                    mcpLoadState[`${id}-${group.id}-mcp`] ? 'bx-loader-circle animate-spin' : 'bx-play-circle'
-                  }`}
+                  className={`bx ${mcpLoadState[`${id}-${group.id}-mcp`] ? 'bx-loader-circle animate-spin' : 'bx-play-circle'
+                    }`}
                 />
                 Load app
               </button>
@@ -2019,11 +2046,10 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
                     return (
                       <div
                         key={resultKey}
-                        className={`border-l-2 pl-4 py-1 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words ${
-                          result.is_error
-                            ? 'border-red-400/50 dark:border-red-600/50 text-red-600 dark:text-red-400'
-                            : 'border-neutral-300/50 dark:border-neutral-700/50 text-neutral-500 dark:text-neutral-500'
-                        }`}
+                        className={`border-l-2 pl-4 py-1 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words ${result.is_error
+                          ? 'border-red-400/50 dark:border-red-600/50 text-red-600 dark:text-red-400'
+                          : 'border-neutral-300/50 dark:border-neutral-700/50 text-neutral-500 dark:text-neutral-500'
+                          }`}
                       >
                         {renderedContent}
                         {!result.is_error && (
@@ -2703,89 +2729,89 @@ const extractHtmlFromToolResult = (content: any): { html: string; toolName?: str
                   onEdit={
                     !hasSelection
                       ? () => {
-                          closeFloatingActions()
-                          handleEdit()
-                        }
+                        closeFloatingActions()
+                        handleEdit()
+                      }
                       : undefined
                   }
                   onBranch={
                     !hasSelection && role === 'user'
                       ? () => {
-                          closeFloatingActions()
-                          handleBranch()
-                        }
+                        closeFloatingActions()
+                        handleBranch()
+                      }
                       : undefined
                   }
                   onDelete={
                     !hasSelection
                       ? () => {
-                          closeFloatingActions()
-                          handleDelete()
-                        }
+                        closeFloatingActions()
+                        handleDelete()
+                      }
                       : undefined
                   }
                   onCopy={
                     !hasSelection
                       ? () => {
-                          handleCopy()
-                          // Don't close on copy to show feedback
-                        }
+                        handleCopy()
+                        // Don't close on copy to show feedback
+                      }
                       : undefined
                   }
                   onCopySelection={
                     hasSelection
                       ? () => {
-                          handleCopySelection()
-                          // Don't close on copy to show feedback
-                        }
+                        handleCopySelection()
+                        // Don't close on copy to show feedback
+                      }
                       : undefined
                   }
                   onExplainSelection={
                     hasSelection && onExplainFromSelection
                       ? (position?: { x: number; y: number }) => {
-                          closeFloatingActions()
-                          handleExplainSelection(position)
-                        }
+                        closeFloatingActions()
+                        handleExplainSelection(position)
+                      }
                       : undefined
                   }
                   onAddToNoteSelection={
                     hasSelection && _onAddToNote
                       ? () => {
-                          closeFloatingActions()
-                          handleAddSelectionToNote()
-                        }
+                        closeFloatingActions()
+                        handleAddSelectionToNote()
+                      }
                       : undefined
                   }
                   onSave={
                     !hasSelection
                       ? () => {
-                          closeFloatingActions()
-                          handleSave()
-                        }
+                        closeFloatingActions()
+                        handleSave()
+                      }
                       : undefined
                   }
                   onSaveBranch={
                     !hasSelection
                       ? () => {
-                          closeFloatingActions()
-                          handleSaveBranch()
-                        }
+                        closeFloatingActions()
+                        handleSaveBranch()
+                      }
                       : undefined
                   }
                   onCancel={
                     !hasSelection
                       ? () => {
-                          closeFloatingActions()
-                          handleCancel()
-                        }
+                        closeFloatingActions()
+                        handleCancel()
+                      }
                       : undefined
                   }
                   onMore={
                     !hasSelection
                       ? () => {
-                          closeFloatingActions()
-                          handleMoreClick()
-                        }
+                        closeFloatingActions()
+                        handleMoreClick()
+                      }
                       : undefined
                   }
                   isEditing={editingState}
@@ -2924,11 +2950,10 @@ const TodoListView: React.FC<{
               {todoItems.map((item, idx) => (
                 <li
                   key={`todo-item-${idx}`}
-                  className={`flex items-center gap-3 rounded-xl text-[12px] xl:text-[16px]  ${
-                    item.done
-                      ? ' bg-neutral-50/40 text-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                      : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                  }`}
+                  className={`flex items-center gap-3 rounded-xl text-[12px] xl:text-[16px]  ${item.done
+                    ? ' bg-neutral-50/40 text-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                    : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                    }`}
                 >
                   <span className='text-sm xl:text-[18px]'> {item.done ? '[✓]' : `[  \u00A0 ]`}</span>
                   <span className={`${item.done ? 'line-through opacity-80' : ''}`}>{item.text}</span>
