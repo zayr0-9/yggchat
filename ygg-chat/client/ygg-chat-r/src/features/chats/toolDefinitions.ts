@@ -36,19 +36,6 @@ export interface ToolDefinition {
 // Built-in tool definitions (static)
 const builtInToolDefinitions: ToolDefinition[] = [
   {
-    name: 'directory',
-    enabled: false,
-    description:
-      'Get the directory structure of a specified path. Useful for understanding project organization, finding files, or exploring codebases.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'The directory path to analyze (absolute or relative)' },
-      },
-      required: ['path'],
-    },
-  },
-  {
     name: 'todo_list',
     enabled: true,
     description:
@@ -699,7 +686,9 @@ const cloneTool = (tool: ToolDefinition): ToolDefinition => ({
     properties: { ...tool.inputSchema.properties },
     required: tool.inputSchema.required ? [...tool.inputSchema.required] : undefined,
   },
-  mcpUi: tool.mcpUi ? { ...tool.mcpUi, visibility: tool.mcpUi.visibility ? [...tool.mcpUi.visibility] : undefined } : undefined,
+  mcpUi: tool.mcpUi
+    ? { ...tool.mcpUi, visibility: tool.mcpUi.visibility ? [...tool.mcpUi.visibility] : undefined }
+    : undefined,
   appPermissions: tool.appPermissions ? { ...tool.appPermissions } : undefined,
 })
 

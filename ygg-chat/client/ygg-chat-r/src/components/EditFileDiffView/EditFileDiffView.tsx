@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
+import * as Diff from 'diff'
 
 export interface EditFileArgs {
     path?: string
@@ -25,6 +26,8 @@ interface EditFileDiffViewProps {
     result: EditFileResult | string
     className?: string
 }
+
+type ViewMode = 'unified' | 'split' | 'inline'
 
 /**
  * Attempts to detect the language/extension from a file path
@@ -97,13 +100,105 @@ function getFilename(path: string): string {
 }
 
 /**
+ * Inline Diff Line Component - renders a single line with word-level diff highlighting
+ */
+interface InlineDiffLineProps {
+    type: 'added' | 'removed' | 'unchanged'
+    content: string
+    lineNumber?: number
+}
+
+const InlineDiffLine: React.FC<InlineDiffLineProps> = ({ type, content, lineNumber }) => {
+    const bgClass =
+        type === 'added'
+            ? 'bg-emerald-100 dark:bg-emerald-500/15'
+            : type === 'removed'
+                ? 'bg-red-100 dark:bg-red-500/15'
+                : 'bg-transparent'
+
+    const textClass =
+        type === 'added'
+            ? 'text-emerald-800 dark:text-emerald-300'
+            : type === 'removed'
+                ? 'text-red-800 dark:text-red-300 line-through'
+                : 'text-neutral-700 dark:text-neutral-300'
+
+    const prefixIcon =
+        type === 'added' ? (
+            <span className='text-emerald-600 dark:text-emerald-400 select-none'>+</span>
+        ) : type === 'removed' ? (
+            <span className='text-red-600 dark:text-red-400 select-none'>−</span>
+        ) : (
+            <span className='text-neutral-400 dark:text-neutral-600 select-none'> </span>
+        )
+
+    return (
+        <div className={`flex ${bgClass} font-mono text-[10px] leading-snug`}>
+            {lineNumber !== undefined && (
+                <span className='w-8 flex-shrink-0 text-right pr-2 text-neutral-400 dark:text-neutral-600 select-none border-r border-neutral-200 dark:border-neutral-700'>
+                    {lineNumber}
+                </span>
+            )}
+            <span className='w-4 flex-shrink-0 text-center'>{prefixIcon}</span>
+            <span className={`flex-1 whitespace-pre-wrap break-all ${textClass}`}>{content || ' '}</span>
+        </div>
+    )
+}
+
+/**
+ * Inline Diff View - renders a merged view with line-by-line diff
+ */
+interface InlineDiffViewProps {
+    original: string
+    replacement: string
+}
+
+const InlineDiffView: React.FC<InlineDiffViewProps> = ({ original, replacement }) => {
+    const diffLines = useMemo(() => {
+        // Use line-by-line diff
+        const changes = Diff.diffLines(original || '', replacement || '')
+
+        const lines: Array<{ type: 'added' | 'removed' | 'unchanged'; content: string; lineNum?: number }> = []
+        let lineNum = 1
+
+        changes.forEach((change) => {
+            const changeLines = change.value.split('\n')
+            // Remove empty last element if the string ends with newline
+            if (changeLines[changeLines.length - 1] === '') {
+                changeLines.pop()
+            }
+
+            changeLines.forEach((line) => {
+                if (change.added) {
+                    lines.push({ type: 'added', content: line, lineNum: lineNum++ })
+                } else if (change.removed) {
+                    lines.push({ type: 'removed', content: line })
+                } else {
+                    lines.push({ type: 'unchanged', content: line, lineNum: lineNum++ })
+                }
+            })
+        })
+
+        return lines
+    }, [original, replacement])
+
+    return (
+        <div className='overflow-x-auto max-h-[300px] overflow-y-auto'>
+            {diffLines.map((line, idx) => (
+                <InlineDiffLine key={idx} type={line.type} content={line.content} lineNumber={line.lineNum} />
+            ))}
+        </div>
+    )
+}
+
+/**
  * EditFileDiffView - A stylish diff viewer component for edit_file tool results
  *
  * Displays the search pattern and replacement in a unified diff-like view
  * with syntax highlighting based on the file extension.
  */
 export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result, className = '' }) => {
-    const [viewMode, setViewMode] = useState<'unified' | 'split'>('unified')
+    const [viewMode, setViewMode] = useState<ViewMode>('unified')
     const [isExpanded, setIsExpanded] = useState(true)
 
     const parsedResult = useMemo(() => parseResult(result), [result])
@@ -166,23 +261,32 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
                         </span>
                     )}
 
-                    {/* View mode toggle */}
-                    <div className='flex items-center rounded bg-neutral-200 dark:bg-neutral-700/50 p-0.5'>
-                        <button
-                            className={`px-1 py-0.5 rounded text-[10px] transition-all ${viewMode === 'unified' ? 'bg-white dark:bg-neutral-600 text-neutral-800 dark:text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
-                            onClick={() => setViewMode('unified')}
-                            title='Unified'
-                        >
-                            <i className='bx bx-align-left' />
-                        </button>
-                        <button
-                            className={`px-1 py-0.5 rounded text-[10px] transition-all ${viewMode === 'split' ? 'bg-white dark:bg-neutral-600 text-neutral-800 dark:text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
-                            onClick={() => setViewMode('split')}
-                            title='Split'
-                        >
-                            <i className='bx bx-columns' />
-                        </button>
-                    </div>
+                    {/* View mode toggle - 3 modes now */}
+                    {!isAppendOperation && (
+                        <div className='flex items-center rounded bg-neutral-200 dark:bg-neutral-700/50 p-0.5'>
+                            <button
+                                className={`px-1 py-0.5 rounded text-[10px] transition-all ${viewMode === 'unified' ? 'bg-white dark:bg-neutral-600 text-neutral-800 dark:text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                                onClick={() => setViewMode('unified')}
+                                title='Unified view (stacked)'
+                            >
+                                <i className='bx bx-align-left' />
+                            </button>
+                            <button
+                                className={`px-1 py-0.5 rounded text-[10px] transition-all ${viewMode === 'split' ? 'bg-white dark:bg-neutral-600 text-neutral-800 dark:text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                                onClick={() => setViewMode('split')}
+                                title='Split view (side-by-side)'
+                            >
+                                <i className='bx bx-columns' />
+                            </button>
+                            <button
+                                className={`px-1 py-0.5 rounded text-[10px] transition-all ${viewMode === 'inline' ? 'bg-white dark:bg-neutral-600 text-neutral-800 dark:text-white shadow-sm' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                                onClick={() => setViewMode('inline')}
+                                title='Inline diff (git-style merged)'
+                            >
+                                <i className='bx bx-git-compare' />
+                            </button>
+                        </div>
+                    )}
 
                     {/* Collapse button */}
                     <button
@@ -201,7 +305,9 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
                         <div className='flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-500/10 border-b border-emerald-200 dark:border-emerald-500/20'>
                             <i className='bx bx-plus text-[10px] text-emerald-600 dark:text-emerald-400' />
                         </div>
-                        <div className={`bg-emerald-50 dark:bg-emerald-500/5 ${codeBlockStyles} overflow-x-auto max-h-[150px] overflow-y-auto`}>
+                        <div
+                            className={`bg-emerald-50 dark:bg-emerald-500/5 ${codeBlockStyles} overflow-x-auto max-h-[150px] overflow-y-auto`}
+                        >
                             <ReactMarkdown rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
                                 {isAppendOperation ? appendContentMarkdown : replacementMarkdown}
                             </ReactMarkdown>
@@ -218,7 +324,6 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
                         <div className='rounded overflow-hidden'>
                             <div className='flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-500/10 border-b border-emerald-200 dark:border-emerald-500/20'>
                                 <i className='bx bx-plus text-[10px] text-emerald-600 dark:text-emerald-400' />
-                                <span className='text-[9px] font-medium text-emerald-700 dark:text-emerald-400/80'></span>
                             </div>
                             <div
                                 className={`bg-emerald-50 dark:bg-emerald-500/5 ${codeBlockStyles} overflow-x-auto max-h-[300px] overflow-y-auto`}
@@ -226,6 +331,17 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
                                 <ReactMarkdown rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
                                     {appendContentMarkdown}
                                 </ReactMarkdown>
+                            </div>
+                        </div>
+                    ) : viewMode === 'inline' ? (
+                        /* Inline diff mode - git-style merged view */
+                        <div className='rounded overflow-hidden border border-neutral-200 dark:border-neutral-700'>
+                            <div className='flex items-center gap-1.5 px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700'>
+                                <i className='bx bx-git-compare text-[10px] text-neutral-500 dark:text-neutral-400' />
+                                <span className='text-[9px] font-medium text-neutral-600 dark:text-neutral-400'>Inline Diff</span>
+                            </div>
+                            <div className='bg-neutral-50 dark:bg-neutral-900'>
+                                <InlineDiffView original={args.searchPattern || ''} replacement={args.replacement || ''} />
                             </div>
                         </div>
                     ) : viewMode === 'unified' ? (

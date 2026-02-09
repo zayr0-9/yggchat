@@ -3,6 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import './TitleBar.css'
 
+import { useAppSelector } from '../../hooks/redux'
+import { selectCurrentConversationId } from '../../features/chats'
+import { selectAllConversations } from '../../features/conversations'
+
 export const TitleBar = () => {
   const location = useLocation()
   const navigate = useNavigate()
@@ -10,6 +14,10 @@ export const TitleBar = () => {
   const [isElectron, setIsElectron] = useState(false)
   const [isCompact, setIsCompact] = useState(false)
   const [isCompactLoading, setIsCompactLoading] = useState(false)
+
+  const currentConversationId = useAppSelector(selectCurrentConversationId)
+  const conversations = useAppSelector(selectAllConversations)
+  const currentCwd = conversations.find(c => String(c.id) === String(currentConversationId))?.cwd
 
   useEffect(() => {
     const detectPlatform = async () => {
@@ -121,6 +129,28 @@ export const TitleBar = () => {
         </div>
       </div>
       <div className='titlebar-controls'>
+        <div
+          style={{
+            marginRight: '12px',
+            fontSize: '11px',
+            color: 'rgba(255, 255, 255, 0.4)',
+            maxWidth: '300px',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'flex',
+            alignItems: 'center',
+            userSelect: 'text',
+            cursor: 'default',
+          }}
+          title={currentCwd || 'No working directory selected'}
+        >
+          {currentCwd ? (
+            <span style={{ fontFamily: 'monospace' }}>{currentCwd}</span>
+          ) : (
+            <span style={{ fontStyle: 'italic', opacity: 0.7 }}>Select a work folder</span>
+          )}
+        </div>
         <button
           className='titlebar-button titlebar-compact'
           onClick={handleToggleCompact}
