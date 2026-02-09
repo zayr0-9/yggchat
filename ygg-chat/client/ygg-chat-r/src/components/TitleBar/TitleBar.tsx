@@ -148,7 +148,7 @@ export const TitleBar = () => {
           {currentCwd ? (
             <span style={{ fontFamily: 'monospace' }}>{currentCwd}</span>
           ) : (
-            <span style={{ fontStyle: 'italic', opacity: 0.7 }}>Select a work folder</span>
+            <span style={{ fontStyle: 'italic', opacity: 1 }}>Select a work folder</span>
           )}
         </div>
         <button
