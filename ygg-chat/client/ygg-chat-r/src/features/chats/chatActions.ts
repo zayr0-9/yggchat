@@ -418,9 +418,7 @@ const updateConversationTitleInArray = (
 ): Conversation[] | undefined => {
   if (!Array.isArray(conversations)) return conversations
 
-  return conversations.map(conv =>
-    String(conv.id) === String(conversationId) ? { ...conv, title } : conv
-  )
+  return conversations.map(conv => (String(conv.id) === String(conversationId) ? { ...conv, title } : conv))
 }
 
 const updateConversationTitleInInfinite = (
@@ -443,7 +441,10 @@ const updateConversationTitleInInfinite = (
  * Keep all conversation list caches in sync after title updates.
  * Includes ConversationPage's infinite-query keys.
  */
-const syncConversationTitleAcrossCaches = (queryClient: QueryClient | null, updatedConversation: Conversation): void => {
+const syncConversationTitleAcrossCaches = (
+  queryClient: QueryClient | null,
+  updatedConversation: Conversation
+): void => {
   if (!queryClient) return
 
   const conversationId = updatedConversation.id
@@ -1385,13 +1386,17 @@ const executeSubagentCall = async (
           id: tc?.id,
           type: 'function',
           function: {
-            name: typeof tc?.name === 'string' ? tc.name : typeof tc?.function?.name === 'string' ? tc.function.name : '',
+            name:
+              typeof tc?.name === 'string' ? tc.name : typeof tc?.function?.name === 'string' ? tc.function.name : '',
             arguments: JSON.stringify(tc.arguments || tc.input || tc?.function?.arguments || {}),
           },
         }))
         .filter(
           (tc): tc is { id: string; type: 'function'; function: { name: string; arguments: string } } =>
-            typeof tc.id === 'string' && tc.id.length > 0 && typeof tc.function.name === 'string' && tc.function.name.length > 0
+            typeof tc.id === 'string' &&
+            tc.id.length > 0 &&
+            typeof tc.function.name === 'string' &&
+            tc.function.name.length > 0
         )
 
       conversationHistory.push({
@@ -1454,7 +1459,7 @@ const executeSubagentCall = async (
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messages: conversationHistory,
-        model: model || 'google/gemini-3-flash-preview',
+        model: model || 'openai/gpt-5.1-codex-mini',
         maxTokens: Math.min(maxTokens || 1024, 4096),
         temperature: temperature ?? 0.3,
         systemPrompt,
@@ -6048,45 +6053,48 @@ export const abortStreaming = createAsyncThunk<
   { success: boolean; messageDeleted?: boolean },
   { messageId: MessageId; streamId?: string | null },
   { state: RootState; extra: ThunkExtraArgument }
->('chat/abortStreaming', async ({ messageId, streamId: providedStreamId }, { dispatch, getState, extra, rejectWithValue }) => {
-  const { auth } = extra
-  const state = getState()
-  const streamId =
-    providedStreamId ??
-    Object.entries(state.chat.streaming.byId).find(([, stream]) => stream.streamingMessageId === messageId)?.[0] ??
-    null
-  try {
-    const response = await apiCall<{ success: boolean; messageDeleted?: boolean }>(
-      `/messages/${messageId}/abort`,
-      auth.accessToken,
-      {
-        method: 'POST',
-      }
-    )
+>(
+  'chat/abortStreaming',
+  async ({ messageId, streamId: providedStreamId }, { dispatch, getState, extra, rejectWithValue }) => {
+    const { auth } = extra
+    const state = getState()
+    const streamId =
+      providedStreamId ??
+      Object.entries(state.chat.streaming.byId).find(([, stream]) => stream.streamingMessageId === messageId)?.[0] ??
+      null
+    try {
+      const response = await apiCall<{ success: boolean; messageDeleted?: boolean }>(
+        `/messages/${messageId}/abort`,
+        auth.accessToken,
+        {
+          method: 'POST',
+        }
+      )
 
-    if (response.success) {
-      dispatch(chatSliceActions.streamingAborted(streamId ? { streamId } : undefined))
+      if (response.success) {
+        dispatch(chatSliceActions.streamingAborted(streamId ? { streamId } : undefined))
 
-      // If the assistant message was deleted, refetch messages to update the UI
-      if (response.messageDeleted) {
-        const conversationId = state.chat.conversation.currentConversationId
-        if (conversationId) {
-          // Stabilize the currentPath first by truncating past the deleted leaf
-          // Pass the user messageId (the generation root); the thunk will truncate before any direct child on path
-          // dispatch(
-          //   refreshCurrentPathAfterDelete({ conversationId, messageId })
-          // )
-          dispatch(fetchConversationMessages(conversationId))
+        // If the assistant message was deleted, refetch messages to update the UI
+        if (response.messageDeleted) {
+          const conversationId = state.chat.conversation.currentConversationId
+          if (conversationId) {
+            // Stabilize the currentPath first by truncating past the deleted leaf
+            // Pass the user messageId (the generation root); the thunk will truncate before any direct child on path
+            // dispatch(
+            //   refreshCurrentPathAfterDelete({ conversationId, messageId })
+            // )
+            dispatch(fetchConversationMessages(conversationId))
+          }
         }
       }
-    }
 
-    return response
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to abort generation'
-    return rejectWithValue(message)
+      return response
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to abort generation'
+      return rejectWithValue(message)
+    }
   }
-})
+)
 
 // Abort local generation (including subagent runs) and optionally stop server streaming
 export const abortGeneration = createAsyncThunk<
@@ -6244,7 +6252,9 @@ export const fetchMcpTools = createAsyncThunk<void, void, { state: RootState }>(
       if (data.success && Array.isArray(data.tools)) {
         // Transform MCP tools to ToolDefinition format
         const mcpToolDefinitions = data.tools.map((tool: any) => {
-          const metaUi = tool?._meta?.ui || (tool?._meta?.['ui/resourceUri'] ? { resourceUri: tool._meta['ui/resourceUri'] } : undefined)
+          const metaUi =
+            tool?._meta?.ui ||
+            (tool?._meta?.['ui/resourceUri'] ? { resourceUri: tool._meta['ui/resourceUri'] } : undefined)
           const visibility = Array.isArray(metaUi?.visibility) ? metaUi.visibility : ['model', 'app']
           const enabled = visibility.includes('model')
           return {

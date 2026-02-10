@@ -120,6 +120,196 @@ import { extractTextFromPdf } from '../utils/pdfUtils'
 import SideBar from './sideBar'
 import RightBar from './rightBar'
 
+type ParsedMessageData = {
+  toolCalls?: ToolCall[]
+  contentBlocks?: ContentBlock[]
+}
+
+type ChatInputUpdater = string | ((prev: string) => string)
+
+type ChatInputControllerHandle = {
+  getValue: () => string
+  setValue: (next: ChatInputUpdater) => void
+  clear: () => void
+  focus: () => void
+}
+
+type ChatInputControllerProps = {
+  conversationId: ConversationId | null
+  initialValue: string
+  slashCommands?: string[]
+  onHasTextChange: (hasText: boolean) => void
+  onSubmit: () => void
+  onBlurPersist: (content: string) => void
+}
+
+const EMPTY_PARSED_MESSAGE_DATA: ParsedMessageData = {}
+
+const parseMessageDataForRender = (msg: Message): ParsedMessageData => {
+  let toolCalls: ToolCall[] | undefined
+  if (msg.tool_calls) {
+    try {
+      if (typeof msg.tool_calls === 'object') {
+        toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [msg.tool_calls]
+      } else if (typeof msg.tool_calls === 'string') {
+        const parsed = JSON.parse(msg.tool_calls)
+        toolCalls = Array.isArray(parsed) ? parsed : [parsed]
+      }
+    } catch (error) {
+      console.warn(`Failed to parse tool_calls for message ${msg.id}:`, msg.tool_calls, error)
+    }
+  }
+
+  let contentBlocks: ContentBlock[] | undefined
+  if ((msg.role === 'assistant' || msg.role === 'ex_agent') && msg.content_blocks) {
+    try {
+      let parsedBlocks: ContentBlock[] = []
+      if (typeof msg.content_blocks === 'object') {
+        parsedBlocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [msg.content_blocks]
+      } else if (typeof msg.content_blocks === 'string') {
+        const parsed = JSON.parse(msg.content_blocks)
+        parsedBlocks = Array.isArray(parsed) ? parsed : [parsed]
+      }
+
+      if (parsedBlocks.length > 0) {
+        const hasMissingIndexes = parsedBlocks.some(block => typeof block.index !== 'number')
+        const isSortedByIndex = parsedBlocks.every((block, index, arr) => {
+          if (index === 0) return true
+          const prevIndex = typeof arr[index - 1].index === 'number' ? arr[index - 1].index : index - 1
+          const currentIndex = typeof block.index === 'number' ? block.index : index
+          return prevIndex <= currentIndex
+        })
+
+        if (!hasMissingIndexes && isSortedByIndex) {
+          contentBlocks = parsedBlocks
+        } else {
+          contentBlocks = parsedBlocks
+            .map((block, index) => ({
+              ...block,
+              index: typeof block.index === 'number' ? block.index : index,
+            }))
+            .sort((a, b) => a.index - b.index)
+        }
+      }
+    } catch (error) {
+      console.warn(`Failed to parse content_blocks for message ${msg.id}`, error)
+      contentBlocks = undefined
+    }
+  }
+
+  return { toolCalls, contentBlocks }
+}
+
+const ChatInputController = React.memo(
+  React.forwardRef<ChatInputControllerHandle, ChatInputControllerProps>(
+    ({ conversationId, initialValue, slashCommands, onHasTextChange, onSubmit, onBlurPersist }, ref) => {
+      const [value, setValueState] = useState(initialValue)
+      const valueRef = useRef(initialValue)
+      const wrapperRef = useRef<HTMLDivElement | null>(null)
+      const lastHasTextRef = useRef(initialValue.trim().length > 0)
+
+      const publishHasText = useCallback(
+        (nextValue: string) => {
+          const hasText = nextValue.trim().length > 0
+          if (hasText !== lastHasTextRef.current) {
+            lastHasTextRef.current = hasText
+            onHasTextChange(hasText)
+          }
+        },
+        [onHasTextChange]
+      )
+
+      const setValue = useCallback(
+        (next: ChatInputUpdater) => {
+          setValueState(prevValue => {
+            const nextValue = typeof next === 'function' ? next(prevValue) : next
+            valueRef.current = nextValue
+            publishHasText(nextValue)
+            return nextValue
+          })
+        },
+        [publishHasText]
+      )
+
+      const clear = useCallback(() => {
+        setValue('')
+      }, [setValue])
+
+      const focus = useCallback(() => {
+        const textarea = wrapperRef.current?.querySelector('textarea')
+        if (!textarea) return
+        try {
+          textarea.focus({ preventScroll: true })
+        } catch {
+          textarea.focus()
+        }
+      }, [])
+
+      useEffect(() => {
+        valueRef.current = initialValue
+        setValueState(initialValue)
+        const hasText = initialValue.trim().length > 0
+        lastHasTextRef.current = hasText
+        onHasTextChange(hasText)
+      }, [conversationId, initialValue, onHasTextChange])
+
+      React.useImperativeHandle(
+        ref,
+        () => ({
+          getValue: () => valueRef.current,
+          setValue,
+          clear,
+          focus,
+        }),
+        [clear, focus, setValue]
+      )
+
+      const handleChange = useCallback(
+        (nextValue: string) => {
+          valueRef.current = nextValue
+          setValueState(nextValue)
+          publishHasText(nextValue)
+        },
+        [publishHasText]
+      )
+
+      const handleKeyDown = useCallback(
+        (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault()
+            onSubmit()
+          }
+        },
+        [onSubmit]
+      )
+
+      const handleBlur = useCallback(() => {
+        onBlurPersist(valueRef.current)
+      }, [onBlurPersist])
+
+      return (
+        <div ref={wrapperRef}>
+          <InputTextArea
+            value={value}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
+            placeholder='Type your message...'
+            state='default'
+            width='w-full'
+            minRows={1}
+            autoFocus={true}
+            showCharCount={false}
+            slashCommands={slashCommands}
+          />
+        </div>
+      )
+    }
+  )
+)
+
+ChatInputController.displayName = 'ChatInputController'
+
 function Chat() {
   const dispatch = useAppDispatch()
   const { accessToken, userId } = useAuth()
@@ -128,8 +318,20 @@ function Chat() {
   const queryClient = useQueryClient()
   const htmlRegistry = useHtmlIframeRegistry()
 
-  // Local state for input to completely avoid Redux dispatches during typing
-  const [localInput, setLocalInput] = useState('')
+  // Keep high-frequency keystrokes inside the input controller to avoid rerendering Chat.
+  const inputControllerRef = useRef<ChatInputControllerHandle | null>(null)
+  const [hasLocalInput, setHasLocalInput] = useState(false)
+
+  const getLocalInput = useCallback(() => inputControllerRef.current?.getValue() ?? '', [])
+  const updateLocalInput = useCallback((next: ChatInputUpdater) => {
+    inputControllerRef.current?.setValue(next)
+  }, [])
+  const clearLocalInput = useCallback(() => {
+    inputControllerRef.current?.clear()
+  }, [])
+  const focusLocalInput = useCallback(() => {
+    inputControllerRef.current?.focus()
+  }, [])
 
   // Subscription status for free/paid detection
   const { isFreeUser } = useSubscriptionStatus(userId)
@@ -290,7 +492,7 @@ function Chat() {
     silenceThreshold: sttConfig.silenceThreshold,
     onFinalTranscript: (text: string) => {
       // Append final transcript to input with a space separator
-      setLocalInput(prev => (prev ? prev + ' ' + text : text.trim()))
+      updateLocalInput(prev => (prev ? prev + ' ' + text : text.trim()))
     },
   })
 
@@ -335,10 +537,10 @@ function Chat() {
       const mentionName = file.name || file.path.split('/').pop() || file.relativePath.split('/').pop() || ''
       if (mentionName) {
         const mentionRegex = new RegExp(`@${escapeRegExp(mentionName)}(\\b|$)\\s*`, 'g')
-        setLocalInput(prev => prev.replace(mentionRegex, ''))
+        updateLocalInput(prev => prev.replace(mentionRegex, ''))
       }
     },
-    [dispatch]
+    [dispatch, updateLocalInput]
   )
 
   const replaceFileMentionsWithPath = useCallback(
@@ -1488,11 +1690,6 @@ function Chat() {
   // No manual loading needed - React Query handles caching and refetching
   // Filtering and sorting is handled by useFilteredModels hook
 
-  // Sync local input with Redux state when conversation changes
-  useEffect(() => {
-    setLocalInput(messageInput.content)
-  }, [messageInput.content, currentConversationId])
-
   // Listen for provider settings changes from Settings page
   useEffect(() => {
     const handleProviderSettingsChange = (e: CustomEvent<ProviderSettings>) => {
@@ -1536,11 +1733,6 @@ function Chat() {
       dispatch(initializeUserAndConversation())
     }
   }, [conversationIdFromUrl, dispatch])
-
-  // Handle input changes with pure local state - no Redux dispatches during typing
-  const handleInputChange = useCallback((content: string) => {
-    setLocalInput(content)
-  }, [])
 
   // Handle model selection
   const handleModelSelect = useCallback(
@@ -1605,20 +1797,19 @@ function Chat() {
     },
     [dispatch]
   )
-  // Local version of canSend that checks localInput instead of Redux state
+  // Local version of canSend that checks input controller state.
   const canSendLocal = useMemo(() => {
-    const hasInput = localInput.trim().length > 0
     const isNotSending = !sendingState.sending && !streamState.active
     const hasModel = !!selectedModel
 
     // Allow retrigger: empty input when last displayed message is from user
     const isRetrigger =
-      localInput.trim().length === 0 &&
+      !hasLocalInput &&
       displayMessages.length > 0 &&
       displayMessages[displayMessages.length - 1]?.role === 'user'
 
-    return (hasInput || isRetrigger) && isNotSending && hasModel
-  }, [localInput, sendingState.sending, streamState.active, selectedModel, displayMessages])
+    return (hasLocalInput || isRetrigger) && isNotSending && hasModel
+  }, [hasLocalInput, sendingState.sending, streamState.active, selectedModel, displayMessages])
 
   // Helper: scroll to bottom immediately using the sentinel or container fallback
   const scrollToBottomNow = useCallback((behavior: ScrollBehavior = 'auto') => {
@@ -1635,6 +1826,8 @@ function Chat() {
 
   const handleSend = useCallback(
     (value: number) => {
+      const localInputValue = getLocalInput()
+
       // Re-enable auto-pinning for CC mode sends until the user scrolls during this stream
       if (ccMode) {
         userScrolledDuringStreamRef.current = false
@@ -1642,7 +1835,7 @@ function Chat() {
       if (canSendLocal && currentConversationId) {
         // Check if this is a retrigger scenario (empty input + last message is user)
         const isRetrigger =
-          localInput.trim().length === 0 &&
+          !hasLocalInput &&
           displayMessages.length > 0 &&
           displayMessages[displayMessages.length - 1]?.role === 'user'
 
@@ -1684,13 +1877,13 @@ function Chat() {
               })
           } else {
             // Normal CC mode send
-            const processedContent = replaceFileMentionsWithPath(localInput)
+            const processedContent = replaceFileMentionsWithPath(localInputValue)
 
             // Update Redux state with processed content before sending
             dispatch(chatSliceActions.inputChanged({ content: processedContent }))
 
             // Clear local input immediately after sending
-            setLocalInput('')
+            clearLocalInput()
 
             // Immediately scroll to bottom for CC mode send
             // DISABLED: Auto-scroll temporarily disabled
@@ -1757,7 +1950,7 @@ function Chat() {
           } else {
             // Normal send flow
             // Process file mentions with actual content before sending
-            const processedContent = replaceFileMentionsWithPath(localInput)
+            const processedContent = replaceFileMentionsWithPath(localInputValue)
 
             // Update Redux state with processed content before sending
             dispatch(chatSliceActions.inputChanged({ content: processedContent }))
@@ -1835,7 +2028,7 @@ function Chat() {
             // Use processed content for immediate send
             const inputToSend = { content: processedContent }
             // Clear local input immediately after sending
-            setLocalInput('')
+            clearLocalInput()
 
             // Dispatch a single sendMessage with repeatNum set to value.
             dispatch(
@@ -1878,7 +2071,9 @@ function Chat() {
       selectedPath,
       think,
       dispatch,
-      localInput,
+      getLocalInput,
+      hasLocalInput,
+      clearLocalInput,
       displayMessages,
       replaceFileMentionsWithPath,
       scrollToBottomNow,
@@ -2448,15 +2643,15 @@ function Chat() {
     [currentConversationId, currentConversation, selectedProject, queryClient, dispatch, userId]
   )
 
-  // Handle key press
-  const handleKeyPress = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        handleSend(multiReplyCount)
-      }
+  const handleComposerSubmit = useCallback(() => {
+    handleSend(multiReplyCount)
+  }, [handleSend, multiReplyCount])
+
+  const handleComposerBlurPersist = useCallback(
+    (content: string) => {
+      dispatch(chatSliceActions.inputChanged({ content }))
     },
-    [handleSend, multiReplyCount]
+    [dispatch]
   )
 
   const handleAttachmentInputChange = useCallback(
@@ -2475,11 +2670,11 @@ function Chat() {
               return `[Pdf Content for ${file.name}]:\n${text}`
             })
           )
-          setLocalInput(prev => {
+          updateLocalInput(prev => {
             const prefix = prev ? `${prev}\n\n` : ''
             return prefix + '```\n' + pdfTexts + '\n``` \n\n'
           })
-          inputAreaRef.current?.querySelector('textarea')?.focus()
+          focusLocalInput()
         } catch (err) {
           console.error('Failed to extract PDF text(s)', err)
         }
@@ -2508,7 +2703,7 @@ function Chat() {
 
       e.target.value = ''
     },
-    [dispatch, focusedChatMessageId]
+    [dispatch, focusedChatMessageId, updateLocalInput, focusLocalInput]
   )
 
   // const handleMultiReplyCountChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -2556,62 +2751,14 @@ function Chat() {
   //   }
   // }, [providers.currentProvider, refreshModelsMutation])
 
-  // Helper to parse message data (tool_calls and content_blocks) for rendering
-  const parseMessageData = useCallback((msg: Message) => {
-    // Parse tool_calls into structured ToolCall array if present
-    // Handles both formats:
-    // - String (from SQLite in local mode): needs JSON.parse()
-    // - Object/Array (from Supabase in web mode): already parsed
-    let toolCalls: ToolCall[] | undefined = undefined
-    if (msg.tool_calls) {
-      try {
-        // If tool_calls is already an object/array (from Supabase), use it directly
-        if (typeof msg.tool_calls === 'object') {
-          toolCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [msg.tool_calls]
-        } else if (typeof msg.tool_calls === 'string') {
-          // If it's a string (from SQLite), parse it
-          const parsed = JSON.parse(msg.tool_calls)
-          toolCalls = Array.isArray(parsed) ? parsed : [parsed]
-        }
-      } catch (error) {
-        console.warn(`Failed to parse tool_calls for message ${msg.id}:`, msg.tool_calls, error)
-      }
+  // Parse message payloads once per message-list change so row props remain stable while typing.
+  const parsedMessageDataById = useMemo(() => {
+    const parsedById = new Map<MessageId, ParsedMessageData>()
+    for (const msg of filteredMessages) {
+      parsedById.set(msg.id, parseMessageDataForRender(msg))
     }
-
-    // Parse content_blocks for assistant messages with sequential rendering
-    // Handles both formats:
-    // - String (from SQLite): needs JSON.parse()
-    // - Object/Array (from Supabase): already parsed
-    // Prioritize content_blocks over legacy fields (content, thinking_block, tool_calls)
-    let contentBlocks: ContentBlock[] | undefined = undefined
-    if ((msg.role === 'assistant' || msg.role === 'ex_agent') && msg.content_blocks) {
-      try {
-        if (typeof msg.content_blocks === 'object') {
-          contentBlocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [msg.content_blocks]
-        } else if (typeof msg.content_blocks === 'string') {
-          const parsed = JSON.parse(msg.content_blocks)
-          contentBlocks = Array.isArray(parsed) ? parsed : [parsed]
-        }
-        // Ensure all blocks have an index property, add if missing
-        if (contentBlocks && contentBlocks.length > 0) {
-          contentBlocks = contentBlocks.map((block, idx) => ({
-            ...block,
-            index: block.index !== undefined ? block.index : idx,
-          }))
-          // Sort by index to ensure chronological order
-          contentBlocks.sort((a, b) => a.index - b.index)
-        } else {
-          // If content_blocks is empty after parsing, treat as undefined to use legacy rendering
-          contentBlocks = undefined
-        }
-      } catch (error) {
-        console.warn(`Failed to parse content_blocks for message ${msg.id}`, error)
-        contentBlocks = undefined
-      }
-    }
-
-    return { toolCalls, contentBlocks }
-  }, [])
+    return parsedById
+  }, [filteredMessages])
 
   // Helper: Parse todo items from markdown content
   const TODO_ITEM_REGEX = /^\s*[-*]\s*\[(x|X| )\]\s*(.*)$/
@@ -3130,7 +3277,8 @@ function Chat() {
 
                   // Render regular message
                   const msg = filteredMessages[virtualRow.index]
-                  const { toolCalls, contentBlocks } = parseMessageData(msg)
+                  const { toolCalls, contentBlocks } =
+                    parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
                   return (
                     <div
                       key={msg.id}
@@ -3268,17 +3416,13 @@ function Chat() {
             )}
             {/* Textarea with shortcut hint */}
             <div className=''>
-              <InputTextArea
-                value={localInput}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyPress}
-                onBlur={() => dispatch(chatSliceActions.inputChanged({ content: localInput }))}
-                placeholder='Type your message...'
-                state='default'
-                width='w-full'
-                minRows={1}
-                autoFocus={true}
-                showCharCount={false}
+              <ChatInputController
+                ref={inputControllerRef}
+                conversationId={currentConversationId}
+                initialValue={messageInput.content}
+                onHasTextChange={setHasLocalInput}
+                onSubmit={handleComposerSubmit}
+                onBlurPersist={handleComposerBlurPersist}
                 slashCommands={ccMode && ccModeAvailable ? ccSlashCommands : undefined}
               />
             </div>
@@ -3904,7 +4048,8 @@ function Chat() {
                     disabled={!canSendLocal || !currentConversationId}
                     title='Send message'
                     onClick={() => {
-                      if (ccMode && ccModeAvailable && localInput.trim()) {
+                      const inputValue = getLocalInput()
+                      if (ccMode && ccModeAvailable && inputValue.trim()) {
                         // Send to Claude Code agent (disabled in web mode)
                         const parent: MessageId | null =
                           selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
@@ -3915,7 +4060,7 @@ function Chat() {
                         dispatch(
                           sendCCMessage({
                             conversationId: currentConversationId,
-                            message: localInput.trim(),
+                            message: inputValue.trim(),
                             cwd: ccCwd || undefined,
                             permissionMode: 'default',
                             resume: true,
@@ -3925,7 +4070,7 @@ function Chat() {
                         )
                           .unwrap()
                           .then(() => {
-                            setLocalInput('')
+                            clearLocalInput()
                           })
                           .catch(error => {
                             console.error('Failed to send CC message:', error)
@@ -4079,7 +4224,7 @@ function Chat() {
           isLoadingNotes={isLoadingResearchNotes}
           ccCwd={ccCwd}
           onFilePathInsert={(path: string) => {
-            setLocalInput(prev => (prev ? prev + ' ' + path : path))
+            updateLocalInput(prev => (prev ? prev + ' ' + path : path))
           }}
         />
       )}
