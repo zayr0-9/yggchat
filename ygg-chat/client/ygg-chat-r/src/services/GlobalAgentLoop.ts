@@ -309,7 +309,12 @@ class GlobalAgentLoop {
 
     try {
       await this.refreshSettings()
-      await this.ensureSystemProjectAndSession()
+
+      // System project/session bootstrap is needed only when missing.
+      // Avoid re-checking /local/projects on every tick.
+      if (!this.systemProjectId || !this.state.conversationId) {
+        await this.ensureSystemProjectAndSession()
+      }
 
       const pendingTasksResponse = await localApi.get<{ success: boolean; tasks: any[] }>('/agent/tasks?status=pending')
       let pendingTasks = pendingTasksResponse?.tasks || []

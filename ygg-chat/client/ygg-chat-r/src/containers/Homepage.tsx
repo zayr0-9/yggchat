@@ -224,7 +224,7 @@ const Homepage: React.FC = () => {
       {/* Dark Overlay */}
       {/* bg-neutral-200/15 dark:bg-black/30 */}
       <div className='absolute inset-0 w-full h-full  z-0' />
-      {!isMobile && <SideBar limit={12} projects={allProjects} />}
+      {!isMobile && <SideBar limit={120} projects={allProjects} />}
       {/* Main content with flex layout - Responsive margins for different displays */}
       <div className='relative z-10 flex-1 h-full flex flex-col w-full mr-2 ml-2 overflow-hidden sm:mr-4 sm:ml-4 md:mr-8 md:ml-8 lg:mr-15 lg:ml-15 xl:mr-20 xl:ml-15 2xl:mr-25 2xl:ml-15 3xl:mr-35 3xl:ml-20 transition-all duration-300'>
         <div className='py-1 lg:py-1 xl:py-1 2xl:py-0 3xl:py-4 4xl:py-6 w-full mx-auto shrink-0'>

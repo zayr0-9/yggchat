@@ -10,8 +10,8 @@ import React, {
   useState,
 } from 'react'
 import type { ContentBlock, Message } from '../../features/chats/chatTypes'
-import type { Conversation } from '../../features/conversations/conversationTypes'
 import { getMcpTools, type ToolDefinition } from '../../features/chats/toolDefinitions'
+import type { Conversation } from '../../features/conversations/conversationTypes'
 import { useAuth } from '../../hooks/useAuth'
 import {
   getHtmlToolsFromCache,
@@ -21,7 +21,6 @@ import {
 } from '../../hooks/useQueries'
 import { environment, localApi } from '../../utils/api'
 import { attachMessageBridge as attachSharedMessageBridge } from '../../utils/iframeBridge'
-import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
 import {
   buildCspValue,
   buildIframeAllow,
@@ -31,6 +30,7 @@ import {
   type McpUiPermissions,
   type McpUiResource,
 } from '../../utils/mcpApps'
+import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
 
 type HtmlIframeEntryBase = {
   key: string
@@ -568,18 +568,16 @@ const configureMcpIframeElement = (iframe: HTMLIFrameElement, className?: string
   iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-presentation')
 }
 
-const createMcpIframeRecord = (
-  payload: {
-    serverName: string
-    resourceUri: string
-    qualifiedToolName: string
-    toolArgs?: Record<string, any> | null
-    toolResult?: { content: any; is_error?: boolean } | null
-    toolDefinition?: ToolDefinition
-    reloadToken?: number
-    className?: string
-  }
-): McpIframeRecord => {
+const createMcpIframeRecord = (payload: {
+  serverName: string
+  resourceUri: string
+  qualifiedToolName: string
+  toolArgs?: Record<string, any> | null
+  toolResult?: { content: any; is_error?: boolean } | null
+  toolDefinition?: ToolDefinition
+  reloadToken?: number
+  className?: string
+}): McpIframeRecord => {
   const iframe = document.createElement('iframe')
   configureMcpIframeElement(iframe, payload.className)
 
@@ -676,10 +674,10 @@ const createMcpIframeRecord = (
           return
         }
         try {
-          const response = await localApi.post<{ success: boolean; result?: any; error?: string }>(
-            '/mcp/tools/call',
-            { name: qualified, arguments: args }
-          )
+          const response = await localApi.post<{ success: boolean; result?: any; error?: string }>('/mcp/tools/call', {
+            name: qualified,
+            arguments: args,
+          })
           if (!response?.success) {
             fail(request.id, response?.error || 'Tool call failed')
             return
@@ -1998,7 +1996,17 @@ export const McpAppIframeSlot: React.FC<{
       reloadToken,
       className,
     })
-  }, [className, iframeKey, qualifiedToolName, reloadToken, resourceUri, serverName, toolArgs, toolDefinition, toolResult])
+  }, [
+    className,
+    iframeKey,
+    qualifiedToolName,
+    reloadToken,
+    resourceUri,
+    serverName,
+    toolArgs,
+    toolDefinition,
+    toolResult,
+  ])
 
   useLayoutEffect(() => {
     const node = slotRef.current

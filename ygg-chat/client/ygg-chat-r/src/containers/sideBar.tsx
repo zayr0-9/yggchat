@@ -22,7 +22,12 @@ interface SideBarProps {
 
 const LOCAL_MODE_RECENT_PROJECTS_LIMIT = 100
 
-const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects = [], activeConversationId = null }) => {
+const SideBar: React.FC<SideBarProps> = ({
+  limit = 100,
+  className = '',
+  projects = [],
+  activeConversationId = null,
+}) => {
   const dispatch = useAppDispatch()
   const navigate = useNavigate()
   const location = useLocation()
@@ -74,8 +79,11 @@ const SideBar: React.FC<SideBarProps> = ({ limit = 8, className = '', projects =
 
   // Fetch recent and favorited conversations using React Query (cached for 5 minutes)
   const { data: recentConversations = [], isLoading: recentLoading, error: recentError } = useRecentConversations(limit)
-  const { data: favoriteConversations = [], isLoading: favoritesLoading, error: favoritesError } =
-    useFavoritedConversations(limit)
+  const {
+    data: favoriteConversations = [],
+    isLoading: favoritesLoading,
+    error: favoritesError,
+  } = useFavoritedConversations(limit)
 
   const visibleConversations = conversationTab === 'favorites' ? favoriteConversations : recentConversations
 

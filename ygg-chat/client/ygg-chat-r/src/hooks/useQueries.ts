@@ -408,12 +408,12 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
  * Fetch recent conversations with a limit
  * Cache key: ['conversations', 'recent', userId, limit]
  */
-export function useRecentConversations(limit: number = 18) {
+export function useRecentConversations(limit: number = 120) {
   const { accessToken, userId: authUserId } = useAuth()
 
   // Use userId from AuthContext (works for both local mode with UUID and web mode)
   const userId = authUserId
-  const safeLimit = Math.max(1, Math.floor(Number.isFinite(limit) ? limit : 8))
+  const safeLimit = Math.max(1, Math.floor(Number.isFinite(limit) ? limit : 120))
 
   return useQuery({
     queryKey: ['conversations', 'recent', userId, safeLimit],

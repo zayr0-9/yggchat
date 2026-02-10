@@ -110,7 +110,7 @@ export async function editFileSearchReplace(
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
-      if (/^[a-zA-Z]:[\/]/.test(fsPath)) {
+      if (/^[a-zA-Z]:[\\/]/.test(fsPath)) {
         pathType = 'windows'
       }
     }
@@ -133,7 +133,8 @@ export async function editFileSearchReplace(
         // Windows or native paths - use Node's path module
         const normalizedCwd = path.resolve(options.cwd)
         const normalizedPath = path.resolve(fsPath)
-        if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+        const rel = path.relative(normalizedCwd, normalizedPath)
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
           return {
             success: false,
             sizeBytes: 0,
@@ -311,7 +312,7 @@ export async function editFileSearchReplaceFirst(
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
-      if (/^[a-zA-Z]:[\/]/.test(fsPath)) {
+      if (/^[a-zA-Z]:[\\/]/.test(fsPath)) {
         pathType = 'windows'
       }
     }
@@ -334,7 +335,8 @@ export async function editFileSearchReplaceFirst(
         // Windows or native paths - use Node's path module
         const normalizedCwd = path.resolve(options.cwd)
         const normalizedPath = path.resolve(fsPath)
-        if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+        const rel = path.relative(normalizedCwd, normalizedPath)
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
           return {
             success: false,
             sizeBytes: 0,
@@ -471,7 +473,7 @@ export async function appendToFile(
     } else {
       const basePath = options.cwd || process.cwd()
       fsPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
-      if (/^[a-zA-Z]:[\/]/.test(fsPath)) {
+      if (/^[a-zA-Z]:[\\/]/.test(fsPath)) {
         pathType = 'windows'
       }
     }
@@ -494,7 +496,8 @@ export async function appendToFile(
         // Windows or native paths - use Node's path module
         const normalizedCwd = path.resolve(options.cwd)
         const normalizedPath = path.resolve(fsPath)
-        if (!normalizedPath.startsWith(normalizedCwd + path.sep) && normalizedPath !== normalizedCwd) {
+        const rel = path.relative(normalizedCwd, normalizedPath)
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
           return {
             success: false,
             sizeBytes: 0,
