@@ -1255,7 +1255,7 @@ const executeSubagentCall = async (
         if (turnText || turnReasoning) {
           conversationHistory.push({
             role: 'assistant',
-            content: turnText || null,
+            content: turnText || '',
           })
         }
 
@@ -1380,14 +1380,24 @@ const executeSubagentCall = async (
       }
 
       // Add assistant message with tool_calls to conversation history
+      const toolCallsForHistory = turnToolCalls
+        .map(tc => ({
+          id: tc?.id,
+          type: 'function',
+          function: {
+            name: typeof tc?.name === 'string' ? tc.name : typeof tc?.function?.name === 'string' ? tc.function.name : '',
+            arguments: JSON.stringify(tc.arguments || tc.input || tc?.function?.arguments || {}),
+          },
+        }))
+        .filter(
+          (tc): tc is { id: string; type: 'function'; function: { name: string; arguments: string } } =>
+            typeof tc.id === 'string' && tc.id.length > 0 && typeof tc.function.name === 'string' && tc.function.name.length > 0
+        )
+
       conversationHistory.push({
         role: 'assistant',
-        content: turnText || null,
-        tool_calls: turnToolCalls.map(tc => ({
-          id: tc.id,
-          type: 'function',
-          function: { name: tc.name, arguments: JSON.stringify(tc.arguments || tc.input || {}) },
-        })),
+        content: turnText || '',
+        tool_calls: toolCallsForHistory,
       })
 
       // Add each tool result as a separate 'tool' message (same format as createToolResultMessage)

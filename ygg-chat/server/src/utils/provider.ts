@@ -396,15 +396,24 @@ export async function generateResponse(
         let parsedToolCalls: any[] = []
         try {
           const toolCallsData = typeof msg.tool_calls === 'string' ? JSON.parse(msg.tool_calls) : msg.tool_calls
-          parsedToolCalls = (Array.isArray(toolCallsData) ? toolCallsData : [toolCallsData]).map((tc: any) => ({
-            id: tc.id,
-            type: 'function' as const,
-            function: {
-              name: tc.name,
-              arguments:
-                typeof tc.arguments === 'string' ? tc.arguments : JSON.stringify(tc.arguments || tc.input || {}),
-            },
-          }))
+          parsedToolCalls = (Array.isArray(toolCallsData) ? toolCallsData : [toolCallsData])
+            .map((tc: any) => {
+              const id = typeof tc?.id === 'string' ? tc.id : ''
+              const name = typeof tc?.name === 'string' ? tc.name : typeof tc?.function?.name === 'string' ? tc.function.name : ''
+              const rawArguments = tc?.arguments ?? tc?.function?.arguments ?? tc?.input ?? tc?.function?.input ?? {}
+              const argumentsString = typeof rawArguments === 'string' ? rawArguments : JSON.stringify(rawArguments)
+
+              if (!id || !name) return null
+              return {
+                id,
+                type: 'function' as const,
+                function: {
+                  name,
+                  arguments: argumentsString,
+                },
+              }
+            })
+            .filter((tc): tc is { id: string; type: 'function'; function: { name: string; arguments: string } } => !!tc)
         } catch (e) {
           // If parsing fails, skip tool_calls
         }
@@ -412,7 +421,7 @@ export async function generateResponse(
         if (parsedToolCalls.length > 0) {
           const assistantMsg: any = {
             role: 'assistant',
-            content: msg.content || null,
+            content: typeof msg.content === 'string' ? msg.content : '',
             tool_calls: parsedToolCalls,
           }
           // Preserve reasoning_details if present on the message (required by Gemini for parallel tool calls)
