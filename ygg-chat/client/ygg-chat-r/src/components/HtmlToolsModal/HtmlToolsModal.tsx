@@ -224,7 +224,7 @@ export const HtmlToolsModal: React.FC = () => {
         : isCompact
           ? 'rounded-2xl border border-neutral-200 dark:border-white/[0.05] bg-neutral-50 dark:bg-black/20 cursor-pointer hover:bg-neutral-100 dark:hover:bg-white/[0.03] hover:border-neutral-300 dark:hover:border-white/[0.08] transition-all duration-200'
           : 'rounded-2xl border border-neutral-200 dark:border-white/[0.05] bg-neutral-50 dark:bg-black/20'
-    const cardStyle = isFullscreen ? { paddingTop: '0.5rem' } : undefined
+    const cardStyle = isFullscreen ? { paddingTop: 'var(--titlebar-height, 0px)' } : undefined
 
     const handleCompactClick = () => {
       if (!isCompact) return
@@ -835,7 +835,7 @@ export const HtmlToolsModal: React.FC = () => {
   return (
     <div
       className='fixed inset-0 z-[1400] flex flex-col'
-      style={{ boxSizing: 'border-box' }}
+      style={{ paddingTop: 'var(--titlebar-height, 0px)', boxSizing: 'border-box' }}
     >
       {/* Fullscreen viewer */}
       <div

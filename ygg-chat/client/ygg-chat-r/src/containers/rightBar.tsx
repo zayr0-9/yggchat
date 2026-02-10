@@ -9,21 +9,18 @@ import { TextArea } from '../components/TextArea/TextArea'
 import { updateResearchNote } from '../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../features/conversations/conversationSelectors'
 import { Conversation } from '../features/conversations/conversationTypes'
-import { loadAgentSettings } from '../helpers/agentSettingsStorage'
 import { uiActions } from '../features/ui'
+import { loadAgentSettings } from '../helpers/agentSettingsStorage'
 import { useAuth } from '../hooks/useAuth'
+import { clearGlobalAgentOptimisticMessage, setGlobalAgentOptimisticMessage } from '../hooks/useGlobalAgentCache'
 import {
   DirectoryFileEntry,
   ResearchNoteItem,
   useDirectoryFiles,
   useGlobalAgentMessages,
+  useGlobalAgentOptimisticMessage,
   useGlobalAgentStreamBuffer,
-  useGlobalAgentOptimisticMessage
 } from '../hooks/useQueries'
-import {
-  setGlobalAgentOptimisticMessage,
-  clearGlobalAgentOptimisticMessage
-} from '../hooks/useGlobalAgentCache'
 import { globalAgentLoop, GlobalAgentState } from '../services'
 import type { RootState } from '../store/store'
 
@@ -36,7 +33,14 @@ interface RightBarProps {
   onFilePathInsert?: (path: string) => void
 }
 
-const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadingNotes = false, className = '', ccCwd = '', onFilePathInsert }) => {
+const RightBar: React.FC<RightBarProps> = ({
+  conversationId,
+  notes = [],
+  isLoadingNotes = false,
+  className = '',
+  ccCwd = '',
+  onFilePathInsert,
+}) => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -288,10 +292,10 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
                     researchNotesCache.map(item =>
                       item.id === conversationId
                         ? {
-                          ...item,
-                          research_note: note,
-                          updated_at: new Date().toISOString(),
-                        }
+                            ...item,
+                            research_note: note,
+                            updated_at: new Date().toISOString(),
+                          }
                         : item
                     )
                   )
@@ -384,7 +388,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
         role: 'user',
         content: trimmed,
         created_at: new Date().toISOString(),
-        _optimistic: true  // Flag for styling
+        _optimistic: true, // Flag for styling
       }
 
       // Add to cache immediately for instant UI update
@@ -420,7 +424,7 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
 
   return (
     <aside
-      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} shadow-md border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-12' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
+      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} rounded-l-xl shadow-md border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-12' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
       aria-label='Research Notes'
     >
       {/* Toggle Button */}
@@ -569,229 +573,229 @@ const RightBar: React.FC<RightBarProps> = ({ conversationId, notes = [], isLoadi
           data-heimdall-wheel-exempt='true'
           data-heimdall-contextmenu-exempt='true'
         >
-        {isCollapsed ? (
-          // Collapsed state - show icons only
-          <div className='flex flex-col items-center gap-2'>
-            {ccCwd && (
+          {isCollapsed ? (
+            // Collapsed state - show icons only
+            <div className='flex flex-col items-center gap-2'>
+              {ccCwd && (
+                <Button
+                  variant='outline2'
+                  size='circle'
+                  rounded='full'
+                  className='h-10 w-10'
+                  onClick={toggleCollapse}
+                  title='Expand to view files'
+                >
+                  <i className='bx bx-folder text-lg' aria-hidden='true'></i>
+                </Button>
+              )}
               <Button
                 variant='outline2'
                 size='circle'
                 rounded='full'
                 className='h-10 w-10'
                 onClick={toggleCollapse}
-                title='Expand to view files'
+                title='Expand to view notes'
               >
-                <i className='bx bx-folder text-lg' aria-hidden='true'></i>
+                <i className='bx bx-note text-lg' aria-hidden='true'></i>
               </Button>
-            )}
-            <Button
-              variant='outline2'
-              size='circle'
-              rounded='full'
-              className='h-10 w-10'
-              onClick={toggleCollapse}
-              title='Expand to view notes'
-            >
-              <i className='bx bx-note text-lg' aria-hidden='true'></i>
-            </Button>
-          </div>
-        ) : activeTab === 'list' ? (
-          // List tab - show all research notes
-          <>
-            {isLoadingNotes && <div className='text-xs text-gray-500 dark:text-gray-300 px-2 py-1'>Loading...</div>}
-            {notes.length === 0 && !isLoadingNotes && (
-              <div className='text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1'>No research notes</div>
-            )}
-            {notes.map(noteItem => (
-              <div key={noteItem.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
-                <div
-                  role='button'
-                  tabIndex={0}
-                  onClick={() => handleNoteClick(noteItem)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      handleNoteClick(noteItem)
-                    }
-                  }}
-                  className='w-full text-left rounded-lg transition-all duration-200 cursor-pointer hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
-                >
-                  <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
-                    <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
-                      {noteItem.title || `Conversation ${noteItem.id}`}
-                    </span>
-                    {noteItem.research_note && (
-                      <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
-                        {noteItem.research_note.substring(0, 50)}
-                        {noteItem.research_note.length > 50 ? '...' : ''}
+            </div>
+          ) : activeTab === 'list' ? (
+            // List tab - show all research notes
+            <>
+              {isLoadingNotes && <div className='text-xs text-gray-500 dark:text-gray-300 px-2 py-1'>Loading...</div>}
+              {notes.length === 0 && !isLoadingNotes && (
+                <div className='text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1'>No research notes</div>
+              )}
+              {notes.map(noteItem => (
+                <div key={noteItem.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
+                  <div
+                    role='button'
+                    tabIndex={0}
+                    onClick={() => handleNoteClick(noteItem)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleNoteClick(noteItem)
+                      }
+                    }}
+                    className='w-full text-left rounded-lg transition-all duration-200 cursor-pointer hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
+                  >
+                    <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
+                      <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
+                        {noteItem.title || `Conversation ${noteItem.id}`}
                       </span>
-                    )}
-                    {noteItem.updated_at && (
-                      <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-500 dark:text-neutral-400 text-right'>
-                        {new Date(noteItem.updated_at).toLocaleDateString()}
-                      </span>
-                    )}
+                      {noteItem.research_note && (
+                        <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
+                          {noteItem.research_note.substring(0, 50)}
+                          {noteItem.research_note.length > 50 ? '...' : ''}
+                        </span>
+                      )}
+                      {noteItem.updated_at && (
+                        <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-500 dark:text-neutral-400 text-right'>
+                          {new Date(noteItem.updated_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </>
-        ) : activeTab === 'global' ? (
-          <div className='flex flex-col h-full'>
-            <div className='flex items-center justify-between mb-2 gap-2'>
-              <div className='flex flex-col'>
-                <span className='text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-[0.2em]'>
-                  {agentConversationDate ? `${agentSettingsName} - ${agentConversationDate}` : agentSettingsName}
-                </span>
-                <span className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>
-                  Status: {agentState.status}
-                </span>
-              </div>
-              <div className='flex gap-1'>
-                <Button
-                  variant='outline2'
-                  size='small'
-                  onClick={() => globalAgentLoop.start()}
-                  disabled={isWeb}
-                  className='text-xs'
-                >
-                  Start
-                </Button>
-                <Button
-                  variant='outline2'
-                  size='small'
-                  onClick={() => globalAgentLoop.pause()}
-                  disabled={isWeb}
-                  className='text-xs'
-                >
-                  Pause
-                </Button>
-                <Button
-                  variant='outline2'
-                  size='small'
-                  onClick={() => globalAgentLoop.startNewSession()}
-                  disabled={isWeb}
-                  className='text-xs'
-                >
-                  New Session
-                </Button>
-                <Button
-                  variant='outline2'
-                  size='small'
-                  onClick={() => globalAgentLoop.stop()}
-                  disabled={isWeb}
-                  className='text-xs'
-                >
-                  Stop
-                </Button>
-              </div>
-            </div>
-
-            <div className='flex-1 overflow-y-auto no-scrollbar space-y-2 pr-1'>
-              {agentMessages.length === 0 && !optimisticMessage && (
-                <div className='text-xs text-neutral-500 dark:text-neutral-400'>No global agent messages yet.</div>
-              )}
-
-              {/* Persisted messages from React Query cache */}
-              {mergedAgentMessages.map(message => (
-                <ChatMessage
-                  key={message.id}
-                  id={message.id}
-                  role={message.role}
-                  content={message.content || ''}
-                  thinking={message.thinking_block || undefined}
-                  toolCalls={parseJsonSafe(message.tool_calls, [])}
-                  contentBlocks={normalizeContentBlocks(parseJsonSafe(message.content_blocks, []))}
-                  timestamp={message.created_at}
-                  width='w-full'
-                  colored={false}
-                  modelName={message.model_name}
-                  onOpenToolHtmlModal={openToolHtmlModal}
-                />
               ))}
-
-              {/* Optimistic user message (shown while task is enqueued) */}
-              {optimisticMessage && (
-                <ChatMessage
-                  key={optimisticMessage.id}
-                  id={optimisticMessage.id}
-                  role={optimisticMessage.role}
-                  content={optimisticMessage.content}
-                  timestamp={optimisticMessage.created_at}
-                  width='w-full'
-                  colored={false}
-                  className='opacity-70'  // Visual feedback for optimistic state
-                  onOpenToolHtmlModal={openToolHtmlModal}
-                />
-              )}
-
-              {/* Streaming assistant response from React Query cache */}
-              {agentStreamBuffer && (
-                <ChatMessage
-                  id='global-agent-streaming'
-                  role='assistant'
-                  content={agentStreamBuffer}
-                  contentBlocks={[{ type: 'text', index: 0, content: agentStreamBuffer }]}
-                  width='w-full'
-                  colored={false}
-                  onOpenToolHtmlModal={openToolHtmlModal}
-                />
-              )}
-            </div>
-
-            <div className='mt-2 flex flex-col gap-2'>
-              <TextArea
-                value={agentInput}
-                onChange={setAgentInput}
-                placeholder='Queue a task for the global agent...'
-                className='w-full resize-none'
-                minRows={2}
-                maxRows={4}
-              />
-              <div className='flex items-center gap-2'>
-                <Button variant='outline2' size='small' onClick={handleAgentSend}>
-                  Send
-                </Button>
-                <Button
-                  variant='outline2'
-                  size='small'
-                  onClick={handleAgentAbort}
-                  disabled={!isAgentStreaming}
-                  className={
-                    isAgentStreaming
-                      ? 'border-rose-500 text-rose-100 bg-rose-600 hover:bg-rose-700 dark:border-rose-500/70'
-                      : 'opacity-60'
-                  }
-                  title={isAgentStreaming ? 'Stop current agent generation' : 'No active generation'}
-                >
-                  Stop
-                </Button>
+            </>
+          ) : activeTab === 'global' ? (
+            <div className='flex flex-col h-full'>
+              <div className='flex items-center justify-between mb-2 gap-2'>
+                <div className='flex flex-col'>
+                  <span className='text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-[0.2em]'>
+                    {agentConversationDate ? `${agentSettingsName} - ${agentConversationDate}` : agentSettingsName}
+                  </span>
+                  <span className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>
+                    Status: {agentState.status}
+                  </span>
+                </div>
+                <div className='flex gap-1'>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => globalAgentLoop.start()}
+                    disabled={isWeb}
+                    className='text-xs'
+                  >
+                    Start
+                  </Button>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => globalAgentLoop.pause()}
+                    disabled={isWeb}
+                    className='text-xs'
+                  >
+                    Pause
+                  </Button>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => globalAgentLoop.startNewSession()}
+                    disabled={isWeb}
+                    className='text-xs'
+                  >
+                    New Session
+                  </Button>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => globalAgentLoop.stop()}
+                    disabled={isWeb}
+                    className='text-xs'
+                  >
+                    Stop
+                  </Button>
+                </div>
               </div>
-            </div>
-          </div>
-        ) : (
-          // Note tab - show current conversation note editor
-          <>
-            {!conversationId ? (
-              <div className='text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1'>
-                Select a conversation to add notes
+
+              <div className='flex-1 overflow-y-auto no-scrollbar space-y-2 pr-1'>
+                {agentMessages.length === 0 && !optimisticMessage && (
+                  <div className='text-xs text-neutral-500 dark:text-neutral-400'>No global agent messages yet.</div>
+                )}
+
+                {/* Persisted messages from React Query cache */}
+                {mergedAgentMessages.map(message => (
+                  <ChatMessage
+                    key={message.id}
+                    id={message.id}
+                    role={message.role}
+                    content={message.content || ''}
+                    thinking={message.thinking_block || undefined}
+                    toolCalls={parseJsonSafe(message.tool_calls, [])}
+                    contentBlocks={normalizeContentBlocks(parseJsonSafe(message.content_blocks, []))}
+                    timestamp={message.created_at}
+                    width='w-full'
+                    colored={false}
+                    modelName={message.model_name}
+                    onOpenToolHtmlModal={openToolHtmlModal}
+                  />
+                ))}
+
+                {/* Optimistic user message (shown while task is enqueued) */}
+                {optimisticMessage && (
+                  <ChatMessage
+                    key={optimisticMessage.id}
+                    id={optimisticMessage.id}
+                    role={optimisticMessage.role}
+                    content={optimisticMessage.content}
+                    timestamp={optimisticMessage.created_at}
+                    width='w-full'
+                    colored={false}
+                    className='opacity-70' // Visual feedback for optimistic state
+                    onOpenToolHtmlModal={openToolHtmlModal}
+                  />
+                )}
+
+                {/* Streaming assistant response from React Query cache */}
+                {agentStreamBuffer && (
+                  <ChatMessage
+                    id='global-agent-streaming'
+                    role='assistant'
+                    content={agentStreamBuffer}
+                    contentBlocks={[{ type: 'text', index: 0, content: agentStreamBuffer }]}
+                    width='w-full'
+                    colored={false}
+                    onOpenToolHtmlModal={openToolHtmlModal}
+                  />
+                )}
               </div>
-            ) : (
-              <div className='h-full flex flex-col'>
+
+              <div className='mt-2 flex flex-col gap-2'>
                 <TextArea
-                  value={localNote}
-                  onChange={handleNoteChange}
-                  placeholder='Enter research notes for this conversation...'
-                  className='w-full resize-none flex-1'
-                  minRows={undefined}
-                  maxRows={undefined}
-                  fillAvailableHeight={true}
-                  autoFocus={false}
+                  value={agentInput}
+                  onChange={setAgentInput}
+                  placeholder='Queue a task for the global agent...'
+                  className='w-full resize-none'
+                  minRows={2}
+                  maxRows={4}
                 />
+                <div className='flex items-center gap-2'>
+                  <Button variant='outline2' size='small' onClick={handleAgentSend}>
+                    Send
+                  </Button>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={handleAgentAbort}
+                    disabled={!isAgentStreaming}
+                    className={
+                      isAgentStreaming
+                        ? 'border-rose-500 text-rose-100 bg-rose-600 hover:bg-rose-700 dark:border-rose-500/70'
+                        : 'opacity-60'
+                    }
+                    title={isAgentStreaming ? 'Stop current agent generation' : 'No active generation'}
+                  >
+                    Stop
+                  </Button>
+                </div>
               </div>
-            )}
-          </>
-        )}
+            </div>
+          ) : (
+            // Note tab - show current conversation note editor
+            <>
+              {!conversationId ? (
+                <div className='text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1'>
+                  Select a conversation to add notes
+                </div>
+              ) : (
+                <div className='h-full flex flex-col'>
+                  <TextArea
+                    value={localNote}
+                    onChange={handleNoteChange}
+                    placeholder='Enter research notes for this conversation...'
+                    className='w-full resize-none flex-1'
+                    minRows={undefined}
+                    maxRows={undefined}
+                    fillAvailableHeight={true}
+                    autoFocus={false}
+                  />
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </aside>

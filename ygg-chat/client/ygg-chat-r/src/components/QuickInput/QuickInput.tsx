@@ -38,6 +38,8 @@ export const QuickInput: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [secretMode, setSecretMode] = useState(false)
   const projectsScrollRef = useRef<HTMLDivElement>(null)
+  const [canScrollProjectsLeft, setCanScrollProjectsLeft] = useState(false)
+  const [canScrollProjectsRight, setCanScrollProjectsRight] = useState(false)
 
   // Secret mode toggle (ZDR models)
   const toggleSecretModeMutation = useToggleSecretMode()
@@ -99,6 +101,30 @@ export const QuickInput: React.FC = () => {
     return [...localProjects, ...cloudProjects]
   }, [projects])
 
+  const updateProjectScrollButtons = useCallback(() => {
+    const element = projectsScrollRef.current
+    if (!element) {
+      setCanScrollProjectsLeft(false)
+      setCanScrollProjectsRight(false)
+      return
+    }
+
+    const maxScrollLeft = element.scrollWidth - element.clientWidth
+    setCanScrollProjectsLeft(element.scrollLeft > 2)
+    setCanScrollProjectsRight(maxScrollLeft > 2 && element.scrollLeft < maxScrollLeft - 2)
+  }, [])
+
+  const handleProjectScroll = useCallback((direction: 'left' | 'right') => {
+    const element = projectsScrollRef.current
+    if (!element) return
+
+    const scrollDistance = Math.max(element.clientWidth * 0.75, 140)
+    element.scrollBy({
+      left: direction === 'left' ? -scrollDistance : scrollDistance,
+      behavior: 'smooth',
+    })
+  }, [])
+
   // Handle horizontal scroll with vertical mouse wheel using native event listener
   useEffect(() => {
     const element = projectsScrollRef.current
@@ -111,9 +137,25 @@ export const QuickInput: React.FC = () => {
       }
     }
 
+    const handleScroll = () => updateProjectScrollButtons()
+
+    const resizeObserver = new ResizeObserver(() => updateProjectScrollButtons())
+
     element.addEventListener('wheel', handleWheel, { passive: false })
-    return () => element.removeEventListener('wheel', handleWheel)
-  }, [])
+    element.addEventListener('scroll', handleScroll, { passive: true })
+    resizeObserver.observe(element)
+    updateProjectScrollButtons()
+
+    return () => {
+      element.removeEventListener('wheel', handleWheel)
+      element.removeEventListener('scroll', handleScroll)
+      resizeObserver.disconnect()
+    }
+  }, [updateProjectScrollButtons])
+
+  useEffect(() => {
+    updateProjectScrollButtons()
+  }, [filteredAndSortedProjects, quickChatInput, updateProjectScrollButtons])
 
   // Fetch models and mutation for model selection
   const { data: modelsData } = useModels(currentProvider)
@@ -241,39 +283,64 @@ export const QuickInput: React.FC = () => {
   )
 
   const canSend = quickChatInput.trim().length > 0 && selectedModel !== null
+  const showProjectSelector = quickChatInput.trim().length > 0
 
   return (
     <div className='bg-transparent acrylic-subtle pb-1 mx-4 my-2 pt-3 2xl:pt-2 outline-1 dark:outline-1 dark:outline-neutral-700 outline-neutral-100/50 rounded-2xl drop-shadow-xl shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_24px_1px_rgba(0,0,0,0.65)]'>
       {/* Project selection pills */}
       {filteredAndSortedProjects && filteredAndSortedProjects.length > 0 && (
-        <div
-          ref={projectsScrollRef}
-          className={`flex gap-2 px-3 py-1 overflow-x-auto no-scrollbar rounded-2xl transition-all duration-300 ${
-            quickChatInput.trim().length > 0 ? 'max-h-40 opacity-100 pt-3 md:pt-0' : 'max-h-0 opacity-0 pt-0'
-          }`}
-        >
-          {filteredAndSortedProjects.map(project => {
-            const isLocalProject = project.storage_mode === 'local'
-            const isSelectedProject = selectedProjectId === project.id
+        <div className='relative'>
+          <div
+            ref={projectsScrollRef}
+            className={`flex gap-2 px-8 py-1 overflow-x-auto no-scrollbar rounded-2xl transition-all duration-300 ${
+              showProjectSelector ? 'max-h-40 opacity-100 pt-3 md:pt-0' : 'max-h-0 opacity-0 pt-0'
+            }`}
+          >
+            {filteredAndSortedProjects.map(project => {
+              const isLocalProject = project.storage_mode === 'local'
+              const isSelectedProject = selectedProjectId === project.id
 
-            return (
-              <button
-                key={project.id}
-                onClick={() => setSelectedProjectId(prev => (prev === project.id ? null : project.id))}
-                className='bg-neutral-100/20  px-1.25 py-0.25  dark:bg-neutral-800/30 rounded-xl'
-              >
-                <p
-                  className={`whitespace-nowrap flex-shrink-0  transition-all duration-200 text-[14px] ${
-                    isSelectedProject
-                      ? 'bg-neutral-100 dark:bg-transparent text-sky-700 dark:text-orange-200'
-                      : `hover:scale-103 text-emerald-500 dark:text-emerald-500 ${isLocalProject ? '' : 'text-neutral-800 dark:text-neutral-300'}`
-                  }`}
+              return (
+                <button
+                  key={project.id}
+                  onClick={() => setSelectedProjectId(prev => (prev === project.id ? null : project.id))}
+                  className='bg-neutral-100/20  px-1.25 py-0.25  dark:bg-neutral-800/30 rounded-xl'
                 >
-                  {project.name}
-                </p>
-              </button>
-            )
-          })}
+                  <p
+                    className={`whitespace-nowrap flex-shrink-0  transition-all duration-200 text-[14px] ${
+                      isSelectedProject
+                        ? 'bg-neutral-100 dark:bg-transparent text-sky-700 dark:text-orange-200'
+                        : `hover:scale-103 text-emerald-500 dark:text-emerald-500 ${isLocalProject ? '' : 'text-neutral-800 dark:text-neutral-300'}`
+                    }`}
+                  >
+                    {project.name}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+          <button
+            type='button'
+            aria-label='Scroll projects left'
+            onClick={() => handleProjectScroll('left')}
+            className={`absolute left-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full border text-sm transition-all duration-200 flex items-center justify-center bg-neutral-50/90 dark:bg-neutral-800/80 border-neutral-300/80 dark:border-neutral-700/70 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+              showProjectSelector && canScrollProjectsLeft ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <i className='bx bx-chevron-left' aria-hidden='true'></i>
+          </button>
+          <button
+            type='button'
+            aria-label='Scroll projects right'
+            onClick={() => handleProjectScroll('right')}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-full border text-sm transition-all duration-200 flex items-center justify-center bg-neutral-50/90 dark:bg-neutral-800/80 border-neutral-300/80 dark:border-neutral-700/70 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700 ${
+              showProjectSelector && canScrollProjectsRight
+                ? 'opacity-100 pointer-events-auto'
+                : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <i className='bx bx-chevron-right' aria-hidden='true'></i>
+          </button>
         </div>
       )}
       <InputTextArea
