@@ -7,6 +7,7 @@ import {
   fetchConversations,
   fetchConversationsByProjectId,
   fetchRecentConversations,
+  updateCwd,
   updateConversation,
   updateResearchNote,
 } from './conversationActions'
@@ -145,6 +146,13 @@ const conversationSlice = createSlice({
       })
       // update research note
       .addCase(updateResearchNote.fulfilled, (state, action: PayloadAction<Conversation>) => {
+        const idx = state.items.findIndex(c => c.id === action.payload.id)
+        if (idx !== -1) {
+          state.items[idx] = action.payload
+        }
+      })
+      // update conversation cwd
+      .addCase(updateCwd.fulfilled, (state, action: PayloadAction<Conversation>) => {
         const idx = state.items.findIndex(c => c.id === action.payload.id)
         if (idx !== -1) {
           state.items[idx] = action.payload

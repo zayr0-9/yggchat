@@ -4,8 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import './TitleBar.css'
 
 import { useAppSelector } from '../../hooks/redux'
-import { selectCurrentConversationId } from '../../features/chats'
-import { selectAllConversations } from '../../features/conversations'
+import { selectCcCwd } from '../../features/chats'
 
 export const TitleBar = () => {
   const location = useLocation()
@@ -15,9 +14,7 @@ export const TitleBar = () => {
   const [isCompact, setIsCompact] = useState(false)
   const [isCompactLoading, setIsCompactLoading] = useState(false)
 
-  const currentConversationId = useAppSelector(selectCurrentConversationId)
-  const conversations = useAppSelector(selectAllConversations)
-  const currentCwd = conversations.find(c => String(c.id) === String(currentConversationId))?.cwd
+  const currentCwd = useAppSelector(selectCcCwd)
 
   useEffect(() => {
     const detectPlatform = async () => {

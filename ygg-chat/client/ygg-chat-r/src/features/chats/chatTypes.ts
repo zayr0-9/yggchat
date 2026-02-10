@@ -264,6 +264,7 @@ export interface ConversationState {
   bookmarked: MessageId[] //each index contains id of a message selected
   excludedMessages: MessageId[] //id of each message which are NOT to be sent for chat,
   context: string
+  ccCwd: string
   // Claude Code session tracking
   ccSession?: CCSessionInfo | null
 }

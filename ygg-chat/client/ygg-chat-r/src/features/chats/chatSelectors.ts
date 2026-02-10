@@ -246,6 +246,7 @@ export const selectConversationMessages = createSelector(
   conversation => conversation.messages
 )
 export const selectCurrentPath = createSelector([selectConversationState], conversation => conversation.currentPath)
+export const selectCcCwd = createSelector([selectConversationState], conversation => conversation.ccCwd)
 export const selectBookmarkedMessages = createSelector(
   [selectConversationState],
   conversation => conversation.bookmarked

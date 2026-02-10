@@ -650,7 +650,7 @@ export function useConversationMessages(conversationId: ConversationId | null, s
         // This finds the conversation even if it's only loaded in a specific project view
         const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
 
-        for (const [data] of allConversationQueries) {
+        for (const [_, data] of allConversationQueries) {
           if (Array.isArray(data)) {
             // Robust comparison handling both string/number IDs
             const match = data.find(c => String(c.id) === String(conversationId))

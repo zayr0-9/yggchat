@@ -48,6 +48,7 @@ export {
   selectBookmarkedMessages,
   selectConversationMessages,
   selectConversationState,
+  selectCcCwd,
   selectCurrentConversationId,
   selectCurrentPath,
   selectDisplayMessages,

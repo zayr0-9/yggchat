@@ -42,6 +42,7 @@ import {
   respondToToolPermission,
   respondToToolPermissionAndEnableAll,
   selectCCSlashCommands,
+  selectCcCwd,
   selectConversationMessages,
   selectCurrentConversationId,
   selectCurrentPath,
@@ -112,7 +113,7 @@ import {
 import { useSubscriptionStatus } from '../hooks/useSubscriptionStatus'
 import { useWakeWord } from '../hooks/useWakeWord'
 import { useWhisperSpeechToText } from '../hooks/useWhisperSpeechToText'
-import { cloneConversation } from '../utils/api'
+import { cloneConversation, localApi } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
 import { extractTextFromPdf } from '../utils/pdfUtils'
@@ -153,10 +154,12 @@ function Chat() {
   const [ccMode, _setCCMode] = useState(import.meta.env.VITE_ENVIRONMENT === 'web' ? false : false)
 
   // Claude Code working directory input (disabled in web mode)
-  const [ccCwd, setCcCwd] = useState('')
+  const ccCwd = useAppSelector(selectCcCwd)
   const isCwdDirtyRef = useRef(false)
-  const latestCcCwdRef = useRef(ccCwd)
-  const lastCwdConversationIdRef = useRef<ConversationId | null>(null)
+  const latestCcCwdRef = useRef('')
+  const persistedCcCwdRef = useRef('')
+  const cwdLoadSeqRef = useRef(0)
+  const pendingManualExtensionSyncRef = useRef(false)
 
   // Image generation configuration (aspect ratio and size for Gemini image models)
   const [imageConfig, setImageConfig] = useState<ImageConfig>({})
@@ -592,13 +595,13 @@ function Chat() {
 
   const setCcCwdFromUser = useCallback((nextValue: string) => {
     isCwdDirtyRef.current = true
-    setCcCwd(nextValue)
-  }, [])
+    dispatch(chatSliceActions.ccCwdSet(nextValue))
+  }, [dispatch])
 
   const setCcCwdFromSystem = useCallback((nextValue: string) => {
     isCwdDirtyRef.current = false
-    setCcCwd(nextValue)
-  }, [])
+    dispatch(chatSliceActions.ccCwdSet(nextValue))
+  }, [dispatch])
   // Fetch conversations for the current project using React Query
   // Use projectId from URL first (ensures correct cache is active on page refresh)
   const { data: projectConversations = [] } = useConversationsByProject(
@@ -981,71 +984,57 @@ function Chat() {
     dispatch(convContextSet(conversation.conversation_context ?? null))
   }, [currentConversationId, findConversationForCurrent, dispatch])
 
-  // Load cwd from conversation when conversation changes
-  // This populates the Claude Code working directory from cached conversation data
-  useEffect(() => {
-    if (!currentConversationId) {
-      // If no conversation is selected, clear cwd
-      lastCwdConversationIdRef.current = null
-      setCcCwdFromSystem('')
-      return
-    }
-
-    const conversationChanged = !idsMatch(lastCwdConversationIdRef.current, currentConversationId)
-    if (conversationChanged) {
-      lastCwdConversationIdRef.current = currentConversationId
-      isCwdDirtyRef.current = false
-    }
-
-    const conversation = findConversationForCurrent()
-    if (!conversation) return
-
-    // Never clobber manual typing for the active conversation.
-    if (!conversationChanged && isCwdDirtyRef.current) {
-      return
-    }
-
-    // Extract cwd from the conversation, default to empty string if not set
-    const conversationCwd = conversation.cwd ?? ''
-    setCcCwdFromSystem(conversationCwd)
-  }, [currentConversationId, findConversationForCurrent, idsMatch, setCcCwdFromSystem])
-
   useEffect(() => {
     latestCcCwdRef.current = ccCwd
   }, [ccCwd])
 
-  // Auto-sync cwd from IDE extension when connected
-  // Only sync once when workspace connects - don't include ccCwd in deps to avoid infinite loop
-  const hasAutoSyncedCwd = useRef<string | null>(null)
+  // Load cwd from local server when conversation changes.
+  // This avoids stale cache races and treats the local row as the source of persisted truth.
   useEffect(() => {
-    // Only run if:
-    // 1. IDE extension is connected
-    // 2. workspace.rootPath is available
-    // 3. There's an active conversation
-    // 4. Haven't already synced this workspace path for this conversation
-    if (
-      ideContext?.extensionConnected &&
-      workspace?.rootPath &&
-      currentConversationId &&
-      !isCwdDirtyRef.current &&
-      hasAutoSyncedCwd.current !== `${currentConversationId}:${workspace.rootPath}`
-    ) {
-      // Mark as synced to prevent re-running
-      hasAutoSyncedCwd.current = `${currentConversationId}:${workspace.rootPath}`
+    const loadSeq = ++cwdLoadSeqRef.current
+    isCwdDirtyRef.current = false
+    pendingManualExtensionSyncRef.current = false
+    persistedCcCwdRef.current = ''
 
-      // Update local state
-      setCcCwdFromSystem(workspace.rootPath)
-
-      // Persist to local database (cwd is Electron-only feature)
-      dispatch(
-        updateCwd({
-          id: currentConversationId,
-          cwd: workspace.rootPath,
-          storageMode: 'local',
-        })
-      )
+    if (!currentConversationId) {
+      setCcCwdFromSystem('')
+      return
     }
-  }, [ideContext?.extensionConnected, workspace?.rootPath, currentConversationId, dispatch, setCcCwdFromSystem])
+
+    // Clear immediately so the previous conversation cwd is never reused while loading.
+    setCcCwdFromSystem('')
+
+    void (async () => {
+      try {
+        const localConversation = await localApi.get<Conversation>(`/local/conversations/${currentConversationId}`)
+        if (cwdLoadSeqRef.current !== loadSeq) return
+        const loadedCwd = typeof localConversation?.cwd === 'string' ? localConversation.cwd : ''
+        persistedCcCwdRef.current = loadedCwd.trim()
+        setCcCwdFromSystem(loadedCwd)
+      } catch (error) {
+        if (cwdLoadSeqRef.current !== loadSeq) return
+        const message = error instanceof Error ? error.message : String(error)
+        if (!message.includes('HTTP 404')) {
+          console.error('[Chat] Failed to load local conversation cwd:', error)
+        }
+        persistedCcCwdRef.current = ''
+        setCcCwdFromSystem('')
+      }
+    })()
+  }, [currentConversationId, setCcCwdFromSystem])
+
+  // Auto-sync cwd from IDE extension when connected
+  // Passive IDE updates should only fill when cwd is empty.
+  // Manual extension selection can force one override on next workspace update.
+  useEffect(() => {
+    if (!ideContext?.extensionConnected || !workspace?.rootPath || !currentConversationId) return
+    const hasCwd = ccCwd.trim().length > 0
+    const shouldApplyWorkspaceRoot = pendingManualExtensionSyncRef.current || !hasCwd
+    if (!shouldApplyWorkspaceRoot) return
+
+    setCcCwdFromSystem(workspace.rootPath)
+    pendingManualExtensionSyncRef.current = false
+  }, [ideContext?.extensionConnected, workspace?.rootPath, currentConversationId, ccCwd, setCcCwdFromSystem])
 
   // Debounce cwd updates to save manual input to database
   // Similar pattern to title update debounce (lines 503-556)
@@ -1054,11 +1043,10 @@ function Chat() {
 
     // Find current conversation to compare against stored value
     const conversation = findConversationForCurrent()
-    const storedCwd = conversation?.cwd ?? ''
 
     // Normalize for comparison (treat empty string same as null/undefined)
     const normalizedCcCwd = ccCwd.trim()
-    const normalizedStoredCwd = (storedCwd || '').trim()
+    const normalizedStoredCwd = persistedCcCwdRef.current
 
     // No-op if unchanged (also release dirty lock once backend catches up)
     if (normalizedCcCwd === normalizedStoredCwd) {
@@ -1079,6 +1067,7 @@ function Chat() {
         .unwrap()
         .then(() => {
           if (latestCcCwdRef.current.trim() === targetCwd) {
+            persistedCcCwdRef.current = targetCwd
             isCwdDirtyRef.current = false
           }
 
@@ -1564,6 +1553,26 @@ function Chat() {
       }
     },
     [models, selectModelMutation, providers.currentProvider, selectedModel?.name]
+  )
+
+  const handleExtensionSelection = useCallback(
+    (val: string) => {
+      const extensionId = val || null
+      pendingManualExtensionSyncRef.current = Boolean(extensionId)
+      dispatch(selectExtension(extensionId))
+
+      if (extensionId) {
+        const selectedExtension = extensions.find(ext => ext.id === extensionId)
+        if (selectedExtension?.rootPath) {
+          setCcCwdFromSystem(selectedExtension.rootPath)
+          pendingManualExtensionSyncRef.current = false
+        }
+      }
+
+      // Immediately request context for the chosen extension.
+      requestContext(extensionId)
+    },
+    [dispatch, extensions, requestContext, setCcCwdFromSystem]
   )
   // Provider selection handler with OpenAI auth check
   const handleProviderSelect = useCallback(
@@ -3431,11 +3440,7 @@ function Chat() {
                   {import.meta.env.VITE_ENVIRONMENT === 'electron' && extensions.length > 0 && (
                     <Select
                       value={selectedExtensionId || ''}
-                      onChange={val => {
-                        dispatch(selectExtension(val || null))
-                        // Immediately request context for the chosen extension
-                        requestContext(val || null)
-                      }}
+                      onChange={handleExtensionSelection}
                       blur='low'
                       options={
                         extensions.length > 0

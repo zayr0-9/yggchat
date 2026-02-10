@@ -127,6 +127,7 @@ const makeInitialState = (): ChatState => {
       bookmarked: [],
       excludedMessages: [],
       context: '',
+      ccCwd: '',
     },
     heimdall: {
       treeData: null,
@@ -552,6 +553,7 @@ export const chatSlice = createSlice({
       state.conversation.currentConversationId = null
       state.conversation.messages = []
       state.conversation.currentPath = []
+      state.conversation.ccCwd = ''
     },
 
     nodesSelected: (state, action: PayloadAction<MessageId[]>) => {
@@ -683,6 +685,9 @@ export const chatSlice = createSlice({
       action: PayloadAction<{ sessionId: string; lastMessageAt: string; messageCount: number; cwd: string }>
     ) => {
       state.conversation.ccSession = action.payload
+    },
+    ccCwdSet: (state, action: PayloadAction<string>) => {
+      state.conversation.ccCwd = action.payload
     },
 
     /* Heimdall tree reducers */
