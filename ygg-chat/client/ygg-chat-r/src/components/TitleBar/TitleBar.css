@@ -57,9 +57,30 @@
   -webkit-app-region: no-drag;
   display: flex;
   height: 100%;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.cwd-pill {
+  position: relative;
+  flex: 1 1 256px;
+  min-width: 0;
+  max-width: 256px;
+}
+
+.cwd-pill-text {
+  display: inline-block;
+  min-width: max-content;
+  transform: translateX(0);
+  will-change: transform;
+}
+
+.cwd-pill:hover .cwd-pill-text-scroll {
+  animation: cwd-hover-scroll 2.2s ease-in-out infinite alternate;
 }
 
 .titlebar-button {
+  flex: 0 0 46px;
   width: 46px;
   height: 100%;
   border: none;
@@ -109,6 +130,41 @@
   height: 10px;
 }
 
+/* Tailwind-like breakpoints for CWD pill sizing */
+@media (min-width: 640px) {
+  .cwd-pill {
+    flex-basis: 236px;
+    max-width: 236px;
+  }
+}
+
+@media (min-width: 768px) {
+  .cwd-pill {
+    flex-basis: 300px;
+    max-width: 300px;
+  }
+}
+
+/* Collapse sooner on very small windows so window controls stay visible */
+@media (max-width: 520px) {
+  .cwd-pill {
+    flex-basis: 208px;
+    max-width: 208px;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .cwd-pill {
+    flex-basis: 64px;
+    max-width: 64px;
+    margin-right: 0 !important;
+    padding-left: 7px !important;
+    padding-right: 7px !important;
+  }
+}
+
 /* Base app-content styling - always applied */
 .app-content {
   height: 100%;
@@ -141,6 +197,21 @@ body.has-titlebar .app-content {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes cwd-hover-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-28px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cwd-pill:hover .cwd-pill-text-scroll {
+    animation: none;
   }
 }
 

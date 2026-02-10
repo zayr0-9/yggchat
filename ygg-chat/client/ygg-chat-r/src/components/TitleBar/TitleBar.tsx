@@ -1,12 +1,13 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
 import './TitleBar.css'
 
-import { useAppSelector } from '../../hooks/redux'
-import { selectCcCwd } from '../../features/chats'
+import { chatSliceActions, selectCcCwd, selectCurrentConversationId } from '../../features/chats'
+import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 
 export const TitleBar = () => {
+  const dispatch = useAppDispatch()
   const location = useLocation()
   const navigate = useNavigate()
   const [platform, setPlatform] = useState<string>('')
@@ -15,6 +16,7 @@ export const TitleBar = () => {
   const [isCompactLoading, setIsCompactLoading] = useState(false)
 
   const currentCwd = useAppSelector(selectCcCwd)
+  const currentConversationId = useAppSelector(selectCurrentConversationId)
 
   useEffect(() => {
     const detectPlatform = async () => {
@@ -76,11 +78,28 @@ export const TitleBar = () => {
   }
 
   const isChatPage = location.pathname.startsWith('/chat/')
+  const canPickCwd = isChatPage && Boolean(currentConversationId) && Boolean(window.electronAPI?.dialog?.selectFolder)
+
+  const handlePickCwd = async () => {
+    if (!canPickCwd) return
+    try {
+      const result = await window.electronAPI?.dialog?.selectFolder()
+      if (result?.success && result.path) {
+        dispatch(chatSliceActions.ccCwdSet(result.path))
+      }
+    } catch (err) {
+      console.error('Failed to select working directory from title bar:', err)
+    }
+  }
 
   return (
     <div className={`titlebar ${isChatPage ? 'titlebar-chat' : ''}`}>
       <div className='titlebar-drag-region'>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <div
+          style={
+            { display: 'flex', alignItems: 'center', gap: '2px', WebkitAppRegion: 'no-drag' } as React.CSSProperties
+          }
+        >
           <button
             onClick={() => navigate(-1)}
             style={{
@@ -94,11 +113,17 @@ export const TitleBar = () => {
               padding: '4px',
               borderRadius: '6px',
               opacity: 0.8,
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1', e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8', e.currentTarget.style.backgroundColor = 'transparent')}
-            title="Go Back"
+            onMouseEnter={e => (
+              (e.currentTarget.style.opacity = '1'),
+              (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')
+            )}
+            onMouseLeave={e => (
+              (e.currentTarget.style.opacity = '0.8'),
+              (e.currentTarget.style.backgroundColor = 'transparent')
+            )}
+            title='Go Back'
           >
             <ChevronLeft size={16} strokeWidth={2} />
           </button>
@@ -115,39 +140,67 @@ export const TitleBar = () => {
               padding: '4px',
               borderRadius: '6px',
               opacity: 0.8,
-              transition: 'all 0.2s ease'
+              transition: 'all 0.2s ease',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.opacity = '1', e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')}
-            onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.8', e.currentTarget.style.backgroundColor = 'transparent')}
-            title="Go Forward"
+            onMouseEnter={e => (
+              (e.currentTarget.style.opacity = '1'),
+              (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')
+            )}
+            onMouseLeave={e => (
+              (e.currentTarget.style.opacity = '0.8'),
+              (e.currentTarget.style.backgroundColor = 'transparent')
+            )}
+            title='Go Forward'
           >
             <ChevronRight size={16} strokeWidth={2} />
           </button>
         </div>
       </div>
       <div className='titlebar-controls'>
-        <div
+        <button
+          type='button'
+          className='cwd-pill'
+          onClick={handlePickCwd}
+          disabled={!canPickCwd}
           style={{
-            marginRight: '12px',
+            marginRight: '2px',
+            marginTop: '4px',
+            marginBottom: '4px',
             fontSize: '11px',
-            color: 'rgba(255, 255, 255, 0.4)',
+            lineHeight: '1', // tighter text box
+            color: 'rgb(255, 255, 255)',
             maxWidth: '300px',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: 'flex',
             alignItems: 'center',
-            userSelect: 'text',
-            cursor: 'default',
+            userSelect: 'none',
+            cursor: canPickCwd ? 'pointer' : 'default',
+            backgroundColor: 'rgba(255, 255, 255, 0.34)',
+            borderRadius: '9999px',
+            padding: '1px 12px', // was 0px 16px
+            minHeight: '18px', // optional: force slimmer height
+            border: 'none',
           }}
-          title={currentCwd || 'No working directory selected'}
+          title={
+            canPickCwd
+              ? currentCwd
+                ? `${currentCwd} (click to change)`
+                : 'Click to select a work folder'
+              : currentCwd || 'Open a chat conversation to set work folder'
+          }
         >
           {currentCwd ? (
-            <span style={{ fontFamily: 'monospace' }}>{currentCwd}</span>
+            <span className='cwd-pill-text cwd-pill-text-scroll' style={{ fontFamily: 'monospace' }}>
+              {currentCwd}
+            </span>
           ) : (
-            <span style={{ fontStyle: 'italic', opacity: 1 }}>Select a work folder</span>
+            <span className='cwd-pill-text' style={{ fontStyle: 'italic', opacity: 1 }}>
+              Select a work folder
+            </span>
           )}
-        </div>
+        </button>
         <button
           className='titlebar-button titlebar-compact'
           onClick={handleToggleCompact}

@@ -436,6 +436,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     return { label, width, height: 20 }
   }
 
+  const getNoteBadgeMetrics = () => {
+    const label = 'NOTE'
+    const width = Math.max(44, Math.round(label.length * 6.5 + 14))
+    return { label, width, height: 20 }
+  }
+
   // Maintain a plain-text processed copy of messages for client-side search
   const [plainMessages, setPlainMessages] = useState<any[]>([])
   useEffect(() => {
@@ -606,6 +612,20 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
     },
     [noteMessageId, debouncedUpdateNote]
+  )
+
+  const handleNoteBadgeClick = useCallback(
+    (event: React.MouseEvent<SVGGElement>, nodeId: string) => {
+      event.stopPropagation()
+      const containerRect = containerRef.current?.getBoundingClientRect()
+      if (!containerRect) return
+
+      handleOpenNoteDialog(nodeId, {
+        x: event.clientX - containerRect.left,
+        y: event.clientY - containerRect.top,
+      })
+    },
+    [handleOpenNoteDialog]
   )
 
   const onWindowMouseMove = (e: globalThis.MouseEvent): void => {
@@ -2286,17 +2306,36 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) return null
               const message = getCurrentMessage(nodeIdParsed)
               const hasNote = message?.note && message.note.trim().length > 0
-              return hasNote ? (
-                <circle
-                  cx={nodeWidth - 8}
-                  cy={nodeHeight - 8}
-                  r='4'
-                  fill='#fbbf24'
-                  stroke='#f59e0b'
-                  strokeWidth='1'
-                  style={{ pointerEvents: 'none' }}
-                />
-              ) : null
+              if (!hasNote) return null
+
+              const badge = getNoteBadgeMetrics()
+              const badgeX = nodeWidth - badge.width - 8
+              const badgeY = nodeHeight - 8
+              return (
+                <g
+                  transform={`translate(${badgeX}, ${badgeY})`}
+                  className='cursor-pointer'
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => handleNoteBadgeClick(e, String(node.id))}
+                >
+                  <rect
+                    width={badge.width}
+                    height={badge.height}
+                    rx='9'
+                    className='fill-amber-400 dark:fill-amber-500'
+                    stroke='rgba(0,0,0,0.18)'
+                    strokeWidth='1'
+                  />
+                  <text
+                    x={badge.width / 2}
+                    y={badge.height / 2 + 4}
+                    textAnchor='middle'
+                    className='fill-stone-900 dark:fill-stone-950 text-[10px] font-semibold tracking-wide'
+                  >
+                    {badge.label}
+                  </text>
+                </g>
+              )
             })()}
           </motion.g>
         )
@@ -2429,17 +2468,36 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) return null
               const message = getCurrentMessage(nodeIdParsed)
               const hasNote = message?.note && message.note.trim().length > 0
-              return hasNote ? (
-                <circle
-                  cx={x + circleRadius - 6}
-                  cy={y + circleRadius + 6}
-                  r='3'
-                  fill='#fbbf24'
-                  stroke='#f59e0b'
-                  strokeWidth='1'
-                  style={{ pointerEvents: 'none' }}
-                />
-              ) : null
+              if (!hasNote) return null
+
+              const badge = getNoteBadgeMetrics()
+              const badgeX = x + circleRadius + 6
+              const badgeY = y + circleRadius + 4
+              return (
+                <g
+                  transform={`translate(${badgeX}, ${badgeY})`}
+                  className='cursor-pointer'
+                  onPointerDown={e => e.stopPropagation()}
+                  onClick={e => handleNoteBadgeClick(e, String(node.id))}
+                >
+                  <rect
+                    width={badge.width}
+                    height={badge.height}
+                    rx='9'
+                    className='fill-amber-400 dark:fill-amber-500'
+                    stroke='rgba(0,0,0,0.18)'
+                    strokeWidth='1'
+                  />
+                  <text
+                    x={badge.width / 2}
+                    y={badge.height / 2 + 4}
+                    textAnchor='middle'
+                    className='fill-stone-900 dark:fill-stone-950 text-[10px] font-semibold tracking-wide'
+                  >
+                    {badge.label}
+                  </text>
+                </g>
+              )
             })()}
             {/* Add a small indicator for branch nodes */}
             {/* {node.children && node.children.length > 1 && (
