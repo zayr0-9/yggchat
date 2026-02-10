@@ -93,13 +93,19 @@ const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
       {!isHomepageFullscreen && (
         <button
           type='button'
-          onClick={() => registry.openModal()}
+          onClick={() => {
+            if (registry.isModalOpen) {
+              registry.closeModal()
+              return
+            }
+            registry.openModal()
+          }}
           className={`fixed ${isMobile ? 'bottom-32 right-5' : 'bottom-6 right-6'} z-[1500] rounded-full border border-neutral-200/80 dark:border-neutral-700/70 bg-white/90 dark:bg-yBlack-900/90 px-4 py-3 text-sm font-semibold text-neutral-800 dark:text-neutral-100 shadow-lg transition hover:scale-[1.02] hover:shadow-xl`}
-          aria-label='Open HTML tools'
+          aria-label={registry.isModalOpen ? 'Close HTML tools' : 'Open HTML tools'}
         >
           <span className='flex items-center gap-2'>
             <i className='bx bx-window-open text-lg' aria-hidden='true'></i>
-            Tools
+            {registry.isModalOpen ? 'Close Tools' : 'Tools'}
           </span>
         </button>
       )}

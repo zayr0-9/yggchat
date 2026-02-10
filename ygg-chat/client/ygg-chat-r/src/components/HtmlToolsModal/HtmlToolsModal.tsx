@@ -87,7 +87,6 @@ export const HtmlToolsModal: React.FC = () => {
   const [showFavorites, setShowFavorites] = useState(false)
   const [showHibernated, setShowHibernated] = useState(false)
   const [fullscreenKey, setFullscreenKey] = useState<string | null>(null)
-  const [modalFullscreen, setModalFullscreen] = useState(false)
   const [showFullscreenSettings, setShowFullscreenSettings] = useState(false)
   const [showFullscreenTabMenu, setShowFullscreenTabMenu] = useState<string | null>(null)
   const [tabMenuPosition, setTabMenuPosition] = useState<{ top: number; left: number } | null>(null)
@@ -131,7 +130,6 @@ export const HtmlToolsModal: React.FC = () => {
   const toggleFullscreen = (entryKey: string) => {
     const isExiting = fullscreenKey === entryKey
     setFullscreenKey(isExiting ? null : entryKey)
-    setModalFullscreen(!isExiting)
   }
 
   const isVisible = isOpen || isHomepageFullscreen
@@ -165,9 +163,8 @@ export const HtmlToolsModal: React.FC = () => {
   useEffect(() => {
     if (!isVisible) {
       if (fullscreenKey) setFullscreenKey(null)
-      if (modalFullscreen) setModalFullscreen(false)
     }
-  }, [fullscreenKey, modalFullscreen, isVisible])
+  }, [fullscreenKey, isVisible])
 
   useEffect(() => {
     if (!fullscreenKey) return
@@ -213,7 +210,6 @@ export const HtmlToolsModal: React.FC = () => {
     const isFullscreen = fullscreenKey === entry.key
     const mcpEntry = entry.kind === 'mcp' ? entry : null
     const isCompact = options?.compactView === true
-    const entryLabel = displayLabels.get(entry.key) ?? resolveEntryLabel(entry)
     const iframeHeightClass = isCollapsed
       ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
       : isFullscreen
@@ -228,7 +224,7 @@ export const HtmlToolsModal: React.FC = () => {
         : isCompact
           ? 'rounded-2xl border border-neutral-200 dark:border-white/[0.05] bg-neutral-50 dark:bg-black/20 cursor-pointer hover:bg-neutral-100 dark:hover:bg-white/[0.03] hover:border-neutral-300 dark:hover:border-white/[0.08] transition-all duration-200'
           : 'rounded-2xl border border-neutral-200 dark:border-white/[0.05] bg-neutral-50 dark:bg-black/20'
-    const cardStyle = isFullscreen ? { paddingTop: 'calc(var(--titlebar-height, 0px) + 0.75rem)' } : undefined
+    const cardStyle = isFullscreen ? { paddingTop: '0.5rem' } : undefined
 
     const handleCompactClick = () => {
       if (!isCompact) return
@@ -243,21 +239,18 @@ export const HtmlToolsModal: React.FC = () => {
     return (
       <div
         id={`html-tool-${entry.key}`}
-        className={`${cardClassName} p-4`}
+        className={`${cardClassName} px-0 py-1`}
         style={cardStyle}
         onClick={handleCompactClick}
       >
-        <div className={`flex items-center gap-3 ${isCompact ? '' : 'mb-4'}`}>
+        <div className={`flex items-center gap-3 px-3 ${isCompact ? '' : 'mb-1'}`}>
           <div className='flex items-center gap-3 min-w-0 flex-1'>
-            <span className='text-[15px] font-medium text-neutral-800 dark:text-neutral-200 tracking-tight'>
-              {entryLabel}
-            </span>
             {mcpEntry && (
               <span className='text-[10px] uppercase tracking-[0.15em] text-emerald-600 dark:text-emerald-400'>
                 MCP App
               </span>
             )}
-            <span className='font-mono text-[10px] px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'>
+            <span className='font-mono text-[10px] px-2 py-0 rounded bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'>
               ID: {truncatedKey}
             </span>
           </div>
@@ -322,7 +315,7 @@ export const HtmlToolsModal: React.FC = () => {
                   toolResult={entry.toolResult ?? undefined}
                   toolDefinition={entry.toolDefinition}
                   reloadToken={entry.reloadToken}
-                  className='h-full w-full rounded-xl overflow-hidden'
+                  className='h-full w-full overflow-hidden'
                   priority={1}
                 />
               ) : (
@@ -331,7 +324,7 @@ export const HtmlToolsModal: React.FC = () => {
                   html={entry.html}
                   toolName={entry.toolName ?? null}
                   fullHeight
-                  className='h-full w-full rounded-xl overflow-hidden'
+                  className='h-full w-full overflow-hidden'
                   priority={1}
                 />
               )}
@@ -345,12 +338,12 @@ export const HtmlToolsModal: React.FC = () => {
   const handleClose = isHomepageFullscreen ? closeHomepageFullscreen : onClose
 
   const headerContent = (
-    <header className='flex items-start justify-between px-8 py-6 border-b border-neutral-200 dark:border-white/[0.03] relative z-[1451]'>
+    <header className='flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-white/[0.03] relative z-[1451]'>
       <div>
-        <h2 className='text-xl font-medium text-neutral-900 dark:text-white tracking-tight'>Task Manager</h2>
-        <p className='font-mono text-[12px] text-neutral-500 uppercase tracking-[0.15em] mt-1.5'>Running Apps</p>
+        <h2 className='text-lg font-medium text-neutral-900 dark:text-white tracking-tight leading-none'>Task Manager</h2>
+        <p className='font-mono text-[10px] text-neutral-500 uppercase tracking-[0.15em] mt-1'>Running Apps</p>
       </div>
-      <div className='flex items-center gap-3'>
+      <div className='flex items-center gap-2'>
         <GhostPill
           onClick={() => setShowFavorites(prev => !prev)}
           active={showFavorites}
@@ -390,7 +383,7 @@ export const HtmlToolsModal: React.FC = () => {
   )
 
   const limitsContent = showLimits && (
-    <div className='border-b border-neutral-200 dark:border-white/[0.03] px-8 py-4 relative z-[1451] bg-neutral-50 dark:bg-black/20'>
+    <div className='border-b border-neutral-200 dark:border-white/[0.03] px-4 py-3 relative z-[1451] bg-neutral-50 dark:bg-black/20'>
       <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs'>
         <label className='flex flex-col gap-1.5'>
           <span className='font-mono text-[10px] uppercase tracking-[0.15em] text-neutral-500'>Max live iframes</span>
@@ -464,7 +457,7 @@ export const HtmlToolsModal: React.FC = () => {
     viewMode === 'tabs' ? (
       <div className='flex-1 flex flex-col overflow-hidden'>
         {/* Tool tab bar */}
-        <div className='shrink-0 px-8 py-3 bg-neutral-50 dark:bg-black/20 border-b border-neutral-200 dark:border-white/[0.03] overflow-x-auto thin-scrollbar relative z-[1451]'>
+        <div className='shrink-0 px-4 py-2 bg-neutral-50 dark:bg-black/20 border-b border-neutral-200 dark:border-white/[0.03] overflow-x-auto thin-scrollbar relative z-[1451]'>
           <div className='flex gap-2'>
             {activeEntries.map(entry => (
               <button
@@ -490,7 +483,7 @@ export const HtmlToolsModal: React.FC = () => {
           </div>
         </div>
         {/* Content area */}
-        <div className='flex-1 flex flex-col min-h-0 p-8'>
+        <div className='flex-1 flex flex-col min-h-0 p-0'>
           {activeEntries.length === 0 ? (
             <div className='flex-1 flex items-center justify-center border border-dashed border-neutral-300 dark:border-white/[0.05] rounded-2xl'>
               <span className='font-mono text-xs text-neutral-400 dark:text-neutral-700'>
@@ -514,7 +507,7 @@ export const HtmlToolsModal: React.FC = () => {
         </div>
         {/* Favorites panel */}
         {showFavorites && (
-          <div className='shrink-0 border-t border-amber-200 dark:border-amber-500/20 bg-neutral-50/80 dark:bg-amber-500/[0.03] p-6 max-h-[40vh] overflow-y-auto space-y-4 relative z-[1451]'>
+          <div className='shrink-0 border-t border-amber-200 dark:border-amber-500/20 bg-neutral-50/80 dark:bg-amber-500/[0.03] p-3 max-h-[40vh] overflow-y-auto space-y-3 relative z-[1451]'>
             <div className='font-mono text-[10px] uppercase tracking-[0.15em] text-amber-600 dark:text-amber-500 flex items-center gap-2'>
               <i className='bx bxs-star' aria-hidden='true' />
               Favorite tools (never removed or hibernated)
@@ -532,7 +525,7 @@ export const HtmlToolsModal: React.FC = () => {
         )}
         {/* Hibernated panel */}
         {showHibernated && (
-          <div className='shrink-0 border-t border-neutral-200 dark:border-white/[0.03] bg-neutral-50 dark:bg-black/20 p-6 max-h-[40vh] overflow-y-auto space-y-4 relative z-[1451]'>
+          <div className='shrink-0 border-t border-neutral-200 dark:border-white/[0.03] bg-neutral-50 dark:bg-black/20 p-3 max-h-[40vh] overflow-y-auto space-y-3 relative z-[1451]'>
             <div className='font-mono text-[10px] uppercase tracking-[0.15em] text-neutral-500'>Hibernated tools</div>
             {hibernatedEntries.length === 0 ? (
               <div className='font-mono text-xs text-neutral-500 dark:text-neutral-600'>No hibernated tools.</div>
@@ -543,7 +536,7 @@ export const HtmlToolsModal: React.FC = () => {
         )}
       </div>
     ) : (
-      <div className='flex-1 overflow-y-auto p-8 space-y-6'>
+      <div className='flex-1 overflow-y-auto px-0 py-2 space-y-2'>
         {activeEntries.length === 0 ? (
           <div className='flex-1 flex items-center justify-center h-[300px] border border-dashed border-neutral-300 dark:border-white/[0.05] rounded-2xl'>
             <span className='font-mono text-xs text-neutral-400 dark:text-neutral-700'>
@@ -554,7 +547,7 @@ export const HtmlToolsModal: React.FC = () => {
           activeEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
         )}
         {showFavorites && (
-          <div className='border-t border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/[0.03] pt-6 space-y-4 relative z-[1451]'>
+          <div className='border-t border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/[0.03] pt-3 space-y-3 relative z-[1451]'>
             <div className='font-mono text-[10px] uppercase tracking-[0.15em] text-amber-600 dark:text-amber-500 flex items-center gap-2'>
               <i className='bx bxs-star' aria-hidden='true' />
               Favorite tools (never removed or hibernated)
@@ -571,7 +564,7 @@ export const HtmlToolsModal: React.FC = () => {
           </div>
         )}
         {showHibernated && (
-          <div className='border-t border-neutral-200 dark:border-white/[0.03] bg-neutral-50 dark:bg-black/20 pt-6 space-y-4 relative z-[1451]'>
+          <div className='border-t border-neutral-200 dark:border-white/[0.03] bg-neutral-50 dark:bg-black/20 pt-3 space-y-3 relative z-[1451]'>
             <div className='font-mono text-[10px] uppercase tracking-[0.15em] text-neutral-500'>Hibernated tools</div>
             {hibernatedEntries.length === 0 ? (
               <div className='font-mono text-xs text-neutral-500 dark:text-neutral-600'>No hibernated tools.</div>
@@ -841,28 +834,12 @@ export const HtmlToolsModal: React.FC = () => {
   // Main modal view
   return (
     <div
-      className={`fixed inset-0 z-[1400] ${modalFullscreen ? '' : 'flex items-center justify-center p-10'}`}
-      style={
-        modalFullscreen
-          ? { paddingTop: 'var(--titlebar-height, 0px)', boxSizing: 'border-box' }
-          : { paddingTop: 'calc(var(--titlebar-height, 0px) + 40px)', boxSizing: 'border-box' }
-      }
+      className='fixed inset-0 z-[1400] flex flex-col'
+      style={{ boxSizing: 'border-box' }}
     >
-      {/* Backdrop */}
-      {!modalFullscreen && (
-        <div
-          className='absolute inset-0 bg-black/20 dark:bg-black/40 backdrop-blur'
-          onClick={onClose}
-          aria-hidden='true'
-        />
-      )}
-      {/* Glass Modal */}
+      {/* Fullscreen viewer */}
       <div
-        className={
-          modalFullscreen
-            ? 'relative w-full h-full bg-white/98 dark:bg-[rgba(15,15,15,0.98)] backdrop-blur-[32px] flex flex-col overflow-hidden'
-            : 'relative w-full max-w-[1000px] h-[80vh] bg-white/75 dark:bg-[rgba(15,15,15,0.82)] backdrop-blur-[32px] border border-neutral-200 dark:border-white/[0.08] rounded-3xl shadow-2xl dark:shadow-[0_40px_100px_-20px_rgba(0,0,0,0.7)] flex flex-col'
-        }
+        className='relative w-full h-full bg-white/98 dark:bg-[rgba(15,15,15,0.98)] backdrop-blur-[32px] flex flex-col overflow-hidden'
         role='dialog'
         aria-modal='true'
         aria-label='HTML tool viewer'
