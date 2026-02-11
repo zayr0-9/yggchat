@@ -25,6 +25,8 @@ import {
 } from './chatTypes'
 import { createLmStudioStreamingRequest } from './LMStudio'
 import { createOpenAIChatGPTStreamingRequest } from './OpenAIChatGPT'
+import { openStreamingWithPreFirstByteRetry } from './streamResilience'
+import { persistToolResultsWithFallback } from './toolResultPersistence'
 // OpenAI OAuth is handled internally by OpenAIChatGPT module
 import { getDefaultMaxTurns, getSubagentEnabledTools, isOrchestratorEnabled } from '../../helpers/subagentToolSettings'
 import { updateToolEnabledState } from '../../helpers/toolSettingsStorage'
@@ -1793,6 +1795,68 @@ const executeToolWithPermissionCheck = async (
   throw new Error('Tool execution denied by user')
 }
 
+const openConversationStreamWithRetry = async (
+  endpoint: string,
+  accessToken: string | null,
+  requestInit: RequestInit,
+  context: {
+    conversationId?: ConversationId | string | null
+    streamId?: string | null
+    controllerSignal?: AbortSignal
+  }
+) =>
+  openStreamingWithPreFirstByteRetry({
+    endpoint,
+    conversationId: context.conversationId ? String(context.conversationId) : null,
+    streamId: context.streamId ?? null,
+    parentSignal: context.controllerSignal,
+    openAttempt: signal =>
+      createStreamingRequest(endpoint, accessToken, {
+        ...requestInit,
+        signal,
+      }),
+  })
+
+const persistAssistantMessageWithFallback = async (
+  dispatch: any,
+  params: {
+    id: MessageId
+    content: string
+    updatedContentBlocks: any[]
+    conversationId?: ConversationId | string | null
+    streamId?: string | null
+    contextLabel: string
+  }
+) => {
+  const { id, content, updatedContentBlocks, conversationId, streamId, contextLabel } = params
+
+  await persistToolResultsWithFallback({
+    attemptPersist: async () => {
+      const dispatched = dispatch(
+        updateMessage({
+          id,
+          content,
+          content_blocks: updatedContentBlocks,
+        }) as any
+      ) as any
+
+      if (dispatched && typeof dispatched.unwrap === 'function') {
+        await dispatched.unwrap()
+        return
+      }
+
+      await dispatched
+    },
+    updatedContentBlocks,
+    conversationId: conversationId ? String(conversationId) : null,
+    streamId: streamId ?? null,
+    messageId: String(id),
+    contextLabel,
+  })
+
+  return updatedContentBlocks
+}
+
 // Model operations have been fully migrated to React Query
 // See useModels, useRecentModels, useRefreshModels, and useSelectModel in hooks/useQueries.ts
 // Model selection state is now managed entirely by React Query and localStorage
@@ -1945,6 +2009,8 @@ export const sendMessage = createAsyncThunk<
         }
 
         let response = null
+        let streamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
+        let firstRead: ReadableStreamReadResult<Uint8Array> | null = null
 
         if (!modelName) {
           throw new Error('No model selected')
@@ -2193,13 +2259,24 @@ export const sendMessage = createAsyncThunk<
 
               if (toolResultBlocks.length > 0 && lastMsg.id) {
                 const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
-                await dispatch(
-                  updateMessage({
-                    id: lastMsg.id,
-                    content: lastMsg.content,
-                    content_blocks: [...existingBlocks, ...toolResultBlocks],
-                  })
-                )
+                const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+                await persistAssistantMessageWithFallback(dispatch, {
+                  id: lastMsg.id,
+                  content: lastMsg.content,
+                  updatedContentBlocks,
+                  conversationId,
+                  streamId,
+                  contextLabel: 'sendMessage/lmstudio-repeat',
+                })
+
+                const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
+                if (historyIndex !== -1) {
+                  currentTurnHistory[historyIndex] = {
+                    ...currentTurnHistory[historyIndex],
+                    content_blocks: updatedContentBlocks,
+                  }
+                }
               }
 
               currentTurnContent = ''
@@ -2358,13 +2435,24 @@ export const sendMessage = createAsyncThunk<
 
               if (toolResultBlocks.length > 0 && lastMsg.id) {
                 const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
-                await dispatch(
-                  updateMessage({
-                    id: lastMsg.id,
-                    content: lastMsg.content,
-                    content_blocks: [...existingBlocks, ...toolResultBlocks],
-                  })
-                )
+                const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+                await persistAssistantMessageWithFallback(dispatch, {
+                  id: lastMsg.id,
+                  content: lastMsg.content,
+                  updatedContentBlocks,
+                  conversationId,
+                  streamId,
+                  contextLabel: 'sendMessage/openai-repeat',
+                })
+
+                const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
+                if (historyIndex !== -1) {
+                  currentTurnHistory[historyIndex] = {
+                    ...currentTurnHistory[historyIndex],
+                    content_blocks: updatedContentBlocks,
+                  }
+                }
               }
 
               currentTurnContent = ''
@@ -2382,75 +2470,87 @@ export const sendMessage = createAsyncThunk<
           const endpoint = `/conversations/${conversationId}/messages/repeat`
           const toolNameById = buildToolNameMap(currentTurnHistory)
 
-          response = await createStreamingRequest(endpoint, auth.accessToken, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: currentTurnHistory.map(m => {
-                const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
-                if (m.role === 'tool' && m.tool_call_id) {
-                  const toolName = toolNameById.get(m.tool_call_id) ?? null
-                  const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
-                  if (sanitizedContent !== m.content) {
-                    const contentPlain =
-                      typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
-                    return {
-                      id: m.id,
-                      conversation_id: m.conversation_id,
-                      parent_id: m.parent_id,
-                      children_ids: m.children_ids,
-                      role: m.role,
-                      thinking_block: m.thinking_block,
-                      tool_calls: m.tool_calls,
-                      content_blocks: contentBlocks,
-                      content: sanitizedContent,
-                      content_plain_text: contentPlain,
-                      created_at: m.created_at,
-                      model_name: m.model_name,
-                      partial: m.partial,
-                      artifacts: m.artifacts,
+          const streamOpen = await openConversationStreamWithRetry(
+            endpoint,
+            auth.accessToken,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                messages: currentTurnHistory.map(m => {
+                  const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
+                  if (m.role === 'tool' && m.tool_call_id) {
+                    const toolName = toolNameById.get(m.tool_call_id) ?? null
+                    const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
+                    if (sanitizedContent !== m.content) {
+                      const contentPlain =
+                        typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
+                      return {
+                        id: m.id,
+                        conversation_id: m.conversation_id,
+                        parent_id: m.parent_id,
+                        children_ids: m.children_ids,
+                        role: m.role,
+                        thinking_block: m.thinking_block,
+                        tool_calls: m.tool_calls,
+                        content_blocks: contentBlocks,
+                        content: sanitizedContent,
+                        content_plain_text: contentPlain,
+                        created_at: m.created_at,
+                        model_name: m.model_name,
+                        partial: m.partial,
+                        artifacts: m.artifacts,
+                      }
                     }
                   }
-                }
-                return {
-                  id: m.id,
-                  conversation_id: m.conversation_id,
-                  parent_id: m.parent_id,
-                  children_ids: m.children_ids,
-                  role: m.role,
-                  thinking_block: m.thinking_block,
-                  tool_calls: m.tool_calls,
-                  content_blocks: contentBlocks,
-                  content: m.content,
-                  content_plain_text: m.content_plain_text,
-                  created_at: m.created_at,
-                  model_name: m.model_name,
-                  partial: m.partial,
-                  artifacts: m.artifacts,
-                }
+                  return {
+                    id: m.id,
+                    conversation_id: m.conversation_id,
+                    parent_id: m.parent_id,
+                    children_ids: m.children_ids,
+                    role: m.role,
+                    thinking_block: m.thinking_block,
+                    tool_calls: m.tool_calls,
+                    content_blocks: contentBlocks,
+                    content: m.content,
+                    content_plain_text: m.content_plain_text,
+                    created_at: m.created_at,
+                    model_name: m.model_name,
+                    partial: m.partial,
+                    artifacts: m.artifacts,
+                  }
+                }),
+                content: currentTurnContent,
+                modelName: modelName,
+                // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
+                parentId: parent,
+                systemPrompt: systemPrompt,
+                conversationContext: combinedContext,
+                projectContext,
+                provider: serverProvider,
+                repeatNum: repeatNum,
+                attachmentsBase64,
+                selectedFiles: selectedFilesForChat,
+                think,
+                retrigger,
+                executionMode,
+                storageMode,
+                isElectron: isElectronMode,
+                imageConfig,
+                reasoningConfig,
+                tools: getToolsForAI(),
               }),
-              content: currentTurnContent,
-              modelName: modelName,
-              // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
-              parentId: parent,
-              systemPrompt: systemPrompt,
-              conversationContext: combinedContext,
-              projectContext,
-              provider: serverProvider,
-              repeatNum: repeatNum,
-              attachmentsBase64,
-              selectedFiles: selectedFilesForChat,
-              think,
-              retrigger,
-              executionMode,
-              storageMode,
-              isElectron: isElectronMode,
-              imageConfig,
-              reasoningConfig,
-              tools: getToolsForAI(),
-            }),
-            signal: controller.signal,
-          })
+              signal: controller.signal,
+            },
+            {
+              conversationId,
+              streamId,
+              controllerSignal: controller.signal,
+            }
+          )
+          response = streamOpen.response
+          streamReader = streamOpen.reader
+          firstRead = streamOpen.firstRead
         } else {
           if (shouldUseLmStudio) {
             const toolNameById = buildToolNameMap(currentTurnHistory)
@@ -2601,13 +2701,14 @@ export const sendMessage = createAsyncThunk<
                 const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
                 const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
 
-                await dispatch(
-                  updateMessage({
-                    id: lastMsg.id,
-                    content: lastMsg.content,
-                    content_blocks: updatedContentBlocks,
-                  })
-                )
+                await persistAssistantMessageWithFallback(dispatch, {
+                  id: lastMsg.id,
+                  content: lastMsg.content,
+                  updatedContentBlocks,
+                  conversationId,
+                  streamId,
+                  contextLabel: 'sendMessage/lmstudio',
+                })
 
                 // Update in currentTurnHistory
                 const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
@@ -2784,13 +2885,14 @@ export const sendMessage = createAsyncThunk<
                 const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
                 const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
 
-                await dispatch(
-                  updateMessage({
-                    id: lastMsg.id,
-                    content: lastMsg.content,
-                    content_blocks: updatedContentBlocks,
-                  })
-                )
+                await persistAssistantMessageWithFallback(dispatch, {
+                  id: lastMsg.id,
+                  content: lastMsg.content,
+                  updatedContentBlocks,
+                  conversationId,
+                  streamId,
+                  contextLabel: 'sendMessage/openai',
+                })
 
                 // Update in currentTurnHistory
                 const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
@@ -2818,74 +2920,86 @@ export const sendMessage = createAsyncThunk<
           const endpoint = `/conversations/${conversationId}/messages`
           const toolNameById = buildToolNameMap(currentTurnHistory)
 
-          response = await createStreamingRequest(endpoint, auth.accessToken, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: currentTurnHistory.map(m => {
-                const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
-                if (m.role === 'tool' && m.tool_call_id) {
-                  const toolName = toolNameById.get(m.tool_call_id) ?? null
-                  const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
-                  if (sanitizedContent !== m.content) {
-                    const contentPlain =
-                      typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
-                    return {
-                      id: m.id,
-                      conversation_id: m.conversation_id,
-                      parent_id: m.parent_id,
-                      children_ids: m.children_ids,
-                      role: m.role,
-                      thinking_block: m.thinking_block,
-                      tool_calls: m.tool_calls,
-                      content_blocks: contentBlocks,
-                      content: sanitizedContent,
-                      content_plain_text: contentPlain,
-                      created_at: m.created_at,
-                      model_name: m.model_name,
-                      partial: m.partial,
-                      artifacts: m.artifacts,
+          const streamOpen = await openConversationStreamWithRetry(
+            endpoint,
+            auth.accessToken,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                messages: currentTurnHistory.map(m => {
+                  const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
+                  if (m.role === 'tool' && m.tool_call_id) {
+                    const toolName = toolNameById.get(m.tool_call_id) ?? null
+                    const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
+                    if (sanitizedContent !== m.content) {
+                      const contentPlain =
+                        typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
+                      return {
+                        id: m.id,
+                        conversation_id: m.conversation_id,
+                        parent_id: m.parent_id,
+                        children_ids: m.children_ids,
+                        role: m.role,
+                        thinking_block: m.thinking_block,
+                        tool_calls: m.tool_calls,
+                        content_blocks: contentBlocks,
+                        content: sanitizedContent,
+                        content_plain_text: contentPlain,
+                        created_at: m.created_at,
+                        model_name: m.model_name,
+                        partial: m.partial,
+                        artifacts: m.artifacts,
+                      }
                     }
                   }
-                }
-                return {
-                  id: m.id,
-                  conversation_id: m.conversation_id,
-                  parent_id: m.parent_id,
-                  children_ids: m.children_ids,
-                  role: m.role,
-                  thinking_block: m.thinking_block,
-                  tool_calls: m.tool_calls,
-                  content_blocks: contentBlocks,
-                  content: m.content,
-                  content_plain_text: m.content_plain_text,
-                  created_at: m.created_at,
-                  model_name: m.model_name,
-                  partial: m.partial,
-                  artifacts: m.artifacts,
-                }
+                  return {
+                    id: m.id,
+                    conversation_id: m.conversation_id,
+                    parent_id: m.parent_id,
+                    children_ids: m.children_ids,
+                    role: m.role,
+                    thinking_block: m.thinking_block,
+                    tool_calls: m.tool_calls,
+                    content_blocks: contentBlocks,
+                    content: m.content,
+                    content_plain_text: m.content_plain_text,
+                    created_at: m.created_at,
+                    model_name: m.model_name,
+                    partial: m.partial,
+                    artifacts: m.artifacts,
+                  }
+                }),
+                content: currentTurnContent, // Empty for tool continuation
+                modelName: modelName,
+                // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
+                parentId: parent,
+                systemPrompt: systemPrompt,
+                conversationContext: combinedContext,
+                projectContext,
+                provider: serverProvider,
+                attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined, // Only send attachments on first turn
+                selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
+                think,
+                retrigger: turnCount === 1 ? retrigger : false,
+                executionMode,
+                storageMode,
+                isElectron: isElectronMode,
+                imageConfig,
+                reasoningConfig,
+                tools: getToolsForAI(),
               }),
-              content: currentTurnContent, // Empty for tool continuation
-              modelName: modelName,
-              // parentId: (currentPath && currentPath.length ? currentPath[currentPath.length - 1] : currentMessages?.at(-1)?.id) || undefined,
-              parentId: parent,
-              systemPrompt: systemPrompt,
-              conversationContext: combinedContext,
-              projectContext,
-              provider: serverProvider,
-              attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined, // Only send attachments on first turn
-              selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
-              think,
-              retrigger: turnCount === 1 ? retrigger : false,
-              executionMode,
-              storageMode,
-              isElectron: isElectronMode,
-              imageConfig,
-              reasoningConfig,
-              tools: getToolsForAI(),
-            }),
-            signal: controller.signal,
-          })
+              signal: controller.signal,
+            },
+            {
+              conversationId,
+              streamId,
+              controllerSignal: controller.signal,
+            }
+          )
+          response = streamOpen.response
+          streamReader = streamOpen.reader
+          firstRead = streamOpen.firstRead
         }
 
         if (!response.ok) {
@@ -2901,7 +3015,7 @@ export const sendMessage = createAsyncThunk<
           throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to send message'}`)
         }
 
-        const reader = response.body?.getReader()
+        const reader = streamReader
         if (!reader) throw new Error('No stream reader available')
 
         const decoder = new TextDecoder()
@@ -2917,10 +3031,13 @@ export const sendMessage = createAsyncThunk<
         let turnAssistantMessageId: string | null = null
         // Track processed tool calls (already executed on server)
         const processedToolCallIds = new Set<string>()
+        let pendingRead = firstRead
 
         try {
           while (true) {
-            const { done, value } = await reader.read()
+            const readResult = pendingRead ?? (await reader.read())
+            pendingRead = null
+            const { done, value } = readResult
             if (done) break
 
             // Append new data to buffer and split by newlines
@@ -3243,13 +3360,14 @@ export const sendMessage = createAsyncThunk<
                 const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
 
                 // Update message via updateMessage thunk (syncs to both local and cloud)
-                await dispatch(
-                  updateMessage({
-                    id: assistantMessage.id,
-                    content: assistantMessage.content,
-                    content_blocks: updatedContentBlocks,
-                  })
-                )
+                await persistAssistantMessageWithFallback(dispatch, {
+                  id: assistantMessage.id,
+                  content: assistantMessage.content,
+                  updatedContentBlocks,
+                  conversationId,
+                  streamId,
+                  contextLabel: 'sendMessage/cloud-client-tools',
+                })
 
                 // Update the assistant message in currentTurnHistory
                 const historyIndex = currentTurnHistory.findIndex(msg => msg.id === assistantMessage.id)
@@ -3664,6 +3782,8 @@ export const editMessageWithBranching = createAsyncThunk<
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false
+        let streamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
+        let firstRead: ReadableStreamReadResult<Uint8Array> | null = null
 
         // LM Studio branch: handle locally like sendMessage does
         if (shouldUseLmStudio) {
@@ -3841,13 +3961,24 @@ export const editMessageWithBranching = createAsyncThunk<
 
             if (toolResultBlocks.length > 0 && lastMsg.id) {
               const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
-              await dispatch(
-                updateMessage({
-                  id: lastMsg.id,
-                  content: lastMsg.content,
-                  content_blocks: [...existingBlocks, ...toolResultBlocks],
-                })
-              )
+              const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+              await persistAssistantMessageWithFallback(dispatch, {
+                id: lastMsg.id,
+                content: lastMsg.content,
+                updatedContentBlocks,
+                conversationId,
+                streamId,
+                contextLabel: 'editMessageWithBranching/lmstudio',
+              })
+
+              const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
+              if (historyIndex !== -1) {
+                currentTurnHistory[historyIndex] = {
+                  ...currentTurnHistory[historyIndex],
+                  content_blocks: updatedContentBlocks,
+                }
+              }
             }
 
             currentTurnContent = ''
@@ -4043,13 +4174,24 @@ export const editMessageWithBranching = createAsyncThunk<
 
             if (toolResultBlocks.length > 0 && lastMsg.id) {
               const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
-              await dispatch(
-                updateMessage({
-                  id: lastMsg.id,
-                  content: lastMsg.content,
-                  content_blocks: [...existingBlocks, ...toolResultBlocks],
-                })
-              )
+              const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+              await persistAssistantMessageWithFallback(dispatch, {
+                id: lastMsg.id,
+                content: lastMsg.content,
+                updatedContentBlocks,
+                conversationId,
+                streamId,
+                contextLabel: 'editMessageWithBranching/openai',
+              })
+
+              const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
+              if (historyIndex !== -1) {
+                currentTurnHistory[historyIndex] = {
+                  ...currentTurnHistory[historyIndex],
+                  content_blocks: updatedContentBlocks,
+                }
+              }
             }
 
             currentTurnContent = ''
@@ -4065,71 +4207,83 @@ export const editMessageWithBranching = createAsyncThunk<
 
         // Create new user message as a branch (or continuation) - cloud server handles LLM, storageMode in body controls DB
         const toolNameById = buildToolNameMap(currentTurnHistory)
-        const response = await createStreamingRequest(`/conversations/${conversationId}/messages`, auth.accessToken, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: currentTurnHistory.map(m => {
-              const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
-              if (m.role === 'tool' && m.tool_call_id) {
-                const toolName = toolNameById.get(m.tool_call_id) ?? null
-                const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
-                if (sanitizedContent !== m.content) {
-                  const contentPlain =
-                    typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
-                  return {
-                    id: m.id,
-                    conversation_id: m.conversation_id,
-                    parent_id: m.parent_id,
-                    children_ids: m.children_ids,
-                    role: m.role,
-                    thinking_block: m.thinking_block,
-                    tool_calls: m.tool_calls,
-                    content_blocks: contentBlocks,
-                    content: sanitizedContent,
-                    content_plain_text: contentPlain,
-                    created_at: m.created_at,
-                    model_name: m.model_name,
-                    partial: m.partial,
-                    artifacts: m.artifacts,
+        const streamOpen = await openConversationStreamWithRetry(
+          `/conversations/${conversationId}/messages`,
+          auth.accessToken,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: currentTurnHistory.map(m => {
+                const contentBlocks = sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls)
+                if (m.role === 'tool' && m.tool_call_id) {
+                  const toolName = toolNameById.get(m.tool_call_id) ?? null
+                  const sanitizedContent = sanitizeToolResultContentForModel(m.content, toolName)
+                  if (sanitizedContent !== m.content) {
+                    const contentPlain =
+                      typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent)
+                    return {
+                      id: m.id,
+                      conversation_id: m.conversation_id,
+                      parent_id: m.parent_id,
+                      children_ids: m.children_ids,
+                      role: m.role,
+                      thinking_block: m.thinking_block,
+                      tool_calls: m.tool_calls,
+                      content_blocks: contentBlocks,
+                      content: sanitizedContent,
+                      content_plain_text: contentPlain,
+                      created_at: m.created_at,
+                      model_name: m.model_name,
+                      partial: m.partial,
+                      artifacts: m.artifacts,
+                    }
                   }
                 }
-              }
-              return {
-                id: m.id,
-                conversation_id: m.conversation_id,
-                parent_id: m.parent_id,
-                children_ids: m.children_ids,
-                role: m.role,
-                thinking_block: m.thinking_block,
-                tool_calls: m.tool_calls,
-                content_blocks: contentBlocks,
-                content: m.content,
-                content_plain_text: m.content_plain_text,
-                created_at: m.created_at,
-                model_name: m.model_name,
-                partial: m.partial,
-                artifacts: m.artifacts,
-              }
+                return {
+                  id: m.id,
+                  conversation_id: m.conversation_id,
+                  parent_id: m.parent_id,
+                  children_ids: m.children_ids,
+                  role: m.role,
+                  thinking_block: m.thinking_block,
+                  tool_calls: m.tool_calls,
+                  content_blocks: contentBlocks,
+                  content: m.content,
+                  content_plain_text: m.content_plain_text,
+                  created_at: m.created_at,
+                  model_name: m.model_name,
+                  partial: m.partial,
+                  artifacts: m.artifacts,
+                }
+              }),
+              content: currentTurnContent,
+              modelName,
+              parentId: activeParentId, // Branch from the same parent as original (or updated parent)
+              systemPrompt: systemPrompt,
+              conversationContext: combinedContext,
+              projectContext,
+              provider: serverProvider,
+              attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
+              selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
+              think,
+              executionMode,
+              isBranch: true,
+              storageMode,
+              isElectron: isElectronMode,
+              tools: getToolsForAI(),
             }),
-            content: currentTurnContent,
-            modelName,
-            parentId: activeParentId, // Branch from the same parent as original (or updated parent)
-            systemPrompt: systemPrompt,
-            conversationContext: combinedContext,
-            projectContext,
-            provider: serverProvider,
-            attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
-            selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
-            think,
-            executionMode,
-            isBranch: true,
-            storageMode,
-            isElectron: isElectronMode,
-            tools: getToolsForAI(),
-          }),
-          signal: controller.signal,
-        })
+            signal: controller.signal,
+          },
+          {
+            conversationId,
+            streamId,
+            controllerSignal: controller.signal,
+          }
+        )
+        const response = streamOpen.response
+        streamReader = streamOpen.reader
+        firstRead = streamOpen.firstRead
 
         if (!response.ok) {
           // Handle free tier limit exceeded (403)
@@ -4144,7 +4298,7 @@ export const editMessageWithBranching = createAsyncThunk<
           throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
 
-        const reader = response.body?.getReader()
+        const reader = streamReader
         if (!reader) throw new Error('No stream reader available')
 
         const decoder = new TextDecoder()
@@ -4158,10 +4312,13 @@ export const editMessageWithBranching = createAsyncThunk<
         let turnAssistantMessageId: string | null = null
         // Track processed tool calls (already executed on server)
         const processedToolCallIds = new Set<string>()
+        let pendingRead = firstRead
 
         try {
           while (true) {
-            const { done, value } = await reader.read()
+            const readResult = pendingRead ?? (await reader.read())
+            pendingRead = null
+            const { done, value } = readResult
             if (done) break
 
             // Append new data to buffer and split by newlines
@@ -4474,13 +4631,14 @@ export const editMessageWithBranching = createAsyncThunk<
                 const existingBlocks = parseContentBlocks(assistantMessage.content_blocks)
                 const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
 
-                await dispatch(
-                  updateMessage({
-                    id: assistantMessage.id,
-                    content: assistantMessage.content,
-                    content_blocks: updatedContentBlocks,
-                  })
-                )
+                await persistAssistantMessageWithFallback(dispatch, {
+                  id: assistantMessage.id,
+                  content: assistantMessage.content,
+                  updatedContentBlocks,
+                  conversationId,
+                  streamId,
+                  contextLabel: 'editMessageWithBranching/cloud-client-tools',
+                })
 
                 // Update the assistant message in currentTurnHistory
                 const historyIndex = currentTurnHistory.findIndex(msg => msg.id === assistantMessage.id)
@@ -4677,6 +4835,8 @@ export const sendMessageToBranch = createAsyncThunk<
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false
+        let streamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
+        let firstRead: ReadableStreamReadResult<Uint8Array> | null = null
 
         // LM Studio branch: handle locally
         if (shouldUseLmStudio) {
@@ -4850,13 +5010,24 @@ export const sendMessageToBranch = createAsyncThunk<
 
             if (toolResultBlocks.length > 0 && lastMsg.id) {
               const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
-              await dispatch(
-                updateMessage({
-                  id: lastMsg.id,
-                  content: lastMsg.content,
-                  content_blocks: [...existingBlocks, ...toolResultBlocks],
-                })
-              )
+              const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+              await persistAssistantMessageWithFallback(dispatch, {
+                id: lastMsg.id,
+                content: lastMsg.content,
+                updatedContentBlocks,
+                conversationId,
+                streamId,
+                contextLabel: 'sendMessageToBranch/lmstudio',
+              })
+
+              const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
+              if (historyIndex !== -1) {
+                currentTurnHistory[historyIndex] = {
+                  ...currentTurnHistory[historyIndex],
+                  content_blocks: updatedContentBlocks,
+                }
+              }
             }
 
             currentTurnContent = ''
@@ -5040,13 +5211,24 @@ export const sendMessageToBranch = createAsyncThunk<
 
             if (toolResultBlocks.length > 0 && lastMsg.id) {
               const existingBlocks = Array.isArray(lastMsg.content_blocks) ? lastMsg.content_blocks : []
-              await dispatch(
-                updateMessage({
-                  id: lastMsg.id,
-                  content: lastMsg.content,
-                  content_blocks: [...existingBlocks, ...toolResultBlocks],
-                })
-              )
+              const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
+
+              await persistAssistantMessageWithFallback(dispatch, {
+                id: lastMsg.id,
+                content: lastMsg.content,
+                updatedContentBlocks,
+                conversationId,
+                streamId,
+                contextLabel: 'sendMessageToBranch/openai',
+              })
+
+              const historyIndex = currentTurnHistory.findIndex(msg => msg.id === lastMsg.id)
+              if (historyIndex !== -1) {
+                currentTurnHistory[historyIndex] = {
+                  ...currentTurnHistory[historyIndex],
+                  content_blocks: updatedContentBlocks,
+                }
+              }
             }
 
             currentTurnContent = ''
@@ -5063,28 +5245,40 @@ export const sendMessageToBranch = createAsyncThunk<
         // Cloud server handles LLM generation; storageMode in body tells it whether to save to cloud DB
         const endpoint = `/conversations/${conversationId}/messages`
 
-        const response = await createStreamingRequest(endpoint, auth.accessToken, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            content: currentTurnContent,
-            modelName,
-            parentId: currentParentId,
-            systemPrompt: effectiveSystemPrompt,
-            conversationContext: combinedContext,
-            projectContext,
-            provider: serverProvider,
-            attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
-            selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
-            think,
-            executionMode,
-            isBranch: true,
-            storageMode,
-            isElectron: isElectronMode,
-            tools: getToolsForAI(),
-          }),
-          signal: controller.signal,
-        })
+        const streamOpen = await openConversationStreamWithRetry(
+          endpoint,
+          auth.accessToken,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: currentTurnContent,
+              modelName,
+              parentId: currentParentId,
+              systemPrompt: effectiveSystemPrompt,
+              conversationContext: combinedContext,
+              projectContext,
+              provider: serverProvider,
+              attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
+              selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
+              think,
+              executionMode,
+              isBranch: true,
+              storageMode,
+              isElectron: isElectronMode,
+              tools: getToolsForAI(),
+            }),
+            signal: controller.signal,
+          },
+          {
+            conversationId,
+            streamId,
+            controllerSignal: controller.signal,
+          }
+        )
+        const response = streamOpen.response
+        streamReader = streamOpen.reader
+        firstRead = streamOpen.firstRead
 
         if (!response.ok) {
           // Handle free tier limit exceeded (403)
@@ -5099,7 +5293,7 @@ export const sendMessageToBranch = createAsyncThunk<
           throw new Error(`HTTP ${response.status}: ${errorText}`)
         }
 
-        const reader = response.body?.getReader()
+        const reader = streamReader
         if (!reader) throw new Error('No stream reader available')
 
         const decoder = new TextDecoder()
@@ -5113,10 +5307,13 @@ export const sendMessageToBranch = createAsyncThunk<
         let turnAssistantMessageId: string | null = null
         // Track processed tool calls (already executed on server)
         const processedToolCallIds = new Set<string>()
+        let pendingRead = firstRead
 
         try {
           while (true) {
-            const { done, value } = await reader.read()
+            const readResult = pendingRead ?? (await reader.read())
+            pendingRead = null
+            const { done, value } = readResult
             if (done) break
 
             // Append new data to buffer and split by newlines
@@ -5407,13 +5604,22 @@ export const sendMessageToBranch = createAsyncThunk<
                 const existingBlocks = parseContentBlocks(assistantMessage.content_blocks)
                 const updatedContentBlocks = [...existingBlocks, ...toolResultBlocks]
 
-                await dispatch(
-                  updateMessage({
-                    id: assistantMessage.id,
-                    content: assistantMessage.content,
+                await persistAssistantMessageWithFallback(dispatch, {
+                  id: assistantMessage.id,
+                  content: assistantMessage.content,
+                  updatedContentBlocks,
+                  conversationId,
+                  streamId,
+                  contextLabel: 'sendMessageToBranch/cloud-client-tools',
+                })
+
+                const historyIndex = currentTurnHistory.findIndex(msg => msg.id === assistantMessage.id)
+                if (historyIndex !== -1) {
+                  currentTurnHistory[historyIndex] = {
+                    ...currentTurnHistory[historyIndex],
                     content_blocks: updatedContentBlocks,
-                  })
-                )
+                  }
+                }
               }
             }
 
