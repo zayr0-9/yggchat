@@ -4,7 +4,6 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import type { Express, Request, Response } from 'express'
-import { redisClient } from '../../../server/src/config/redis.js'
 type ProviderCredentialRecord = {
   user_id: string
   provider: string
@@ -336,6 +335,15 @@ interface RateLimiterAdapter {
   check: (key: string, limitOverride?: number) => Promise<RateLimiterResult>
 }
 
+interface RedisRateLimiterClient {
+  status?: string
+  eval: (
+    script: string,
+    numKeys: number,
+    ...args: string[]
+  ) => Promise<[number | string, number | string]>
+}
+
 class InMemoryRateLimiter implements RateLimiterAdapter {
   private buckets = new Map<string, { count: number; resetAt: number }>()
 
@@ -365,7 +373,7 @@ class RedisRateLimiter implements RateLimiterAdapter {
   private fallback: InMemoryRateLimiter
 
   constructor(
-    private client: typeof redisClient | null,
+    private client: RedisRateLimiterClient | null,
     private defaultLimit: number,
     private windowMs: number,
     private prefix: string
@@ -588,7 +596,8 @@ class ProxyGateway {
       ? defaultLimit
       : DEFAULT_RATE_LIMIT_PER_MINUTE
     const rateLimitPrefix = options?.rateLimitPrefix ?? process.env.YGG_PROXY_RATE_LIMIT_PREFIX ?? DEFAULT_RATE_LIMIT_PREFIX
-    this.rateLimiter = new RedisRateLimiter(redisClient ?? null, rateLimit, DEFAULT_RATE_LIMIT_WINDOW_MS, rateLimitPrefix)
+    // Electron local server should not require Redis. Use in-memory limiter unconditionally.
+    this.rateLimiter = new RedisRateLimiter(null, rateLimit, DEFAULT_RATE_LIMIT_WINDOW_MS, rateLimitPrefix)
 
     this.adapters = { ...DEFAULT_ADAPTERS, ...(options?.adapters ?? {}) }
     this.providerPolicies = { ...DEFAULT_PROVIDER_POLICIES, ...(options?.providerPolicies ?? {}) }

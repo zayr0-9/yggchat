@@ -40,6 +40,24 @@ const UPDATE_FEED_BASE_URL =
   process.env.SUPABASE_UPDATE_FEED_BASE_URL || 'https://auth.yggchat.com/storage/v1/object/public/updates/updates'
 let autoUpdaterConfigured = false
 
+const TRUTHY_ENV_VALUES = new Set(['1', 'true', 'yes', 'on'])
+
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false
+  return TRUTHY_ENV_VALUES.has(value.trim().toLowerCase())
+}
+
+function isEnvDevMode(): boolean {
+  const nodeEnv = (process.env.NODE_ENV || '').trim().toLowerCase()
+  if (nodeEnv === 'development' || nodeEnv === 'dev') {
+    return true
+  }
+
+  return isTruthyEnv(process.env.DEBUG) || isTruthyEnv(process.env.ELECTRON_DEVTOOLS)
+}
+
+const shouldOpenDetachedDevTools = isEnvDevMode()
+
 // Set App User Model ID for Windows taskbar icon
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.yggdrasil.chat')
@@ -309,7 +327,6 @@ function createWindow() {
   if (isDev) {
     // Development: Load from Vite dev server
     mainWindow.loadURL('http://localhost:5173')
-    mainWindow.webContents.openDevTools()
   } else {
     // Production: Load from built files
     const indexPath = path.join(__dirname, '../dist-electron/index.html')
@@ -338,6 +355,10 @@ function createWindow() {
         mainWindow?.webContents.openDevTools({ mode: 'detach' })
       }, 3000)
     }
+  }
+
+  if (shouldOpenDetachedDevTools) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
   }
 
   mainWindow.on('close', event => {
@@ -478,6 +499,10 @@ function createFloatingWindow() {
   } else {
     const indexPath = path.join(__dirname, '../dist-electron/index.html')
     floatingWindow.loadFile(indexPath)
+  }
+
+  if (shouldOpenDetachedDevTools) {
+    floatingWindow.webContents.openDevTools({ mode: 'detach' })
   }
 
   floatingWindow.on('closed', () => {

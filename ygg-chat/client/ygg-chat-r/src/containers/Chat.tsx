@@ -221,14 +221,12 @@ const ChatInputController = React.memo(
 
       const setValue = useCallback(
         (next: ChatInputUpdater) => {
-          setValueState(prevValue => {
-            const nextValue = typeof next === 'function' ? next(prevValue) : next
-            valueRef.current = nextValue
-            publishHasText(nextValue)
-            return nextValue
-          })
+          const prevValue = valueRef.current
+          const nextValue = typeof next === 'function' ? next(prevValue) : next
+          valueRef.current = nextValue
+          setValueState(nextValue)
         },
-        [publishHasText]
+        []
       )
 
       const clear = useCallback(() => {
@@ -268,10 +266,13 @@ const ChatInputController = React.memo(
         (nextValue: string) => {
           valueRef.current = nextValue
           setValueState(nextValue)
-          publishHasText(nextValue)
         },
-        [publishHasText]
+        []
       )
+
+      useEffect(() => {
+        publishHasText(value)
+      }, [publishHasText, value])
 
       const handleKeyDown = useCallback(
         (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
