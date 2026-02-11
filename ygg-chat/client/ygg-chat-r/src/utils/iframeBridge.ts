@@ -333,21 +333,10 @@ export function createMessageHandler(
           }
 
           try {
-            const apiResponse = await fetch('http://127.0.0.1:3002/api/tools/execute', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tool,
-                args: toolArgs || {},
-              }),
+            const result = await localApi.post<{ result?: any; [key: string]: any }>('/tools/execute', {
+              tool,
+              args: toolArgs || {},
             })
-
-            if (!apiResponse.ok) {
-              response = { success: false, error: `HTTP ${apiResponse.status}: ${apiResponse.statusText}` }
-              break
-            }
-
-            const result = await apiResponse.json()
             response = result.result || result
           } catch (err) {
             response = { success: false, error: String(err) }

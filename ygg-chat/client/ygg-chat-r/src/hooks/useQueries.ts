@@ -1904,16 +1904,9 @@ export function useDirectoryFiles(directoryPath: string | null | undefined) {
     queryFn: async () => {
       if (!directoryPath) throw new Error('Directory path is required')
 
-      // Use local API for file system access (electron mode - port 3002)
+      // Use local API for file system access (electron mode)
       const params = new URLSearchParams({ path: directoryPath })
-      const response = await fetch(`http://127.0.0.1:3002/api/local/files?${params}`)
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Failed to list directory' }))
-        throw new Error(error.error || 'Failed to list directory')
-      }
-
-      return response.json() as Promise<DirectoryListingResponse>
+      return localApi.get<DirectoryListingResponse>(`/local/files?${params}`)
     },
     enabled: !!directoryPath && directoryPath.trim().length > 0 && environment !== 'web',
     staleTime: 30 * 1000, // 30 seconds - files can change frequently

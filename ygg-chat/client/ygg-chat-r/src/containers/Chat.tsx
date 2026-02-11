@@ -1774,11 +1774,9 @@ function Chat() {
       if (providerName === 'OpenAI (ChatGPT)' && !isOpenAIAuthenticated()) {
         // Request OAuth flow from local server (server generates and stores PKCE)
         try {
-          const response = await fetch('http://localhost:3002/api/openai/auth/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          })
-          const data = await response.json()
+          const data = await localApi.post<{ success?: boolean; authUrl?: string; state?: string; error?: string }>(
+            '/openai/auth/start'
+          )
           if (data.success && data.authUrl && data.state) {
             setOpenaiAuthFlow({ url: data.authUrl, verifier: '', state: data.state })
             setOpenaiAuthError(null)
@@ -2474,12 +2472,15 @@ function Chat() {
 
     try {
       // Retrieve tokens from server using state (server already exchanged the code)
-      const response = await fetch('http://localhost:3002/api/openai/auth/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: openaiAuthFlow.state }),
-      })
-      const data = await response.json()
+      const data = await localApi.post<{
+        pending?: boolean
+        success?: boolean
+        error?: string
+        accessToken?: string
+        refreshToken?: string
+        expiresAt?: number
+        accountId?: string
+      }>('/openai/auth/complete', { state: openaiAuthFlow.state })
 
       if (data.pending) {
         setOpenaiAuthError('Please complete the sign-in in your browser first, then click this button again.')

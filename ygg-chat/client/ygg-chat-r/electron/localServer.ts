@@ -1,6 +1,6 @@
 // electron/localServer.ts
 // Embedded local SQLite server for dual-sync in Electron mode
-// This server runs on port 3002 and handles sync operations from Railway to local SQLite
+// This server prefers port 3002 and falls back to available local ports.
 
 import AdmZip from 'adm-zip'
 import Database from 'better-sqlite3'
@@ -9,6 +9,7 @@ import crypto from 'crypto'
 import { app as electronApp } from 'electron'
 import express from 'express'
 import fs from 'fs'
+import type { AddressInfo } from 'net'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
@@ -1971,7 +1972,7 @@ function setupServer() {
     }
   })
 
-  // GET /auth/callback - OAuth callback (port 1455 will redirect here, but we handle on 3002)
+  // GET /auth/callback - OAuth callback (port 1455 redirects to whichever local API port is active)
   // Note: The actual callback server runs on port 1455
   app.get('/auth/callback', async (req, res) => {
     try {
@@ -5974,10 +5975,117 @@ function setupServer() {
   startOAuthCallbackServer()
 }
 
-// Start the server
-export async function startLocalServer(port: number = 3002, dbPath?: string): Promise<void> {
+export interface LocalServerStartOptions {
+  preferredPort?: number
+  fallbackPorts?: number[]
+  host?: string
+  allowEphemeralPort?: boolean
+  dbPath?: string
+}
+
+export interface LocalServerStartResult {
+  port: number
+  host: string
+  url: string
+  dbPath: string
+}
+
+function normalizePortCandidate(value: number, label: string): number {
+  if (!Number.isInteger(value) || value < 0 || value > 65535) {
+    throw new Error(`[LocalServer] Invalid ${label}: ${value}`)
+  }
+  return value
+}
+
+function buildPortCandidates(preferredPort: number, fallbackPorts: number[], allowEphemeralPort: boolean): number[] {
+  const candidates: number[] = []
+  const seen = new Set<number>()
+
+  const addCandidate = (port: number) => {
+    if (seen.has(port)) return
+    seen.add(port)
+    candidates.push(port)
+  }
+
+  addCandidate(preferredPort)
+  for (const port of fallbackPorts) {
+    addCandidate(port)
+  }
+  if (allowEphemeralPort) {
+    addCandidate(0)
+  }
+
+  return candidates
+}
+
+function getServerAddressInfo(serverInstance: any): AddressInfo {
+  const address = serverInstance.address()
+  if (!address || typeof address === 'string') {
+    throw new Error('[LocalServer] Unable to resolve bound server address')
+  }
+  return address
+}
+
+function listenOnPort(port: number, host: string): Promise<{ serverInstance: any; actualPort: number }> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      candidateServer.removeListener('error', onError)
+      candidateServer.removeListener('listening', onListening)
+    }
+
+    const onError = (err: NodeJS.ErrnoException) => {
+      cleanup()
+      reject(err)
+    }
+
+    const onListening = () => {
+      cleanup()
+      try {
+        const address = getServerAddressInfo(candidateServer)
+        resolve({ serverInstance: candidateServer, actualPort: address.port })
+      } catch (error) {
+        candidateServer.close(() => {
+          reject(error)
+        })
+      }
+    }
+
+    const candidateServer = app.listen(port, host, onListening)
+    candidateServer.once('error', onError)
+  })
+}
+
+// Start the server. Supports legacy signature: startLocalServer(port, dbPath)
+export async function startLocalServer(
+  optionsOrPort: LocalServerStartOptions | number = 3002,
+  legacyDbPath?: string
+): Promise<LocalServerStartResult> {
+  const defaultDbPath = path.join(process.cwd(), 'data', 'local-sync.db')
+
+  const preferredPort =
+    typeof optionsOrPort === 'number'
+      ? normalizePortCandidate(optionsOrPort, 'preferred port')
+      : normalizePortCandidate(optionsOrPort.preferredPort ?? 3002, 'preferred port')
+  const fallbackPortsRaw = typeof optionsOrPort === 'number' ? [] : optionsOrPort.fallbackPorts || []
+  const fallbackPorts = fallbackPortsRaw.map((port, index) =>
+    normalizePortCandidate(port, `fallback port at index ${index}`)
+  )
+  const host = typeof optionsOrPort === 'number' ? '127.0.0.1' : optionsOrPort.host || '127.0.0.1'
+  const allowEphemeralPort = typeof optionsOrPort === 'number' ? false : optionsOrPort.allowEphemeralPort ?? false
+  const actualDbPath =
+    typeof optionsOrPort === 'number' ? legacyDbPath || defaultDbPath : optionsOrPort.dbPath || defaultDbPath
+
+  if (server && server.listening) {
+    const existing = getServerAddressInfo(server)
+    return {
+      port: existing.port,
+      host,
+      url: `http://${host}:${existing.port}`,
+      dbPath: actualDbPath,
+    }
+  }
+
   try {
-    const actualDbPath = dbPath || path.join(process.cwd(), 'data', 'local-sync.db')
     initializeLocalDatabase(actualDbPath)
 
     // Initialize tool registries
@@ -6031,29 +6139,54 @@ export async function startLocalServer(port: number = 3002, dbPath?: string): Pr
 
     setupServer()
 
-    return new Promise((resolve, reject) => {
-      server = app.listen(port, '0.0.0.0', () => {
-        // console.log(`[LocalServer] Local sync server running on http://0.0.0.0:${port}`)
-        // console.log(`[LocalServer] Database path: ${actualDbPath}`)
+    const retryableCodes = new Set(['EADDRINUSE', 'EACCES', 'EPERM'])
+    const portCandidates = buildPortCandidates(preferredPort, fallbackPorts, allowEphemeralPort)
+    let lastError: Error | null = null
+
+    for (const candidatePort of portCandidates) {
+      try {
+        const { serverInstance, actualPort } = await listenOnPort(candidatePort, host)
+        server = serverInstance
 
         // Initialize WebSocket Server after HTTP server is running
         initializeWebSocketServer(server)
 
-        resolve()
-      })
-
-      server.on('error', (err: NodeJS.ErrnoException) => {
-        if (err.code === 'EADDRINUSE') {
-          console.error(`[LocalServer] Port ${port} is already in use`)
-          reject(new Error(`Port ${port} is already in use`))
-        } else {
-          console.error('[LocalServer] Server error:', err)
-          reject(err)
+        const serverUrl = `http://${host}:${actualPort}`
+        if (candidatePort !== preferredPort) {
+          console.warn(`[LocalServer] Preferred port ${preferredPort} unavailable, using ${actualPort}`)
         }
-      })
-    })
+
+        return {
+          port: actualPort,
+          host,
+          url: serverUrl,
+          dbPath: actualDbPath,
+        }
+      } catch (error) {
+        const err = error as NodeJS.ErrnoException
+        lastError = err
+        const code = err.code || 'UNKNOWN'
+        const portLabel = candidatePort === 0 ? 'ephemeral port' : `port ${candidatePort}`
+
+        if (retryableCodes.has(code)) {
+          console.warn(`[LocalServer] Could not bind ${portLabel} (${code}), trying next candidate`)
+          continue
+        }
+
+        throw error
+      }
+    }
+
+    const attempted = portCandidates.map(port => (port === 0 ? 'ephemeral' : String(port))).join(', ')
+    const message = `[LocalServer] Failed to bind local server after trying: ${attempted}. Last error: ${
+      lastError?.message || 'unknown error'
+    }`
+    throw new Error(message)
   } catch (error) {
     console.error('[LocalServer] Failed to start:', error)
+    await stopLocalServer().catch(stopError => {
+      console.error('[LocalServer] Cleanup after failed start encountered an error:', stopError)
+    })
     throw error
   }
 }
@@ -6079,6 +6212,7 @@ export function stopLocalServer(): Promise<void> {
         wss.close(() => {
           console.log('[LocalServer] WebSocket server closed')
         })
+        wss = null
         // Also close all client connections
         clients.forEach(client => {
           if (client.ws.readyState === WebSocket.OPEN) {
@@ -6086,6 +6220,7 @@ export function stopLocalServer(): Promise<void> {
           }
         })
         clients.clear()
+        extensionsMap.clear()
       }
 
       server.close(() => {
@@ -6095,9 +6230,18 @@ export function stopLocalServer(): Promise<void> {
           db = null
         }
         server = null
+        currentDbPath = null
         resolve()
       })
     } else {
+      if (db) {
+        db.close()
+        db = null
+      }
+      currentDbPath = null
+      clients.clear()
+      extensionsMap.clear()
+      wss = null
       resolve()
     }
   })

@@ -5,7 +5,152 @@ import { clearClaimsCache, getSessionFromStorage, getTokenExpirationTime, refres
 // Base configuration
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 export const environment = import.meta.env.VITE_ENVIRONMENT || 'local'
-export const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
+const DEFAULT_LOCAL_SERVER_ORIGIN = 'http://127.0.0.1:3002'
+const LOCAL_SERVER_STATUS_CACHE_TTL_MS = 15000
+const LOCAL_SERVER_STATUS_TIMEOUT_MS = 3000
+
+export const LOCAL_API_BASE = `${DEFAULT_LOCAL_SERVER_ORIGIN}/api`
+
+export interface LocalServerStatus {
+  localServerRunning: boolean
+  localServerPort: number | null
+  localServerUrl: string | null
+  localServerError?: string | null
+}
+
+let cachedLocalServerStatus: LocalServerStatus | null = null
+let cachedLocalServerStatusAt = 0
+let pendingLocalServerStatusRequest: Promise<LocalServerStatus> | null = null
+
+function normalizeEndpoint(endpoint: string): string {
+  if (!endpoint) return '/'
+  return endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+}
+
+function normalizeOrigin(origin: string | null | undefined): string | null {
+  if (!origin || typeof origin !== 'string') return null
+  const trimmed = origin.trim().replace(/\/+$/, '')
+  if (!trimmed) return null
+  return /^https?:\/\//i.test(trimmed) ? trimmed : null
+}
+
+function isElectronRuntimeWithSyncIpc(): boolean {
+  if (environment !== 'electron') return false
+  if (typeof window === 'undefined') return false
+  return typeof window.electronAPI?.sync?.status === 'function'
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(`Timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise
+      .then(result => {
+        clearTimeout(timeoutId)
+        resolve(result)
+      })
+      .catch(error => {
+        clearTimeout(timeoutId)
+        reject(error)
+      })
+  })
+}
+
+function getDefaultLocalServerStatus(): LocalServerStatus {
+  return {
+    localServerRunning: false,
+    localServerPort: null,
+    localServerUrl: null,
+    localServerError: null,
+  }
+}
+
+function normalizeLocalServerStatus(raw: Partial<LocalServerStatus> | null | undefined): LocalServerStatus {
+  const normalizedUrl = normalizeOrigin(raw?.localServerUrl)
+  const normalizedPort =
+    typeof raw?.localServerPort === 'number' && Number.isInteger(raw.localServerPort) ? raw.localServerPort : null
+
+  return {
+    localServerRunning: Boolean(raw?.localServerRunning),
+    localServerPort: normalizedPort,
+    localServerUrl: normalizedUrl,
+    localServerError: raw?.localServerError ?? null,
+  }
+}
+
+async function fetchLocalServerStatus(forceRefresh = false): Promise<LocalServerStatus> {
+  if (!isElectronRuntimeWithSyncIpc()) {
+    return getDefaultLocalServerStatus()
+  }
+
+  const now = Date.now()
+  if (!forceRefresh && cachedLocalServerStatus && now - cachedLocalServerStatusAt < LOCAL_SERVER_STATUS_CACHE_TTL_MS) {
+    return cachedLocalServerStatus
+  }
+
+  if (!forceRefresh && pendingLocalServerStatusRequest) {
+    return pendingLocalServerStatusRequest
+  }
+
+  pendingLocalServerStatusRequest = withTimeout(window.electronAPI!.sync.status(), LOCAL_SERVER_STATUS_TIMEOUT_MS)
+    .then(status => {
+      const normalized = normalizeLocalServerStatus(status)
+      cachedLocalServerStatus = normalized
+      cachedLocalServerStatusAt = Date.now()
+      return normalized
+    })
+    .catch(error => {
+      const fallback = getDefaultLocalServerStatus()
+      fallback.localServerError = error instanceof Error ? error.message : String(error)
+      return fallback
+    })
+    .finally(() => {
+      pendingLocalServerStatusRequest = null
+    })
+
+  return pendingLocalServerStatusRequest
+}
+
+export async function refreshLocalServerStatus(): Promise<LocalServerStatus> {
+  return fetchLocalServerStatus(true)
+}
+
+export async function getLocalServerOrigin(): Promise<string> {
+  const status = await fetchLocalServerStatus()
+  return normalizeOrigin(status.localServerUrl) || DEFAULT_LOCAL_SERVER_ORIGIN
+}
+
+export function getCachedLocalServerOrigin(): string {
+  return normalizeOrigin(cachedLocalServerStatus?.localServerUrl) || DEFAULT_LOCAL_SERVER_ORIGIN
+}
+
+export async function getLocalApiBase(): Promise<string> {
+  const origin = await getLocalServerOrigin()
+  return `${origin}/api`
+}
+
+export function getCachedLocalApiBase(): string {
+  return `${getCachedLocalServerOrigin()}/api`
+}
+
+export async function buildLocalApiUrl(endpoint: string): Promise<string> {
+  return `${await getLocalApiBase()}${normalizeEndpoint(endpoint)}`
+}
+
+export function buildCachedLocalApiUrl(endpoint: string): string {
+  return `${getCachedLocalApiBase()}${normalizeEndpoint(endpoint)}`
+}
+
+export async function buildLocalWebSocketUrl(pathname: string): Promise<string> {
+  const origin = await getLocalServerOrigin()
+  return `${origin.replace(/^http/i, 'ws')}${normalizeEndpoint(pathname)}`
+}
+
+export function buildCachedLocalWebSocketUrl(pathname: string): string {
+  return `${getCachedLocalServerOrigin().replace(/^http/i, 'ws')}${normalizeEndpoint(pathname)}`
+}
 
 // Helper to determine if we should use local API
 export function shouldUseLocalApi(storageMode?: StorageMode, env?: string): boolean {
@@ -17,7 +162,7 @@ const handleLocalApiError = (error: any, endpoint: string): never => {
   // Check if it's a network error (server unavailable)
   if (error instanceof TypeError && error.message.includes('fetch')) {
     throw new Error(
-      `Local server not available at ${LOCAL_API_BASE}. ` +
+      `Local server not available at ${getCachedLocalApiBase()}. ` +
         `Please ensure the Electron app is running with the local server enabled.`
     )
   }
@@ -28,7 +173,7 @@ const handleLocalApiError = (error: any, endpoint: string): never => {
 export const localApi = {
   get: async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, { ...options, method: 'GET' })
+      const response = await fetch(await buildLocalApiUrl(endpoint), { ...options, method: 'GET' })
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -40,7 +185,7 @@ export const localApi = {
 
   post: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, {
+      const response = await fetch(await buildLocalApiUrl(endpoint), {
         ...options,
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -57,7 +202,7 @@ export const localApi = {
 
   patch: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, {
+      const response = await fetch(await buildLocalApiUrl(endpoint), {
         ...options,
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -74,7 +219,7 @@ export const localApi = {
 
   put: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, {
+      const response = await fetch(await buildLocalApiUrl(endpoint), {
         ...options,
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -91,7 +236,7 @@ export const localApi = {
 
   delete: async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, { ...options, method: 'DELETE' })
+      const response = await fetch(await buildLocalApiUrl(endpoint), { ...options, method: 'DELETE' })
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
@@ -100,6 +245,12 @@ export const localApi = {
       return handleLocalApiError(error, endpoint)
     }
   },
+}
+
+if (typeof window !== 'undefined' && environment === 'electron') {
+  void refreshLocalServerStatus().catch(() => {
+    // Endpoint discovery is best-effort and can be retried by callers.
+  })
 }
 
 /**

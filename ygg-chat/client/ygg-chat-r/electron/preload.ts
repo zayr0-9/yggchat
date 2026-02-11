@@ -41,6 +41,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   theme: {
     update: (isDark: boolean) => ipcRenderer.invoke('theme:update', isDark),
   },
+  sync: {
+    status: () => ipcRenderer.invoke('sync:status'),
+  },
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
   },

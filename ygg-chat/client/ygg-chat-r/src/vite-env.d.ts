@@ -49,6 +49,14 @@ interface ElectronAPI {
   theme: {
     update: (isDark: boolean) => Promise<void>
   }
+  sync: {
+    status: () => Promise<{
+      localServerRunning: boolean
+      localServerPort: number | null
+      localServerUrl: string | null
+      localServerError?: string | null
+    }>
+  }
   shell: {
     openPath: (path: string) => Promise<{ success: boolean; error?: string }>
   }

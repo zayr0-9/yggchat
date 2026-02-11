@@ -4,8 +4,7 @@ import { fetchCustomTools, fetchTools, updateToolEnabled } from '../../features/
 // import { selectTools } from '../../features/chats/chatSelectors'
 import { getAllTools } from '../../features/chats/toolDefinitions'
 import { useAppDispatch } from '../../hooks/redux'
-
-const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
+import { localApi } from '../../utils/api'
 
 export const ToolsSettings: React.FC = () => {
   const dispatch = useAppDispatch()
@@ -30,8 +29,8 @@ export const ToolsSettings: React.FC = () => {
     // Tools are now initialized at store creation (store.ts)
     // Only fetch the custom tools directory path for the UI
     if (!isWebMode) {
-      fetch(`${LOCAL_API_BASE}/custom-tools/directory`)
-        .then(res => res.json())
+      localApi
+        .get<{ success?: boolean; directory?: string }>('/custom-tools/directory')
         .then(data => {
           if (data.success && data.directory) {
             setCustomToolsPath(data.directory)
@@ -116,10 +115,7 @@ export const ToolsSettings: React.FC = () => {
   const handleReloadTools = async () => {
     setReloadingTools(true)
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/custom-tools/reload`, {
-        method: 'POST',
-      })
-      const data = await response.json()
+      const data = await localApi.post<{ success?: boolean }>('/custom-tools/reload')
 
       if (data.success) {
         // Refresh the tools list after reload

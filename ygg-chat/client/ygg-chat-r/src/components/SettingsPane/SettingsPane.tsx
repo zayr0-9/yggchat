@@ -8,6 +8,7 @@ import type { Conversation } from '../../features/conversations/conversationType
 import { selectSelectedProject } from '../../features/projects'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { useUserSystemPrompts } from '../../hooks/useUserSystemPrompts'
+import { localApi } from '../../utils/api'
 import { extractTextFromPdf } from '../../utils/pdfUtils'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { SendButtonAnimationSettings } from './SendButtonAnimationSettings'
@@ -197,8 +198,9 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const fetchInstalledSkills = useCallback(async () => {
     setSkillsLoading(true)
     try {
-      const response = await fetch('http://127.0.0.1:3002/api/skills')
-      const data = await response.json()
+      const data = await localApi.get<{ success?: boolean; skills?: Array<{ name: string; description: string; enabled: boolean }> }>(
+        '/skills'
+      )
       if (data.success && data.skills) {
         setInstalledSkills(data.skills)
       }
@@ -225,13 +227,9 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     setSkillInstallMessage('Downloading and installing skill...')
 
     try {
-      const response = await fetch('http://127.0.0.1:3002/api/skills/install/url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+      const data = await localApi.post<{ success?: boolean; skillName?: string; error?: string }>('/skills/install/url', {
+        url,
       })
-
-      const data = await response.json()
 
       if (data.success) {
         setSkillInstallStatus('success')
@@ -258,10 +256,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const handleToggleSkill = useCallback(async (skillName: string, currentEnabled: boolean) => {
     const action = currentEnabled ? 'disable' : 'enable'
     try {
-      const response = await fetch(`http://127.0.0.1:3002/api/skills/${encodeURIComponent(skillName)}/${action}`, {
-        method: 'POST',
-      })
-      const data = await response.json()
+      const data = await localApi.post<{ success?: boolean }>(`/skills/${encodeURIComponent(skillName)}/${action}`)
       if (data.success) {
         // Update local state
         setInstalledSkills(prev => prev.map(s =>
@@ -278,10 +273,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     if (!confirm(`Are you sure you want to uninstall "${skillName}"?`)) return
 
     try {
-      const response = await fetch(`http://127.0.0.1:3002/api/skills/${encodeURIComponent(skillName)}`, {
-        method: 'DELETE',
-      })
-      const data = await response.json()
+      const data = await localApi.delete<{ success?: boolean }>(`/skills/${encodeURIComponent(skillName)}`)
       if (data.success) {
         // Remove from local state
         setInstalledSkills(prev => prev.filter(s => s.name !== skillName))
@@ -295,8 +287,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const fetchMcpServers = useCallback(async () => {
     setMcpLoading(true)
     try {
-      const response = await fetch('http://127.0.0.1:3002/api/mcp/servers')
-      const data = await response.json()
+      const data = await localApi.get<{ success?: boolean; servers?: typeof mcpServers }>('/mcp/servers')
       if (data.success && data.servers) {
         setMcpServers(data.servers)
       }
@@ -309,8 +300,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
 
   const fetchMcpSettings = useCallback(async () => {
     try {
-      const response = await fetch('http://127.0.0.1:3002/api/mcp/settings')
-      const data = await response.json()
+      const data = await localApi.get<{ success?: boolean; settings?: { lazyStart?: boolean } }>('/mcp/settings')
       if (data.success && data.settings) {
         setMcpLazyStart(Boolean(data.settings.lazyStart))
       }
@@ -331,10 +321,9 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const handleToggleMcpServer = useCallback(async (serverName: string, currentStatus: string) => {
     const action = currentStatus === 'connected' ? 'stop' : 'start'
     try {
-      const response = await fetch(`http://127.0.0.1:3002/api/mcp/servers/${encodeURIComponent(serverName)}/${action}`, {
-        method: 'POST',
-      })
-      const data = await response.json()
+      const data = await localApi.post<{ success?: boolean; error?: string }>(
+        `/mcp/servers/${encodeURIComponent(serverName)}/${action}`
+      )
       if (data.success) {
         setMcpActionStatus({ type: 'success', message: `Server ${action}ed successfully` })
         fetchMcpServers()
@@ -342,7 +331,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
         if (action === 'start') {
           setTimeout(async () => {
             // First refresh with orchestrator (backend registers tools)
-            await fetch('http://127.0.0.1:3002/api/mcp/refresh-tools', { method: 'POST' })
+            await localApi.post('/mcp/refresh-tools')
             // Then refresh Redux state (frontend gets tool definitions)
             dispatch(fetchMcpTools())
           }, 1000) // Small delay to let server fully connect
@@ -363,10 +352,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     if (!confirm(`Are you sure you want to remove "${serverName}"?`)) return
 
     try {
-      const response = await fetch(`http://127.0.0.1:3002/api/mcp/servers/${encodeURIComponent(serverName)}`, {
-        method: 'DELETE',
-      })
-      const data = await response.json()
+      const data = await localApi.delete<{ success?: boolean }>(`/mcp/servers/${encodeURIComponent(serverName)}`)
       if (data.success) {
         setMcpServers(prev => prev.filter(s => s.name !== serverName))
         setMcpActionStatus({ type: 'success', message: 'Server removed' })
@@ -389,12 +375,12 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     }
 
     try {
-      const response = await fetch('http://127.0.0.1:3002/api/mcp/servers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, command, args, enabled: true }),
+      const data = await localApi.post<{ success?: boolean; error?: string }>('/mcp/servers', {
+        name,
+        command,
+        args,
+        enabled: true,
       })
-      const data = await response.json()
       if (data.success) {
         setMcpActionStatus({ type: 'success', message: `Server "${name}" added` })
         setNewServerName('')
@@ -404,7 +390,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
         fetchMcpServers()
         // Refresh MCP tools after adding server (backend auto-registers, then update Redux)
         setTimeout(async () => {
-          await fetch('http://127.0.0.1:3002/api/mcp/refresh-tools', { method: 'POST' })
+          await localApi.post('/mcp/refresh-tools')
           dispatch(fetchMcpTools())
         }, 1500)
         setTimeout(() => setMcpActionStatus(null), 3000)
@@ -419,8 +405,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const handleRefreshMcpTools = useCallback(async () => {
     setMcpRefreshing(true)
     try {
-      const response = await fetch('http://127.0.0.1:3002/api/mcp/refresh-tools', { method: 'POST' })
-      const data = await response.json()
+      const data = await localApi.post<{ success?: boolean; error?: string }>('/mcp/refresh-tools')
       if (data.success) {
         dispatch(fetchMcpTools())
         fetchMcpServers()
@@ -440,12 +425,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     const nextValue = !mcpLazyStart
     setMcpLazyStart(nextValue)
     try {
-      const response = await fetch('http://127.0.0.1:3002/api/mcp/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lazyStart: nextValue }),
-      })
-      const data = await response.json()
+      const data = await localApi.put<{ success?: boolean; error?: string }>('/mcp/settings', { lazyStart: nextValue })
       if (data.success) {
         setMcpActionStatus({
           type: 'success',

@@ -22,6 +22,14 @@ let compactMode = false
 let savedBounds: Electron.Rectangle | null = null
 let serverProcess: ChildProcess | null = null
 let localServerStarted = false
+let localServerPort: number | null = null
+let localServerUrl: string | null = null
+let localServerError: string | null = null
+
+const LOCAL_SERVER_PREFERRED_PORT = 3002
+const LOCAL_SERVER_FALLBACK_PORTS = Array.from({ length: 13 }, (_, index) => LOCAL_SERVER_PREFERRED_PORT + 1 + index)
+const LOCAL_SERVER_HOST = '127.0.0.1'
+const LOCAL_SERVER_ALLOW_EPHEMERAL_PORT = true
 const activeReadStreams = new Map<
   string,
   {
@@ -615,15 +623,31 @@ app.whenReady().then(async () => {
     // await startServer()
     // console.log('[Electron] Server started, starting local sync server...')
 
-    // Start local SQLite server for dual-sync (port 3002)
+    // Start local SQLite server for dual-sync (prefer 3002, fallback to other local ports)
     try {
       const localDbPath = path.join(app.getPath('userData'), 'local-sync.db')
-      await startLocalServer(3002, localDbPath)
+      const localServerInfo = await startLocalServer({
+        preferredPort: LOCAL_SERVER_PREFERRED_PORT,
+        fallbackPorts: LOCAL_SERVER_FALLBACK_PORTS,
+        host: LOCAL_SERVER_HOST,
+        allowEphemeralPort: LOCAL_SERVER_ALLOW_EPHEMERAL_PORT,
+        dbPath: localDbPath,
+      })
       localServerStarted = true
-      // console.log('[Electron] Local sync server started on port 3002')
-    } catch (localServerError) {
-      console.warn('[Electron] Failed to start local sync server:', localServerError)
+      localServerPort = localServerInfo.port
+      localServerUrl = localServerInfo.url
+      localServerError = null
+      console.log(`[Electron] Local sync server started on ${localServerInfo.url}`)
+    } catch (localServerStartError) {
+      console.warn('[Electron] Failed to start local sync server:', localServerStartError)
       console.warn('[Electron] Continuing without local sync - data will not be synced locally')
+      localServerStarted = false
+      localServerPort = null
+      localServerUrl = null
+      localServerError =
+        localServerStartError instanceof Error
+          ? localServerStartError.message
+          : `Failed to start local server: ${localServerStartError}`
     }
 
     // console.log('[Electron] Creating window...')
@@ -652,6 +676,9 @@ app.on('window-all-closed', () => {
     console.log('[Electron] Stopping local sync server...')
     stopLocalServer().catch(err => console.error('[Electron] Error stopping local server:', err))
     localServerStarted = false
+    localServerPort = null
+    localServerUrl = null
+    localServerError = null
   }
 
   if (process.platform !== 'darwin') {
@@ -677,6 +704,9 @@ app.on('before-quit', () => {
   if (localServerStarted) {
     stopLocalServer().catch(err => console.error('[Electron] Error stopping local server on quit:', err))
     localServerStarted = false
+    localServerPort = null
+    localServerUrl = null
+    localServerError = null
   }
 
   if (tray) {
@@ -1469,8 +1499,9 @@ ipcMain.handle('auth:openOAuthWindow', async (_event, url: string) => {
 ipcMain.handle('sync:status', async () => {
   return {
     localServerRunning: localServerStarted,
-    localServerPort: 3002,
-    localServerUrl: 'http://127.0.0.1:3002',
+    localServerPort,
+    localServerUrl,
+    localServerError,
   }
 })
 

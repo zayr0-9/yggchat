@@ -2,7 +2,7 @@
 // Manages syncing Railway server responses to local SQLite database in Electron mode
 
 import { v4 as uuidv4 } from 'uuid'
-import { environment } from '../../utils/api'
+import { buildLocalApiUrl, environment, getCachedLocalApiBase } from '../../utils/api'
 
 // Types for sync operations
 export interface SyncOperation {
@@ -32,7 +32,6 @@ export interface DualSyncStatus {
   errors: Array<{ id: string; type: string; error: string; timestamp: number }>
 }
 
-const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 1000
 const MAX_ERROR_LOG = 50
@@ -56,7 +55,7 @@ class DualSyncManager {
   // Check if local server is available
   private async checkLocalServer(): Promise<boolean> {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/health`, {
+      const response = await fetch(await buildLocalApiUrl('/health'), {
         method: 'GET',
         signal: AbortSignal.timeout(2000),
       })
@@ -70,7 +69,7 @@ class DualSyncManager {
         this.enabled = false
       }
     } catch (error) {
-      console.warn('[DualSync] Local server not available:', error)
+      console.warn(`[DualSync] Local server not available at ${getCachedLocalApiBase()}:`, error)
       this.localServerAvailable = false
       this.enabled = false
     }
@@ -245,7 +244,7 @@ class DualSyncManager {
         throw new Error(`Unknown operation type: ${operation.type}`)
     }
 
-    const response = await fetch(`${LOCAL_API_BASE}${endpoint}`, {
+    const response = await fetch(await buildLocalApiUrl(endpoint), {
       method,
       headers: {
         'Content-Type': 'application/json',
@@ -361,7 +360,7 @@ class DualSyncManager {
     }
 
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/sync/batch`, {
+      const response = await fetch(await buildLocalApiUrl('/sync/batch'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -401,7 +400,7 @@ class DualSyncManager {
     }
 
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/sync/stats`, {
+      const response = await fetch(await buildLocalApiUrl('/sync/stats'), {
         signal: AbortSignal.timeout(2000),
       })
       if (response.ok) {
@@ -420,7 +419,7 @@ class DualSyncManager {
     }
 
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/sync/conversation/${conversationId}`, {
+      const response = await fetch(await buildLocalApiUrl(`/sync/conversation/${conversationId}`), {
         method: 'GET',
         signal: AbortSignal.timeout(2000),
       })
@@ -440,7 +439,7 @@ class DualSyncManager {
     if (!this.enabled) return false
 
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/sync/project/${projectId}`, {
+      const response = await fetch(await buildLocalApiUrl(`/sync/project/${projectId}`), {
         method: 'GET',
         signal: AbortSignal.timeout(2000),
       })

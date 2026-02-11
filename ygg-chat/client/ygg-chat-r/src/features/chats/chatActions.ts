@@ -6,7 +6,16 @@ import { getDefaultUserSystemPromptFromCache } from '../../hooks/useQueries'
 import { dualSync } from '../../lib/sync/dualSyncManager'
 import type { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
-import { API_BASE, apiCall, createStreamingRequest, environment, localApi, shouldUseLocalApi } from '../../utils/api'
+import {
+  API_BASE,
+  apiCall,
+  buildLocalApiUrl,
+  createStreamingRequest,
+  environment,
+  getCachedLocalApiBase,
+  localApi,
+  shouldUseLocalApi,
+} from '../../utils/api'
 import { convContextSet, systemPromptSet } from '../conversations/conversationSlice'
 import type { Conversation } from '../conversations/conversationTypes'
 import { selectSelectedProject } from '../projects/projectSelectors'
@@ -43,8 +52,6 @@ import {
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
 
-// Local API base for tool execution
-const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
 // Remote API base for syncing from cloud (Railway)
 const REMOTE_API_BASE = import.meta.env.VITE_API_URL || 'https://webdrasil-production.up.railway.app/api'
 // Tools that should not prompt for user permission before execution.
@@ -534,7 +541,7 @@ export const resolveAttachmentUrl = (
     const fp = filePath.replace(/\\/g, '/')
     // Check if it's an absolute path (not a relative server path)
     if (isAbsoluteLocalPath(fp)) {
-      return `http://127.0.0.1:3002/api/local/attachments/${attachmentId}/file`
+      return `${getCachedLocalApiBase()}/local/attachments/${attachmentId}/file`
     }
   }
 
@@ -726,7 +733,7 @@ const executeBrowseWebLocally = async (
   timeoutMs: number
 ) => {
   try {
-    const response = await fetch(`${LOCAL_API_BASE}/tools/execute`, {
+    const response = await fetch(await buildLocalApiUrl('/tools/execute'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1659,7 +1666,7 @@ export const submitToolAsJob = async (
   }
 ) => {
   try {
-    const response = await fetch(`${LOCAL_API_BASE}/jobs`, {
+    const response = await fetch(await buildLocalApiUrl('/jobs'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1710,7 +1717,7 @@ export const executeToolAsJobAndWait = async (
   }
 ) => {
   try {
-    const response = await fetch(`${LOCAL_API_BASE}/jobs/execute-and-wait`, {
+    const response = await fetch(await buildLocalApiUrl('/jobs/execute-and-wait'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1985,7 +1992,7 @@ export const sendMessage = createAsyncThunk<
       const isElectronMode =
         import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
       // For local tool execution support (GemTools), we prefer client mode even in web environment
-      // This allows the client to intercept tool calls and execute them via the local server (3002)
+      // This allows the client to intercept tool calls and execute them via the discovered local server endpoint.
       const executionMode = 'client'
 
       let currentTurnHistory = [...currentPathMessages]
@@ -6367,7 +6374,7 @@ export const fetchCustomTools = createAsyncThunk<void, void, { state: RootState 
     }
 
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/custom-tools`)
+      const response = await fetch(await buildLocalApiUrl('/custom-tools'))
       if (!response.ok) {
         console.warn('[CustomTools] Failed to fetch custom tools:', response.statusText)
         return
@@ -6394,7 +6401,7 @@ export const reloadCustomTools = createAsyncThunk<{ success: boolean; count: num
   async (_, { dispatch }) => {
     try {
       // Tell the server to reload tools from disk
-      const reloadResponse = await fetch(`${LOCAL_API_BASE}/custom-tools/reload`, {
+      const reloadResponse = await fetch(await buildLocalApiUrl('/custom-tools/reload'), {
         method: 'POST',
       })
 
@@ -6443,12 +6450,12 @@ export const fetchMcpTools = createAsyncThunk<void, void, { state: RootState }>(
 
     try {
       try {
-        await fetch(`${LOCAL_API_BASE}/mcp/refresh-tools`, { method: 'POST' })
+        await fetch(await buildLocalApiUrl('/mcp/refresh-tools'), { method: 'POST' })
       } catch {
         // Ignore refresh errors; we'll still try to read tools
       }
 
-      const response = await fetch(`${LOCAL_API_BASE}/mcp/tools`)
+      const response = await fetch(await buildLocalApiUrl('/mcp/tools'))
       if (!response.ok) {
         console.warn('[McpTools] Failed to fetch MCP tools:', response.statusText)
         return
@@ -6660,7 +6667,7 @@ export const sendCCMessage = createAsyncThunk<
       if (forkSession !== undefined) requestBody.forkSession = forkSession
 
       // CC always routes to local server (no auth needed)
-      const response = await fetch(`${LOCAL_API_BASE}/agents/cc-messages/${conversationId}`, {
+      const response = await fetch(await buildLocalApiUrl(`/agents/cc-messages/${conversationId}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
@@ -6864,7 +6871,7 @@ export const sendCCBranch = createAsyncThunk<
       if (forkSession !== undefined) requestBody.forkSession = forkSession
 
       // CC always routes to local server (no auth needed)
-      const response = await fetch(`${LOCAL_API_BASE}/agents/cc-messages-branch/${conversationId}`, {
+      const response = await fetch(await buildLocalApiUrl(`/agents/cc-messages-branch/${conversationId}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),

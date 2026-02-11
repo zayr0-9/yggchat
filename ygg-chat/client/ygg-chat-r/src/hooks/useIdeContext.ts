@@ -17,6 +17,7 @@ import {
   updateWorkspace,
 } from '../features/ideContext'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { buildLocalWebSocketUrl, refreshLocalServerStatus } from '../utils/api'
 
 // Global WebSocket connection shared across all hook instances
 let globalWebSocket: WebSocket | null = null
@@ -146,7 +147,7 @@ export function useIdeContext(): UseIdeContextReturn {
     }
   }
 
-  const connect = () => {
+  const connect = async () => {
     // Prevent multiple simultaneous connection attempts
     if (isConnecting || (globalWebSocket && globalWebSocket.readyState === WebSocket.CONNECTING)) {
       return
@@ -165,10 +166,12 @@ export function useIdeContext(): UseIdeContextReturn {
       const wsHost = apiBase.replace(/^https?:\/\//, '').replace(/\/api$/, '')
       let websocketUrl = `${wsProtocol}://${wsHost}/ide-context?type=frontend&id=ygg-chat`
 
-      // In Electron, use the local sync server (port 3002) which handles IDE context
+      // In Electron, discover the local sync server endpoint via IPC.
       if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
-        websocketUrl = 'ws://localhost:3002/ide-context?type=frontend&id=ygg-chat'
-        // console.log('[useIdeContext] Electron mode detected, using local server:', websocketUrl)
+        await refreshLocalServerStatus().catch(() => {
+          // Best-effort refresh; URL builder has a safe fallback.
+        })
+        websocketUrl = await buildLocalWebSocketUrl('/ide-context?type=frontend&id=ygg-chat')
       }
 
       globalWebSocket = new WebSocket(websocketUrl)
@@ -384,7 +387,7 @@ export function useIdeContext(): UseIdeContextReturn {
           const delay = Math.min(1000 * Math.pow(2, connectionAttempts), 30000)
           reconnectTimeout.current = setTimeout(() => {
             connectionAttempts++
-            connect()
+            void connect()
           }, delay)
         } else {
           console.warn('⚠️ Max reconnection attempts reached, giving up')
@@ -412,7 +415,7 @@ export function useIdeContext(): UseIdeContextReturn {
   useEffect(() => {
     // Only connect if not already connected or connecting
     if (!globalWebSocket || globalWebSocket.readyState === WebSocket.CLOSED) {
-      connect()
+      void connect()
     } else if (globalWebSocket.readyState === WebSocket.OPEN) {
       // Connection already exists - request context to sync state after refresh
 

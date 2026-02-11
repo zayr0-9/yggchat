@@ -9,6 +9,7 @@
  *
  * This service is independent of React lifecycle and maintains its own state.
  */
+import { buildCachedLocalWebSocketUrl, buildLocalApiUrl, refreshLocalServerStatus } from '../utils/api'
 
 // Types mirrored from server (electron/tools/orchestrator/types.ts)
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
@@ -96,9 +97,6 @@ export interface OrchestratorStats {
 type JobEventListener = (event: JobEvent) => void
 type JobsChangeListener = (jobs: JobSummary[]) => void
 
-const LOCAL_API_BASE = 'http://127.0.0.1:3002/api'
-const WS_URL = 'ws://127.0.0.1:3002/ide-context?type=frontend&id=job-manager'
-
 class ToolJobManager {
   private static instance: ToolJobManager | null = null
 
@@ -146,11 +144,15 @@ class ToolJobManager {
     this.initializing = true
 
     try {
+      await refreshLocalServerStatus().catch(() => {
+        // Best-effort cache refresh; requests still fallback if discovery fails.
+      })
+
       // Load initial jobs from server
       await this.refreshJobs()
 
       // Connect WebSocket for real-time updates
-      this.connectWebSocket()
+      await this.connectWebSocket()
 
       this.initialized = true
     } catch (error) {
@@ -163,13 +165,17 @@ class ToolJobManager {
   /**
    * Connect to WebSocket for real-time job events
    */
-  private connectWebSocket(): void {
+  private async connectWebSocket(): Promise<void> {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return
     }
 
     try {
-      this.ws = new WebSocket(WS_URL)
+      await refreshLocalServerStatus().catch(() => {
+        // Best-effort cache refresh; requests still fallback if discovery fails.
+      })
+      const wsUrl = buildCachedLocalWebSocketUrl('/ide-context?type=frontend&id=job-manager')
+      this.ws = new WebSocket(wsUrl)
 
       this.ws.onopen = () => {
         this.wsConnected = true
@@ -220,7 +226,7 @@ class ToolJobManager {
 
     this.wsReconnectTimer = window.setTimeout(() => {
       this.wsReconnectTimer = null
-      this.connectWebSocket()
+      void this.connectWebSocket()
     }, delay)
   }
 
@@ -275,7 +281,8 @@ class ToolJobManager {
       if (filter?.orderBy) params.set('orderBy', filter.orderBy)
       if (filter?.orderDir) params.set('orderDir', filter.orderDir)
 
-      const url = `${LOCAL_API_BASE}/jobs${params.toString() ? '?' + params.toString() : ''}`
+      const endpoint = `/jobs${params.toString() ? '?' + params.toString() : ''}`
+      const url = await buildLocalApiUrl(endpoint)
       const response = await fetch(url)
       const data = await response.json()
 
@@ -300,7 +307,7 @@ class ToolJobManager {
    */
   async submitJob(toolName: string, args: Record<string, any>, options?: JobOptions): Promise<Job> {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/jobs`, {
+      const response = await fetch(await buildLocalApiUrl('/jobs'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ toolName, args, options }),
@@ -339,7 +346,7 @@ class ToolJobManager {
    */
   async getJob(jobId: string): Promise<Job | null> {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/jobs/${jobId}`)
+      const response = await fetch(await buildLocalApiUrl(`/jobs/${jobId}`))
       const data = await response.json()
 
       if (data.success && data.job) {
@@ -362,7 +369,7 @@ class ToolJobManager {
    */
   async cancelJob(jobId: string): Promise<boolean> {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/jobs/${jobId}/cancel`, {
+      const response = await fetch(await buildLocalApiUrl(`/jobs/${jobId}/cancel`), {
         method: 'POST',
       })
 
@@ -379,7 +386,7 @@ class ToolJobManager {
    */
   async getStats(): Promise<OrchestratorStats> {
     try {
-      const response = await fetch(`${LOCAL_API_BASE}/jobs/stats`)
+      const response = await fetch(await buildLocalApiUrl('/jobs/stats'))
       const data = await response.json()
 
       if (data.success && data.stats) {

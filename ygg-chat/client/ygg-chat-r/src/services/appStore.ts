@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase'
 import { getSessionFromStorage } from '../lib/jwtUtils'
-import { apiCall, environment, localApi, LOCAL_API_BASE } from '../utils/api'
+import { apiCall, buildLocalApiUrl, environment, localApi } from '../utils/api'
 
 const APP_STORE_BUCKET = 'updates'
 const APP_STORE_ROOT = 'apps'
@@ -298,7 +298,7 @@ export async function validateCommunityAppUpload(file: File): Promise<CommunityA
   }
 
   const buffer = await file.arrayBuffer()
-  const response = await fetch(`${LOCAL_API_BASE}/app-store/validate-upload`, {
+  const response = await fetch(await buildLocalApiUrl('/app-store/validate-upload'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/zip',
@@ -328,7 +328,7 @@ export async function uploadCommunityApp(file: File): Promise<AppStoreApp> {
   }
 
   const buffer = await file.arrayBuffer()
-  const response = await fetch(`${LOCAL_API_BASE}/app-store/community/upload`, {
+  const response = await fetch(await buildLocalApiUrl('/app-store/community/upload'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
