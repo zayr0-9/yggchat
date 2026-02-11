@@ -201,7 +201,13 @@ async function extractZipBufferToDirectory(
 // Built-in tool handler type
 type BuiltInToolHandler = (
   args: any,
-  options: { rootPath?: string; operationMode?: 'plan' | 'execute' }
+  options: {
+    rootPath?: string
+    operationMode?: 'plan' | 'execute'
+    conversationId?: string | null
+    messageId?: string | null
+    streamId?: string | null
+  }
 ) => Promise<ToolResult>
 
 // Registry for built-in tools (initialized in setupServer)
@@ -407,8 +413,15 @@ function initializeBuiltInToolRegistry() {
     }
   })
 
-  builtInTools.set('custom_tool_manager', async args => {
-    return await executeCustomToolManager(args)
+  builtInTools.set('custom_tool_manager', async (args, options) => {
+    return await executeCustomToolManager(args, {
+      rootPath: options?.rootPath,
+      operationMode: options?.operationMode,
+      conversationId: options?.conversationId ?? null,
+      messageId: options?.messageId ?? null,
+      streamId: options?.streamId ?? null,
+      cwd: options?.rootPath,
+    })
   })
 
   builtInTools.set('mcp_manager', async args => {
@@ -3015,12 +3028,18 @@ function setupServer() {
   // Tool Execution Endpoint (uses built-in and custom tool registries)
   app.post('/api/tools/execute', async (req, res) => {
     try {
-      const { toolName, args, rootPath, operationMode } = req.body
+      const { toolName, args, rootPath, operationMode, conversationId, messageId, streamId } = req.body
       const normalizedToolName = typeof toolName === 'string' ? toolName.trim() : toolName
       // console.log(`[LocalServer] Executing tool: ${toolName} (operationMode: ${operationMode || 'execute'})`)
 
       const parsedArgs = typeof args === 'string' ? JSON.parse(args) : args
-      const toolOptions = { rootPath, operationMode: operationMode as 'plan' | 'execute' | undefined }
+      const toolOptions = {
+        rootPath,
+        operationMode: operationMode as 'plan' | 'execute' | undefined,
+        conversationId: conversationId ?? null,
+        messageId: messageId ?? null,
+        streamId: streamId ?? null,
+      }
 
       let result: ToolResult
 

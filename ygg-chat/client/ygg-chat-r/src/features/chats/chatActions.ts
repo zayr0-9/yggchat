@@ -56,7 +56,38 @@ import {
 const REMOTE_API_BASE = import.meta.env.VITE_API_URL || 'https://webdrasil-production.up.railway.app/api'
 // Tools that should not prompt for user permission before execution.
 // Server-executed tools (e.g., brave_search) are already excluded upstream.
-const TOOL_PERMISSION_BYPASS = new Set(['custom_tool_manager', 'skill_manager', 'mcp_manager'])
+const TOOL_PERMISSION_ALWAYS_BYPASS = new Set(['skill_manager', 'mcp_manager'])
+const CUSTOM_TOOL_MANAGER_BYPASS_ACTIONS = new Set(['list', 'get', 'enable', 'disable', 'add', 'remove', 'reload', 'settings'])
+
+const getToolCallArgsObject = (toolCall: any): Record<string, any> | null => {
+  const rawArgs = toolCall?.arguments
+  if (rawArgs && typeof rawArgs === 'object' && !Array.isArray(rawArgs)) {
+    return rawArgs as Record<string, any>
+  }
+  if (typeof rawArgs === 'string') {
+    try {
+      const parsed = JSON.parse(rawArgs)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, any>
+      }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+const shouldBypassToolPermission = (toolCall: any): boolean => {
+  const toolName = typeof toolCall?.name === 'string' ? toolCall.name : ''
+  if (!toolName) return false
+  if (TOOL_PERMISSION_ALWAYS_BYPASS.has(toolName)) return true
+  if (toolName !== 'custom_tool_manager') return false
+
+  const args = getToolCallArgsObject(toolCall)
+  const action = typeof args?.action === 'string' ? args.action.trim().toLowerCase() : ''
+  if (!action) return false
+  return action !== 'invoke' && CUSTOM_TOOL_MANAGER_BYPASS_ACTIONS.has(action)
+}
 
 /**
  * Creates a Message object for tool results to be used in LM Studio conversation history.
@@ -1776,7 +1807,7 @@ const executeToolWithPermissionCheck = async (
     getState,
   }
 
-  if (toolCall?.name && TOOL_PERMISSION_BYPASS.has(toolCall.name)) {
+  if (shouldBypassToolPermission(toolCall)) {
     return await executeLocalTool(toolCall, rootPath, operationMode, extendedContext)
   }
 

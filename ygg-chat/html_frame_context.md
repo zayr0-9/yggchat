@@ -34,7 +34,7 @@ At app startup and on manual reload:
 - Each valid tool is registered with the custom tool registry.
 - The client fetches definitions via `GET /api/custom-tools` and merges them into tool definitions.
 
-Custom tools are **not** sent to the model directly. The model discovers them via `custom_tool_manager` (built-in tool), then calls the custom tool by name.
+Custom tools are **not** sent to the model directly. The model discovers them via `custom_tool_manager` (built-in tool) and executes them via `custom_tool_manager` with `action: "invoke"`.
 
 
 ## 3) Tool definition shape (custom)
@@ -74,6 +74,8 @@ return { success: true, type: "text/html", content: "<html>...</html>" }
 ```
 
 The renderer expects HTML to be **trusted only as input**, and it still re-sanitizes before rendering.
+
+When HTML is returned through `custom_tool_manager` invoke, the manager stamps `toolName` on HTML-shaped responses if missing. This preserves iframe permission mapping for `appPermissions`.
 
 
 ## 5) Rendering paths (two paths)

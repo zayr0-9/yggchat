@@ -522,15 +522,15 @@ const builtInToolDefinitions: ToolDefinition[] = [
     name: 'custom_tool_manager',
     enabled: true,
     description:
-      'Manage custom tools on demand. Actions: list/get definitions, enable/disable tools, add/remove tools, reload definitions, and configure auto-refresh watcher settings.',
+      'Manage and invoke custom tools on demand. Actions: list/get definitions, invoke a custom tool by name, enable/disable tools, add/remove tools, reload definitions, and configure auto-refresh watcher settings.',
     inputSchema: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['list', 'get', 'enable', 'disable', 'add', 'remove', 'reload', 'settings'],
+          enum: ['list', 'get', 'invoke', 'enable', 'disable', 'add', 'remove', 'reload', 'settings'],
           description:
-            'Action to perform: "list" and "get" discover tools, "enable"/"disable" toggle availability, "add"/"remove" manage tool folders, "reload" re-scan tools, and "settings" gets/updates auto-refresh watcher settings.',
+            'Action to perform: "list" and "get" discover tools, "invoke" executes a custom tool, "enable"/"disable" toggle availability, "add"/"remove" manage tool folders, "reload" re-scan tools, and "settings" gets/updates auto-refresh watcher settings.',
         },
         names: {
           type: 'array',
@@ -540,7 +540,13 @@ const builtInToolDefinitions: ToolDefinition[] = [
         },
         name: {
           type: 'string',
-          description: 'Tool name for "enable", "disable", or "remove" actions.',
+          description: 'Tool name for "invoke", "enable", "disable", or "remove" actions.',
+        },
+        args: {
+          type: 'object',
+          description:
+            'For "invoke" action: argument object to pass to the target custom tool. Must match that tool\'s inputSchema.',
+          default: {},
         },
         sourcePath: {
           type: 'string',

@@ -18,6 +18,16 @@ custom-tools/
 - `name` must be lowercase with underscores: `my_tool`, not `MyTool`
 - Use `inputSchema` (camelCase), not `input_schema`
 
+## How Models Invoke Custom Tools
+
+Models should use `custom_tool_manager` for both discovery and execution:
+
+1. `custom_tool_manager({ "action": "list" })`
+2. `custom_tool_manager({ "action": "get", "names": ["my_tool"] })`
+3. `custom_tool_manager({ "action": "invoke", "name": "my_tool", "args": { ... } })`
+
+Direct calls to undeclared custom tool names are not the expected path.
+
 ---
 
 ## File 1: definition.json
