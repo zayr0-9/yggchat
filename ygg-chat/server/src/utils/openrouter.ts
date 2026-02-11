@@ -178,6 +178,8 @@ interface ModelPricing {
 let allModelsPricingCache: Map<string, ModelPricing> = new Map()
 let lastFetchTime = 0
 const PRICING_CACHE_DURATION = 60 * 60 * 1000 // 1 hour in milliseconds
+const OPENROUTER_HTTP_REFERER = process.env.OPENROUTER_REFERER || process.env.SITE_URL || 'https://yggchat.com'
+const OPENROUTER_X_TITLE = process.env.OPENROUTER_TITLE || 'Yggdrasil'
 
 async function getOpenRouterClient() {
   if (!openrouterInstance) {
@@ -194,8 +196,8 @@ async function getOpenRouterClient() {
     openrouterApiKey = apiKey
     openrouterInstance = new OpenRouter({
       apiKey,
-      httpReferer: 'https://yggchat.com',
-      xTitle: 'Yggdrasil',
+      httpReferer: OPENROUTER_HTTP_REFERER,
+      xTitle: OPENROUTER_X_TITLE,
     })
   }
   if (!openrouterInstance) throw new Error('Failed to initialize OpenRouter client')
@@ -212,8 +214,8 @@ async function fetchAllModelsPricing(): Promise<void> {
     const response = await fetch('https://openrouter.ai/api/v1/models', {
       headers: {
         Authorization: `Bearer ${openrouterApiKey}`,
-        'HTTP-Referer': process.env.OPENROUTER_REFERER || process.env.SITE_URL || '',
-        'X-Title': process.env.OPENROUTER_TITLE || 'Yggdrasil',
+        'HTTP-Referer': OPENROUTER_HTTP_REFERER,
+        'X-Title': OPENROUTER_X_TITLE,
       },
     })
 
@@ -1085,8 +1087,7 @@ export async function generateResponse(
       // 2. Tools are defined (which might trigger tool calls that require thought_signature)
       // The SDK's Zod validation strips reasoning_details, so we must bypass it for Gemini models with tools
       const needsRawGeminiStream =
-        isGeminiModelRequiringReasoningDetails(model) &&
-        (hasReasoningDetails(formattedMessages) || hasTools)
+        isGeminiModelRequiringReasoningDetails(model) && (hasReasoningDetails(formattedMessages) || hasTools)
 
       if (needsRawGeminiStream) {
         const hasExistingDetails = hasReasoningDetails(formattedMessages)
@@ -1333,7 +1334,13 @@ export async function generateResponse(
           modalities: modalities?.outputModalities,
           ...(effectiveReasoningConfig && { reasoning: effectiveReasoningConfig }),
         } as any,
-        { signal: abortSignal }
+        {
+          signal: abortSignal,
+          headers: {
+            'HTTP-Referer': OPENROUTER_HTTP_REFERER,
+            'X-Title': OPENROUTER_X_TITLE,
+          },
+        }
       )
 
       let toolCalls: Array<{ id: string; name: string; arguments: string }> = []
@@ -1912,6 +1919,10 @@ export async function generateResponse(
             } as any,
             {
               signal: abortSignal,
+              headers: {
+                'HTTP-Referer': OPENROUTER_HTTP_REFERER,
+                'X-Title': OPENROUTER_X_TITLE,
+              },
             }
           )
 
