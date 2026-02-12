@@ -6346,17 +6346,27 @@ export const abortGeneration = createAsyncThunk<
   { streamId?: string | null; messageId?: MessageId | null },
   { state: RootState }
 >('chat/abortGeneration', async ({ streamId, messageId }, { dispatch }) => {
-  abortGenerationControllers(streamId)
   abortSubagentControllers(streamId)
+
+  if (messageId) {
+    try {
+      const response = await dispatch(abortStreaming({ messageId, streamId })).unwrap()
+      if (response?.success) {
+        // Keep the stream reader alive so the server can still emit the final
+        // aborted completion payload (partial content + tool calls).
+        return
+      }
+    } catch {
+      // Fall through to hard local abort when server abort is unavailable/failed.
+    }
+  }
+
+  abortGenerationControllers(streamId)
 
   if (streamId) {
     dispatch(chatSliceActions.streamingAborted({ streamId }))
   } else {
     dispatch(chatSliceActions.allStreamsAborted())
-  }
-
-  if (messageId) {
-    dispatch(abortStreaming({ messageId, streamId }))
   }
 })
 

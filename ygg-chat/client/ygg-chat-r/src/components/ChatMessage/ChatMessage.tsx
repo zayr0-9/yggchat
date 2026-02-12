@@ -65,6 +65,7 @@ interface ChatMessageProps {
   modelName?: string
   className?: string
   artifacts?: string[]
+  showInlineActions?: boolean
   // Font size offset in pixels: positive increases, negative decreases all fonts uniformly
   fontSizeOffset?: number
 }
@@ -880,6 +881,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     modelName,
     className,
     artifacts = [],
+    showInlineActions = true,
     fontSizeOffset = 0,
   }) => {
     const dispatch = useAppDispatch()
@@ -2622,7 +2624,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           </div>
         )}
         {/* Actions row (at bottom) */}
-        {hasContent && role === 'user' && (
+        {hasContent && role === 'user' && showInlineActions && (
           <div className='flex items-center justify-end'>
             <div ref={moreButtonRef} className='relative'>
               <MessageActions

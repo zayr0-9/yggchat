@@ -3,6 +3,7 @@ import { Button } from '../Button/button'
 
 interface UpdateInfo {
   version: string
+  releaseNotes?: string | Array<{ note?: string }>
 }
 
 interface DownloadProgress {
@@ -84,6 +85,26 @@ export const UpdateModal: React.FC = () => {
 
   if (!isOpen) return null
 
+  const normalizedReleaseNotes = (() => {
+    const raw = updateInfo?.releaseNotes
+    if (!raw) return []
+
+    if (typeof raw === 'string') {
+      return raw
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+    }
+
+    if (Array.isArray(raw)) {
+      return raw
+        .map(item => item?.note?.trim())
+        .filter((note): note is string => Boolean(note))
+    }
+
+    return []
+  })()
+
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -110,6 +131,20 @@ export const UpdateModal: React.FC = () => {
               Version <span className='font-semibold text-green-600 dark:text-green-400'>{updateInfo.version}</span>{' '}
               {isDownloading ? 'is downloading' : 'is ready to install'}
             </p>
+          )}
+
+          {normalizedReleaseNotes.length > 0 && (
+            <div className='w-full mb-4 rounded-lg border border-neutral-200 dark:border-neutral-700 p-3 text-left'>
+              <p className='text-xs uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-2'>What&apos;s new</p>
+              <ul className='space-y-1 text-sm text-neutral-700 dark:text-neutral-200'>
+                {normalizedReleaseNotes.slice(0, 8).map((note, index) => (
+                  <li key={`${index}-${note.slice(0, 24)}`} className='flex gap-2'>
+                    <span className='text-green-500 mt-[2px]'>•</span>
+                    <span>{note}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {/* Download progress bar */}

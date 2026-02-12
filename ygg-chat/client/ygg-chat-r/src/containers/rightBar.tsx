@@ -10,7 +10,7 @@ import { updateResearchNote } from '../features/conversations/conversationAction
 import { makeSelectConversationById } from '../features/conversations/conversationSelectors'
 import { Conversation } from '../features/conversations/conversationTypes'
 import { uiActions } from '../features/ui'
-import { loadAgentSettings } from '../helpers/agentSettingsStorage'
+import { AGENT_SETTINGS_CHANGE_EVENT, AgentSettings, loadAgentSettings } from '../helpers/agentSettingsStorage'
 import { useAuth } from '../hooks/useAuth'
 import { clearGlobalAgentOptimisticMessage, setGlobalAgentOptimisticMessage } from '../hooks/useGlobalAgentCache'
 import {
@@ -21,7 +21,7 @@ import {
   useGlobalAgentOptimisticMessage,
   useGlobalAgentStreamBuffer,
 } from '../hooks/useQueries'
-import { globalAgentLoop, GlobalAgentState } from '../services'
+import { globalAgentLoop, GlobalAgentSchedulePreset, GlobalAgentState, GlobalAgentTaskSchedule } from '../services'
 import type { RootState } from '../store/store'
 
 interface RightBarProps {
@@ -31,6 +31,40 @@ interface RightBarProps {
   className?: string
   ccCwd?: string
   onFilePathInsert?: (path: string) => void
+}
+
+type ScheduleIntervalUnit = 'seconds' | 'minutes' | 'hours'
+
+type AgentScheduleDraft = {
+  preset: GlobalAgentSchedulePreset
+  repeatCount: number
+  intervalValue: number
+  intervalUnit: ScheduleIntervalUnit
+  startDate: string
+  endDate: string
+  allowedWeekdays: number[]
+}
+
+const ALL_WEEKDAYS: number[] = [0, 1, 2, 3, 4, 5, 6]
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+const PRESET_CONFIGS: Array<{
+  key: GlobalAgentSchedulePreset
+  label: string
+  intervalValue: number
+  intervalUnit: ScheduleIntervalUnit
+}> = [
+  { key: 'hourly', label: 'Every Hour', intervalValue: 1, intervalUnit: 'hours' },
+  { key: 'every_4_hours', label: 'Every 4 Hours', intervalValue: 4, intervalUnit: 'hours' },
+  { key: 'every_6_hours', label: 'Every 6 Hours', intervalValue: 6, intervalUnit: 'hours' },
+  { key: 'daily', label: 'Every Day', intervalValue: 24, intervalUnit: 'hours' },
+]
+
+const intervalUnitToMs = (value: number, unit: ScheduleIntervalUnit): number => {
+  const safeValue = Number.isFinite(value) ? Math.max(1, Math.floor(value)) : 1
+  if (unit === 'hours') return safeValue * 60 * 60 * 1000
+  if (unit === 'minutes') return safeValue * 60 * 1000
+  return safeValue * 1000
 }
 
 const RightBar: React.FC<RightBarProps> = ({
@@ -74,7 +108,19 @@ const RightBar: React.FC<RightBarProps> = ({
   // Global agent state
   const [agentState, setAgentState] = useState<GlobalAgentState>(globalAgentLoop.getState())
   const [agentSettingsName, setAgentSettingsName] = useState<string>('Global Agent')
+  const [agentWorkDirectory, setAgentWorkDirectory] = useState<string | null>(null)
   const [agentInput, setAgentInput] = useState<string>('')
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
+  const [scheduleEnabled, setScheduleEnabled] = useState(false)
+  const [scheduleDraft, setScheduleDraft] = useState<AgentScheduleDraft>({
+    preset: 'hourly',
+    repeatCount: 1,
+    intervalValue: 1,
+    intervalUnit: 'hours',
+    startDate: '',
+    endDate: '',
+    allowedWeekdays: [...ALL_WEEKDAYS],
+  })
 
   // Use React Query hooks for agent messages
   const { data: agentData } = useGlobalAgentMessages()
@@ -204,10 +250,19 @@ const RightBar: React.FC<RightBarProps> = ({
       .then(settings => {
         if (!mounted) return
         setAgentSettingsName(settings.agentName || 'Global Agent')
+        setAgentWorkDirectory(settings.workDirectory || null)
       })
       .catch(error => {
         console.error('Failed to load agent settings:', error)
       })
+
+    const handleAgentSettingsChange = (event: CustomEvent<AgentSettings>) => {
+      if (!mounted) return
+      setAgentSettingsName(event.detail.agentName || 'Global Agent')
+      setAgentWorkDirectory(event.detail.workDirectory || null)
+    }
+
+    window.addEventListener(AGENT_SETTINGS_CHANGE_EVENT, handleAgentSettingsChange as EventListener)
 
     // Subscribe to agent state changes only
     // Stream and message events now update React Query cache directly in GlobalAgentLoop
@@ -222,6 +277,7 @@ const RightBar: React.FC<RightBarProps> = ({
 
     return () => {
       mounted = false
+      window.removeEventListener(AGENT_SETTINGS_CHANGE_EVENT, handleAgentSettingsChange as EventListener)
       unsubscribe()
     }
   }, [])
@@ -376,29 +432,109 @@ const RightBar: React.FC<RightBarProps> = ({
     }
   }
 
+  const scheduleSummary = useMemo(() => {
+    if (!scheduleEnabled) return 'Schedule: Off'
+    const repeats = Math.max(1, Math.floor(scheduleDraft.repeatCount || 1))
+    const every = Math.max(1, Math.floor(scheduleDraft.intervalValue || 1))
+    const unitLabel =
+      scheduleDraft.intervalUnit === 'hours'
+        ? every === 1
+          ? 'hour'
+          : 'hours'
+        : scheduleDraft.intervalUnit === 'minutes'
+          ? every === 1
+            ? 'minute'
+            : 'minutes'
+          : every === 1
+            ? 'second'
+            : 'seconds'
+    const weekdaySummary =
+      scheduleDraft.allowedWeekdays.length === 7
+        ? 'all days'
+        : scheduleDraft.allowedWeekdays
+            .slice()
+            .sort((a, b) => a - b)
+            .map(day => WEEKDAY_LABELS[day])
+            .join(', ')
+    const rangeLabel =
+      scheduleDraft.startDate || scheduleDraft.endDate
+        ? ` | ${scheduleDraft.startDate || 'any'} -> ${scheduleDraft.endDate || 'any'}`
+        : ''
+    return `${repeats} run${repeats > 1 ? 's' : ''}, every ${every} ${unitLabel}, ${weekdaySummary}${rangeLabel}`
+  }, [scheduleDraft, scheduleEnabled])
+
+  const handlePresetSelect = (presetKey: GlobalAgentSchedulePreset) => {
+    if (presetKey === 'custom') {
+      setScheduleDraft(prev => ({ ...prev, preset: 'custom' }))
+      return
+    }
+    const preset = PRESET_CONFIGS.find(item => item.key === presetKey)
+    if (!preset) return
+    setScheduleDraft(prev => ({
+      ...prev,
+      preset: preset.key,
+      intervalValue: preset.intervalValue,
+      intervalUnit: preset.intervalUnit,
+    }))
+  }
+
+  const toggleScheduleWeekday = (day: number) => {
+    setScheduleDraft(prev => {
+      const exists = prev.allowedWeekdays.includes(day)
+      const nextDays = exists ? prev.allowedWeekdays.filter(value => value !== day) : [...prev.allowedWeekdays, day]
+      return {
+        ...prev,
+        allowedWeekdays: nextDays.length > 0 ? nextDays : [day],
+      }
+    })
+  }
+
+  const buildScheduleConfig = useCallback((): GlobalAgentTaskSchedule | undefined => {
+    if (!scheduleEnabled) return undefined
+    const repeatCount = Math.max(1, Math.floor(scheduleDraft.repeatCount || 1))
+    const intervalValue = Math.max(1, Math.floor(scheduleDraft.intervalValue || 1))
+    return {
+      repeatCount,
+      intervalMs: intervalUnitToMs(intervalValue, scheduleDraft.intervalUnit),
+      preset: scheduleDraft.preset,
+      startDate: scheduleDraft.startDate || null,
+      endDate: scheduleDraft.endDate || null,
+      allowedWeekdays: scheduleDraft.allowedWeekdays,
+    }
+  }, [scheduleDraft, scheduleEnabled])
+
   const handleAgentSend = async () => {
     if (isWeb) return
     const trimmed = agentInput.trim()
     if (!trimmed) return
 
-    try {
-      // Create optimistic message for instant UI feedback
-      const optimisticUserMessage = {
-        id: `temp-${Date.now()}`,
-        role: 'user',
-        content: trimmed,
-        created_at: new Date().toISOString(),
-        _optimistic: true, // Flag for styling
-      }
+    const scheduleConfig = buildScheduleConfig()
 
-      // Add to cache immediately for instant UI update
-      setGlobalAgentOptimisticMessage(queryClient, optimisticUserMessage)
+    try {
+      if (!scheduleConfig) {
+        // Create optimistic message for instant UI feedback
+        const optimisticUserMessage = {
+          id: `temp-${Date.now()}`,
+          role: 'user',
+          content: trimmed,
+          created_at: new Date().toISOString(),
+          _optimistic: true, // Flag for styling
+        }
+
+        // Add to cache immediately for instant UI update
+        setGlobalAgentOptimisticMessage(queryClient, optimisticUserMessage)
+      } else {
+        clearGlobalAgentOptimisticMessage(queryClient)
+      }
 
       // Clear input
       setAgentInput('')
 
       // Enqueue task (async) - GlobalAgentLoop will clear optimistic message when real message is persisted
-      await globalAgentLoop.enqueueTask(trimmed)
+      await globalAgentLoop.enqueueTask(trimmed, undefined, undefined, scheduleConfig)
+
+      // Reset schedule toggle after a successful send
+      setScheduleEnabled(false)
     } catch (error) {
       console.error('Failed to enqueue agent task:', error)
       // Clear optimistic message on error
@@ -642,53 +778,71 @@ const RightBar: React.FC<RightBarProps> = ({
             </>
           ) : activeTab === 'global' ? (
             <div className='flex flex-col h-full'>
-              <div className='flex items-center justify-between mb-2 gap-2'>
-                <div className='flex flex-col'>
-                  <span className='text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-[0.2em]'>
-                    {agentConversationDate ? `${agentSettingsName} - ${agentConversationDate}` : agentSettingsName}
-                  </span>
-                  <span className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>
-                    Status: {agentState.status}
-                  </span>
+              <div className='mb-2 flex flex-col gap-2'>
+                <div className='flex items-start justify-between gap-2'>
+                  <div className='flex flex-col flex-1 min-w-0'>
+                    <span className='text-xs text-neutral-500 dark:text-neutral-400 uppercase tracking-[0.2em] truncate'>
+                      {agentConversationDate ? `${agentSettingsName} - ${agentConversationDate}` : agentSettingsName}
+                    </span>
+                    <span className='text-sm font-semibold text-neutral-800 dark:text-neutral-100 truncate'>
+                      Status: {agentState.status}
+                    </span>
+                  </div>
+                  <div className='flex gap-1 flex-shrink-0 flex-wrap justify-end'>
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => globalAgentLoop.start()}
+                      disabled={isWeb}
+                      className='text-xs'
+                      aria-label='Start'
+                      title='Start'
+                    >
+                      🟢
+                    </Button>
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => globalAgentLoop.pause()}
+                      disabled={isWeb}
+                      className='text-xs'
+                      aria-label='Pause'
+                      title='Pause'
+                    >
+                      🟡
+                    </Button>
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => globalAgentLoop.startNewSession()}
+                      disabled={isWeb}
+                      className='text-xs'
+                      aria-label='New Session'
+                      title='New Session'
+                    >
+                      🔵
+                    </Button>
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => globalAgentLoop.stop()}
+                      disabled={isWeb}
+                      className='text-xs'
+                      aria-label='Stop'
+                      title='Stop'
+                    >
+                      🔴
+                    </Button>
+                  </div>
                 </div>
-                <div className='flex gap-1'>
-                  <Button
-                    variant='outline2'
-                    size='small'
-                    onClick={() => globalAgentLoop.start()}
-                    disabled={isWeb}
-                    className='text-xs'
+                {agentWorkDirectory && (
+                  <span
+                    className='text-[11px] text-neutral-500 dark:text-neutral-400 truncate'
+                    title={agentWorkDirectory}
                   >
-                    Start
-                  </Button>
-                  <Button
-                    variant='outline2'
-                    size='small'
-                    onClick={() => globalAgentLoop.pause()}
-                    disabled={isWeb}
-                    className='text-xs'
-                  >
-                    Pause
-                  </Button>
-                  <Button
-                    variant='outline2'
-                    size='small'
-                    onClick={() => globalAgentLoop.startNewSession()}
-                    disabled={isWeb}
-                    className='text-xs'
-                  >
-                    New Session
-                  </Button>
-                  <Button
-                    variant='outline2'
-                    size='small'
-                    onClick={() => globalAgentLoop.stop()}
-                    disabled={isWeb}
-                    className='text-xs'
-                  >
-                    Stop
-                  </Button>
-                </div>
+                    cwd: {agentWorkDirectory}
+                  </span>
+                )}
               </div>
 
               <div className='flex-1 overflow-y-auto no-scrollbar space-y-2 pr-1'>
@@ -709,6 +863,7 @@ const RightBar: React.FC<RightBarProps> = ({
                     timestamp={message.created_at}
                     width='w-full'
                     colored={false}
+                    showInlineActions={false}
                     modelName={message.model_name}
                     onOpenToolHtmlModal={openToolHtmlModal}
                   />
@@ -724,6 +879,7 @@ const RightBar: React.FC<RightBarProps> = ({
                     timestamp={optimisticMessage.created_at}
                     width='w-full'
                     colored={false}
+                    showInlineActions={false}
                     className='opacity-70' // Visual feedback for optimistic state
                     onOpenToolHtmlModal={openToolHtmlModal}
                   />
@@ -738,6 +894,7 @@ const RightBar: React.FC<RightBarProps> = ({
                     contentBlocks={[{ type: 'text', index: 0, content: agentStreamBuffer }]}
                     width='w-full'
                     colored={false}
+                    showInlineActions={false}
                     onOpenToolHtmlModal={openToolHtmlModal}
                   />
                 )}
@@ -753,6 +910,14 @@ const RightBar: React.FC<RightBarProps> = ({
                   maxRows={4}
                 />
                 <div className='flex items-center gap-2'>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => setScheduleModalOpen(true)}
+                    className={scheduleEnabled ? 'border-sky-500 text-sky-100 bg-sky-600 hover:bg-sky-700' : ''}
+                  >
+                    Schedule
+                  </Button>
                   <Button variant='outline2' size='small' onClick={handleAgentSend}>
                     Send
                   </Button>
@@ -771,6 +936,7 @@ const RightBar: React.FC<RightBarProps> = ({
                     Stop
                   </Button>
                 </div>
+                <span className='text-[11px] text-neutral-500 dark:text-neutral-400'>{scheduleSummary}</span>
               </div>
             </div>
           ) : (
@@ -798,6 +964,203 @@ const RightBar: React.FC<RightBarProps> = ({
           )}
         </div>
       </div>
+      {scheduleModalOpen && !isCollapsed && activeTab === 'global' && (
+        <div className='absolute mb-15 inset-0 z-50 flex items-end bg-black/30 p-2'>
+          <div className='w-full max-h-full overflow-y-auto no-scrollbar rounded-xl border border-stone-300 bg-stone-50 p-3 shadow-xl dark:border-stone-700 dark:bg-zinc-900'>
+            <div className='mb-2 flex items-center justify-between'>
+              <p className='text-sm font-semibold text-stone-900 dark:text-stone-100'>Schedule Task</p>
+              <button
+                onClick={() => setScheduleModalOpen(false)}
+                className='rounded p-1 text-stone-500 transition-colors hover:bg-stone-200 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-zinc-800 dark:hover:text-stone-100'
+                title='Close'
+              >
+                <i className='bx bx-x text-lg' />
+              </button>
+            </div>
+
+            <div className='mb-3 flex items-center justify-between rounded-lg border border-stone-200 px-3 py-2 dark:border-stone-700'>
+              <div>
+                <p className='text-sm font-medium text-stone-900 dark:text-stone-100'>Enable Schedule</p>
+                <p className='text-xs text-stone-500 dark:text-stone-400'>
+                  Send once now, then repeat based on this plan.
+                </p>
+              </div>
+              <button
+                onClick={() => setScheduleEnabled(prev => !prev)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  scheduleEnabled ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    scheduleEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className='grid grid-cols-2 gap-2 mb-3'>
+              <label className='flex flex-col gap-1'>
+                <span className='text-xs text-stone-600 dark:text-stone-300'>Repeat Count</span>
+                <input
+                  type='number'
+                  min={1}
+                  step={1}
+                  value={scheduleDraft.repeatCount}
+                  onChange={e =>
+                    setScheduleDraft(prev => ({
+                      ...prev,
+                      repeatCount: Math.max(1, Number(e.target.value) || 1),
+                    }))
+                  }
+                  className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
+                />
+              </label>
+              <label className='flex flex-col gap-1'>
+                <span className='text-xs text-stone-600 dark:text-stone-300'>Every (number)</span>
+                <input
+                  type='number'
+                  min={1}
+                  step={1}
+                  value={scheduleDraft.intervalValue}
+                  onChange={e =>
+                    setScheduleDraft(prev => ({
+                      ...prev,
+                      preset: 'custom',
+                      intervalValue: Math.max(1, Number(e.target.value) || 1),
+                    }))
+                  }
+                  className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
+                />
+              </label>
+            </div>
+
+            <div className='mb-3 flex gap-2'>
+              <button
+                onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'seconds' }))}
+                className={`rounded-lg border px-2 py-1 text-xs ${
+                  scheduleDraft.intervalUnit === 'seconds'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                    : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                }`}
+              >
+                Seconds
+              </button>
+              <button
+                onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'minutes' }))}
+                className={`rounded-lg border px-2 py-1 text-xs ${
+                  scheduleDraft.intervalUnit === 'minutes'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                    : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                }`}
+              >
+                Minutes
+              </button>
+              <button
+                onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'hours' }))}
+                className={`rounded-lg border px-2 py-1 text-xs ${
+                  scheduleDraft.intervalUnit === 'hours'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                    : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                }`}
+              >
+                Hours
+              </button>
+            </div>
+
+            <div className='mb-3'>
+              <p className='mb-1 text-xs text-stone-600 dark:text-stone-300'>Presets</p>
+              <div className='flex flex-wrap gap-2'>
+                {PRESET_CONFIGS.map(preset => (
+                  <button
+                    key={preset.key}
+                    onClick={() => handlePresetSelect(preset.key)}
+                    className={`rounded-lg border px-2 py-1 text-xs ${
+                      scheduleDraft.preset === preset.key
+                        ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200'
+                        : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => handlePresetSelect('custom')}
+                  className={`rounded-lg border px-2 py-1 text-xs ${
+                    scheduleDraft.preset === 'custom'
+                      ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200'
+                      : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                  }`}
+                >
+                  Custom
+                </button>
+              </div>
+            </div>
+
+            <div className='mb-3 grid grid-cols-2 gap-2'>
+              <label className='flex flex-col gap-1'>
+                <span className='text-xs text-stone-600 dark:text-stone-300'>Start Date</span>
+                <input
+                  type='date'
+                  value={scheduleDraft.startDate}
+                  onChange={e => setScheduleDraft(prev => ({ ...prev, startDate: e.target.value }))}
+                  className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
+                />
+              </label>
+              <label className='flex flex-col gap-1'>
+                <span className='text-xs text-stone-600 dark:text-stone-300'>End Date</span>
+                <input
+                  type='date'
+                  value={scheduleDraft.endDate}
+                  onChange={e => setScheduleDraft(prev => ({ ...prev, endDate: e.target.value }))}
+                  className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
+                />
+              </label>
+            </div>
+
+            <div className='mb-3'>
+              <p className='mb-1 text-xs text-stone-600 dark:text-stone-300'>Allowed Weekdays</p>
+              <div className='flex flex-wrap gap-1'>
+                {WEEKDAY_LABELS.map((label, index) => {
+                  const selected = scheduleDraft.allowedWeekdays.includes(index)
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => toggleScheduleWeekday(index)}
+                      className={`rounded-md border px-2 py-1 text-[11px] ${
+                        selected
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                          : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className='flex items-center justify-between'>
+              <span className='text-[11px] text-stone-500 dark:text-stone-400'>{scheduleSummary}</span>
+              <div className='flex gap-2'>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={() => {
+                    setScheduleEnabled(false)
+                    setScheduleModalOpen(false)
+                  }}
+                >
+                  Disable
+                </Button>
+                <Button variant='outline2' size='small' onClick={() => setScheduleModalOpen(false)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

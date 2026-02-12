@@ -43,6 +43,28 @@ export type GlobalAgentEvent =
   | { type: 'message'; data: GlobalAgentMessageEvent }
   | { type: 'error'; error: string }
 
+export type GlobalAgentSchedulePreset = 'custom' | 'hourly' | 'every_4_hours' | 'every_6_hours' | 'daily'
+
+export type GlobalAgentTaskSchedule = {
+  repeatCount: number
+  intervalMs: number
+  preset: GlobalAgentSchedulePreset
+  startDate?: string | null
+  endDate?: string | null
+  allowedWeekdays?: number[]
+}
+
+type ScheduledTaskMeta = {
+  runAt: string
+  sequence: number
+  total: number
+  intervalMs: number
+  preset: GlobalAgentSchedulePreset
+  startDate: string | null
+  endDate: string | null
+  allowedWeekdays: number[]
+}
+
 class GlobalAgentLoop {
   private static instance: GlobalAgentLoop | null = null
   private initialized = false
@@ -217,6 +239,7 @@ class GlobalAgentLoop {
       user_id: this.userId,
       project_id: this.systemProjectId,
       title: this.settings?.agentName || 'Global Agent',
+      cwd: this.getConfiguredWorkDirectory(),
       storage_mode: 'local',
     })
 
@@ -240,13 +263,168 @@ class GlobalAgentLoop {
     this.emit({ type: 'state', state: { ...this.state } })
   }
 
-  async enqueueTask(description: string, payload?: any, source?: string): Promise<void> {
-    await localApi.post('/agent/tasks', { description, payload, source })
+  async enqueueTask(description: string, payload?: any, source?: string, schedule?: GlobalAgentTaskSchedule): Promise<void> {
+    if (schedule) {
+      await this.enqueueScheduledTasks(description, payload, source, schedule)
+    } else {
+      await localApi.post('/agent/tasks', { description, payload, source })
+    }
     await this.runTick()
   }
 
   getState(): GlobalAgentState {
     return { ...this.state }
+  }
+
+  private getConfiguredWorkDirectory(): string | null {
+    const value = this.settings?.workDirectory
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+  }
+
+  private normalizeWeekdays(input?: number[]): number[] {
+    if (!Array.isArray(input)) {
+      return [0, 1, 2, 3, 4, 5, 6]
+    }
+    const unique = Array.from(
+      new Set(
+        input
+          .map(value => Math.floor(value))
+          .filter(value => Number.isFinite(value) && value >= 0 && value <= 6)
+      )
+    )
+    return unique.length > 0 ? unique.sort((a, b) => a - b) : [0, 1, 2, 3, 4, 5, 6]
+  }
+
+  private parseDateBoundary(value: string | null | undefined, endOfDay: boolean): Date | null {
+    if (typeof value !== 'string' || value.trim().length === 0) return null
+    const parsed = new Date(`${value}${endOfDay ? 'T23:59:59.999' : 'T00:00:00.000'}`)
+    if (Number.isNaN(parsed.getTime())) return null
+    return parsed
+  }
+
+  private computeScheduledRunTimes(schedule: GlobalAgentTaskSchedule): Date[] {
+    const repeatCount = Math.max(1, Math.min(500, Math.floor(schedule.repeatCount || 1)))
+    const intervalMs = Math.max(1000, Math.floor(schedule.intervalMs || 1000))
+    const allowedWeekdays = this.normalizeWeekdays(schedule.allowedWeekdays)
+    const startBoundary = this.parseDateBoundary(schedule.startDate, false)
+    const endBoundary = this.parseDateBoundary(schedule.endDate, true)
+
+    if (startBoundary && endBoundary && startBoundary.getTime() > endBoundary.getTime()) {
+      return []
+    }
+
+    const results: Date[] = []
+    let candidate = new Date()
+    const maxIterations = repeatCount * 128
+    let iterations = 0
+
+    while (results.length < repeatCount && iterations < maxIterations) {
+      if (startBoundary && candidate.getTime() < startBoundary.getTime()) {
+        candidate = new Date(startBoundary.getTime())
+      }
+      if (endBoundary && candidate.getTime() > endBoundary.getTime()) {
+        break
+      }
+
+      if (allowedWeekdays.includes(candidate.getDay())) {
+        results.push(new Date(candidate.getTime()))
+      }
+
+      candidate = new Date(candidate.getTime() + intervalMs)
+      iterations += 1
+    }
+
+    return results
+  }
+
+  private buildScheduledTaskPayload(payload: any, scheduleMeta: ScheduledTaskMeta): any {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return {
+        ...payload,
+        __globalSchedule: scheduleMeta,
+      }
+    }
+    if (payload === undefined) {
+      return { __globalSchedule: scheduleMeta }
+    }
+    return {
+      value: payload,
+      __globalSchedule: scheduleMeta,
+    }
+  }
+
+  private parseTaskPayload(task: any): any {
+    const raw = task?.payload
+    if (!raw) return null
+    if (typeof raw === 'object') return raw
+    if (typeof raw !== 'string') return null
+    try {
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
+  }
+
+  private getTaskRunAt(task: any): number | null {
+    const payload = this.parseTaskPayload(task)
+    const runAt = payload?.__globalSchedule?.runAt
+    if (typeof runAt !== 'string' || runAt.trim().length === 0) return null
+    const timestamp = Date.parse(runAt)
+    return Number.isNaN(timestamp) ? null : timestamp
+  }
+
+  private async enqueueScheduledTasks(
+    description: string,
+    payload: any,
+    source: string | undefined,
+    schedule: GlobalAgentTaskSchedule
+  ): Promise<void> {
+    const runTimes = this.computeScheduledRunTimes(schedule)
+    if (runTimes.length === 0) {
+      throw new Error('Schedule does not produce any valid run times.')
+    }
+
+    const now = Date.now()
+    const repeatCount = Math.max(1, Math.min(500, Math.floor(schedule.repeatCount || 1)))
+    const intervalMs = Math.max(1000, Math.floor(schedule.intervalMs || 1000))
+    const normalizedWeekdays = this.normalizeWeekdays(schedule.allowedWeekdays)
+
+    for (let i = 0; i < runTimes.length; i += 1) {
+      const runAt = runTimes[i]
+      const scheduleMeta: ScheduledTaskMeta = {
+        runAt: runAt.toISOString(),
+        sequence: i + 1,
+        total: repeatCount,
+        intervalMs,
+        preset: schedule.preset,
+        startDate: schedule.startDate ?? null,
+        endDate: schedule.endDate ?? null,
+        allowedWeekdays: normalizedWeekdays,
+      }
+      const taskPayload = this.buildScheduledTaskPayload(payload, scheduleMeta)
+      const status = runAt.getTime() <= now ? 'pending' : 'scheduled'
+      await localApi.post('/agent/tasks', {
+        description,
+        payload: taskPayload,
+        source,
+        status,
+      })
+    }
+  }
+
+  private async promoteDueScheduledTasks(nowMs: number): Promise<void> {
+    const scheduledTasksResponse = await localApi.get<{ success: boolean; tasks: any[] }>('/agent/tasks?status=scheduled')
+    const scheduledTasks = scheduledTasksResponse?.tasks || []
+    if (scheduledTasks.length === 0) return
+
+    for (const task of scheduledTasks) {
+      const runAt = this.getTaskRunAt(task)
+      if (runAt === null || runAt <= nowMs) {
+        await localApi.patch(`/agent/tasks/${task.id}`, { status: 'pending' })
+      }
+    }
   }
 
   private async ensureSystemProjectAndSession(): Promise<void> {
@@ -268,6 +446,7 @@ class GlobalAgentLoop {
         user_id: this.userId,
         project_id: systemProject.id,
         title: this.settings?.agentName || 'Global Agent',
+        cwd: this.getConfiguredWorkDirectory(),
         storage_mode: 'local',
       })
 
@@ -309,12 +488,15 @@ class GlobalAgentLoop {
 
     try {
       await this.refreshSettings()
+      const now = new Date()
 
       // System project/session bootstrap is needed only when missing.
       // Avoid re-checking /local/projects on every tick.
       if (!this.systemProjectId || !this.state.conversationId) {
         await this.ensureSystemProjectAndSession()
       }
+
+      await this.promoteDueScheduledTasks(now.getTime())
 
       const pendingTasksResponse = await localApi.get<{ success: boolean; tasks: any[] }>('/agent/tasks?status=pending')
       let pendingTasks = pendingTasksResponse?.tasks || []
@@ -338,7 +520,6 @@ class GlobalAgentLoop {
         pendingTasks = pendingTasks.slice(0, maxQueue)
       }
 
-      const now = new Date()
       const heartbeatDue = this.shouldRunHeartbeat(now)
 
       if (pendingTasks.length === 0 && !heartbeatDue) {
@@ -460,6 +641,7 @@ class GlobalAgentLoop {
       user_id: this.userId,
       project_id: this.systemProjectId,
       title: this.settings?.agentName || 'Global Agent',
+      cwd: this.getConfiguredWorkDirectory(),
       storage_mode: 'local',
     })
 
@@ -493,9 +675,13 @@ class GlobalAgentLoop {
       tool_call_id: msg.tool_call_id || undefined,
     }))
 
-    const systemPrompt = this.settings?.agentName
+    const configuredWorkDirectory = this.getConfiguredWorkDirectory()
+    const baseSystemPrompt = this.settings?.agentName
       ? `You are the global agent "${this.settings.agentName}". Execute the queued task carefully.`
       : 'You are the global agent. Execute the queued task carefully.'
+    const systemPrompt = configuredWorkDirectory
+      ? `${baseSystemPrompt}\n\nCurrent working directory: ${configuredWorkDirectory}`
+      : baseSystemPrompt
 
     const toolAllowlist = this.settings?.toolAllowlist ?? null
     const baseTools = getToolsForAI()
@@ -743,7 +929,7 @@ class GlobalAgentLoop {
             continue
           }
 
-          const result = await executeLocalTool(toolCall, null, 'execute', {
+          const result = await executeLocalTool(toolCall, configuredWorkDirectory, 'execute', {
             conversationId,
             messageId: assistantMessageId,
             streamId,

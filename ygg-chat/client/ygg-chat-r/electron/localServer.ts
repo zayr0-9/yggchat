@@ -629,12 +629,14 @@ function initializeLocalDatabase(dbPath: string) {
       loop_interval_ms INTEGER,
       auto_resume INTEGER,
       tool_allowlist TEXT,
+      work_directory TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
 
-  db.exec(`INSERT OR IGNORE INTO agent_settings (id, heartbeat_time, agent_name, model, model_context_length, loop_interval_ms, auto_resume, tool_allowlist)
-           VALUES (1, NULL, 'Global Agent', NULL, NULL, 60000, 1, NULL)`)
+  // Keep bootstrap insert schema-agnostic for legacy DBs.
+  // Column backfills are handled below via ALTER TABLE migrations.
+  db.exec(`INSERT OR IGNORE INTO agent_settings (id) VALUES (1)`)
 
   // Ensure new columns exist if older DB is present
   try {
@@ -657,6 +659,9 @@ function initializeLocalDatabase(dbPath: string) {
     }
     if (!columnNames.has('tool_allowlist')) {
       db.exec(`ALTER TABLE agent_settings ADD COLUMN tool_allowlist TEXT`)
+    }
+    if (!columnNames.has('work_directory')) {
+      db.exec(`ALTER TABLE agent_settings ADD COLUMN work_directory TEXT`)
     }
   } catch (error) {
     console.warn('[LocalServer] Failed to migrate agent_settings table:', error)
@@ -864,11 +869,11 @@ function initializeLocalDatabase(dbPath: string) {
 
     // Agent Settings
     getAgentSettings: db.prepare(
-      'SELECT heartbeat_time, agent_name, model, model_context_length, loop_interval_ms, auto_resume, tool_allowlist, updated_at FROM agent_settings WHERE id = 1'
+      'SELECT heartbeat_time, agent_name, model, model_context_length, loop_interval_ms, auto_resume, tool_allowlist, work_directory, updated_at FROM agent_settings WHERE id = 1'
     ),
     upsertAgentSettings: db.prepare(`
-        INSERT INTO agent_settings (id, heartbeat_time, agent_name, model, model_context_length, loop_interval_ms, auto_resume, tool_allowlist, updated_at)
-        VALUES (1, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO agent_settings (id, heartbeat_time, agent_name, model, model_context_length, loop_interval_ms, auto_resume, tool_allowlist, work_directory, updated_at)
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
           heartbeat_time = excluded.heartbeat_time,
           agent_name = excluded.agent_name,
@@ -877,6 +882,7 @@ function initializeLocalDatabase(dbPath: string) {
           loop_interval_ms = excluded.loop_interval_ms,
           auto_resume = excluded.auto_resume,
           tool_allowlist = excluded.tool_allowlist,
+          work_directory = excluded.work_directory,
           updated_at = CURRENT_TIMESTAMP
       `),
 
@@ -1408,6 +1414,7 @@ function setupServer() {
             loop_interval_ms?: number | null
             auto_resume?: number | null
             tool_allowlist?: string | null
+            work_directory?: string | null
             updated_at?: string
           }
         | undefined
@@ -1428,6 +1435,7 @@ function setupServer() {
         loopIntervalMs: row?.loop_interval_ms ?? null,
         autoResume: row?.auto_resume ?? null,
         toolAllowlist,
+        workDirectory: row?.work_directory ?? null,
         updatedAt: row?.updated_at ?? null,
       })
     } catch (error) {
@@ -1444,7 +1452,7 @@ function setupServer() {
         return
       }
 
-      const { heartbeatTime, agentName, model, modelContextLength, loopIntervalMs, autoResume, toolAllowlist } =
+      const { heartbeatTime, agentName, model, modelContextLength, loopIntervalMs, autoResume, toolAllowlist, workDirectory } =
         req.body as {
           heartbeatTime?: string | null
           agentName?: string | null
@@ -1453,6 +1461,7 @@ function setupServer() {
           loopIntervalMs?: number | null
           autoResume?: boolean | number | null
           toolAllowlist?: string[] | null
+          workDirectory?: string | null
         }
       const normalized =
         typeof heartbeatTime === 'string' && heartbeatTime.trim().length > 0 ? heartbeatTime.trim() : null
@@ -1469,6 +1478,8 @@ function setupServer() {
       const normalizedAutoResume = autoResume === null || autoResume === undefined ? null : autoResume ? 1 : 0
       const normalizedAllowlist =
         Array.isArray(toolAllowlist) && toolAllowlist.length > 0 ? JSON.stringify(toolAllowlist) : null
+      const normalizedWorkDirectory =
+        typeof workDirectory === 'string' && workDirectory.trim().length > 0 ? workDirectory.trim() : null
 
       if (normalized && !/^\d{2}:\d{2}$/.test(normalized)) {
         res.status(400).json({ error: 'heartbeatTime must be in HH:MM format or null' })
@@ -1482,7 +1493,8 @@ function setupServer() {
         normalizedModelContext,
         normalizedLoopInterval,
         normalizedAutoResume,
-        normalizedAllowlist
+        normalizedAllowlist,
+        normalizedWorkDirectory
       )
 
       const row = statements.getAgentSettings.get() as
@@ -1570,12 +1582,14 @@ function setupServer() {
       }
       const {
         description,
+        status = 'pending',
         priority = 'normal',
         source = 'user',
         payload,
         sessionId,
       } = req.body as {
         description?: string
+        status?: string
         priority?: string
         source?: string
         payload?: any
@@ -1590,11 +1604,15 @@ function setupServer() {
       const taskId = uuidv4()
       const now = new Date().toISOString()
       const activeSessionId = sessionId ?? (statements.getAgentState.get() as any)?.session_id ?? null
+      const normalizedStatus =
+        typeof status === 'string' && ['pending', 'scheduled', 'running', 'completed', 'failed'].includes(status)
+          ? status
+          : 'pending'
 
       statements.createAgentTask.run(
         taskId,
         activeSessionId,
-        'pending',
+        normalizedStatus,
         priority,
         source,
         description.trim(),

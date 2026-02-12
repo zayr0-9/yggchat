@@ -98,7 +98,10 @@ const Settings: React.FC = () => {
     loopIntervalMs: 60000,
     autoResume: true,
     toolAllowlist: null,
+    workDirectory: null,
   })
+  const [workDirectoryInput, setWorkDirectoryInput] = useState('')
+  const [workDirectoryTouched, setWorkDirectoryTouched] = useState(false)
   const [loopIntervalInput, setLoopIntervalInput] = useState('60000')
   const [loopIntervalTouched, setLoopIntervalTouched] = useState(false)
   const [agentSettingsLoading, setAgentSettingsLoading] = useState(true)
@@ -277,6 +280,11 @@ const Settings: React.FC = () => {
   }, [agentSettings, agentSettingsLoading, tools])
 
   useEffect(() => {
+    if (workDirectoryTouched) return
+    setWorkDirectoryInput(agentSettings.workDirectory ?? '')
+  }, [agentSettings.workDirectory, workDirectoryTouched])
+
+  useEffect(() => {
     if (loopIntervalTouched) return
     setLoopIntervalInput(String(agentSettings.loopIntervalMs ?? 60000))
   }, [agentSettings.loopIntervalMs, loopIntervalTouched])
@@ -340,6 +348,22 @@ const Settings: React.FC = () => {
   const handleLoopIntervalInputChange = (value: string) => {
     setLoopIntervalInput(value)
     setLoopIntervalTouched(true)
+  }
+
+  const handleWorkDirectoryInputChange = (value: string) => {
+    setWorkDirectoryInput(value)
+    setWorkDirectoryTouched(true)
+  }
+
+  const commitWorkDirectoryChange = async (value: string) => {
+    const nextWorkDirectory = value.trim().length > 0 ? value.trim() : null
+    setWorkDirectoryTouched(false)
+    setWorkDirectoryInput(nextWorkDirectory ?? '')
+    await persistAgentSettings(
+      { ...agentSettings, workDirectory: nextWorkDirectory },
+      nextWorkDirectory ? 'Global agent work directory updated.' : 'Global agent work directory cleared.',
+      'Failed to update global agent work directory.'
+    )
   }
 
   const commitLoopIntervalChange = async (value: string) => {
@@ -683,6 +707,27 @@ const Settings: React.FC = () => {
                 />
                 <p className='text-xs text-stone-500 dark:text-stone-400'>
                   Non-OpenRouter models can be set later. TODO: add provider-aware context limits.
+                </p>
+              </div>
+
+              <div className='flex flex-col gap-2'>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Work Directory</p>
+                <input
+                  type='text'
+                  value={workDirectoryInput}
+                  placeholder='/path/to/project'
+                  onChange={e => handleWorkDirectoryInputChange(e.target.value)}
+                  onBlur={e => commitWorkDirectoryChange(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  disabled={agentSettingsLoading || agentSettingsSaving}
+                  className='w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+                />
+                <p className='text-xs text-stone-500 dark:text-stone-400'>
+                  Used as the working directory root when the global agent runs local tools.
                 </p>
               </div>
 

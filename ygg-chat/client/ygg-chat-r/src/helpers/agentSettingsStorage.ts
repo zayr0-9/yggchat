@@ -10,6 +10,7 @@ export interface AgentSettings {
   loopIntervalMs: number | null
   autoResume: boolean
   toolAllowlist: string[] | null
+  workDirectory: string | null
 }
 
 const DEFAULT_SETTINGS: AgentSettings = {
@@ -20,6 +21,7 @@ const DEFAULT_SETTINGS: AgentSettings = {
   loopIntervalMs: 60000,
   autoResume: true,
   toolAllowlist: null,
+  workDirectory: null,
 }
 
 export async function loadAgentSettings(): Promise<AgentSettings> {
@@ -36,6 +38,7 @@ export async function loadAgentSettings(): Promise<AgentSettings> {
       loopIntervalMs?: number | null
       autoResume?: number | boolean | null
       toolAllowlist?: string[] | null
+      workDirectory?: string | null
       settings?: {
         heartbeat_time?: string | null
         agent_name?: string | null
@@ -44,6 +47,7 @@ export async function loadAgentSettings(): Promise<AgentSettings> {
         loop_interval_ms?: number | null
         auto_resume?: number | null
         tool_allowlist?: string | null
+        work_directory?: string | null
       }
     }>('/agent-settings')
 
@@ -58,8 +62,11 @@ export async function loadAgentSettings(): Promise<AgentSettings> {
     const toolAllowlist =
       response?.toolAllowlist ??
       (response?.settings?.tool_allowlist ? JSON.parse(response.settings.tool_allowlist) : DEFAULT_SETTINGS.toolAllowlist)
+    const workDirectoryRaw = response?.workDirectory ?? response?.settings?.work_directory ?? DEFAULT_SETTINGS.workDirectory
+    const workDirectory =
+      typeof workDirectoryRaw === 'string' && workDirectoryRaw.trim().length > 0 ? workDirectoryRaw.trim() : null
 
-    return { heartbeatTime, agentName, model, modelContextLength, loopIntervalMs, autoResume, toolAllowlist }
+    return { heartbeatTime, agentName, model, modelContextLength, loopIntervalMs, autoResume, toolAllowlist, workDirectory }
   } catch (error) {
     console.error('Failed to load agent settings:', error)
     return { ...DEFAULT_SETTINGS }
@@ -83,6 +90,7 @@ export async function saveAgentSettings(settings: AgentSettings): Promise<AgentS
       loop_interval_ms?: number | null
       auto_resume?: number | null
       tool_allowlist?: string | null
+      work_directory?: string | null
     }
   }>(
     '/agent-settings',
@@ -94,6 +102,10 @@ export async function saveAgentSettings(settings: AgentSettings): Promise<AgentS
       loopIntervalMs: settings.loopIntervalMs ?? null,
       autoResume: settings.autoResume ?? null,
       toolAllowlist: settings.toolAllowlist ?? null,
+      workDirectory:
+        typeof settings.workDirectory === 'string' && settings.workDirectory.trim().length > 0
+          ? settings.workDirectory.trim()
+          : null,
     }
   )
 
@@ -117,6 +129,10 @@ export async function saveAgentSettings(settings: AgentSettings): Promise<AgentS
         }
       }
       return settings.toolAllowlist ?? DEFAULT_SETTINGS.toolAllowlist
+    })(),
+    workDirectory: (() => {
+      const value = response?.settings?.work_directory ?? settings.workDirectory ?? DEFAULT_SETTINGS.workDirectory
+      return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
     })(),
   }
 

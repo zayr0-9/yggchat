@@ -27,11 +27,11 @@ import {
 } from './containers'
 import RightBar from './containers/rightBar'
 import { selectCurrentUser } from './features/users'
+import GlobalAgentBootstrap from './GlobalAgentBootstrap'
 import { useAppSelector } from './hooks/redux'
 import { useIsMobile } from './hooks/useMediaQuery'
 import { useResearchNotes } from './hooks/useQueries'
 import IdeContextBootstrap from './IdeContextBootstrap'
-import GlobalAgentBootstrap from './GlobalAgentBootstrap'
 
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
 // Use BrowserRouter for web (standard HTML5 history API)
@@ -104,8 +104,8 @@ const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
           aria-label={registry.isModalOpen ? 'Close HTML tools' : 'Open HTML tools'}
         >
           <span className='flex items-center gap-2'>
-            <i className='bx bx-window-open text-lg' aria-hidden='true'></i>
-            {registry.isModalOpen ? 'Close Tools' : 'Tools'}
+            {/* <i className='bx bx-window-open text-lg' aria-hidden='true'></i> */}
+            {registry.isModalOpen ? 'Close' : 'Apps'}
           </span>
         </button>
       )}
@@ -125,14 +125,7 @@ const RightBarShell = () => {
   if (match) return null
   const conversationId = null
 
-  return (
-    <RightBar
-      conversationId={conversationId}
-      notes={notes}
-      isLoadingNotes={isLoadingNotes}
-      ccCwd={''}
-    />
-  )
+  return <RightBar conversationId={conversationId} notes={notes} isLoadingNotes={isLoadingNotes} ccCwd={''} />
 }
 
 function AnimatedRoutes() {
