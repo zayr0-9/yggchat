@@ -116,27 +116,30 @@ const MessageActions: React.FC<MessageActionsProps> = ({
   const isMenuLayout = layout === 'menu'
   const showLabels = isMenuLayout
   const containerClassName = isMenuLayout
-    ? 'flex flex-col items-stretch bg-neutral-100/90 dark:bg-neutral-900/90 backdrop-blur-xl border border-neutral-200/70 dark:border-white/[0.08] rounded-2xl p-1 gap-1 shadow-[0_12px_30px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_12px_30px_-10px_rgba(0,0,0,0.55)]'
-    : 'inline-flex items-center bg-neutral-100/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/50 dark:border-white/[0.08] rounded-full p-0 gap-0.5 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.15)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]'
+    ? 'flex flex-col items-stretch bg-neutral-100/90 dark:bg-neutral-900/90 backdrop-blur-xl border border-neutral-200/70 dark:border-white/[0.08] rounded-2xl p-1 gap-1 shadow-[0_12px_14px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_12px_12px_-1px_rgba(0,0,0,0.55)]'
+    : 'inline-flex items-center bg-neutral-100/80 dark:bg-neutral-900/80 backdrop-blur-xl border border-neutral-200/50 dark:border-white/[0.08] rounded-full p-0 gap-0.5 shadow-[0_10px_14px_-10px_rgba(0,0,0,0.15)] dark:shadow-[0_3px_4px_-1px_rgba(0,0,0,0.5)]'
   const baseButtonClassName = isMenuLayout
     ? 'flex items-center gap-2 px-3 py-2 rounded-xl bg-transparent border-none cursor-pointer transition-all duration-200'
     : 'p-2 rounded-full bg-transparent border-none cursor-pointer transition-all duration-200'
 
   return (
     <div
-      className={`${containerClassName} transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${isVisible
-        ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
-        : 'opacity-0 translate-y-2 scale-[0.98] pointer-events-none'
-        }`}
+      className={`${containerClassName} transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${
+        isVisible
+          ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto'
+          : 'opacity-0 translate-y-2 scale-[0.98] pointer-events-none'
+      }`}
     >
       {/* Model ID Badge */}
       {modelName && !isEditing && !isSelectionVariant && (
         <div
-          className={`font-mono text-[10px] text-neutral-500 dark:text-neutral-400 tracking-wider uppercase ${isMenuLayout ? 'px-3 py-2' : 'px-3'
-            } ${isMenuLayout
+          className={`font-mono text-[10px] text-neutral-500 dark:text-neutral-400 tracking-wider uppercase ${
+            isMenuLayout ? 'px-3 py-2' : 'px-3'
+          } ${
+            isMenuLayout
               ? 'border-b border-neutral-200 dark:border-white/[0.08]'
               : 'border-r border-neutral-200 dark:border-white/[0.08]'
-            }`}
+          }`}
         >
           {(() => {
             const displayName = modelName.includes('/') ? modelName.split('/').pop() || modelName : modelName
@@ -173,10 +176,11 @@ const MessageActions: React.FC<MessageActionsProps> = ({
               {onCopySelection && (
                 <button
                   onClick={onCopySelection}
-                  className={`${baseButtonClassName} ${copied
-                    ? 'text-green-500'
-                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
-                    }`}
+                  className={`${baseButtonClassName} ${
+                    copied
+                      ? 'text-green-500'
+                      : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
+                  }`}
                   title={copied ? 'Copied' : 'Copy selection'}
                 >
                   {copied ? (
@@ -255,10 +259,11 @@ const MessageActions: React.FC<MessageActionsProps> = ({
               {/* Copy Button */}
               <button
                 onClick={onCopy}
-                className={`${baseButtonClassName} ${copied
-                  ? 'text-green-500'
-                  : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
-                  }`}
+                className={`${baseButtonClassName} ${
+                  copied
+                    ? 'text-green-500'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-neutral-800 dark:hover:text-neutral-200'
+                }`}
                 title={copied ? 'Copied' : 'Copy Content'}
               >
                 {copied ? (
@@ -1915,10 +1920,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
             {/* Status pip indicator */}
             <div
-              className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${hasResults && hasError
-                ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
-                : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
-                }`}
+              className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
+                hasResults && hasError
+                  ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+                  : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+              }`}
             />
             {/* Tool header */}
             <div className='flex items-center gap-2 mb-3'>
@@ -1946,10 +1952,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
           {/* Status pip indicator - green for success/executing, red for error */}
           <div
-            className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${hasResults && hasError
-              ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
-              : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
-              }`}
+            className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
+              hasResults && hasError
+                ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+                : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+            }`}
           />
 
           {/* Tool header row */}
@@ -1999,8 +2006,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 className='ml-auto flex items-center gap-1 rounded border border-neutral-200 dark:border-neutral-700 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60'
               >
                 <i
-                  className={`bx ${mcpLoadState[`${id}-${group.id}-mcp`] ? 'bx-loader-circle animate-spin' : 'bx-play-circle'
-                    }`}
+                  className={`bx ${
+                    mcpLoadState[`${id}-${group.id}-mcp`] ? 'bx-loader-circle animate-spin' : 'bx-play-circle'
+                  }`}
                 />
                 Load app
               </button>
@@ -2046,10 +2054,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                     return (
                       <div
                         key={resultKey}
-                        className={`border-l-2 pl-4 py-1 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words ${result.is_error
-                          ? 'border-red-400/50 dark:border-red-600/50 text-red-600 dark:text-red-400'
-                          : 'border-neutral-300/50 dark:border-neutral-700/50 text-neutral-500 dark:text-neutral-500'
-                          }`}
+                        className={`border-l-2 pl-4 py-1 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words ${
+                          result.is_error
+                            ? 'border-red-400/50 dark:border-red-600/50 text-red-600 dark:text-red-400'
+                            : 'border-neutral-300/50 dark:border-neutral-700/50 text-neutral-500 dark:text-neutral-500'
+                        }`}
                       >
                         {renderedContent}
                         {!result.is_error && (
@@ -2072,6 +2081,8 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const textContentStyle: React.CSSProperties | undefined =
       fontSizeOffset !== 0 ? { fontSize: `calc(1em + ${fontSizeOffset}px)` } : undefined
     const hasSelection = selectedText.length > 0
+
+    const contextHighlightClass = contextMenuOpen ? 'bg-neutral-200/60 dark:bg-orange-900/10' : ''
 
     const isHiddenStreamSeparator = (event: StreamEvent, index: number): boolean => {
       const groupedTool = streamToolGroupsByIndex.get(index)
@@ -2102,7 +2113,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       <div
         id={`message-${id}`}
         ref={messageRef}
-        className={`group px-0 sm:px-2 md:px-2 mb-0 sm:mb-0 md:mb-0 ${styles.container} ${width} transition-[background-color,opacity] duration-200 rounded-3xl hover:bg-opacity-80  ${className ?? ''}`}
+        className={`group px-0 sm:px-2 md:px-2 mb-0 sm:mb-0 md:mb-0 ${styles.container} ${contextHighlightClass} ${width} transition-[background-color,opacity] duration-200 rounded-md hover:bg-opacity-80 ${className ?? ''}`}
         onContextMenu={handleContextMenu}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
@@ -2111,7 +2122,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       >
         {/* Header with role */}
         {role === 'user' && (
-          <div className='inline-flex items-center gap-2 py-[3px] px-2.5 bg-white/[0.03] border border-white/[0.08] rounded-md mb-3 backdrop-blur cursor-default transition-all duration-200'>
+          <div className='inline-flex mt-8 items-center gap-2 py-[3px] px-2.5 bg-white/[0.03] border border-white/[0.08] rounded-md mb-3 backdrop-blur cursor-default transition-all duration-200'>
             <div className='w-1 h-1 rounded-full bg-neutral-500 shadow-[0_0_8px_rgba(115,115,115,0.4)]'></div>
             <span className='font-mono text-[11px] uppercase tracking-[0.1em] text-neutral-500'>{styles.roleText}</span>
           </div>
@@ -2611,12 +2622,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           </div>
         )}
         {/* Actions row (at bottom) */}
-        {hasContent && (
-          <div className='flex items-center justify-end mt-3 mb-2'>
+        {hasContent && role === 'user' && (
+          <div className='flex items-center justify-end'>
             <div ref={moreButtonRef} className='relative'>
               <MessageActions
-                onEdit={role === 'user' ? handleEdit : handleEdit}
-                onBranch={role === 'user' ? handleBranch : undefined}
+                onEdit={handleEdit}
+                onBranch={handleBranch}
                 onDelete={handleDelete}
                 onCopy={handleCopy}
                 onSave={handleSave}
@@ -2691,7 +2702,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         )}
 
         {role === 'user' && (
-          <div className='h-px w-full bg-gradient-to-r from-transparent via-orange-500/30 to-transparent my-8'></div>
+          <div className='h-px w-full bg-gradient-to-r from-transparent via-orange-500/30 to-transparent mb-8'></div>
         )}
 
         {/* Edit instructions */}
@@ -2729,89 +2740,89 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   onEdit={
                     !hasSelection
                       ? () => {
-                        closeFloatingActions()
-                        handleEdit()
-                      }
+                          closeFloatingActions()
+                          handleEdit()
+                        }
                       : undefined
                   }
                   onBranch={
                     !hasSelection && role === 'user'
                       ? () => {
-                        closeFloatingActions()
-                        handleBranch()
-                      }
+                          closeFloatingActions()
+                          handleBranch()
+                        }
                       : undefined
                   }
                   onDelete={
                     !hasSelection
                       ? () => {
-                        closeFloatingActions()
-                        handleDelete()
-                      }
+                          closeFloatingActions()
+                          handleDelete()
+                        }
                       : undefined
                   }
                   onCopy={
                     !hasSelection
                       ? () => {
-                        handleCopy()
-                        // Don't close on copy to show feedback
-                      }
+                          handleCopy()
+                          // Don't close on copy to show feedback
+                        }
                       : undefined
                   }
                   onCopySelection={
                     hasSelection
                       ? () => {
-                        handleCopySelection()
-                        // Don't close on copy to show feedback
-                      }
+                          handleCopySelection()
+                          // Don't close on copy to show feedback
+                        }
                       : undefined
                   }
                   onExplainSelection={
                     hasSelection && onExplainFromSelection
                       ? (position?: { x: number; y: number }) => {
-                        closeFloatingActions()
-                        handleExplainSelection(position)
-                      }
+                          closeFloatingActions()
+                          handleExplainSelection(position)
+                        }
                       : undefined
                   }
                   onAddToNoteSelection={
                     hasSelection && _onAddToNote
                       ? () => {
-                        closeFloatingActions()
-                        handleAddSelectionToNote()
-                      }
+                          closeFloatingActions()
+                          handleAddSelectionToNote()
+                        }
                       : undefined
                   }
                   onSave={
                     !hasSelection
                       ? () => {
-                        closeFloatingActions()
-                        handleSave()
-                      }
+                          closeFloatingActions()
+                          handleSave()
+                        }
                       : undefined
                   }
                   onSaveBranch={
                     !hasSelection
                       ? () => {
-                        closeFloatingActions()
-                        handleSaveBranch()
-                      }
+                          closeFloatingActions()
+                          handleSaveBranch()
+                        }
                       : undefined
                   }
                   onCancel={
                     !hasSelection
                       ? () => {
-                        closeFloatingActions()
-                        handleCancel()
-                      }
+                          closeFloatingActions()
+                          handleCancel()
+                        }
                       : undefined
                   }
                   onMore={
                     !hasSelection
                       ? () => {
-                        closeFloatingActions()
-                        handleMoreClick()
-                      }
+                          closeFloatingActions()
+                          handleMoreClick()
+                        }
                       : undefined
                   }
                   isEditing={editingState}
@@ -2950,10 +2961,11 @@ const TodoListView: React.FC<{
               {todoItems.map((item, idx) => (
                 <li
                   key={`todo-item-${idx}`}
-                  className={`flex items-center gap-3 rounded-xl text-[12px] xl:text-[16px]  ${item.done
-                    ? ' bg-neutral-50/40 text-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                    : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                    }`}
+                  className={`flex items-center gap-3 rounded-xl text-[12px] xl:text-[16px]  ${
+                    item.done
+                      ? ' bg-neutral-50/40 text-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                      : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
+                  }`}
                 >
                   <span className='text-sm xl:text-[18px]'> {item.done ? '[✓]' : `[  \u00A0 ]`}</span>
                   <span className={`${item.done ? 'line-through opacity-80' : ''}`}>{item.text}</span>
