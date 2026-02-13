@@ -28,9 +28,11 @@ let localServerError: string | null = null
 
 const LOCAL_SERVER_PREFERRED_PORT = 3002
 const LOCAL_SERVER_FALLBACK_PORTS = Array.from({ length: 13 }, (_, index) => LOCAL_SERVER_PREFERRED_PORT + 1 + index)
-const LOCAL_SERVER_ALLOW_REMOTE = ['1', 'true', 'yes', 'on'].includes(
-  (process.env.YGG_LOCAL_SERVER_ALLOW_REMOTE || '').trim().toLowerCase()
-)
+const localServerAllowRemoteEnvRaw = (process.env.YGG_LOCAL_SERVER_ALLOW_REMOTE || '').trim().toLowerCase()
+const LOCAL_SERVER_ALLOW_REMOTE =
+  localServerAllowRemoteEnvRaw.length > 0
+    ? ['1', 'true', 'yes', 'on'].includes(localServerAllowRemoteEnvRaw)
+    : process.platform === 'win32'
 const LOCAL_SERVER_HOST =
   process.env.YGG_LOCAL_SERVER_HOST?.trim() || (LOCAL_SERVER_ALLOW_REMOTE ? '0.0.0.0' : '127.0.0.1')
 const LOCAL_SERVER_ADVERTISE_HOST =
