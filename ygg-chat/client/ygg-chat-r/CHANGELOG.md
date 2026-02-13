@@ -14,6 +14,8 @@ The format follows Keep a Changelog, and versions map to `client/ygg-chat-r/pack
 - **Chat Reasoning Defaults** (Settings page): Users can now configure default thinking behavior and reasoning effort level (`low`/`medium`/`high`/`xhigh`) for supported models. These preferences persist locally and are automatically applied in Chat when the selected model supports extended thinking. Models without reasoning support will have thinking forced off regardless of the default setting.
 - **GPT Account Logout**: Users can now properly log out of their GPT account, with session data and authentication tokens securely cleared.
 - **Codex 5.3 Integration**: Full support for Codex 5.3 has been added, including all latest features and capabilities.
+- **notes pill and branch labeling** Heimdall note pills now show a truncated preview of the note text, adopt a blue pill background with white text in light mode, and open a hover popup mirroring the note’s full content.
+- **5.1 Codex mini**: Support added, small fast model good for small changes (write my commit browse the web etc)
 
 ### Fixed
 

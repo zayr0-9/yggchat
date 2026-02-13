@@ -132,6 +132,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [noteDialogPos, setNoteDialogPos] = useState<{ x: number; y: number } | null>(null)
   const [noteMessageId, setNoteMessageId] = useState<MessageId | null>(null)
   const [noteText, setNoteText] = useState<string>('')
+  const [hoveredNote, setHoveredNote] = useState<{
+    note: string
+    sender: 'user' | 'assistant' | 'ex_agent'
+    x: number
+    y: number
+  } | null>(null)
   // Store message content in ref to avoid stale closures in debounced update
   const noteMessageContentRef = useRef<string>('')
   // Track dark mode for shadows
@@ -436,9 +442,24 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     return { label, width, height: 20 }
   }
 
-  const getNoteBadgeMetrics = () => {
-    const label = 'NOTE'
-    const width = Math.max(44, Math.round(label.length * 6.5 + 14))
+  const getNoteBadgeMetrics = (noteText?: string) => {
+    const normalized = (noteText || '').replace(/\s+/g, ' ').trim()
+    if (!normalized) {
+      const label = 'Note'
+      const width = Math.max(44, Math.round(label.length * 6.5 + 14))
+      return { label, width, height: 20 }
+    }
+
+    const firstWords = normalized.split(' ').slice(0, 4).join(' ')
+    const maxChars = 22
+    let label = firstWords
+    if (label.length > maxChars) {
+      label = `${label.slice(0, maxChars).trimEnd()}…`
+    } else if (label.length < normalized.length) {
+      label = `${label}…`
+    }
+
+    const width = Math.min(150, Math.max(56, Math.round(label.length * 6.2 + 16)))
     return { label, width, height: 20 }
   }
 
@@ -617,6 +638,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const handleNoteBadgeClick = useCallback(
     (event: React.MouseEvent<SVGGElement>, nodeId: string) => {
       event.stopPropagation()
+      setHoveredNote(null)
       const containerRect = containerRef.current?.getBoundingClientRect()
       if (!containerRect) return
 
@@ -627,6 +649,24 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     },
     [handleOpenNoteDialog]
   )
+
+  const handleNoteBadgeHover = useCallback(
+    (event: React.MouseEvent<SVGGElement>, node: ChatNode, note: string) => {
+      const containerRect = containerRef.current?.getBoundingClientRect()
+      if (!containerRect) return
+      setHoveredNote({
+        note,
+        sender: node.sender,
+        x: event.clientX - containerRect.left,
+        y: event.clientY - containerRect.top,
+      })
+    },
+    []
+  )
+
+  const handleNoteBadgeLeave = useCallback(() => {
+    setHoveredNote(null)
+  }, [])
 
   const onWindowMouseMove = (e: globalThis.MouseEvent): void => {
     if (isDraggingRef.current) {
@@ -1034,6 +1074,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
   useEffect(() => {
     setSubagentPanel(null)
+    setHoveredNote(null)
   }, [conversationId])
 
   const nodeWidth = 250
@@ -2308,7 +2349,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               const hasNote = message?.note && message.note.trim().length > 0
               if (!hasNote) return null
 
-              const badge = getNoteBadgeMetrics()
+              const badge = getNoteBadgeMetrics(message?.note)
               const badgeX = nodeWidth - badge.width - 8
               const badgeY = nodeHeight - 8
               return (
@@ -2316,13 +2357,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                   transform={`translate(${badgeX}, ${badgeY})`}
                   className='cursor-pointer'
                   onPointerDown={e => e.stopPropagation()}
+                  onMouseEnter={e => handleNoteBadgeHover(e, node, message.note || '')}
+                  onMouseMove={e => handleNoteBadgeHover(e, node, message.note || '')}
+                  onMouseLeave={handleNoteBadgeLeave}
                   onClick={e => handleNoteBadgeClick(e, String(node.id))}
                 >
                   <rect
                     width={badge.width}
                     height={badge.height}
                     rx='9'
-                    className='fill-amber-400 dark:fill-amber-500'
+                    className='fill-blue-500 dark:fill-amber-500'
                     stroke='rgba(0,0,0,0.18)'
                     strokeWidth='1'
                   />
@@ -2330,7 +2374,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                     x={badge.width / 2}
                     y={badge.height / 2 + 4}
                     textAnchor='middle'
-                    className='fill-stone-900 dark:fill-stone-950 text-[10px] font-semibold tracking-wide'
+                    className='fill-white dark:fill-stone-950 text-[10px] font-semibold'
                   >
                     {badge.label}
                   </text>
@@ -2470,7 +2514,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               const hasNote = message?.note && message.note.trim().length > 0
               if (!hasNote) return null
 
-              const badge = getNoteBadgeMetrics()
+              const badge = getNoteBadgeMetrics(message?.note)
               const badgeX = x + circleRadius + 6
               const badgeY = y + circleRadius + 4
               return (
@@ -2478,13 +2522,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                   transform={`translate(${badgeX}, ${badgeY})`}
                   className='cursor-pointer'
                   onPointerDown={e => e.stopPropagation()}
+                  onMouseEnter={e => handleNoteBadgeHover(e, node, message.note || '')}
+                  onMouseMove={e => handleNoteBadgeHover(e, node, message.note || '')}
+                  onMouseLeave={handleNoteBadgeLeave}
                   onClick={e => handleNoteBadgeClick(e, String(node.id))}
                 >
                   <rect
                     width={badge.width}
                     height={badge.height}
                     rx='9'
-                    className='fill-amber-400 dark:fill-amber-500'
+                    className='fill-blue-500 dark:fill-amber-500'
                     stroke='rgba(0,0,0,0.18)'
                     strokeWidth='1'
                   />
@@ -2492,7 +2539,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                     x={badge.width / 2}
                     y={badge.height / 2 + 4}
                     textAnchor='middle'
-                    className='fill-stone-900 dark:fill-stone-950 text-[10px] font-semibold tracking-wide'
+                    className='fill-white dark:fill-stone-950 text-[10px] font-semibold'
                   >
                     {badge.label}
                   </text>
@@ -2953,7 +3000,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           </button>
         </div>
       )}
-      {selectedNode &&
+      {selectedNode && !hoveredNote &&
         (() => {
           const nodeIdParsed = parseId(selectedNode.id)
           const msg =
@@ -3124,6 +3171,27 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             </div>
           )
         })()}
+      {hoveredNote && (
+        <div
+          className='absolute bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-30 border border-stone-200 dark:border-neutral-700'
+          style={{
+            left: Math.max(10, Math.min(hoveredNote.x + 10, dimensions.width - 340)),
+            top: Math.max(10, Math.min(hoveredNote.y + 10, dimensions.height - 300)),
+            width: '320px',
+            maxHeight: '280px',
+            overflow: 'auto',
+          }}
+        >
+          <div className='text-sm font-medium mb-2 text-amber-700 dark:text-amber-300'>
+            {hoveredNote.sender === 'user' ? 'User Note' : hoveredNote.sender === 'ex_agent' ? 'Agent Note' : 'Assistant Note'}
+          </div>
+          <div className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-y-auto thin-scrollbar'>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
+              {hoveredNote.note}
+            </ReactMarkdown>
+          </div>
+        </div>
+      )}
       {/* Note dialog */}
       {/* Subagent Calls Modal */}
       {subagentPanel &&

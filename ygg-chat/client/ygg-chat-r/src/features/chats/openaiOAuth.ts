@@ -20,12 +20,20 @@ const CODEX_GITHUB_API_RELEASES = 'https://api.github.com/repos/openai/codex/rel
 const CODEX_GITHUB_HTML_RELEASES = 'https://github.com/openai/codex/releases/latest'
 const CODEX_CACHE_TTL_MS = 15 * 60 * 1000
 
-type CodexModelFamily = 'gpt-5.3-codex' | 'gpt-5.2-codex' | 'codex-max' | 'codex' | 'gpt-5.2' | 'gpt-5.1'
+type CodexModelFamily =
+  | 'gpt-5.3-codex'
+  | 'gpt-5.2-codex'
+  | 'gpt-5.1-codex-mini'
+  | 'codex-max'
+  | 'codex'
+  | 'gpt-5.2'
+  | 'gpt-5.1'
 
 const CODEX_PROMPT_FILES: Record<CodexModelFamily, string> = {
   // GPT-5.3 Codex currently shares the GPT-5.2 Codex instruction prompt in codex-rs/core.
   'gpt-5.3-codex': 'gpt-5.2-codex_prompt.md',
   'gpt-5.2-codex': 'gpt-5.2-codex_prompt.md',
+  'gpt-5.1-codex-mini': 'gpt_5_codex_prompt.md',
   'codex-max': 'gpt-5.1-codex-max_prompt.md',
   codex: 'gpt_5_codex_prompt.md',
   'gpt-5.2': 'gpt_5_2_prompt.md',
@@ -35,6 +43,7 @@ const CODEX_PROMPT_FILES: Record<CodexModelFamily, string> = {
 const CODEX_CACHE_KEYS: Record<CodexModelFamily, string> = {
   'gpt-5.3-codex': 'openai_codex_instructions_gpt-5.3-codex',
   'gpt-5.2-codex': 'openai_codex_instructions_gpt-5.2-codex',
+  'gpt-5.1-codex-mini': 'openai_codex_instructions_gpt-5.1-codex-mini',
   'codex-max': 'openai_codex_instructions_codex-max',
   codex: 'openai_codex_instructions_codex',
   'gpt-5.2': 'openai_codex_instructions_gpt-5.2',
@@ -44,6 +53,7 @@ const CODEX_CACHE_KEYS: Record<CodexModelFamily, string> = {
 const CODEX_CACHE_META_KEYS: Record<CodexModelFamily, string> = {
   'gpt-5.3-codex': 'openai_codex_instructions_gpt-5.3-codex_meta',
   'gpt-5.2-codex': 'openai_codex_instructions_gpt-5.2-codex_meta',
+  'gpt-5.1-codex-mini': 'openai_codex_instructions_gpt-5.1-codex-mini_meta',
   'codex-max': 'openai_codex_instructions_codex-max_meta',
   codex: 'openai_codex_instructions_codex_meta',
   'gpt-5.2': 'openai_codex_instructions_gpt-5.2_meta',
@@ -95,6 +105,9 @@ function getCodexModelFamily(model: string): CodexModelFamily {
   }
   if (normalized.includes('gpt-5.2-codex') || normalized.includes('gpt 5.2 codex')) {
     return 'gpt-5.2-codex'
+  }
+  if (normalized.includes('gpt-5.1-codex-mini') || normalized.includes('gpt 5.1 codex mini')) {
+    return 'gpt-5.1-codex-mini'
   }
   if (normalized.includes('codex-max') || normalized.includes('codex max')) {
     return 'codex-max'
@@ -519,6 +532,14 @@ export const CHATGPT_MODELS = [
     name: 'GPT-5.1 Codex Max',
     displayName: 'GPT-5.1 Codex Max',
     description: 'GPT-5.1 Codex Max for complex coding',
+    contextLength: 200000,
+    maxCompletionTokens: 16384,
+  },
+  {
+    id: 'gpt-5.1-codex-mini',
+    name: 'GPT-5.1 Codex Mini',
+    displayName: 'GPT-5.1 Codex Mini',
+    description: 'GPT-5.1 Codex Mini for faster coding tasks',
     contextLength: 200000,
     maxCompletionTokens: 16384,
   },
