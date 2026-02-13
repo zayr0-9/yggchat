@@ -314,8 +314,8 @@ export function useIdeContext(): UseIdeContextReturn {
                 globalDispatch(setAllFiles(projectState.allFiles))
               }
 
-              if (projectState.currentSelection) {
-                globalDispatch(setCurrentSelection(projectState.currentSelection))
+              if ('currentSelection' in projectState) {
+                globalDispatch(setCurrentSelection(projectState.currentSelection || null))
               }
               break
             }
@@ -348,8 +348,15 @@ export function useIdeContext(): UseIdeContextReturn {
               globalDispatch(setActiveFile(activeFile))
               break
 
-            case 'selection_changed':
-              const selection = message.data as SelectionInfo
+            case 'selection_changed': {
+              const selection = message.data as SelectionInfo | null
+              const selectedText = selection?.selectedText?.trim() || ''
+
+              if (!selection || !selectedText) {
+                globalDispatch(setCurrentSelection(null))
+                break
+              }
+
               globalDispatch(
                 setCurrentSelection({
                   ...selection,
@@ -359,6 +366,11 @@ export function useIdeContext(): UseIdeContextReturn {
               addRecentActivity('selection_changed', selection.filePath, {
                 selection: selection.selectedText.substring(0, 100),
               })
+              break
+            }
+
+            case 'selection_cleared':
+              globalDispatch(setCurrentSelection(null))
               break
 
             case 'file_contents_response':

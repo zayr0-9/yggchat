@@ -52,7 +52,6 @@ function findActiveMention(value: string, cursorPos: number) {
   return { start: atIndex, term }
 }
 
-
 export const TextArea: React.FC<TextAreaProps> = ({
   label,
   placeholder = 'Type your message...',
@@ -410,7 +409,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
       const rect = ta.getBoundingClientRect()
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight
       const padding = 8 // px gap from textarea
-      const desiredMax = 240 // ~max-h-60 (15rem)
+      const desiredMax = 184 // ~max-h-96 (24rem)
 
       const spaceBelow = Math.max(0, viewportHeight - rect.bottom - padding)
       const spaceAbove = Math.max(0, rect.top - padding)
@@ -491,7 +490,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
           {showFileList && filteredFiles.length > 0 && (
             <div
               ref={listRef}
-              className='absolute z-50 mb-1 w-full max-h-60 overflow-y-auto thin-scrollbar dark:bg-neutral-900 bg-neutral-50 rounded-lg shadow-lg'
+              className='absolute z-50 mb-1 w-full max-h-96 overflow-y-auto thin-scrollbar dark:bg-neutral-900 bg-neutral-50 rounded-lg shadow-lg'
               style={{
                 bottom: dropdownDirection === 'up' ? '100%' : undefined,
                 top: dropdownDirection === 'down' ? '100%' : undefined,

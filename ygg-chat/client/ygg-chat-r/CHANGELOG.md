@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - _No notable changes yet._
 
+## [0.1.74] - 2026-02-13
+
+### Changed
+
+### Fixed
+
+- IDE file mention dropdowns from branch edits no longer render underneath adjacent virtualized message rows (stacking contexts) when extension-driven file lists are visible.
+- IDE context was not clearing.
+
 ## [0.1.73] - 2026-02-13
 
 ### Fixed

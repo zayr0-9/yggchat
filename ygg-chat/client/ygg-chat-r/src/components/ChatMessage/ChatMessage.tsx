@@ -68,6 +68,7 @@ interface ChatMessageProps {
   showInlineActions?: boolean
   // Font size offset in pixels: positive increases, negative decreases all fonts uniformly
   fontSizeOffset?: number
+  onEditingStateChange?: (id: string, isEditing: boolean, mode: 'edit' | 'branch' | null) => void
 }
 
 interface MessageActionsProps {
@@ -883,6 +884,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     artifacts = [],
     showInlineActions = true,
     fontSizeOffset = 0,
+    onEditingStateChange,
   }) => {
     const dispatch = useAppDispatch()
     const isMobile = useIsMobile()
@@ -911,6 +913,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [isHovering, setIsHovering] = useState(false)
     const moreButtonRef = useRef<HTMLDivElement | null>(null)
     const messageRef = useRef<HTMLDivElement | null>(null)
+
     const handleMobileMessageActivate = useCallback(() => {
       if (!isMobile) return
       setIsHovering(true)
@@ -975,6 +978,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Use contentBlocks if available, otherwise use simple content
       setEditContent(contentBlocks && contentBlocks.length > 0 ? contentBlocksToEditableText(contentBlocks) : content)
       setEditMode('edit')
+      onEditingStateChange?.(id, true, 'edit')
     }
 
     const handleBranch = () => {
@@ -983,6 +987,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Use contentBlocks if available, otherwise use simple content
       setEditContent(contentBlocks && contentBlocks.length > 0 ? contentBlocksToEditableText(contentBlocks) : content)
       setEditMode('branch')
+      onEditingStateChange?.(id, true, 'branch')
     }
 
     const handleSave = () => {
@@ -1002,6 +1007,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
       dispatch(chatSliceActions.editingBranchSet(false))
       setEditingState(false)
+      onEditingStateChange?.(id, false, 'edit')
     }
 
     const handleSaveBranch = () => {
@@ -1015,6 +1021,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Clear any image drafts after branching is initiated
       dispatch(chatSliceActions.imageDraftsCleared())
       setEditingState(false)
+      onEditingStateChange?.(id, false, 'branch')
     }
 
     const handleCancel = () => {
@@ -1026,6 +1033,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         dispatch(chatSliceActions.messageArtifactsRestoreFromBackup({ messageId: id }))
       }
       setEditingState(false)
+      onEditingStateChange?.(id, false, editMode)
       setEditMode('edit')
     }
 

@@ -461,6 +461,7 @@ function Chat() {
   const selectedPath = useAppSelector(selectCurrentPath)
   const multiReplyCount = useAppSelector(selectMultiReplyCount)
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
+  const isBranchEditing = useAppSelector(state => state.chat.composition.editingBranch)
 
   // const ideContext = useAppSelector(selectIdeContext)
   const workspace = useAppSelector(selectWorkspace)
@@ -502,6 +503,26 @@ function Chat() {
 
     return added
   }, [currentIdeSelection])
+
+  const [activeBranchEditingMessageId, setActiveBranchEditingMessageId] = useState<string | null>(null)
+
+  const handleMessageEditingStateChange = useCallback(
+    (messageId: string, isEditing: boolean, mode: 'edit' | 'branch' | null) => {
+      if (isEditing && mode === 'branch') {
+        setActiveBranchEditingMessageId(messageId)
+        return
+      }
+
+      setActiveBranchEditingMessageId(prev => (prev === messageId ? null : prev))
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (!isBranchEditing && activeBranchEditingMessageId) {
+      setActiveBranchEditingMessageId(null)
+    }
+  }, [isBranchEditing, activeBranchEditingMessageId])
 
   const addedIdeContextItems = useMemo(
     () =>
@@ -3487,12 +3508,17 @@ function Chat() {
                       id={`message-${msg.id}`}
                       data-index={virtualRow.index}
                       ref={virtualizer.measureElement}
+                      className='z-0 focus-within:z-[70]'
                       style={{
                         position: 'absolute',
                         top: 0,
                         left: 0,
                         width: '100%',
                         transform: `translateY(${virtualRow.start}px)`,
+                        zIndex:
+                          activeBranchEditingMessageId != null && String(msg.id) === String(activeBranchEditingMessageId)
+                            ? 80
+                            : 0,
                       }}
                     >
                       <ChatMessage
@@ -3514,6 +3540,7 @@ function Chat() {
                         onAddToNote={handleAddToNote}
                         onExplainFromSelection={handleExplainFromSelection}
                         onOpenToolHtmlModal={openToolHtmlModal}
+                        onEditingStateChange={handleMessageEditingStateChange}
                       />
                     </div>
                   )
@@ -3546,7 +3573,7 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute z-10 bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-0 md:px-4 lg:px-4 2xl:px-4  ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+          className={`absolute ${isBranchEditing ? 'z-0' : 'z-10'} bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-0 md:px-4 lg:px-4 2xl:px-4  ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
           style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {/* Controls row (above) */}

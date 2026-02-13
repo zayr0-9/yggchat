@@ -704,7 +704,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
         {showFileList && filteredFiles.length > 0 && (
           <div
             ref={listRef}
-            className='absolute acrylic-input-chat-light z-50 mb-1 w-full max-h-60 overflow-y-auto rounded-b-lg rounded-3xl thin-scrollbar'
+            className='absolute acrylic-input-chat-light z-50 mb-1 w-full max-h-96 overflow-y-auto rounded-b-lg rounded-3xl thin-scrollbar'
             style={{
               bottom: '100%',
               left: 0,
