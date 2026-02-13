@@ -148,6 +148,17 @@ type ChatInputControllerProps = {
   onHasTextChange: (hasText: boolean) => void
   onSubmit: () => void
   onBlurPersist: (content: string) => void
+  onAddCurrentIdeContext?: () => boolean
+  selectedIdeContextItems?: Array<{ id: string; label: string }>
+}
+
+type AddedIdeContext = {
+  id: string
+  filePath: string
+  fileName: string
+  startLine: number
+  endLine: number
+  selectedText: string
 }
 
 const EMPTY_PARSED_MESSAGE_DATA: ParsedMessageData = {}
@@ -209,7 +220,19 @@ const parseMessageDataForRender = (msg: Message): ParsedMessageData => {
 
 const ChatInputController = React.memo(
   React.forwardRef<ChatInputControllerHandle, ChatInputControllerProps>(
-    ({ conversationId, initialValue, slashCommands, onHasTextChange, onSubmit, onBlurPersist }, ref) => {
+    (
+      {
+        conversationId,
+        initialValue,
+        slashCommands,
+        onHasTextChange,
+        onSubmit,
+        onBlurPersist,
+        onAddCurrentIdeContext,
+        selectedIdeContextItems,
+      },
+      ref
+    ) => {
       const [value, setValueState] = useState(initialValue)
       const valueRef = useRef(initialValue)
       const wrapperRef = useRef<HTMLDivElement | null>(null)
@@ -309,6 +332,8 @@ const ChatInputController = React.memo(
             autoFocus={true}
             showCharCount={false}
             slashCommands={slashCommands}
+            onAddCurrentIdeContext={onAddCurrentIdeContext}
+            selectedIdeContextItems={selectedIdeContextItems}
           />
         </div>
       )
@@ -329,6 +354,7 @@ function Chat() {
   // Keep high-frequency keystrokes inside the input controller to avoid rerendering Chat.
   const inputControllerRef = useRef<ChatInputControllerHandle | null>(null)
   const [hasLocalInput, setHasLocalInput] = useState(false)
+  const [addedIdeContexts, setAddedIdeContexts] = useState<AddedIdeContext[]>([])
 
   const getLocalInput = useCallback(() => inputControllerRef.current?.getValue() ?? '', [])
   const updateLocalInput = useCallback((next: ChatInputUpdater) => {
@@ -446,6 +472,45 @@ function Chat() {
   const selectedFilesForChat = useAppSelector(selectSelectedFilesForChat)
   const mentionableFilesForDebug = useAppSelector(selectMentionableFiles)
   const optimisticMessage = useAppSelector(state => state.chat.composition.optimisticMessage)
+
+  const addCurrentIdeContextToMessage = useCallback((): boolean => {
+    const selectedText = currentIdeSelection?.selectedText?.trim()
+    const filePath = currentIdeSelection?.filePath || currentIdeSelection?.relativePath
+    if (!selectedText || !filePath) return false
+
+    const startLine = currentIdeSelection?.startLine ?? 0
+    const endLine = currentIdeSelection?.endLine ?? startLine
+    const fileName = filePath.split(/[\\/]/).pop() || filePath
+    const id = `${filePath}:${startLine}-${endLine}:${selectedText}`
+
+    let added = false
+    setAddedIdeContexts(prev => {
+      if (prev.some(item => item.id === id)) return prev
+      added = true
+      return [
+        ...prev,
+        {
+          id,
+          filePath,
+          fileName,
+          startLine,
+          endLine,
+          selectedText,
+        },
+      ]
+    })
+
+    return added
+  }, [currentIdeSelection])
+
+  const addedIdeContextItems = useMemo(
+    () =>
+      addedIdeContexts.map(item => ({
+        id: item.id,
+        label: `${item.fileName}:${item.startLine}-${item.endLine}`,
+      })),
+    [addedIdeContexts]
+  )
   const optimisticBranchMessage = useAppSelector(state => state.chat.composition.optimisticBranchMessage)
   const ccSlashCommands = useAppSelector(selectCCSlashCommands)
 
@@ -625,30 +690,53 @@ function Chat() {
   const appendIdeContextToMessage = useCallback(
     (message: string): string => {
       if (!message || typeof message !== 'string') return message || ''
-      if (!currentIdeSelection) return message
 
-      const contextPath = currentIdeSelection.filePath || currentIdeSelection.relativePath
-      if (!contextPath) return message
+      const currentPath = currentIdeSelection?.filePath || currentIdeSelection?.relativePath || ''
+      const currentText = currentIdeSelection?.selectedText?.trim() || ''
+      const currentStart = currentIdeSelection?.startLine ?? 0
+      const currentEnd = currentIdeSelection?.endLine ?? currentStart
+      const currentFileName = currentPath ? currentPath.split(/[\\/]/).pop() || currentPath : ''
 
-      const fileName = contextPath.split(/[\\/]/).pop() || contextPath
-      const hasLineRange =
-        typeof currentIdeSelection.startLine === 'number' && typeof currentIdeSelection.endLine === 'number'
-      const lineRangeText = hasLineRange
-        ? `
-IDE selection lines: ${currentIdeSelection.startLine}-${currentIdeSelection.endLine}`
-        : ''
-      const ideContextFooter = `IDE context: ${contextPath}
-IDE file: ${fileName}${lineRangeText}`
-
-      if (message.includes(ideContextFooter)) {
-        return message
+      const contexts: AddedIdeContext[] = [...addedIdeContexts]
+      if (currentPath && currentText) {
+        const currentId = `${currentPath}:${currentStart}-${currentEnd}:${currentText}`
+        if (!contexts.some(item => item.id === currentId)) {
+          contexts.push({
+            id: currentId,
+            filePath: currentPath,
+            fileName: currentFileName,
+            startLine: currentStart,
+            endLine: currentEnd,
+            selectedText: currentText,
+          })
+        }
       }
+
+      if (contexts.length === 0) return message
+
+      const footer = contexts
+        .map((ctx, index) => {
+          return [
+            `[${index + 1}] IDE context: ${ctx.filePath}`,
+            `IDE file: ${ctx.fileName}`,
+            `IDE selection lines: ${ctx.startLine}-${ctx.endLine}`,
+            'IDE selected text:',
+            '```',
+            ctx.selectedText,
+            '```',
+          .join('\\n')
+                  })
+                  .join('\\n')
+
+      const ideContextFooter = `IDE contexts:
+${footer}`
+      if (message.includes(ideContextFooter)) return message
 
       return `${message.trimEnd()}
 
 ${ideContextFooter}`
     },
-    [currentIdeSelection]
+    [currentIdeSelection, addedIdeContexts]
   )
 
   // Ref for auto-scroll
@@ -939,6 +1027,10 @@ ${ideContextFooter}`
   useEffect(() => {
     setTitleInput(currentConversation?.title ?? '')
   }, [currentConversation?.title])
+
+  useEffect(() => {
+    setAddedIdeContexts([])
+  }, [currentConversationId])
 
   // Close options dropdown on outside click
   useEffect(() => {
@@ -2002,6 +2094,9 @@ ${ideContextFooter}`
               })
             )
               .unwrap()
+              .then(() => {
+                setAddedIdeContexts([])
+              })
               .catch(error => {
                 console.error('Failed to send CC message:', error)
               })
@@ -2150,6 +2245,7 @@ ${ideContextFooter}`
                 if (!result?.userMessage) {
                   console.warn('Server did not confirm user message')
                 }
+                setAddedIdeContexts([])
                 // ✅ No refetch needed - messages already added to Redux via SSE stream
                 // Stream sends: user_message event + complete event with full message data
                 // Redux already updated via messageAdded() + messageBranchCreated() dispatches
@@ -3533,6 +3629,8 @@ ${ideContextFooter}`
                 onSubmit={handleComposerSubmit}
                 onBlurPersist={handleComposerBlurPersist}
                 slashCommands={ccMode && ccModeAvailable ? ccSlashCommands : undefined}
+                onAddCurrentIdeContext={addCurrentIdeContextToMessage}
+                selectedIdeContextItems={addedIdeContextItems}
               />
             </div>
             {/* Selected file chips moved from InputTextArea */}

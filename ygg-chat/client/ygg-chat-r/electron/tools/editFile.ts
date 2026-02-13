@@ -12,7 +12,9 @@ export interface EditFileOptions {
   enableFuzzyMatching?: boolean // Enable layered matching strategies (default: true)
   fuzzyThreshold?: number // Similarity threshold for fuzzy matching (default: 0.8)
   preserveIndentation?: boolean // Preserve original indentation style (default: true)
-  interpretEscapeSequences?: boolean // Interpret \n, \t, etc. in patterns (default: true)
+  interpretEscapeSequences?: boolean // Deprecated: applies to both search/replacement when specific flags are absent
+  interpretSearchEscapes?: boolean // Interpret \n, \t, etc. in search patterns (default: true)
+  interpretReplacementEscapes?: boolean // Interpret \n, \t, etc. in replacement text (default: false)
   operationMode?: 'plan' | 'execute'
   validateContent?: boolean // Validate file hasn't changed since read (default: true)
   expectedHash?: string // Expected content hash from previous read
@@ -68,6 +70,18 @@ async function readFullTextFileForEdit(filePath: string, cwd?: string) {
   return fileData
 }
 
+function resolveEscapeHandling(options: EditFileOptions) {
+  const hasLegacyFlag = typeof options.interpretEscapeSequences === 'boolean'
+  const legacyValue = options.interpretEscapeSequences ?? true
+
+  return {
+    interpretSearchEscapes:
+      options.interpretSearchEscapes ?? (hasLegacyFlag ? legacyValue : true),
+    interpretReplacementEscapes:
+      options.interpretReplacementEscapes ?? (hasLegacyFlag ? legacyValue : false),
+  }
+}
+
 /**
  * Edit a file using simple search and replace operations.
  * Much faster and more context-efficient than AST-based editing.
@@ -90,9 +104,10 @@ export async function editFileSearchReplace(
     enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
-    interpretEscapeSequences: shouldInterpretEscapes = true,
     validateContent = true,
   } = options
+  const { interpretSearchEscapes, interpretReplacementEscapes } =
+    resolveEscapeHandling(options)
 
   try {
     // Resolve path for fs operations and track path type
@@ -174,7 +189,10 @@ export async function editFileSearchReplace(
     let replacements: number
     let matchStrategy: MatchStrategy | undefined
     let attemptedStrategies: string[] = []
-    const processedSearchPattern = interpretEscapeSequences(searchPattern, shouldInterpretEscapes)
+    const processedSearchPattern = interpretEscapeSequences(
+      searchPattern,
+      interpretSearchEscapes
+    )
 
     // Try layered matching strategies
     const matchResult = findMatchWithStrategies(
@@ -206,7 +224,10 @@ export async function editFileSearchReplace(
     }
 
     // Interpret escape sequences in replacement
-    finalReplacement = interpretEscapeSequences(finalReplacement, shouldInterpretEscapes)
+    finalReplacement = interpretEscapeSequences(
+      finalReplacement,
+      interpretReplacementEscapes
+    )
 
     // Keep replacement scope aligned with the strategy that actually matched.
     if (matchResult.strategy === 'exact') {
@@ -292,9 +313,10 @@ export async function editFileSearchReplaceFirst(
     enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
-    interpretEscapeSequences: shouldInterpretEscapes = true,
     validateContent = true,
   } = options
+  const { interpretSearchEscapes, interpretReplacementEscapes } =
+    resolveEscapeHandling(options)
 
   try {
     // Resolve path for fs operations and track path type
@@ -371,7 +393,10 @@ export async function editFileSearchReplaceFirst(
     }
 
     // Try layered matching strategies
-    const processedSearchPattern = interpretEscapeSequences(searchPattern, shouldInterpretEscapes)
+    const processedSearchPattern = interpretEscapeSequences(
+      searchPattern,
+      interpretSearchEscapes
+    )
     const matchResult = findMatchWithStrategies(
       originalContent,
       processedSearchPattern,
@@ -398,7 +423,10 @@ export async function editFileSearchReplaceFirst(
     }
 
     // Interpret escape sequences in replacement
-    finalReplacement = interpretEscapeSequences(finalReplacement, shouldInterpretEscapes)
+    finalReplacement = interpretEscapeSequences(
+      finalReplacement,
+      interpretReplacementEscapes
+    )
 
     const hasChanges = finalReplacement !== matchResult.matchedText
     const newContent = hasChanges

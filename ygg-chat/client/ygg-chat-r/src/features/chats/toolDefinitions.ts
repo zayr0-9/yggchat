@@ -235,7 +235,7 @@ const builtInToolDefinitions: ToolDefinition[] = [
     name: 'edit_file',
     enabled: true,
     description:
-      'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy. Escape sequences like \\n, \\t, \\r in search patterns are interpreted by default (disable with interpretEscapeSequences: false). Supports content validation using hash and metadata from read_file to prevent editing stale content.',
+      'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy. Escape sequences like \\n, \\t, \\r are interpreted in search patterns by default. Replacement text is treated literally by default to avoid accidental source corruption. Supports content validation using hash and metadata from read_file to prevent editing stale content.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -253,7 +253,7 @@ const builtInToolDefinitions: ToolDefinition[] = [
         replacement: {
           type: 'string',
           description:
-            'REQUIRED for replace/replace_first operations. The text to replace the search pattern with. Supports escape sequences.',
+            'REQUIRED for replace/replace_first operations. The text to replace the search pattern with. Treated literally by default; include actual newlines in the string when needed.',
         },
         content: {
           type: 'string',
@@ -261,11 +261,6 @@ const builtInToolDefinitions: ToolDefinition[] = [
         },
         createBackup: { type: 'boolean', description: 'Whether to create a backup before editing (default false)' },
         encoding: { type: 'string', description: 'File encoding (default utf8)' },
-        interpretEscapeSequences: {
-          type: 'boolean',
-          description:
-            'Interpret escape sequences (\\n, \\t, \\r, etc.) in search and replacement strings (default true)',
-        },
         validateContent: {
           type: 'boolean',
           description: 'Validate file has not changed since read using hash/metadata (default true)',

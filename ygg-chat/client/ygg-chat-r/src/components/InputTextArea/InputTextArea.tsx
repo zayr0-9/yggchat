@@ -35,6 +35,8 @@ interface TextAreaProps {
   onProcessMessage?: (processMessage: (message: string) => string) => void
   variant?: 'primary' | 'outline'
   slashCommands?: string[]
+  onAddCurrentIdeContext?: () => boolean
+  selectedIdeContextItems?: Array<{ id: string; label: string }>
 }
 
 const allowedMentionChar = /[A-Za-z0-9._\/\-]/
@@ -108,6 +110,8 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   onProcessMessage,
   variant = 'primary',
   slashCommands,
+  onAddCurrentIdeContext,
+  selectedIdeContextItems = [],
   ...rest
 }) => {
   const dispatch = useDispatch()
@@ -151,6 +155,16 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   const ideSelectionLocation = currentSelection
     ? `${ideSelectionPath}:${currentSelection.startLine}-${currentSelection.endLine}`
     : null
+  const [showContextAddedNotice, setShowContextAddedNotice] = useState(false)
+
+  const handleAddContextClick = () => {
+    if (!onAddCurrentIdeContext || !hasIdeContextSelection) return
+    const wasAdded = onAddCurrentIdeContext()
+    if (!wasAdded) return
+
+    setShowContextAddedNotice(true)
+    window.setTimeout(() => setShowContextAddedNotice(false), 1200)
+  }
 
   // Slash command autocomplete state
   const slashListRef = useRef<HTMLDivElement>(null)
@@ -724,22 +738,51 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
           </div>
         )}
 
-        {hasIdeContextSelection && (
-          <div className='mb-1 ml-1 flex'>
-            <div className='group relative inline-flex max-w-full'>
-              <span className='inline-flex items-center rounded-full border border-orange-400/60 bg-orange-100/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-orange-800 dark:border-orange-500/60 dark:bg-orange-900/40 dark:text-orange-200'>
-                ide context detected
-              </span>
+        {(hasIdeContextSelection || selectedIdeContextItems.length > 0) && (
+          <div className='mb-1 ml-1 flex flex-wrap items-center gap-2'>
+            {hasIdeContextSelection && (
+              <div className='group relative inline-flex max-w-full items-center gap-1'>
+                <span className='inline-flex items-center rounded-full border border-orange-400/60 bg-orange-100/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-orange-800 dark:border-orange-500/60 dark:bg-orange-900/40 dark:text-orange-200'>
+                  ide context detected
+                </span>
+                <button
+                  type='button'
+                  onClick={handleAddContextClick}
+                  className='inline-flex h-5 w-5 items-center justify-center rounded-full border border-orange-400/70 bg-orange-200/70 text-xs font-bold text-orange-900 hover:bg-orange-300/80 dark:border-orange-500/60 dark:bg-orange-800/60 dark:text-orange-100 dark:hover:bg-orange-700/70'
+                  title='Add this IDE context to message context list'
+                  aria-label='Add IDE context'
+                >
+                  +
+                </button>
 
-              <div className='pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-[24rem] max-w-[90vw] rounded-md border border-orange-300/70 bg-orange-50/95 p-2 shadow-xl group-hover:block dark:border-orange-500/40 dark:bg-neutral-900/95'>
-                {ideSelectionLocation && (
-                  <div className='mb-1 text-[10px] font-semibold text-orange-900 dark:text-orange-200'>{ideSelectionLocation}</div>
-                )}
-                <pre className='max-h-40 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-orange-950 dark:text-orange-100'>
-                  {ideSelectionPreview}
-                </pre>
+                <div className='pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-[24rem] max-w-[90vw] rounded-md border border-orange-300/70 bg-orange-50/95 p-2 shadow-xl group-hover:block dark:border-orange-500/40 dark:bg-neutral-900/95'>
+                  {ideSelectionLocation && (
+                    <div className='mb-1 text-[10px] font-semibold text-orange-900 dark:text-orange-200'>{ideSelectionLocation}</div>
+                  )}
+                  <pre className='max-h-40 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-orange-950 dark:text-orange-100'>
+                    {ideSelectionPreview}
+                  </pre>
+                </div>
               </div>
-            </div>
+            )}
+
+            {showContextAddedNotice && (
+              <span className='text-[10px] font-semibold text-orange-700 dark:text-orange-300'>context added</span>
+            )}
+
+            {selectedIdeContextItems.length > 0 && (
+              <div className='flex flex-wrap gap-1'>
+                {selectedIdeContextItems.map(item => (
+                  <span
+                    key={item.id}
+                    className='inline-flex items-center rounded-full border border-orange-300/70 bg-orange-100/70 px-2 py-0.5 text-[10px] text-orange-900 dark:border-orange-500/40 dark:bg-orange-900/30 dark:text-orange-100'
+                    title={item.label}
+                  >
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -263,7 +263,7 @@ describe('editFile replace and replace_first behavior', () => {
 })
 
 describe('editFile escape sequence behavior', () => {
-  it('interprets escape sequences by default in search and replacement', async () => {
+  it('interprets escapes in search patterns but keeps replacement escapes literal by default', async () => {
     const harness = await createToolFsHarness()
     await harness.writeFile('escape-default.txt', 'alpha\nbeta\ngamma\n')
 
@@ -275,7 +275,54 @@ describe('editFile escape sequence behavior', () => {
 
     expect(result.success).toBe(true)
     expect(result.replacements).toBe(1)
-    expect(await harness.readFile('escape-default.txt')).toBe('alpha\nB\nG\n')
+    expect(await harness.readFile('escape-default.txt')).toBe('alpha\nB\\nG\n')
+  })
+
+  it('applies replacement newlines when actual newline characters are provided', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('escape-newline-literal.txt', 'alpha\nbeta\ngamma\n')
+
+    const result = await editFile('escape-newline-literal.txt', 'replace_first', {
+      searchPattern: 'beta\\ngamma',
+      replacement: 'B\nG',
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('escape-newline-literal.txt')).toBe('alpha\nB\nG\n')
+  })
+
+  it('supports legacy interpretEscapeSequences=true to interpret escapes in replacement text', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('escape-legacy-true.txt', 'alpha\nbeta\ngamma\n')
+
+    const result = await editFile('escape-legacy-true.txt', 'replace_first', {
+      searchPattern: 'beta\\ngamma',
+      replacement: 'B\\nG',
+      interpretEscapeSequences: true,
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('escape-legacy-true.txt')).toBe('alpha\nB\nG\n')
+  })
+
+  it('interprets replacement escapes when interpretReplacementEscapes is true', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('escape-replacement-override.txt', 'alpha\nbeta\ngamma\n')
+
+    const result = await editFile('escape-replacement-override.txt', 'replace_first', {
+      searchPattern: 'beta\\ngamma',
+      replacement: 'B\\nG',
+      interpretReplacementEscapes: true,
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(await harness.readFile('escape-replacement-override.txt')).toBe('alpha\nB\nG\n')
   })
 
   it('treats escape sequences literally when interpretEscapeSequences is false', async () => {
@@ -292,6 +339,39 @@ describe('editFile escape sequence behavior', () => {
     expect(result.success).toBe(true)
     expect(result.replacements).toBe(1)
     expect(await harness.readFile('escape-literal.txt')).toBe('literal [NL] marker\n')
+  })
+
+  it('prevents join newline corruption when replacing escaped newline sequences in code', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'escape-chat-join-regression.tsx',
+      [
+        'const footer = contexts',
+        '  .map((ctx) => {',
+        '    return [',
+        "      'x',",
+        "    ].join('\\\\n')",
+        '  })',
+        "  .join('\\\\n\\\\n')",
+        '',
+        "const ideContextFooter = `IDE contexts:\\\\n${footer}`",
+        '',
+      ].join('\n')
+    )
+
+    const result = await editFile('escape-chat-join-regression.tsx', 'replace_first', {
+      searchPattern: "].join('\\\\n')",
+      replacement: "].join('\\n')",
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('escape-chat-join-regression.tsx')
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(updated).toContain(String.raw`].join('\n')`)
+    expect(updated).toContain(String.raw`.join('\\n\\n')`)
+    expect(updated).not.toContain("].join('\n')")
   })
 
   it('preserves escaped backslashes in regex literals during replacement', async () => {

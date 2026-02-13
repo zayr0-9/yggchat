@@ -287,7 +287,6 @@ function initializeBuiltInToolRegistry() {
       enableFuzzyMatching,
       fuzzyThreshold,
       preserveIndentation,
-      interpretEscapeSequences,
       validateContent,
       expectedHash,
       expectedMetadata,
@@ -302,7 +301,10 @@ function initializeBuiltInToolRegistry() {
       enableFuzzyMatching,
       fuzzyThreshold,
       preserveIndentation,
-      interpretEscapeSequences,
+      // Keep tool-call behavior deterministic and safe for code edits:
+      // parse escape sequences in search patterns, but treat replacement text literally.
+      interpretSearchEscapes: true,
+      interpretReplacementEscapes: false,
       validateContent,
       expectedHash,
       expectedMetadata,
