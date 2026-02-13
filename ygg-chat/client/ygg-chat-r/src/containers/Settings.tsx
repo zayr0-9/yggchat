@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Select } from '../components'
 import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
-import { selectProviderState } from '../features/chats'
+import { chatSliceActions, selectProviderState } from '../features/chats'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../features/chats/chatActions'
 import { getAllTools } from '../features/chats/toolDefinitions'
 import {
@@ -29,6 +29,13 @@ import {
   saveToolExecutionSettings,
 } from '../helpers/toolExecutionSettings'
 import {
+  CHAT_REASONING_SETTINGS_CHANGE_EVENT,
+  ChatReasoningSettings,
+  loadChatReasoningSettings,
+  REASONING_EFFORT_OPTIONS,
+  saveChatReasoningSettings,
+} from '../helpers/chatReasoningSettingsStorage'
+import {
   addCustomVideo,
   clearCustomVideoLibrary,
   CustomVideoEntry,
@@ -42,6 +49,7 @@ import {
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useModels } from '../hooks/useQueries'
+import { clearTokens as clearOpenAITokens, isOpenAIAuthenticated } from '../features/chats/openaiOAuth'
 import { API_BASE } from '../utils/api'
 
 const MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024 // 8MB
@@ -112,6 +120,9 @@ const Settings: React.FC = () => {
   )
   const [bashTimeoutTouched, setBashTimeoutTouched] = useState(false)
   const [defaultConversationTab, setDefaultConversationTab] = useState<ConversationTab>(() => loadDefaultConversationTab())
+  const [chatReasoningSettings, setChatReasoningSettings] = useState<ChatReasoningSettings>(() =>
+    loadChatReasoningSettings()
+  )
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     heartbeatTime: null,
     agentName: 'Global Agent',
@@ -189,6 +200,16 @@ const Settings: React.FC = () => {
       )
   }, [])
 
+  useEffect(() => {
+    const handleChatReasoningSettingsChange = (e: CustomEvent<ChatReasoningSettings>) => {
+      setChatReasoningSettings(e.detail)
+    }
+
+    window.addEventListener(CHAT_REASONING_SETTINGS_CHANGE_EVENT, handleChatReasoningSettingsChange as EventListener)
+    return () =>
+      window.removeEventListener(CHAT_REASONING_SETTINGS_CHANGE_EVENT, handleChatReasoningSettingsChange as EventListener)
+  }, [])
+
   const handleProviderVisibilityToggle = () => {
     const updated = {
       ...providerSettings,
@@ -213,6 +234,14 @@ const Settings: React.FC = () => {
       type: 'success',
       text: providerName ? `Default provider set to "${providerName}".` : 'Default provider cleared.',
     })
+  }
+
+  const handleOpenAIChatGPTSignOut = () => {
+    clearOpenAITokens()
+    if (providers.currentProvider === 'OpenAI (ChatGPT)') {
+      dispatch(chatSliceActions.providerSelected('OpenRouter'))
+    }
+    showStatus({ type: 'success', text: 'Signed out of OpenAI ChatGPT. You can sign in again from Chat.' })
   }
 
   const handleOpenRouterTemperatureInputChange = (value: string) => {
@@ -315,6 +344,37 @@ const Settings: React.FC = () => {
     showStatus({
       type: 'success',
       text: nextTab === 'favorites' ? 'Sidebar default set to Favorites.' : 'Sidebar default set to Recent.',
+    })
+  }
+
+  const handleDefaultThinkingToggle = () => {
+    const updated: ChatReasoningSettings = {
+      ...chatReasoningSettings,
+      defaultThinkingEnabled: !chatReasoningSettings.defaultThinkingEnabled,
+    }
+    saveChatReasoningSettings(updated)
+    setChatReasoningSettings(updated)
+    showStatus({
+      type: 'success',
+      text: updated.defaultThinkingEnabled
+        ? 'Default thinking enabled for reasoning-capable models.'
+        : 'Default thinking disabled.',
+    })
+  }
+
+  const handleDefaultReasoningEffortChange = (value: string) => {
+    const effort = REASONING_EFFORT_OPTIONS.includes(value as (typeof REASONING_EFFORT_OPTIONS)[number])
+      ? (value as ChatReasoningSettings['defaultReasoningEffort'])
+      : 'medium'
+    const updated: ChatReasoningSettings = {
+      ...chatReasoningSettings,
+      defaultReasoningEffort: effort,
+    }
+    saveChatReasoningSettings(updated)
+    setChatReasoningSettings(updated)
+    showStatus({
+      type: 'success',
+      text: `Default reasoning effort set to ${effort}.`,
     })
   }
 
@@ -743,6 +803,64 @@ const Settings: React.FC = () => {
           </div>
         </section>
 
+        <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+          <div className='flex flex-col gap-1'>
+            <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Chat Reasoning Defaults</h2>
+            <p className='text-sm text-stone-500 dark:text-stone-200'>
+              These defaults are loaded every time Chat opens, then applied when the selected model supports
+              reasoning/thinking.
+            </p>
+          </div>
+
+          <div className='mt-4 flex flex-col gap-4'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Default Thinking</p>
+                <p className='text-sm text-stone-500 dark:text-stone-400'>
+                  Automatically turn thinking on for models that support it.
+                </p>
+              </div>
+              <button
+                onClick={handleDefaultThinkingToggle}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  chatReasoningSettings.defaultThinkingEnabled
+                    ? 'bg-emerald-500 dark:bg-emerald-600'
+                    : 'bg-stone-300 dark:bg-stone-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    chatReasoningSettings.defaultThinkingEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className='flex flex-col gap-2 pt-2 border-t border-stone-200 dark:border-stone-700'>
+              <div>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Default Reasoning Effort</p>
+                <p className='text-sm text-stone-500 dark:text-stone-400'>
+                  Used when thinking is enabled. The model must support reasoning.
+                </p>
+              </div>
+              <Select
+                value={chatReasoningSettings.defaultReasoningEffort}
+                onChange={handleDefaultReasoningEffortChange}
+                options={REASONING_EFFORT_OPTIONS.map(option => ({
+                  value: option,
+                  label:
+                    option === 'medium'
+                      ? 'Medium (Default)'
+                      : option === 'xhigh'
+                        ? 'X-High'
+                        : option.charAt(0).toUpperCase() + option.slice(1),
+                }))}
+                className='max-w-xs'
+              />
+            </div>
+          </div>
+        </section>
+
         {/* Provider Settings Section */}
         {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
           <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
@@ -841,6 +959,35 @@ const Settings: React.FC = () => {
                 <p className='text-xs text-stone-500 dark:text-stone-400'>
                   Range: {MIN_OPENROUTER_TEMPERATURE} to {MAX_OPENROUTER_TEMPERATURE}.
                 </p>
+              </div>
+
+              <div className='flex flex-col gap-2 pt-2 border-t border-stone-200 dark:border-stone-700'>
+                <div>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>OpenAI ChatGPT Account</p>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>
+                    Sign out to clear local ChatGPT OAuth tokens. You can sign in again from Chat when selecting
+                    OpenAI (ChatGPT).
+                  </p>
+                </div>
+                <div className='flex flex-wrap items-center gap-3'>
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full border ${
+                      isOpenAIAuthenticated()
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-700 dark:text-emerald-300'
+                        : 'bg-stone-100 border-stone-200 text-stone-600 dark:bg-stone-800 dark:border-stone-700 dark:text-stone-300'
+                    }`}
+                  >
+                    {isOpenAIAuthenticated() ? 'Signed in' : 'Signed out'}
+                  </span>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={handleOpenAIChatGPTSignOut}
+                    disabled={!isOpenAIAuthenticated()}
+                  >
+                    Sign out of ChatGPT
+                  </Button>
+                </div>
               </div>
             </div>
           </section>

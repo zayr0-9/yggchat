@@ -94,6 +94,11 @@ import {
   PROVIDER_SETTINGS_CHANGE_EVENT,
   ProviderSettings,
 } from '../helpers/providerSettingsStorage'
+import {
+  CHAT_REASONING_SETTINGS_CHANGE_EVENT,
+  loadChatReasoningSettings,
+  REASONING_EFFORT_OPTIONS,
+} from '../helpers/chatReasoningSettingsStorage'
 import { isOrchestratorEnabled, toggleOrchestratorEnabled } from '../helpers/subagentToolSettings'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
@@ -367,8 +372,12 @@ function Chat() {
   // Image generation configuration (aspect ratio and size for Gemini image models)
   const [imageConfig, setImageConfig] = useState<ImageConfig>({})
 
+  const [chatReasoningSettings, setChatReasoningSettings] = useState(() => loadChatReasoningSettings())
+
   // Reasoning configuration (effort level for extended thinking models)
-  const [reasoningConfig, setReasoningConfig] = useState<ReasoningConfig>({ effort: 'medium' })
+  const [reasoningConfig, setReasoningConfig] = useState<ReasoningConfig>(() => ({
+    effort: chatReasoningSettings.defaultReasoningEffort,
+  }))
 
   // Check if CC mode should be available
   const ccModeAvailable = import.meta.env.VITE_ENVIRONMENT !== 'web'
@@ -1047,7 +1056,7 @@ function Chat() {
   })
   const [isResizing, setIsResizing] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [think, setThink] = useState<boolean>(false)
+  const [think, setThink] = useState<boolean>(chatReasoningSettings.defaultThinkingEnabled)
   const [heimdallVisible, setHeimdallVisible] = useState<boolean>(() => {
     try {
       const stored = typeof window !== 'undefined' ? window.localStorage.getItem('chat:heimdallVisible') : null
@@ -1701,6 +1710,40 @@ function Chat() {
     return () =>
       window.removeEventListener(PROVIDER_SETTINGS_CHANGE_EVENT, handleProviderSettingsChange as EventListener)
   }, [])
+
+  // Listen for default reasoning settings changes from Settings page.
+  useEffect(() => {
+    const handleReasoningSettingsChange = (e: CustomEvent<ReturnType<typeof loadChatReasoningSettings>>) => {
+      setChatReasoningSettings(e.detail)
+    }
+
+    window.addEventListener(CHAT_REASONING_SETTINGS_CHANGE_EVENT, handleReasoningSettingsChange as EventListener)
+    return () =>
+      window.removeEventListener(CHAT_REASONING_SETTINGS_CHANGE_EVENT, handleReasoningSettingsChange as EventListener)
+  }, [])
+
+  // Apply default thinking/effort only when model capability is known.
+  // This prevents races where selectedModel is not yet loaded on first render.
+  useEffect(() => {
+    if (!selectedModel) return
+
+    if (!selectedModel.thinking) {
+      setThink(false)
+      return
+    }
+
+    setThink(chatReasoningSettings.defaultThinkingEnabled)
+    setReasoningConfig(prev =>
+      prev.effort === chatReasoningSettings.defaultReasoningEffort
+        ? prev
+        : { ...prev, effort: chatReasoningSettings.defaultReasoningEffort }
+    )
+  }, [
+    selectedModel?.name,
+    selectedModel?.thinking,
+    chatReasoningSettings.defaultThinkingEnabled,
+    chatReasoningSettings.defaultReasoningEffort,
+  ])
 
   // Set default provider based on settings or fall back to OpenRouter
   useEffect(() => {
@@ -3746,12 +3789,15 @@ function Chat() {
                               <label className='text-xs text-neutral-500 dark:text-neutral-400'>Effort Level</label>
                               <Select
                                 value={reasoningConfig.effort}
-                                options={[
-                                  { value: 'low', label: 'Low' },
-                                  { value: 'medium', label: 'Medium (Default)' },
-                                  { value: 'high', label: 'High' },
-                                  { value: 'xhigh', label: 'X-High' },
-                                ]}
+                                options={REASONING_EFFORT_OPTIONS.map(option => ({
+                                  value: option,
+                                  label:
+                                    option === 'medium'
+                                      ? 'Medium (Default)'
+                                      : option === 'xhigh'
+                                        ? 'X-High'
+                                        : option.charAt(0).toUpperCase() + option.slice(1),
+                                }))}
                                 onChange={value =>
                                   setReasoningConfig(prev => ({
                                     ...prev,

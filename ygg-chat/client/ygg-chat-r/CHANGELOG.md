@@ -8,8 +8,12 @@ The format follows Keep a Changelog, and versions map to `client/ygg-chat-r/pack
 
 ### Added
 
-- Provider Settings now include an `OpenRouter Temperature` field with local persistence.
-- Tools Configuration now includes a default bash timeout setting for tool runs that do not specify `timeoutMs`.
+- **OpenRouter Temperature Setting**: Provider Settings now include an `OpenRouter Temperature` field with local persistence, allowing fine-grained control over response randomness for OpenRouter models.
+- **Default Bash Timeout Configuration**: Tools Configuration now includes a configurable default bash timeout setting that applies to tool runs that do not explicitly specify a `timeoutMs` value.
+- **Graceful Agent Queue Handling**: Global agent queues now properly wait for the current stream to complete before processing the next request, preventing race conditions and ensuring smooth sequential execution.
+- **Chat Reasoning Defaults** (Settings page): Users can now configure default thinking behavior and reasoning effort level (`low`/`medium`/`high`/`xhigh`) for supported models. These preferences persist locally and are automatically applied in Chat when the selected model supports extended thinking. Models without reasoning support will have thinking forced off regardless of the default setting.
+- **GPT Account Logout**: Users can now properly log out of their GPT account, with session data and authentication tokens securely cleared.
+- **Codex 5.3 Integration**: Full support for Codex 5.3 has been added, including all latest features and capabilities.
 
 ### Fixed
 

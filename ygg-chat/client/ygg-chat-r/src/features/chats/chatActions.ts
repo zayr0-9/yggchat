@@ -2361,6 +2361,7 @@ export const sendMessage = createAsyncThunk<
                   role: 'assistant',
                   content: m.content || '',
                   content_blocks: sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls),
+                  responses_output_items: (m as any)?.responses_output_items,
                 }
                 if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                   assistantMsg.tool_calls = m.tool_calls.map(tc => ({
@@ -2798,6 +2799,7 @@ export const sendMessage = createAsyncThunk<
                   role: 'assistant',
                   content: m.content || '',
                   content_blocks: sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls),
+                  responses_output_items: (m as any)?.responses_output_items,
                 }
                 if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                   assistantMsg.tool_calls = m.tool_calls.map(tc => ({
@@ -4113,6 +4115,7 @@ export const editMessageWithBranching = createAsyncThunk<
                 role: 'assistant',
                 content: m.content || '',
                 content_blocks: sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls),
+                responses_output_items: (m as any)?.responses_output_items,
               }
               if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                 assistantMsg.tool_calls = m.tool_calls.map(tc => ({
@@ -5153,6 +5156,7 @@ export const sendMessageToBranch = createAsyncThunk<
                 role: 'assistant',
                 content: m.content || '',
                 content_blocks: sanitizeContentBlocksForModel(m.content_blocks, m.tool_calls),
+                responses_output_items: (m as any)?.responses_output_items,
               }
               if (m.tool_calls && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
                 assistantMsg.tool_calls = m.tool_calls.map(tc => ({
