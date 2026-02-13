@@ -2,7 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { selectFocusedChatMessageId } from '../../features/chats/chatSelectors'
 import { chatSliceActions } from '../../features/chats/chatSlice'
-import { selectMentionableFiles } from '../../features/ideContext/ideContextSelectors'
+import { selectMentionableFiles, type MentionableFileOption } from '../../features/ideContext/ideContextSelectors'
 import { useIdeContext } from '../../hooks/useIdeContext'
 import type { RootState } from '../../store/store'
 
@@ -92,7 +92,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
   const listRef = useRef<HTMLDivElement>(null)
   const [showFileList, setShowFileList] = useState(false)
   const [selectedFileIndex, setSelectedFileIndex] = useState(0)
-  const [filteredFiles, setFilteredFiles] = useState<Array<{ path: string; name: string; mention: string }>>([])
+  const [filteredFiles, setFilteredFiles] = useState<MentionableFileOption[]>([])
   const [activeMention, setActiveMention] = useState<{ start: number; term: string } | null>(null)
   const [dropdownDirection, setDropdownDirection] = useState<'up' | 'down'>('up')
   const [dropdownMaxHeight, setDropdownMaxHeight] = useState<number | undefined>(undefined)
@@ -265,34 +265,38 @@ export const TextArea: React.FC<TextAreaProps> = ({
       .catch(err => console.error('Failed to read pasted images', err))
   }
 
-  const handleFileSelection = async (file: { path: string; name: string; mention: string }) => {
+  const handleFileSelection = async (file: MentionableFileOption) => {
     if (!activeMention) {
       setShowFileList(false)
       return
     }
 
+    const mentionToken = file.relativePath || file.name
+
     try {
-      await requestFileContent(file.path)
-      setLocalMentionableFiles(prev => prev.filter(f => f.path !== file.path))
-      setFilteredFiles(prev => prev.filter(f => f.path !== file.path))
+      if (file.kind === 'file') {
+        await requestFileContent(file.path)
+        setLocalMentionableFiles(prev => prev.filter(f => f.path !== file.path))
+        setFilteredFiles(prev => prev.filter(f => f.path !== file.path))
+      }
 
       if (textareaRef.current) {
         const currentValue = textareaRef.current.value
         const before = currentValue.slice(0, activeMention.start)
         const after = currentValue.slice(activeMention.start + 1 + activeMention.term.length)
-        const newValue = `${before}@${file.name} ${after}`
+        const newValue = `${before}@${mentionToken} ${after}`
         onChange?.(newValue)
 
         setTimeout(() => {
           if (textareaRef.current) {
-            const cursorPos = before.length + file.name.length + 2 // include @ and trailing space
+            const cursorPos = before.length + mentionToken.length + 2 // include @ and trailing space
             textareaRef.current.focus()
             textareaRef.current.setSelectionRange(cursorPos, cursorPos)
           }
         }, 0)
       }
     } catch (error) {
-      console.error('Failed to request file content:', error)
+      console.error('Failed to process @mention selection:', error)
     } finally {
       setActiveMention(null)
       setShowFileList(false)
@@ -384,9 +388,13 @@ export const TextArea: React.FC<TextAreaProps> = ({
     }
 
     const term = activeMention.term.toLowerCase()
-    const filtered = localMentionableFiles.filter(
-      file => file.name.toLowerCase().includes(term) || file.path.toLowerCase().includes(term)
-    )
+    const filtered = localMentionableFiles.filter(file => {
+      const nameMatches = file.name.toLowerCase().includes(term)
+      const relativePathMatches = file.relativePath.toLowerCase().includes(term)
+      const relativeDirectoryMatches = file.relativeDirectoryPath.toLowerCase().includes(term)
+      const absolutePathMatches = file.path.toLowerCase().includes(term)
+      return nameMatches || relativePathMatches || relativeDirectoryMatches || absolutePathMatches
+    })
     setFilteredFiles(filtered)
     setSelectedFileIndex(0)
     setShowFileList(filtered.length > 0)
@@ -503,8 +511,13 @@ export const TextArea: React.FC<TextAreaProps> = ({
                   onMouseEnter={() => setSelectedFileIndex(index)}
                 >
                   <div className='flex justify-between'>
-                    <div className='font-medium truncate'>{file.name}</div>
-                    <div className='text-xs text-stone-400 truncate'>{file.path}</div>
+                    <div className='font-medium truncate'>
+                      {file.kind === 'folder' ? '📁 ' : '📄 '}
+                      {file.name}
+                    </div>
+                    <div className='text-xs text-stone-400 truncate' title={file.relativePath || file.path}>
+                      {file.kind === 'folder' ? file.relativePath : file.relativeDirectoryPath || '/'}
+                    </div>
                   </div>
                 </div>
               ))}

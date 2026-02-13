@@ -2,7 +2,12 @@ import React, { useEffect, useId, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { selectFocusedChatMessageId } from '../../features/chats/chatSelectors'
 import { chatSliceActions } from '../../features/chats/chatSlice'
-import { selectMentionableFiles, selectSelectedFilesForChat } from '../../features/ideContext/ideContextSelectors'
+import {
+  selectCurrentSelection,
+  selectMentionableFiles,
+  selectSelectedFilesForChat,
+  type MentionableFileOption,
+} from '../../features/ideContext/ideContextSelectors'
 import { useIdeContext } from '../../hooks/useIdeContext'
 import type { RootState } from '../../store/store'
 
@@ -109,6 +114,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   const focusedMessageId = useSelector(selectFocusedChatMessageId)
   const imageDrafts = useSelector((s: RootState) => s.chat.composition.imageDrafts)
   const editingBranch = useSelector((s: RootState) => s.chat.composition.editingBranch)
+  const currentSelection = useSelector(selectCurrentSelection)
   const mentionableFiles = useSelector(selectMentionableFiles)
   const selectedFilesForChat = useSelector(selectSelectedFilesForChat)
   // Local copy of mentionable files to prevent re-selecting the same file locally
@@ -129,8 +135,22 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   const [dragOver, setDragOver] = useState(false)
   const [showFileList, setShowFileList] = useState(false)
   const [selectedFileIndex, setSelectedFileIndex] = useState(0)
-  const [filteredFiles, setFilteredFiles] = useState<Array<{ path: string; name: string; mention: string }>>([])
+  const [filteredFiles, setFilteredFiles] = useState<MentionableFileOption[]>([])
   const [activeMention, setActiveMention] = useState<{ start: number; term: string } | null>(null)
+
+  const ideSelectionText = currentSelection?.selectedText?.trim() || ''
+  const hasIdeContextSelection = ideSelectionText.length > 0
+  const ideSelectionPreview =
+    ideSelectionText.length > 1200 ? `${ideSelectionText.slice(0, 1200)}
+…` : ideSelectionText
+  const ideSelectionPath =
+    currentSelection?.relativePath ||
+    currentSelection?.filePath?.split(/[\\/]/).pop() ||
+    currentSelection?.filePath ||
+    'current file'
+  const ideSelectionLocation = currentSelection
+    ? `${ideSelectionPath}:${currentSelection.startLine}-${currentSelection.endLine}`
+    : null
 
   // Slash command autocomplete state
   const slashListRef = useRef<HTMLDivElement>(null)
@@ -365,34 +385,38 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
       .catch(err => console.error('Failed to read pasted images', err))
   }
 
-  const handleFileSelection = async (file: { path: string; name: string; mention: string }) => {
+  const handleFileSelection = async (file: MentionableFileOption) => {
     if (!activeMention) {
       setShowFileList(false)
       return
     }
 
+    const mentionToken = file.relativePath || file.name
+
     try {
-      await requestFileContent(file.path)
-      setLocalMentionableFiles(prev => prev.filter(f => f.path !== file.path))
-      setFilteredFiles(prev => prev.filter(f => f.path !== file.path))
+      if (file.kind === 'file') {
+        await requestFileContent(file.path)
+        setLocalMentionableFiles(prev => prev.filter(f => f.path !== file.path))
+        setFilteredFiles(prev => prev.filter(f => f.path !== file.path))
+      }
 
       if (textareaRef.current) {
         const currentValue = textareaRef.current.value
         const before = currentValue.slice(0, activeMention.start)
         const after = currentValue.slice(activeMention.start + 1 + activeMention.term.length)
-        const newValue = `${before}@${file.name} ${after}`
+        const newValue = `${before}@${mentionToken} ${after}`
         onChange?.(newValue)
 
         setTimeout(() => {
           if (textareaRef.current) {
-            const cursorPos = before.length + file.name.length + 2 // include @ and trailing space
+            const cursorPos = before.length + mentionToken.length + 2 // include @ and trailing space
             textareaRef.current.focus()
             textareaRef.current.setSelectionRange(cursorPos, cursorPos)
           }
         }, 0)
       }
     } catch (error) {
-      console.error('Failed to request file content:', error)
+      console.error('Failed to process @mention selection:', error)
     } finally {
       setActiveMention(null)
       setShowFileList(false)
@@ -549,9 +573,13 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
     }
 
     const term = activeMention.term.toLowerCase()
-    const filtered = localMentionableFiles.filter(
-      file => file.name.toLowerCase().includes(term) || file.path.toLowerCase().includes(term)
-    )
+    const filtered = localMentionableFiles.filter(file => {
+      const nameMatches = file.name.toLowerCase().includes(term)
+      const relativePathMatches = file.relativePath.toLowerCase().includes(term)
+      const relativeDirectoryMatches = file.relativeDirectoryPath.toLowerCase().includes(term)
+      const absolutePathMatches = file.path.toLowerCase().includes(term)
+      return nameMatches || relativePathMatches || relativeDirectoryMatches || absolutePathMatches
+    })
     setFilteredFiles(filtered)
     setSelectedFileIndex(0)
     setShowFileList(filtered.length > 0)
@@ -681,16 +709,40 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
               >
                 <div className='flex justify-between gap-2'>
                   <div className='pl-2 font-medium sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg truncate basis-2/5'>
+                    {file.kind === 'folder' ? '📁 ' : '📄 '}
                     {file.name}
                   </div>
-                  <div className='pl-2 overflow-left text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate rtl text-left basis-3/5'>
-                    {file.path}
+                  <div
+                    className='pl-2 overflow-left text-[10px] sm:text-xs md:text-xs lg:text-sm 3xl:text-base 4xl:text-lg text-stone-800 dark:text-stone-300 truncate rtl text-left basis-3/5'
+                    title={file.relativePath || file.path}
+                  >
+                    {file.kind === 'folder' ? file.relativePath : file.relativeDirectoryPath || '/'}
                   </div>
                 </div>
               </div>
             ))}
           </div>
         )}
+
+        {hasIdeContextSelection && (
+          <div className='mb-1 ml-1 flex'>
+            <div className='group relative inline-flex max-w-full'>
+              <span className='inline-flex items-center rounded-full border border-orange-400/60 bg-orange-100/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-orange-800 dark:border-orange-500/60 dark:bg-orange-900/40 dark:text-orange-200'>
+                ide context detected
+              </span>
+
+              <div className='pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-[24rem] max-w-[90vw] rounded-md border border-orange-300/70 bg-orange-50/95 p-2 shadow-xl group-hover:block dark:border-orange-500/40 dark:bg-neutral-900/95'>
+                {ideSelectionLocation && (
+                  <div className='mb-1 text-[10px] font-semibold text-orange-900 dark:text-orange-200'>{ideSelectionLocation}</div>
+                )}
+                <pre className='max-h-40 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-orange-950 dark:text-orange-100'>
+                  {ideSelectionPreview}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           id={id}

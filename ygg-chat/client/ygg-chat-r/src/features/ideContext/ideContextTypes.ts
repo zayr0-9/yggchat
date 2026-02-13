@@ -2,6 +2,8 @@
 export interface FileInfo {
   path: string
   relativePath: string
+  directoryPath?: string
+  relativeDirectoryPath?: string
   name: string
   language: string
   lastModified: string
@@ -30,6 +32,8 @@ export interface WorkspaceInfo {
 export interface SelectedFileContent {
   path: string
   relativePath: string
+  directoryPath?: string
+  relativeDirectoryPath?: string
   name?: string
   contents: string
   contentLength: number

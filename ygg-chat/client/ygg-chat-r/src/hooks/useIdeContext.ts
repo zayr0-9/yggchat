@@ -242,6 +242,48 @@ export function useIdeContext(): UseIdeContextReturn {
                     (projectState.openFiles && projectState.openFiles.length > 0))
               )
 
+              if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
+                const workspaceRoot =
+                  typeof projectState?.workspace === 'string' ? null : (projectState?.workspace?.rootPath ?? null)
+                const normalizedWorkspaceRoot = typeof workspaceRoot === 'string' ? workspaceRoot.replace(/[\\/]+$/, '') : null
+                const allFiles = Array.isArray(projectState?.allFiles) ? projectState.allFiles : []
+                const openFiles = Array.isArray(projectState?.openFiles) ? projectState.openFiles : []
+                const relativeAllFiles = allFiles.map((filePath: string) => {
+                  if (!normalizedWorkspaceRoot) return filePath
+                  const normalizedFilePath = String(filePath)
+                  if (normalizedFilePath === normalizedWorkspaceRoot) return ''
+                  if (normalizedFilePath.startsWith(`${normalizedWorkspaceRoot}/`)) {
+                    return normalizedFilePath.slice(normalizedWorkspaceRoot.length + 1)
+                  }
+                  if (normalizedFilePath.startsWith(`${normalizedWorkspaceRoot}\\`)) {
+                    return normalizedFilePath.slice(normalizedWorkspaceRoot.length + 1)
+                  }
+                  return normalizedFilePath
+                })
+                const allFilesInSubdirectoriesCount = relativeAllFiles.filter((relativePath: string) => /[\\/]/.test(relativePath)).length
+
+                console.log('[IDE DEBUG][WS inbound context]', {
+                  type: message.type,
+                  requestId: responseRequestId,
+                  workspaceName:
+                    typeof projectState?.workspace === 'string'
+                      ? projectState.workspace
+                      : (projectState?.workspace?.name ?? null),
+                  workspaceRoot,
+                  allFilesCount: allFiles.length,
+                  allFilesInSubdirectoriesCount,
+                  allFilesSample: allFiles.slice(0, 8),
+                  relativeAllFilesSample: relativeAllFiles.slice(0, 8),
+                  openFilesCount: openFiles.length,
+                  openFilesSample: openFiles.slice(0, 5).map((file: any) => ({
+                    path: file?.path,
+                    relativePath: file?.relativePath,
+                    directoryPath: file?.directoryPath,
+                    relativeDirectoryPath: file?.relativeDirectoryPath,
+                  })),
+                })
+              }
+
               globalDispatch(setExtensionStatus(isRealExtensionResponse))
 
               if (projectState.workspace) {
@@ -280,6 +322,14 @@ export function useIdeContext(): UseIdeContextReturn {
 
             case 'file_opened':
               const openedFile = message.data as FileInfo
+              if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
+                console.log('[IDE DEBUG][WS file_opened]', {
+                  path: openedFile.path,
+                  relativePath: openedFile.relativePath,
+                  directoryPath: (openedFile as any).directoryPath,
+                  relativeDirectoryPath: (openedFile as any).relativeDirectoryPath,
+                })
+              }
               globalDispatch(addOpenFile(openedFile))
               addRecentActivity('file_opened', openedFile.path, { file: openedFile })
               break
@@ -313,6 +363,15 @@ export function useIdeContext(): UseIdeContextReturn {
 
             case 'file_contents_response':
               const fileContent = message.data
+              if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
+                console.log('[IDE DEBUG][WS file_contents_response]', {
+                  requestId: message.requestId ?? fileContent?.requestId,
+                  path: fileContent?.path,
+                  relativePath: fileContent?.relativePath,
+                  directoryPath: fileContent?.directoryPath,
+                  relativeDirectoryPath: fileContent?.relativeDirectoryPath,
+                })
+              }
               const responseRequestIdRaw = message.requestId ?? fileContent?.requestId
               const responseRequestId: number | undefined =
                 typeof responseRequestIdRaw === 'string' ? Number(responseRequestIdRaw) : responseRequestIdRaw
@@ -326,6 +385,8 @@ export function useIdeContext(): UseIdeContextReturn {
                 addSelectedFileForChat({
                   path: fileContent.path,
                   relativePath: fileContent.relativePath,
+                  directoryPath: fileContent.directoryPath,
+                  relativeDirectoryPath: fileContent.relativeDirectoryPath,
                   name: fileContent.name ? fileContent.name : fileContent.path,
                   contents: fileContent.contents,
                   contentLength: fileContent.contents?.length || 0,

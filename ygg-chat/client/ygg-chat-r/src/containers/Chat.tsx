@@ -80,7 +80,9 @@ import {
 import { updateCwd } from '../features/conversations/conversationActions'
 import { removeSelectedFileForChat, selectExtension, updateIdeContext } from '../features/ideContext'
 import {
+  selectCurrentSelection,
   selectExtensions,
+  selectMentionableFiles,
   selectSelectedExtensionId,
   selectSelectedFilesForChat,
   selectWorkspace,
@@ -436,11 +438,13 @@ function Chat() {
 
   // const ideContext = useAppSelector(selectIdeContext)
   const workspace = useAppSelector(selectWorkspace)
+  const currentIdeSelection = useAppSelector(selectCurrentSelection)
   const extensions = useAppSelector(selectExtensions)
   const selectedExtensionId = useAppSelector(selectSelectedExtensionId)
   // const isIdeConnected = useAppSelector(selectIsIdeConnected)
   // const activeFile = useAppSelector(selectActiveFile)
   const selectedFilesForChat = useAppSelector(selectSelectedFilesForChat)
+  const mentionableFilesForDebug = useAppSelector(selectMentionableFiles)
   const optimisticMessage = useAppSelector(state => state.chat.composition.optimisticMessage)
   const optimisticBranchMessage = useAppSelector(state => state.chat.composition.optimisticBranchMessage)
   const ccSlashCommands = useAppSelector(selectCCSlashCommands)
@@ -475,6 +479,30 @@ function Chat() {
       (typeof window !== 'undefined' && (window as any).__IS_ELECTRON__),
     []
   )
+
+  useEffect(() => {
+    if (!isElectronEnv) return
+
+    const sample = mentionableFilesForDebug.slice(0, 10).map(file => ({
+      kind: file.kind,
+      name: file.name,
+      relativePath: file.relativePath,
+      relativeDirectoryPath: file.relativeDirectoryPath,
+      absolutePath: file.path,
+    }))
+
+    const withDirectoryCount = mentionableFilesForDebug.filter(file => Boolean(file.relativeDirectoryPath)).length
+
+    console.log('[IDE DEBUG][Chat mentionable files for @]', {
+      workspaceName: workspace?.name ?? null,
+      workspaceRootPath: workspace?.rootPath ?? null,
+      allFilesCount: ideContext.allFiles?.length ?? 0,
+      mentionableFilesCount: mentionableFilesForDebug.length,
+      mentionableFilesWithDirectoryCount: withDirectoryCount,
+      sample,
+    })
+  }, [isElectronEnv, mentionableFilesForDebug, workspace?.name, workspace?.rootPath, ideContext.allFiles])
+
   const inputAreaBorderClasses =
     operationMode === 'plan'
       ? 'outline-1 outline-blue-200/70 dark:outline-neutral-700/50'
@@ -592,6 +620,35 @@ function Chat() {
       })
     },
     [selectedFilesForChat] // Dependency array: Re-creates if selectedFilesForChat changes.
+  )
+
+  const appendIdeContextToMessage = useCallback(
+    (message: string): string => {
+      if (!message || typeof message !== 'string') return message || ''
+      if (!currentIdeSelection) return message
+
+      const contextPath = currentIdeSelection.filePath || currentIdeSelection.relativePath
+      if (!contextPath) return message
+
+      const fileName = contextPath.split(/[\\/]/).pop() || contextPath
+      const hasLineRange =
+        typeof currentIdeSelection.startLine === 'number' && typeof currentIdeSelection.endLine === 'number'
+      const lineRangeText = hasLineRange
+        ? `
+IDE selection lines: ${currentIdeSelection.startLine}-${currentIdeSelection.endLine}`
+        : ''
+      const ideContextFooter = `IDE context: ${contextPath}
+IDE file: ${fileName}${lineRangeText}`
+
+      if (message.includes(ideContextFooter)) {
+        return message
+      }
+
+      return `${message.trimEnd()}
+
+${ideContextFooter}`
+    },
+    [currentIdeSelection]
   )
 
   // Ref for auto-scroll
@@ -1920,9 +1977,10 @@ function Chat() {
           } else {
             // Normal CC mode send
             const processedContent = replaceFileMentionsWithPath(localInputValue)
+            const contentWithIdeContext = appendIdeContextToMessage(processedContent)
 
             // Update Redux state with processed content before sending
-            dispatch(chatSliceActions.inputChanged({ content: processedContent }))
+            dispatch(chatSliceActions.inputChanged({ content: contentWithIdeContext }))
 
             // Clear local input immediately after sending
             clearLocalInput()
@@ -1935,7 +1993,7 @@ function Chat() {
             dispatch(
               sendCCMessage({
                 conversationId: currentConversationId,
-                message: processedContent,
+                message: contentWithIdeContext,
                 cwd: ccCwd || undefined,
                 permissionMode: 'default',
                 resume: true,
@@ -1993,9 +2051,10 @@ function Chat() {
             // Normal send flow
             // Process file mentions with actual content before sending
             const processedContent = replaceFileMentionsWithPath(localInputValue)
+            const contentWithIdeContext = appendIdeContextToMessage(processedContent)
 
             // Update Redux state with processed content before sending
-            dispatch(chatSliceActions.inputChanged({ content: processedContent }))
+            dispatch(chatSliceActions.inputChanged({ content: contentWithIdeContext }))
 
             const parent: MessageId | null = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
 
@@ -2055,8 +2114,8 @@ function Chat() {
               id: `temp-${Date.now()}`,
               conversation_id: currentConversationId,
               role: 'user' as const,
-              content: processedContent,
-              content_plain_text: processedContent,
+              content: contentWithIdeContext,
+              content_plain_text: contentWithIdeContext,
               parent_id: parent || null,
               children_ids: [],
               created_at: new Date().toISOString(),
@@ -2068,7 +2127,7 @@ function Chat() {
             dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
 
             // Use processed content for immediate send
-            const inputToSend = { content: processedContent }
+            const inputToSend = { content: contentWithIdeContext }
             // Clear local input immediately after sending
             clearLocalInput()
 
@@ -2118,6 +2177,7 @@ function Chat() {
       clearLocalInput,
       displayMessages,
       replaceFileMentionsWithPath,
+      appendIdeContextToMessage,
       scrollToBottomNow,
       selectedModel,
       ccMode,
@@ -2162,6 +2222,7 @@ function Chat() {
       if (currentConversationId) {
         // Replace any @file mentions with actual file contents before branching
         const processed = replaceFileMentionsWithPath(newContent)
+        const contentWithIdeContext = appendIdeContextToMessage(processed)
         const parsedId = parseId(id)
         const originalMessage = conversationMessages.find(m => m.id === parsedId)
 
@@ -2177,7 +2238,7 @@ function Chat() {
           dispatch(
             sendCCBranch({
               conversationId: currentConversationId,
-              message: processed,
+              message: contentWithIdeContext,
               cwd: ccCwd || undefined,
               permissionMode: 'default',
               resume: true,
@@ -2198,8 +2259,8 @@ function Chat() {
               id: `branch-temp-${Date.now()}`,
               conversation_id: currentConversationId,
               role: 'user' as const,
-              content: processed,
-              content_plain_text: processed,
+              content: contentWithIdeContext,
+              content_plain_text: contentWithIdeContext,
               parent_id: originalMessage.parent_id,
               children_ids: [],
               created_at: new Date().toISOString(),
@@ -2215,7 +2276,7 @@ function Chat() {
             editMessageWithBranching({
               conversationId: currentConversationId,
               originalMessageId: parsedId,
-              newContent: processed,
+              newContent: contentWithIdeContext,
               modelOverride: selectedModel?.name,
               think: think,
               cwd: ccCwd || undefined,
@@ -2247,6 +2308,7 @@ function Chat() {
       ccModeAvailable,
       dispatch,
       replaceFileMentionsWithPath,
+      appendIdeContextToMessage,
       conversationMessages,
       queryClient,
     ]
@@ -2257,6 +2319,7 @@ function Chat() {
       if (currentConversationId) {
         // Replace any @file mentions with actual file contents before branching
         const processed = replaceFileMentionsWithPath(newContent)
+        const contentWithIdeContext = appendIdeContextToMessage(processed)
         // console.log(processed)
 
         // Find the message to check if it has children
@@ -2278,8 +2341,8 @@ function Chat() {
             id: `temp-${Date.now()}`,
             conversation_id: currentConversationId,
             role: 'user' as const,
-            content: newContent,
-            content_plain_text: newContent,
+            content: contentWithIdeContext,
+            content_plain_text: contentWithIdeContext,
             parent_id: parsedId,
             children_ids: [],
             created_at: new Date().toISOString(),
@@ -2294,7 +2357,7 @@ function Chat() {
           dispatch(
             sendMessage({
               conversationId: currentConversationId,
-              input: { content: newContent },
+              input: { content: contentWithIdeContext },
               parent: parsedId,
               repeatNum: 1,
               think: think,
@@ -2322,8 +2385,8 @@ function Chat() {
             id: `branch-temp-${Date.now()}`,
             conversation_id: currentConversationId,
             role: 'user' as const,
-            content: newContent,
-            content_plain_text: newContent,
+            content: contentWithIdeContext,
+            content_plain_text: contentWithIdeContext,
             parent_id: originalMessage.parent_id,
             children_ids: [],
             created_at: new Date().toISOString(),
@@ -2338,7 +2401,7 @@ function Chat() {
             editMessageWithBranching({
               conversationId: currentConversationId,
               originalMessageId: parsedId,
-              newContent: processed,
+              newContent: contentWithIdeContext,
               modelOverride: selectedModel?.name,
               think: think,
               cwd: ccCwd || undefined,
@@ -2366,6 +2429,7 @@ function Chat() {
       think,
       dispatch,
       replaceFileMentionsWithPath,
+      appendIdeContextToMessage,
       conversationMessages,
       queryClient,
       ccCwd,
@@ -3477,6 +3541,9 @@ function Chat() {
                 {selectedFilesForChat.map(file => {
                   const displayName =
                     file.name || file.relativePath.split('/').pop() || file.path.split('/').pop() || file.relativePath
+                  const directoryLabel =
+                    file.relativeDirectoryPath ||
+                    (file.relativePath.includes('/') ? file.relativePath.split('/').slice(0, -1).join('/') : '')
                   const isExpanded = expandedFilePath === file.path
                   const isClosing = closingFilePath === file.path
                   const isOpening = openingFilePath === file.path
@@ -3496,7 +3563,12 @@ function Chat() {
                         }
                       }}
                     >
-                      <span className='truncate max-w-[100px] sm:max-w-[150px] md:max-w-[220px]'>{displayName}</span>
+                      <span className='flex flex-col max-w-[100px] sm:max-w-[150px] md:max-w-[220px]'>
+                        <span className='truncate'>{displayName}</span>
+                        {directoryLabel ? (
+                          <span className='truncate text-[10px] text-neutral-600 dark:text-neutral-400'>{directoryLabel}</span>
+                        ) : null}
+                      </span>
                       <button
                         type='button'
                         className='rounded dark:hover:bg-blue-200 hover:bg-blue-700 p-0.5 text-blue-700 dark:text-blue-200'
@@ -3517,9 +3589,14 @@ function Chat() {
                             : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
                         }`}
                       >
-                        <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-2 truncate'>
+                        <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-1 truncate'>
                           {file.name || file.relativePath.split('/').pop() || file.path.split('/').pop()}
                         </div>
+                        {directoryLabel ? (
+                          <div className='text-[10px] text-neutral-600 dark:text-neutral-400 mb-2 truncate'>
+                            {directoryLabel}
+                          </div>
+                        ) : null}
                         <div
                           className={`text-xs font-mono whitespace-pre-wrap break-words text-stone-800 dark:text-stone-300 ${isExpanded ? 'overflow-auto max-h-[60vh]' : isClosing ? 'overflow-hidden' : 'overflow-hidden line-clamp-6'} ${isOpening || isClosing ? 'opacity-50 ' : 'opacity-100 visible'} transition-opacity duration-50 overscroll-contain select-text`}
                         >
@@ -4096,37 +4173,7 @@ function Chat() {
                     disabled={!canSendLocal || !currentConversationId}
                     title='Send message'
                     onClick={() => {
-                      const inputValue = getLocalInput()
-                      if (ccMode && ccModeAvailable && inputValue.trim()) {
-                        // Send to Claude Code agent (disabled in web mode)
-                        const parent: MessageId | null =
-                          selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
-
-                        // Use shared helper to find last ex_agent session ID
-                        const lastExAgentSessionId = findLastExAgentSession(selectedPath)
-
-                        dispatch(
-                          sendCCMessage({
-                            conversationId: currentConversationId,
-                            message: inputValue.trim(),
-                            cwd: ccCwd || undefined,
-                            permissionMode: 'default',
-                            resume: true,
-                            parentId: parent,
-                            sessionId: lastExAgentSessionId,
-                          })
-                        )
-                          .unwrap()
-                          .then(() => {
-                            clearLocalInput()
-                          })
-                          .catch(error => {
-                            console.error('Failed to send CC message:', error)
-                          })
-                      } else {
-                        // Send normal message
-                        handleSend(multiReplyCount)
-                      }
+                      handleSend(multiReplyCount)
                     }}
                   >
                     <svg

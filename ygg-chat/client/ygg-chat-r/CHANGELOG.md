@@ -14,8 +14,11 @@ The format follows Keep a Changelog, and versions map to `client/ygg-chat-r/pack
 - **Chat Reasoning Defaults** (Settings page): Users can now configure default thinking behavior and reasoning effort level (`low`/`medium`/`high`/`xhigh`) for supported models. These preferences persist locally and are automatically applied in Chat when the selected model supports extended thinking. Models without reasoning support will have thinking forced off regardless of the default setting.
 - **GPT Account Logout**: Users can now properly log out of their GPT account, with session data and authentication tokens securely cleared.
 - **Codex 5.3 Integration**: Full support for Codex 5.3 has been added, including all latest features and capabilities.
-- **notes pill and branch labeling** Heimdall note pills now show a truncated preview of the note text, adopt a blue pill background with white text in light mode, and open a hover popup mirroring the note’s full content.
+- **notes pill and branch labeling**: Heimdall note pills now show a truncated preview of the note text, adopt a blue pill background with white text in light mode, and open a hover popup mirroring the note’s full content.
 - **5.1 Codex mini**: Support added, small fast model good for small changes (write my commit browse the web etc)
+- **IDE context visibility**: Added an “ide context detected” pill with a hover preview (including dark-mode styling) whenever the extension reports a selected-range; it surfaces filename/path/lines alongside the file mention dropdown.
+- **Context-aware sends & branches**: Appended IDE context metadata (file path/name/line range) to every outgoing user message, including CC sends, message sends, branch submissions, and explain-from-selection flows so the model sees which file/selection the user referenced.
+- **Branch coverage**: Ensured IDE-context metadata now flows through branching helpers (sendCCBranch, editMessageWithBranching, etc.) so all follow-up messages carry the inferred file context.
 
 ### Fixed
 
