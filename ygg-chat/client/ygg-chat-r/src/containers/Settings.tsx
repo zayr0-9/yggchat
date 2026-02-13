@@ -1,9 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
 import { useNavigate } from 'react-router-dom'
+import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import changelogMarkdown from '../../CHANGELOG.md?raw'
 import { Button, Select } from '../components'
 import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import { chatSliceActions, selectProviderState } from '../features/chats'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../features/chats/chatActions'
+import { clearTokens as clearOpenAITokens, isOpenAIAuthenticated } from '../features/chats/openaiOAuth'
 import { getAllTools } from '../features/chats/toolDefinitions'
 import {
   AGENT_SETTINGS_CHANGE_EVENT,
@@ -12,6 +19,13 @@ import {
   saveAgentSettings,
 } from '../helpers/agentSettingsStorage'
 import {
+  CHAT_REASONING_SETTINGS_CHANGE_EVENT,
+  ChatReasoningSettings,
+  loadChatReasoningSettings,
+  REASONING_EFFORT_OPTIONS,
+  saveChatReasoningSettings,
+} from '../helpers/chatReasoningSettingsStorage'
+import {
   loadProviderSettings,
   MAX_OPENROUTER_TEMPERATURE,
   MIN_OPENROUTER_TEMPERATURE,
@@ -19,22 +33,19 @@ import {
   ProviderSettings,
   saveProviderSettings,
 } from '../helpers/providerSettingsStorage'
-import { loadDefaultConversationTab, saveDefaultConversationTab, type ConversationTab } from '../helpers/sidebarPreferences'
+import {
+  loadDefaultConversationTab,
+  saveDefaultConversationTab,
+  type ConversationTab,
+} from '../helpers/sidebarPreferences'
 import {
   loadToolExecutionSettings,
   MAX_BASH_TIMEOUT_MS,
   MIN_BASH_TIMEOUT_MS,
+  saveToolExecutionSettings,
   TOOL_EXECUTION_SETTINGS_CHANGE_EVENT,
   ToolExecutionSettings,
-  saveToolExecutionSettings,
 } from '../helpers/toolExecutionSettings'
-import {
-  CHAT_REASONING_SETTINGS_CHANGE_EVENT,
-  ChatReasoningSettings,
-  loadChatReasoningSettings,
-  REASONING_EFFORT_OPTIONS,
-  saveChatReasoningSettings,
-} from '../helpers/chatReasoningSettingsStorage'
 import {
   addCustomVideo,
   clearCustomVideoLibrary,
@@ -49,7 +60,6 @@ import {
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useModels } from '../hooks/useQueries'
-import { clearTokens as clearOpenAITokens, isOpenAIAuthenticated } from '../features/chats/openaiOAuth'
 import { API_BASE } from '../utils/api'
 
 const MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024 // 8MB
@@ -106,6 +116,7 @@ const Settings: React.FC = () => {
   const [googleDisconnecting, setGoogleDisconnecting] = useState(false)
   const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null)
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false)
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(() => loadProviderSettings())
   const [openRouterTemperatureInput, setOpenRouterTemperatureInput] = useState<string>(() => {
     const configured = loadProviderSettings().openRouterTemperature
@@ -119,7 +130,9 @@ const Settings: React.FC = () => {
     String(loadToolExecutionSettings().bashTimeoutMs)
   )
   const [bashTimeoutTouched, setBashTimeoutTouched] = useState(false)
-  const [defaultConversationTab, setDefaultConversationTab] = useState<ConversationTab>(() => loadDefaultConversationTab())
+  const [defaultConversationTab, setDefaultConversationTab] = useState<ConversationTab>(() =>
+    loadDefaultConversationTab()
+  )
   const [chatReasoningSettings, setChatReasoningSettings] = useState<ChatReasoningSettings>(() =>
     loadChatReasoningSettings()
   )
@@ -207,7 +220,10 @@ const Settings: React.FC = () => {
 
     window.addEventListener(CHAT_REASONING_SETTINGS_CHANGE_EVENT, handleChatReasoningSettingsChange as EventListener)
     return () =>
-      window.removeEventListener(CHAT_REASONING_SETTINGS_CHANGE_EVENT, handleChatReasoningSettingsChange as EventListener)
+      window.removeEventListener(
+        CHAT_REASONING_SETTINGS_CHANGE_EVENT,
+        handleChatReasoningSettingsChange as EventListener
+      )
   }, [])
 
   const handleProviderVisibilityToggle = () => {
@@ -419,9 +435,7 @@ const Settings: React.FC = () => {
     if (agentSettingsLoading || import.meta.env.VITE_ENVIRONMENT !== 'electron') return
     if (agentSettings.toolAllowlist && agentSettings.toolAllowlist.length > 0) return
 
-    const defaultAllowlist = tools
-      .filter(tool => tool.enabled || tool.name === 'bash')
-      .map(tool => tool.name)
+    const defaultAllowlist = tools.filter(tool => tool.enabled || tool.name === 'bash').map(tool => tool.name)
 
     if (defaultAllowlist.length === 0) return
 
@@ -446,6 +460,19 @@ const Settings: React.FC = () => {
     if (bashTimeoutTouched) return
     setBashTimeoutInput(String(toolExecutionSettings.bashTimeoutMs))
   }, [toolExecutionSettings.bashTimeoutMs, bashTimeoutTouched])
+
+  useEffect(() => {
+    if (!isChangelogOpen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsChangelogOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isChangelogOpen])
 
   const persistAgentSettings = async (nextSettings: AgentSettings, successText: string, errorText: string) => {
     setAgentSettings(nextSettings)
@@ -586,9 +613,7 @@ const Settings: React.FC = () => {
 
   const handleAgentToolToggle = async (toolName: string) => {
     const current = agentSettings.toolAllowlist ?? []
-    const next = current.includes(toolName)
-      ? current.filter(name => name !== toolName)
-      : [...current, toolName]
+    const next = current.includes(toolName) ? current.filter(name => name !== toolName) : [...current, toolName]
     await persistAgentSettings(
       { ...agentSettings, toolAllowlist: next },
       'Global agent tools updated.',
@@ -762,22 +787,58 @@ const Settings: React.FC = () => {
       <div className='mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8'>
         <header className='flex flex-wrap items-center justify-between gap-4'>
           <div>
-            <p className='text-sm uppercase tracking-[0.3em] video-light:text-neutral-100 video-dark:text-neutral-900'>
-              Background
-            </p>
+            {/* <p className='text-sm uppercase tracking-[0.3em] video-light:text-neutral-100 video-dark:text-neutral-900'>
+              Config
+            </p> */}
             <h1 className='text-3xl font-semibold video-light:text-neutral-100 video-dark:text-neutral-900 '>
-              Custom Wallpaper
+              Settings
             </h1>
-            <p className='mt-1 text-sm video-light:text-neutral-100 video-dark:text-neutral-900'>
-              Upload up to 8MB MP4/WebM clips and switch between them in one place.
-            </p>
           </div>
-          <Button variant='acrylic' onClick={() => navigate('/homepage')} className='group'>
-            <p className='transition-transform duration-100 group-active:scale-95'>Back to Home</p>
-          </Button>
+          <div className='flex items-center gap-3'>
+            <button
+              type='button'
+              onClick={() => setIsChangelogOpen(true)}
+              className='rounded-full border border-stone-300 bg-stone-100 px-3 py-1 font-mono text-xs tracking-wide text-stone-700 transition hover:bg-stone-200 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700'
+            >
+              CHANGELOG
+            </button>
+            <Button variant='acrylic' onClick={() => navigate('/homepage')} className='group'>
+              <p className='transition-transform duration-100 group-active:scale-95'>Back to Home</p>
+            </Button>
+          </div>
         </header>
 
         {renderStatus()}
+
+        {isChangelogOpen && (
+          <div
+            className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4'
+            onClick={() => setIsChangelogOpen(false)}
+          >
+            <div
+              className='w-full max-w-4xl max-h-[85vh] overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl dark:border-stone-700 dark:bg-zinc-900'
+              onClick={event => event.stopPropagation()}
+            >
+              <div className='flex items-center justify-between border-b border-stone-200 px-4 py-3 dark:border-stone-700'>
+                <p className='font-mono text-sm tracking-wide text-stone-800 dark:text-stone-100'>CHANGELOG</p>
+                <button
+                  type='button'
+                  onClick={() => setIsChangelogOpen(false)}
+                  className='rounded-md px-2 py-1 text-stone-600 transition hover:bg-stone-100 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800 dark:hover:text-stone-100'
+                >
+                  ✕
+                </button>
+              </div>
+              <div className='max-h-[calc(85vh-60px)] overflow-y-auto p-4'>
+                <div className='prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-pre:rounded-lg prose-pre:border prose-pre:border-stone-300 dark:prose-pre:border-stone-700'>
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex]}>
+                    {changelogMarkdown}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
           <div className='flex flex-col gap-1'>
@@ -965,8 +1026,8 @@ const Settings: React.FC = () => {
                 <div>
                   <p className='text-base font-medium text-stone-900 dark:text-stone-100'>OpenAI ChatGPT Account</p>
                   <p className='text-sm text-stone-500 dark:text-stone-400'>
-                    Sign out to clear local ChatGPT OAuth tokens. You can sign in again from Chat when selecting
-                    OpenAI (ChatGPT).
+                    Sign out to clear local ChatGPT OAuth tokens. You can sign in again from Chat when selecting OpenAI
+                    (ChatGPT).
                   </p>
                 </div>
                 <div className='flex flex-wrap items-center gap-3'>
@@ -1054,9 +1115,7 @@ const Settings: React.FC = () => {
               <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
                 <div>
                   <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Loop Cadence (ms)</p>
-                  <p className='text-sm text-stone-500 dark:text-stone-400'>
-                    How often the agent checks its queue.
-                  </p>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>How often the agent checks its queue.</p>
                 </div>
                 <input
                   type='number'
@@ -1185,7 +1244,9 @@ const Settings: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <p className='text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5'>{tool.description}</p>
+                          <p className='text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5'>
+                            {tool.description}
+                          </p>
                         </div>
                         <button
                           onClick={() => handleAgentToolToggle(tool.name)}
@@ -1243,7 +1304,9 @@ const Settings: React.FC = () => {
               <div className='mb-3 rounded-lg border border-stone-200 bg-stone-50/60 p-3 dark:border-stone-700 dark:bg-stone-800/30'>
                 <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
                   <div>
-                    <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Default Bash Timeout (ms)</p>
+                    <p className='text-base font-medium text-stone-900 dark:text-stone-100'>
+                      Default Bash Timeout (ms)
+                    </p>
                     <p className='text-xs text-stone-500 dark:text-stone-400'>
                       Used when the `bash` tool call does not specify `timeoutMs`.
                     </p>
@@ -1555,6 +1618,9 @@ const Settings: React.FC = () => {
             <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Custom Upload</h2>
             <p className='text-sm text-stone-500 dark:text-stone-200'>
               Drag in an MP4 or WebM and we’ll keep it ready for whenever you want that motion.
+            </p>
+            <p className='mt-1 text-sm video-light:text-neutral-100 video-dark:text-neutral-900'>
+              Upload up to 8MB MP4/WebM clips and switch between them in one place.
             </p>
           </div>
 
