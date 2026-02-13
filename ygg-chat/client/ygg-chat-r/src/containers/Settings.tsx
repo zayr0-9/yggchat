@@ -783,7 +783,7 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className='h-full overflow-y-auto bg-transparent min-h-full'>
+    <div className='h-full overflow-y-auto thin-scrollbar bg-transparent min-h-full'>
       <div className='mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8'>
         <header className='flex flex-wrap items-center justify-between gap-4'>
           <div>
@@ -829,7 +829,7 @@ const Settings: React.FC = () => {
                   ✕
                 </button>
               </div>
-              <div className='max-h-[calc(85vh-60px)] overflow-y-auto p-4'>
+              <div className='max-h-[calc(85vh-60px)] overflow-y-auto thin-scrollbar p-4'>
                 <div className='prose prose-sm max-w-none dark:prose-invert prose-headings:font-semibold prose-pre:rounded-lg prose-pre:border prose-pre:border-stone-300 dark:prose-pre:border-stone-700'>
                   <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeHighlight, rehypeKatex]}>
                     {changelogMarkdown}
