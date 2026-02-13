@@ -13,11 +13,21 @@ import {
 } from '../helpers/agentSettingsStorage'
 import {
   loadProviderSettings,
+  MAX_OPENROUTER_TEMPERATURE,
+  MIN_OPENROUTER_TEMPERATURE,
   PROVIDER_SETTINGS_CHANGE_EVENT,
   ProviderSettings,
   saveProviderSettings,
 } from '../helpers/providerSettingsStorage'
 import { loadDefaultConversationTab, saveDefaultConversationTab, type ConversationTab } from '../helpers/sidebarPreferences'
+import {
+  loadToolExecutionSettings,
+  MAX_BASH_TIMEOUT_MS,
+  MIN_BASH_TIMEOUT_MS,
+  TOOL_EXECUTION_SETTINGS_CHANGE_EVENT,
+  ToolExecutionSettings,
+  saveToolExecutionSettings,
+} from '../helpers/toolExecutionSettings'
 import {
   addCustomVideo,
   clearCustomVideoLibrary,
@@ -89,6 +99,18 @@ const Settings: React.FC = () => {
   const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null)
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(() => loadProviderSettings())
+  const [openRouterTemperatureInput, setOpenRouterTemperatureInput] = useState<string>(() => {
+    const configured = loadProviderSettings().openRouterTemperature
+    return typeof configured === 'number' ? String(configured) : ''
+  })
+  const [openRouterTemperatureTouched, setOpenRouterTemperatureTouched] = useState(false)
+  const [toolExecutionSettings, setToolExecutionSettings] = useState<ToolExecutionSettings>(() =>
+    loadToolExecutionSettings()
+  )
+  const [bashTimeoutInput, setBashTimeoutInput] = useState<string>(() =>
+    String(loadToolExecutionSettings().bashTimeoutMs)
+  )
+  const [bashTimeoutTouched, setBashTimeoutTouched] = useState(false)
   const [defaultConversationTab, setDefaultConversationTab] = useState<ConversationTab>(() => loadDefaultConversationTab())
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     heartbeatTime: null,
@@ -148,6 +170,25 @@ const Settings: React.FC = () => {
       window.removeEventListener(PROVIDER_SETTINGS_CHANGE_EVENT, handleProviderSettingsChange as EventListener)
   }, [])
 
+  useEffect(() => {
+    if (openRouterTemperatureTouched) return
+    const configured = providerSettings.openRouterTemperature
+    setOpenRouterTemperatureInput(typeof configured === 'number' ? String(configured) : '')
+  }, [providerSettings.openRouterTemperature, openRouterTemperatureTouched])
+
+  useEffect(() => {
+    const handleToolExecutionSettingsChange = (e: CustomEvent<ToolExecutionSettings>) => {
+      setToolExecutionSettings(e.detail)
+    }
+
+    window.addEventListener(TOOL_EXECUTION_SETTINGS_CHANGE_EVENT, handleToolExecutionSettingsChange as EventListener)
+    return () =>
+      window.removeEventListener(
+        TOOL_EXECUTION_SETTINGS_CHANGE_EVENT,
+        handleToolExecutionSettingsChange as EventListener
+      )
+  }, [])
+
   const handleProviderVisibilityToggle = () => {
     const updated = {
       ...providerSettings,
@@ -172,6 +213,58 @@ const Settings: React.FC = () => {
       type: 'success',
       text: providerName ? `Default provider set to "${providerName}".` : 'Default provider cleared.',
     })
+  }
+
+  const handleOpenRouterTemperatureInputChange = (value: string) => {
+    setOpenRouterTemperatureInput(value)
+    setOpenRouterTemperatureTouched(true)
+  }
+
+  const commitOpenRouterTemperatureChange = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      const updated = {
+        ...providerSettings,
+        openRouterTemperature: null,
+      }
+      saveProviderSettings(updated)
+      setProviderSettings(updated)
+      setOpenRouterTemperatureTouched(false)
+      setOpenRouterTemperatureInput('')
+      showStatus({ type: 'success', text: 'OpenRouter temperature reset to model default.' })
+      return
+    }
+
+    const parsed = Number(trimmed)
+    if (!Number.isFinite(parsed)) {
+      setOpenRouterTemperatureTouched(false)
+      setOpenRouterTemperatureInput(
+        typeof providerSettings.openRouterTemperature === 'number' ? String(providerSettings.openRouterTemperature) : ''
+      )
+      showStatus({ type: 'error', text: 'OpenRouter temperature must be a number between 0 and 2.' })
+      return
+    }
+
+    const clamped = Math.max(MIN_OPENROUTER_TEMPERATURE, Math.min(MAX_OPENROUTER_TEMPERATURE, parsed))
+    const normalized = Math.round(clamped * 100) / 100
+    const updated = {
+      ...providerSettings,
+      openRouterTemperature: normalized,
+    }
+    saveProviderSettings(updated)
+    setProviderSettings(updated)
+    setOpenRouterTemperatureTouched(false)
+    setOpenRouterTemperatureInput(String(normalized))
+
+    if (normalized !== parsed) {
+      showStatus({
+        type: 'info',
+        text: `OpenRouter temperature adjusted to ${normalized} (allowed range ${MIN_OPENROUTER_TEMPERATURE}-${MAX_OPENROUTER_TEMPERATURE}).`,
+      })
+      return
+    }
+
+    showStatus({ type: 'success', text: 'OpenRouter temperature updated.' })
   }
 
   // Tool handlers
@@ -289,6 +382,11 @@ const Settings: React.FC = () => {
     setLoopIntervalInput(String(agentSettings.loopIntervalMs ?? 60000))
   }, [agentSettings.loopIntervalMs, loopIntervalTouched])
 
+  useEffect(() => {
+    if (bashTimeoutTouched) return
+    setBashTimeoutInput(String(toolExecutionSettings.bashTimeoutMs))
+  }, [toolExecutionSettings.bashTimeoutMs, bashTimeoutTouched])
+
   const persistAgentSettings = async (nextSettings: AgentSettings, successText: string, errorText: string) => {
     setAgentSettings(nextSettings)
 
@@ -350,6 +448,11 @@ const Settings: React.FC = () => {
     setLoopIntervalTouched(true)
   }
 
+  const handleBashTimeoutInputChange = (value: string) => {
+    setBashTimeoutInput(value)
+    setBashTimeoutTouched(true)
+  }
+
   const handleWorkDirectoryInputChange = (value: string) => {
     setWorkDirectoryInput(value)
     setWorkDirectoryTouched(true)
@@ -381,6 +484,36 @@ const Settings: React.FC = () => {
       'Loop cadence updated.',
       'Failed to update loop cadence.'
     )
+  }
+
+  const commitBashTimeoutChange = (value: string) => {
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setBashTimeoutTouched(false)
+      setBashTimeoutInput(String(toolExecutionSettings.bashTimeoutMs))
+      showStatus({ type: 'error', text: 'Bash timeout must be a positive number of milliseconds.' })
+      return
+    }
+
+    const clamped = Math.max(MIN_BASH_TIMEOUT_MS, Math.min(MAX_BASH_TIMEOUT_MS, Math.floor(parsed)))
+    const nextSettings: ToolExecutionSettings = {
+      ...toolExecutionSettings,
+      bashTimeoutMs: clamped,
+    }
+    saveToolExecutionSettings(nextSettings)
+    setToolExecutionSettings(nextSettings)
+    setBashTimeoutTouched(false)
+    setBashTimeoutInput(String(clamped))
+
+    if (clamped !== Math.floor(parsed)) {
+      showStatus({
+        type: 'info',
+        text: `Bash timeout adjusted to ${clamped}ms (allowed range ${MIN_BASH_TIMEOUT_MS}-${MAX_BASH_TIMEOUT_MS}ms).`,
+      })
+      return
+    }
+
+    showStatus({ type: 'success', text: 'Default bash timeout updated.' })
   }
 
   const handleAutoResumeToggle = async () => {
@@ -669,6 +802,46 @@ const Settings: React.FC = () => {
                   )}
                 </div>
               )}
+
+              <div className='flex flex-col gap-2 pt-2 border-t border-stone-200 dark:border-stone-700'>
+                <div>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>OpenRouter Temperature</p>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>
+                    Optional default for OpenRouter requests. Leave blank to use each model&apos;s default.
+                  </p>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <input
+                    type='number'
+                    min={MIN_OPENROUTER_TEMPERATURE}
+                    max={MAX_OPENROUTER_TEMPERATURE}
+                    step={0.1}
+                    value={openRouterTemperatureInput}
+                    placeholder='model default'
+                    onChange={e => handleOpenRouterTemperatureInputChange(e.target.value)}
+                    onBlur={e => commitOpenRouterTemperatureChange(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur()
+                      }
+                    }}
+                    className='w-40 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+                  />
+                  {providerSettings.openRouterTemperature !== null && (
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => commitOpenRouterTemperatureChange('')}
+                      className='h-[36px]'
+                    >
+                      Reset
+                    </Button>
+                  )}
+                </div>
+                <p className='text-xs text-stone-500 dark:text-stone-400'>
+                  Range: {MIN_OPENROUTER_TEMPERATURE} to {MAX_OPENROUTER_TEMPERATURE}.
+                </p>
+              </div>
             </div>
           </section>
         )}
@@ -920,6 +1093,35 @@ const Settings: React.FC = () => {
                 toolsExpanded ? ' opacity-100 my-4' : 'max-h-0 opacity-0'
               }`}
             >
+              <div className='mb-3 rounded-lg border border-stone-200 bg-stone-50/60 p-3 dark:border-stone-700 dark:bg-stone-800/30'>
+                <div className='flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                  <div>
+                    <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Default Bash Timeout (ms)</p>
+                    <p className='text-xs text-stone-500 dark:text-stone-400'>
+                      Used when the `bash` tool call does not specify `timeoutMs`.
+                    </p>
+                  </div>
+                  <input
+                    type='number'
+                    min={MIN_BASH_TIMEOUT_MS}
+                    max={MAX_BASH_TIMEOUT_MS}
+                    step={1000}
+                    value={bashTimeoutInput}
+                    onChange={e => handleBashTimeoutInputChange(e.target.value)}
+                    onBlur={e => commitBashTimeoutChange(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur()
+                      }
+                    }}
+                    className='w-44 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+                  />
+                </div>
+                <p className='mt-2 text-xs text-stone-500 dark:text-stone-400'>
+                  Range: {MIN_BASH_TIMEOUT_MS}ms to {MAX_BASH_TIMEOUT_MS}ms.
+                </p>
+              </div>
+
               {/* Reload button */}
               <div className='flex justify-end mb-3'>
                 <Button

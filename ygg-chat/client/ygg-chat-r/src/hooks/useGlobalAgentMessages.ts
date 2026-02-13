@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { environment, localApi } from '../utils/api'
 import { useAuth } from './useAuth'
 
@@ -7,6 +7,20 @@ export interface GlobalAgentMessagesData {
   messages: any[]
   conversationId: string | null
   conversationDate: string | null
+}
+
+export interface GlobalAgentQueuedTask {
+  id: string
+  status: string
+  description: string
+  created_at: string
+  payload?: any
+  source?: string
+  priority?: string
+}
+
+export interface GlobalAgentQueuedTasksData {
+  tasks: GlobalAgentQueuedTask[]
 }
 
 /**
@@ -116,4 +130,60 @@ export function useGlobalAgentOptimisticMessage(): any | null {
   })
 
   return data || null
+}
+
+/**
+ * Fetch queued global agent tasks (pending + scheduled)
+ */
+export function useGlobalAgentQueuedTasks(enabled: boolean = true) {
+  const { userId } = useAuth()
+
+  return useQuery({
+    queryKey: ['globalAgent', 'queuedTasks'],
+    queryFn: async (): Promise<GlobalAgentQueuedTasksData> => {
+      const [pendingResponse, scheduledResponse] = await Promise.all([
+        localApi.get<{ success: boolean; tasks: GlobalAgentQueuedTask[] }>('/agent/tasks?status=pending'),
+        localApi.get<{ success: boolean; tasks: GlobalAgentQueuedTask[] }>('/agent/tasks?status=scheduled'),
+      ])
+
+      const pending = Array.isArray(pendingResponse?.tasks) ? pendingResponse.tasks : []
+      const scheduled = Array.isArray(scheduledResponse?.tasks) ? scheduledResponse.tasks : []
+      const merged = [...pending, ...scheduled].sort((a, b) => {
+        const aTime = Date.parse(a.created_at || '')
+        const bTime = Date.parse(b.created_at || '')
+        if (Number.isNaN(aTime) || Number.isNaN(bTime)) return 0
+        return aTime - bTime
+      })
+
+      return { tasks: merged }
+    },
+    enabled: enabled && !!userId && environment === 'electron',
+    staleTime: 1000,
+    refetchInterval: enabled ? 3000 : false,
+    refetchOnMount: 'always',
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+/**
+ * Remove a queued task from execution by marking it completed.
+ */
+export function useRemoveGlobalAgentQueuedTask() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (taskId: string) => {
+      if (!taskId) {
+        throw new Error('Task id is required')
+      }
+      return localApi.patch(`/agent/tasks/${taskId}`, {
+        status: 'completed',
+        error: 'removed from queue by user',
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['globalAgent', 'queuedTasks'] })
+    },
+  })
 }

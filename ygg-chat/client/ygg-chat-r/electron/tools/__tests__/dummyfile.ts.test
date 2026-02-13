@@ -49,8 +49,10 @@ function validateAndResolvePath(
   rootPath: string | undefined,
   fallbackToRoot = true
 ): string {
+  const normalizedInput = typeof inputPath === 'string' ? inputPath.trim() : ''
+
   // If no input path provided
-  if (!inputPath) {
+  if (!normalizedInput) {
     if (fallbackToRoot && rootPath) return rootPath
     return '.'
   }
@@ -64,18 +66,22 @@ function validateAndResolvePath(
 
   // If no rootPath constraint, just resolve the path
   if (!rootPath) {
-    return pathModule.isAbsolute(inputPath) ? pathModule.normalize(inputPath) : pathModule.resolve(inputPath)
+    return pathModule.resolve(normalizedInput)
   }
 
-  // Resolve to absolute path
-  const resolvedPath = pathModule.isAbsolute(inputPath)
-    ? pathModule.normalize(inputPath)
-    : pathModule.resolve(rootPath, inputPath)
+  const normalizedRoot = pathModule.resolve(rootPath)
 
-  const normalizedRoot = pathModule.normalize(rootPath)
+  // Resolve to absolute path
+  const resolvedPath = pathModule.isAbsolute(normalizedInput)
+    ? pathModule.resolve(normalizedInput)
+    : pathModule.resolve(normalizedRoot, normalizedInput)
 
   // Security: Ensure resolved path is within rootPath scope
-  if (!resolvedPath.startsWith(normalizedRoot + pathModule.sep) && resolvedPath !== normalizedRoot) {
+  const relativeToRoot = pathModule.relative(normalizedRoot, resolvedPath)
+  const outsideWorkspace =
+    relativeToRoot === '..' || relativeToRoot.startsWith(`..${pathModule.sep}`) || pathModule.isAbsolute(relativeToRoot)
+
+  if (outsideWorkspace) {
     throw new Error(`Path must be within workspace: ${rootPath}`)
   }
 

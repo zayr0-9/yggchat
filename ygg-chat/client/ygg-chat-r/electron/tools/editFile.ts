@@ -698,10 +698,12 @@ function escapeRegExp(string: string): string {
 function interpretEscapeSequences(str: string, enable: boolean = true): string {
   if (!enable) return str
 
+  const { content: contentWithoutRegexLiterals, protectedLiterals } = protectRegexLiterals(str)
+
   // Use placeholder to protect literal backslashes (\\)
   const BACKSLASH_PLACEHOLDER = '\u0000LITERAL_BACKSLASH\u0000'
 
-  return str
+  const interpreted = contentWithoutRegexLiterals
     // First, protect literal backslashes: \\ → placeholder
     .replace(/\\\\/g, BACKSLASH_PLACEHOLDER)
     // Then interpret escape sequences
@@ -712,6 +714,109 @@ function interpretEscapeSequences(str: string, enable: boolean = true): string {
     .replace(/\\"/g, '"')
     // Finally, restore literal backslashes without collapsing them
     .replace(new RegExp(BACKSLASH_PLACEHOLDER, 'g'), '\\\\')
+
+  return restoreProtectedLiterals(interpreted, protectedLiterals)
+}
+
+function protectRegexLiterals(str: string): {
+  content: string
+  protectedLiterals: Array<{ placeholder: string; value: string }>
+} {
+  const protectedLiterals: Array<{ placeholder: string; value: string }> = []
+  let content = ''
+  let index = 0
+
+  while (index < str.length) {
+    if (str[index] === '/' && isRegexLiteralStart(str, index)) {
+      const regexEnd = findRegexLiteralEnd(str, index + 1)
+      if (regexEnd !== -1) {
+        let literalEnd = regexEnd + 1
+
+        // Capture regex flags (e.g., /.../gim).
+        while (literalEnd < str.length && /[a-z]/i.test(str[literalEnd])) {
+          literalEnd += 1
+        }
+
+        const literal = str.slice(index, literalEnd)
+        const placeholder = `\u0000REGEX_LITERAL_${protectedLiterals.length}\u0000`
+        protectedLiterals.push({ placeholder, value: literal })
+        content += placeholder
+        index = literalEnd
+        continue
+      }
+    }
+
+    content += str[index]
+    index += 1
+  }
+
+  return { content, protectedLiterals }
+}
+
+function restoreProtectedLiterals(
+  str: string,
+  protectedLiterals: Array<{ placeholder: string; value: string }>
+): string {
+  return protectedLiterals.reduce((output, entry) => output.split(entry.placeholder).join(entry.value), str)
+}
+
+function isRegexLiteralStart(str: string, slashIndex: number): boolean {
+  // Skip escaped slashes.
+  let precedingBackslashes = 0
+  for (let i = slashIndex - 1; i >= 0 && str[i] === '\\'; i -= 1) {
+    precedingBackslashes += 1
+  }
+  if (precedingBackslashes % 2 === 1) {
+    return false
+  }
+
+  // Exclude comment starts.
+  const nextChar = str[slashIndex + 1]
+  if (nextChar === '/' || nextChar === '*') {
+    return false
+  }
+
+  // Heuristic: regex literals usually follow operators, delimiters, or start-of-line.
+  for (let i = slashIndex - 1; i >= 0; i -= 1) {
+    const ch = str[i]
+    if (/\s/.test(ch)) continue
+    return /[({[=:+\-*%!~?;,|&^<>]/.test(ch)
+  }
+
+  return true
+}
+
+function findRegexLiteralEnd(str: string, startIndex: number): number {
+  let inCharClass = false
+
+  for (let i = startIndex; i < str.length; i += 1) {
+    const ch = str[i]
+
+    if (ch === '\n' || ch === '\r') {
+      return -1
+    }
+
+    if (ch === '\\') {
+      i += 1
+      continue
+    }
+
+    if (ch === '[' && !inCharClass) {
+      inCharClass = true
+      continue
+    }
+
+    if (ch === ']' && inCharClass) {
+      inCharClass = false
+      continue
+    }
+
+    if (ch === '/' && !inCharClass) {
+      return i
+    }
+  }
+
+  return -1
 }
 
 /**

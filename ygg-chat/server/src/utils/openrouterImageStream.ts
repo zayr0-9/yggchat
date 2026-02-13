@@ -13,6 +13,7 @@ interface ImageStreamOptions {
   model: string
   messages: any[]
   maxTokens?: number
+  temperature?: number
   abortSignal?: AbortSignal
   imageConfig?: ImageConfig
 }
@@ -64,6 +65,7 @@ export async function streamImageGeneration(options: ImageStreamOptions, callbac
       modalities: ['image', 'text'],
       stream: true,
       max_tokens: options.maxTokens || 20000,
+      ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
       ...(options.imageConfig && {
         image_config: {
           ...(options.imageConfig.aspectRatio && { aspect_ratio: options.imageConfig.aspectRatio }),

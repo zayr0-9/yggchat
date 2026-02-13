@@ -10,6 +10,7 @@ interface GeminiStreamOptions {
   messages: any[]
   tools?: any[]
   maxTokens?: number
+  temperature?: number
   reasoning?: { effort: 'low' | 'medium' | 'high' | 'xhigh' }
   abortSignal?: AbortSignal
 }
@@ -98,6 +99,7 @@ export async function streamGeminiWithReasoningDetails(
     messages: rawMessages,
     stream: true,
     max_tokens: options.maxTokens || 20000,
+    ...(typeof options.temperature === 'number' ? { temperature: options.temperature } : {}),
   }
 
   if (options.tools && options.tools.length > 0) {

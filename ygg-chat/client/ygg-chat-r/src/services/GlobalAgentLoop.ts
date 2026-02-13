@@ -146,6 +146,17 @@ class GlobalAgentLoop {
       }
     }
 
+    // Streams cannot survive app restart. Clear any persisted stream marker to avoid phantom "active stream" blocks.
+    if (this.state.streamId) {
+      this.state.streamId = null
+      try {
+        await localApi.put('/agent/state', { streamId: null })
+      } catch (error) {
+        console.warn('[GlobalAgentLoop] Failed to clear stale streamId during initialize:', error)
+      }
+      this.emit({ type: 'state', state: { ...this.state } })
+    }
+
     await this.ensureSystemProjectAndSession()
 
     if (this.settings?.autoResume && this.state.status === 'running') {
@@ -526,6 +537,12 @@ class GlobalAgentLoop {
         return
       }
 
+      const hasActiveStream = Boolean(this.state.streamId) || Boolean(this.streamAbortController)
+      if (hasActiveStream) {
+        console.debug('[GlobalAgentLoop] Deferring queued task execution while stream is active')
+        return
+      }
+
       const task = pendingTasks[0] || {
         id: uuidv4(),
         description: 'Heartbeat check-in',
@@ -728,7 +745,9 @@ class GlobalAgentLoop {
       clearGlobalAgentOptimisticMessage(this.queryClient)
     }
 
-    let parentId = userMessageId
+    // Keep a single cursor so every persisted message links to the immediately
+    // previous message. This guarantees a strictly linear global-agent session.
+    let lineageCursorId = userMessageId
     let currentHistory = [...history, { role: 'user', content: prompt }]
 
     let aborted = false
@@ -833,10 +852,11 @@ class GlobalAgentLoop {
           }
         }
 
+        const assistantParentId = lineageCursorId
         const assistantMessage = {
           id: assistantMessageId,
           conversation_id: conversationId,
-          parent_id: parentId,
+          parent_id: assistantParentId,
           role: 'ex_agent',
           content: turnText,
           plain_text_content: turnText,
@@ -850,6 +870,7 @@ class GlobalAgentLoop {
           user_id: this.userId,
         }
         await localApi.post('/sync/message', assistantMessage)
+        lineageCursorId = assistantMessageId
 
         // Update React Query cache immediately
         if (this.queryClient) {
@@ -884,7 +905,7 @@ class GlobalAgentLoop {
           const toolMessage = {
             id: toolMessageId,
             conversation_id: conversationId,
-            parent_id: assistantMessageId,
+            parent_id: lineageCursorId,
             role: 'tool',
             content: toolContent,
             plain_text_content: toolContent,
@@ -905,6 +926,7 @@ class GlobalAgentLoop {
             user_id: this.userId,
           }
           await localApi.post('/sync/message', toolMessage)
+          lineageCursorId = toolMessageId
 
           // Update React Query cache with tool message
           if (this.queryClient) {
@@ -948,7 +970,7 @@ class GlobalAgentLoop {
           const toolMessage = {
             id: toolMessageId,
             conversation_id: conversationId,
-            parent_id: assistantMessageId,
+            parent_id: lineageCursorId,
             role: 'tool',
             content: toolContent,
             plain_text_content: toolContent,
@@ -970,6 +992,7 @@ class GlobalAgentLoop {
           }
 
           await localApi.post('/sync/message', toolMessage)
+          lineageCursorId = toolMessageId
 
           // Update React Query cache with tool message
           if (this.queryClient) {
@@ -987,13 +1010,12 @@ class GlobalAgentLoop {
           toolResults.push({ role: 'tool', tool_call_id: toolCall.id, content: toolContent })
         }
 
-        parentId = assistantMessageId
         currentHistory = [...currentHistory, { role: 'assistant', content: turnText }, ...toolResults]
 
         await localApi.post('/sync/message', {
           id: assistantMessageId,
           conversation_id: conversationId,
-          parent_id: parentId,
+          parent_id: assistantParentId,
           role: 'ex_agent',
           content: turnText,
           plain_text_content: turnText,

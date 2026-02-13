@@ -4,6 +4,17 @@ All notable changes to the Electron app are documented in this file.
 
 The format follows Keep a Changelog, and versions map to `client/ygg-chat-r/package.json`.
 
+## [0.1.73] - 2026-02-12
+
+### Added
+
+- Provider Settings now include an `OpenRouter Temperature` field with local persistence.
+- Tools Configuration now includes a default bash timeout setting for tool runs that do not specify `timeoutMs`.
+
+### Fixed
+
+- Bash tool workspace path validation now correctly accepts equivalent root paths (for example trailing-slash variants) and handles `cwd` values like `.` consistently.
+
 ## [0.1.72] - 2026-02-12
 
 ### Changed

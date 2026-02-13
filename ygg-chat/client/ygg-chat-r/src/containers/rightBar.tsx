@@ -15,11 +15,14 @@ import { useAuth } from '../hooks/useAuth'
 import { clearGlobalAgentOptimisticMessage, setGlobalAgentOptimisticMessage } from '../hooks/useGlobalAgentCache'
 import {
   DirectoryFileEntry,
+  GlobalAgentQueuedTask,
   ResearchNoteItem,
   useDirectoryFiles,
   useGlobalAgentMessages,
   useGlobalAgentOptimisticMessage,
+  useGlobalAgentQueuedTasks,
   useGlobalAgentStreamBuffer,
+  useRemoveGlobalAgentQueuedTask,
 } from '../hooks/useQueries'
 import { globalAgentLoop, GlobalAgentSchedulePreset, GlobalAgentState, GlobalAgentTaskSchedule } from '../services'
 import type { RootState } from '../store/store'
@@ -111,6 +114,8 @@ const RightBar: React.FC<RightBarProps> = ({
   const [agentWorkDirectory, setAgentWorkDirectory] = useState<string | null>(null)
   const [agentInput, setAgentInput] = useState<string>('')
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
+  const [scheduleModalTab, setScheduleModalTab] = useState<'schedule' | 'queue'>('schedule')
+  const [removingTaskId, setRemovingTaskId] = useState<string | null>(null)
   const [scheduleEnabled, setScheduleEnabled] = useState(false)
   const [scheduleDraft, setScheduleDraft] = useState<AgentScheduleDraft>({
     preset: 'hourly',
@@ -133,6 +138,11 @@ const RightBar: React.FC<RightBarProps> = ({
   const agentStreamBuffer = useGlobalAgentStreamBuffer()
   const optimisticMessage = useGlobalAgentOptimisticMessage()
   const isAgentStreaming = Boolean(agentStreamBuffer) || Boolean(agentState.streamId)
+  const scheduleModalVisible = scheduleModalOpen && !isCollapsed && activeTab === 'global'
+  const { data: queuedTasksData, isLoading: isLoadingQueuedTasks, isFetching: isFetchingQueuedTasks } =
+    useGlobalAgentQueuedTasks(scheduleModalVisible)
+  const removeQueuedTaskMutation = useRemoveGlobalAgentQueuedTask()
+  const queuedTasks = queuedTasksData?.tasks || []
 
   const parseJsonSafe = useCallback(<T,>(value: any, fallback: T): T => {
     if (!value) return fallback
@@ -502,6 +512,33 @@ const RightBar: React.FC<RightBarProps> = ({
       allowedWeekdays: scheduleDraft.allowedWeekdays,
     }
   }, [scheduleDraft, scheduleEnabled])
+
+  const getQueuedTaskRunAtLabel = useCallback(
+    (task: GlobalAgentQueuedTask): string | null => {
+      const payload = parseJsonSafe<any>(task.payload, null)
+      const runAt = payload?.__globalSchedule?.runAt
+      if (typeof runAt !== 'string' || runAt.trim().length === 0) return null
+      const timestamp = Date.parse(runAt)
+      if (Number.isNaN(timestamp)) return null
+      return new Date(timestamp).toLocaleString()
+    },
+    [parseJsonSafe]
+  )
+
+  const handleRemoveQueuedTask = useCallback(
+    async (taskId: string) => {
+      if (isWeb || !taskId) return
+      try {
+        setRemovingTaskId(taskId)
+        await removeQueuedTaskMutation.mutateAsync(taskId)
+      } catch (error) {
+        console.error('Failed to remove queued task:', error)
+      } finally {
+        setRemovingTaskId(null)
+      }
+    },
+    [isWeb, removeQueuedTaskMutation]
+  )
 
   const handleAgentSend = async () => {
     if (isWeb) return
@@ -913,7 +950,10 @@ const RightBar: React.FC<RightBarProps> = ({
                   <Button
                     variant='outline2'
                     size='small'
-                    onClick={() => setScheduleModalOpen(true)}
+                    onClick={() => {
+                      setScheduleModalTab('schedule')
+                      setScheduleModalOpen(true)
+                    }}
                     className={scheduleEnabled ? 'border-sky-500 text-sky-100 bg-sky-600 hover:bg-sky-700' : ''}
                   >
                     Schedule
@@ -964,7 +1004,7 @@ const RightBar: React.FC<RightBarProps> = ({
           )}
         </div>
       </div>
-      {scheduleModalOpen && !isCollapsed && activeTab === 'global' && (
+      {scheduleModalVisible && (
         <div className='absolute mb-15 inset-0 z-50 flex items-end bg-black/30 p-2'>
           <div className='w-full max-h-full overflow-y-auto no-scrollbar rounded-xl border border-stone-300 bg-stone-50 p-3 shadow-xl dark:border-stone-700 dark:bg-zinc-900'>
             <div className='mb-2 flex items-center justify-between'>
@@ -978,186 +1018,274 @@ const RightBar: React.FC<RightBarProps> = ({
               </button>
             </div>
 
-            <div className='mb-3 flex items-center justify-between rounded-lg border border-stone-200 px-3 py-2 dark:border-stone-700'>
-              <div>
-                <p className='text-sm font-medium text-stone-900 dark:text-stone-100'>Enable Schedule</p>
-                <p className='text-xs text-stone-500 dark:text-stone-400'>
-                  Send once now, then repeat based on this plan.
-                </p>
-              </div>
+            <div className='mb-3 flex gap-2 rounded-lg border border-stone-200 bg-white p-1 dark:border-stone-700 dark:bg-zinc-800'>
               <button
-                onClick={() => setScheduleEnabled(prev => !prev)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  scheduleEnabled ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                onClick={() => setScheduleModalTab('schedule')}
+                className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                  scheduleModalTab === 'schedule'
+                    ? 'bg-stone-200 text-stone-900 dark:bg-zinc-700 dark:text-stone-100'
+                    : 'text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-zinc-700/60'
                 }`}
               >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    scheduleEnabled ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
+                Schedule
+              </button>
+              <button
+                onClick={() => setScheduleModalTab('queue')}
+                className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                  scheduleModalTab === 'queue'
+                    ? 'bg-stone-200 text-stone-900 dark:bg-zinc-700 dark:text-stone-100'
+                    : 'text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-zinc-700/60'
+                }`}
+              >
+                Queue ({queuedTasks.length})
               </button>
             </div>
 
-            <div className='grid grid-cols-2 gap-2 mb-3'>
-              <label className='flex flex-col gap-1'>
-                <span className='text-xs text-stone-600 dark:text-stone-300'>Repeat Count</span>
-                <input
-                  type='number'
-                  min={1}
-                  step={1}
-                  value={scheduleDraft.repeatCount}
-                  onChange={e =>
-                    setScheduleDraft(prev => ({
-                      ...prev,
-                      repeatCount: Math.max(1, Number(e.target.value) || 1),
-                    }))
-                  }
-                  className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
-                />
-              </label>
-              <label className='flex flex-col gap-1'>
-                <span className='text-xs text-stone-600 dark:text-stone-300'>Every (number)</span>
-                <input
-                  type='number'
-                  min={1}
-                  step={1}
-                  value={scheduleDraft.intervalValue}
-                  onChange={e =>
-                    setScheduleDraft(prev => ({
-                      ...prev,
-                      preset: 'custom',
-                      intervalValue: Math.max(1, Number(e.target.value) || 1),
-                    }))
-                  }
-                  className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
-                />
-              </label>
-            </div>
-
-            <div className='mb-3 flex gap-2'>
-              <button
-                onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'seconds' }))}
-                className={`rounded-lg border px-2 py-1 text-xs ${
-                  scheduleDraft.intervalUnit === 'seconds'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
-                    : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
-                }`}
-              >
-                Seconds
-              </button>
-              <button
-                onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'minutes' }))}
-                className={`rounded-lg border px-2 py-1 text-xs ${
-                  scheduleDraft.intervalUnit === 'minutes'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
-                    : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
-                }`}
-              >
-                Minutes
-              </button>
-              <button
-                onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'hours' }))}
-                className={`rounded-lg border px-2 py-1 text-xs ${
-                  scheduleDraft.intervalUnit === 'hours'
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
-                    : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
-                }`}
-              >
-                Hours
-              </button>
-            </div>
-
-            <div className='mb-3'>
-              <p className='mb-1 text-xs text-stone-600 dark:text-stone-300'>Presets</p>
-              <div className='flex flex-wrap gap-2'>
-                {PRESET_CONFIGS.map(preset => (
+            {scheduleModalTab === 'schedule' ? (
+              <>
+                <div className='mb-3 flex items-center justify-between rounded-lg border border-stone-200 px-3 py-2 dark:border-stone-700'>
+                  <div>
+                    <p className='text-sm font-medium text-stone-900 dark:text-stone-100'>Enable Schedule</p>
+                    <p className='text-xs text-stone-500 dark:text-stone-400'>
+                      Send once now, then repeat based on this plan.
+                    </p>
+                  </div>
                   <button
-                    key={preset.key}
-                    onClick={() => handlePresetSelect(preset.key)}
+                    onClick={() => setScheduleEnabled(prev => !prev)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      scheduleEnabled ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        scheduleEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className='grid grid-cols-2 gap-2 mb-3'>
+                  <label className='flex flex-col gap-1'>
+                    <span className='text-xs text-stone-600 dark:text-stone-300'>Repeat Count</span>
+                    <input
+                      type='number'
+                      min={1}
+                      step={1}
+                      value={scheduleDraft.repeatCount}
+                      onChange={e =>
+                        setScheduleDraft(prev => ({
+                          ...prev,
+                          repeatCount: Math.max(1, Number(e.target.value) || 1),
+                        }))
+                      }
+                      className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
+                    />
+                  </label>
+                  <label className='flex flex-col gap-1'>
+                    <span className='text-xs text-stone-600 dark:text-stone-300'>Every (number)</span>
+                    <input
+                      type='number'
+                      min={1}
+                      step={1}
+                      value={scheduleDraft.intervalValue}
+                      onChange={e =>
+                        setScheduleDraft(prev => ({
+                          ...prev,
+                          preset: 'custom',
+                          intervalValue: Math.max(1, Number(e.target.value) || 1),
+                        }))
+                      }
+                      className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
+                    />
+                  </label>
+                </div>
+
+                <div className='mb-3 flex gap-2'>
+                  <button
+                    onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'seconds' }))}
                     className={`rounded-lg border px-2 py-1 text-xs ${
-                      scheduleDraft.preset === preset.key
-                        ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200'
+                      scheduleDraft.intervalUnit === 'seconds'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
                         : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
                     }`}
                   >
-                    {preset.label}
+                    Seconds
                   </button>
-                ))}
-                <button
-                  onClick={() => handlePresetSelect('custom')}
-                  className={`rounded-lg border px-2 py-1 text-xs ${
-                    scheduleDraft.preset === 'custom'
-                      ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200'
-                      : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
-                  }`}
-                >
-                  Custom
-                </button>
-              </div>
-            </div>
+                  <button
+                    onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'minutes' }))}
+                    className={`rounded-lg border px-2 py-1 text-xs ${
+                      scheduleDraft.intervalUnit === 'minutes'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                        : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                    }`}
+                  >
+                    Minutes
+                  </button>
+                  <button
+                    onClick={() => setScheduleDraft(prev => ({ ...prev, preset: 'custom', intervalUnit: 'hours' }))}
+                    className={`rounded-lg border px-2 py-1 text-xs ${
+                      scheduleDraft.intervalUnit === 'hours'
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                        : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                    }`}
+                  >
+                    Hours
+                  </button>
+                </div>
 
-            <div className='mb-3 grid grid-cols-2 gap-2'>
-              <label className='flex flex-col gap-1'>
-                <span className='text-xs text-stone-600 dark:text-stone-300'>Start Date</span>
-                <input
-                  type='date'
-                  value={scheduleDraft.startDate}
-                  onChange={e => setScheduleDraft(prev => ({ ...prev, startDate: e.target.value }))}
-                  className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
-                />
-              </label>
-              <label className='flex flex-col gap-1'>
-                <span className='text-xs text-stone-600 dark:text-stone-300'>End Date</span>
-                <input
-                  type='date'
-                  value={scheduleDraft.endDate}
-                  onChange={e => setScheduleDraft(prev => ({ ...prev, endDate: e.target.value }))}
-                  className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
-                />
-              </label>
-            </div>
-
-            <div className='mb-3'>
-              <p className='mb-1 text-xs text-stone-600 dark:text-stone-300'>Allowed Weekdays</p>
-              <div className='flex flex-wrap gap-1'>
-                {WEEKDAY_LABELS.map((label, index) => {
-                  const selected = scheduleDraft.allowedWeekdays.includes(index)
-                  return (
+                <div className='mb-3'>
+                  <p className='mb-1 text-xs text-stone-600 dark:text-stone-300'>Presets</p>
+                  <div className='flex flex-wrap gap-2'>
+                    {PRESET_CONFIGS.map(preset => (
+                      <button
+                        key={preset.key}
+                        onClick={() => handlePresetSelect(preset.key)}
+                        className={`rounded-lg border px-2 py-1 text-xs ${
+                          scheduleDraft.preset === preset.key
+                            ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200'
+                            : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
                     <button
-                      key={label}
-                      onClick={() => toggleScheduleWeekday(index)}
-                      className={`rounded-md border px-2 py-1 text-[11px] ${
-                        selected
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                      onClick={() => handlePresetSelect('custom')}
+                      className={`rounded-lg border px-2 py-1 text-xs ${
+                        scheduleDraft.preset === 'custom'
+                          ? 'border-sky-500 bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-200'
                           : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
                       }`}
                     >
-                      {label}
+                      Custom
                     </button>
-                  )
-                })}
-              </div>
-            </div>
+                  </div>
+                </div>
 
-            <div className='flex items-center justify-between'>
-              <span className='text-[11px] text-stone-500 dark:text-stone-400'>{scheduleSummary}</span>
-              <div className='flex gap-2'>
-                <Button
-                  variant='outline2'
-                  size='small'
-                  onClick={() => {
-                    setScheduleEnabled(false)
-                    setScheduleModalOpen(false)
-                  }}
-                >
-                  Disable
-                </Button>
-                <Button variant='outline2' size='small' onClick={() => setScheduleModalOpen(false)}>
-                  Done
-                </Button>
+                <div className='mb-3 grid grid-cols-2 gap-2'>
+                  <label className='flex flex-col gap-1'>
+                    <span className='text-xs text-stone-600 dark:text-stone-300'>Start Date</span>
+                    <input
+                      type='date'
+                      value={scheduleDraft.startDate}
+                      onChange={e => setScheduleDraft(prev => ({ ...prev, startDate: e.target.value }))}
+                      className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
+                    />
+                  </label>
+                  <label className='flex flex-col gap-1'>
+                    <span className='text-xs text-stone-600 dark:text-stone-300'>End Date</span>
+                    <input
+                      type='date'
+                      value={scheduleDraft.endDate}
+                      onChange={e => setScheduleDraft(prev => ({ ...prev, endDate: e.target.value }))}
+                      className='w-full rounded-lg border border-stone-200 bg-white px-2 py-1.5 text-sm text-stone-900 dark:border-stone-700 dark:bg-zinc-800 dark:text-stone-100'
+                    />
+                  </label>
+                </div>
+
+                <div className='mb-3'>
+                  <p className='mb-1 text-xs text-stone-600 dark:text-stone-300'>Allowed Weekdays</p>
+                  <div className='flex flex-wrap gap-1'>
+                    {WEEKDAY_LABELS.map((label, index) => {
+                      const selected = scheduleDraft.allowedWeekdays.includes(index)
+                      return (
+                        <button
+                          key={label}
+                          onClick={() => toggleScheduleWeekday(index)}
+                          className={`rounded-md border px-2 py-1 text-[11px] ${
+                            selected
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200'
+                              : 'border-stone-200 text-stone-600 dark:border-stone-700 dark:text-stone-300'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className='flex items-center justify-between'>
+                  <span className='text-[11px] text-stone-500 dark:text-stone-400'>{scheduleSummary}</span>
+                  <div className='flex gap-2'>
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => {
+                        setScheduleEnabled(false)
+                        setScheduleModalOpen(false)
+                      }}
+                    >
+                      Disable
+                    </Button>
+                    <Button variant='outline2' size='small' onClick={() => setScheduleModalOpen(false)}>
+                      Done
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className='space-y-3'>
+                <div className='flex items-center justify-between'>
+                  <p className='text-xs text-stone-600 dark:text-stone-300'>
+                    Pending and scheduled tasks are shown here.
+                  </p>
+                  <span className='text-[11px] text-stone-500 dark:text-stone-400'>
+                    {isFetchingQueuedTasks ? 'Refreshing...' : `${queuedTasks.length} queued`}
+                  </span>
+                </div>
+
+                {isLoadingQueuedTasks ? (
+                  <div className='text-xs text-stone-500 dark:text-stone-400'>Loading queued tasks...</div>
+                ) : queuedTasks.length === 0 ? (
+                  <div className='text-xs text-stone-500 dark:text-stone-400'>No queued tasks.</div>
+                ) : (
+                  <div className='space-y-2 max-h-80 overflow-y-auto pr-1 no-scrollbar'>
+                    {queuedTasks.map(task => {
+                      const runAtLabel = getQueuedTaskRunAtLabel(task)
+                      const createdAtLabel = task.created_at
+                        ? Number.isNaN(Date.parse(task.created_at))
+                          ? task.created_at
+                          : new Date(task.created_at).toLocaleString()
+                        : 'Unknown time'
+                      return (
+                        <div
+                          key={task.id}
+                          className='rounded-lg border border-stone-200 bg-white p-2 dark:border-stone-700 dark:bg-zinc-800'
+                        >
+                          <div className='flex items-start gap-2'>
+                            <div className='min-w-0 flex-1'>
+                              <p className='text-sm text-stone-900 dark:text-stone-100 break-words'>{task.description}</p>
+                              <div className='mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-stone-500 dark:text-stone-400'>
+                                <span>Status: {task.status}</span>
+                                <span>Queued: {createdAtLabel}</span>
+                                {runAtLabel && <span>Run at: {runAtLabel}</span>}
+                              </div>
+                            </div>
+                            <Button
+                              variant='outline2'
+                              size='small'
+                              onClick={() => handleRemoveQueuedTask(task.id)}
+                              disabled={removingTaskId === task.id || removeQueuedTaskMutation.isPending}
+                              className='text-xs'
+                              title='Remove from queue'
+                            >
+                              {removingTaskId === task.id ? 'Removing...' : 'Remove'}
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                <div className='flex justify-end'>
+                  <Button variant='outline2' size='small' onClick={() => setScheduleModalOpen(false)}>
+                    Close
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}

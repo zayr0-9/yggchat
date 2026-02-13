@@ -85,6 +85,7 @@ export interface SendMessageRequest {
   conversationContext?: string | null
   projectContext?: string | null
   think?: boolean
+  temperature?: number
   selectedFiles?: any[]
   retrigger?: boolean
   executionMode?: 'server' | 'client'

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { HtmlIframeSlot, McpAppIframeSlot, useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 
@@ -71,6 +71,22 @@ const GhostPillIcon: React.FC<{
   </button>
 )
 
+const CUSTOM_TOOL_MANAGER_LABEL_REGEX = /^custom[\s_]+tool[\s_]+manager(?:\s+result\s+\d+)?$/i
+
+const humanizeToolName = (toolName: string): string => {
+  const normalized = toolName
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!normalized) return ''
+
+  return normalized
+    .split(' ')
+    .map(token => token.charAt(0).toUpperCase() + token.slice(1).toLowerCase())
+    .join(' ')
+}
+
 export const HtmlToolsModal: React.FC = () => {
   const registry = useHtmlIframeRegistry()
   if (!registry) return null
@@ -102,8 +118,23 @@ export const HtmlToolsModal: React.FC = () => {
   const favoriteEntries = useMemo(() => entries.filter(entry => entry.favorite), [entries])
   const activeKey = activeTab ?? activeEntries[0]?.key ?? null
   const maxBytesMb = useMemo(() => Math.round(registry.settings.maxBytes / (1024 * 1024)), [registry.settings.maxBytes])
-  const resolveEntryLabel = (entry: (typeof entries)[number]) =>
-    entry.label || (entry.kind === 'mcp' ? 'MCP App' : 'HTML Tool Output')
+  const resolveEntryLabel = useCallback((entry: (typeof entries)[number]) => {
+    if (entry.kind === 'html') {
+      const currentLabel = entry.label?.trim() ?? ''
+      const toolName = entry.toolName ?? ''
+      const shouldUseInvokedToolName =
+        currentLabel.length > 0 && CUSTOM_TOOL_MANAGER_LABEL_REGEX.test(currentLabel) && toolName.length > 0
+
+      if (shouldUseInvokedToolName) {
+        const invokedLabel = humanizeToolName(toolName)
+        if (invokedLabel) {
+          return invokedLabel
+        }
+      }
+    }
+
+    return entry.label || (entry.kind === 'mcp' ? 'MCP App' : 'HTML Tool Output')
+  }, [])
 
   const displayLabels = useMemo(() => {
     const labelCounts = new Map<string, number>()

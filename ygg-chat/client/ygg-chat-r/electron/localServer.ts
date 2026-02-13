@@ -50,8 +50,10 @@ function validateAndResolvePath(
   rootPath: string | undefined,
   fallbackToRoot = true
 ): string {
+  const normalizedInput = typeof inputPath === 'string' ? inputPath.trim() : ''
+
   // If no input path provided
-  if (!inputPath) {
+  if (!normalizedInput) {
     if (fallbackToRoot && rootPath) return rootPath
     return '.'
   }
@@ -65,18 +67,22 @@ function validateAndResolvePath(
 
   // If no rootPath constraint, just resolve the path
   if (!rootPath) {
-    return pathModule.isAbsolute(inputPath) ? pathModule.normalize(inputPath) : pathModule.resolve(inputPath)
+    return pathModule.resolve(normalizedInput)
   }
 
-  // Resolve to absolute path
-  const resolvedPath = pathModule.isAbsolute(inputPath)
-    ? pathModule.normalize(inputPath)
-    : pathModule.resolve(rootPath, inputPath)
+  const normalizedRoot = pathModule.resolve(rootPath)
 
-  const normalizedRoot = pathModule.normalize(rootPath)
+  // Resolve to absolute path
+  const resolvedPath = pathModule.isAbsolute(normalizedInput)
+    ? pathModule.resolve(normalizedInput)
+    : pathModule.resolve(normalizedRoot, normalizedInput)
 
   // Security: Ensure resolved path is within rootPath scope
-  if (!resolvedPath.startsWith(normalizedRoot + pathModule.sep) && resolvedPath !== normalizedRoot) {
+  const relativeToRoot = pathModule.relative(normalizedRoot, resolvedPath)
+  const outsideWorkspace =
+    relativeToRoot === '..' || relativeToRoot.startsWith(`..${pathModule.sep}`) || pathModule.isAbsolute(relativeToRoot)
+
+  if (outsideWorkspace) {
     throw new Error(`Path must be within workspace: ${rootPath}`)
   }
 
@@ -1539,7 +1545,7 @@ function setupServer() {
         res.status(500).json({ error: 'Database not initialized' })
         return
       }
-      const { status, sessionId, conversationId, streamId, lastRunAt, nextRunAt } = req.body as {
+      const body = (req.body ?? {}) as {
         status?: string
         sessionId?: number | null
         conversationId?: string | null
@@ -1547,14 +1553,21 @@ function setupServer() {
         lastRunAt?: string | null
         nextRunAt?: string | null
       }
+      const { status, sessionId, conversationId, streamId, lastRunAt, nextRunAt } = body
 
       const current = statements.getAgentState.get() as any
-      const nextStatus = status ?? current?.status ?? 'stopped'
-      const nextSessionId = sessionId ?? current?.session_id ?? null
-      const nextConversationId = conversationId ?? current?.conversation_id ?? null
-      const nextStreamId = streamId ?? current?.stream_id ?? null
-      const nextLastRunAt = lastRunAt ?? current?.last_run_at ?? null
-      const nextNextRunAt = nextRunAt ?? current?.next_run_at ?? null
+      const hasField = (field: keyof typeof body) => Object.prototype.hasOwnProperty.call(body, field)
+
+      const nextStatus = hasField('status')
+        ? (status ?? current?.status ?? 'stopped')
+        : (current?.status ?? 'stopped')
+      const nextSessionId = hasField('sessionId') ? (sessionId ?? null) : (current?.session_id ?? null)
+      const nextConversationId = hasField('conversationId')
+        ? (conversationId ?? null)
+        : (current?.conversation_id ?? null)
+      const nextStreamId = hasField('streamId') ? (streamId ?? null) : (current?.stream_id ?? null)
+      const nextLastRunAt = hasField('lastRunAt') ? (lastRunAt ?? null) : (current?.last_run_at ?? null)
+      const nextNextRunAt = hasField('nextRunAt') ? (nextRunAt ?? null) : (current?.next_run_at ?? null)
 
       statements.upsertAgentState.run(
         nextStatus,

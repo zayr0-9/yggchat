@@ -324,6 +324,7 @@ router.post(
         abortController.signal,
         undefined, // conversationContext
         false, // think
+        temperature,
         undefined, // messageId
         userId,
         undefined, // conversationId
@@ -1529,6 +1530,7 @@ router.post(
       conversationContext: clientConversationContext,
       projectContext: clientProjectContext,
       think,
+      temperature,
       retrigger = false,
       isBranch = false,
       storageMode = 'cloud',
@@ -1802,6 +1804,7 @@ router.post(
           controller.signal,
           combinedContext ? combinedContext : null,
           think,
+          temperature,
           undefined, // No assistant message ID yet (will create after streaming)
           userId,
           conversationId,
@@ -1965,6 +1968,7 @@ router.post(
       conversationContext: clientConversationContext,
       projectContext: clientProjectContext,
       think,
+      temperature,
       selectedFiles,
       retrigger = false,
       executionMode = 'server',
@@ -2366,6 +2370,7 @@ router.post(
           controller.signal,
           combinedContext ? combinedContext : null,
           think,
+          temperature,
           undefined, // No assistant message ID yet (will create after streaming)
           userId,
           conversationId,

@@ -38,6 +38,8 @@ import { openStreamingWithPreFirstByteRetry } from './streamResilience'
 import { persistToolResultsWithFallback } from './toolResultPersistence'
 // OpenAI OAuth is handled internally by OpenAIChatGPT module
 import { getDefaultMaxTurns, getSubagentEnabledTools, isOrchestratorEnabled } from '../../helpers/subagentToolSettings'
+import { loadProviderSettings } from '../../helpers/providerSettingsStorage'
+import { getDefaultBashTimeoutMs } from '../../helpers/toolExecutionSettings'
 import { updateToolEnabledState } from '../../helpers/toolSettingsStorage'
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
 import sysPromptConfig from './sys_prompt.json'
@@ -741,17 +743,25 @@ const sanitizeContentBlocksForModel = (
 const resolveToolTimeoutMs = (toolCall: any, override?: number) => {
   if (typeof override === 'number') return override
 
-  const argTimeout = typeof toolCall?.arguments?.timeoutMs === 'number' ? toolCall.arguments.timeoutMs : undefined
+  const args = getToolCallArgsObject(toolCall)
+  const argTimeout = typeof args?.timeoutMs === 'number' ? args.timeoutMs : undefined
   const metadataTimeout = typeof toolCall?.timeoutMs === 'number' ? toolCall.timeoutMs : undefined
   const isLongDuration =
     toolCall?.metadata?.longDuration === true ||
-    toolCall?.arguments?.longDuration === true ||
-    toolCall?.arguments?.long_duration === true
+    args?.longDuration === true ||
+    args?.long_duration === true
 
   if (typeof argTimeout === 'number') return argTimeout
   if (typeof metadataTimeout === 'number') return metadataTimeout
   if (isLongDuration) return 300000 // 5 minutes for long tasks
+  if (getToolCallName(toolCall) === 'bash') return getDefaultBashTimeoutMs()
   return 60000 // default 60s
+}
+
+const resolveOpenRouterTemperature = (providerSlug: string): number | undefined => {
+  if (providerSlug !== 'openrouter') return undefined
+  const configured = loadProviderSettings().openRouterTemperature
+  return typeof configured === 'number' ? configured : undefined
 }
 
 /**
@@ -1965,6 +1975,7 @@ export const sendMessage = createAsyncThunk<
       const appProvider = providerRaw.toLowerCase()
       const providerSlug = appProvider.replace(/\s+/g, '')
       const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
+      const openRouterTemperature = resolveOpenRouterTemperature(providerSlug)
       const isLmStudio = providerSlug === 'lmstudio'
       const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
       // Gather any image drafts (base64) to send along with the message. Nullable when empty.
@@ -2566,6 +2577,7 @@ export const sendMessage = createAsyncThunk<
                 conversationContext: combinedContext,
                 projectContext,
                 provider: serverProvider,
+                ...(openRouterTemperature !== undefined ? { temperature: openRouterTemperature } : {}),
                 repeatNum: repeatNum,
                 attachmentsBase64,
                 selectedFiles: selectedFilesForChat,
@@ -3016,6 +3028,7 @@ export const sendMessage = createAsyncThunk<
                 conversationContext: combinedContext,
                 projectContext,
                 provider: serverProvider,
+                ...(openRouterTemperature !== undefined ? { temperature: openRouterTemperature } : {}),
                 attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined, // Only send attachments on first turn
                 selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
                 think,
@@ -3698,6 +3711,7 @@ export const editMessageWithBranching = createAsyncThunk<
       const appProvider = providerRaw.toLowerCase()
       const providerSlug = appProvider.replace(/\s+/g, '')
       const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
+      const openRouterTemperature = resolveOpenRouterTemperature(providerSlug)
       const isLmStudio = providerSlug === 'lmstudio'
       const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
 
@@ -4302,6 +4316,7 @@ export const editMessageWithBranching = createAsyncThunk<
               conversationContext: combinedContext,
               projectContext,
               provider: serverProvider,
+              ...(openRouterTemperature !== undefined ? { temperature: openRouterTemperature } : {}),
               attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
               selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
               think,
@@ -4789,6 +4804,7 @@ export const sendMessageToBranch = createAsyncThunk<
       const appProvider = providerRaw.toLowerCase()
       const providerSlug = appProvider.replace(/\s+/g, '')
       const serverProvider = providerSlug === 'google' ? 'gemini' : providerSlug
+      const openRouterTemperature = resolveOpenRouterTemperature(providerSlug)
       const isLmStudio = providerSlug === 'lmstudio'
       const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
       const drafts = state.chat.composition.imageDrafts || []
@@ -5297,6 +5313,7 @@ export const sendMessageToBranch = createAsyncThunk<
               conversationContext: combinedContext,
               projectContext,
               provider: serverProvider,
+              ...(openRouterTemperature !== undefined ? { temperature: openRouterTemperature } : {}),
               attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
               selectedFiles: turnCount === 1 ? selectedFilesForChat : undefined,
               think,

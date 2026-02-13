@@ -947,6 +947,7 @@ router.post(
       provider = 'ollama',
       systemPrompt,
       think,
+      temperature,
     } = req.body
 
     if (!content) {
@@ -1138,6 +1139,7 @@ router.post(
           controller.signal,
           combinedContext ? combinedContext : null,
           think,
+          temperature,
           assistantMessage.id,
           conversation.user_id,
           conversationId
@@ -1266,6 +1268,7 @@ router.post(
       provider = 'ollama',
       systemPrompt,
       think,
+      temperature,
       selectedFiles,
       retrigger = false,
     } = req.body as {
@@ -1276,6 +1279,7 @@ router.post(
       provider?: string
       systemPrompt?: string
       think?: boolean
+      temperature?: number
       selectedFiles?: SelectedFileContent[]
       retrigger?: boolean
     }
@@ -1574,6 +1578,7 @@ router.post(
           controller.signal,
           combinedContext ? combinedContext : null,
           think,
+          temperature,
           assistantMessage.id,
           conversation.user_id,
           conversationId

@@ -449,6 +449,29 @@ describe('editFile regex literal handling', () => {
       `${String.raw`const newlineRegex = /\r?\n/g;`}\n`
     )
   })
+
+  it('keeps regex newline escapes intact in replacement code when escape interpretation is enabled', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('regex-newline-replacement-default.txt', 'const marker = true;\n')
+
+    const replacement = [
+      'function buildSearchIndex(md) {',
+      String.raw`  searchMap = md.split(/\n/).map((line, i) => ({ id: i, text: line }));`,
+      '}',
+    ].join('\n')
+
+    const result = await editFile('regex-newline-replacement-default.txt', 'replace_first', {
+      searchPattern: 'const marker = true;',
+      replacement,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('regex-newline-replacement-default.txt')
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(updated).toContain(String.raw`split(/\n/).map((line, i) => ({ id: i, text: line }));`)
+    expect(updated).not.toContain('split(/\n/).map((line, i) => ({ id: i, text: line }));')
+  })
 })
 
 describe('editFile layered matching strategies', () => {

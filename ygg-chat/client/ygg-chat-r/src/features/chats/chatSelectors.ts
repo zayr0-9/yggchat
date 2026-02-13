@@ -273,8 +273,16 @@ export const selectFocusedChatMessageId = createSelector(
 export const selectDisplayMessages = createSelector(
   [selectConversationMessages, selectCurrentPath],
   (messages, currentPath) => {
-    // Never display ex_agent messages in the chat list
-    const displayableMessages = messages.filter(message => message.role !== 'ex_agent')
+    const isPersistentGlobalAgentType = (value: string | null | undefined): boolean =>
+      value === 'persistent_agent' || value === 'persistent_agent_summary'
+
+    // Keep legacy behavior (hide ex_agent) for normal chats, but show ex_agent in
+    // persistent global-agent conversations so system-project chats render correctly.
+    const shouldShowExAgent = messages.some(
+      message => message.role === 'ex_agent' && isPersistentGlobalAgentType(message.ex_agent_type)
+    )
+
+    const displayableMessages = shouldShowExAgent ? messages : messages.filter(message => message.role !== 'ex_agent')
 
     if (Array.isArray(currentPath) && currentPath.length > 0) {
       const byId = new Map(displayableMessages.map(m => [m.id, m]))

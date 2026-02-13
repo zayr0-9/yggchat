@@ -41,6 +41,7 @@ export async function generateResponse(
   abortSignal?: AbortSignal,
   conversationContext?: string | null,
   think?: boolean,
+  temperature?: number,
   messageId?: MessageId,
   userId?: string,
   conversationId?: string,
@@ -569,7 +570,8 @@ export async function generateResponse(
         isElectron,
         imageConfig,
         reasoningConfig,
-        tools
+        tools,
+        temperature
       )
     }
     case 'lmstudio': {

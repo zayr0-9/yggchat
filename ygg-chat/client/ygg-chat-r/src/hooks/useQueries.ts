@@ -634,6 +634,14 @@ function filterExAgentNodes(node: any): any | null {
   return node
 }
 
+const isPersistentGlobalAgentType = (value: string | null | undefined): boolean =>
+  value === 'persistent_agent' || value === 'persistent_agent_summary'
+
+const shouldFilterExAgentNodes = (messages: Message[] | undefined): boolean => {
+  if (!Array.isArray(messages) || messages.length === 0) return true
+  return !messages.some(message => message.role === 'ex_agent' && isPersistentGlobalAgentType(message.ex_agent_type))
+}
+
 export function useConversationMessages(conversationId: ConversationId | null, storageMode?: 'local' | 'cloud') {
   const { accessToken } = useAuth()
   const queryClient = useQueryClient()
@@ -694,7 +702,10 @@ export function useConversationMessages(conversationId: ConversationId | null, s
             }>(`/local/conversations/${conversationId}/messages/tree`)
             // If local API succeeds, return it with ex_agent nodes filtered from tree
             if (localResult) {
-              return { ...localResult, tree: filterExAgentNodes(localResult.tree) }
+              const tree = shouldFilterExAgentNodes(localResult.messages)
+                ? filterExAgentNodes(localResult.tree)
+                : localResult.tree
+              return { ...localResult, tree }
             }
           } catch (err) {
             // Local not found, fall through to cloud
@@ -712,7 +723,8 @@ export function useConversationMessages(conversationId: ConversationId | null, s
           tree: any
           meta?: { storage_mode: 'local' | 'cloud' }
         }>(`/local/conversations/${conversationId}/messages/tree`)
-        return { ...result, tree: filterExAgentNodes(result.tree) }
+        const tree = shouldFilterExAgentNodes(result.messages) ? filterExAgentNodes(result.tree) : result.tree
+        return { ...result, tree }
       }
 
       // Default to cloud API
@@ -720,7 +732,8 @@ export function useConversationMessages(conversationId: ConversationId | null, s
         `/conversations/${conversationId}/messages/tree`,
         accessToken
       )
-      return { ...result, tree: filterExAgentNodes(result.tree) }
+      const tree = shouldFilterExAgentNodes(result.messages) ? filterExAgentNodes(result.tree) : result.tree
+      return { ...result, tree }
     },
     enabled: !!conversationId && !!accessToken,
     staleTime: 30000, // 30 seconds - messages only change on user actions (send/edit/branch)
@@ -1882,11 +1895,13 @@ export interface DirectoryListingResponse {
  * Global Agent hooks - re-export from dedicated files
  */
 export {
+  useGlobalAgentQueuedTasks,
   useGlobalAgentMessages,
   useGlobalAgentOptimisticMessage,
+  useRemoveGlobalAgentQueuedTask,
   useGlobalAgentStreamBuffer,
 } from './useGlobalAgentMessages'
-export type { GlobalAgentMessagesData } from './useGlobalAgentMessages'
+export type { GlobalAgentMessagesData, GlobalAgentQueuedTask, GlobalAgentQueuedTasksData } from './useGlobalAgentMessages'
 
 /**
  * Fetch files from a directory path

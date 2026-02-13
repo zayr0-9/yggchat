@@ -660,7 +660,8 @@ export async function generateResponse(
   isElectron: boolean = false,
   imageConfig?: ImageConfig,
   reasoningConfig?: ReasoningConfig,
-  toolsFromClient?: ToolDefinition[]
+  toolsFromClient?: ToolDefinition[],
+  temperature?: number
 ): Promise<void> {
   const MAX_STEPS = 400 // Reduced to prevent infinite loops with problematic models
   let stepCount = 0
@@ -958,6 +959,7 @@ export async function generateResponse(
             model,
             messages: messagesForRawApi,
             maxTokens: 20000,
+            temperature,
             abortSignal,
             imageConfig,
           },
@@ -1107,6 +1109,7 @@ export async function generateResponse(
             messages: formattedMessages,
             tools: hasTools ? openaiTools : undefined,
             maxTokens: 20000,
+            temperature,
             reasoning: effectiveReasoningConfig,
             abortSignal,
           },
@@ -1329,6 +1332,7 @@ export async function generateResponse(
           messages: formattedMessages,
           stream: true,
           maxTokens: 20000,
+          ...(typeof temperature === 'number' ? { temperature } : {}),
           tools: hasTools ? openaiTools : undefined,
           usage: { include: true },
           modalities: modalities?.outputModalities,
@@ -1914,6 +1918,7 @@ export async function generateResponse(
               messages: formattedMessages,
               stream: true,
               maxTokens: 4000,
+              ...(typeof temperature === 'number' ? { temperature } : {}),
               usage: { include: true },
               ...(think && { reasoning: { effort: 'high' } }),
             } as any,
