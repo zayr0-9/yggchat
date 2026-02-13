@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - _No notable changes yet._
 
+## [0.1.73] - 2026-02-13
+
+### Fixed
+
+- Extension when run in wsl was not connecting to app running under windows, it works now.
+
 ## [0.1.73] - 2026-02-12
 
 ### Added
