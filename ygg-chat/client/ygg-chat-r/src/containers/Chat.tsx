@@ -715,8 +715,8 @@ function Chat() {
       if (contexts.length === 0) return message
 
       const footer = contexts
-        .map((ctx, index) => {
-          return [
+        .map((ctx, index) =>
+          [
             `[${index + 1}] IDE context: ${ctx.filePath}`,
             `IDE file: ${ctx.fileName}`,
             `IDE selection lines: ${ctx.startLine}-${ctx.endLine}`,
@@ -724,17 +724,14 @@ function Chat() {
             '```',
             ctx.selectedText,
             '```',
-          .join('\\n')
-                  })
-                  .join('\\n')
+          ].join('\n')
+        )
+        .join('\n\n')
 
-      const ideContextFooter = `IDE contexts:
-${footer}`
+      const ideContextFooter = `IDE contexts:\n${footer}`
       if (message.includes(ideContextFooter)) return message
 
-      return `${message.trimEnd()}
-
-${ideContextFooter}`
+      return `${message.trimEnd()}\n\n${ideContextFooter}`
     },
     [currentIdeSelection, addedIdeContexts]
   )

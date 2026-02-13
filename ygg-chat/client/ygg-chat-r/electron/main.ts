@@ -28,7 +28,14 @@ let localServerError: string | null = null
 
 const LOCAL_SERVER_PREFERRED_PORT = 3002
 const LOCAL_SERVER_FALLBACK_PORTS = Array.from({ length: 13 }, (_, index) => LOCAL_SERVER_PREFERRED_PORT + 1 + index)
-const LOCAL_SERVER_HOST = '127.0.0.1'
+const LOCAL_SERVER_ALLOW_REMOTE = ['1', 'true', 'yes', 'on'].includes(
+  (process.env.YGG_LOCAL_SERVER_ALLOW_REMOTE || '').trim().toLowerCase()
+)
+const LOCAL_SERVER_HOST =
+  process.env.YGG_LOCAL_SERVER_HOST?.trim() || (LOCAL_SERVER_ALLOW_REMOTE ? '0.0.0.0' : '127.0.0.1')
+const LOCAL_SERVER_ADVERTISE_HOST =
+  process.env.YGG_LOCAL_SERVER_ADVERTISE_HOST?.trim() ||
+  (LOCAL_SERVER_HOST === '0.0.0.0' ? '127.0.0.1' : LOCAL_SERVER_HOST)
 const LOCAL_SERVER_ALLOW_EPHEMERAL_PORT = true
 const activeReadStreams = new Map<
   string,
@@ -624,6 +631,9 @@ app.whenReady().then(async () => {
     // console.log('[Electron] Server started, starting local sync server...')
 
     // Start local SQLite server for dual-sync (prefer 3002, fallback to other local ports)
+    console.log(
+      `[Electron] Local server bind host: ${LOCAL_SERVER_HOST}, advertise host: ${LOCAL_SERVER_ADVERTISE_HOST}, remote access: ${LOCAL_SERVER_ALLOW_REMOTE}`
+    )
     try {
       const localDbPath = path.join(app.getPath('userData'), 'local-sync.db')
       const localServerInfo = await startLocalServer({
@@ -635,9 +645,11 @@ app.whenReady().then(async () => {
       })
       localServerStarted = true
       localServerPort = localServerInfo.port
-      localServerUrl = localServerInfo.url
+      localServerUrl = `http://${LOCAL_SERVER_ADVERTISE_HOST}:${localServerInfo.port}`
       localServerError = null
-      console.log(`[Electron] Local sync server started on ${localServerInfo.url}`)
+      console.log(
+        `[Electron] Local sync server started on ${localServerInfo.url} (renderer endpoint: ${localServerUrl})`
+      )
     } catch (localServerStartError) {
       console.warn('[Electron] Failed to start local sync server:', localServerStartError)
       console.warn('[Electron] Continuing without local sync - data will not be synced locally')
