@@ -120,7 +120,6 @@ import {
   useConversationsByProject,
   useConversationStorageMode,
   useModels,
-  useProjects,
   useResearchNotes,
   useSelectedModel,
   useSelectModel,
@@ -132,13 +131,28 @@ import { cloneConversation, localApi } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
 import { extractTextFromPdf } from '../utils/pdfUtils'
-import SideBar from './sideBar'
 import RightBar from './rightBar'
 
 type ParsedMessageData = {
   toolCalls?: ToolCall[]
   contentBlocks?: ContentBlock[]
 }
+
+type MessageRenderRow =
+  | {
+      kind: 'message'
+      id: MessageId
+      message: Message
+    }
+  | {
+      kind: 'process_group'
+      id: MessageId
+      anchorMessageId: MessageId
+      memberMessageIds: MessageId[]
+      messages: Message[]
+      toolCount: number
+      reasoningCount: number
+    }
 
 type ChatInputUpdater = string | ((prev: string) => string)
 
@@ -177,6 +191,7 @@ type AddedIdeContext = {
 
 const EMPTY_PARSED_MESSAGE_DATA: ParsedMessageData = {}
 const COMPOSER_SLASH_COMMANDS = ['status-openai']
+const CROSS_MESSAGE_PROCESS_GROUP_MIN_MESSAGES = 3
 
 const parseMessageDataForRender = (msg: Message): ParsedMessageData => {
   let toolCalls: ToolCall[] | undefined
@@ -894,6 +909,215 @@ function Chat() {
     return displayMessages.filter(msg => msg && msg.id != null)
   }, [displayMessages])
 
+  const [groupToolReasoningRuns, setGroupToolReasoningRuns] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('chat:groupToolReasoningRuns') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  // Parse message payloads once per message-list change so row props remain stable while typing.
+  const parsedMessageDataById = useMemo(() => {
+    const parsedById = new Map<MessageId, ParsedMessageData>()
+    for (const msg of filteredMessages) {
+      parsedById.set(msg.id, parseMessageDataForRender(msg))
+    }
+    return parsedById
+  }, [filteredMessages])
+
+  const messageRenderRows = useMemo<MessageRenderRow[]>(() => {
+    const debugProcessGrouping =
+      typeof window !== 'undefined' && window.localStorage.getItem('chat:debugProcessGrouping') === 'true'
+
+    const isLikelyProcessAnnotationText = (text: string): boolean => {
+      const trimmed = text.trim()
+      if (!trimmed) return true
+      if (trimmed.includes('\n\n')) return false
+      if (trimmed.startsWith('```')) return false
+
+      const normalized = trimmed.replace(/[*_`>#-]/g, ' ')
+      const words = normalized.split(/\s+/).filter(Boolean)
+      return words.length <= 14
+    }
+
+    const hasSubstantialTextOrImage = (msg: Message, parsed: ParsedMessageData): boolean => {
+      if (
+        typeof msg.content === 'string' &&
+        msg.content.trim().length > 0 &&
+        !isLikelyProcessAnnotationText(msg.content)
+      ) {
+        return true
+      }
+
+      if (Array.isArray(parsed.contentBlocks)) {
+        return parsed.contentBlocks.some(block => {
+          if (block.type === 'text') {
+            return (
+              typeof block.content === 'string' &&
+              block.content.trim().length > 0 &&
+              !isLikelyProcessAnnotationText(block.content)
+            )
+          }
+          if (block.type === 'image') {
+            return Boolean(block.url)
+          }
+          return false
+        })
+      }
+
+      return false
+    }
+
+    const isProcessOnlyAssistantStep = (msg: Message): boolean => {
+      if (msg.role !== 'assistant' && msg.role !== 'ex_agent') {
+        return false
+      }
+
+      const parsed = parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
+      const hasThinking = typeof msg.thinking_block === 'string' && msg.thinking_block.trim().length > 0
+      const hasToolCalls = Array.isArray(parsed.toolCalls) && parsed.toolCalls.length > 0
+      const hasProcessBlocks = Array.isArray(parsed.contentBlocks)
+        ? parsed.contentBlocks.some(block =>
+            block.type === 'thinking' ||
+            block.type === 'tool_use' ||
+            block.type === 'tool_result' ||
+            block.type === 'reasoning_details'
+          )
+        : false
+
+      const hasProcessSignal = hasThinking || hasToolCalls || hasProcessBlocks
+      if (!hasProcessSignal) {
+        return false
+      }
+
+      if (hasSubstantialTextOrImage(msg, parsed)) {
+        return false
+      }
+
+      return true
+    }
+
+    if (!groupToolReasoningRuns) {
+      return filteredMessages.map(msg => ({
+        kind: 'message' as const,
+        id: msg.id,
+        message: msg,
+      }))
+    }
+
+    const rows: MessageRenderRow[] = []
+    let index = 0
+
+    while (index < filteredMessages.length) {
+      const msg = filteredMessages[index]
+      if (!msg) {
+        index += 1
+        continue
+      }
+
+      if (!isProcessOnlyAssistantStep(msg)) {
+        rows.push({
+          kind: 'message',
+          id: msg.id,
+          message: msg,
+        })
+        index += 1
+        continue
+      }
+
+      const runMessages: Message[] = []
+      let cursor = index
+      while (cursor < filteredMessages.length) {
+        const candidate = filteredMessages[cursor]
+        if (!candidate || !isProcessOnlyAssistantStep(candidate)) {
+          break
+        }
+        runMessages.push(candidate)
+        cursor += 1
+      }
+
+      if (runMessages.length >= CROSS_MESSAGE_PROCESS_GROUP_MIN_MESSAGES) {
+        const memberMessageIds = runMessages.map(message => message.id)
+        const toolCount = runMessages.reduce((count, message) => {
+          const parsed = parsedMessageDataById.get(message.id) ?? EMPTY_PARSED_MESSAGE_DATA
+          const parsedToolCalls = Array.isArray(parsed.toolCalls) ? parsed.toolCalls.length : 0
+          if (parsedToolCalls > 0) {
+            return count + parsedToolCalls
+          }
+
+          const toolUseCount = Array.isArray(parsed.contentBlocks)
+            ? parsed.contentBlocks.filter(block => block.type === 'tool_use').length
+            : 0
+          return count + toolUseCount
+        }, 0)
+        const reasoningCount = runMessages.reduce((count, message) => {
+          const parsed = parsedMessageDataById.get(message.id) ?? EMPTY_PARSED_MESSAGE_DATA
+          const thinkingBlockCount = Array.isArray(parsed.contentBlocks)
+            ? parsed.contentBlocks.filter(block => block.type === 'thinking').length
+            : 0
+          if (thinkingBlockCount > 0) {
+            return count + thinkingBlockCount
+          }
+          return count + (typeof message.thinking_block === 'string' && message.thinking_block.trim().length > 0 ? 1 : 0)
+        }, 0)
+
+        if (debugProcessGrouping) {
+          console.debug('[Chat] Grouping process-only message run', {
+            count: runMessages.length,
+            toolCount,
+            reasoningCount,
+            messageIds: memberMessageIds,
+          })
+        }
+
+        rows.push({
+          kind: 'process_group',
+          id: `process-group-${memberMessageIds[0]}-${memberMessageIds[memberMessageIds.length - 1]}`,
+          anchorMessageId: memberMessageIds[0],
+          memberMessageIds,
+          messages: runMessages,
+          toolCount,
+          reasoningCount,
+        })
+      } else {
+        if (debugProcessGrouping && runMessages.length > 0) {
+          console.debug('[Chat] Process-only run below grouping threshold', {
+            count: runMessages.length,
+            threshold: CROSS_MESSAGE_PROCESS_GROUP_MIN_MESSAGES,
+            messageIds: runMessages.map(message => message.id),
+          })
+        }
+
+        for (const runMessage of runMessages) {
+          rows.push({
+            kind: 'message',
+            id: runMessage.id,
+            message: runMessage,
+          })
+        }
+      }
+
+      index = cursor
+    }
+
+    return rows
+  }, [filteredMessages, groupToolReasoningRuns, parsedMessageDataById])
+
+  const findMessageRowIndex = useCallback(
+    (targetId: MessageId | null | undefined): number => {
+      if (targetId == null) return -1
+      const target = String(targetId)
+      return messageRenderRows.findIndex(row => {
+        if (row.kind === 'message') {
+          return String(row.message.id) === target
+        }
+        return row.memberMessageIds.some(id => String(id) === target)
+      })
+    },
+    [messageRenderRows]
+  )
+
   // Calculate padding for end of list - allows last message to scroll to middle of viewport
   const virtualizerPaddingEnd = useMemo(() => {
     return Math.max(500, containerHeight * 0.6)
@@ -920,7 +1144,7 @@ function Chat() {
 
   // Virtualizer for efficient message list rendering
   const virtualizer = useVirtualizer({
-    count: filteredMessages.length + extraItemsCount,
+    count: messageRenderRows.length + extraItemsCount,
     getScrollElement: () => messagesContainerRef.current,
     estimateSize: () => 200, // Estimated average message height
     overscan: 5, // Buffer 5 messages above/below viewport
@@ -1001,9 +1225,6 @@ function Chat() {
     if (currentConversation && idsMatch(currentConversation.id, currentConversationId)) return currentConversation
     return null
   }, [currentConversationId, projectConversations, currentConversation, idsMatch])
-
-  // Fetch all projects for SideBar
-  const { data: allProjects = [] } = useProjects()
 
   // Fetch storage mode using the robust hook
   const { data: storageModeFromHook } = useConversationStorageMode(conversationIdFromUrl)
@@ -1317,15 +1538,8 @@ function Chat() {
     }
   })
 
-  const [groupToolReasoningRuns, setGroupToolReasoningRuns] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('chat:groupToolReasoningRuns') === 'true'
-    } catch {
-      return false
-    }
-  })
-
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
+  const [expandedProcessMessageRuns, setExpandedProcessMessageRuns] = useState<Set<string>>(() => new Set())
   useEffect(() => {
     // Listen for custom event from SettingsPane (same window)
     const handleCustomEvent = (e: Event) => {
@@ -1368,6 +1582,18 @@ function Chat() {
       window.removeEventListener('groupToolReasoningRunsChange', handleGroupRunsEvent)
       window.removeEventListener('storage', handleStorageEvent)
     }
+  }, [])
+
+  const toggleProcessMessageRun = useCallback((runId: string) => {
+    setExpandedProcessMessageRuns(prev => {
+      const next = new Set(prev)
+      if (next.has(runId)) {
+        next.delete(runId)
+      } else {
+        next.add(runId)
+      }
+      return next
+    })
   }, [])
 
   useEffect(() => {
@@ -1737,7 +1963,7 @@ function Chat() {
     if (selectionScrollCauseRef.current === 'user' && selectedPath && selectedPath.length > 0) {
       const targetId = focusedChatMessageId
       // Find the index of the target message in filteredMessages for virtualizer
-      const targetIndex = filteredMessages.findIndex(msg => msg.id === targetId)
+      const targetIndex = findMessageRowIndex(targetId)
 
       if (targetIndex !== -1) {
         // Use virtualizer to scroll to the message index
@@ -1752,7 +1978,7 @@ function Chat() {
       // After handling, reset so programmatic path changes (e.g., during send/stream) won't recenter
       selectionScrollCauseRef.current = null
     }
-  }, [selectedPath, focusedChatMessageId, filteredMessages, virtualizer])
+  }, [selectedPath, focusedChatMessageId, findMessageRowIndex, virtualizer])
 
   // Scroll to the focused message when focus changes via hash/search (non user-click cases)
   useEffect(() => {
@@ -1769,7 +1995,7 @@ function Chat() {
     }
 
     // Find the index of the target message in filteredMessages for virtualizer
-    const targetIndex = filteredMessages.findIndex(msg => msg.id === focusedChatMessageId)
+    const targetIndex = findMessageRowIndex(focusedChatMessageId)
 
     if (targetIndex !== -1) {
       // Use virtualizer to scroll to the message index
@@ -1777,7 +2003,7 @@ function Chat() {
       // Mark this focus as handled so we don't keep re-centering on subsequent renders
       lastFocusedScrollIdRef.current = focusedChatMessageId
     }
-  }, [focusedChatMessageId, filteredMessages, virtualizer, streamState.active])
+  }, [focusedChatMessageId, findMessageRowIndex, virtualizer, streamState.active])
 
   // Helper to check if a message should be excluded from visibility tracking
   // (tool-only or reasoning-only messages without meaningful text content)
@@ -1865,7 +2091,9 @@ function Chat() {
       let closestItem: (typeof virtualItems)[0] | null = null
 
       for (const item of virtualItems) {
-        const msg = filteredMessages[item.index]
+        const row = messageRenderRows[item.index]
+        if (!row || row.kind !== 'message') continue
+        const msg = row.message
         if (!msg || isToolOrReasoningOnly(msg)) continue
 
         const itemTop = item.start
@@ -1891,9 +2119,9 @@ function Chat() {
         return
       }
 
-      const msg = filteredMessages[closestItem.index]
-      if (msg) {
-        setVisibleMessageId(msg.id)
+      const row = messageRenderRows[closestItem.index]
+      if (row && row.kind === 'message') {
+        setVisibleMessageId(row.message.id)
       }
     }
 
@@ -1905,7 +2133,7 @@ function Chat() {
     return () => {
       container.removeEventListener('scroll', updateVisibleMessage)
     }
-  }, [filteredMessages, virtualizer, isToolOrReasoningOnly])
+  }, [filteredMessages, messageRenderRows, virtualizer, isToolOrReasoningOnly])
 
   // If URL contains a #messageId fragment, capture it once
   // const location = useLocation() // Moved to top
@@ -3132,15 +3360,6 @@ function Chat() {
   //   }
   // }, [providers.currentProvider, refreshModelsMutation])
 
-  // Parse message payloads once per message-list change so row props remain stable while typing.
-  const parsedMessageDataById = useMemo(() => {
-    const parsedById = new Map<MessageId, ParsedMessageData>()
-    for (const msg of filteredMessages) {
-      parsedById.set(msg.id, parseMessageDataForRender(msg))
-    }
-    return parsedById
-  }, [filteredMessages])
-
   // Helper: Parse todo items from markdown content
   const TODO_ITEM_REGEX = /^\s*[-*]\s*\[(x|X| )\]\s*(.*)$/
   const parseTodoItems = (markdownContent: string): { text: string; done: boolean }[] => {
@@ -3365,9 +3584,6 @@ function Chat() {
       ref={containerRef}
       className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'
     >
-      {/* Recent conversations sidebar */}
-      {!isMobile && <SideBar limit={12} projects={allProjects} activeConversationId={currentConversationId} />}
-
       <div
         className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden`}
         style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : 'auto' }}
@@ -3536,7 +3752,7 @@ function Chat() {
               willChange: 'scroll-position',
             }}
           >
-            {filteredMessages.length === 0 && extraItemsCount === 0 ? (
+            {messageRenderRows.length === 0 && extraItemsCount === 0 ? (
               <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
             ) : (
               <div
@@ -3550,12 +3766,12 @@ function Chat() {
               >
                 {virtualizer.getVirtualItems().map(virtualRow => {
                   // Calculate indices for extra items (order: optimistic, optimisticBranch, streaming)
-                  const optimisticIndex = showOptimisticMessage ? filteredMessages.length : -1
+                  const optimisticIndex = showOptimisticMessage ? messageRenderRows.length : -1
                   const optimisticBranchIndex = showOptimisticBranchMessage
-                    ? filteredMessages.length + (showOptimisticMessage ? 1 : 0)
+                    ? messageRenderRows.length + (showOptimisticMessage ? 1 : 0)
                     : -1
                   const streamingIndex = showStreamingMessage
-                    ? filteredMessages.length + (showOptimisticMessage ? 1 : 0) + (showOptimisticBranchMessage ? 1 : 0)
+                    ? messageRenderRows.length + (showOptimisticMessage ? 1 : 0) + (showOptimisticBranchMessage ? 1 : 0)
                     : -1
 
                   // Render optimistic message
@@ -3659,8 +3875,91 @@ function Chat() {
                     )
                   }
 
-                  // Render regular message
-                  const msg = filteredMessages[virtualRow.index]
+                  // Render regular message row or grouped process-only run
+                  const row = messageRenderRows[virtualRow.index]
+                  if (!row) return null
+
+                  if (row.kind === 'process_group') {
+                    const runId = String(row.id)
+                    const isExpanded = expandedProcessMessageRuns.has(runId)
+                    const summaryParts: string[] = []
+                    if (row.toolCount > 0) {
+                      summaryParts.push(`${row.toolCount} tool${row.toolCount === 1 ? '' : 's'}`)
+                    }
+                    if (row.reasoningCount > 0) {
+                      summaryParts.push(`${row.reasoningCount} reasoning`)
+                    }
+
+                    return (
+                      <div
+                        key={runId}
+                        id={`message-group-${runId}`}
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        className='z-0'
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <div className='relative pl-6 py-3 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+                          <div className='absolute -left-[5px] top-4 w-2.5 h-2.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.35)]' />
+                          <button
+                            onClick={() => toggleProcessMessageRun(runId)}
+                            className='flex items-center gap-2 group/run hover:opacity-80 transition-opacity cursor-pointer outline-none'
+                          >
+                            <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
+                              Agent Steps ({row.messages.length})
+                            </span>
+                            {!isExpanded && summaryParts.length > 0 && (
+                              <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[320px]'>
+                                {summaryParts.join(' • ')}
+                              </span>
+                            )}
+                            <svg
+                              className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/run:text-neutral-500 dark:group-hover/run:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                              fill='none'
+                              viewBox='0 0 24 24'
+                              stroke='currentColor'
+                            >
+                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                            </svg>
+                          </button>
+                          <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+                            <div className='tool-expand-content pt-2'>
+                              {row.messages.map(groupedMessage => {
+                                const { toolCalls, contentBlocks } =
+                                  parsedMessageDataById.get(groupedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                                return (
+                                  <ChatMessage
+                                    key={groupedMessage.id}
+                                    id={groupedMessage.id.toString()}
+                                    role={groupedMessage.role}
+                                    content={groupedMessage.content}
+                                    thinking={groupedMessage.thinking_block}
+                                    toolCalls={toolCalls}
+                                    contentBlocks={contentBlocks}
+                                    timestamp={groupedMessage.created_at}
+                                    width='w-full'
+                                    modelName={groupedMessage.model_name}
+                                    artifacts={groupedMessage.artifacts}
+                                    fontSizeOffset={fontSizeOffset}
+                                    groupToolReasoningRuns={false}
+                                    onOpenToolHtmlModal={openToolHtmlModal}
+                                  />
+                                )
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  const msg = row.message
                   const { toolCalls, contentBlocks } =
                     parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
                   return (

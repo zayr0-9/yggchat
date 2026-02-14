@@ -400,6 +400,7 @@ interface MessageRenderItem {
   key: string
   kind: 'process' | 'other'
   processType?: ProcessEntryType
+  ignoreForProcessRunGrouping?: boolean
   node: React.ReactNode
 }
 
@@ -1584,6 +1585,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return words.slice(0, maxWords).join(' ') + '...'
     }
 
+    const isProcessRunSeparatorText = (text: string): boolean => {
+      const trimmed = text.trim()
+      if (!trimmed) return true
+      if (trimmed.includes('\n\n')) return false
+      if (trimmed.startsWith('#') || trimmed.startsWith('```')) return false
+      const words = trimmed.split(/\s+/).filter(Boolean)
+      return words.length <= 12
+    }
+
     const extractHtmlFromToolResult = (content: any): { html: string; toolName?: string | null } | null => {
       if (!content) return null
 
@@ -2207,17 +2217,37 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         }
 
         let runEnd = index
-        while (runEnd < items.length && items[runEnd].kind === 'process') {
-          runEnd += 1
+        while (runEnd < items.length) {
+          const candidate = items[runEnd]
+          if (!candidate) break
+
+          if (candidate.kind === 'process') {
+            runEnd += 1
+            continue
+          }
+
+          if (candidate.ignoreForProcessRunGrouping) {
+            let lookahead = runEnd + 1
+            while (lookahead < items.length && items[lookahead]?.ignoreForProcessRunGrouping) {
+              lookahead += 1
+            }
+            if (lookahead < items.length && items[lookahead]?.kind === 'process') {
+              runEnd += 1
+              continue
+            }
+          }
+
+          break
         }
 
         const runItems = items.slice(index, runEnd)
+        const processItems = runItems.filter(item => item.kind === 'process')
 
-        if (runItems.length >= PROCESS_RUN_GROUP_MIN_ITEMS) {
+        if (processItems.length >= PROCESS_RUN_GROUP_MIN_ITEMS) {
           const groupKey = `process-run-${sourceKey}-${runItems[0].key}-${runItems[runItems.length - 1].key}`
           const isExpanded = expandedBlocks.groupRuns.has(groupKey)
-          const toolCount = runItems.filter(item => item.processType === 'tool').length
-          const reasoningCount = runItems.filter(item => item.processType === 'reasoning').length
+          const toolCount = processItems.filter(item => item.processType === 'tool').length
+          const reasoningCount = processItems.filter(item => item.processType === 'reasoning').length
           const summaryParts: string[] = []
           if (toolCount > 0) summaryParts.push(`${toolCount} tool${toolCount === 1 ? '' : 's'}`)
           if (reasoningCount > 0) summaryParts.push(`${reasoningCount} reasoning`)
@@ -2230,7 +2260,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 className='flex items-center gap-2 group/run hover:opacity-80 transition-opacity cursor-pointer outline-none'
               >
                 <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
-                  Agent Steps ({runItems.length})
+                  Agent Steps ({processItems.length})
                 </span>
                 {!isExpanded && summaryParts.length > 0 && (
                   <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[300px]'>
@@ -2305,11 +2335,13 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             }
           }
 
-          if (accumulatedText) {
+          const trimmedText = accumulatedText.trim()
+          if (trimmedText.length > 0) {
             const textKey = `text-${idx}`
             items.push({
               key: textKey,
               kind: 'other',
+              ignoreForProcessRunGrouping: isProcessRunSeparatorText(accumulatedText),
               node: (
                 <div
                   key={textKey}
@@ -2487,10 +2519,17 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         }
 
         if (block.type === 'text') {
+          const rawText = typeof block.content === 'string' ? block.content : ''
+          if (!rawText.trim()) {
+            idx += 1
+            continue
+          }
+
           const textKey = `text-${block.index}-${idx}`
           items.push({
             key: textKey,
             kind: 'other',
+            ignoreForProcessRunGrouping: isProcessRunSeparatorText(rawText),
             node: (
               <div
                 key={textKey}
@@ -2502,7 +2541,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
                   components={{ pre: PreRenderer, a: MarkdownLink }}
                 >
-                  {block.content}
+                  {rawText}
                 </ReactMarkdown>
               </div>
             ),

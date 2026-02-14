@@ -26,6 +26,8 @@ import {
   TermsOfService,
 } from './containers'
 import RightBar from './containers/rightBar'
+import SideBar from './containers/sideBar'
+import { selectCurrentConversationId } from './features/chats'
 import { selectCurrentUser } from './features/users'
 import GlobalAgentBootstrap from './GlobalAgentBootstrap'
 import { useAppSelector } from './hooks/redux'
@@ -54,6 +56,16 @@ const TOOL_VIEWER_HIDDEN_ROUTES = new Set([
 ])
 
 const RIGHTBAR_HIDDEN_ROUTES = new Set(['/landingpage', '/login'])
+
+const SIDEBAR_VISIBLE_ROUTE_PATTERNS = [/^\/homepage$/, /^\/conversationPage$/, /^\/chat\/[^/]+\/[^/]+$/]
+
+const getRouteAnimationKey = (pathname: string) => {
+  if (/^\/chat\/[^/]+\/[^/]+$/.test(pathname)) {
+    return '/chat/:projectId/:id'
+  }
+
+  return pathname
+}
 
 const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
   const location = useLocation()
@@ -113,6 +125,19 @@ const HtmlToolsShell = ({ enabled }: { enabled: boolean }) => {
   )
 }
 
+const SideBarShell = () => {
+  const location = useLocation()
+  const isMobile = useIsMobile()
+  const currentUser = useAppSelector(selectCurrentUser)
+  const currentConversationId = useAppSelector(selectCurrentConversationId)
+
+  if (!currentUser || isMobile) return null
+
+  const isVisibleRoute = SIDEBAR_VISIBLE_ROUTE_PATTERNS.some(pattern => pattern.test(location.pathname))
+
+  return <SideBar limit={120} activeConversationId={currentConversationId} className={isVisibleRoute ? '' : 'hidden'} />
+}
+
 const RightBarShell = () => {
   const location = useLocation()
   const isMobile = useIsMobile()
@@ -133,7 +158,7 @@ function AnimatedRoutes() {
 
   return (
     <AnimatePresence mode='popLayout'>
-      <Routes location={location} key={location.pathname}>
+      <Routes location={location} key={getRouteAnimationKey(location.pathname)}>
         {/* Public route */}
         <Route path='/landingpage' element={<LandingPage />} />
         {/* Public route */}
@@ -219,6 +244,7 @@ function App() {
       {/* Global update modal for Electron auto-updates */}
       <UpdateModal />
       <div className='app-content'>
+        <SideBarShell />
         <div className='app-main'>
           <AnimatedRoutes />
         </div>
