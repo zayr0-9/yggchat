@@ -135,12 +135,30 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     }
   })
 
+  const [groupToolReasoningRuns, setGroupToolReasoningRuns] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('chat:groupToolReasoningRuns') === 'true'
+    } catch {
+      return false
+    }
+  })
+
   const handleFontSizeChange = useCallback((value: number) => {
     const next = Math.max(-8, Math.min(16, value)) // Clamp between -8 and +16
     setFontSizeOffset(next)
     try {
       localStorage.setItem('chat:fontSizeOffset', String(next))
       window.dispatchEvent(new CustomEvent('fontSizeOffsetChange', { detail: next }))
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [])
+
+  const handleGroupToolReasoningRunsChange = useCallback((enabled: boolean) => {
+    setGroupToolReasoningRuns(enabled)
+    try {
+      localStorage.setItem('chat:groupToolReasoningRuns', String(enabled))
+      window.dispatchEvent(new CustomEvent('groupToolReasoningRunsChange', { detail: enabled }))
     } catch {
       // Ignore localStorage errors
     }
@@ -909,6 +927,31 @@ ${block}`
                   title='Reset to default'
                 >
                   Reset
+                </button>
+              </div>
+            </div>
+
+            {/* Process Step Grouping Section */}
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/40 px-3 py-2'>
+                <div className='pr-4'>
+                  <p className='text-sm font-medium text-stone-700 dark:text-stone-200'>
+                    Group continuous reasoning/tool steps
+                  </p>
+                  <p className='text-xs text-neutral-500 dark:text-neutral-400'>
+                    Collapse long chains of agent reasoning and tool calls into one expandable section.
+                  </p>
+                </div>
+                <button
+                  type='button'
+                  onClick={() => handleGroupToolReasoningRunsChange(!groupToolReasoningRuns)}
+                  className='p-1.5 rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors'
+                  title={groupToolReasoningRuns ? 'Disable grouping' : 'Enable grouping'}
+                  aria-pressed={groupToolReasoningRuns}
+                >
+                  <i
+                    className={`bx ${groupToolReasoningRuns ? 'bx-toggle-right text-green-500' : 'bx-toggle-left text-neutral-400'} text-xl`}
+                  ></i>
                 </button>
               </div>
             </div>

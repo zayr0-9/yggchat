@@ -68,6 +68,8 @@ interface ChatMessageProps {
   showInlineActions?: boolean
   // Font size offset in pixels: positive increases, negative decreases all fonts uniformly
   fontSizeOffset?: number
+  // Optional UX setting to group long consecutive reasoning/tool chains
+  groupToolReasoningRuns?: boolean
   onEditingStateChange?: (id: string, isEditing: boolean, mode: 'edit' | 'branch' | null) => void
 }
 
@@ -390,6 +392,16 @@ const MessageActions: React.FC<MessageActionsProps> = ({
 
 // Configuration for collapsed content display
 const COLLAPSED_CONTENT_WORD_LIMIT = 15
+const PROCESS_RUN_GROUP_MIN_ITEMS = 4
+
+type ProcessEntryType = 'tool' | 'reasoning'
+
+interface MessageRenderItem {
+  key: string
+  kind: 'process' | 'other'
+  processType?: ProcessEntryType
+  node: React.ReactNode
+}
 
 // Helper function to convert contentBlocks to editable text
 const contentBlocksToEditableText = (blocks: ContentBlock[] | undefined): string => {
@@ -884,6 +896,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     artifacts = [],
     showInlineActions = true,
     fontSizeOffset = 0,
+    groupToolReasoningRuns = false,
     onEditingStateChange,
   }) => {
     const dispatch = useAppDispatch()
@@ -899,10 +912,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       toolCalls: Set<string>
       toolResults: Set<string>
       reasoning: Set<number>
+      groupRuns: Set<string>
     }>({
       toolCalls: new Set(),
       toolResults: new Set(),
       reasoning: new Set(),
+      groupRuns: new Set(),
     })
     // More menu states
     const [showMoreMenu, setShowMoreMenu] = useState(false)
@@ -1534,7 +1549,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }
 
     // Toggle function for collapsible blocks
-    const toggleBlock = (type: 'toolCalls' | 'toolResults' | 'reasoning', id: string | number) => {
+    const toggleBlock = (type: 'toolCalls' | 'toolResults' | 'reasoning' | 'groupRuns', id: string | number) => {
       setExpandedBlocks(prev => {
         const newState = { ...prev }
         const currentSet = prev[type]
@@ -2119,6 +2134,458 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return null
     }
 
+    const buildReasoningRenderItem = (reasoningText: string, reasoningId: number, key: string): MessageRenderItem => {
+      const isExpanded = expandedBlocks.reasoning.has(reasoningId)
+      const reasoningSummary = truncateWords(reasoningText)
+
+      return {
+        key,
+        kind: 'process',
+        processType: 'reasoning',
+        node: (
+          <div key={key} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+            <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' />
+
+            <button
+              onClick={() => toggleBlock('reasoning', reasoningId)}
+              className='flex items-center gap-2 group/reason hover:opacity-80 transition-opacity cursor-pointer outline-none'
+            >
+              <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
+                Reasoning
+              </span>
+              {!isExpanded && reasoningSummary && (
+                <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[300px]'>
+                  {reasoningSummary}
+                </span>
+              )}
+              <svg
+                className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/reason:text-neutral-500 dark:group-hover/reason:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                fill='none'
+                viewBox='0 0 24 24'
+                stroke='currentColor'
+              >
+                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+              </svg>
+            </button>
+
+            <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+              <div className='tool-expand-content pt-2'>
+                <div
+                  className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'
+                  style={textContentStyle}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
+                    components={{ pre: PreRenderer, a: MarkdownLink }}
+                  >
+                    {reasoningText}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            </div>
+          </div>
+        ),
+      }
+    }
+
+    const renderItemsWithOptionalProcessGrouping = (items: MessageRenderItem[], sourceKey: string): React.ReactNode[] => {
+      if (!groupToolReasoningRuns) {
+        return items.map(item => item.node)
+      }
+
+      const rendered: React.ReactNode[] = []
+      let index = 0
+
+      while (index < items.length) {
+        const current = items[index]
+
+        if (current.kind !== 'process') {
+          rendered.push(current.node)
+          index += 1
+          continue
+        }
+
+        let runEnd = index
+        while (runEnd < items.length && items[runEnd].kind === 'process') {
+          runEnd += 1
+        }
+
+        const runItems = items.slice(index, runEnd)
+
+        if (runItems.length >= PROCESS_RUN_GROUP_MIN_ITEMS) {
+          const groupKey = `process-run-${sourceKey}-${runItems[0].key}-${runItems[runItems.length - 1].key}`
+          const isExpanded = expandedBlocks.groupRuns.has(groupKey)
+          const toolCount = runItems.filter(item => item.processType === 'tool').length
+          const reasoningCount = runItems.filter(item => item.processType === 'reasoning').length
+          const summaryParts: string[] = []
+          if (toolCount > 0) summaryParts.push(`${toolCount} tool${toolCount === 1 ? '' : 's'}`)
+          if (reasoningCount > 0) summaryParts.push(`${reasoningCount} reasoning`)
+
+          rendered.push(
+            <div key={groupKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+              <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.35)]' />
+              <button
+                onClick={() => toggleBlock('groupRuns', groupKey)}
+                className='flex items-center gap-2 group/run hover:opacity-80 transition-opacity cursor-pointer outline-none'
+              >
+                <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
+                  Agent Steps ({runItems.length})
+                </span>
+                {!isExpanded && summaryParts.length > 0 && (
+                  <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[300px]'>
+                    {summaryParts.join(' • ')}
+                  </span>
+                )}
+                <svg
+                  className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/run:text-neutral-500 dark:group-hover/run:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                  fill='none'
+                  viewBox='0 0 24 24'
+                  stroke='currentColor'
+                >
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                </svg>
+              </button>
+              <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+                <div className='tool-expand-content pt-2'>{runItems.map(item => item.node)}</div>
+              </div>
+            </div>
+          )
+        } else {
+          rendered.push(...runItems.map(item => item.node))
+        }
+
+        index = runEnd
+      }
+
+      return rendered
+    }
+
+    const buildStreamRenderItems = (): MessageRenderItem[] => {
+      if (!Array.isArray(streamEvents) || streamEvents.length === 0) return []
+
+      const items: MessageRenderItem[] = []
+      let idx = 0
+
+      while (idx < streamEvents.length) {
+        const event = streamEvents[idx]
+        if (!event) {
+          idx += 1
+          continue
+        }
+
+        const groupedTool = streamToolGroupsByIndex.get(idx)
+        if (groupedTool) {
+          if (groupedTool.anchorIndex === idx) {
+            const toolKey = `stream-${groupedTool.id}-${idx}`
+            const toolNode = renderToolCallGroupCard(groupedTool, toolKey)
+            if (toolNode) {
+              items.push({
+                key: `stream-tool-${groupedTool.id}-${idx}`,
+                kind: 'process',
+                processType: 'tool',
+                node: toolNode,
+              })
+            }
+          }
+          idx += 1
+          continue
+        }
+
+        if (event.type === 'text') {
+          let accumulatedText = event.delta || ''
+          let nextIdx = idx + 1
+          while (nextIdx < streamEvents.length) {
+            const nextEvent = streamEvents[nextIdx]
+            if (nextEvent?.type === 'text' && nextEvent.delta) {
+              accumulatedText += nextEvent.delta
+              nextIdx += 1
+            } else {
+              break
+            }
+          }
+
+          if (accumulatedText) {
+            const textKey = `text-${idx}`
+            items.push({
+              key: textKey,
+              kind: 'other',
+              node: (
+                <div
+                  key={textKey}
+                  className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
+                  style={textContentStyle}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
+                    components={{ pre: PreRenderer, a: MarkdownLink }}
+                  >
+                    {accumulatedText}
+                  </ReactMarkdown>
+                </div>
+              ),
+            })
+          }
+
+          idx = nextIdx
+          continue
+        }
+
+        if (event.type === 'reasoning' && event.delta) {
+          if (getPreviousVisibleStreamType(idx) === 'reasoning') {
+            idx += 1
+            continue
+          }
+
+          let accumulatedReasoning = event.delta || ''
+          let nextIdx = idx + 1
+          while (nextIdx < streamEvents.length) {
+            const nextEvent = streamEvents[nextIdx]
+            if (nextEvent?.type === 'reasoning' && nextEvent.delta) {
+              accumulatedReasoning += nextEvent.delta
+              nextIdx += 1
+            } else if (nextEvent && isHiddenStreamSeparator(nextEvent, nextIdx)) {
+              nextIdx += 1
+            } else {
+              break
+            }
+          }
+
+          items.push(buildReasoningRenderItem(accumulatedReasoning, idx, `reasoning-${idx}`))
+          idx = nextIdx
+          continue
+        }
+
+        if (event.type === 'tool_call' && event.toolCall && event.complete) {
+          const toolCall = event.toolCall
+          const toggleKey = `tool-call-${toolCall.id}-${idx}`
+          const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
+          const pathParam = extractPathParam(toolCall.arguments)
+          const isHtmlToolCall = (toolCall.name ?? '').toLowerCase() === 'html_renderer'
+          const hasHtmlOutput = isHtmlToolCall || Boolean(extractHtmlFromToolResult(toolCall.result)?.html)
+
+          items.push({
+            key: `tool-${toolCall.id}-${idx}`,
+            kind: 'process',
+            processType: 'tool',
+            node: (
+              <div
+                key={`tool-${toolCall.id}-${idx}`}
+                className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
+              >
+                <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
+
+                <button
+                  onClick={() => toggleBlock('toolCalls', toggleKey)}
+                  className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
+                >
+                  <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
+                    {toolCall.name || 'tool'}
+                  </span>
+                  {!isExpanded && pathParam && (
+                    <span
+                      className='text-[10px] text-neutral-500 dark:text-neutral-500 max-w-[200px] overflow-hidden whitespace-nowrap'
+                      style={{ direction: 'rtl', textOverflow: 'ellipsis' }}
+                    >
+                      {pathParam}
+                    </span>
+                  )}
+                  <svg
+                    className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/tool:text-neutral-500 dark:group-hover/tool:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                    fill='none'
+                    viewBox='0 0 24 24'
+                    stroke='currentColor'
+                  >
+                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                  </svg>
+                </button>
+
+                <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+                  <div className='tool-expand-content pt-3'>
+                    {!hasHtmlOutput && toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+                      <div className='border-l-2 border-neutral-300/50 dark:border-neutral-700/50 pl-4 py-1 mb-2 font-mono text-[11px] text-neutral-500 dark:text-neutral-500 leading-relaxed'>
+                        {Object.entries(toolCall.arguments).map(([key, value]) => (
+                          <div key={key} className='break-all'>
+                            <span className='text-neutral-400 dark:text-neutral-600'>{key}:</span>{' '}
+                            <span className='text-neutral-600 dark:text-neutral-400'>
+                              {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {toolCall.result && (
+                      <div className='border-l-2 border-neutral-300/50 dark:border-neutral-700/50 pl-4 py-1 font-mono text-[11px] text-neutral-500 dark:text-neutral-500 leading-relaxed whitespace-pre-wrap break-words'>
+                        {toolCall.result}
+                        <span className='text-neutral-400 dark:text-neutral-600 italic mt-1 block text-[10px] tracking-tight'>
+                          completed
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ),
+          })
+          idx += 1
+          continue
+        }
+
+        if (event.type === 'image' && event.url) {
+          const imageKey = `image-${idx}`
+          items.push({
+            key: imageKey,
+            kind: 'other',
+            node: (
+              <div key={imageKey} className='my-3 mx-1'>
+                <img
+                  src={event.url}
+                  alt='Generated image'
+                  className='max-w-full max-h-96 object-contain rounded-lg shadow-md'
+                  loading='lazy'
+                />
+              </div>
+            ),
+          })
+        }
+
+        idx += 1
+      }
+
+      return items
+    }
+
+    const buildContentBlockRenderItems = (): MessageRenderItem[] => {
+      if (!Array.isArray(contentBlocks) || contentBlocks.length === 0) return []
+
+      const items: MessageRenderItem[] = []
+      let idx = 0
+
+      while (idx < contentBlocks.length) {
+        const block = contentBlocks[idx]
+        if (!block) {
+          idx += 1
+          continue
+        }
+
+        const groupedTool = contentToolGroupsByIndex.get(idx)
+        if (groupedTool) {
+          const toolKey = `block-${groupedTool.id}-${idx}`
+          const toolNode = renderToolCallGroupCard(groupedTool, toolKey)
+          if (toolNode) {
+            items.push({
+              key: `block-tool-${groupedTool.id}-${idx}`,
+              kind: 'process',
+              processType: 'tool',
+              node: toolNode,
+            })
+          }
+          idx += 1
+          continue
+        }
+
+        if (block.type === 'text') {
+          const textKey = `text-${block.index}-${idx}`
+          items.push({
+            key: textKey,
+            kind: 'other',
+            node: (
+              <div
+                key={textKey}
+                className='prose sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px] mt-2'
+                style={textContentStyle}
+              >
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkMath]}
+                  rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
+                  components={{ pre: PreRenderer, a: MarkdownLink }}
+                >
+                  {block.content}
+                </ReactMarkdown>
+              </div>
+            ),
+          })
+          idx += 1
+          continue
+        }
+
+        if (block.type === 'thinking') {
+          let prevIdx = idx - 1
+          while (prevIdx >= 0 && contentBlocks[prevIdx]?.type === 'reasoning_details') {
+            prevIdx -= 1
+          }
+          if (prevIdx >= 0 && contentBlocks[prevIdx]?.type === 'thinking') {
+            idx += 1
+            continue
+          }
+
+          let accumulatedThinking = block.content || ''
+          let nextIdx = idx + 1
+          while (nextIdx < contentBlocks.length) {
+            const nextBlock = contentBlocks[nextIdx]
+            if (!nextBlock) {
+              nextIdx += 1
+              continue
+            }
+            if (nextBlock.type === 'thinking') {
+              accumulatedThinking += nextBlock.content || ''
+              nextIdx += 1
+            } else if (nextBlock.type === 'reasoning_details') {
+              nextIdx += 1
+            } else {
+              break
+            }
+          }
+
+          items.push(buildReasoningRenderItem(accumulatedThinking, block.index, `thinking-${block.index}-${idx}`))
+          idx = nextIdx
+          continue
+        }
+
+        if (block.type === 'reasoning_details') {
+          idx += 1
+          continue
+        }
+
+        if (block.type === 'image' && block.url) {
+          const imageKey = `image-${block.index}-${idx}`
+          items.push({
+            key: imageKey,
+            kind: 'other',
+            node: (
+              <div key={imageKey} className='my-3 mx-1'>
+                <img
+                  src={block.url}
+                  alt='Generated image'
+                  className='max-w-full max-h-96 object-contain rounded-lg shadow-md'
+                  onClick={() => handleArtifactClick(block.url)}
+                  loading='lazy'
+                />
+              </div>
+            ),
+          })
+          idx += 1
+          continue
+        }
+
+        idx += 1
+      }
+
+      return items
+    }
+
+    const streamRenderedNodes =
+      !editingState && Array.isArray(streamEvents) && streamEvents.length > 0
+        ? renderItemsWithOptionalProcessGrouping(buildStreamRenderItems(), `stream-${id}`)
+        : null
+
+    const contentBlockRenderedNodes =
+      !editingState && Array.isArray(contentBlocks) && contentBlocks.length > 0
+        ? renderItemsWithOptionalProcessGrouping(buildContentBlockRenderItems(), `blocks-${id}`)
+        : null
+
     return (
       <div
         id={`message-${id}`}
@@ -2141,331 +2608,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         {/* Prioritize rendering: streamEvents > contentBlocks > legacy fields */}
         {/* Sequential streaming events - render in order as received */}
         {!editingState && Array.isArray(streamEvents) && streamEvents.length > 0 ? (
-          <div className='space-y-0 mb-3'>
-            {streamEvents.map((event, idx) => {
-              const groupedTool = streamToolGroupsByIndex.get(idx)
-              if (groupedTool) {
-                // Only render the group card at the anchor index (first occurrence)
-                // Skip duplicate tool_call events with the same ID
-                if (groupedTool.anchorIndex === idx) {
-                  return renderToolCallGroupCard(groupedTool, `stream-${groupedTool.id}-${idx}`)
-                }
-                return null // Skip duplicate tool events
-              }
-
-              if (event.type === 'text') {
-                // Accumulate consecutive text events into one block
-                let accumulatedText = event.delta || ''
-                for (let i = idx + 1; i < streamEvents.length; i++) {
-                  if (streamEvents[i].type === 'text' && streamEvents[i].delta) {
-                    accumulatedText += streamEvents[i].delta
-                  } else {
-                    break
-                  }
-                }
-                // Only render if this is the first text event in the sequence
-                if (idx === 0 || streamEvents[idx - 1].type !== 'text') {
-                  return (
-                    <div
-                      key={`text-${idx}`}
-                      className='prose max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px]'
-                      style={textContentStyle}
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
-                        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
-                        components={{ pre: PreRenderer, a: MarkdownLink }}
-                      >
-                        {accumulatedText}
-                      </ReactMarkdown>
-                    </div>
-                  )
-                }
-                return null
-              } else if (event.type === 'reasoning' && event.delta) {
-                // Accumulate consecutive reasoning events into one block
-                let accumulatedReasoning = event.delta || ''
-                for (let i = idx + 1; i < streamEvents.length; i++) {
-                  const nextEvent = streamEvents[i]
-
-                  if (nextEvent.type === 'reasoning' && nextEvent.delta) {
-                    accumulatedReasoning += nextEvent.delta
-                  } else if (isHiddenStreamSeparator(nextEvent, i)) {
-                    // Skip non-visible separators so we don't create duplicate reasoning cards.
-                    continue
-                  } else {
-                    break
-                  }
-                }
-                // Only render if the previous visible event is not reasoning.
-                if (getPreviousVisibleStreamType(idx) !== 'reasoning') {
-                  const isExpanded = expandedBlocks.reasoning.has(idx)
-                  const reasoningSummary = truncateWords(accumulatedReasoning)
-
-                  return (
-                    <div
-                      key={`reasoning-${idx}`}
-                      className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
-                    >
-                      {/* Blue pip indicator for reasoning */}
-                      <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' />
-
-                      {/* Reasoning header */}
-                      <button
-                        onClick={() => toggleBlock('reasoning', idx)}
-                        className='flex items-center gap-2 group/reason hover:opacity-80 transition-opacity cursor-pointer outline-none'
-                      >
-                        <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
-                          Reasoning
-                        </span>
-                        {!isExpanded && reasoningSummary && (
-                          <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[300px]'>
-                            {reasoningSummary}
-                          </span>
-                        )}
-                        <svg
-                          className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/reason:text-neutral-500 dark:group-hover/reason:text-neutral-400 ${isExpanded ? 'open' : ''}`}
-                          fill='none'
-                          viewBox='0 0 24 24'
-                          stroke='currentColor'
-                        >
-                          <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
-                        </svg>
-                      </button>
-
-                      {/* Expandable content */}
-                      <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
-                        <div className='tool-expand-content pt-2'>
-                          <div
-                            className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'
-                            style={textContentStyle}
-                          >
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm, remarkMath]}
-                              rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
-                              components={{ pre: PreRenderer, a: MarkdownLink }}
-                            >
-                              {accumulatedReasoning}
-                            </ReactMarkdown>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                }
-                return null
-              } else if (event.type === 'tool_call' && event.toolCall && event.complete) {
-                const toolCall = event.toolCall
-                const toggleKey = `tool-call-${toolCall.id}-${idx}`
-                const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
-                const pathParam = extractPathParam(toolCall.arguments)
-                const isHtmlToolCall = (toolCall.name ?? '').toLowerCase() === 'html_renderer'
-                const hasHtmlOutput = isHtmlToolCall || Boolean(extractHtmlFromToolResult(toolCall.result)?.html)
-
-                return (
-                  <div
-                    key={`tool-${toolCall.id}-${idx}`}
-                    className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
-                  >
-                    {/* Green pip indicator */}
-                    <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
-
-                    {/* Tool header button */}
-                    <button
-                      onClick={() => toggleBlock('toolCalls', toggleKey)}
-                      className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
-                    >
-                      <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
-                        {toolCall.name || 'tool'}
-                      </span>
-                      {!isExpanded && pathParam && (
-                        <span
-                          className='text-[10px] text-neutral-500 dark:text-neutral-500 max-w-[200px] overflow-hidden whitespace-nowrap'
-                          style={{ direction: 'rtl', textOverflow: 'ellipsis' }}
-                        >
-                          {pathParam}
-                        </span>
-                      )}
-                      <svg
-                        className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/tool:text-neutral-500 dark:group-hover/tool:text-neutral-400 ${isExpanded ? 'open' : ''}`}
-                        fill='none'
-                        viewBox='0 0 24 24'
-                        stroke='currentColor'
-                      >
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
-                      </svg>
-                    </button>
-
-                    {/* Expandable content */}
-                    <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
-                      <div className='tool-expand-content pt-3'>
-                        {/* Tool inputs */}
-                        {!hasHtmlOutput && toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
-                          <div className='border-l-2 border-neutral-300/50 dark:border-neutral-700/50 pl-4 py-1 mb-2 font-mono text-[11px] text-neutral-500 dark:text-neutral-500 leading-relaxed'>
-                            {Object.entries(toolCall.arguments).map(([key, value]) => (
-                              <div key={key} className='break-all'>
-                                <span className='text-neutral-400 dark:text-neutral-600'>{key}:</span>{' '}
-                                <span className='text-neutral-600 dark:text-neutral-400'>
-                                  {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Tool result */}
-                        {toolCall.result && (
-                          <div className='border-l-2 border-neutral-300/50 dark:border-neutral-700/50 pl-4 py-1 font-mono text-[11px] text-neutral-500 dark:text-neutral-500 leading-relaxed whitespace-pre-wrap break-words'>
-                            {toolCall.result}
-                            <span className='text-neutral-400 dark:text-neutral-600 italic mt-1 block text-[10px] tracking-tight'>
-                              completed
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              } else if (event.type === 'image' && event.url) {
-                return (
-                  <div key={`image-${idx}`} className='my-3 mx-1'>
-                    <img
-                      src={event.url}
-                      alt='Generated image'
-                      className='max-w-full max-h-96 object-contain rounded-lg shadow-md'
-                      loading='lazy'
-                    />
-                  </div>
-                )
-              }
-              return null
-            })}
-          </div>
+          <div className='space-y-0 mb-3'>{streamRenderedNodes}</div>
         ) : !editingState && Array.isArray(contentBlocks) && contentBlocks.length > 0 ? (
-          // Render content_blocks if available (prioritized over legacy fields)
-          // Uses same formatting as streaming events
-          <div className='space-y-0 mb-0'>
-            {contentBlocks.map((block, idx) => {
-              const groupedTool = contentToolGroupsByIndex.get(idx)
-              if (groupedTool) {
-                return renderToolCallGroupCard(groupedTool, `block-${groupedTool.id}-${idx}`)
-              }
-
-              if (block.type === 'text') {
-                return (
-                  <div
-                    key={`text-${block.index}-${idx}`}
-                    className='prose sm:px-1 max-w-none dark:prose-invert w-full text-[16px] sm:text-[16px] 2xl:text-[20px] 3xl:text-[21px] mt-2'
-                    style={textContentStyle}
-                  >
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
-                      components={{ pre: PreRenderer, a: MarkdownLink }}
-                    >
-                      {block.content}
-                    </ReactMarkdown>
-                  </div>
-                )
-              } else if (block.type === 'thinking') {
-                // Accumulate consecutive thinking blocks into one (same logic as streaming)
-                // Skip if this is not the first thinking block in a sequence
-                // Need to look back past reasoning_details blocks to find previous thinking block
-                let prevIdx = idx - 1
-                while (prevIdx >= 0 && contentBlocks[prevIdx]?.type === 'reasoning_details') {
-                  prevIdx--
-                }
-                if (prevIdx >= 0 && contentBlocks[prevIdx]?.type === 'thinking') {
-                  return null
-                }
-
-                // Accumulate all consecutive thinking blocks (skipping interleaved reasoning_details)
-                let accumulatedThinking = block.content || ''
-                for (let i = idx + 1; i < contentBlocks.length; i++) {
-                  const nextBlock = contentBlocks[i]
-                  if (nextBlock.type === 'thinking') {
-                    accumulatedThinking += nextBlock.content || ''
-                  } else if (nextBlock.type === 'reasoning_details') {
-                    // Skip reasoning_details blocks that are interspersed with thinking blocks
-                    continue
-                  } else {
-                    break
-                  }
-                }
-
-                const isExpanded = expandedBlocks.reasoning.has(block.index)
-                const reasoningSummary = truncateWords(accumulatedThinking)
-
-                return (
-                  <div
-                    key={`thinking-${block.index}-${idx}`}
-                    className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
-                  >
-                    {/* Blue pip indicator for reasoning */}
-                    <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' />
-
-                    {/* Reasoning header */}
-                    <button
-                      onClick={() => toggleBlock('reasoning', block.index)}
-                      className='flex items-center gap-2 group/reason hover:opacity-80 transition-opacity cursor-pointer outline-none'
-                    >
-                      <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
-                        Reasoning
-                      </span>
-                      {!isExpanded && reasoningSummary && (
-                        <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[300px]'>
-                          {reasoningSummary}
-                        </span>
-                      )}
-                      <svg
-                        className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/reason:text-neutral-500 dark:group-hover/reason:text-neutral-400 ${isExpanded ? 'open' : ''}`}
-                        fill='none'
-                        viewBox='0 0 24 24'
-                        stroke='currentColor'
-                      >
-                        <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
-                      </svg>
-                    </button>
-
-                    {/* Expandable content */}
-                    <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
-                      <div className='tool-expand-content pt-2'>
-                        <div
-                          className='text-sm text-neutral-600 dark:text-neutral-400 leading-relaxed prose max-w-none dark:prose-invert'
-                          style={textContentStyle}
-                        >
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkMath]}
-                            rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeKatex]}
-                            components={{ pre: PreRenderer, a: MarkdownLink }}
-                          >
-                            {accumulatedThinking}
-                          </ReactMarkdown>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )
-              } else if (block.type === 'reasoning_details') {
-                // Skip reasoning_details blocks - they are handled together with thinking blocks
-                // and should not be rendered separately
-                return null
-              } else if (block.type === 'image' && block.url) {
-                return (
-                  <div key={`image-${block.index}-${idx}`} className='my-3 mx-1'>
-                    <img
-                      src={block.url}
-                      alt='Generated image'
-                      className='max-w-full max-h-96 object-contain rounded-lg shadow-md'
-                      onClick={() => handleArtifactClick(block.url)}
-                      loading='lazy'
-                    />
-                  </div>
-                )
-              }
-              return null
-            })}
-          </div>
+          <div className='space-y-0 mb-0'>{contentBlockRenderedNodes}</div>
         ) : (
           <>
             {/* Fallback: render tool calls and reasoning separately if no streamEvents or contentBlocks */}
@@ -2918,7 +3063,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 const TodoListView: React.FC<{
   group: ToolCallRenderGroup
   toggleState: Set<string>
-  toggleFn: (type: 'toolCalls' | 'toolResults' | 'reasoning', id: string | number) => void
+  toggleFn: (type: 'toolCalls' | 'toolResults' | 'reasoning' | 'groupRuns', id: string | number) => void
   keySuffix: string
 }> = ({ group, toggleState, toggleFn, keySuffix }) => {
   const action = (group.args?.action as string | undefined)?.toLowerCase() || 'read'

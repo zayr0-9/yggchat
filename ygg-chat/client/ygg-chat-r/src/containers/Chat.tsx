@@ -1316,6 +1316,15 @@ function Chat() {
       return 0
     }
   })
+
+  const [groupToolReasoningRuns, setGroupToolReasoningRuns] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('chat:groupToolReasoningRuns') === 'true'
+    } catch {
+      return false
+    }
+  })
+
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
   useEffect(() => {
     // Listen for custom event from SettingsPane (same window)
@@ -1334,6 +1343,29 @@ function Chat() {
     window.addEventListener('storage', handleStorageEvent)
     return () => {
       window.removeEventListener('fontSizeOffsetChange', handleCustomEvent)
+      window.removeEventListener('storage', handleStorageEvent)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleGroupRunsEvent = (e: Event) => {
+      const detail = (e as CustomEvent<boolean>).detail
+      if (typeof detail === 'boolean') {
+        setGroupToolReasoningRuns(detail)
+      }
+    }
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'chat:groupToolReasoningRuns' && e.newValue !== null) {
+        setGroupToolReasoningRuns(e.newValue === 'true')
+      }
+    }
+
+    window.addEventListener('groupToolReasoningRunsChange', handleGroupRunsEvent)
+    window.addEventListener('storage', handleStorageEvent)
+
+    return () => {
+      window.removeEventListener('groupToolReasoningRunsChange', handleGroupRunsEvent)
       window.removeEventListener('storage', handleStorageEvent)
     }
   }, [])
@@ -3551,6 +3583,7 @@ function Chat() {
                           artifacts={optimisticMessage.artifacts}
                           width='w-full'
                           fontSizeOffset={fontSizeOffset}
+                          groupToolReasoningRuns={groupToolReasoningRuns}
                           className='opacity-70'
                           onOpenToolHtmlModal={openToolHtmlModal}
                         />
@@ -3583,6 +3616,7 @@ function Chat() {
                           artifacts={optimisticBranchMessage.artifacts}
                           width='w-full'
                           fontSizeOffset={fontSizeOffset}
+                          groupToolReasoningRuns={groupToolReasoningRuns}
                           className='opacity-70'
                           onOpenToolHtmlModal={openToolHtmlModal}
                         />
@@ -3616,6 +3650,7 @@ function Chat() {
                           streamEvents={streamState.events}
                           width='w-full'
                           fontSizeOffset={fontSizeOffset}
+                          groupToolReasoningRuns={groupToolReasoningRuns}
                           modelName={selectedModel?.name || undefined}
                           className=''
                           onOpenToolHtmlModal={openToolHtmlModal}
@@ -3659,6 +3694,7 @@ function Chat() {
                         modelName={msg.model_name}
                         artifacts={msg.artifacts}
                         fontSizeOffset={fontSizeOffset}
+                        groupToolReasoningRuns={groupToolReasoningRuns}
                         onEdit={handleMessageEdit}
                         onBranch={handleMessageBranch}
                         onDelete={handleRequestDelete}

@@ -8,8 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- _No notable changes yet._
-
 ## [0.1.75] - 2026-02-14
 
 ### Added
@@ -18,10 +16,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Added hover-only add/delete controls next to every project/conversation, letting you spin up a new chat or cleanly delete a project/conversation with cache health maintained behind the scenes (Redux + React Query updates + navigation when the active chat vanishes).
 - Creating a conversation from the sidebar now immediately navigates into the new chat and refreshes the project order without waiting for the next network fetch.
 - Can set default startup page to be homepage or latest chat.
+- floating title bar in chat page now hides itself.
+- Added a new Chat Settings toggle to group continuous reasoning/tool-call chains (`chat:groupToolReasoningRuns`), with local persistence and live sync via custom/storage events.
 
 ### Fixed
 
 - Navigating between conversations with empty histories now clears the previous messages view so stale content is not shown.
+
+### Changed
+
+- Chat message rendering can now optionally collapse long contiguous reasoning + tool sequences into a single `Agent Steps (N)` collapsible section.
+- The optional grouping behavior is applied consistently to both live streaming (`streamEvents`) and persisted history rendering (`contentBlocks`).
 
 ## [0.1.75] - 2026-02-13
 
