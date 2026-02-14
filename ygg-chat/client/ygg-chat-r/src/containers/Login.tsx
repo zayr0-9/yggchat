@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components'
+import { loadStartupLandingPreference } from '../helpers/startupPreferences'
 import { useAuth } from '../hooks/useAuth'
+import { useRecentConversations } from '../hooks/useQueries'
 import { supabase } from '../lib/supabase'
 import { dualSync } from '../lib/sync/dualSyncManager'
 
@@ -10,9 +12,14 @@ const RAILWAY_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'https:
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
-  const { user, reloadSession } = useAuth()
+  const { user, accessToken, loading: authLoading, reloadSession } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const startupRedirectedRef = useRef(false)
+
+  const startupLandingPreference = useMemo(() => loadStartupLandingPreference(), [])
+  const shouldRouteToLatestChat = startupLandingPreference === 'latest-chat'
+  const { data: startupRecentConversations = [], isLoading: startupConversationsLoading } = useRecentConversations(1)
 
   // OOB (Out-of-Band) authentication state for Electron
   const [oobMode, setOobMode] = useState(false)
@@ -28,12 +35,47 @@ const Login: React.FC = () => {
   const isElectronMode =
     (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
 
-  // Redirect if already logged in
   useEffect(() => {
-    if (user) {
-      navigate('/homepage')
+    if (!user) {
+      startupRedirectedRef.current = false
     }
-  }, [user, navigate])
+  }, [user])
+
+  // Redirect after auth based on startup preference.
+  useEffect(() => {
+    if (!user || authLoading || startupRedirectedRef.current) return
+
+    if (shouldRouteToLatestChat && !accessToken) return
+
+    if (!shouldRouteToLatestChat) {
+      startupRedirectedRef.current = true
+      navigate('/homepage', { replace: true })
+      return
+    }
+
+    if (startupConversationsLoading) return
+
+    const latestConversation = startupRecentConversations.find(conversation => conversation.project_id)
+    if (latestConversation?.id && latestConversation.project_id) {
+      startupRedirectedRef.current = true
+      navigate(`/chat/${latestConversation.project_id}/${latestConversation.id}`, {
+        replace: true,
+        state: latestConversation.storage_mode ? { storageMode: latestConversation.storage_mode } : undefined,
+      })
+      return
+    }
+
+    startupRedirectedRef.current = true
+    navigate('/homepage', { replace: true })
+  }, [
+    user,
+    authLoading,
+    shouldRouteToLatestChat,
+    startupConversationsLoading,
+    startupRecentConversations,
+    navigate,
+    accessToken,
+  ])
 
   // Monitor auth state changes - just for logging and cleanup
   // NOTE: Skip in Electron mode - ElectronAuthProvider handles auth state through useAuth()
@@ -216,7 +258,8 @@ const Login: React.FC = () => {
         const { error } = await supabase.auth.signInWithOAuth({
           provider,
           options: {
-            redirectTo: `${window.location.origin}/homepage`,
+            // Route back to login so startup preference logic can choose homepage vs latest chat.
+            redirectTo: `${window.location.origin}/login`,
           },
         })
         if (error) throw error

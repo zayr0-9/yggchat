@@ -12,6 +12,7 @@ export const OPENAI_SCOPE = 'openid profile email offline_access'
 // ChatGPT Backend API
 export const CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
 export const CHATGPT_CODEX_ENDPOINT = '/codex/responses'
+export const CHATGPT_USAGE_ENDPOINT = '/wham/usage'
 
 // JWT claim path for ChatGPT account ID
 export const JWT_CLAIM_PATH = 'https://api.openai.com/auth'
@@ -73,6 +74,30 @@ export interface OpenAITokens {
   expiresAt: number
   accountId: string
 }
+
+export interface OpenAIUsageWindow {
+  usedPercent: number | null
+  resetAtIso: string | null
+  limitWindowSeconds: number | null
+}
+
+export interface OpenAIUsageSnapshot {
+  planType: string | null
+  session: OpenAIUsageWindow
+  weekly: OpenAIUsageWindow
+  reviews: OpenAIUsageWindow
+  credits: {
+    hasCredits: boolean
+    unlimited: boolean
+    balance: number | null
+  } | null
+  fetchedAtIso: string
+}
+
+export type OpenAIUsageResult =
+  | { type: 'success'; data: OpenAIUsageSnapshot }
+  | { type: 'unauthenticated'; error: string }
+  | { type: 'error'; error: string }
 
 export interface PKCEPair {
   verifier: string
@@ -462,6 +487,97 @@ export async function getValidTokens(): Promise<OpenAITokens | null> {
   }
 
   return tokens
+}
+
+function parseUsageNumber(value: unknown): number | null {
+  if (value == null) return null
+  if (typeof value === 'string' && value.trim() === '') return null
+
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function toIsoFromUnixSeconds(value: unknown): string | null {
+  const unixSeconds = parseUsageNumber(value)
+  if (unixSeconds == null) return null
+
+  try {
+    return new Date(unixSeconds * 1000).toISOString()
+  } catch {
+    return null
+  }
+}
+
+function parseUsageWindow(windowData: any, headerPercent: string | null): OpenAIUsageWindow {
+  const usedPercent = parseUsageNumber(windowData?.used_percent) ?? parseUsageNumber(headerPercent)
+  const resetAtIso = toIsoFromUnixSeconds(windowData?.reset_at)
+  const limitWindowSeconds = parseUsageNumber(windowData?.limit_window_seconds)
+
+  return {
+    usedPercent,
+    resetAtIso,
+    limitWindowSeconds,
+  }
+}
+
+export async function fetchOpenAIUsageStatus(): Promise<OpenAIUsageResult> {
+  const tokens = await getValidTokens()
+  if (!tokens) {
+    return {
+      type: 'unauthenticated',
+      error: 'OpenAI authentication required. Sign in with your ChatGPT account first.',
+    }
+  }
+
+  const url = `${CHATGPT_BASE_URL}${CHATGPT_USAGE_ENDPOINT}`
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${tokens.accessToken}`,
+        Accept: 'application/json',
+        'ChatGPT-Account-Id': tokens.accountId,
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      return {
+        type: 'error',
+        error: errorText?.trim()
+          ? `OpenAI usage request failed (${response.status}): ${errorText.trim()}`
+          : `OpenAI usage request failed (${response.status}).`,
+      }
+    }
+
+    const payload = (await response.json()) as any
+
+    const primaryPercentHeader = response.headers.get('x-codex-primary-used-percent')
+    const secondaryPercentHeader = response.headers.get('x-codex-secondary-used-percent')
+
+    const snapshot: OpenAIUsageSnapshot = {
+      planType: typeof payload?.plan_type === 'string' ? payload.plan_type : null,
+      session: parseUsageWindow(payload?.rate_limit?.primary_window, primaryPercentHeader),
+      weekly: parseUsageWindow(payload?.rate_limit?.secondary_window, secondaryPercentHeader),
+      reviews: parseUsageWindow(payload?.code_review_rate_limit?.primary_window, null),
+      credits: payload?.credits
+        ? {
+            hasCredits: Boolean(payload.credits.has_credits),
+            unlimited: Boolean(payload.credits.unlimited),
+            balance: parseUsageNumber(payload.credits.balance),
+          }
+        : null,
+      fetchedAtIso: new Date().toISOString(),
+    }
+
+    return { type: 'success', data: snapshot }
+  } catch (error) {
+    return {
+      type: 'error',
+      error: `Failed to fetch OpenAI usage: ${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
 }
 
 // Check if user is authenticated with OpenAI

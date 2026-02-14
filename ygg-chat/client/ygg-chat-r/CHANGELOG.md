@@ -10,6 +10,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - _No notable changes yet._
 
+## [0.1.75] - 2026-02-14
+
+### Added
+
+- Reworked the sidebar’s Projects view to feel like a dedicated workspace: the most-recent project expands by default, project summaries now show a “last activity” date even for local projects, and expanding a project fetches its conversations lazily.
+- Added hover-only add/delete controls next to every project/conversation, letting you spin up a new chat or cleanly delete a project/conversation with cache health maintained behind the scenes (Redux + React Query updates + navigation when the active chat vanishes).
+- Creating a conversation from the sidebar now immediately navigates into the new chat and refreshes the project order without waiting for the next network fetch.
+- Can set default startup page to be homepage or latest chat.
+
+### Fixed
+
+- Navigating between conversations with empty histories now clears the previous messages view so stale content is not shown.
+
+## [0.1.75] - 2026-02-13
+
+### Changed
+
+- Chat conversation title editor top bar now auto-hides while scrolling down through messages and reappears when scrolling back up, with smooth transition animations and adaptive message-list top padding.
+- Sidebar now always opens on the Projects tab and the previous per-user default-tab preference in Settings has been removed, reinforcing a single consistent entry point.
+
 ## [0.1.74] - 2026-02-13
 
 ### Changed

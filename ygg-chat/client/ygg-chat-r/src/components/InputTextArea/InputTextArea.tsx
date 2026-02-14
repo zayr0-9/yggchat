@@ -14,6 +14,11 @@ import type { RootState } from '../../store/store'
 type textAreaState = 'default' | 'error' | 'disabled'
 type textAreaWidth = 'w-1/6' | 'w-1/4' | 'w-1/2' | 'w-3/4' | 'w-3/5' | 'w-5/6' | 'w-full' | 'max-w-3xl'
 
+type SlashCommandSelectionResult = {
+  handled: boolean
+  clearInput?: boolean
+}
+
 interface TextAreaProps {
   label?: string
   placeholder?: string
@@ -35,6 +40,7 @@ interface TextAreaProps {
   onProcessMessage?: (processMessage: (message: string) => string) => void
   variant?: 'primary' | 'outline'
   slashCommands?: string[]
+  onSlashCommandSelect?: (command: string) => SlashCommandSelectionResult | void
   onAddCurrentIdeContext?: () => boolean
   selectedIdeContextItems?: Array<{ id: string; label: string }>
 }
@@ -110,6 +116,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   onProcessMessage,
   variant = 'primary',
   slashCommands,
+  onSlashCommandSelect,
   onAddCurrentIdeContext,
   selectedIdeContextItems = [],
   ...rest
@@ -145,8 +152,10 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   const ideSelectionText = currentSelection?.selectedText?.trim() || ''
   const hasIdeContextSelection = ideSelectionText.length > 0
   const ideSelectionPreview =
-    ideSelectionText.length > 1200 ? `${ideSelectionText.slice(0, 1200)}
-…` : ideSelectionText
+    ideSelectionText.length > 1200
+      ? `${ideSelectionText.slice(0, 1200)}
+…`
+      : ideSelectionText
   const ideSelectionPath =
     currentSelection?.relativePath ||
     currentSelection?.filePath?.split(/[\\/]/).pop() ||
@@ -444,6 +453,27 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
       return
     }
 
+    const commandResult = onSlashCommandSelect?.(command)
+    if (commandResult && commandResult.handled) {
+      if (commandResult.clearInput) {
+        const after = value.slice(activeSlashCommand.start + 1 + activeSlashCommand.term.length)
+        const clearedValue = after.trimStart()
+        onChange?.(clearedValue)
+
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus()
+            const cursorPos = Math.max(clearedValue.length, 0)
+            textareaRef.current.setSelectionRange(cursorPos, cursorPos)
+          }
+        }, 0)
+      }
+
+      setActiveSlashCommand(null)
+      setShowSlashList(false)
+      return
+    }
+
     if (textareaRef.current) {
       // Replace the partial command with the selected one
       // The command already includes the `/` prefix, so just add a trailing space
@@ -514,7 +544,10 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   useEffect(() => {
     if (activeSlashCommand && slashCommands) {
       const term = activeSlashCommand.term.toLowerCase()
-      const filtered = slashCommands.filter(cmd => cmd.toLowerCase().startsWith(term))
+      const filtered = slashCommands.filter(cmd => {
+        const normalized = cmd.startsWith('/') ? cmd.slice(1) : cmd
+        return normalized.toLowerCase().startsWith(term)
+      })
       setFilteredSlashCommands(filtered)
       setShowSlashList(filtered.length > 0)
       setSelectedSlashIndex(0)
@@ -681,15 +714,14 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
           <div
             ref={slashListRef}
             className='absolute bottom-full left-0 mb-1 w-64 max-h-48 overflow-y-auto
-                       bg-white dark:bg-neutral-800 border border-neutral-200
-                       dark:border-neutral-700 rounded-lg shadow-lg z-50'
+                       /70 acrylic-light  rounded-xl shadow-lg z-50'
           >
             {filteredSlashCommands.map((command, index) => (
               <div
                 key={command}
                 className={`px-3 py-2 cursor-pointer text-sm ${
                   index === selectedSlashIndex
-                    ? 'bg-blue-500 text-white'
+                    ? 'transparent dark:text-orange-400 text-blue-400'
                     : 'hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-900 dark:text-neutral-100'
                 }`}
                 onClick={() => handleSlashCommandSelection(command)}
@@ -757,7 +789,9 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
 
                 <div className='pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-[24rem] max-w-[90vw] rounded-md border border-orange-300/70 bg-orange-50/95 p-2 shadow-xl group-hover:block dark:border-orange-500/40 dark:bg-neutral-900/95'>
                   {ideSelectionLocation && (
-                    <div className='mb-1 text-[10px] font-semibold text-orange-900 dark:text-orange-200'>{ideSelectionLocation}</div>
+                    <div className='mb-1 text-[10px] font-semibold text-orange-900 dark:text-orange-200'>
+                      {ideSelectionLocation}
+                    </div>
                   )}
                   <pre className='max-h-40 overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-orange-950 dark:text-orange-100'>
                     {ideSelectionPreview}

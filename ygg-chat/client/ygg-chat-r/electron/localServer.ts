@@ -4415,6 +4415,11 @@ function setupServer() {
         now
       )
 
+      // Touch parent project timestamp so project ordering reflects latest conversation activity
+      if (project_id) {
+        db!.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, project_id)
+      }
+
       const created = statements.getConversationById.get(conversationId)
       res.status(201).json(created)
     } catch (error) {

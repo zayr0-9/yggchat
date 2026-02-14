@@ -25,6 +25,7 @@ import {
   REASONING_EFFORT_OPTIONS,
   saveChatReasoningSettings,
 } from '../helpers/chatReasoningSettingsStorage'
+import { loadShowTokenUsageBar, saveShowTokenUsageBar } from '../helpers/chatUiSettingsStorage'
 import {
   loadProviderSettings,
   MAX_OPENROUTER_TEMPERATURE,
@@ -34,10 +35,10 @@ import {
   saveProviderSettings,
 } from '../helpers/providerSettingsStorage'
 import {
-  loadDefaultConversationTab,
-  saveDefaultConversationTab,
-  type ConversationTab,
-} from '../helpers/sidebarPreferences'
+  loadStartupLandingPreference,
+  saveStartupLandingPreference,
+  type StartupLandingPreference,
+} from '../helpers/startupPreferences'
 import {
   loadToolExecutionSettings,
   MAX_BASH_TIMEOUT_MS,
@@ -130,12 +131,13 @@ const Settings: React.FC = () => {
     String(loadToolExecutionSettings().bashTimeoutMs)
   )
   const [bashTimeoutTouched, setBashTimeoutTouched] = useState(false)
-  const [defaultConversationTab, setDefaultConversationTab] = useState<ConversationTab>(() =>
-    loadDefaultConversationTab()
+  const [startupLandingPreference, setStartupLandingPreference] = useState<StartupLandingPreference>(() =>
+    loadStartupLandingPreference()
   )
   const [chatReasoningSettings, setChatReasoningSettings] = useState<ChatReasoningSettings>(() =>
     loadChatReasoningSettings()
   )
+  const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     heartbeatTime: null,
     agentName: 'Global Agent',
@@ -353,13 +355,16 @@ const Settings: React.FC = () => {
     timeoutRef.current = window.setTimeout(() => setStatusMessage(null), 4000)
   }
 
-  const handleDefaultConversationTabChange = (value: string) => {
-    const nextTab: ConversationTab = value === 'favorites' ? 'favorites' : 'recent'
-    saveDefaultConversationTab(nextTab)
-    setDefaultConversationTab(nextTab)
+  const handleStartupLandingPreferenceChange = (value: string) => {
+    const nextPreference: StartupLandingPreference = value === 'latest-chat' ? 'latest-chat' : 'homepage'
+    saveStartupLandingPreference(nextPreference)
+    setStartupLandingPreference(nextPreference)
     showStatus({
       type: 'success',
-      text: nextTab === 'favorites' ? 'Sidebar default set to Favorites.' : 'Sidebar default set to Recent.',
+      text:
+        nextPreference === 'latest-chat'
+          ? 'Startup default set to Latest Chat.'
+          : 'Startup default set to Homepage.',
     })
   }
 
@@ -375,6 +380,16 @@ const Settings: React.FC = () => {
       text: updated.defaultThinkingEnabled
         ? 'Default thinking enabled for reasoning-capable models.'
         : 'Default thinking disabled.',
+    })
+  }
+
+  const handleTokenUsageBarToggle = () => {
+    const nextValue = !showTokenUsageBar
+    saveShowTokenUsageBar(nextValue)
+    setShowTokenUsageBar(nextValue)
+    showStatus({
+      type: 'success',
+      text: nextValue ? 'Token usage bar enabled in Chat.' : 'Token usage bar hidden in Chat.',
     })
   }
 
@@ -844,19 +859,22 @@ const Settings: React.FC = () => {
           <div className='flex flex-col gap-1'>
             <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Sidebar</h2>
             <p className='text-sm text-stone-500 dark:text-stone-200'>
-              Choose which conversation tab opens by default.
+              Configure where the app should land after login.
             </p>
           </div>
 
-          <div className='mt-4 flex flex-col gap-3'>
+          <div className='mt-4 flex flex-col gap-4'>
             <div className='flex flex-col gap-2'>
-              <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Default Conversation Tab</p>
+              <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Startup Destination After Login</p>
+              <p className='text-sm text-stone-500 dark:text-stone-400'>
+                Choose where the app opens when login completes.
+              </p>
               <Select
-                value={defaultConversationTab}
-                onChange={handleDefaultConversationTabChange}
+                value={startupLandingPreference}
+                onChange={handleStartupLandingPreferenceChange}
                 options={[
-                  { value: 'recent', label: 'Recent' },
-                  { value: 'favorites', label: 'Favorites' },
+                  { value: 'homepage', label: 'Homepage' },
+                  { value: 'latest-chat', label: 'Latest Chat' },
                 ]}
                 className='max-w-xs'
               />
@@ -918,6 +936,38 @@ const Settings: React.FC = () => {
                 }))}
                 className='max-w-xs'
               />
+            </div>
+          </div>
+        </section>
+
+        <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+          <div className='flex flex-col gap-1'>
+            <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Chat Interface</h2>
+            <p className='text-sm text-stone-500 dark:text-stone-200'>
+              Control optional chat UI elements.
+            </p>
+          </div>
+
+          <div className='mt-4 flex flex-col gap-4'>
+            <div className='flex items-center justify-between'>
+              <div>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Show Token Usage Bar</p>
+                <p className='text-sm text-stone-500 dark:text-stone-400'>
+                  Display input/output token progress and credit refresh in the chat composer.
+                </p>
+              </div>
+              <button
+                onClick={handleTokenUsageBarToggle}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showTokenUsageBar ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    showTokenUsageBar ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
             </div>
           </div>
         </section>

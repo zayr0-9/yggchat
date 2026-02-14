@@ -34,14 +34,12 @@ import {
   chatSliceActions,
   deleteMessage,
   editMessageWithBranching,
-  fetchCCSlashCommands,
   initializeUserAndConversation,
   Message,
   refreshCurrentPathAfterDelete,
   resolveAttachmentUrl,
   respondToToolPermission,
   respondToToolPermissionAndEnableAll,
-  selectCCSlashCommands,
   selectCcCwd,
   selectConversationMessages,
   selectCurrentConversationId,
@@ -67,7 +65,13 @@ import {
   updateMessage,
 } from '../features/chats'
 import type { ContentBlock, ToolCall } from '../features/chats/chatTypes'
-import { clearTokens as clearOpenAITokens, isOpenAIAuthenticated, saveTokens } from '../features/chats/openaiOAuth'
+import {
+  clearTokens as clearOpenAITokens,
+  fetchOpenAIUsageStatus,
+  isOpenAIAuthenticated,
+  saveTokens,
+  type OpenAIUsageSnapshot,
+} from '../features/chats/openaiOAuth'
 import { buildBranchPathForMessage } from '../features/chats/pathUtils'
 import {
   convContextSet,
@@ -101,6 +105,10 @@ import {
   loadChatReasoningSettings,
   REASONING_EFFORT_OPTIONS,
 } from '../helpers/chatReasoningSettingsStorage'
+import {
+  CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
+  loadShowTokenUsageBar,
+} from '../helpers/chatUiSettingsStorage'
 import { isOrchestratorEnabled, toggleOrchestratorEnabled } from '../helpers/subagentToolSettings'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
@@ -141,10 +149,16 @@ type ChatInputControllerHandle = {
   focus: () => void
 }
 
+type ComposerSlashCommandResult = {
+  handled: boolean
+  clearInput?: boolean
+}
+
 type ChatInputControllerProps = {
   conversationId: ConversationId | null
   initialValue: string
   slashCommands?: string[]
+  onSlashCommandSelect?: (command: string) => ComposerSlashCommandResult | void
   onHasTextChange: (hasText: boolean) => void
   onSubmit: () => void
   onBlurPersist: (content: string) => void
@@ -162,6 +176,7 @@ type AddedIdeContext = {
 }
 
 const EMPTY_PARSED_MESSAGE_DATA: ParsedMessageData = {}
+const COMPOSER_SLASH_COMMANDS = ['status-openai']
 
 const parseMessageDataForRender = (msg: Message): ParsedMessageData => {
   let toolCalls: ToolCall[] | undefined
@@ -225,6 +240,7 @@ const ChatInputController = React.memo(
         conversationId,
         initialValue,
         slashCommands,
+        onSlashCommandSelect,
         onHasTextChange,
         onSubmit,
         onBlurPersist,
@@ -332,6 +348,7 @@ const ChatInputController = React.memo(
             autoFocus={true}
             showCharCount={false}
             slashCommands={slashCommands}
+            onSlashCommandSelect={onSlashCommandSelect}
             onAddCurrentIdeContext={onAddCurrentIdeContext}
             selectedIdeContextItems={selectedIdeContextItems}
           />
@@ -533,7 +550,6 @@ function Chat() {
     [addedIdeContexts]
   )
   const optimisticBranchMessage = useAppSelector(state => state.chat.composition.optimisticBranchMessage)
-  const ccSlashCommands = useAppSelector(selectCCSlashCommands)
 
   // File chip expanded modal state
   const [expandedFilePath, setExpandedFilePath] = useState<string | null>(null)
@@ -559,6 +575,11 @@ function Chat() {
   // const [openaiCallbackInput, setOpenaiCallbackInput] = useState('')
   const [openaiAuthError, setOpenaiAuthError] = useState<string | null>(null)
   const [openaiAuthLoading, setOpenaiAuthLoading] = useState(false)
+  const [showOpenAIUsagePanel, setShowOpenAIUsagePanel] = useState(false)
+  const [openAIUsageData, setOpenAIUsageData] = useState<OpenAIUsageSnapshot | null>(null)
+  const [openAIUsageLoading, setOpenAIUsageLoading] = useState(false)
+  const [openAIUsageError, setOpenAIUsageError] = useState<string | null>(null)
+  const composerSlashCommands = COMPOSER_SLASH_COMMANDS
   const isElectronEnv = useMemo(
     () =>
       import.meta.env.VITE_ENVIRONMENT === 'electron' ||
@@ -797,16 +818,6 @@ function Chat() {
     [conversationMessages]
   )
 
-  // Fetch CC slash commands when CC mode is enabled and conversation exists
-  useEffect(() => {
-    if (ccMode && ccModeAvailable && currentConversationId) {
-      dispatch(fetchCCSlashCommands({ conversationId: currentConversationId, cwd: ccCwd || undefined }))
-    } else if (!ccMode) {
-      // Clear slash commands when CC mode is disabled
-      dispatch(chatSliceActions.ccSlashCommandsCleared())
-    }
-  }, [ccMode, ccModeAvailable, currentConversationId, ccCwd, dispatch])
-
   // Lock page scroll while chat is mounted
   useEffect(() => {
     const prevDocOverflow = document.documentElement.style.overflow
@@ -1029,8 +1040,10 @@ function Chat() {
   // Use URL-derived ID to ensure correct fetching even on page refresh
   // Single request fetches both messages AND tree data to eliminate duplicate requests
   // Pass storage_mode from projectConversations to correctly route to local/cloud API
-  const { data: conversationData } = useConversationMessages(conversationIdFromUrl, conversationStorageMode)
-  const reactQueryMessages = conversationData?.messages || []
+  const { data: conversationData, isFetched: isConversationDataFetched } = useConversationMessages(
+    conversationIdFromUrl,
+    conversationStorageMode
+  )
   const treeData = conversationData?.tree
   // Use useMemo to ensure stable reference for empty object fallback
   // Without this, {} !== {} on each render, causing the useEffect below to
@@ -1040,6 +1053,8 @@ function Chat() {
   const [editingTitle, setEditingTitle] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [cloningConversation, setCloningConversation] = useState(false)
+  const [isTitleBarVisible, setIsTitleBarVisible] = useState(true)
+  const lastScrollTopRef = useRef(0)
   const optionsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -1063,6 +1078,49 @@ function Chat() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [optionsOpen])
+
+  // Always reveal top bar when switching conversations.
+  useEffect(() => {
+    setIsTitleBarVisible(true)
+  }, [currentConversationId])
+
+  // Hide title bar on scroll down, reveal on scroll up (modern collapsing header behavior).
+  useEffect(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+
+    lastScrollTopRef.current = el.scrollTop
+    let rafId: number | null = null
+
+    const onScroll = () => {
+      if (rafId != null) return
+      rafId = requestAnimationFrame(() => {
+        const currentTop = el.scrollTop
+        const delta = currentTop - lastScrollTopRef.current
+        const absDelta = Math.abs(delta)
+        const nearTop = currentTop < 48
+
+        if (nearTop) {
+          setIsTitleBarVisible(true)
+        } else if (absDelta > 8) {
+          if (delta > 0 && !editingTitle && !optionsOpen) {
+            setIsTitleBarVisible(false)
+          } else if (delta < 0) {
+            setIsTitleBarVisible(true)
+          }
+        }
+
+        lastScrollTopRef.current = currentTop
+        rafId = null
+      })
+    }
+
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (rafId != null) cancelAnimationFrame(rafId)
+    }
+  }, [editingTitle, optionsOpen])
 
   // Debounce title updates to avoid dispatching on every keystroke
   useEffect(() => {
@@ -1126,63 +1184,75 @@ function Chat() {
     return () => clearTimeout(handle)
   }, [titleInput, currentConversationId, currentConversation?.title, dispatch, queryClient, selectedProject?.id])
 
-  // Sync React Query messages to Redux when they arrive
-  // This keeps Redux state updated for components that still depend on it
+  // Reset visible messages immediately when switching conversations to prevent stale message bleed.
   useEffect(() => {
-    if (reactQueryMessages && reactQueryMessages.length > 0) {
-      dispatch(chatSliceActions.messagesLoaded(reactQueryMessages))
+    dispatch(chatSliceActions.messagesLoaded([]))
+  }, [conversationIdFromUrl, dispatch])
 
-      // Sync to local database in Electron mode
-      // This handles syncing messages fetched from the server to the local SQLite DB
-      if (import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl) {
-        // Use type assertion or cast if the action is not properly typed in the dispatch
-        // but since it's a thunk, dispatch handles it fine.
-        ;(dispatch as any)(
-          syncConversationToLocal({
-            conversationId: String(conversationIdFromUrl),
-            messages: reactQueryMessages,
-            storageMode: conversationStorageMode,
+  // Sync React Query messages to Redux when query resolves, including empty conversations.
+  // This keeps Redux state updated for components that still depend on it.
+  useEffect(() => {
+    if (!conversationIdFromUrl || !isConversationDataFetched) return
+
+    const fetchedMessages = conversationData?.messages ?? []
+    dispatch(chatSliceActions.messagesLoaded(fetchedMessages))
+
+    if (fetchedMessages.length === 0) return
+
+    // Sync to local database in Electron mode
+    // This handles syncing messages fetched from the server to the local SQLite DB
+    if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
+      ;(dispatch as any)(
+        syncConversationToLocal({
+          conversationId: String(conversationIdFromUrl),
+          messages: fetchedMessages,
+          storageMode: conversationStorageMode,
+        })
+      )
+    }
+
+    // Process attachments from React Query response
+    // This converts attachment URLs to base64 artifacts for display in ChatMessage
+    fetchedMessages.forEach(msg => {
+      const includedAttachments = (msg as any).attachments
+      if (includedAttachments && Array.isArray(includedAttachments) && includedAttachments.length > 0) {
+        // Dispatch attachment metadata immediately
+        dispatch(
+          chatSliceActions.attachmentsSetForMessage({
+            messageId: msg.id,
+            attachments: includedAttachments,
           })
         )
-      }
 
-      // Process attachments from React Query response
-      // This converts attachment URLs to base64 artifacts for display in ChatMessage
-      reactQueryMessages.forEach(msg => {
-        const includedAttachments = (msg as any).attachments
-        if (includedAttachments && Array.isArray(includedAttachments) && includedAttachments.length > 0) {
-          // Dispatch attachment metadata immediately
-          dispatch(
-            chatSliceActions.attachmentsSetForMessage({
-              messageId: msg.id,
-              attachments: includedAttachments,
-            })
-          )
-
-          // Fetch and convert binaries to base64 asynchronously (don't await, let it run in background)
-          Promise.all(
-            includedAttachments.map(async (a: any) => {
-              const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path, a.id)
-              if (!url) return null
-              try {
-                const res = await fetch(url)
-                if (!res.ok) return null
-                const blob = await res.blob()
-                return await blobToDataURL(blob)
-              } catch {
-                return null
-              }
-            })
-          ).then(dataUrls => {
-            const validUrls = dataUrls.filter((x): x is string => Boolean(x))
-            if (validUrls.length > 0) {
-              dispatch(chatSliceActions.messageArtifactsSet({ messageId: msg.id, artifacts: validUrls }))
+        // Fetch and convert binaries to base64 asynchronously (don't await, let it run in background)
+        Promise.all(
+          includedAttachments.map(async (a: any) => {
+            const url = resolveAttachmentUrl(a.url, a.storage_path || a.file_path, a.id)
+            if (!url) return null
+            try {
+              const res = await fetch(url)
+              if (!res.ok) return null
+              const blob = await res.blob()
+              return await blobToDataURL(blob)
+            } catch {
+              return null
             }
           })
-        }
-      })
-    }
-  }, [reactQueryMessages, dispatch, conversationIdFromUrl, conversationStorageMode])
+        ).then(dataUrls => {
+          const validUrls = dataUrls.filter((x): x is string => Boolean(x))
+          if (validUrls.length > 0) {
+            dispatch(chatSliceActions.messageArtifactsSet({ messageId: msg.id, artifacts: validUrls }))
+          }
+        })
+      }
+    })
+  }, [
+    conversationData,
+    conversationIdFromUrl,
+    conversationStorageMode,
+    dispatch,
+    isConversationDataFetched,
+  ])
 
   // Sync tree data to Redux when it arrives
   // Always dispatch even when treeData is null/undefined to keep Redux in sync with React Query
@@ -1246,6 +1316,7 @@ function Chat() {
       return 0
     }
   })
+  const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
   useEffect(() => {
     // Listen for custom event from SettingsPane (same window)
     const handleCustomEvent = (e: Event) => {
@@ -1266,6 +1337,33 @@ function Chat() {
       window.removeEventListener('storage', handleStorageEvent)
     }
   }, [])
+
+  useEffect(() => {
+    const handleTokenUsageVisibilityEvent = (e: Event) => {
+      const detail = (e as CustomEvent<boolean>).detail
+      if (typeof detail === 'boolean') {
+        setShowTokenUsageBar(detail)
+      }
+    }
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'chat:showTokenUsageBar' && e.newValue !== null) {
+        setShowTokenUsageBar(e.newValue === 'true')
+      }
+    }
+
+    window.addEventListener(CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT, handleTokenUsageVisibilityEvent as EventListener)
+    window.addEventListener('storage', handleStorageEvent)
+
+    return () => {
+      window.removeEventListener(
+        CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
+        handleTokenUsageVisibilityEvent as EventListener
+      )
+      window.removeEventListener('storage', handleStorageEvent)
+    }
+  }, [])
+
   // Send button animation type and color (synced from SettingsPane via custom event + localStorage)
   const [sendButtonAnimation, setSendButtonAnimation] = useState<SendButtonAnimationType>(getStoredSendButtonAnimation)
   const [sendButtonColor, setSendButtonColor] = useState<string>(getStoredSendButtonColor)
@@ -2006,6 +2104,34 @@ function Chat() {
     },
     [dispatch]
   )
+
+  const handleComposerSlashCommandSelect = useCallback((command: string): ComposerSlashCommandResult | void => {
+    if (command !== 'status-openai' && command !== '/status-openai') {
+      return { handled: false }
+    }
+
+    setShowOpenAIUsagePanel(true)
+    setOpenAIUsageLoading(true)
+    setOpenAIUsageError(null)
+
+    void (async () => {
+      const result = await fetchOpenAIUsageStatus()
+      if (result.type === 'success') {
+        setOpenAIUsageData(result.data)
+        setOpenAIUsageError(null)
+      } else {
+        setOpenAIUsageData(null)
+        setOpenAIUsageError(result.error)
+      }
+      setOpenAIUsageLoading(false)
+    })()
+
+    return {
+      handled: true,
+      clearInput: true,
+    }
+  }, [])
+
   // Local version of canSend that checks input controller state.
   const canSendLocal = useMemo(() => {
     const isNotSending = !sendingState.sending && !streamState.active
@@ -3223,7 +3349,7 @@ function Chat() {
           {/* Conversation Title Editor */}
           {currentConversationId && (
             <div
-              className={`absolute mb-2 mt-4 top-0 left-0 px-2 z-10 mx-auto right-0 ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+              className={`absolute mb-2 mt-4 top-0 left-0 px-2 z-10 mx-auto right-0 transition-all duration-300 ease-out ${isTitleBarVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'} ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
             >
               <div className='flex items-center bg-white/80 dark:bg-neutral-900/80 backdrop-blur-[12px] border border-black/[0.08] dark:border-white/[0.08] rounded-full py-1 px-1.5 gap-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]'>
                 {/* Workspace Actions */}
@@ -3372,7 +3498,7 @@ function Chat() {
 
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col pt-25 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
+            className={`flex flex-col ${currentConversationId && isTitleBarVisible ? 'pt-25' : 'pt-6'} transition-[padding-top] duration-300 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
             style={{
               ['overflowAnchor' as any]: 'none',
               willChange: 'scroll-position',
@@ -3643,6 +3769,63 @@ function Chat() {
                 )}
               </div>
             )}
+            {showOpenAIUsagePanel && (
+              <div className='mx-2 mt-2 mb-1 rounded-[16px] border border-neutral-200 dark:border-neutral-700 bg-neutral-100/90 dark:bg-neutral-800/60 px-3 py-2'>
+                <div className='flex items-start justify-between gap-3'>
+                  <div className='text-xs font-semibold text-neutral-700 dark:text-neutral-200'>OpenAI Usage</div>
+                  <button
+                    type='button'
+                    className='text-red-500 hover:text-red-400 text-xs font-semibold leading-none'
+                    aria-label='Close OpenAI usage panel'
+                    onClick={() => setShowOpenAIUsagePanel(false)}
+                  >
+                    X
+                  </button>
+                </div>
+
+                {openAIUsageLoading ? (
+                  <div className='mt-2 text-xs text-neutral-600 dark:text-neutral-300'>Loading usage…</div>
+                ) : openAIUsageError ? (
+                  <div className='mt-2 text-xs text-red-500'>{openAIUsageError}</div>
+                ) : openAIUsageData ? (
+                  <div className='mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200'>
+                    <div className='flex items-center justify-between gap-2'>
+                      <span className='text-neutral-500 dark:text-neutral-400'>Session</span>
+                      <span>{openAIUsageData.session.usedPercent == null ? '—' : `${Math.round(openAIUsageData.session.usedPercent)}%`}</span>
+                    </div>
+                    <div className='flex items-center justify-between gap-2'>
+                      <span className='text-neutral-500 dark:text-neutral-400'>Weekly</span>
+                      <span>{openAIUsageData.weekly.usedPercent == null ? '—' : `${Math.round(openAIUsageData.weekly.usedPercent)}%`}</span>
+                    </div>
+                    {openAIUsageData.reviews.usedPercent != null && (
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-neutral-500 dark:text-neutral-400'>Reviews</span>
+                        <span>{`${Math.round(openAIUsageData.reviews.usedPercent)}%`}</span>
+                      </div>
+                    )}
+                    {openAIUsageData.credits && openAIUsageData.credits.balance != null && (
+                      <div className='flex items-center justify-between gap-2'>
+                        <span className='text-neutral-500 dark:text-neutral-400'>Credits</span>
+                        <span>{openAIUsageData.credits.balance.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {openAIUsageData.session.resetAtIso && (
+                      <div className='pt-1 text-[10px] text-neutral-500 dark:text-neutral-400'>
+                        Session reset: {new Date(openAIUsageData.session.resetAtIso).toLocaleString()}
+                      </div>
+                    )}
+                    {openAIUsageData.weekly.resetAtIso && (
+                      <div className='text-[10px] text-neutral-500 dark:text-neutral-400'>
+                        Weekly reset: {new Date(openAIUsageData.weekly.resetAtIso).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className='mt-2 text-xs text-neutral-600 dark:text-neutral-300'>No usage data available.</div>
+                )}
+              </div>
+            )}
+
             {/* Textarea with shortcut hint */}
             <div className=''>
               <ChatInputController
@@ -3652,7 +3835,8 @@ function Chat() {
                 onHasTextChange={setHasLocalInput}
                 onSubmit={handleComposerSubmit}
                 onBlurPersist={handleComposerBlurPersist}
-                slashCommands={ccMode && ccModeAvailable ? ccSlashCommands : undefined}
+                slashCommands={composerSlashCommands}
+                onSlashCommandSelect={handleComposerSlashCommandSelect}
                 onAddCurrentIdeContext={addCurrentIdeContextToMessage}
                 selectedIdeContextItems={addedIdeContextItems}
               />
@@ -3731,81 +3915,83 @@ function Chat() {
               </div>
             )}
 
-            {/* Token Usage Progress Bar - Stacked */}
-            <div className='mx-1 mb-0.5 group relative cursor-pointer'>
-              <div className='flex items-center gap-2'>
-                <div className='flex-1 h-1 bg-neutral-300/50 dark:bg-neutral-700/50 rounded-full overflow-hidden relative'>
-                  {/* Render larger bar first (bottom), smaller bar second (top) */}
-                  {inputProgress >= outputProgress ? (
-                    <>
-                      <div
-                        className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300'
-                        style={{ width: `${inputProgress}%` }}
-                      />
-                      <div
-                        className='absolute inset-0 h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-all duration-300'
-                        style={{ width: `${outputProgress}%` }}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <div
-                        className='absolute inset-0 h-full bg-emerald-500 dark:bg-emerald-600 rounded-full transition-all duration-300'
-                        style={{ width: `${outputProgress}%` }}
-                      />
-                      <div
-                        className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-600 rounded-full transition-all duration-300'
-                        style={{ width: `${inputProgress}%` }}
-                      />
-                    </>
-                  )}
-                </div>
-                {/* Refresh credits button */}
-                <button
-                  onClick={handleRefreshCredits}
-                  disabled={isRefreshingCredits}
-                  className='p-1 rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50'
-                  title='Refresh credits'
-                >
-                  <svg
-                    className={`w-3 h-3 text-neutral-500 dark:text-neutral-400 ${isRefreshingCredits ? 'animate-spin' : ''}`}
-                    fill='none'
-                    stroke='currentColor'
-                    viewBox='0 0 24 24'
+            {/* Token Usage Progress Bar - Optional */}
+            {showTokenUsageBar && (
+              <div className='mx-1 mb-0.5 group relative cursor-pointer'>
+                <div className='flex items-center gap-2'>
+                  <div className='flex-1 h-1 bg-neutral-300/50 dark:bg-neutral-700/50 rounded-full overflow-hidden relative'>
+                    {/* Render larger bar first (bottom), smaller bar second (top) */}
+                    {inputProgress >= outputProgress ? (
+                      <>
+                        <div
+                          className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300'
+                          style={{ width: `${inputProgress}%` }}
+                        />
+                        <div
+                          className='absolute inset-0 h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-all duration-300'
+                          style={{ width: `${outputProgress}%` }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <div
+                          className='absolute inset-0 h-full bg-emerald-500 dark:bg-emerald-600 rounded-full transition-all duration-300'
+                          style={{ width: `${outputProgress}%` }}
+                        />
+                        <div
+                          className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-600 rounded-full transition-all duration-300'
+                          style={{ width: `${inputProgress}%` }}
+                        />
+                      </>
+                    )}
+                  </div>
+                  {/* Refresh credits button */}
+                  <button
+                    onClick={handleRefreshCredits}
+                    disabled={isRefreshingCredits}
+                    className='p-1 rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors disabled:opacity-50'
+                    title='Refresh credits'
                   >
-                    <path
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      strokeWidth={2}
-                      d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
-                    />
-                  </svg>
-                </button>
-              </div>
-              {/* Hover Popup with Token Details */}
-              <div className='absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50'>
-                <div className='bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white rounded-lg shadow-lg px-3 py-2 whitespace-nowrap'>
-                  <div className='flex items-center gap-2 text-xs'>
-                    <span className='text-blue-700 dark:text-blue-400'>Input:</span>
-                    <span>
-                      {tokenUsage.inputTokens.toLocaleString()} / {tokenLimits.maxInputTokens.toLocaleString()}
-                    </span>
+                    <svg
+                      className={`w-3 h-3 text-neutral-500 dark:text-neutral-400 ${isRefreshingCredits ? 'animate-spin' : ''}`}
+                      fill='none'
+                      stroke='currentColor'
+                      viewBox='0 0 24 24'
+                    >
+                      <path
+                        strokeLinecap='round'
+                        strokeLinejoin='round'
+                        strokeWidth={2}
+                        d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'
+                      />
+                    </svg>
+                  </button>
+                </div>
+                {/* Hover Popup with Token Details */}
+                <div className='absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50'>
+                  <div className='bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white rounded-lg shadow-lg px-3 py-2 whitespace-nowrap'>
+                    <div className='flex items-center gap-2 text-xs'>
+                      <span className='text-blue-700 dark:text-blue-400'>Input:</span>
+                      <span>
+                        {tokenUsage.inputTokens.toLocaleString()} / {tokenLimits.maxInputTokens.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className='flex items-center gap-2 text-xs mt-1'>
+                      <span className='text-emerald-600 dark:text-emerald-400'>Output:</span>
+                      <span>
+                        {tokenUsage.outputTokens.toLocaleString()} / {tokenLimits.maxOutputTokens.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className='flex items-center gap-2 text-xs mt-1'>
+                      <span className='text-neutral-900 dark:text-neutral-200'>Credits:</span>
+                      <span>{(current_credits * 100).toFixed(3)}</span>
+                    </div>
+                    {/* Tooltip Arrow */}
+                    <div className='absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800 dark:border-t-neutral-900' />
                   </div>
-                  <div className='flex items-center gap-2 text-xs mt-1'>
-                    <span className='text-emerald-600 dark:text-emerald-400'>Output:</span>
-                    <span>
-                      {tokenUsage.outputTokens.toLocaleString()} / {tokenLimits.maxOutputTokens.toLocaleString()}
-                    </span>
-                  </div>
-                  <div className='flex items-center gap-2 text-xs mt-1'>
-                    <span className='text-neutral-900 dark:text-neutral-200'>Credits:</span>
-                    <span>{(current_credits * 100).toFixed(3)}</span>
-                  </div>
-                  {/* Tooltip Arrow */}
-                  <div className='absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800 dark:border-t-neutral-900' />
                 </div>
               </div>
-            </div>
+            )}
             {/* Controls row */}
             <div className='flex items-center justify-between gap-0 flex-wrap'>
               {/* Left side controls */}
