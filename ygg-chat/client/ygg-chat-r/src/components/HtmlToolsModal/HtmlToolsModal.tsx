@@ -102,6 +102,9 @@ export const HtmlToolsModal: React.FC = () => {
   const [showLimits, setShowLimits] = useState(false)
   const [showFavorites, setShowFavorites] = useState(false)
   const [showHibernated, setShowHibernated] = useState(false)
+  const [isRightDocked, setIsRightDocked] = useState(false)
+  const [dockWidthPx, setDockWidthPx] = useState<number | null>(null)
+  const [isDockResizing, setIsDockResizing] = useState(false)
   const [fullscreenKey, setFullscreenKey] = useState<string | null>(null)
   const [showFullscreenSettings, setShowFullscreenSettings] = useState(false)
   const [showFullscreenTabMenu, setShowFullscreenTabMenu] = useState<string | null>(null)
@@ -111,6 +114,14 @@ export const HtmlToolsModal: React.FC = () => {
   const tabMenuRef = useRef<HTMLDivElement | null>(null)
   const lastFocusKeyRef = useRef<string | null>(null)
   const lastFocusModeRef = useRef<'list' | 'tabs' | null>(null)
+  const isDockResizingRef = useRef(false)
+  const isRightDockedLayout = isRightDocked && !isHomepageFullscreen
+  const clampDockWidth = useCallback((width: number) => {
+    if (typeof window === 'undefined') return width
+    const minWidth = Math.round(window.innerWidth * 0.3)
+    const maxWidth = Math.max(minWidth, window.innerWidth - 320)
+    return Math.min(Math.max(width, minWidth), maxWidth)
+  }, [])
 
   const entries = registry.entries
   const activeEntries = useMemo(() => entries.filter(entry => entry.status === 'active'), [entries])
@@ -198,6 +209,12 @@ export const HtmlToolsModal: React.FC = () => {
   }, [fullscreenKey, isVisible])
 
   useEffect(() => {
+    if (isRightDocked && fullscreenKey) {
+      setFullscreenKey(null)
+    }
+  }, [fullscreenKey, isRightDocked])
+
+  useEffect(() => {
     if (!fullscreenKey) return
     const exists = entries.some(entry => entry.key === fullscreenKey && entry.status === 'active')
     if (!exists) {
@@ -234,6 +251,64 @@ export const HtmlToolsModal: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [showFullscreenSettings, showFullscreenTabMenu])
 
+  const stopDockResize = useCallback(() => {
+    isDockResizingRef.current = false
+    setIsDockResizing(false)
+    if (typeof document !== 'undefined') {
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+  }, [])
+
+  const handleDockMouseMove = useCallback(
+    (clientX: number) => {
+      if (!isDockResizingRef.current || typeof window === 'undefined') return
+      setDockWidthPx(clampDockWidth(window.innerWidth - clientX))
+    },
+    [clampDockWidth]
+  )
+
+  const startDockResize = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!isRightDockedLayout || typeof window === 'undefined') return
+      event.preventDefault()
+      isDockResizingRef.current = true
+      setIsDockResizing(true)
+      document.body.style.userSelect = 'none'
+      document.body.style.cursor = 'col-resize'
+      handleDockMouseMove(event.clientX)
+    },
+    [handleDockMouseMove, isRightDockedLayout]
+  )
+
+  useEffect(() => {
+    if (!isRightDockedLayout || typeof window === 'undefined') {
+      stopDockResize()
+      return
+    }
+
+    const handleMouseMove = (event: MouseEvent) => handleDockMouseMove(event.clientX)
+    const handleMouseUp = () => stopDockResize()
+    const handleWindowBlur = () => stopDockResize()
+
+    const handleResize = () => {
+      setDockWidthPx(prev => (prev == null ? prev : clampDockWidth(prev)))
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    window.addEventListener('blur', handleWindowBlur)
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('blur', handleWindowBlur)
+      window.removeEventListener('resize', handleResize)
+      stopDockResize()
+    }
+  }, [clampDockWidth, handleDockMouseMove, isRightDockedLayout, stopDockResize])
+
   const renderEntry = (entry: (typeof entries)[number], options?: { fillHeight?: boolean; compactView?: boolean }) => {
     const isCollapsed = collapsedTools[entry.key] ?? false
     const isHibernated = entry.status === 'hibernated'
@@ -241,6 +316,7 @@ export const HtmlToolsModal: React.FC = () => {
     const isFullscreen = fullscreenKey === entry.key
     const mcpEntry = entry.kind === 'mcp' ? entry : null
     const isCompact = options?.compactView === true
+    const dockEdgeInsetClass = isRightDockedLayout ? 'pl-2' : ''
     const iframeHeightClass = isCollapsed
       ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
       : isFullscreen
@@ -304,9 +380,15 @@ export const HtmlToolsModal: React.FC = () => {
               <i className={`bx ${isHibernated ? 'bx-play' : 'bx-moon'} text-sm`} aria-hidden='true' />
             </GhostPillIcon>
             <GhostPillIcon
-              disabled={isHibernated}
+              disabled={isHibernated || isRightDocked}
               onClick={() => toggleFullscreen(entry.key)}
-              aria-label={isFullscreen ? 'Exit fullscreen tool output' : 'Enter fullscreen tool output'}
+              aria-label={
+                isRightDocked
+                  ? 'Fullscreen is unavailable while right docked'
+                  : isFullscreen
+                    ? 'Exit fullscreen tool output'
+                    : 'Enter fullscreen tool output'
+              }
             >
               <i className={`bx ${isFullscreen ? 'bx-exit-fullscreen' : 'bx-fullscreen'} text-sm`} aria-hidden='true' />
             </GhostPillIcon>
@@ -335,7 +417,7 @@ export const HtmlToolsModal: React.FC = () => {
             {isCollapsed && (
               <div className='font-mono text-xs text-neutral-500 dark:text-neutral-600'>Output collapsed.</div>
             )}
-            <div className={`w-full ${iframeHeightClass}`} aria-hidden={isCollapsed}>
+            <div className={`w-full ${iframeHeightClass} ${dockEdgeInsetClass}`} aria-hidden={isCollapsed}>
               {entry.kind === 'mcp' ? (
                 <McpAppIframeSlot
                   iframeKey={entry.key}
@@ -367,37 +449,121 @@ export const HtmlToolsModal: React.FC = () => {
   }
 
   const handleClose = isHomepageFullscreen ? closeHomepageFullscreen : onClose
+  const resolvedDockWidthPx = isRightDockedLayout
+    ? clampDockWidth(dockWidthPx ?? (typeof window !== 'undefined' ? Math.round(window.innerWidth * 0.5) : 720))
+    : null
+  const modalWrapperClassName = isRightDockedLayout
+    ? 'fixed inset-y-0 right-0 z-[1400] flex max-w-full flex-col'
+    : 'fixed inset-0 z-[1400] flex flex-col'
+  const modalWrapperStyle = isRightDockedLayout
+    ? {
+        paddingTop: 'var(--titlebar-height, 0px)',
+        paddingLeft: '0.5rem',
+        boxSizing: 'border-box' as const,
+        width: resolvedDockWidthPx ?? undefined,
+      }
+    : { paddingTop: 'var(--titlebar-height, 0px)', boxSizing: 'border-box' as const }
+  const modalPanelClassName = isRightDockedLayout
+    ? 'relative w-full h-full bg-white dark:bg-[rgba(15,15,15,1)] flex flex-col overflow-hidden border-l border-neutral-200 dark:border-white/[0.06] shadow-[-24px_0_60px_-32px_rgba(0,0,0,0.45)]'
+    : 'relative w-full h-full bg-white/98 dark:bg-[rgba(15,15,15,0.98)] backdrop-blur-[32px] flex flex-col overflow-hidden'
+
+  const useIconOnlyHeaderButtons = isRightDockedLayout && (resolvedDockWidthPx ?? 0) < 760
+
+  const dockResizeShield =
+    isRightDockedLayout && isDockResizing
+      ? createPortal(
+          <div
+            className='fixed inset-0 z-[3000] cursor-col-resize select-none bg-transparent'
+            aria-hidden='true'
+            onMouseMove={event => handleDockMouseMove(event.clientX)}
+            onMouseUp={stopDockResize}
+            onMouseLeave={stopDockResize}
+          />,
+          document.body
+        )
+      : null
 
   const headerContent = (
     <header className='flex items-center justify-between px-4 py-3 border-b border-neutral-200 dark:border-white/[0.03] relative z-[1451]'>
-      <div>
-        <h2 className='text-lg font-medium text-neutral-900 dark:text-white tracking-tight leading-none'>Task Manager</h2>
-        <p className='font-mono text-[10px] text-neutral-500 uppercase tracking-[0.15em] mt-1'>Running Apps</p>
+      <div className='min-w-0'>
+        <h2 className='text-lg font-medium text-neutral-900 dark:text-white tracking-tight leading-none truncate'>Task Manager</h2>
+        {!useIconOnlyHeaderButtons && (
+          <p className='font-mono text-[10px] text-neutral-500 uppercase tracking-[0.15em] mt-1'>Running Apps</p>
+        )}
       </div>
-      <div className='flex items-center gap-2'>
-        <GhostPill
-          onClick={() => setShowFavorites(prev => !prev)}
-          active={showFavorites}
-          aria-pressed={showFavorites}
-          aria-label={showFavorites ? 'Hide favorite tools' : 'Show favorite tools'}
-        >
-          <i
-            className={`bx ${showFavorites ? 'bxs-star text-amber-500 dark:text-amber-400' : 'bx-star'}`}
-            aria-hidden='true'
-          />
-          Favorites{favoriteEntries.length > 0 ? ` (${favoriteEntries.length})` : ''}
-        </GhostPill>
-        <GhostPill
-          onClick={() => setShowHibernated(prev => !prev)}
-          active={showHibernated}
-          aria-pressed={showHibernated}
-          aria-label={showHibernated ? 'Hide hibernated tools' : 'Show hibernated tools'}
-        >
-          <i className='bx bx-moon' aria-hidden='true' />
-          Hibernated{hibernatedEntries.length > 0 ? ` (${hibernatedEntries.length})` : ''}
-        </GhostPill>
+      <div className={`flex items-center ${useIconOnlyHeaderButtons ? 'gap-1' : 'gap-2'} shrink-0`}>
+        {useIconOnlyHeaderButtons ? (
+          <GhostPillIcon
+            onClick={() => setShowFavorites(prev => !prev)}
+            active={showFavorites}
+            aria-pressed={showFavorites}
+            aria-label={showFavorites ? 'Hide favorite tools' : 'Show favorite tools'}
+          >
+            <i
+              className={`bx ${showFavorites ? 'bxs-star text-amber-500 dark:text-amber-400' : 'bx-star'}`}
+              aria-hidden='true'
+            />
+          </GhostPillIcon>
+        ) : (
+          <GhostPill
+            onClick={() => setShowFavorites(prev => !prev)}
+            active={showFavorites}
+            aria-pressed={showFavorites}
+            aria-label={showFavorites ? 'Hide favorite tools' : 'Show favorite tools'}
+          >
+            <i
+              className={`bx ${showFavorites ? 'bxs-star text-amber-500 dark:text-amber-400' : 'bx-star'}`}
+              aria-hidden='true'
+            />
+            Favorites{favoriteEntries.length > 0 ? ` (${favoriteEntries.length})` : ''}
+          </GhostPill>
+        )}
+
+        {useIconOnlyHeaderButtons ? (
+          <GhostPillIcon
+            onClick={() => setShowHibernated(prev => !prev)}
+            active={showHibernated}
+            aria-pressed={showHibernated}
+            aria-label={showHibernated ? 'Hide hibernated tools' : 'Show hibernated tools'}
+          >
+            <i className='bx bx-moon' aria-hidden='true' />
+          </GhostPillIcon>
+        ) : (
+          <GhostPill
+            onClick={() => setShowHibernated(prev => !prev)}
+            active={showHibernated}
+            aria-pressed={showHibernated}
+            aria-label={showHibernated ? 'Hide hibernated tools' : 'Show hibernated tools'}
+          >
+            <i className='bx bx-moon' aria-hidden='true' />
+            Hibernated{hibernatedEntries.length > 0 ? ` (${hibernatedEntries.length})` : ''}
+          </GhostPill>
+        )}
+
         {/* Divider */}
-        <div className='w-px h-4 bg-neutral-300 dark:bg-white/10 mx-1' />
+        <div className={`w-px h-4 bg-neutral-300 dark:bg-white/10 ${useIconOnlyHeaderButtons ? 'mx-0.5' : 'mx-1'}`} />
+
+        {useIconOnlyHeaderButtons ? (
+          <GhostPillIcon
+            onClick={() => setIsRightDocked(prev => !prev)}
+            active={isRightDocked}
+            aria-pressed={isRightDocked}
+            aria-label={isRightDocked ? 'Undock tool viewer' : 'Dock tool viewer to right half'}
+          >
+            <i className={`bx ${isRightDocked ? 'bx-exit-fullscreen' : 'bx-sidebar'} text-sm`} aria-hidden='true' />
+          </GhostPillIcon>
+        ) : (
+          <GhostPill
+            onClick={() => setIsRightDocked(prev => !prev)}
+            active={isRightDocked}
+            aria-pressed={isRightDocked}
+            aria-label={isRightDocked ? 'Undock tool viewer' : 'Dock tool viewer to right half'}
+          >
+            <i className={`bx ${isRightDocked ? 'bx-exit-fullscreen' : 'bx-sidebar'} text-sm`} aria-hidden='true' />
+            {isRightDocked ? 'Undock' : 'Dock Right'}
+          </GhostPill>
+        )}
+
         <GhostPillIcon
           onClick={() => setShowLimits(prev => !prev)}
           active={showLimits}
@@ -864,21 +1030,27 @@ export const HtmlToolsModal: React.FC = () => {
 
   // Main modal view
   return (
-    <div
-      className='fixed inset-0 z-[1400] flex flex-col'
-      style={{ paddingTop: 'var(--titlebar-height, 0px)', boxSizing: 'border-box' }}
-    >
-      {/* Fullscreen viewer */}
-      <div
-        className='relative w-full h-full bg-white/98 dark:bg-[rgba(15,15,15,0.98)] backdrop-blur-[32px] flex flex-col overflow-hidden'
-        role='dialog'
-        aria-modal='true'
-        aria-label='HTML tool viewer'
-      >
-        {headerContent}
-        {limitsContent}
-        {mainContent}
+    <>
+      {dockResizeShield}
+      <div className={modalWrapperClassName} style={modalWrapperStyle}>
+        {isRightDockedLayout && (
+          <div
+            role='separator'
+            aria-orientation='vertical'
+            aria-label='Resize docked tool viewer'
+            className='absolute left-0 top-0 h-full w-2 z-[1452] dark:bg-neutral-900 bg-neutral-50 hover:dark:bg-neutral-800 hover:bg-neutral-200 cursor-col-resize select-none'
+            style={{ border: 'none', outline: 'none', margin: 0, padding: 0 }}
+            onMouseDown={startDockResize}
+            title='Drag to resize'
+          />
+        )}
+        {/* Fullscreen viewer */}
+        <div className={modalPanelClassName} role='dialog' aria-modal='true' aria-label='HTML tool viewer'>
+          {headerContent}
+          {limitsContent}
+          {mainContent}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

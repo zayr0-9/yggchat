@@ -1677,27 +1677,34 @@ function Chat() {
       } catch {}
     }
 
+    const stopResizing = () => setIsResizing(false)
     const onMouseMove = (e: MouseEvent) => handleMove(e.clientX)
-    const onMouseUp = () => setIsResizing(false)
+    const onMouseUp = stopResizing
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches && e.touches[0]) handleMove(e.touches[0].clientX)
     }
-    const onTouchEnd = () => setIsResizing(false)
+    const onTouchEnd = stopResizing
+    const onWindowBlur = stopResizing
 
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
     window.addEventListener('touchmove', onTouchMove, { passive: false })
     window.addEventListener('touchend', onTouchEnd)
+    window.addEventListener('blur', onWindowBlur)
 
     const prevUserSelect = document.body.style.userSelect
+    const prevCursor = document.body.style.cursor
     document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
 
     return () => {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
       window.removeEventListener('touchmove', onTouchMove)
       window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('blur', onWindowBlur)
       document.body.style.userSelect = prevUserSelect
+      document.body.style.cursor = prevCursor
     }
   }, [isResizing])
 
@@ -4863,6 +4870,15 @@ function Chat() {
             setIsResizing(true)
           }}
           title='Drag to resize'
+        />
+      )}
+
+      {isResizing && !isMobile && (
+        <div
+          className='fixed inset-0 z-[2000] cursor-col-resize select-none bg-transparent'
+          aria-hidden='true'
+          onMouseUp={() => setIsResizing(false)}
+          onTouchEnd={() => setIsResizing(false)}
         />
       )}
 

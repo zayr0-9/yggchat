@@ -8,6 +8,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+## [0.1.76] - 2026-02-14
+
+### Added
+
+- Added a right-dock mode toggle to the HTML Tools modal so the app viewer can switch between full-screen overlay and a right-side panel.
+- Added a draggable dock separator for the right-docked HTML Tools modal, including persistent live resize behavior.
+
+### Changed
+
+- Right-docked HTML Tools modal now uses a solid panel style (no backdrop blur), with improved separator affordance and a dedicated left grab gutter.
+- Docked modal width bounds now allow shrinking down to 30% of viewport width.
+- Header controls in docked mode now collapse to icon-only actions at narrow widths to prevent overflow.
+
+### Fixed
+
+- Fixed iframe-adjacent resize “stuck drag” behavior by introducing iframe-safe drag shields during active resize interactions.
+- Applied the resize drag fix in both split panes:
+  - Chat view (Heimdall separator in `Chat.tsx`)
+  - HTML Tools docked modal separator (`HtmlToolsModal.tsx`)
+
 ## [0.1.75] - 2026-02-14
 
 ### Added
@@ -29,11 +49,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Chat message rendering can now optionally collapse long contiguous reasoning + tool sequences into a single `Agent Steps (N)` collapsible section.
 - The optional grouping behavior is applied consistently to both live streaming (`streamEvents`) and persisted history rendering (`contentBlocks`).
-
-## [0.1.75] - 2026-02-13
-
-### Changed
-
 - Chat conversation title editor top bar now auto-hides while scrolling down through messages and reappears when scrolling back up, with smooth transition animations and adaptive message-list top padding.
 - Sidebar now always opens on the Projects tab and the previous per-user default-tab preference in Settings has been removed, reinforcing a single consistent entry point.
 
