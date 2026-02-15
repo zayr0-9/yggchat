@@ -4074,8 +4074,8 @@ export const editMessageWithBranching = createAsyncThunk<
             updateMessageCache(extra.queryClient, conversationId, newUserMessage)
             dispatch(chatSliceActions.optimisticBranchMessageCleared())
 
-            localApi
-              .post('/sync/message', {
+            try {
+              await localApi.post('/sync/message', {
                 ...newUserMessage,
                 conversation_id: conversationId,
                 children_ids: newUserMessage.children_ids,
@@ -4086,9 +4086,43 @@ export const editMessageWithBranching = createAsyncThunk<
                 project_id: selectedProject?.id || null,
                 storage_mode: storageMode,
               })
-              .catch(err =>
-                console.error('[editMessageWithBranching][openai-chatgpt] Failed to sync user message:', err)
+            } catch (err) {
+              console.error('[editMessageWithBranching][openai-chatgpt] Failed to sync user message:', err)
+            }
+
+            // Save image attachments to local DB for the new branched user message
+            if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
+              localApi
+                .post('/local/attachments/save-base64', {
+                  messageId: newUserMessage.id,
+                  attachments: attachmentsBase64,
+                })
+                .catch(err =>
+                  console.error('[editMessageWithBranching][openai-chatgpt] Failed to save local attachments:', err)
+                )
+            }
+
+            // Ensure branched user message shows intended artifacts immediately
+            if (combinedArtifacts.length > 0) {
+              dispatch(
+                chatSliceActions.messageArtifactsSet({
+                  messageId: newUserMessage.id,
+                  artifacts: combinedArtifacts,
+                })
               )
+
+              const cacheKey = ['conversations', conversationId, 'messages']
+              const existingData = extra.queryClient?.getQueryData<{ messages: Message[]; tree: any }>(cacheKey)
+              if (existingData) {
+                const updatedMessages = existingData.messages.map(msg =>
+                  msg.id === newUserMessage.id ? { ...msg, artifacts: combinedArtifacts } : msg
+                )
+                extra.queryClient?.setQueryData(cacheKey, {
+                  messages: updatedMessages,
+                  tree: existingData.tree,
+                })
+              }
+            }
 
             userMessage = newUserMessage
             currentTurnHistory.push(newUserMessage)
@@ -5124,8 +5158,8 @@ export const sendMessageToBranch = createAsyncThunk<
             dispatch(chatSliceActions.messageBranchCreated({ newMessage: newUserMessage }))
             updateMessageCache(extra.queryClient, conversationId, newUserMessage)
 
-            localApi
-              .post('/sync/message', {
+            try {
+              await localApi.post('/sync/message', {
                 ...newUserMessage,
                 conversation_id: conversationId,
                 children_ids: newUserMessage.children_ids,
@@ -5136,7 +5170,33 @@ export const sendMessageToBranch = createAsyncThunk<
                 project_id: selectedProject?.id || null,
                 storage_mode: storageMode,
               })
-              .catch(err => console.error('[sendMessageToBranch][openai-chatgpt] Failed to sync user message:', err))
+            } catch (err) {
+              console.error('[sendMessageToBranch][openai-chatgpt] Failed to sync user message:', err)
+            }
+
+            // Save image attachments to local DB for the new branched user message
+            if (storageMode === 'local' && attachmentsBase64 && attachmentsBase64.length > 0) {
+              localApi
+                .post('/local/attachments/save-base64', {
+                  messageId: newUserMessage.id,
+                  attachments: attachmentsBase64,
+                })
+                .catch(err =>
+                  console.error('[sendMessageToBranch][openai-chatgpt] Failed to save local attachments:', err)
+                )
+            }
+
+            // Live-update artifacts so images appear immediately in the branch message
+            if (drafts.length > 0) {
+              const artifactDataUrls = drafts.map(d => d.dataUrl)
+              dispatch(
+                chatSliceActions.messageArtifactsAppended({
+                  messageId: newUserMessage.id,
+                  artifacts: artifactDataUrls,
+                })
+              )
+              updateMessageArtifactsInCache(extra.queryClient, conversationId, newUserMessage.id, artifactDataUrls)
+            }
 
             userMessage = newUserMessage
             currentTurnHistory.push(newUserMessage)
