@@ -3764,7 +3764,7 @@ export const editMessageWithBranching = createAsyncThunk<
 
       const deletedBackup: string[] = state.chat.attachments.backup?.[originalMessageId] || []
       const existingMinusDeleted = artifactsExisting.filter(a => !deletedBackup.includes(a))
-      const combinedArtifacts = [...existingMinusDeleted, ...draftDataUrls]
+      const combinedArtifacts = Array.from(new Set([...existingMinusDeleted, ...draftDataUrls]))
 
       // Build attachmentsBase64 with full metadata like sendMessage does
       const attachmentsBase64 = combinedArtifacts.length

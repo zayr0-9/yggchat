@@ -804,8 +804,12 @@ export const chatSlice = createSlice({
       const { messageId, artifacts } = action.payload
       const msg = state.conversation.messages.find(m => m.id === messageId)
       if (msg) {
-        const existing = Array.isArray(msg.artifacts) ? msg.artifacts : []
-        msg.artifacts = [...existing, ...artifacts]
+        const existing = Array.isArray(msg.artifacts) ? [...msg.artifacts] : []
+        const existingSet = new Set(existing)
+        const newArtifacts = artifacts.filter(artifact => !existingSet.has(artifact))
+        if (newArtifacts.length > 0) {
+          msg.artifacts = [...existing, ...newArtifacts]
+        }
       }
     },
 
