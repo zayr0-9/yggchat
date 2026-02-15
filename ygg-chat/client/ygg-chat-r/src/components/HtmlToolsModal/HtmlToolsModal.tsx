@@ -473,7 +473,8 @@ export const HtmlToolsModal: React.FC = () => {
     isRightDockedLayout && isDockResizing
       ? createPortal(
           <div
-            className='fixed inset-0 z-[3000] cursor-col-resize select-none bg-transparent'
+            className='fixed inset-x-0 bottom-0 z-[3000] cursor-col-resize select-none bg-transparent'
+            style={{ top: 'var(--titlebar-height, 0px)' }}
             aria-hidden='true'
             onMouseMove={event => handleDockMouseMove(event.clientX)}
             onMouseUp={stopDockResize}
@@ -1039,7 +1040,14 @@ export const HtmlToolsModal: React.FC = () => {
             aria-orientation='vertical'
             aria-label='Resize docked tool viewer'
             className='absolute left-0 top-0 h-full w-2 z-[1452] dark:bg-neutral-900 bg-neutral-50 hover:dark:bg-neutral-800 hover:bg-neutral-200 cursor-col-resize select-none'
-            style={{ border: 'none', outline: 'none', margin: 0, padding: 0 }}
+            style={{
+            border: 'none',
+            outline: 'none',
+            margin: 0,
+            padding: 0,
+            top: 'var(--titlebar-height, 0px)',
+            height: 'calc(100% - var(--titlebar-height, 0px))',
+          }}
             onMouseDown={startDockResize}
             title='Drag to resize'
           />
