@@ -1624,15 +1624,22 @@ export function useFilteredModels(provider: string | null) {
 }
 
 /**
- * Hook for searching conversations with local-first optimization
- * First searches cached conversations by title, falls back to server if no local results
+ * Hook for searching conversations by title.
+ * Default behavior is local-cache first, then API fallback.
+ * When forceServerSearch is enabled, it always hits the API.
  *
  * @param projectId - Optional project ID to scope search
- * @returns Search function and state (results, isSearching, searchFromServer)
+ * @param options - Optional behavior flags
  */
-export function useSearchConversations(projectId?: string | null) {
+export function useSearchConversations(
+  projectId?: string | null,
+  options?: {
+    forceServerSearch?: boolean
+  }
+) {
   const queryClient = useQueryClient()
-  const { accessToken } = useAuth()
+  const { accessToken, userId } = useAuth()
+  const forceServerSearch = options?.forceServerSearch ?? false
   const [searchResults, setSearchResults] = useState<Conversation[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [searchedFromServer, setSearchedFromServer] = useState(false)
@@ -1643,6 +1650,7 @@ export function useSearchConversations(projectId?: string | null) {
       if (!query.trim()) return []
 
       const lowerQuery = query.toLowerCase()
+      const normalizedQuery = lowerQuery.replace(/[\s_-]+/g, '')
       const results: Conversation[] = []
       const seenIds = new Set<string>()
 
@@ -1666,9 +1674,11 @@ export function useSearchConversations(projectId?: string | null) {
           if (seenIds.has(String(conv.id))) continue
           if (projectId && conv.project_id !== projectId) continue
 
-          // Case-insensitive title search
+          // Case-insensitive title search, with spacing/punctuation-tolerant fallback
           const title = conv.title || ''
-          if (title.toLowerCase().includes(lowerQuery)) {
+          const lowerTitle = title.toLowerCase()
+          const normalizedTitle = lowerTitle.replace(/[\s_-]+/g, '')
+          if (lowerTitle.includes(lowerQuery) || (normalizedQuery && normalizedTitle.includes(normalizedQuery))) {
             results.push(conv)
             seenIds.add(String(conv.id))
           }
@@ -1681,10 +1691,31 @@ export function useSearchConversations(projectId?: string | null) {
     [queryClient, projectId]
   )
 
-  // Search server (fallback)
+  // Search API (SQLite local endpoint in Electron, cloud endpoint on web)
   const searchServer = useCallback(
     async (query: string): Promise<Conversation[]> => {
       if (!query.trim()) return []
+
+      if (environment === 'electron') {
+        if (!userId) {
+          console.warn('[useSearchConversations] No userId available, skipping local search')
+          return []
+        }
+
+        const params = new URLSearchParams({ q: query, limit: '20', userId })
+        if (projectId) {
+          params.set('projectId', projectId)
+        }
+
+        try {
+          const results = await localApi.get<Conversation[]>(`/local/conversations/search?${params.toString()}`)
+          return results || []
+        } catch (error) {
+          console.error('Local conversation title search failed:', error)
+          return []
+        }
+      }
+
       if (!accessToken) {
         console.warn('[useSearchConversations] No accessToken available, skipping server search')
         return []
@@ -1703,13 +1734,14 @@ export function useSearchConversations(projectId?: string | null) {
         return []
       }
     },
-    [accessToken, projectId]
+    [accessToken, projectId, userId]
   )
 
-  // Main search function with local-first optimization
+  // Main search function
   const search = useCallback(
     async (query: string) => {
-      if (!query.trim()) {
+      const trimmed = query.trim()
+      if (!trimmed) {
         setSearchResults([])
         setSearchedFromServer(false)
         return
@@ -1718,8 +1750,15 @@ export function useSearchConversations(projectId?: string | null) {
       setIsSearching(true)
 
       try {
+        if (forceServerSearch) {
+          const serverResults = await searchServer(trimmed)
+          setSearchResults(serverResults)
+          setSearchedFromServer(true)
+          return
+        }
+
         // Step 1: Search local cache
-        const localResults = searchLocalCache(query)
+        const localResults = searchLocalCache(trimmed)
 
         if (localResults.length > 0) {
           // Found in local cache, use these results
@@ -1728,8 +1767,8 @@ export function useSearchConversations(projectId?: string | null) {
           return
         }
 
-        // Step 2: Nothing in local cache, search server
-        const serverResults = await searchServer(query)
+        // Step 2: Nothing in local cache, search API
+        const serverResults = await searchServer(trimmed)
         setSearchResults(serverResults)
         setSearchedFromServer(true)
       } catch (error) {
@@ -1740,7 +1779,7 @@ export function useSearchConversations(projectId?: string | null) {
         setIsSearching(false)
       }
     },
-    [searchLocalCache, searchServer]
+    [forceServerSearch, searchLocalCache, searchServer]
   )
 
   // Clear search results

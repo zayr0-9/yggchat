@@ -20,6 +20,7 @@ import { Provider } from 'react-redux'
 import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
 import './index.css'
+import { initClientTelemetry } from './services/clientTelemetry'
 import { store } from './store/store'
 import { updateThunkExtraQueryClient } from './store/thunkExtra'
 
@@ -66,6 +67,9 @@ const persister = createSyncStoragePersister({
   storage: window.localStorage,
   key: 'ygg-react-query-cache',
 })
+
+// Initialize Electron-only client error telemetry early in app startup.
+initClientTelemetry()
 
 // Global theme manager: keeps the `dark` class in sync with user preference and system theme
 // Runs once per page load (guarded for HMR) so it applies across all routes

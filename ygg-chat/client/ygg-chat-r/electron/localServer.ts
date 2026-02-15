@@ -556,6 +556,7 @@ function initializeLocalDatabase(dbPath: string) {
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_conversations_user_favorite ON conversations(user_id, favorite);
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_title ON conversations(user_id, title);
   `)
 
   db.exec(`
@@ -808,6 +809,27 @@ function initializeLocalDatabase(dbPath: string) {
     ),
     getFavoriteConversationsLimited: db.prepare(
       'SELECT * FROM conversations WHERE user_id = ? AND favorite = 1 ORDER BY updated_at DESC LIMIT ?'
+    ),
+    searchConversationsByTitle: db.prepare(
+      `SELECT * FROM conversations
+       WHERE user_id = ?
+         AND (
+           COALESCE(title, '') LIKE ? COLLATE NOCASE
+           OR REPLACE(REPLACE(REPLACE(COALESCE(title, ''), ' ', ''), '-', ''), '_', '') LIKE ? COLLATE NOCASE
+         )
+       ORDER BY updated_at DESC
+       LIMIT ?`
+    ),
+    searchConversationsByTitleInProject: db.prepare(
+      `SELECT * FROM conversations
+       WHERE user_id = ?
+         AND project_id = ?
+         AND (
+           COALESCE(title, '') LIKE ? COLLATE NOCASE
+           OR REPLACE(REPLACE(REPLACE(COALESCE(title, ''), ' ', ''), '-', ''), '_', '') LIKE ? COLLATE NOCASE
+         )
+       ORDER BY updated_at DESC
+       LIMIT ?`
     ),
     updateConversationResearchNote: db.prepare(
       'UPDATE conversations SET research_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
@@ -4385,6 +4407,40 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] ❌ Error fetching favorite conversations:', error)
       res.status(500).json({ error: 'Failed to fetch favorite conversations' })
+    }
+  })
+
+  // GET /api/local/conversations/search?userId=xxx&q=term&limit=20&projectId=xxx
+  app.get('/api/local/conversations/search', (req, res) => {
+    try {
+      const userId = req.query.userId as string
+      const rawQuery = (req.query.q as string) || ''
+      const projectId = (req.query.projectId as string | undefined) || undefined
+      const rawLimit = Number(req.query.limit ?? 20)
+      const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 20, 1), 50)
+
+      if (!userId) {
+        res.status(400).json({ error: 'userId required' })
+        return
+      }
+
+      if (!rawQuery.trim()) {
+        res.status(400).json({ error: 'q required' })
+        return
+      }
+
+      const trimmedQuery = rawQuery.trim()
+      const normalizedQuery = trimmedQuery.replace(/[\s_-]+/g, '')
+      const likeQuery = `%${trimmedQuery}%`
+      const normalizedLikeQuery = `%${normalizedQuery || trimmedQuery}%`
+      const conversations = projectId
+        ? statements.searchConversationsByTitleInProject.all(userId, projectId, likeQuery, normalizedLikeQuery, limit)
+        : statements.searchConversationsByTitle.all(userId, likeQuery, normalizedLikeQuery, limit)
+
+      res.json(conversations)
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error searching conversations by title:', error)
+      res.status(500).json({ error: 'Failed to search conversations' })
     }
   })
 

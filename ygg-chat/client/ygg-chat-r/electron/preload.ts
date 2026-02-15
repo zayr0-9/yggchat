@@ -102,6 +102,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('fs:readFileStream:aborted', listener)
     },
   },
+  logs: {
+    appendClientError: (content: string) => ipcRenderer.invoke('logs:appendClientError', content),
+    getClientErrorLogPath: () => ipcRenderer.invoke('logs:getClientErrorLogPath'),
+  },
   exec: {
     run: (command: string, options?: { cwd?: string; timeout?: number }) =>
       ipcRenderer.invoke('shell:exec', command, options),

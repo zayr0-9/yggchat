@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { TextField } from '..'
 import { ConversationId } from '../../../../../shared/types'
 
@@ -12,6 +13,13 @@ export type SearchResultItem = {
 }
 
 type Variant = 'neutral' | 'secondary'
+
+type DropdownPosition = {
+  top: number
+  left: number
+  width: number
+  maxHeight: number
+}
 
 export interface SearchListProps {
   value: string
@@ -42,7 +50,12 @@ const SearchList: React.FC<SearchListProps> = ({
   dropdownVariant = 'neutral',
 }) => {
   const [isOpen, setIsOpen] = useState(false)
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 })
+  const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition>({
+    top: 0,
+    left: 0,
+    width: 0,
+    maxHeight: 320,
+  })
   const dropdownRef = useRef<HTMLUListElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -50,14 +63,35 @@ const SearchList: React.FC<SearchListProps> = ({
   useEffect(() => {
     const updatePosition = () => {
       if (isOpen && containerRef.current) {
-        // Get the actual input element to position dropdown correctly
+        // Position based on the actual input element
         const inputElement = containerRef.current.querySelector('input')
         if (inputElement) {
           const rect = inputElement.getBoundingClientRect()
+          const viewportPadding = 8
+          const minDropdownHeight = 120
+          const preferredMaxHeight = 420
+
+          const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
+          const spaceAbove = rect.top - viewportPadding
+          const openUpward = spaceBelow < minDropdownHeight && spaceAbove > spaceBelow
+
+          const availableHeight = openUpward ? spaceAbove : spaceBelow
+          const computedMaxHeight = Math.max(100, Math.min(preferredMaxHeight, availableHeight))
+
+          const top = openUpward
+            ? Math.max(viewportPadding, rect.top - computedMaxHeight)
+            : Math.max(viewportPadding, rect.bottom)
+
+          const clampedLeft = Math.min(
+            Math.max(viewportPadding, rect.left),
+            Math.max(viewportPadding, window.innerWidth - rect.width - viewportPadding)
+          )
+
           setDropdownPosition({
-            top: rect.bottom - 65,
-            left: rect.left - 5,
-            width: rect.width - 3,
+            top,
+            left: clampedLeft,
+            width: rect.width,
+            maxHeight: computedMaxHeight,
           })
         }
       }
@@ -107,22 +141,9 @@ const SearchList: React.FC<SearchListProps> = ({
 
   const borderVariantClass = variantBorderClass[dropdownVariant]
 
-  return (
-    <div
-      ref={containerRef}
-      className={`relative drop-shadow-xl shadow-[0_1px_10px_-2px_rgba(0,0,0,0.01),0_1px_10px_-2px_rgba(0,0,0,0.01)] dark:shadow-[1px_4px_16px_-6px_rgba(0,0,0,0.45),1px_4px_16px_-4px_rgba(0,0,0,0.02)] ${className}`}
-    >
-      <TextField
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        onKeyDown={handleEnterKey as any}
-        showSearchIcon
-        onSearchClick={handleSearchClick}
-      />
-
-      {isOpen &&
-        (loading ? (
+  const dropdownContent = isOpen
+    ? loading
+      ? (
           <div
             className='fixed z-50 bg-indigo-50 dark:bg-yBlack-900 p-4 md:p-3 lg:p-2.5 xl:p-2 text-sm md:text-xs lg:text-xs xl:text-[10px]'
             style={{
@@ -133,16 +154,18 @@ const SearchList: React.FC<SearchListProps> = ({
           >
             Searching...
           </div>
-        ) : (
-          results.length > 0 && (
+        )
+      : results.length > 0
+        ? (
             <ul
               ref={dropdownRef}
-              className={`fixed z-50 max-h-230 overflow-y-auto bg-slate-50 border border-indigo-100 ${borderVariantClass} rounded shadow-lg dark:bg-neutral-700 thin-scrollbar`}
+              className={`fixed z-50 overflow-y-auto bg-slate-50 border border-indigo-100 ${borderVariantClass} rounded shadow-lg dark:bg-neutral-700 thin-scrollbar`}
               style={{
                 colorScheme: 'dark',
                 top: `${dropdownPosition.top}px`,
                 left: `${dropdownPosition.left}px`,
                 width: `${dropdownPosition.width}px`,
+                maxHeight: `${dropdownPosition.maxHeight}px`,
               }}
             >
               {results.map(res => (
@@ -169,7 +192,24 @@ const SearchList: React.FC<SearchListProps> = ({
               ))}
             </ul>
           )
-        ))}
+        : null
+    : null
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative drop-shadow-xl shadow-[0_1px_10px_-2px_rgba(0,0,0,0.01),0_1px_10px_-2px_rgba(0,0,0,0.01)] dark:shadow-[1px_4px_16px_-6px_rgba(0,0,0,0.45),1px_4px_16px_-4px_rgba(0,0,0,0.02)] ${className}`}
+    >
+      <TextField
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        onKeyDown={handleEnterKey}
+        showSearchIcon
+        onSearchClick={handleSearchClick}
+      />
+
+      {dropdownContent && typeof document !== 'undefined' ? createPortal(dropdownContent, document.body) : null}
     </div>
   )
 }

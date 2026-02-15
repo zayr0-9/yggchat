@@ -60,6 +60,10 @@ interface ElectronAPI {
   shell: {
     openPath: (path: string) => Promise<{ success: boolean; error?: string }>
   }
+  logs: {
+    appendClientError: (content: string) => Promise<{ success: boolean; error?: string; filePath?: string }>
+    getClientErrorLogPath: () => Promise<{ success: boolean; error?: string; filePath?: string }>
+  }
   dialog: {
     selectFolder: () => Promise<{ success: boolean; path?: string; error?: string }>
   }

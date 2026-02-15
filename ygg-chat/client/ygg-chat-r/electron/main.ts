@@ -55,7 +55,16 @@ const activeReadStreams = new Map<
 const PROTOCOL = 'yggchat'
 const UPDATE_FEED_BASE_URL =
   process.env.SUPABASE_UPDATE_FEED_BASE_URL || 'https://auth.yggchat.com/storage/v1/object/public/updates/updates'
+const CLIENT_ERROR_LOG_FILENAME = 'client-errors.ndjson'
 let autoUpdaterConfigured = false
+
+function getClientErrorLogPath(): string {
+  const logsDir = path.join(app.getPath('userData'), 'logs')
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true })
+  }
+  return path.join(logsDir, CLIENT_ERROR_LOG_FILENAME)
+}
 
 const TRUTHY_ENV_VALUES = new Set(['1', 'true', 'yes', 'on'])
 
@@ -1112,6 +1121,31 @@ ipcMain.handle('fs:writeFile', async (_event, filePath: string, content: string,
     return { success: true }
   } catch (error) {
     console.error('[Electron IPC] Failed to write file:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('logs:getClientErrorLogPath', async () => {
+  try {
+    const filePath = getClientErrorLogPath()
+    return { success: true, filePath }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to resolve client error log path:', error)
+    return { success: false, error: String(error) }
+  }
+})
+
+ipcMain.handle('logs:appendClientError', async (_event, content: string) => {
+  if (typeof content !== 'string' || content.length === 0) {
+    return { success: true }
+  }
+
+  try {
+    const filePath = getClientErrorLogPath()
+    fs.appendFileSync(filePath, content, 'utf-8')
+    return { success: true, filePath }
+  } catch (error) {
+    console.error('[Electron IPC] Failed to append client error log:', error)
     return { success: false, error: String(error) }
   }
 })

@@ -1,6 +1,7 @@
 // utils/api.ts
 import { ConversationId, StorageMode } from '../../../../shared/types'
 import { clearClaimsCache, getSessionFromStorage, getTokenExpirationTime, refreshTokenIfNeeded } from '../lib/jwtUtils'
+import { logClientError } from '../services/clientTelemetry'
 
 // Base configuration
 export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
@@ -10,6 +11,51 @@ const LOCAL_SERVER_STATUS_CACHE_TTL_MS = 15000
 const LOCAL_SERVER_STATUS_TIMEOUT_MS = 3000
 
 export const LOCAL_API_BASE = `${DEFAULT_LOCAL_SERVER_ORIGIN}/api`
+
+const NETWORK_FAILURE_LOGGED_SYMBOL = Symbol('networkFailureLogged')
+
+type LoggedNetworkError = Error & {
+  [NETWORK_FAILURE_LOGGED_SYMBOL]?: boolean
+}
+
+type NetworkFailureInput = {
+  source: string
+  endpoint: string
+  method: string
+  message: string
+  status?: number
+  statusText?: string
+  durationMs?: number
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function markNetworkFailureLogged(error: unknown): void {
+  if (error && typeof error === 'object') {
+    ;(error as LoggedNetworkError)[NETWORK_FAILURE_LOGGED_SYMBOL] = true
+  }
+}
+
+function isNetworkFailureLogged(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  return Boolean((error as LoggedNetworkError)[NETWORK_FAILURE_LOGGED_SYMBOL])
+}
+
+function reportNetworkFailure(input: NetworkFailureInput): void {
+  logClientError({
+    type: 'network_error',
+    source: input.source,
+    endpoint: input.endpoint,
+    method: input.method,
+    status: input.status,
+    statusText: input.statusText,
+    durationMs: input.durationMs,
+    message: input.message,
+  })
+}
 
 export interface LocalServerStatus {
   localServerRunning: boolean
@@ -172,76 +218,191 @@ const handleLocalApiError = (error: any, endpoint: string): never => {
 
 export const localApi = {
   get: async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
+    const requestStart = Date.now()
+    const method = 'GET'
+
     try {
-      const response = await fetch(await buildLocalApiUrl(endpoint), { ...options, method: 'GET' })
+      const response = await fetch(await buildLocalApiUrl(endpoint), { ...options, method })
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        const error = new Error(`HTTP ${response.status}: ${response.statusText}`)
+        markNetworkFailureLogged(error)
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          status: response.status,
+          statusText: response.statusText,
+          durationMs: Date.now() - requestStart,
+          message: error.message,
+        })
+        throw error
       }
       return (await response.json()) as T
     } catch (error) {
+      if (!isNetworkFailureLogged(error)) {
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          durationMs: Date.now() - requestStart,
+          message: getErrorMessage(error),
+        })
+      }
       return handleLocalApiError(error, endpoint)
     }
   },
 
   post: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
+    const requestStart = Date.now()
+    const method = 'POST'
+
     try {
       const response = await fetch(await buildLocalApiUrl(endpoint), {
         ...options,
-        method: 'POST',
+        method,
         headers: { 'Content-Type': 'application/json', ...options?.headers },
         body: data ? JSON.stringify(data) : undefined,
       })
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        const error = new Error(`HTTP ${response.status}: ${response.statusText}`)
+        markNetworkFailureLogged(error)
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          status: response.status,
+          statusText: response.statusText,
+          durationMs: Date.now() - requestStart,
+          message: error.message,
+        })
+        throw error
       }
       return (await response.json()) as T
     } catch (error) {
+      if (!isNetworkFailureLogged(error)) {
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          durationMs: Date.now() - requestStart,
+          message: getErrorMessage(error),
+        })
+      }
       return handleLocalApiError(error, endpoint)
     }
   },
 
   patch: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
+    const requestStart = Date.now()
+    const method = 'PATCH'
+
     try {
       const response = await fetch(await buildLocalApiUrl(endpoint), {
         ...options,
-        method: 'PATCH',
+        method,
         headers: { 'Content-Type': 'application/json', ...options?.headers },
         body: data ? JSON.stringify(data) : undefined,
       })
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        const error = new Error(`HTTP ${response.status}: ${response.statusText}`)
+        markNetworkFailureLogged(error)
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          status: response.status,
+          statusText: response.statusText,
+          durationMs: Date.now() - requestStart,
+          message: error.message,
+        })
+        throw error
       }
       return (await response.json()) as T
     } catch (error) {
+      if (!isNetworkFailureLogged(error)) {
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          durationMs: Date.now() - requestStart,
+          message: getErrorMessage(error),
+        })
+      }
       return handleLocalApiError(error, endpoint)
     }
   },
 
   put: async <T>(endpoint: string, data?: any, options?: RequestInit): Promise<T> => {
+    const requestStart = Date.now()
+    const method = 'PUT'
+
     try {
       const response = await fetch(await buildLocalApiUrl(endpoint), {
         ...options,
-        method: 'PUT',
+        method,
         headers: { 'Content-Type': 'application/json', ...options?.headers },
         body: data ? JSON.stringify(data) : undefined,
       })
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        const error = new Error(`HTTP ${response.status}: ${response.statusText}`)
+        markNetworkFailureLogged(error)
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          status: response.status,
+          statusText: response.statusText,
+          durationMs: Date.now() - requestStart,
+          message: error.message,
+        })
+        throw error
       }
       return (await response.json()) as T
     } catch (error) {
+      if (!isNetworkFailureLogged(error)) {
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          durationMs: Date.now() - requestStart,
+          message: getErrorMessage(error),
+        })
+      }
       return handleLocalApiError(error, endpoint)
     }
   },
 
   delete: async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
+    const requestStart = Date.now()
+    const method = 'DELETE'
+
     try {
-      const response = await fetch(await buildLocalApiUrl(endpoint), { ...options, method: 'DELETE' })
+      const response = await fetch(await buildLocalApiUrl(endpoint), { ...options, method })
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        const error = new Error(`HTTP ${response.status}: ${response.statusText}`)
+        markNetworkFailureLogged(error)
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          status: response.status,
+          statusText: response.statusText,
+          durationMs: Date.now() - requestStart,
+          message: error.message,
+        })
+        throw error
       }
       return (await response.json()) as T
     } catch (error) {
+      if (!isNetworkFailureLogged(error)) {
+        reportNetworkFailure({
+          source: 'localApi',
+          endpoint,
+          method,
+          durationMs: Date.now() - requestStart,
+          message: getErrorMessage(error),
+        })
+      }
       return handleLocalApiError(error, endpoint)
     }
   },
@@ -351,11 +512,13 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
   // Ensure token is valid before making the request
   const validToken = await ensureValidToken()
   const tokenToUse = validToken || accessToken
+  const requestStart = Date.now()
 
   const isFormData = options?.body && typeof FormData !== 'undefined' && options.body instanceof FormData
 
   // Destructure to separate headers from other options
   const { headers: optionsHeaders, ...restOptions } = options || {}
+  const method = String(restOptions.method || 'GET').toUpperCase()
 
   const makeRequest = async (token: string | null) => {
     return fetch(`${API_BASE}${endpoint}`, {
@@ -368,7 +531,22 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
     })
   }
 
-  let response = await makeRequest(tokenToUse)
+  const executeRequest = async (token: string | null): Promise<Response> => {
+    try {
+      return await makeRequest(token)
+    } catch (error) {
+      reportNetworkFailure({
+        source: 'apiCall',
+        endpoint,
+        method,
+        durationMs: Date.now() - requestStart,
+        message: getErrorMessage(error),
+      })
+      throw error
+    }
+  }
+
+  let response = await executeRequest(tokenToUse)
 
   // Handle 401 Unauthorized: Try to refresh token and retry once
   if (response.status === 401 && (environment === 'web' || environment === 'electron')) {
@@ -386,7 +564,7 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
         if (newToken) {
           // console.log('[api] Token refreshed, retrying request...')
           // Retry the request with the new token
-          response = await makeRequest(newToken)
+          response = await executeRequest(newToken)
 
           if (response.status === 401) {
             // Still unauthorized after refresh - redirect to login
@@ -413,6 +591,15 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
 
   if (!response.ok) {
     const errorText = await response.text()
+    reportNetworkFailure({
+      source: 'apiCall',
+      endpoint,
+      method,
+      status: response.status,
+      statusText: response.statusText,
+      durationMs: Date.now() - requestStart,
+      message: errorText || response.statusText || `HTTP ${response.status}`,
+    })
     throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`)
   }
 
@@ -464,11 +651,13 @@ export const createStreamingRequest = async (
   // Ensure token is valid before making the request
   const validToken = await ensureValidToken()
   const tokenToUse = validToken || accessToken
+  const requestStart = Date.now()
 
   const isFormData = options?.body && typeof FormData !== 'undefined' && options.body instanceof FormData
 
   // Destructure to separate headers from other options
   const { headers: optionsHeaders, ...restOptions } = options || {}
+  const method = String(restOptions.method || 'POST').toUpperCase()
 
   const makeStreamRequest = async (token: string | null) => {
     const headers = {
@@ -483,7 +672,22 @@ export const createStreamingRequest = async (
     })
   }
 
-  let response = await makeStreamRequest(tokenToUse)
+  const executeStreamRequest = async (token: string | null): Promise<Response> => {
+    try {
+      return await makeStreamRequest(token)
+    } catch (error) {
+      reportNetworkFailure({
+        source: 'createStreamingRequest',
+        endpoint,
+        method,
+        durationMs: Date.now() - requestStart,
+        message: getErrorMessage(error),
+      })
+      throw error
+    }
+  }
+
+  let response = await executeStreamRequest(tokenToUse)
 
   // Handle 401 Unauthorized: Try to refresh token and retry once
   if (response.status === 401 && (environment === 'web' || environment === 'electron')) {
@@ -501,7 +705,7 @@ export const createStreamingRequest = async (
         if (newToken) {
           // console.log('[api] Token refreshed, retrying streaming request...')
           // Retry the request with the new token
-          response = await makeStreamRequest(newToken)
+          response = await executeStreamRequest(newToken)
 
           if (response.status === 401) {
             // Still unauthorized after refresh - redirect to login
@@ -524,6 +728,18 @@ export const createStreamingRequest = async (
       redirectToLogin()
       throw new Error('Session expired. Please log in again.')
     }
+  }
+
+  if (!response.ok) {
+    reportNetworkFailure({
+      source: 'createStreamingRequest',
+      endpoint,
+      method,
+      status: response.status,
+      statusText: response.statusText,
+      durationMs: Date.now() - requestStart,
+      message: response.statusText || `HTTP ${response.status}`,
+    })
   }
 
   return response

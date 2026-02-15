@@ -18,6 +18,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Can set default startup page to be homepage or latest chat.
 - floating title bar in chat page now hides itself.
 - Added a new Chat Settings toggle to group continuous reasoning/tool-call chains (`chat:groupToolReasoningRuns`), with local persistence and live sync via custom/storage events.
+- Added search bar in SideBar, can search for any chat title, search is pretty lenient in pattern matching.
+- logs store in app dir under /logs in ndjson file.
 
 ### Fixed
 

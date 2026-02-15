@@ -3,14 +3,25 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ConversationId, Project } from '../../../../shared/types'
 import { Button } from '../components'
+import SearchList, { type SearchResultItem } from '../components/SearchList/SearchList'
 import { chatSliceActions } from '../features/chats'
-import { activeConversationIdSet, Conversation, createConversation, deleteConversation } from '../features/conversations'
+import {
+  activeConversationIdSet,
+  Conversation,
+  createConversation,
+  deleteConversation,
+} from '../features/conversations'
 import { deleteProject } from '../features/projects'
 import { type ConversationTab } from '../helpers/sidebarPreferences'
 // import { searchActions, selectSearchLoading, selectSearchQuery, selectSearchResults } from '../features/search'
 import { useAppDispatch } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
-import { useConversationsByProject, useFavoritedConversations, useProjects } from '../hooks/useQueries'
+import {
+  useConversationsByProject,
+  useFavoritedConversations,
+  useProjects,
+  useSearchConversations,
+} from '../hooks/useQueries'
 
 type SidebarProject = Project & {
   latest_conversation_updated_at?: string | null
@@ -59,7 +70,8 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = ({
     return [...projectConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
   }, [projectConversations])
 
-  const projectLastActivityDate = project.latest_conversation_updated_at || project.updated_at || project.created_at || null
+  const projectLastActivityDate =
+    project.latest_conversation_updated_at || project.updated_at || project.created_at || null
 
   return (
     <div className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative overflow-hidden'>
@@ -104,13 +116,7 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = ({
                   <div className='text-[12px] md:text-[12px] lg:text-[13px] xl:text-[13px] 2xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate min-w-0 flex-1'>
                     {project.name}
                   </div>
-                  {project.storage_mode === 'local' ? (
-                    <i
-                      className='bx bxs-circle text-[8px] text-emerald-500 shrink-0'
-                      aria-label='Local project'
-                      title='Local project'
-                    ></i>
-                  ) : (
+                  {project.storage_mode !== 'local' && (
                     <i
                       className='bx bx-cloud text-[14px] text-blue-500 shrink-0'
                       aria-label='Cloud project'
@@ -167,7 +173,10 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = ({
                 sortedConversations.map(conversation => {
                   const isActive = String(activeConversationId) === String(conversation.id)
                   return (
-                    <div key={conversation.id} className='group/conv flex items-start gap-1 mb-1 min-w-0 overflow-hidden'>
+                    <div
+                      key={conversation.id}
+                      className='group/conv flex items-start gap-1 mb-1 min-w-0 overflow-hidden'
+                    >
                       <button
                         type='button'
                         onClick={() => onSelectConversation(conversation)}
@@ -210,9 +219,7 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = ({
           <div className='bg-neutral-900 dark:bg-neutral-700 text-white dark:text-neutral-100 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap max-w-xs'>
             <div className='font-medium flex items-center gap-1'>
               <span>{project.name}</span>
-              {project.storage_mode === 'local' ? (
-                <i className='bx bxs-circle text-[8px] text-emerald-400' title='Local project'></i>
-              ) : (
+              {project.storage_mode !== 'local' && (
                 <i className='bx bx-cloud text-[14px] text-blue-300' title='Cloud project'></i>
               )}
             </div>
@@ -284,10 +291,28 @@ const SideBar: React.FC<SideBarProps> = ({
       ? String(favoritesError)
       : null
 
-  // Search functionality
-  // const searchLoading = useAppSelector(selectSearchLoading)
-  // const searchResults = useAppSelector(selectSearchResults)
-  // const searchQuery = useAppSelector(selectSearchQuery)
+  const [searchQuery, setSearchQuery] = useState('')
+  const {
+    search,
+    clearSearch,
+    searchResults: searchedConversations,
+    isSearching,
+  } = useSearchConversations(null, { forceServerSearch: true })
+
+  const sidebarSearchResults = useMemo<SearchResultItem[]>(() => {
+    return searchedConversations.map(conversation => {
+      const projectName = conversation.project_id
+        ? projectData.find(p => String(p.id) === String(conversation.project_id))?.name
+        : null
+      return {
+        conversationId: conversation.id,
+        messageId: String(conversation.id),
+        content: projectName ? `Project: ${projectName}` : 'Project: None',
+        conversationTitle: conversation.title || 'Untitled conversation',
+        createdAt: conversation.updated_at || conversation.created_at || new Date().toISOString(),
+      }
+    })
+  }, [searchedConversations, projectData])
 
   // Drawer collapse state with localStorage persistence and mobile-first default
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
@@ -346,6 +371,39 @@ const SideBar: React.FC<SideBarProps> = ({
 
   const cycleTheme = () => {
     setThemeMode(prev => (prev === 'Light' ? 'Dark' : prev === 'Dark' ? 'System' : 'Light'))
+  }
+
+  useEffect(() => {
+    if (!isProjectsTab && searchQuery) {
+      setSearchQuery('')
+      clearSearch()
+    }
+  }, [isProjectsTab, searchQuery, clearSearch])
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value)
+    if (!value.trim()) {
+      clearSearch()
+    }
+  }
+
+  const handleSearchSubmit = () => {
+    const trimmedQuery = searchQuery.trim()
+    if (!trimmedQuery) {
+      clearSearch()
+      return
+    }
+
+    search(trimmedQuery)
+  }
+
+  const handleSearchResultClick = (conversationId: ConversationId) => {
+    const match = searchedConversations.find(conversation => String(conversation.id) === String(conversationId))
+    if (!match) return
+
+    handleProjectConversationSelect(match)
+    setSearchQuery('')
+    clearSearch()
   }
 
   const handleSelect = (id: ConversationId) => {
@@ -464,7 +522,8 @@ const SideBar: React.FC<SideBarProps> = ({
         return [createdConversation, ...previousItems.filter(item => item.id !== createdConversation.id)]
       })
 
-      const activityTimestamp = createdConversation.updated_at || createdConversation.created_at || new Date().toISOString()
+      const activityTimestamp =
+        createdConversation.updated_at || createdConversation.created_at || new Date().toISOString()
       const debugProjectOrder =
         typeof window !== 'undefined' && window.localStorage.getItem('sidebar:debugProjectOrder') === 'true'
       const previousProjectOrder = userId
@@ -499,7 +558,9 @@ const SideBar: React.FC<SideBarProps> = ({
         queryClient.setQueryData<SidebarProject[]>(['projects', userId], applyProjectActivityOrdering)
 
         if (debugProjectOrder) {
-          const nextProjectOrder = queryClient.getQueryData<SidebarProject[]>(['projects', userId])?.map(item => item.id)
+          const nextProjectOrder = queryClient
+            .getQueryData<SidebarProject[]>(['projects', userId])
+            ?.map(item => item.id)
           console.debug('[SideBar] project order after creating conversation', {
             projectId: project.id,
             conversationId: createdConversation.id,
@@ -529,22 +590,6 @@ const SideBar: React.FC<SideBarProps> = ({
   const toggleCollapse = () => {
     setIsCollapsed(prev => !prev)
   }
-
-  // const handleSearchChange = (value: string) => {
-  //   dispatch(searchActions.queryChanged(value))
-  // }
-
-  // const handleSearchSubmit = () => {
-  //   if (searchQuery.trim()) {
-  //     dispatch(searchActions.performSearch(searchQuery))
-  //   }
-  // }
-
-  // const handleResultClick = (conversationId: string, messageId: string) => {
-  //   const conversation = conversations.find(c => c.id === conversationId)
-  //   dispatch(chatSliceActions.conversationSet(conversationId))
-  //   navigate(`/chat/${conversation?.project_id || 'unknown'}/${conversationId}#${messageId}`)
-  // }
 
   return (
     <aside
@@ -599,43 +644,21 @@ const SideBar: React.FC<SideBarProps> = ({
         </div>
       )}
 
-      {/* Search + New Chat Section */}
-      {/* {!isCollapsed && isProjectsTab && (
-        <div className='px-2 pb-2 space-y-2'>
-          <TextField
-            placeholder='Search projects...'
-            value={searchQuery}
-            onChange={setSearchQuery}
-            showSearchIcon={true}
-            size='small'
-          />
-          <Button
-            variant='acrylic'
-            size='small'
-            rounded='full'
-            className='w-full justify-center'
-            onClick={handleCreateConversationFromSidebar}
-            disabled={!defaultNewChatProject}
-          >
-            <i className='bx bx-plus mr-1 text-lg' aria-hidden='true'></i>
-            New Chat
-          </Button>
-        </div>
-      )} */}
-      {/* {!isCollapsed && (
-        <div className='px-2 relative z-50'>
+      {/* Search */}
+      {!isCollapsed && isProjectsTab && (
+        <div className='px-2 pb-2 relative z-50'>
           <SearchList
             value={searchQuery}
             onChange={handleSearchChange}
             onSubmit={handleSearchSubmit}
-            results={searchResults}
-            loading={searchLoading}
-            onResultClick={handleResultClick}
-            placeholder='Search messages...'
+            results={sidebarSearchResults}
+            loading={isSearching}
+            onResultClick={conversationId => handleSearchResultClick(conversationId)}
+            placeholder='Search chat...'
             dropdownVariant='neutral'
           />
         </div>
-      )} */}
+      )}
 
       {/* Conversations List */}
       <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-2 2xl:pt-2 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0'>
