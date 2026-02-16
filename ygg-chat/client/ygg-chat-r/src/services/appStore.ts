@@ -52,6 +52,8 @@ export interface AppStoreInstallResult {
   toolCount?: number
   extracted?: number
   skipped?: number
+  mode?: 'install' | 'update'
+  preservedResources?: number
 }
 
 export interface AppStoreUninstallResult {
@@ -369,6 +371,7 @@ export async function installAppFromStore(payload: {
   appId: string
   appName?: string
   zipUrl?: string | null
+  mode?: 'install' | 'update'
 }): Promise<AppStoreInstallResult> {
   if (environment !== 'electron') {
     throw new Error('App installs are only available in the desktop app.')

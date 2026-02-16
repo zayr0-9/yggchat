@@ -97,6 +97,7 @@ const EXECUTABLE_EXTENSIONS = new Set(['.exe', '.bat', '.sh'])
 const MAX_UPLOAD_ENTRIES = 5000
 const MAX_UPLOAD_UNPACKED_BYTES = 500 * 1024 * 1024
 const REMOTE_API_BASE = 'https://webdrasil-production.up.railway.app/api'
+const DEFAULT_PRESERVE_RESOURCE_DIRS = ['resources', 'resource']
 
 function buildRemoteApiUrl(pathname: string): string {
   if (pathname.startsWith('/')) {
@@ -202,6 +203,134 @@ async function extractZipBufferToDirectory(
   }
 
   return { extracted, skipped, strippedPrefix: stripPrefix }
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.promises.access(targetPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function detectZipToolDirectoryName(
+  entries: { entryName: string }[],
+  strippedPrefix?: string | null
+): string | null {
+  const rootDirs = new Set<string>()
+
+  for (const entry of entries) {
+    let entryName = sanitizeZipEntryName(entry.entryName)
+    if (strippedPrefix && entryName.startsWith(strippedPrefix)) {
+      entryName = entryName.slice(strippedPrefix.length)
+    }
+
+    if (!entryName) continue
+
+    const [root] = entryName.split('/')
+    if (!root || root === '.' || root === '..' || root === '__MACOSX') {
+      continue
+    }
+
+    rootDirs.add(root)
+  }
+
+  if (rootDirs.size !== 1) {
+    return null
+  }
+
+  return Array.from(rootDirs)[0]
+}
+
+async function stageZipBufferForToolInstall(zipBuffer: Buffer): Promise<{
+  tempDir: string
+  stagedToolsRoot: string
+  stagedToolDirName: string
+  stagedToolPath: string
+  extracted: number
+  skipped: number
+  strippedPrefix?: string | null
+}> {
+  const zip = new AdmZip(zipBuffer)
+  const entries = zip.getEntries()
+  const strippedPrefix = detectZipStripPrefix(entries)
+  const stagedToolDirName = detectZipToolDirectoryName(entries, strippedPrefix)
+
+  if (!stagedToolDirName) {
+    throw new Error('Zip must contain exactly one top-level tool directory.')
+  }
+
+  const tempDir = await fs.promises.mkdtemp(path.join(electronApp.getPath('temp'), 'ygg-app-store-'))
+  const stagedToolsRoot = path.join(tempDir, 'custom-tools')
+  await fs.promises.mkdir(stagedToolsRoot, { recursive: true })
+
+  const { extracted, skipped } = await extractZipBufferToDirectory(zipBuffer, stagedToolsRoot)
+  const stagedToolPath = path.join(stagedToolsRoot, stagedToolDirName)
+
+  const stagedExists = await pathExists(stagedToolPath)
+  if (!stagedExists) {
+    throw new Error('Installed package is missing the expected tool directory.')
+  }
+
+  return {
+    tempDir,
+    stagedToolsRoot,
+    stagedToolDirName,
+    stagedToolPath,
+    extracted,
+    skipped,
+    strippedPrefix,
+  }
+}
+
+async function deployToolUpdateWithPreservedResources(options: {
+  stagedToolPath: string
+  targetToolPath: string
+  preserveDirs?: string[]
+}): Promise<{ preservedResources: number }> {
+  const preserveDirs = (options.preserveDirs || DEFAULT_PRESERVE_RESOURCE_DIRS).filter(Boolean)
+  const targetParentDir = path.dirname(options.targetToolPath)
+  const targetName = path.basename(options.targetToolPath)
+  const rollbackPath = path.join(
+    targetParentDir,
+    `${targetName}.__rollback_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  )
+
+  await fs.promises.rename(options.targetToolPath, rollbackPath)
+
+  try {
+    await fs.promises.cp(options.stagedToolPath, options.targetToolPath, {
+      recursive: true,
+      force: true,
+      errorOnExist: false,
+    })
+
+    let preservedResources = 0
+
+    for (const dirName of preserveDirs) {
+      const sourcePath = path.join(rollbackPath, dirName)
+      if (!(await pathExists(sourcePath))) {
+        continue
+      }
+
+      const restorePath = path.join(options.targetToolPath, dirName)
+      await fs.promises.rm(restorePath, { recursive: true, force: true })
+      await fs.promises.cp(sourcePath, restorePath, {
+        recursive: true,
+        force: true,
+        errorOnExist: false,
+      })
+      preservedResources += 1
+    }
+
+    await fs.promises.rm(rollbackPath, { recursive: true, force: true })
+    return { preservedResources }
+  } catch (error) {
+    await fs.promises.rm(options.targetToolPath, { recursive: true, force: true }).catch(() => undefined)
+    await fs.promises.rename(rollbackPath, options.targetToolPath).catch(() => undefined)
+    throw error
+  }
 }
 
 // Built-in tool handler type
@@ -3513,10 +3642,13 @@ function setupServer() {
     }
   )
 
-  // POST /api/app-store/install - Download and install an app package into custom tools
+  // POST /api/app-store/install - Download and install/update an app package into custom tools
   app.post('/api/app-store/install', async (req, res) => {
+    let tempDirToCleanup: string | null = null
+
     try {
-      const { zipUrl, appId, appName } = req.body || {}
+      const { zipUrl, appId, appName, mode } = req.body || {}
+      const requestedMode = mode === 'update' ? 'update' : 'install'
 
       if (!zipUrl || typeof zipUrl !== 'string') {
         res.status(400).json({ success: false, error: 'zipUrl is required' })
@@ -3537,26 +3669,103 @@ function setupServer() {
       const customToolsDir = customToolRegistry.getCustomToolsDirectoryPath()
 
       await fs.promises.mkdir(customToolsDir, { recursive: true })
-      const { extracted, skipped, strippedPrefix } = await extractZipBufferToDirectory(zipBuffer, customToolsDir)
 
-      await customToolRegistry.reload('app_store_install')
+      let extracted = 0
+      let skipped = 0
+      let strippedPrefix: string | null | undefined = null
+      let preservedResources = 0
+      let effectiveMode: 'install' | 'update' = requestedMode
+
+      if (requestedMode === 'update') {
+        if (!appId || typeof appId !== 'string') {
+          res.status(400).json({ success: false, error: 'appId is required for update mode' })
+          return
+        }
+
+        if (appId.includes('/') || appId.includes('\\')) {
+          res.status(400).json({ success: false, error: 'Invalid appId' })
+          return
+        }
+
+        const staged = await stageZipBufferForToolInstall(zipBuffer)
+        tempDirToCleanup = staged.tempDir
+        extracted = staged.extracted
+        skipped = staged.skipped
+        strippedPrefix = staged.strippedPrefix
+
+        const targetToolPath = validateAndResolvePath(appId, customToolsDir, false)
+        const targetStats = await fs.promises.stat(targetToolPath).catch(() => null)
+        if (!targetStats || !targetStats.isDirectory()) {
+          res.status(404).json({ success: false, error: `Installed app directory not found for "${appId}"` })
+          return
+        }
+
+        const deployed = await deployToolUpdateWithPreservedResources({
+          stagedToolPath: staged.stagedToolPath,
+          targetToolPath,
+          preserveDirs: DEFAULT_PRESERVE_RESOURCE_DIRS,
+        })
+        preservedResources = deployed.preservedResources
+      } else {
+        const staged = await stageZipBufferForToolInstall(zipBuffer)
+        tempDirToCleanup = staged.tempDir
+        extracted = staged.extracted
+        skipped = staged.skipped
+        strippedPrefix = staged.strippedPrefix
+
+        const targetToolPath = validateAndResolvePath(staged.stagedToolDirName, customToolsDir, false)
+        const targetExists = await pathExists(targetToolPath)
+
+        if (targetExists) {
+          effectiveMode = 'update'
+          const targetStats = await fs.promises.stat(targetToolPath)
+          if (!targetStats.isDirectory()) {
+            res.status(400).json({ success: false, error: 'Existing app path is not a directory' })
+            return
+          }
+
+          const deployed = await deployToolUpdateWithPreservedResources({
+            stagedToolPath: staged.stagedToolPath,
+            targetToolPath,
+            preserveDirs: DEFAULT_PRESERVE_RESOURCE_DIRS,
+          })
+          preservedResources = deployed.preservedResources
+        } else {
+          await fs.promises.cp(staged.stagedToolPath, targetToolPath, {
+            recursive: true,
+            force: true,
+            errorOnExist: false,
+          })
+        }
+      }
+
+      await customToolRegistry.reload(`app_store_${effectiveMode}`)
       const definitions = customToolRegistry.getDefinitions()
 
       res.json({
         success: true,
         appId,
         appName,
+        mode: effectiveMode,
         extracted,
         skipped,
         strippedPrefix,
+        preservedResources,
         toolCount: definitions.length,
         restartRequired: false,
-        message: 'App installed and loaded.',
+        message:
+          effectiveMode === 'update'
+            ? `App updated and loaded. Preserved ${preservedResources} resource folder${preservedResources === 1 ? '' : 's'}.`
+            : 'App installed and loaded.',
       })
     } catch (error) {
       console.error('[LocalServer] App store install error:', error)
       const msg = error instanceof Error ? error.message : String(error)
       res.status(500).json({ success: false, error: msg })
+    } finally {
+      if (tempDirToCleanup) {
+        await fs.promises.rm(tempDirToCleanup, { recursive: true, force: true }).catch(() => undefined)
+      }
     }
   })
 

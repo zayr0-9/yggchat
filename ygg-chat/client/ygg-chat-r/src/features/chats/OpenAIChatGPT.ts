@@ -502,6 +502,89 @@ function transformMessagesForChatGPT(messages: any[]): any[] {
   return input
 }
 
+function normalizeAttachmentImageUrl(attachment: any): string | null {
+  if (!attachment) return null
+
+  if (typeof attachment === 'string') {
+    const trimmed = attachment.trim()
+    if (!trimmed) return null
+    if (/^data:image\//i.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
+      return trimmed
+    }
+    return null
+  }
+
+  const candidate =
+    attachment.dataUrl ||
+    attachment.dataURL ||
+    attachment.url ||
+    attachment.image_url ||
+    attachment.imageUrl ||
+    null
+
+  if (typeof candidate !== 'string') return null
+  const trimmed = candidate.trim()
+  if (!trimmed) return null
+
+  if (/^data:image\//i.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  return null
+}
+
+function appendImageAttachmentsToLatestUserMessage(input: any[], attachmentsBase64?: any[] | null): any[] {
+  if (!Array.isArray(attachmentsBase64) || attachmentsBase64.length === 0) {
+    return input
+  }
+
+  const imageParts = attachmentsBase64
+    .map(attachment => normalizeAttachmentImageUrl(attachment))
+    .filter((url): url is string => Boolean(url))
+    .map(url => ({ type: 'input_image', image_url: url }))
+
+  if (imageParts.length === 0) {
+    return input
+  }
+
+  // Target the latest user message in the transformed responses input
+  let latestUserIndex = -1
+  for (let i = input.length - 1; i >= 0; i--) {
+    const item = input[i]
+    if (item?.type === 'message' && item?.role === 'user') {
+      latestUserIndex = i
+      break
+    }
+  }
+
+  if (latestUserIndex >= 0) {
+    const target = input[latestUserIndex]
+    const existingContent = Array.isArray(target.content) ? [...target.content] : toInputTextContent(target.content)
+
+    const existingImageUrls = new Set(
+      existingContent
+        .filter((part: any) => part?.type === 'input_image' && typeof part?.image_url === 'string')
+        .map((part: any) => part.image_url)
+    )
+
+    for (const imagePart of imageParts) {
+      if (!existingImageUrls.has(imagePart.image_url)) {
+        existingContent.push(imagePart)
+      }
+    }
+
+    target.content = existingContent
+  } else {
+    input.push({
+      type: 'message',
+      role: 'user',
+      content: imageParts,
+    })
+  }
+
+  return input
+}
+
 // Build request body for ChatGPT Codex backend
 function buildCodexRequestBody(
   model: string,
@@ -554,8 +637,20 @@ export async function createOpenAIChatGPTStreamingRequest(
   // Transform messages to ChatGPT format
   const input = transformMessagesForChatGPT(payload.messages)
 
+  // Attach image inputs (if provided) to the latest user message for multimodal models
+  const inputWithImages = appendImageAttachmentsToLatestUserMessage(input, payload.attachmentsBase64)
+  if (Array.isArray(payload.attachmentsBase64) && payload.attachmentsBase64.length > 0) {
+    console.log('[OpenAI ChatGPT] Image attachments provided:', payload.attachmentsBase64.length)
+  }
+
   // Build request body - use system prompt as instructions
-  const body = buildCodexRequestBody(payload.modelName, input, tools, payload.systemPrompt || '', payload.reasoningConfig)
+  const body = buildCodexRequestBody(
+    payload.modelName,
+    inputWithImages,
+    tools,
+    payload.systemPrompt || '',
+    payload.reasoningConfig
+  )
 
   // Build URL for Codex endpoint
   const url = `${CHATGPT_BASE_URL}${CHATGPT_CODEX_ENDPOINT}`

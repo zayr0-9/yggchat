@@ -2398,6 +2398,7 @@ export const sendMessage = createAsyncThunk<
                 modelName,
                 systemPrompt,
                 messages: chatgptMessages,
+                attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
                 tools: getToolsForAI(),
                 reasoningConfig,
               },
@@ -2836,6 +2837,7 @@ export const sendMessage = createAsyncThunk<
                 modelName,
                 systemPrompt,
                 messages: chatgptMessages,
+                attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
                 tools: getToolsForAI(),
                 reasoningConfig,
               },
@@ -4177,6 +4179,7 @@ export const editMessageWithBranching = createAsyncThunk<
               modelName,
               systemPrompt,
               messages: chatgptMessages,
+              attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
               tools: getToolsForAI(),
             },
             {
@@ -5244,6 +5247,7 @@ export const sendMessageToBranch = createAsyncThunk<
               modelName,
               systemPrompt: effectiveSystemPrompt || '',
               messages: chatgptMessages,
+              attachmentsBase64: turnCount === 1 ? attachmentsBase64 : undefined,
               tools: getToolsForAI(),
             },
             {

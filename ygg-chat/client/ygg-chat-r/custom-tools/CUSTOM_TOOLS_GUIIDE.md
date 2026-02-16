@@ -17,6 +17,33 @@ custom-tools/
 - Use **CommonJS** (`require`/`module.exports`), NOT ES modules (`import`/`export`)
 - `name` must be lowercase with underscores: `my_tool`, not `MyTool`
 - Use `inputSchema` (camelCase), not `input_schema`
+- **Store app data/resources under `resources/` inside your tool folder**
+
+### Required Resource Storage Convention
+
+When building custom apps/tools, any runtime data or generated assets should be stored in a `resources` subfolder under the tool directory.
+
+Use this pattern:
+
+```
+custom-tools/
+└── my_tool/
+    ├── definition.json
+    ├── index.js
+    ├── ui.html
+    └── resources/          ← store app data here
+        ├── state.json
+        ├── cache/
+        └── output/
+```
+
+Examples of what belongs in `resources/`:
+- user-created files
+- cached downloads
+- generated images/video/audio
+- app state snapshots / local DB files
+
+Do **not** scatter mutable app data at the tool root. Keep it under `resources/` so host update flows can preserve app data safely.
 
 ## How Models Invoke Custom Tools
 

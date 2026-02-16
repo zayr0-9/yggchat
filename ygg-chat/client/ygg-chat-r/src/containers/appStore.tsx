@@ -29,7 +29,7 @@ type AppActionStatus = {
 
 type AppActionState = {
   appId: string
-  type: 'install' | 'uninstall'
+  type: 'install' | 'update' | 'uninstall'
 }
 
 type StoreTab = 'first-party' | 'community'
@@ -37,6 +37,13 @@ type StoreTab = 'first-party' | 'community'
 type UploadStatus = {
   type: 'idle' | 'validating' | 'ready' | 'uploading' | 'success' | 'error'
   message: string
+}
+
+type AppUpdateInfo = {
+  appId: string
+  installedId: string
+  installedVersion: string
+  availableVersion: string
 }
 
 const formatSize = (size?: number | string) => {
@@ -57,15 +64,45 @@ const getAppDisplayName = (app: AppStoreApp) => app.description.title || app.des
 
 const normalizeToolId = (value: string) => value.trim().toLowerCase().replace(/[\s-]+/g, '_')
 
-const collectInstalledToolIndex = (tools: Array<{ name?: string; sourcePath?: string }>) => {
+const parseVersionNumbers = (value: string): number[] => {
+  const normalized = value.trim().replace(/^v/i, '')
+  if (!normalized) return []
+  return normalized.split('.').map(segment => {
+    const match = segment.match(/^\d+/)
+    return match ? parseInt(match[0], 10) : 0
+  })
+}
+
+const compareVersions = (left: string, right: string): number => {
+  const leftParts = parseVersionNumbers(left)
+  const rightParts = parseVersionNumbers(right)
+  const maxLength = Math.max(leftParts.length, rightParts.length)
+
+  for (let idx = 0; idx < maxLength; idx += 1) {
+    const leftPart = leftParts[idx] ?? 0
+    const rightPart = rightParts[idx] ?? 0
+    if (leftPart > rightPart) return 1
+    if (leftPart < rightPart) return -1
+  }
+
+  return 0
+}
+
+const isVersionNewer = (candidate: string, baseline: string) => compareVersions(candidate, baseline) > 0
+
+const collectInstalledToolIndex = (tools: Array<{ name?: string; sourcePath?: string; version?: string }>) => {
   const ids = new Set<string>()
   const map: Record<string, string> = {}
+  const versions: Record<string, string> = {}
 
-  const register = (value: string, prefer = false) => {
+  const register = (value: string, version?: string, prefer = false) => {
     const normalized = normalizeToolId(value)
     ids.add(normalized)
     if (prefer || !map[normalized]) {
       map[normalized] = value
+    }
+    if (version && (prefer || !versions[normalized])) {
+      versions[normalized] = version
     }
   }
 
@@ -74,15 +111,15 @@ const collectInstalledToolIndex = (tools: Array<{ name?: string; sourcePath?: st
       const parts = tool.sourcePath.split(/[/\\]/)
       const dirName = parts[parts.length - 1]
       if (dirName) {
-        register(dirName, true)
+        register(dirName, tool.version, true)
       }
     }
     if (tool.name) {
-      register(tool.name)
+      register(tool.name, tool.version)
     }
   })
 
-  return { ids, map }
+  return { ids, map, versions }
 }
 
 export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) => {
@@ -102,6 +139,7 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
   const [communityError, setCommunityError] = useState<string | null>(null)
   const [installedToolIds, setInstalledToolIds] = useState<Set<string>>(new Set())
   const [installedToolIndex, setInstalledToolIndex] = useState<Record<string, string>>({})
+  const [installedToolVersions, setInstalledToolVersions] = useState<Record<string, string>>({})
   const [installedLoading, setInstalledLoading] = useState(false)
   const [installedError, setInstalledError] = useState<string | null>(null)
   const [actionState, setActionState] = useState<AppActionState | null>(null)
@@ -191,6 +229,7 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     if (!isElectron) {
       setInstalledToolIds(new Set())
       setInstalledToolIndex({})
+      setInstalledToolVersions({})
       setInstalledLoading(false)
       setInstalledError(null)
       return
@@ -201,9 +240,10 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
 
     try {
       const tools = await fetchInstalledCustomTools()
-      const { ids, map } = collectInstalledToolIndex(tools)
+      const { ids, map, versions } = collectInstalledToolIndex(tools)
       setInstalledToolIds(ids)
       setInstalledToolIndex(map)
+      setInstalledToolVersions(versions)
     } catch (err) {
       setInstalledError(err instanceof Error ? err.message : 'Failed to load installed tools')
     } finally {
@@ -248,73 +288,123 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     [storeTab]
   )
 
-  const isAppInstalled = useCallback(
-    (app: AppStoreApp) => {
-      const candidates = [app.id, app.description.name, app.name].filter(Boolean) as string[]
-      return candidates.some(candidate => installedToolIds.has(normalizeToolId(candidate)))
-    },
-    [installedToolIds]
-  )
-
-  const resolveInstalledAppId = useCallback(
+  const resolveInstalledAppInfo = useCallback(
     (app: AppStoreApp) => {
       const candidates = [app.id, app.description.name, app.name].filter(Boolean) as string[]
       for (const candidate of candidates) {
         const normalized = normalizeToolId(candidate)
-        const resolved = installedToolIndex[normalized]
-        if (resolved) return resolved
+        const installedId = installedToolIndex[normalized]
+        const installedVersion = installedToolVersions[normalized]
+        if (installedId || installedToolIds.has(normalized)) {
+          return {
+            normalized,
+            installedId: installedId || candidate,
+            installedVersion,
+          }
+        }
       }
-      return app.id
+      return null
     },
-    [installedToolIndex]
+    [installedToolIds, installedToolIndex, installedToolVersions]
   )
 
-  const handleInstall = useCallback(async () => {
-    if (!selectedApp || !selectedApp.zipUrl) {
-      setActionStatus({
-        type: 'error',
-        message: 'No download available for this app yet.',
-      })
-      return
-    }
+  const isAppInstalled = useCallback(
+    (app: AppStoreApp) => Boolean(resolveInstalledAppInfo(app)),
+    [resolveInstalledAppInfo]
+  )
 
-    if (!isElectron) {
-      setActionStatus({
-        type: 'error',
-        message: 'App installs are only available in the desktop app.',
-      })
-      return
-    }
+  const resolveInstalledAppId = useCallback(
+    (app: AppStoreApp) => resolveInstalledAppInfo(app)?.installedId || app.id,
+    [resolveInstalledAppInfo]
+  )
 
-    setActionState({ appId: selectedApp.id, type: 'install' })
-    setActionStatus({ type: 'working', message: 'Downloading and installing app...' })
-
-    try {
-      const result = await installAppFromStore({
-        appId: selectedApp.id,
-        appName: selectedApp.name,
-        zipUrl: selectedApp.zipUrl,
-      })
-
-      if (!result.success) {
-        throw new Error(result.error || 'Install failed')
+  const getAppUpdateInfo = useCallback(
+    (app: AppStoreApp): AppUpdateInfo | null => {
+      const installed = resolveInstalledAppInfo(app)
+      if (!installed?.installedVersion || !app.description.version) {
+        return null
       }
 
+      if (!isVersionNewer(app.description.version, installed.installedVersion)) {
+        return null
+      }
+
+      return {
+        appId: app.id,
+        installedId: installed.installedId,
+        installedVersion: installed.installedVersion,
+        availableVersion: app.description.version,
+      }
+    },
+    [resolveInstalledAppInfo]
+  )
+
+  const activeTabUpdates = useMemo(
+    () => activeApps.map(app => ({ app, update: getAppUpdateInfo(app) })).filter(item => Boolean(item.update)),
+    [activeApps, getAppUpdateInfo]
+  )
+
+  const handleInstall = useCallback(
+    async (targetApp?: AppStoreApp, mode: 'install' | 'update' = 'install') => {
+      const app = targetApp || selectedApp
+      if (!app || !app.zipUrl) {
+        setActionStatus({
+          type: 'error',
+          message: 'No download available for this app yet.',
+        })
+        return
+      }
+
+      if (!isElectron) {
+        setActionStatus({
+          type: 'error',
+          message: 'App installs are only available in the desktop app.',
+        })
+        return
+      }
+
+      const resolvedInstallTarget = mode === 'update' ? resolveInstalledAppId(app) : app.id
+      const actionType = mode === 'update' ? 'update' : 'install'
+      setActionState({ appId: app.id, type: actionType })
       setActionStatus({
-        type: 'success',
-        message: result.message || 'Installed successfully. Restart recommended.',
-        restartRequired: result.restartRequired ?? true,
+        type: 'working',
+        message: mode === 'update' ? 'Downloading and applying update...' : 'Downloading and installing app...',
       })
-      await reloadInstalledTools()
-    } catch (err) {
-      setActionStatus({
-        type: 'error',
-        message: err instanceof Error ? err.message : 'Install failed',
-      })
-    } finally {
-      setActionState(null)
-    }
-  }, [isElectron, reloadInstalledTools, selectedApp])
+
+      try {
+        const result = await installAppFromStore({
+          appId: resolvedInstallTarget,
+          appName: app.name,
+          zipUrl: app.zipUrl,
+          mode,
+        })
+
+        if (!result.success) {
+          throw new Error(result.error || `${mode === 'update' ? 'Update' : 'Install'} failed`)
+        }
+
+        setActionStatus({
+          type: 'success',
+          message:
+            result.message ||
+            (mode === 'update'
+              ? 'Updated successfully. Existing resources were preserved.'
+              : 'Installed successfully. Restart recommended.'),
+          restartRequired: result.restartRequired ?? false,
+        })
+        await reloadInstalledTools()
+        await dispatch(reloadCustomTools())
+      } catch (err) {
+        setActionStatus({
+          type: 'error',
+          message: err instanceof Error ? err.message : `${mode === 'update' ? 'Update' : 'Install'} failed`,
+        })
+      } finally {
+        setActionState(null)
+      }
+    },
+    [dispatch, isElectron, reloadInstalledTools, resolveInstalledAppId, selectedApp]
+  )
 
   const handleUninstall = useCallback(async () => {
     if (!selectedApp) {
@@ -456,8 +546,16 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     return isAppInstalled(selectedApp)
   }, [isAppInstalled, selectedApp])
 
+  const selectedAppUpdateInfo = useMemo(() => {
+    if (!selectedApp) return null
+    return getAppUpdateInfo(selectedApp)
+  }, [getAppUpdateInfo, selectedApp])
+
+  const selectedAppHasUpdate = Boolean(selectedAppUpdateInfo)
+
   const isActionInProgress = selectedApp ? actionState?.appId === selectedApp.id : false
   const isInstalling = isActionInProgress && actionState?.type === 'install'
+  const isUpdating = isActionInProgress && actionState?.type === 'update'
   const isUninstalling = isActionInProgress && actionState?.type === 'uninstall'
   const activeLoading = storeTab === 'first-party' ? firstPartyLoading : communityLoading
   const activeError = storeTab === 'first-party' ? firstPartyError : communityError
@@ -666,6 +764,36 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                 </div>
               )}
 
+              {isElectron && activeTabUpdates.length > 0 && (
+                <div className='rounded-xl border border-blue-200/70 bg-blue-50/70 px-4 py-3 text-sm text-blue-800 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200 space-y-2'>
+                  <p className='font-medium'>
+                    {activeTabUpdates.length} update{activeTabUpdates.length === 1 ? '' : 's'} available
+                  </p>
+                  <p className='text-xs text-blue-700/90 dark:text-blue-200/90'>
+                    Updates preserve each app’s <code>resources/</code> and <code>resource/</code> folders.
+                  </p>
+                  <div className='flex flex-wrap gap-2'>
+                    {activeTabUpdates.slice(0, 4).map(({ app, update }) =>
+                      update ? (
+                        <button
+                          key={`update-${app.id}`}
+                          onClick={() => void handleInstall(app, 'update')}
+                          disabled={Boolean(actionState)}
+                          className='px-2.5 py-1 text-xs rounded-lg border border-blue-300/70 dark:border-blue-400/40 bg-white/70 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+                        >
+                          Update {getAppDisplayName(app)} ({update.installedVersion} → {update.availableVersion})
+                        </button>
+                      ) : null
+                    )}
+                    {activeTabUpdates.length > 4 && (
+                      <span className='text-xs text-blue-700 dark:text-blue-300 self-center'>
+                        +{activeTabUpdates.length - 4} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {activeLoading && (
                 <div className='flex items-center gap-2 text-sm text-neutral-500 dark:text-neutral-400'>
                   <i className='bx bx-loader-alt animate-spin'></i>
@@ -704,6 +832,7 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                     const isSelected = selectedApp?.id === app.id
                     const iconUrl = app.description.iconUrl || app.description.icon
                     const isInstalled = isAppInstalled(app)
+                    const updateInfo = getAppUpdateInfo(app)
 
                     return (
                       <button
@@ -756,6 +885,11 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                                 Installed
                               </span>
                             )}
+                            {updateInfo && (
+                              <span className='px-2 py-0.5 rounded-full bg-blue-100/70 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 text-[10px] font-semibold uppercase tracking-wide'>
+                                Update Available
+                              </span>
+                            )}
                             {version && <span>{version}</span>}
                           </span>
                         </div>
@@ -797,6 +931,11 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                       <p className='text-sm text-neutral-700 dark:text-neutral-200'>
                         {selectedApp.description.version || 'n/a'}
                       </p>
+                      {selectedAppUpdateInfo && (
+                        <p className='text-[11px] text-blue-600 dark:text-blue-300'>
+                          Installed: {selectedAppUpdateInfo.installedVersion}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <p className='uppercase tracking-[0.12em] text-[10px]'>Size</p>
@@ -861,26 +1000,55 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
 
                   <div className='mt-6 flex flex-wrap items-center gap-3'>
                     {selectedAppInstalled ? (
-                      <button
-                        onClick={handleUninstall}
-                        disabled={!isElectron || isActionInProgress}
-                        className='px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2'
-                      >
-                        {isUninstalling ? (
-                          <>
-                            <i className='bx bx-loader-alt animate-spin text-base'></i>
-                            Uninstalling...
-                          </>
+                      <>
+                        {selectedAppHasUpdate ? (
+                          <button
+                            onClick={() => void handleInstall(selectedApp, 'update')}
+                            disabled={!isElectron || isActionInProgress}
+                            className='px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2'
+                          >
+                            {isUpdating ? (
+                              <>
+                                <i className='bx bx-loader-alt animate-spin text-base'></i>
+                                Updating...
+                              </>
+                            ) : (
+                              <>
+                                <i className='bx bx-refresh text-base'></i>
+                                Update
+                              </>
+                            )}
+                          </button>
                         ) : (
-                          <>
-                            <i className='bx bx-trash text-base'></i>
-                            Uninstall
-                          </>
+                          <span className='text-xs text-emerald-700 dark:text-emerald-300 rounded-lg bg-emerald-100/70 dark:bg-emerald-500/10 px-3 py-2'>
+                            Installed and up to date
+                          </span>
                         )}
-                      </button>
+                        <button
+                          onClick={handleUninstall}
+                          disabled={!isElectron || isActionInProgress}
+                          className={`px-4 py-2 text-sm rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 ${
+                            selectedAppHasUpdate
+                              ? 'border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10'
+                              : 'bg-red-500 text-white hover:bg-red-600'
+                          }`}
+                        >
+                          {isUninstalling ? (
+                            <>
+                              <i className='bx bx-loader-alt animate-spin text-base'></i>
+                              Uninstalling...
+                            </>
+                          ) : (
+                            <>
+                              <i className='bx bx-trash text-base'></i>
+                              Uninstall
+                            </>
+                          )}
+                        </button>
+                      </>
                     ) : (
                       <button
-                        onClick={handleInstall}
+                        onClick={() => void handleInstall()}
                         disabled={!isElectron || isActionInProgress}
                         className='px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2'
                       >
