@@ -95,6 +95,13 @@ interface MessageActionsProps {
   layout?: 'pill' | 'menu'
 }
 
+type MoreMenuPlacement = {
+  top: number
+  left: number
+  width: number
+  openUp: boolean
+}
+
 const MessageActions: React.FC<MessageActionsProps> = ({
   onEdit,
   onBranch,
@@ -922,8 +929,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     })
     // More menu states
     const [showMoreMenu, setShowMoreMenu] = useState(false)
-    const [showMoreInfo, setShowMoreInfo] = useState(false)
-    const [menuOpenUp, setMenuOpenUp] = useState(false)
+    const [moreMenuPlacement, setMoreMenuPlacement] = useState<MoreMenuPlacement | null>(null)
     const moreMenuRef = useRef<HTMLDivElement | null>(null)
     // Hover state for message actions visibility (fixes web mode hover detection)
     const [isHovering, setIsHovering] = useState(false)
@@ -1257,25 +1263,68 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       return { x: Math.max(10, x), y: Math.max(10, y) }
     }
 
+    const getEstimatedMoreMenuSize = useCallback(() => {
+      if (typeof window === 'undefined') {
+        return { width: 320, height: 440 }
+      }
+
+      const breakpointWidth = window.innerWidth >= 768 ? 320 : window.innerWidth >= 640 ? 288 : 256
+      const maxAllowedWidth = Math.max(180, window.innerWidth - 16)
+      const width = Math.min(breakpointWidth, maxAllowedWidth)
+
+      return { width, height: 440 }
+    }, [])
+
+    const computeMoreMenuPlacement = useCallback((): MoreMenuPlacement | null => {
+      if (typeof window === 'undefined') return null
+
+      const trigger = moreButtonRef.current
+      if (!trigger) return null
+
+      const rect = trigger.getBoundingClientRect()
+      const { width, height } = getEstimatedMoreMenuSize()
+      const margin = 8
+
+      const minLeft = margin
+      const maxLeft = Math.max(margin, window.innerWidth - width - margin)
+      const left = Math.min(Math.max(rect.right - width, minLeft), maxLeft)
+
+      const spaceBelow = window.innerHeight - rect.bottom - margin
+      const spaceAbove = rect.top - margin
+      const openUp = spaceBelow < height && spaceAbove > spaceBelow
+
+      const preferredTop = openUp ? rect.top - height - 6 : rect.bottom + 6
+      const minTop = margin
+      const maxTop = Math.max(margin, window.innerHeight - height - margin)
+      const top = Math.min(Math.max(preferredTop, minTop), maxTop)
+
+      return { top, left, width, openUp }
+    }, [getEstimatedMoreMenuSize])
+
     const handleMoreClick = () => {
-      setShowMoreMenu(!showMoreMenu)
-      setShowMoreInfo(false)
-    }
+      if (showMoreMenu) {
+        setShowMoreMenu(false)
+        setMoreMenuPlacement(null)
+        return
+      }
 
-    const handleMoreInfoClick = () => {
-      setShowMoreInfo(true)
-    }
+      const placement = computeMoreMenuPlacement()
+      if (!placement) return
 
-    const handleBackToMenu = () => {
-      setShowMoreInfo(false)
+      setMoreMenuPlacement(placement)
+      setShowMoreMenu(true)
     }
 
     // Click outside handler for more menu
     useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
-        if (moreMenuRef.current && !moreMenuRef.current.contains(event.target as Node)) {
+        const target = event.target as Node
+        const clickedMenu = Boolean(moreMenuRef.current && moreMenuRef.current.contains(target))
+        const clickedTrigger = Boolean(moreButtonRef.current && moreButtonRef.current.contains(target))
+
+        if (!clickedMenu && !clickedTrigger) {
           setShowMoreMenu(false)
-          setShowMoreInfo(false)
+          setMoreMenuPlacement(null)
         }
       }
 
@@ -1327,7 +1376,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     useEffect(() => {
       if (contextMenuOpen) {
         setShowMoreMenu(false)
-        setShowMoreInfo(false)
+        setMoreMenuPlacement(null)
       }
     }, [contextMenuOpen])
 
@@ -1376,34 +1425,23 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
     }, [isMobile])
 
-    // Compute dropdown placement - runs on mount and when menu state changes
+    // Keep portal menu anchored to the trigger while open
     useEffect(() => {
-      const computePosition = () => {
-        const trigger = moreButtonRef.current
-        if (!trigger || typeof window === 'undefined') return
-
-        const rect = trigger.getBoundingClientRect()
-        const spaceBelow = window.innerHeight - rect.bottom
-        const spaceAbove = rect.top
-
-        // Open upward if space below is insufficient and space above is better
-        const shouldOpenUp = spaceBelow < 300 && spaceAbove > spaceBelow
-        setMenuOpenUp(shouldOpenUp)
-      }
-
-      // Always compute on mount and when showMoreMenu changes
-      computePosition()
-
       if (!showMoreMenu) return
 
-      window.addEventListener('resize', computePosition)
-      window.addEventListener('scroll', computePosition, true)
+      const recomputePosition = () => {
+        const placement = computeMoreMenuPlacement()
+        if (placement) setMoreMenuPlacement(placement)
+      }
+
+      window.addEventListener('resize', recomputePosition)
+      window.addEventListener('scroll', recomputePosition, true)
 
       return () => {
-        window.removeEventListener('resize', computePosition)
-        window.removeEventListener('scroll', computePosition, true)
+        window.removeEventListener('resize', recomputePosition)
+        window.removeEventListener('scroll', recomputePosition, true)
       }
-    }, [showMoreMenu])
+    }, [showMoreMenu, computeMoreMenuPlacement])
 
     const copyRichText = async (plainText: string, html?: string) => {
       // Try copying both HTML and plain text for rich paste support (Word, etc.)
@@ -2839,32 +2877,23 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 variant='default'
               />
               {/* More menu dropdown */}
-              {showMoreMenu && (
-                <div
-                  ref={moreMenuRef}
-                  className={`absolute right-0 ${menuOpenUp ? 'bottom-full mb-1' : 'top-8'} z-20 w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
-                >
-                  {!showMoreInfo ? (
-                    <div className='py-1 rounded-4xl'>
-                      <button
-                        onClick={handleMoreInfoClick}
-                        className='w-full text-left rounded-4xl px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-900 active:scale-95 transition-all duration-150'
-                      >
-                        More Info
-                      </button>
-                    </div>
-                  ) : (
+              {showMoreMenu &&
+                moreMenuPlacement &&
+                createPortal(
+                  <div
+                    ref={moreMenuRef}
+                    className='fixed z-[200] w-64 sm:w-72 md:w-80 rounded-2xl bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_0px_4px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_8px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]'
+                    style={{
+                      top: `${moreMenuPlacement.top}px`,
+                      left: `${moreMenuPlacement.left}px`,
+                      width: `${moreMenuPlacement.width}px`,
+                    }}
+                  >
                     <div className='p-2 sm:p-3'>
                       <div className='flex items-center justify-between mb-1'>
                         <h3 className='text-xs sm:text-sm 3xl:text-base font-semibold text-gray-700 dark:text-gray-300'>
                           Message Info
                         </h3>
-                        <button
-                          onClick={handleBackToMenu}
-                          className='text-xs sm:text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 active:scale-95 transition-all duration-150'
-                        >
-                          Back
-                        </button>
                       </div>
                       <div className='max-h-64 sm:max-h-80 md:max-h-96 overflow-y-auto text-xs sm:text-sm space-y-1.5 pt-2'>
                         {messageData ? (
@@ -2891,9 +2920,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                         )}
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>,
+                  document.body
+                )}
             </div>
           </div>
         )}
