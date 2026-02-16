@@ -2199,7 +2199,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
     }
 
-    const renderItemsWithOptionalProcessGrouping = (items: MessageRenderItem[], sourceKey: string): React.ReactNode[] => {
+    const renderItemsWithOptionalProcessGrouping = (
+      items: MessageRenderItem[],
+      sourceKey: string
+    ): React.ReactNode[] => {
       if (!groupToolReasoningRuns) {
         return items.map(item => item.node)
       }
@@ -2923,7 +2926,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 5 }}
                 transition={{ duration: 0.15 }}
-                className='fixed z-[100000]'
+                className='fixed z-[40]'
                 style={{
                   left: `${contextMenuPosition.x}px`,
                   top: `${contextMenuPosition.y}px`,
@@ -3043,7 +3046,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className='fixed z-[100000] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 [will-change:contents] [transform:translateZ(0)]'
+                className='fixed z-[40] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 [will-change:contents] [transform:translateZ(0)]'
                 style={{
                   left: `${getAdjustedExplainInputPosition()?.x || explainInputPosition.current.x}px`,
                   top: `${getAdjustedExplainInputPosition()?.y || explainInputPosition.current.y}px`,

@@ -102,20 +102,24 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const [skillUrl, setSkillUrl] = useState('')
   const [skillInstallStatus, setSkillInstallStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [skillInstallMessage, setSkillInstallMessage] = useState('')
-  const [installedSkills, setInstalledSkills] = useState<Array<{ name: string; description: string; enabled: boolean }>>([])
+  const [installedSkills, setInstalledSkills] = useState<
+    Array<{ name: string; description: string; enabled: boolean }>
+  >([])
   const [skillsLoading, setSkillsLoading] = useState(false)
 
   // MCP Servers section state
   const [mcpExpanded, setMcpExpanded] = useState(false)
-  const [mcpServers, setMcpServers] = useState<Array<{
-    name: string
-    command: string
-    args: string[]
-    enabled: boolean
-    status: 'disconnected' | 'connecting' | 'connected' | 'error'
-    error?: string
-    toolCount: number
-  }>>([])
+  const [mcpServers, setMcpServers] = useState<
+    Array<{
+      name: string
+      command: string
+      args: string[]
+      enabled: boolean
+      status: 'disconnected' | 'connecting' | 'connected' | 'error'
+      error?: string
+      toolCount: number
+    }>
+  >([])
   const [mcpLazyStart, setMcpLazyStart] = useState(true)
   const [mcpLoading, setMcpLoading] = useState(false)
   const [mcpRefreshing, setMcpRefreshing] = useState(false)
@@ -216,9 +220,10 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const fetchInstalledSkills = useCallback(async () => {
     setSkillsLoading(true)
     try {
-      const data = await localApi.get<{ success?: boolean; skills?: Array<{ name: string; description: string; enabled: boolean }> }>(
-        '/skills'
-      )
+      const data = await localApi.get<{
+        success?: boolean
+        skills?: Array<{ name: string; description: string; enabled: boolean }>
+      }>('/skills')
       if (data.success && data.skills) {
         setInstalledSkills(data.skills)
       }
@@ -245,9 +250,12 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     setSkillInstallMessage('Downloading and installing skill...')
 
     try {
-      const data = await localApi.post<{ success?: boolean; skillName?: string; error?: string }>('/skills/install/url', {
-        url,
-      })
+      const data = await localApi.post<{ success?: boolean; skillName?: string; error?: string }>(
+        '/skills/install/url',
+        {
+          url,
+        }
+      )
 
       if (data.success) {
         setSkillInstallStatus('success')
@@ -277,9 +285,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       const data = await localApi.post<{ success?: boolean }>(`/skills/${encodeURIComponent(skillName)}/${action}`)
       if (data.success) {
         // Update local state
-        setInstalledSkills(prev => prev.map(s =>
-          s.name === skillName ? { ...s, enabled: !currentEnabled } : s
-        ))
+        setInstalledSkills(prev => prev.map(s => (s.name === skillName ? { ...s, enabled: !currentEnabled } : s)))
       }
     } catch (error) {
       console.error(`Failed to ${action} skill:`, error)
@@ -336,34 +342,37 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   }, [mcpExpanded, fetchMcpServers, fetchMcpSettings])
 
   // Handle MCP server start/stop
-  const handleToggleMcpServer = useCallback(async (serverName: string, currentStatus: string) => {
-    const action = currentStatus === 'connected' ? 'stop' : 'start'
-    try {
-      const data = await localApi.post<{ success?: boolean; error?: string }>(
-        `/mcp/servers/${encodeURIComponent(serverName)}/${action}`
-      )
-      if (data.success) {
-        setMcpActionStatus({ type: 'success', message: `Server ${action}ed successfully` })
-        fetchMcpServers()
-        // Refresh MCP tools with orchestrator and Redux after server state change
-        if (action === 'start') {
-          setTimeout(async () => {
-            // First refresh with orchestrator (backend registers tools)
-            await localApi.post('/mcp/refresh-tools')
-            // Then refresh Redux state (frontend gets tool definitions)
+  const handleToggleMcpServer = useCallback(
+    async (serverName: string, currentStatus: string) => {
+      const action = currentStatus === 'connected' ? 'stop' : 'start'
+      try {
+        const data = await localApi.post<{ success?: boolean; error?: string }>(
+          `/mcp/servers/${encodeURIComponent(serverName)}/${action}`
+        )
+        if (data.success) {
+          setMcpActionStatus({ type: 'success', message: `Server ${action}ed successfully` })
+          fetchMcpServers()
+          // Refresh MCP tools with orchestrator and Redux after server state change
+          if (action === 'start') {
+            setTimeout(async () => {
+              // First refresh with orchestrator (backend registers tools)
+              await localApi.post('/mcp/refresh-tools')
+              // Then refresh Redux state (frontend gets tool definitions)
+              dispatch(fetchMcpTools())
+            }, 1000) // Small delay to let server fully connect
+          } else {
             dispatch(fetchMcpTools())
-          }, 1000) // Small delay to let server fully connect
+          }
+          setTimeout(() => setMcpActionStatus(null), 3000)
         } else {
-          dispatch(fetchMcpTools())
+          setMcpActionStatus({ type: 'error', message: data.error || `Failed to ${action} server` })
         }
-        setTimeout(() => setMcpActionStatus(null), 3000)
-      } else {
-        setMcpActionStatus({ type: 'error', message: data.error || `Failed to ${action} server` })
+      } catch (error) {
+        setMcpActionStatus({ type: 'error', message: `Failed to ${action} server` })
       }
-    } catch (error) {
-      setMcpActionStatus({ type: 'error', message: `Failed to ${action} server` })
-    }
-  }, [fetchMcpServers, dispatch])
+    },
+    [fetchMcpServers, dispatch]
+  )
 
   // Handle MCP server removal
   const handleRemoveMcpServer = useCallback(async (serverName: string) => {
@@ -383,7 +392,10 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
 
   // Handle adding new MCP server
   const handleAddMcpServer = useCallback(async () => {
-    const name = newServerName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+    const name = newServerName
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
     const command = newServerCommand.trim()
     const args = newServerArgs.trim().split(/\s+/).filter(Boolean)
 
@@ -656,7 +668,7 @@ ${block}`
   if (!open) return null
 
   return (
-    <div className='fixed inset-0 z-40 flex items-center justify-center'>
+    <div className='fixed inset-0 z-400 flex items-center justify-center'>
       {/* Overlay */}
       <div
         className='fixed inset-0 bg-neutral-300/50 dark:bg-neutral-900/20 bg-opacity-50 backdrop-blur-sm'
@@ -1153,7 +1165,9 @@ ${block}`
 
                   <div className='flex items-center justify-between rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/50 px-3 py-2'>
                     <div>
-                      <p className='text-sm font-medium text-neutral-700 dark:text-neutral-200'>Lazy start MCP servers</p>
+                      <p className='text-sm font-medium text-neutral-700 dark:text-neutral-200'>
+                        Lazy start MCP servers
+                      </p>
                       <p className='text-xs text-neutral-500 dark:text-neutral-400'>
                         When enabled, servers won’t auto-start on launch.
                       </p>
@@ -1203,7 +1217,9 @@ ${block}`
                         disabled={mcpRefreshing}
                         className='flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300 hover:text-neutral-800 dark:hover:text-neutral-100 transition-colors disabled:opacity-60'
                       >
-                        <i className={`bx ${mcpRefreshing ? 'bx-loader-circle animate-spin' : 'bx-refresh'} text-base`} />
+                        <i
+                          className={`bx ${mcpRefreshing ? 'bx-loader-circle animate-spin' : 'bx-refresh'} text-base`}
+                        />
                         Refresh MCP Tools
                       </button>
                     </div>
