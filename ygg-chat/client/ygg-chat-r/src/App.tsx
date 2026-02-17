@@ -55,7 +55,18 @@ const TOOL_VIEWER_HIDDEN_ROUTES = new Set([
   '/blog',
 ])
 
-const RIGHTBAR_HIDDEN_ROUTES = new Set(['/landingpage', '/login'])
+const RIGHTBAR_HIDDEN_ROUTES = new Set([
+  '/',
+  '/landingpage',
+  '/login',
+  '/faq',
+  '/paymentplan',
+  '/blog',
+  '/terms',
+  '/refund-policy',
+  '/privacy',
+  '/infrastructure',
+])
 
 const SIDEBAR_VISIBLE_ROUTE_PATTERNS = [/^\/homepage$/, /^\/conversationPage$/, /^\/chat\/[^/]+\/[^/]+$/]
 
