@@ -12,13 +12,25 @@ import { EventEmitter } from 'events'
 // Types and Interfaces
 // ============================================================================
 
+export type McpServerTransport = 'stdio' | 'http'
+
 export interface McpServerConfig {
   name: string
-  command: string
-  args: string[]
-  env?: Record<string, string>
   enabled: boolean
   autoStart?: boolean // Start when app launches (default: true)
+
+  // Transport selection
+  transport?: McpServerTransport
+  type?: McpServerTransport // Backward compatibility with .mcp.json-style configs
+
+  // stdio transport
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+
+  // remote HTTP transport
+  url?: string
+  headers?: Record<string, string>
 }
 
 export interface McpToolDefinition {
@@ -102,6 +114,16 @@ interface JsonRpcNotification {
   params?: any
 }
 
+function normalizeTransport(value: unknown): McpServerTransport | undefined {
+  if (value === 'http') return 'http'
+  if (value === 'stdio') return 'stdio'
+  return undefined
+}
+
+function resolveTransport(config: Partial<McpServerConfig>): McpServerTransport {
+  return normalizeTransport(config.transport) ?? normalizeTransport(config.type) ?? (config.url ? 'http' : 'stdio')
+}
+
 // ============================================================================
 // MCP Client - Handles communication with a single MCP server
 // ============================================================================
@@ -115,6 +137,8 @@ class McpClient extends EventEmitter {
     timeout: NodeJS.Timeout
   }> = new Map()
   private buffer = ''
+  private sessionId?: string
+  private readonly transport: McpServerTransport
 
   public status: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected'
   public error?: string
@@ -127,6 +151,7 @@ class McpClient extends EventEmitter {
     public readonly config: McpServerConfig
   ) {
     super()
+    this.transport = resolveTransport(config)
   }
 
   async connect(): Promise<void> {
@@ -139,40 +164,11 @@ class McpClient extends EventEmitter {
     this.emit('statusChange', this.status)
 
     try {
-      // Spawn the MCP server process
-      const env = { ...process.env, ...this.config.env }
-
-      this.process = spawn(this.config.command, this.config.args, {
-        env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        shell: process.platform === 'win32',
-      })
-
-      // Handle stdout (JSON-RPC messages)
-      this.process.stdout?.on('data', (data: Buffer) => {
-        this.handleData(data.toString())
-      })
-
-      // Handle stderr (logging)
-      this.process.stderr?.on('data', (data: Buffer) => {
-        console.log(`[MCP:${this.name}] stderr:`, data.toString().trim())
-      })
-
-      // Handle process exit
-      this.process.on('exit', (code, signal) => {
-        console.log(`[MCP:${this.name}] Process exited with code ${code}, signal ${signal}`)
-        this.status = 'disconnected'
-        this.process = null
-        this.emit('statusChange', this.status)
-        this.rejectAllPending(new Error('MCP server process exited'))
-      })
-
-      this.process.on('error', (err) => {
-        console.error(`[MCP:${this.name}] Process error:`, err)
-        this.status = 'error'
-        this.error = err.message
-        this.emit('statusChange', this.status)
-      })
+      if (this.transport === 'http') {
+        await this.connectHttp()
+      } else {
+        await this.connectStdio()
+      }
 
       // Initialize the connection
       await this.initialize()
@@ -182,15 +178,63 @@ class McpClient extends EventEmitter {
 
       this.status = 'connected'
       this.emit('statusChange', this.status)
-      console.log(`[MCP:${this.name}] Connected successfully`)
-
+      console.log(`[MCP:${this.name}] Connected successfully (${this.transport})`)
     } catch (err) {
       this.status = 'error'
       this.error = err instanceof Error ? err.message : String(err)
       this.emit('statusChange', this.status)
-      this.disconnect()
+      await this.disconnect()
       throw err
     }
+  }
+
+  private async connectStdio(): Promise<void> {
+    if (!this.config.command) {
+      throw new Error(`MCP stdio server '${this.name}' is missing command`)
+    }
+
+    const env = { ...process.env, ...this.config.env }
+    const args = Array.isArray(this.config.args) ? this.config.args : []
+
+    this.process = spawn(this.config.command, args, {
+      env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    })
+
+    // Handle stdout (JSON-RPC messages)
+    this.process.stdout?.on('data', (data: Buffer) => {
+      this.handleData(data.toString())
+    })
+
+    // Handle stderr (logging)
+    this.process.stderr?.on('data', (data: Buffer) => {
+      console.log(`[MCP:${this.name}] stderr:`, data.toString().trim())
+    })
+
+    // Handle process exit
+    this.process.on('exit', (code, signal) => {
+      console.log(`[MCP:${this.name}] Process exited with code ${code}, signal ${signal}`)
+      this.status = 'disconnected'
+      this.process = null
+      this.emit('statusChange', this.status)
+      this.rejectAllPending(new Error('MCP server process exited'))
+    })
+
+    this.process.on('error', (err) => {
+      console.error(`[MCP:${this.name}] Process error:`, err)
+      this.status = 'error'
+      this.error = err.message
+      this.emit('statusChange', this.status)
+    })
+  }
+
+  private async connectHttp(): Promise<void> {
+    if (!this.config.url) {
+      throw new Error(`MCP HTTP server '${this.name}' is missing url`)
+    }
+
+    this.sessionId = undefined
   }
 
   async disconnect(): Promise<void> {
@@ -206,6 +250,7 @@ class McpClient extends EventEmitter {
     }
 
     this.process = null
+    this.sessionId = undefined
     this.status = 'disconnected'
     this.tools = []
     this.resources = []
@@ -359,6 +404,14 @@ class McpClient extends EventEmitter {
   }
 
   private sendRequest(method: string, params?: any): Promise<any> {
+    if (this.transport === 'http') {
+      return this.sendHttpRequest(method, params)
+    }
+
+    return this.sendStdioRequest(method, params)
+  }
+
+  private sendStdioRequest(method: string, params?: any): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this.process?.stdin) {
         reject(new Error('MCP server not connected'))
@@ -385,7 +438,158 @@ class McpClient extends EventEmitter {
     })
   }
 
+  private async sendHttpRequest(method: string, params?: any): Promise<any> {
+    if (!this.config.url) {
+      throw new Error(`MCP HTTP server '${this.name}' is missing url`)
+    }
+
+    const id = ++this.requestId
+    const request: JsonRpcRequest = {
+      jsonrpc: '2.0',
+      id,
+      method,
+      params,
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30000)
+
+    try {
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        ...(this.config.headers || {}),
+      }
+
+      if (this.sessionId) {
+        headers['mcp-session-id'] = this.sessionId
+      }
+
+      const response = await fetch(this.config.url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      })
+
+      const responseSessionId = response.headers.get('mcp-session-id')
+      if (responseSessionId) {
+        this.sessionId = responseSessionId
+      }
+
+      const payload = await response.text()
+      if (!response.ok) {
+        throw new Error(
+          `MCP HTTP request failed (${response.status} ${response.statusText})${payload ? `: ${payload.slice(0, 400)}` : ''}`
+        )
+      }
+
+      if (!payload.trim()) {
+        return undefined
+      }
+
+      const contentType = response.headers.get('content-type') || ''
+      if (contentType.includes('text/event-stream')) {
+        return this.resolveJsonRpcFromSse(payload, id)
+      }
+
+      try {
+        const parsed = JSON.parse(payload)
+        return this.resolveJsonRpcPayload(parsed, id)
+      } catch (parseError) {
+        if (payload.includes('\ndata:')) {
+          return this.resolveJsonRpcFromSse(payload, id)
+        }
+        throw new Error(
+          `MCP HTTP response parse error: ${parseError instanceof Error ? parseError.message : String(parseError)}`
+        )
+      }
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  private resolveJsonRpcFromSse(payload: string, expectedId: number | string): any {
+    const events = payload.split(/\r?\n\r?\n/)
+    const parsedEvents: any[] = []
+
+    for (const event of events) {
+      const lines = event.split(/\r?\n/)
+      const dataLines = lines
+        .filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).trim())
+        .filter(Boolean)
+
+      if (dataLines.length === 0) continue
+
+      const data = dataLines.join('\n')
+      if (data === '[DONE]') continue
+
+      try {
+        parsedEvents.push(JSON.parse(data))
+      } catch {
+        // Ignore non-JSON SSE event payloads
+      }
+    }
+
+    if (parsedEvents.length === 0) {
+      throw new Error('MCP HTTP SSE response did not contain JSON payloads')
+    }
+
+    return this.resolveJsonRpcPayload(parsedEvents, expectedId)
+  }
+
+  private resolveJsonRpcPayload(payload: any, expectedId: number | string): any {
+    const messages = Array.isArray(payload) ? payload : [payload]
+    let fallbackResult: any = undefined
+
+    for (const message of messages) {
+      if (!message || typeof message !== 'object') {
+        continue
+      }
+
+      // Notification
+      if ('method' in message && !('id' in message)) {
+        this.handleNotification(message as JsonRpcNotification)
+        continue
+      }
+
+      if ('id' in message) {
+        if (message.id !== expectedId) {
+          continue
+        }
+
+        if ('error' in message && message.error) {
+          throw new Error(message.error.message || 'MCP request failed')
+        }
+
+        return message.result
+      }
+
+      if ('result' in message) {
+        fallbackResult = message.result
+      } else {
+        fallbackResult = message
+      }
+    }
+
+    if (fallbackResult !== undefined) {
+      return fallbackResult
+    }
+
+    throw new Error('No matching JSON-RPC response found')
+  }
+
   private sendNotification(method: string, params?: any): void {
+    if (this.transport === 'http') {
+      void this.sendHttpNotification(method, params)
+      return
+    }
+
+    this.sendStdioNotification(method, params)
+  }
+
+  private sendStdioNotification(method: string, params?: any): void {
     if (!this.process?.stdin) return
 
     const notification: JsonRpcNotification = {
@@ -396,6 +600,48 @@ class McpClient extends EventEmitter {
 
     const message = JSON.stringify(notification) + '\n'
     this.process.stdin.write(message)
+  }
+
+  private async sendHttpNotification(method: string, params?: any): Promise<void> {
+    if (!this.config.url) return
+
+    const notification: JsonRpcNotification = {
+      jsonrpc: '2.0',
+      method,
+      params,
+    }
+
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      ...(this.config.headers || {}),
+    }
+
+    if (this.sessionId) {
+      headers['mcp-session-id'] = this.sessionId
+    }
+
+    try {
+      const response = await fetch(this.config.url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(notification),
+      })
+
+      const responseSessionId = response.headers.get('mcp-session-id')
+      if (responseSessionId) {
+        this.sessionId = responseSessionId
+      }
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '')
+        console.warn(
+          `[MCP:${this.name}] HTTP notification failed (${response.status} ${response.statusText})${body ? `: ${body.slice(0, 300)}` : ''}`
+        )
+      }
+    } catch (error) {
+      console.warn(`[MCP:${this.name}] HTTP notification error:`, error)
+    }
   }
 
   private rejectAllPending(error: Error): void {
@@ -429,7 +675,8 @@ interface McpConfigFile {
   settings?: {
     lazyStart?: boolean
   }
-  servers: Record<string, Omit<McpServerConfig, 'name' | 'enabled'> & { enabled?: boolean }>
+  servers?: Record<string, Omit<McpServerConfig, 'name'>>
+  mcpServers?: Record<string, Omit<McpServerConfig, 'name'>> // Compatibility with .mcp.json format
 }
 
 class McpManager extends EventEmitter {
@@ -496,23 +743,37 @@ class McpManager extends EventEmitter {
     const config = await this.loadConfigFile()
     this.settings = { lazyStart: config.settings?.lazyStart ?? true }
 
-    return Object.entries(config.servers).map(([name, serverConfig]) => ({
-      name,
-      enabled: serverConfig.enabled !== false,
-      autoStart: serverConfig.autoStart,
-      command: serverConfig.command,
-      args: serverConfig.args,
-      env: serverConfig.env,
-    }))
+    const rawServers = (config.servers && Object.keys(config.servers).length > 0
+      ? config.servers
+      : config.mcpServers) || {}
+
+    return Object.entries(rawServers).map(([name, serverConfig]) => {
+      const transport = resolveTransport(serverConfig)
+
+      return {
+        name,
+        enabled: serverConfig.enabled !== false,
+        autoStart: serverConfig.autoStart,
+        transport,
+        type: transport,
+        command: serverConfig.command,
+        args: Array.isArray(serverConfig.args) ? serverConfig.args : [],
+        env: serverConfig.env,
+        url: serverConfig.url,
+        headers: serverConfig.headers,
+      }
+    })
   }
 
   private async loadConfigFile(): Promise<McpConfigFile> {
     try {
       const content = await fs.readFile(this.configPath, 'utf-8')
       const parsed: McpConfigFile = JSON.parse(content)
+      const servers = parsed.servers || parsed.mcpServers || {}
+
       return {
         settings: parsed.settings,
-        servers: parsed.servers || {},
+        servers,
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -535,12 +796,17 @@ class McpManager extends EventEmitter {
     }
 
     for (const config of configs) {
-      configFile.servers[config.name] = {
+      const transport = resolveTransport(config)
+      configFile.servers![config.name] = {
+        enabled: config.enabled,
+        autoStart: config.autoStart,
+        transport,
+        type: transport,
         command: config.command,
         args: config.args,
         env: config.env,
-        enabled: config.enabled,
-        autoStart: config.autoStart,
+        url: config.url,
+        headers: config.headers,
       }
     }
 
@@ -566,8 +832,24 @@ class McpManager extends EventEmitter {
       return
     }
 
+    const transport = resolveTransport(config)
+    const normalizedConfig: McpServerConfig = {
+      ...config,
+      transport,
+      type: transport,
+      args: Array.isArray(config.args) ? config.args : [],
+    }
+
+    if (transport === 'http' && !normalizedConfig.url) {
+      throw new Error(`MCP server '${config.name}' is configured for HTTP but missing url`)
+    }
+
+    if (transport === 'stdio' && !normalizedConfig.command) {
+      throw new Error(`MCP server '${config.name}' is configured for stdio but missing command`)
+    }
+
     // Create and connect client
-    const client = new McpClient(config.name, config)
+    const client = new McpClient(config.name, normalizedConfig)
 
     client.on('statusChange', (status) => {
       this.emit('serverStatusChange', { name: config.name, status })
@@ -602,12 +884,20 @@ class McpManager extends EventEmitter {
       throw new Error(`Server '${config.name}' already exists`)
     }
 
-    configs.push(config)
+    const transport = resolveTransport(config)
+    const normalizedConfig: McpServerConfig = {
+      ...config,
+      transport,
+      type: transport,
+      args: Array.isArray(config.args) ? config.args : [],
+    }
+
+    configs.push(normalizedConfig)
     await this.saveConfig(configs, this.settings)
 
     // Start if enabled
-    if (!this.settings.lazyStart && config.enabled && config.autoStart !== false) {
-      await this.startServer(config)
+    if (!this.settings.lazyStart && normalizedConfig.enabled && normalizedConfig.autoStart !== false) {
+      await this.startServer(normalizedConfig)
     }
   }
 
@@ -619,7 +909,15 @@ class McpManager extends EventEmitter {
       throw new Error(`Server '${name}' not found`)
     }
 
-    configs[index] = { ...configs[index], ...updates }
+    const merged = { ...configs[index], ...updates }
+    const transport = resolveTransport(merged)
+    configs[index] = {
+      ...merged,
+      transport,
+      type: transport,
+      args: Array.isArray(merged.args) ? merged.args : [],
+    }
+
     await this.saveConfig(configs, this.settings)
 
     // Restart if running

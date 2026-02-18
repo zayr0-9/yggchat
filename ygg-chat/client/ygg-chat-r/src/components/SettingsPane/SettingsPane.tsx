@@ -112,8 +112,12 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const [mcpServers, setMcpServers] = useState<
     Array<{
       name: string
-      command: string
-      args: string[]
+      transport?: 'stdio' | 'http'
+      type?: 'stdio' | 'http'
+      command?: string
+      args?: string[]
+      url?: string
+      headers?: Record<string, string>
       enabled: boolean
       status: 'disconnected' | 'connecting' | 'connected' | 'error'
       error?: string
@@ -125,8 +129,11 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const [mcpRefreshing, setMcpRefreshing] = useState(false)
   const [mcpAddMode, setMcpAddMode] = useState(false)
   const [newServerName, setNewServerName] = useState('')
+  const [newServerTransport, setNewServerTransport] = useState<'stdio' | 'http'>('stdio')
   const [newServerCommand, setNewServerCommand] = useState('')
   const [newServerArgs, setNewServerArgs] = useState('')
+  const [newServerUrl, setNewServerUrl] = useState('')
+  const [newServerHeadersText, setNewServerHeadersText] = useState('')
   const [mcpActionStatus, setMcpActionStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Font size offset state (persisted to localStorage)
@@ -398,24 +405,75 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       .replace(/[^a-z0-9-]/g, '-')
     const command = newServerCommand.trim()
     const args = newServerArgs.trim().split(/\s+/).filter(Boolean)
+    const url = newServerUrl.trim()
 
-    if (!name || !command) {
-      setMcpActionStatus({ type: 'error', message: 'Name and command are required' })
+    let parsedHeaders: Record<string, string> | undefined
+    const headersText = newServerHeadersText.trim()
+
+    if (headersText) {
+      try {
+        const parsed = JSON.parse(headersText)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          setMcpActionStatus({ type: 'error', message: 'Headers must be a JSON object, e.g. {"Authorization":"Bearer ..."}' })
+          return
+        }
+
+        parsedHeaders = Object.fromEntries(
+          Object.entries(parsed).map(([key, value]) => [key, typeof value === 'string' ? value : String(value)])
+        )
+      } catch {
+        setMcpActionStatus({
+          type: 'error',
+          message: 'Invalid headers JSON. Example: {"Authorization":"Bearer <token>"}',
+        })
+        return
+      }
+    }
+
+    if (!name) {
+      setMcpActionStatus({ type: 'error', message: 'Server name is required' })
+      return
+    }
+
+    if (newServerTransport === 'stdio' && !command) {
+      setMcpActionStatus({ type: 'error', message: 'Command is required for stdio MCP servers' })
+      return
+    }
+
+    if (newServerTransport === 'http' && !url) {
+      setMcpActionStatus({ type: 'error', message: 'URL is required for remote MCP servers' })
       return
     }
 
     try {
-      const data = await localApi.post<{ success?: boolean; error?: string }>('/mcp/servers', {
-        name,
-        command,
-        args,
-        enabled: true,
-      })
+      const payload =
+        newServerTransport === 'http'
+          ? {
+              name,
+              transport: 'http' as const,
+              type: 'http' as const,
+              url,
+              headers: parsedHeaders,
+              enabled: true,
+            }
+          : {
+              name,
+              transport: 'stdio' as const,
+              type: 'stdio' as const,
+              command,
+              args,
+              enabled: true,
+            }
+
+      const data = await localApi.post<{ success?: boolean; error?: string }>('/mcp/servers', payload)
       if (data.success) {
         setMcpActionStatus({ type: 'success', message: `Server "${name}" added` })
         setNewServerName('')
         setNewServerCommand('')
         setNewServerArgs('')
+        setNewServerUrl('')
+        setNewServerHeadersText('')
+        setNewServerTransport('stdio')
         setMcpAddMode(false)
         fetchMcpServers()
         // Refresh MCP tools after adding server (backend auto-registers, then update Redux)
@@ -430,7 +488,16 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     } catch (error) {
       setMcpActionStatus({ type: 'error', message: 'Network error' })
     }
-  }, [newServerName, newServerCommand, newServerArgs, fetchMcpServers, dispatch])
+  }, [
+    newServerName,
+    newServerTransport,
+    newServerCommand,
+    newServerArgs,
+    newServerUrl,
+    newServerHeadersText,
+    fetchMcpServers,
+    dispatch,
+  ])
 
   const handleRefreshMcpTools = useCallback(async () => {
     setMcpRefreshing(true)
@@ -1237,33 +1304,98 @@ ${block}`
                           className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
                         />
                       </div>
+
                       <div className='space-y-2'>
-                        <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Command</label>
-                        <input
-                          type='text'
-                          value={newServerCommand}
-                          onChange={e => setNewServerCommand(e.target.value)}
-                          placeholder='npx'
-                          className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                        />
+                        <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Transport</label>
+                        <div className='flex items-center gap-2'>
+                          <button
+                            type='button'
+                            onClick={() => setNewServerTransport('stdio')}
+                            className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${
+                              newServerTransport === 'stdio'
+                                ? 'bg-blue-500 text-white border-blue-500'
+                                : 'bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600'
+                            }`}
+                          >
+                            Local (stdio)
+                          </button>
+                          <button
+                            type='button'
+                            onClick={() => setNewServerTransport('http')}
+                            className={`px-3 py-1.5 text-xs rounded-md border transition-colors ${
+                              newServerTransport === 'http'
+                                ? 'bg-blue-500 text-white border-blue-500'
+                                : 'bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-600'
+                            }`}
+                          >
+                            Remote (HTTP)
+                          </button>
+                        </div>
                       </div>
-                      <div className='space-y-2'>
-                        <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
-                          Arguments (space-separated)
-                        </label>
-                        <input
-                          type='text'
-                          value={newServerArgs}
-                          onChange={e => setNewServerArgs(e.target.value)}
-                          placeholder='-y @anthropic/mcp-server-filesystem /path/to/dir'
-                          className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                        />
-                      </div>
+
+                      {newServerTransport === 'stdio' ? (
+                        <>
+                          <div className='space-y-2'>
+                            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Command</label>
+                            <input
+                              type='text'
+                              value={newServerCommand}
+                              onChange={e => setNewServerCommand(e.target.value)}
+                              placeholder='npx'
+                              className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+                              Arguments (space-separated)
+                            </label>
+                            <input
+                              type='text'
+                              value={newServerArgs}
+                              onChange={e => setNewServerArgs(e.target.value)}
+                              placeholder='-y @anthropic/mcp-server-filesystem /path/to/dir'
+                              className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                            />
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className='space-y-2'>
+                            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>Remote URL</label>
+                            <input
+                              type='text'
+                              value={newServerUrl}
+                              onChange={e => setNewServerUrl(e.target.value)}
+                              placeholder='https://mcp.example.com/mcp'
+                              className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                            />
+                          </div>
+                          <div className='space-y-2'>
+                            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+                              Headers (JSON, optional)
+                            </label>
+                            <textarea
+                              value={newServerHeadersText}
+                              onChange={e => setNewServerHeadersText(e.target.value)}
+                              placeholder='{"Authorization":"Bearer <token>"}'
+                              rows={3}
+                              className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                            />
+                            <p className='text-[11px] text-neutral-500 dark:text-neutral-400'>
+                              Example: {`{"Authorization":"Bearer <token>","x-api-key":"abc123"}`}
+                            </p>
+                          </div>
+                        </>
+                      )}
+
                       <div className='flex items-center gap-2'>
                         <button
                           type='button'
                           onClick={handleAddMcpServer}
-                          disabled={!newServerName.trim() || !newServerCommand.trim()}
+                          disabled={
+                            !newServerName.trim() ||
+                            (newServerTransport === 'stdio' ? !newServerCommand.trim() : !newServerUrl.trim())
+                          }
                           className='px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
                         >
                           Add Server
@@ -1273,8 +1405,11 @@ ${block}`
                           onClick={() => {
                             setMcpAddMode(false)
                             setNewServerName('')
+                            setNewServerTransport('stdio')
                             setNewServerCommand('')
                             setNewServerArgs('')
+                            setNewServerUrl('')
+                            setNewServerHeadersText('')
                           }}
                           className='px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
                         >
@@ -1286,7 +1421,7 @@ ${block}`
 
                   {/* Help text */}
                   <p className='text-xs text-neutral-500 dark:text-neutral-500'>
-                    Example: Command "npx" with args "-y @modelcontextprotocol/server-filesystem /home/user/projects"
+                    Examples: Local stdio → Command "npx" + args "-y @modelcontextprotocol/server-filesystem /home/user/projects". Remote HTTP → URL "https://mcp.example.com/mcp" + optional headers JSON (Authorization, API keys, etc.).
                   </p>
 
                   {/* Connected Servers List */}
@@ -1316,6 +1451,9 @@ ${block}`
                                 <span className='font-medium text-sm text-neutral-900 dark:text-neutral-100'>
                                   {server.name}
                                 </span>
+                                <span className='text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400'>
+                                  {(server.transport || server.type || (server.url ? 'http' : 'stdio')).toUpperCase()}
+                                </span>
                                 <span
                                   className={`text-xs px-1.5 py-0.5 rounded ${
                                     server.status === 'connected'
@@ -1336,8 +1474,13 @@ ${block}`
                                 )}
                               </div>
                               <p className='text-xs text-neutral-500 dark:text-neutral-400 truncate mt-0.5'>
-                                {server.command} {server.args.join(' ')}
+                                {server.url || `${server.command || ''} ${(server.args || []).join(' ')}`.trim()}
                               </p>
+                              {server.headers && Object.keys(server.headers).length > 0 && (
+                                <p className='text-xs text-neutral-500 dark:text-neutral-400 mt-0.5'>
+                                  Headers: {Object.keys(server.headers).join(', ')}
+                                </p>
+                              )}
                               {server.error && (
                                 <p className='text-xs text-red-500 dark:text-red-400 mt-0.5'>{server.error}</p>
                               )}

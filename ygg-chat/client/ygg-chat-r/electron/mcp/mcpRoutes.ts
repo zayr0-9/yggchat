@@ -135,20 +135,10 @@ export function registerMcpRoutes(app: Express): void {
   app.post('/api/mcp/servers', async (req, res) => {
     try {
       await mcpManager.initialize()
-      const { name, command, args, env, enabled, autoStart } = req.body
+      const { name, command, args, env, enabled, autoStart, url, headers, transport, type } = req.body
 
       if (!name || typeof name !== 'string') {
         res.status(400).json({ success: false, error: 'Missing "name" in request body' })
-        return
-      }
-
-      if (!command || typeof command !== 'string') {
-        res.status(400).json({ success: false, error: 'Missing "command" in request body' })
-        return
-      }
-
-      if (!Array.isArray(args)) {
-        res.status(400).json({ success: false, error: '"args" must be an array' })
         return
       }
 
@@ -158,13 +148,54 @@ export function registerMcpRoutes(app: Express): void {
         return
       }
 
+      const resolvedTransport: 'stdio' | 'http' =
+        transport === 'http' || type === 'http' || (typeof url === 'string' && url.trim().length > 0) ? 'http' : 'stdio'
+
+      if (resolvedTransport === 'http') {
+        if (!url || typeof url !== 'string') {
+          res.status(400).json({ success: false, error: 'Missing "url" in request body for HTTP MCP server' })
+          return
+        }
+
+        try {
+          new URL(url)
+        } catch {
+          res.status(400).json({ success: false, error: '"url" must be a valid URL' })
+          return
+        }
+      } else {
+        if (!command || typeof command !== 'string') {
+          res.status(400).json({ success: false, error: 'Missing "command" in request body for stdio MCP server' })
+          return
+        }
+
+        if (args !== undefined && !Array.isArray(args)) {
+          res.status(400).json({ success: false, error: '"args" must be an array' })
+          return
+        }
+      }
+
+      if (env !== undefined && (typeof env !== 'object' || env === null || Array.isArray(env))) {
+        res.status(400).json({ success: false, error: '"env" must be an object' })
+        return
+      }
+
+      if (headers !== undefined && (typeof headers !== 'object' || headers === null || Array.isArray(headers))) {
+        res.status(400).json({ success: false, error: '"headers" must be an object' })
+        return
+      }
+
       const config: McpServerConfig = {
         name,
-        command,
-        args,
-        env: env || {},
         enabled: enabled !== false,
         autoStart: autoStart !== false,
+        transport: resolvedTransport,
+        type: resolvedTransport,
+        command: typeof command === 'string' ? command : undefined,
+        args: Array.isArray(args) ? args : [],
+        env: env || undefined,
+        url: typeof url === 'string' ? url : undefined,
+        headers: headers || undefined,
       }
 
       await mcpManager.addServer(config)
@@ -183,7 +214,37 @@ export function registerMcpRoutes(app: Express): void {
   app.put('/api/mcp/servers/:name', async (req, res) => {
     try {
       await mcpManager.initialize()
-      const { command, args, env, enabled, autoStart } = req.body
+      const { command, args, env, enabled, autoStart, url, headers, transport, type } = req.body
+
+      if (args !== undefined && !Array.isArray(args)) {
+        res.status(400).json({ success: false, error: '"args" must be an array' })
+        return
+      }
+
+      if (env !== undefined && (typeof env !== 'object' || env === null || Array.isArray(env))) {
+        res.status(400).json({ success: false, error: '"env" must be an object' })
+        return
+      }
+
+      if (headers !== undefined && (typeof headers !== 'object' || headers === null || Array.isArray(headers))) {
+        res.status(400).json({ success: false, error: '"headers" must be an object' })
+        return
+      }
+
+      if (url !== undefined && typeof url !== 'string') {
+        res.status(400).json({ success: false, error: '"url" must be a string' })
+        return
+      }
+
+      if (transport !== undefined && transport !== 'stdio' && transport !== 'http') {
+        res.status(400).json({ success: false, error: '"transport" must be "stdio" or "http"' })
+        return
+      }
+
+      if (type !== undefined && type !== 'stdio' && type !== 'http') {
+        res.status(400).json({ success: false, error: '"type" must be "stdio" or "http"' })
+        return
+      }
 
       const updates: Partial<McpServerConfig> = {}
       if (command !== undefined) updates.command = command
@@ -191,6 +252,10 @@ export function registerMcpRoutes(app: Express): void {
       if (env !== undefined) updates.env = env
       if (enabled !== undefined) updates.enabled = enabled
       if (autoStart !== undefined) updates.autoStart = autoStart
+      if (url !== undefined) updates.url = url
+      if (headers !== undefined) updates.headers = headers
+      if (transport !== undefined) updates.transport = transport
+      if (type !== undefined) updates.type = type
 
       await mcpManager.updateServer(req.params.name, updates)
 
