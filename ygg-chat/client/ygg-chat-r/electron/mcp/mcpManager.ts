@@ -2,17 +2,34 @@
 // MCP (Model Context Protocol) server manager
 // Manages connections to MCP servers that provide tools, resources, and prompts
 
-import { app } from 'electron'
+import { app, shell } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import fs from 'fs/promises'
 import path from 'path'
 import { EventEmitter } from 'events'
+import { createServer, type Server as HttpServer } from 'http'
+import { randomBytes, createHash } from 'crypto'
 
 // ============================================================================
 // Types and Interfaces
 // ============================================================================
 
 export type McpServerTransport = 'stdio' | 'http'
+
+export interface McpOAuthConfig {
+  resourceMetadataUrl?: string
+  resource?: string
+  authorizationServer?: string
+  authorizationEndpoint?: string
+  tokenEndpoint?: string
+  registrationEndpoint?: string
+  scopes?: string[]
+  clientId?: string
+  clientSecret?: string
+  accessToken?: string
+  refreshToken?: string
+  expiresAt?: number
+}
 
 export interface McpServerConfig {
   name: string
@@ -31,6 +48,9 @@ export interface McpServerConfig {
   // remote HTTP transport
   url?: string
   headers?: Record<string, string>
+
+  // OAuth state for remote transport
+  oauth?: McpOAuthConfig
 }
 
 export interface McpToolDefinition {
@@ -114,6 +134,27 @@ interface JsonRpcNotification {
   params?: any
 }
 
+interface OAuthProtectedResourceMetadata {
+  resource?: string
+  authorization_servers?: string[]
+  scopes_supported?: string[]
+}
+
+interface OAuthAuthorizationServerMetadata {
+  issuer?: string
+  authorization_endpoint: string
+  token_endpoint: string
+  registration_endpoint?: string
+}
+
+interface OAuthTokenResponse {
+  access_token: string
+  refresh_token?: string
+  expires_in?: number
+  token_type?: string
+  scope?: string
+}
+
 function normalizeTransport(value: unknown): McpServerTransport | undefined {
   if (value === 'http') return 'http'
   if (value === 'stdio') return 'stdio'
@@ -139,6 +180,8 @@ class McpClient extends EventEmitter {
   private buffer = ''
   private sessionId?: string
   private readonly transport: McpServerTransport
+  private oauth?: McpOAuthConfig
+  private authFlowPromise: Promise<void> | null = null
 
   public status: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected'
   public error?: string
@@ -152,6 +195,7 @@ class McpClient extends EventEmitter {
   ) {
     super()
     this.transport = resolveTransport(config)
+    this.oauth = config.oauth ? { ...config.oauth } : undefined
   }
 
   async connect(): Promise<void> {
@@ -283,7 +327,7 @@ class McpClient extends EventEmitter {
 
   private async initialize(): Promise<void> {
     const result = await this.sendRequest('initialize', {
-      protocolVersion: '2024-11-05',
+      protocolVersion: '2025-06-18',
       capabilities: {
         roots: { listChanged: true },
         sampling: {},
@@ -438,7 +482,7 @@ class McpClient extends EventEmitter {
     })
   }
 
-  private async sendHttpRequest(method: string, params?: any): Promise<any> {
+  private async sendHttpRequest(method: string, params?: any, allowAuthRetry = true): Promise<any> {
     if (!this.config.url) {
       throw new Error(`MCP HTTP server '${this.name}' is missing url`)
     }
@@ -455,15 +499,7 @@ class McpClient extends EventEmitter {
     const timeout = setTimeout(() => controller.abort(), 30000)
 
     try {
-      const headers: Record<string, string> = {
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        ...(this.config.headers || {}),
-      }
-
-      if (this.sessionId) {
-        headers['mcp-session-id'] = this.sessionId
-      }
+      const headers = this.buildHttpHeaders()
 
       const response = await fetch(this.config.url, {
         method: 'POST',
@@ -478,9 +514,23 @@ class McpClient extends EventEmitter {
       }
 
       const payload = await response.text()
+
+      if (response.status === 401 && allowAuthRetry) {
+        const authenticated = await this.tryHandleHttpUnauthorized(response)
+        if (authenticated) {
+          return this.sendHttpRequest(method, params, false)
+        }
+      }
+
       if (!response.ok) {
+        const wwwAuthenticate = response.headers.get('www-authenticate')
+        const oauthHint =
+          response.status === 401 && wwwAuthenticate
+            ? ` | OAuth required. WWW-Authenticate: ${wwwAuthenticate}`
+            : ''
+
         throw new Error(
-          `MCP HTTP request failed (${response.status} ${response.statusText})${payload ? `: ${payload.slice(0, 400)}` : ''}`
+          `MCP HTTP request failed (${response.status} ${response.statusText})${payload ? `: ${payload.slice(0, 400)}` : ''}${oauthHint}`
         )
       }
 
@@ -509,7 +559,464 @@ class McpClient extends EventEmitter {
     }
   }
 
+  private buildHttpHeaders(): Record<string, string> {
+
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      'mcp-protocol-version': '2025-06-18',
+      ...(this.config.headers || {}),
+    }
+
+    if (this.sessionId) {
+      headers['mcp-session-id'] = this.sessionId
+    }
+
+    if (!headers.Authorization && this.oauth?.accessToken) {
+      headers.Authorization = `Bearer ${this.oauth.accessToken}`
+    }
+
+    return headers
+  }
+
+  private extractWwwAuthenticateParam(headerValue: string | null, paramName: string): string | undefined {
+    if (!headerValue) return undefined
+    const pattern = new RegExp(`${paramName}="([^"]+)"`, 'i')
+    const match = headerValue.match(pattern)
+    return match?.[1]
+  }
+
+  private async tryHandleHttpUnauthorized(response: Response): Promise<boolean> {
+    if (this.transport !== 'http') return false
+
+    // If caller explicitly configured a static Authorization header and we don't have OAuth state,
+    // do not override with interactive auth.
+    if (this.config.headers?.Authorization && !this.oauth?.refreshToken && !this.oauth?.accessToken) {
+      return false
+    }
+
+    const wwwAuthenticate = response.headers.get('www-authenticate')
+    const resourceMetadataUrl = this.extractWwwAuthenticateParam(wwwAuthenticate, 'resource_metadata')
+
+    try {
+      await this.ensureOAuthAccessToken(resourceMetadataUrl)
+      return Boolean(this.oauth?.accessToken)
+    } catch (error) {
+      console.error(`[MCP:${this.name}] OAuth flow failed:`, error)
+      return false
+    }
+  }
+
+  private async ensureOAuthAccessToken(resourceMetadataUrlHint?: string): Promise<void> {
+    if (!this.config.url) {
+      throw new Error(`MCP HTTP server '${this.name}' is missing url`)
+    }
+
+    if (this.authFlowPromise) {
+      return this.authFlowPromise
+    }
+
+    this.authFlowPromise = (async () => {
+      this.oauth = this.oauth || this.config.oauth || {}
+
+      const now = Date.now()
+      if (this.oauth.accessToken && this.oauth.expiresAt && this.oauth.expiresAt > now + 60_000) {
+        this.applyAccessToken(this.oauth.accessToken)
+        return
+      }
+
+      if (
+        this.oauth.refreshToken &&
+        this.oauth.tokenEndpoint &&
+        this.oauth.clientId &&
+        this.oauth.clientSecret
+      ) {
+        try {
+          await this.refreshOAuthToken()
+          return
+        } catch (error) {
+          console.warn(`[MCP:${this.name}] Refresh token failed, falling back to browser auth:`, error)
+        }
+      }
+
+      await this.runInteractiveOAuthFlow(resourceMetadataUrlHint)
+    })()
+
+    try {
+      await this.authFlowPromise
+    } finally {
+      this.authFlowPromise = null
+    }
+  }
+
+  private async runInteractiveOAuthFlow(resourceMetadataUrlHint?: string): Promise<void> {
+    if (!this.config.url) {
+      throw new Error(`MCP HTTP server '${this.name}' is missing url`)
+    }
+
+    const state = randomBytes(24).toString('hex')
+    const codeVerifier = randomBytes(32).toString('base64url')
+    const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
+
+    const callbackServer = await this.createOAuthCallbackServer(state)
+
+    try {
+      const oauthMeta = await this.discoverOAuthMetadata(resourceMetadataUrlHint)
+      const client = await this.registerDynamicClient(oauthMeta.registrationEndpoint, callbackServer.redirectUri)
+
+      const authUrl = new URL(oauthMeta.authorizationEndpoint)
+      authUrl.searchParams.set('response_type', 'code')
+      authUrl.searchParams.set('client_id', client.clientId)
+      authUrl.searchParams.set('redirect_uri', callbackServer.redirectUri)
+      authUrl.searchParams.set('state', state)
+      authUrl.searchParams.set('code_challenge', codeChallenge)
+      authUrl.searchParams.set('code_challenge_method', 'S256')
+      authUrl.searchParams.set('resource', oauthMeta.resource)
+      if (oauthMeta.scope) {
+        authUrl.searchParams.set('scope', oauthMeta.scope)
+      }
+
+      await shell.openExternal(authUrl.toString())
+
+      const authCode = await callbackServer.waitForCode(5 * 60_000)
+
+      const token = await this.exchangeAuthorizationCodeForToken({
+        code: authCode,
+        codeVerifier,
+        redirectUri: callbackServer.redirectUri,
+        tokenEndpoint: oauthMeta.tokenEndpoint,
+        clientId: client.clientId,
+        clientSecret: client.clientSecret,
+        resource: oauthMeta.resource,
+      })
+
+      this.oauth = {
+        ...this.oauth,
+        resourceMetadataUrl: oauthMeta.resourceMetadataUrl,
+        resource: oauthMeta.resource,
+        authorizationServer: oauthMeta.authorizationServer,
+        authorizationEndpoint: oauthMeta.authorizationEndpoint,
+        tokenEndpoint: oauthMeta.tokenEndpoint,
+        registrationEndpoint: oauthMeta.registrationEndpoint,
+        scopes: oauthMeta.scope ? oauthMeta.scope.split(' ').filter(Boolean) : this.oauth?.scopes,
+        clientId: client.clientId,
+        clientSecret: client.clientSecret,
+        accessToken: token.access_token,
+        refreshToken: token.refresh_token || this.oauth?.refreshToken,
+        expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined,
+      }
+
+      this.config.oauth = { ...this.oauth }
+      this.applyAccessToken(token.access_token)
+    } finally {
+      await callbackServer.close().catch(() => undefined)
+    }
+  }
+
+  private async discoverOAuthMetadata(resourceMetadataUrlHint?: string): Promise<{
+    resourceMetadataUrl: string
+    resource: string
+    authorizationServer: string
+    authorizationEndpoint: string
+    tokenEndpoint: string
+    registrationEndpoint?: string
+    scope?: string
+  }> {
+    if (!this.config.url) {
+      throw new Error(`MCP HTTP server '${this.name}' is missing url`)
+    }
+
+    const mcpUrl = new URL(this.config.url)
+    const resourceMetadataUrl =
+      resourceMetadataUrlHint ||
+      this.oauth?.resourceMetadataUrl ||
+      `${mcpUrl.origin}/.well-known/oauth-protected-resource${mcpUrl.pathname}${mcpUrl.search}`
+
+    const protectedResource = await this.fetchJson<OAuthProtectedResourceMetadata>(resourceMetadataUrl)
+    const authorizationServer = protectedResource.authorization_servers?.[0]
+    if (!authorizationServer) {
+      throw new Error('OAuth discovery failed: authorization server not provided by protected resource metadata')
+    }
+
+    const authServerMetadataUrl = `${authorizationServer.replace(/\/+$/, '')}/.well-known/oauth-authorization-server`
+    const authServerMetadata = await this.fetchJson<OAuthAuthorizationServerMetadata>(authServerMetadataUrl)
+
+    if (!authServerMetadata.authorization_endpoint || !authServerMetadata.token_endpoint) {
+      throw new Error('OAuth discovery failed: authorization/token endpoints missing in auth server metadata')
+    }
+
+    const scope =
+      this.oauth?.scopes?.join(' ') ||
+      (Array.isArray(protectedResource.scopes_supported) && protectedResource.scopes_supported.length > 0
+        ? protectedResource.scopes_supported.join(' ')
+        : undefined)
+
+    return {
+      resourceMetadataUrl,
+      resource: protectedResource.resource || this.config.url,
+      authorizationServer,
+      authorizationEndpoint: authServerMetadata.authorization_endpoint,
+      tokenEndpoint: authServerMetadata.token_endpoint,
+      registrationEndpoint: authServerMetadata.registration_endpoint,
+      scope,
+    }
+  }
+
+  private async fetchJson<T>(url: string): Promise<T> {
+    const response = await fetch(url, {
+      headers: {
+        accept: 'application/json',
+      },
+    })
+
+    const body = await response.text()
+    if (!response.ok) {
+      throw new Error(`Request failed for ${url}: ${response.status} ${response.statusText}${body ? ` - ${body.slice(0, 300)}` : ''}`)
+    }
+
+    try {
+      return JSON.parse(body) as T
+    } catch (error) {
+      throw new Error(`Invalid JSON response from ${url}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  private async registerDynamicClient(
+    registrationEndpoint: string | undefined,
+    redirectUri: string
+  ): Promise<{ clientId: string; clientSecret: string }> {
+    if (!registrationEndpoint) {
+      if (this.oauth?.clientId && this.oauth?.clientSecret) {
+        return { clientId: this.oauth.clientId, clientSecret: this.oauth.clientSecret }
+      }
+      throw new Error('Authorization server does not expose dynamic client registration endpoint')
+    }
+
+    const response = await fetch(registrationEndpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        client_name: `Ygg Chat MCP (${this.name})`,
+        redirect_uris: [redirectUri],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'client_secret_post',
+      }),
+    })
+
+    const body = await response.text()
+    if (!response.ok) {
+      throw new Error(
+        `Dynamic client registration failed (${response.status} ${response.statusText})${body ? `: ${body.slice(0, 400)}` : ''}`
+      )
+    }
+
+    const payload = JSON.parse(body) as { client_id?: string; client_secret?: string }
+    if (!payload.client_id || !payload.client_secret) {
+      throw new Error('Dynamic client registration response missing client_id/client_secret')
+    }
+
+    return { clientId: payload.client_id, clientSecret: payload.client_secret }
+  }
+
+  private async exchangeAuthorizationCodeForToken(input: {
+    code: string
+    codeVerifier: string
+    redirectUri: string
+    tokenEndpoint: string
+    clientId: string
+    clientSecret: string
+    resource: string
+  }): Promise<OAuthTokenResponse> {
+    const params = new URLSearchParams()
+    params.set('grant_type', 'authorization_code')
+    params.set('code', input.code)
+    params.set('redirect_uri', input.redirectUri)
+    params.set('code_verifier', input.codeVerifier)
+    params.set('client_id', input.clientId)
+    params.set('client_secret', input.clientSecret)
+    params.set('resource', input.resource)
+
+    const response = await fetch(input.tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+      },
+      body: params.toString(),
+    })
+
+    const body = await response.text()
+    if (!response.ok) {
+      throw new Error(
+        `Token exchange failed (${response.status} ${response.statusText})${body ? `: ${body.slice(0, 400)}` : ''}`
+      )
+    }
+
+    const token = JSON.parse(body) as OAuthTokenResponse
+    if (!token.access_token) {
+      throw new Error('Token exchange response missing access_token')
+    }
+
+    return token
+  }
+
+  private async refreshOAuthToken(): Promise<void> {
+    if (!this.oauth?.refreshToken || !this.oauth?.tokenEndpoint || !this.oauth?.clientId || !this.oauth?.clientSecret) {
+      throw new Error('Missing OAuth refresh token configuration')
+    }
+
+    const params = new URLSearchParams()
+    params.set('grant_type', 'refresh_token')
+    params.set('refresh_token', this.oauth.refreshToken)
+    params.set('client_id', this.oauth.clientId)
+    params.set('client_secret', this.oauth.clientSecret)
+    if (this.oauth.resource) {
+      params.set('resource', this.oauth.resource)
+    }
+
+    const response = await fetch(this.oauth.tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json',
+      },
+      body: params.toString(),
+    })
+
+    const body = await response.text()
+    if (!response.ok) {
+      throw new Error(
+        `Refresh token request failed (${response.status} ${response.statusText})${body ? `: ${body.slice(0, 400)}` : ''}`
+      )
+    }
+
+    const token = JSON.parse(body) as OAuthTokenResponse
+    if (!token.access_token) {
+      throw new Error('Refresh token response missing access_token')
+    }
+
+    this.oauth = {
+      ...this.oauth,
+      accessToken: token.access_token,
+      refreshToken: token.refresh_token || this.oauth.refreshToken,
+      expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined,
+    }
+
+    this.config.oauth = { ...this.oauth }
+    this.applyAccessToken(token.access_token)
+  }
+
+  private applyAccessToken(accessToken: string): void {
+    this.config.headers = {
+      ...(this.config.headers || {}),
+      Authorization: `Bearer ${accessToken}`,
+    }
+  }
+
+  private async createOAuthCallbackServer(expectedState: string): Promise<{
+    redirectUri: string
+    waitForCode: (timeoutMs?: number) => Promise<string>
+    close: () => Promise<void>
+  }> {
+    const callbackPath = '/mcp/oauth/callback'
+    let resolver: ((code: string) => void) | null = null
+    let rejecter: ((err: Error) => void) | null = null
+
+    const callbackPromise = new Promise<string>((resolve, reject) => {
+      resolver = resolve
+      rejecter = reject
+    })
+
+    const server: HttpServer = createServer((req, res) => {
+      try {
+        const requestUrl = new URL(req.url || callbackPath, `http://${req.headers.host || '127.0.0.1'}`)
+        if (requestUrl.pathname !== callbackPath) {
+          res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
+          res.end('Not found')
+          return
+        }
+
+        const state = requestUrl.searchParams.get('state')
+        const code = requestUrl.searchParams.get('code')
+        const error = requestUrl.searchParams.get('error')
+        const errorDescription = requestUrl.searchParams.get('error_description')
+
+        if (!state || state !== expectedState) {
+          res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' })
+          res.end('Invalid OAuth state. You can close this tab and retry from the app.')
+          rejecter?.(new Error('Invalid OAuth state received'))
+          return
+        }
+
+        if (error) {
+          res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' })
+          res.end(`OAuth authorization failed: ${errorDescription || error}. You can close this tab.`)
+          rejecter?.(new Error(`OAuth authorization failed: ${errorDescription || error}`))
+          return
+        }
+
+        if (!code) {
+          res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' })
+          res.end('Missing authorization code. You can close this tab and retry from the app.')
+          rejecter?.(new Error('OAuth callback missing authorization code'))
+          return
+        }
+
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        res.end('<html><body><h2>MCP authorization complete.</h2><p>You can close this tab and return to Ygg Chat.</p></body></html>')
+        resolver?.(code)
+      } catch (error) {
+        rejecter?.(error instanceof Error ? error : new Error(String(error)))
+      }
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject)
+      server.listen(0, '127.0.0.1', () => {
+        server.removeListener('error', reject)
+        resolve()
+      })
+    })
+
+    const address = server.address() as { port?: number } | null
+    const port = address?.port
+    if (!port) {
+      server.close()
+      throw new Error('Failed to start OAuth callback server')
+    }
+
+    return {
+      redirectUri: `http://127.0.0.1:${port}${callbackPath}`,
+      waitForCode: (timeoutMs = 5 * 60_000) =>
+        new Promise<string>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Timed out waiting for OAuth callback'))
+          }, timeoutMs)
+
+          callbackPromise
+            .then(code => {
+              clearTimeout(timeout)
+              resolve(code)
+            })
+            .catch(error => {
+              clearTimeout(timeout)
+              reject(error)
+            })
+        }),
+      close: async () => {
+        await new Promise<void>(resolve => {
+          server.close(() => resolve())
+        })
+      },
+    }
+  }
+
   private resolveJsonRpcFromSse(payload: string, expectedId: number | string): any {
+
     const events = payload.split(/\r?\n\r?\n/)
     const parsedEvents: any[] = []
 
@@ -614,6 +1121,7 @@ class McpClient extends EventEmitter {
     const headers: Record<string, string> = {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',
+      'mcp-protocol-version': '2025-06-18',
       ...(this.config.headers || {}),
     }
 
@@ -761,6 +1269,7 @@ class McpManager extends EventEmitter {
         env: serverConfig.env,
         url: serverConfig.url,
         headers: serverConfig.headers,
+        oauth: serverConfig.oauth,
       }
     })
   }
@@ -807,10 +1316,32 @@ class McpManager extends EventEmitter {
         env: config.env,
         url: config.url,
         headers: config.headers,
+        oauth: config.oauth,
       }
     }
 
     await fs.writeFile(this.configPath, JSON.stringify(configFile, null, 2), 'utf-8')
+  }
+
+  private async persistClientConfig(name: string): Promise<void> {
+    try {
+      const client = this.clients.get(name)
+      if (!client) return
+
+      const configs = await this.loadConfig()
+      const index = configs.findIndex(c => c.name === name)
+      if (index === -1) return
+
+      configs[index] = {
+        ...configs[index],
+        ...client.config,
+        name: configs[index].name,
+      }
+
+      await this.saveConfig(configs, this.settings)
+    } catch (error) {
+      console.warn(`[McpManager] Failed to persist runtime config for ${name}:`, error)
+    }
   }
 
   async updateSettings(updates: { lazyStart?: boolean }): Promise<{ lazyStart: boolean }> {
@@ -853,6 +1384,9 @@ class McpManager extends EventEmitter {
 
     client.on('statusChange', (status) => {
       this.emit('serverStatusChange', { name: config.name, status })
+      if (status === 'connected') {
+        void this.persistClientConfig(config.name)
+      }
     })
 
     this.clients.set(config.name, client)

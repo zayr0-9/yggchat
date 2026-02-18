@@ -93,11 +93,27 @@ export function registerMcpRoutes(app: Express): void {
       const configs = await mcpManager.getConfigs()
       const status = mcpManager.getStatus()
 
-      // Merge config with status
+      // Merge config with status (sanitize secrets)
       const servers = configs.map(config => {
         const serverStatus = status.find(s => s.name === config.name)
+
+        const sanitizedHeaders = config.headers
+          ? Object.fromEntries(Object.keys(config.headers).map(key => [key, '<redacted>']))
+          : undefined
+
+        const oauth = config.oauth
+          ? {
+              authorizationServer: config.oauth.authorizationServer,
+              hasAccessToken: Boolean(config.oauth.accessToken),
+              hasRefreshToken: Boolean(config.oauth.refreshToken),
+              expiresAt: config.oauth.expiresAt,
+            }
+          : undefined
+
         return {
           ...config,
+          headers: sanitizedHeaders,
+          oauth,
           status: serverStatus?.status || 'disconnected',
           error: serverStatus?.error,
           toolCount: serverStatus?.tools.length || 0,
