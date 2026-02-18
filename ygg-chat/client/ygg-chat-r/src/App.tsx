@@ -18,6 +18,7 @@ import {
   Homepage,
   LandingPage,
   Login,
+  LoggingPage,
   PaymentPage,
   PaymentPlans,
   PrivacyPolicy,
@@ -66,9 +67,10 @@ const RIGHTBAR_HIDDEN_ROUTES = new Set([
   '/refund-policy',
   '/privacy',
   '/infrastructure',
+  '/logging',
 ])
 
-const SIDEBAR_VISIBLE_ROUTE_PATTERNS = [/^\/homepage$/, /^\/conversationPage$/, /^\/chat\/[^/]+\/[^/]+$/]
+const SIDEBAR_VISIBLE_ROUTE_PATTERNS = [/^\/homepage$/, /^\/conversationPage$/, /^\/chat\/[^/]+\/[^/]+$/, /^\/logging$/]
 
 const getRouteAnimationKey = (pathname: string) => {
   if (/^\/chat\/[^/]+\/[^/]+$/.test(pathname)) {
@@ -225,6 +227,14 @@ function AnimatedRoutes() {
           element={
             <ProtectedRoute>
               <PaymentPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path='/logging'
+          element={
+            <ProtectedRoute>
+              <LoggingPage />
             </ProtectedRoute>
           }
         />

@@ -4341,6 +4341,503 @@ function setupServer() {
     }
   })
 
+  // Local analytics dashboard endpoint
+  app.get('/api/local/analytics/dashboard', (req, res) => {
+    try {
+      const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+      const round = (value: number, digits = 6) => {
+        const factor = 10 ** digits
+        return Math.round(value * factor) / factor
+      }
+      const toNumber = (value: unknown) => {
+        if (typeof value === 'number' && Number.isFinite(value)) return value
+        if (typeof value === 'string') {
+          const parsed = Number(value)
+          return Number.isFinite(parsed) ? parsed : 0
+        }
+        return 0
+      }
+      const parseTimestamp = (value: unknown) => {
+        if (typeof value !== 'string' || value.trim().length === 0) return null
+        const ms = Date.parse(value)
+        return Number.isNaN(ms) ? null : ms
+      }
+      const dayKey = (value: unknown) => {
+        const ms = parseTimestamp(value)
+        if (ms === null) return 'unknown'
+        return new Date(ms).toISOString().slice(0, 10)
+      }
+      const parseToolCalls = (input: unknown): any[] => {
+        if (Array.isArray(input)) return input
+        if (input && typeof input === 'object') return [input]
+        if (typeof input === 'string') {
+          try {
+            return parseToolCalls(JSON.parse(input))
+          } catch {
+            return []
+          }
+        }
+        return []
+      }
+      const extractToolName = (toolCall: unknown): string | null => {
+        if (!toolCall || typeof toolCall !== 'object') return null
+        const record = toolCall as Record<string, unknown>
+        const direct = typeof record.name === 'string' ? record.name : null
+        const functionName =
+          record.function && typeof record.function === 'object'
+            ? typeof (record.function as Record<string, unknown>).name === 'string'
+              ? ((record.function as Record<string, unknown>).name as string)
+              : null
+            : null
+        const name = direct || functionName
+        return name && name.trim() ? name.trim() : null
+      }
+
+      const rangeDaysParam = Number(req.query.rangeDays)
+      const rangeDays = Number.isFinite(rangeDaysParam) ? clamp(Math.trunc(rangeDaysParam), 1, 365) : 30
+      const projectId = typeof req.query.projectId === 'string' && req.query.projectId.trim() ? req.query.projectId.trim() : null
+      const conversationId =
+        typeof req.query.conversationId === 'string' && req.query.conversationId.trim()
+          ? req.query.conversationId.trim()
+          : null
+      const modelFilter = typeof req.query.model === 'string' && req.query.model.trim() ? req.query.model.trim() : null
+      const toolNameFilter = typeof req.query.toolName === 'string' && req.query.toolName.trim() ? req.query.toolName.trim() : null
+      const toolStatusFilter =
+        typeof req.query.toolStatus === 'string' && req.query.toolStatus.trim() ? req.query.toolStatus.trim() : null
+
+      const sinceMs = Date.now() - rangeDays * 24 * 60 * 60 * 1000
+
+      const projects = db!
+        .prepare('SELECT id, name, created_at, storage_mode FROM projects ORDER BY created_at ASC')
+        .all() as Array<{ id: string; name: string; created_at: string; storage_mode: 'cloud' | 'local' | null }>
+
+      const conversations = db!
+        .prepare('SELECT id, project_id, title, created_at, storage_mode FROM conversations ORDER BY created_at ASC')
+        .all() as Array<{
+        id: string
+        project_id: string | null
+        title: string | null
+        created_at: string
+        storage_mode: 'cloud' | 'local' | null
+      }>
+
+      const messages = db!
+        .prepare('SELECT id, conversation_id, parent_id, role, model_name, tool_calls, created_at FROM messages ORDER BY created_at ASC')
+        .all() as Array<{
+        id: string
+        conversation_id: string
+        parent_id: string | null
+        role: string
+        model_name: string | null
+        tool_calls: string | null
+        created_at: string
+      }>
+
+      const providerCosts = db!
+        .prepare(
+          `SELECT 
+             pc.id,
+             pc.message_id,
+             pc.prompt_tokens,
+             pc.completion_tokens,
+             pc.reasoning_tokens,
+             pc.approx_cost,
+             pc.api_credit_cost,
+             pc.created_at,
+             m.conversation_id,
+             m.model_name
+           FROM provider_cost pc
+           LEFT JOIN messages m ON m.id = pc.message_id
+           ORDER BY pc.created_at ASC`
+        )
+        .all() as Array<{
+        id: string
+        message_id: string
+        prompt_tokens: number
+        completion_tokens: number
+        reasoning_tokens: number
+        approx_cost: number
+        api_credit_cost: number
+        created_at: string
+        conversation_id: string | null
+        model_name: string | null
+      }>
+
+      let toolJobs: Array<{
+        id: string
+        tool_name: string
+        status: string
+        conversation_id: string | null
+        created_at: string
+        started_at: string | null
+        completed_at: string | null
+        error: string | null
+      }> = []
+
+      try {
+        toolJobs = db!
+          .prepare(
+            'SELECT id, tool_name, status, conversation_id, created_at, started_at, completed_at, error FROM tool_jobs ORDER BY created_at ASC'
+          )
+          .all() as typeof toolJobs
+      } catch {
+        toolJobs = []
+      }
+
+      const scopedProjects = projects.filter(project => {
+        if (projectId && project.id !== projectId) return false
+        const created = parseTimestamp(project.created_at)
+        return created === null ? false : created >= sinceMs
+      })
+
+      const scopedConversations = conversations.filter(conversation => {
+        if (projectId && conversation.project_id !== projectId) return false
+        if (conversationId && conversation.id !== conversationId) return false
+        const created = parseTimestamp(conversation.created_at)
+        return created === null ? false : created >= sinceMs
+      })
+      const scopedConversationIdSet = new Set(scopedConversations.map(conversation => conversation.id))
+
+      const scopedMessages = messages.filter(message => {
+        if (!scopedConversationIdSet.has(message.conversation_id)) return false
+        const created = parseTimestamp(message.created_at)
+        return created === null ? false : created >= sinceMs
+      })
+
+      const filteredMessages = scopedMessages.filter(message => {
+        if (!modelFilter) return true
+        return message.model_name === modelFilter
+      })
+
+      const scopedProviderCosts = providerCosts.filter(cost => {
+        const created = parseTimestamp(cost.created_at)
+        if (created === null || created < sinceMs) return false
+        if (conversationId && cost.conversation_id !== conversationId) return false
+        if (projectId && cost.conversation_id) {
+          return scopedConversationIdSet.has(cost.conversation_id)
+        }
+        if (projectId && !cost.conversation_id) return false
+        return true
+      })
+
+      const filteredProviderCosts = scopedProviderCosts.filter(cost => {
+        if (!modelFilter) return true
+        return (cost.model_name || 'unknown') === modelFilter
+      })
+
+      const requestedToolCalls = filteredMessages.flatMap(message =>
+        parseToolCalls(message.tool_calls)
+          .map(call => extractToolName(call))
+          .filter((name): name is string => Boolean(name))
+      )
+
+      const filteredRequestedToolCalls = toolNameFilter
+        ? requestedToolCalls.filter(toolName => toolName === toolNameFilter)
+        : requestedToolCalls
+
+      const scopedToolJobs = toolJobs.filter(job => {
+        const created = parseTimestamp(job.created_at)
+        if (created === null || created < sinceMs) return false
+        if (conversationId && job.conversation_id !== conversationId) return false
+        if (projectId && job.conversation_id && !scopedConversationIdSet.has(job.conversation_id)) return false
+        if (projectId && !job.conversation_id) return false
+        if (toolNameFilter && job.tool_name !== toolNameFilter) return false
+        if (toolStatusFilter && job.status !== toolStatusFilter) return false
+        return true
+      })
+
+      const messageById = new Map(filteredMessages.map(message => [message.id, message]))
+      const messageCostIdSet = new Set(filteredProviderCosts.map(cost => cost.message_id))
+
+      const messageCountByRole = filteredMessages.reduce<Record<string, number>>((acc, message) => {
+        acc[message.role] = (acc[message.role] || 0) + 1
+        return acc
+      }, {})
+
+      const messagesPerDay = filteredMessages.reduce<Record<string, number>>((acc, message) => {
+        const key = dayKey(message.created_at)
+        acc[key] = (acc[key] || 0) + 1
+        return acc
+      }, {})
+
+      const childrenCountByParent = new Map<string, number>()
+      for (const message of filteredMessages) {
+        if (!message.parent_id) continue
+        childrenCountByParent.set(message.parent_id, (childrenCountByParent.get(message.parent_id) || 0) + 1)
+      }
+      const branchPoints = Array.from(childrenCountByParent.values()).filter(count => count > 1).length
+
+      const depthMemo = new Map<string, number>()
+      const visiting = new Set<string>()
+      const computeDepth = (id: string): number => {
+        if (depthMemo.has(id)) return depthMemo.get(id) || 0
+        if (visiting.has(id)) return 0
+        visiting.add(id)
+        const current = messageById.get(id)
+        let depth = 0
+        if (current?.parent_id && messageById.has(current.parent_id)) {
+          depth = computeDepth(current.parent_id) + 1
+        }
+        visiting.delete(id)
+        depthMemo.set(id, depth)
+        return depth
+      }
+
+      const messageDepths = filteredMessages.map(message => computeDepth(message.id))
+      const maxDepth = messageDepths.length > 0 ? Math.max(...messageDepths) : 0
+      const avgDepth =
+        messageDepths.length > 0 ? messageDepths.reduce((sum, depth) => sum + depth, 0) / messageDepths.length : 0
+
+      const totalApproxCost = filteredProviderCosts.reduce((sum, row) => sum + toNumber(row.approx_cost), 0)
+      const totalApiCredits = filteredProviderCosts.reduce((sum, row) => sum + toNumber(row.api_credit_cost), 0)
+      const totalPromptTokens = filteredProviderCosts.reduce((sum, row) => sum + toNumber(row.prompt_tokens), 0)
+      const totalCompletionTokens = filteredProviderCosts.reduce((sum, row) => sum + toNumber(row.completion_tokens), 0)
+      const totalReasoningTokens = filteredProviderCosts.reduce((sum, row) => sum + toNumber(row.reasoning_tokens), 0)
+
+      const assistantMessageCount = filteredMessages.filter(message => message.role === 'assistant').length
+      const assistantWithCost = filteredMessages.filter(
+        message => message.role === 'assistant' && messageCostIdSet.has(message.id)
+      ).length
+
+      const dailyCostMap = new Map<
+        string,
+        {
+          date: string
+          approxCost: number
+          apiCredits: number
+          promptTokens: number
+          completionTokens: number
+          reasoningTokens: number
+        }
+      >()
+
+      for (const row of filteredProviderCosts) {
+        const key = dayKey(row.created_at)
+        const existing = dailyCostMap.get(key) || {
+          date: key,
+          approxCost: 0,
+          apiCredits: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          reasoningTokens: 0,
+        }
+        existing.approxCost += toNumber(row.approx_cost)
+        existing.apiCredits += toNumber(row.api_credit_cost)
+        existing.promptTokens += toNumber(row.prompt_tokens)
+        existing.completionTokens += toNumber(row.completion_tokens)
+        existing.reasoningTokens += toNumber(row.reasoning_tokens)
+        dailyCostMap.set(key, existing)
+      }
+
+      const dailySpend = Array.from(dailyCostMap.values())
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(row => ({
+          ...row,
+          approxCost: round(row.approxCost),
+          apiCredits: round(row.apiCredits),
+        }))
+
+      const modelStatsMap = new Map<string, { runs: number; totalApproxCost: number; totalApiCredits: number; tokens: number }>()
+      for (const row of filteredProviderCosts) {
+        const model = row.model_name || 'unknown'
+        const existing = modelStatsMap.get(model) || { runs: 0, totalApproxCost: 0, totalApiCredits: 0, tokens: 0 }
+        existing.runs += 1
+        existing.totalApproxCost += toNumber(row.approx_cost)
+        existing.totalApiCredits += toNumber(row.api_credit_cost)
+        existing.tokens += toNumber(row.prompt_tokens) + toNumber(row.completion_tokens) + toNumber(row.reasoning_tokens)
+        modelStatsMap.set(model, existing)
+      }
+
+      const topModels = Array.from(modelStatsMap.entries())
+        .map(([model, stat]) => ({
+          model,
+          runs: stat.runs,
+          totalApproxCost: round(stat.totalApproxCost),
+          totalActualCredits: round(stat.totalApiCredits),
+          avgActualCredits: round(stat.totalApiCredits / Math.max(1, stat.runs)),
+          totalTokens: Math.round(stat.tokens),
+        }))
+        .sort((a, b) => b.totalActualCredits - a.totalActualCredits)
+
+      const toolRequestedByName = filteredRequestedToolCalls.reduce<Record<string, number>>((acc, toolName) => {
+        acc[toolName] = (acc[toolName] || 0) + 1
+        return acc
+      }, {})
+
+      const toolStatusCounts = scopedToolJobs.reduce<Record<string, number>>((acc, job) => {
+        acc[job.status] = (acc[job.status] || 0) + 1
+        return acc
+      }, {})
+
+      const failedByTool = scopedToolJobs
+        .filter(job => job.status === 'failed')
+        .reduce<Record<string, number>>((acc, job) => {
+          acc[job.tool_name] = (acc[job.tool_name] || 0) + 1
+          return acc
+        }, {})
+
+      const topFailing = Object.entries(failedByTool)
+        .map(([toolName, failures]) => ({ toolName, failures }))
+        .sort((a, b) => b.failures - a.failures)
+        .slice(0, 10)
+
+      const durationValues = scopedToolJobs
+        .map(job => {
+          const started = parseTimestamp(job.started_at)
+          const completed = parseTimestamp(job.completed_at)
+          if (started === null || completed === null || completed < started) return null
+          return completed - started
+        })
+        .filter((value): value is number => value !== null)
+
+      const availableModels = Array.from(
+        new Set([
+          ...scopedProviderCosts.map(cost => cost.model_name || 'unknown'),
+          ...scopedMessages.map(message => message.model_name || 'unknown'),
+        ])
+      ).sort()
+
+      const availableToolNames = Array.from(
+        new Set(
+          scopedMessages.flatMap(message =>
+            parseToolCalls(message.tool_calls)
+              .map(call => extractToolName(call))
+              .filter((name): name is string => Boolean(name))
+          )
+        )
+      ).sort()
+
+      const burnRatePerDay = totalApiCredits / Math.max(1, rangeDays)
+
+      res.json({
+        rangeDays,
+        source: 'local',
+        filters: {
+          applied: {
+            projectId,
+            conversationId,
+            model: modelFilter,
+            providerRunStatus: null,
+            toolName: toolNameFilter,
+            toolStatus: toolStatusFilter,
+          },
+          available: {
+            models: availableModels,
+            providerRunStatuses: [],
+            toolNames: availableToolNames,
+            toolJobStatuses: Array.from(new Set(toolJobs.map(job => job.status))).sort(),
+            projects: scopedProjects.map(project => ({ id: project.id, name: project.name, storage_mode: project.storage_mode })),
+            conversations: scopedConversations.map(conversation => ({
+              id: conversation.id,
+              title: conversation.title,
+              project_id: conversation.project_id,
+              storage_mode: conversation.storage_mode,
+            })),
+          },
+        },
+        summary: {
+          netCreditsConsumed: round(totalApiCredits),
+          totalReservedCredits: 0,
+          totalRefundCredits: 0,
+          totalAdjustmentCredits: 0,
+          averageCreditsPerGeneration: round(totalApiCredits / Math.max(1, filteredProviderCosts.length)),
+          averageCreditsPerAssistantMessage: round(totalApiCredits / Math.max(1, assistantMessageCount)),
+          messagesTotal: filteredMessages.length,
+          conversationsCreated: scopedConversations.length,
+          projectsCreated: scopedProjects.length,
+          activeDays: Object.keys(messagesPerDay).length,
+        },
+        spend: {
+          totals: {
+            approxCostUsd: round(totalApproxCost),
+            apiCredits: round(totalApiCredits),
+            promptTokens: Math.round(totalPromptTokens),
+            completionTokens: Math.round(totalCompletionTokens),
+            reasoningTokens: Math.round(totalReasoningTokens),
+          },
+          daily: dailySpend,
+          balanceTrend: [],
+          burnRate: {
+            creditsPerDay: round(burnRatePerDay),
+            projectedDaysRemaining: null,
+          },
+        },
+        models: {
+          topByCredits: topModels,
+          tokenMixByModel: topModels.map(model => ({
+            model: model.model,
+            prompt: model.totalTokens,
+            completion: 0,
+            reasoning: 0,
+            samples: model.runs,
+          })),
+        },
+        providerRuns: {
+          statusCounts: {},
+          quality: {
+            total: 0,
+            withGenerationIdPct: 0,
+            withMessageLinkPct: 0,
+            withConversationLinkPct: 0,
+            reconciledPct: 0,
+            lastReconciledAt: null,
+          },
+          reconcileLagMinutes: {
+            avg: 0,
+            p50: 0,
+            p90: 0,
+            max: 0,
+          },
+        },
+        activity: {
+          messagesByRole: messageCountByRole,
+          messagesPerDay: Object.entries(messagesPerDay)
+            .map(([date, count]) => ({ date, count }))
+            .sort((a, b) => a.date.localeCompare(b.date)),
+          branching: {
+            branchPoints,
+            averageDepth: round(avgDepth, 2),
+            maxDepth,
+          },
+        },
+        tools: {
+          requested: {
+            total: filteredRequestedToolCalls.length,
+            byName: toolRequestedByName,
+          },
+          jobs: {
+            available: true,
+            statusCounts: toolStatusCounts,
+            total: scopedToolJobs.length,
+            topFailing,
+            averageDurationMs:
+              durationValues.length > 0
+                ? round(durationValues.reduce((sum, duration) => sum + duration, 0) / durationValues.length, 2)
+                : null,
+          },
+        },
+        payments: {
+          currentPlan: null,
+          history: {
+            monthlyAllocation: [],
+            topups: [],
+          },
+          currentCreditsBalance: null,
+        },
+        dataQuality: {
+          assistantMessagesWithCostPct:
+            assistantMessageCount > 0 ? round((assistantWithCost / assistantMessageCount) * 100, 2) : 0,
+          assistantMessagesTotal: assistantMessageCount,
+          assistantMessagesWithCost: assistantWithCost,
+        },
+      })
+    } catch (error) {
+      console.error('[LocalServer] Error getting local analytics dashboard:', error)
+      const message = error instanceof Error ? error.message : String(error)
+      res.status(500).json({ error: 'Failed to get local analytics dashboard', message })
+    }
+  })
+
   // Update conversation research note
   app.patch('/api/conversations/:id/research-note', (req, res) => {
     try {

@@ -801,6 +801,16 @@ const SideBar: React.FC<SideBarProps> = ({
         )}
       </div>
       <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
+        <Button variant='acrylic' size='smaller' rounded='full' className='group' onClick={() => navigate('/logging')}>
+          <i className='bx p-1 bx-line-chart text-3xl md:text-2xl lg:text-[20px] xl:text-[24px] 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] hover:scale-104 active:scale-95'></i>
+        </Button>
+        {!isCollapsed && (
+          <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] pl-2 dark:text-stone-300'>
+            <h3> Logging </h3>
+          </div>
+        )}
+      </div>
+      <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
         <Button variant='acrylic' size='smaller' rounded='full' className='group' onClick={() => navigate('/payment')}>
           <i className='bx p-1 bx-user-circle text-3xl md:text-2xl lg:text-[20px] xl:text-[24px] 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] hover:scale-104 active:scale-95'></i>
         </Button>

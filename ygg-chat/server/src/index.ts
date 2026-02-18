@@ -303,6 +303,9 @@ if (env.VITE_ENVIRONMENT === 'web') {
     const supaStore = require('./routes/supaStore').default
     app.use('/api', supaStore)
 
+    const analyticsRoutes = require('./routes/analytics').default
+    app.use('/api/analytics', analyticsRoutes)
+
     // Agent routes: Claude Code and other external agents
     const supaAgents = require('./routes/supaAgents').default
     app.use('/api/agents', supaAgents)
