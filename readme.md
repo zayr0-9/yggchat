@@ -137,19 +137,9 @@ npm run dev:electron
 
 ## Build (Windows)
 
-From `ygg-chat/` you can run the workspace build script:
-
-```bash
-cd ygg-chat
-npm install
-npm --prefix client/ygg-chat-r run build:win
-```
-
-Or run it directly inside the workspace:
-
 ```bash
 cd ygg-chat/client/ygg-chat-r
-npm install
+npm install --workspaces=false --include=optional
 npm run build:win
 ```
 
