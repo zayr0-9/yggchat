@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { StorageMode } from '../../../../shared/types'
 import { Button } from '../components'
+import { isCommunityMode } from '../config/runtimeMode'
 import { LowBar } from '../components/LowBar/LowBar'
 import { Select } from '../components/Select/Select'
 import { TextField } from '../components/TextField/TextField'
@@ -183,7 +184,7 @@ const ConversationPage: React.FC = () => {
   }, [searchQuery, search, clearSearch])
   const [showNewConversationModal, setShowNewConversationModal] = useState(false)
   const [newConvTitle, setNewConvTitle] = useState('')
-  const [storageMode, setStorageMode] = useState<StorageMode>('cloud')
+  const [storageMode, setStorageMode] = useState<StorageMode>(isCommunityMode ? 'local' : 'cloud')
   // Download app modal state
   const [showDownloadModal, setShowDownloadModal] = useState(false)
   // Move project modal state
@@ -378,7 +379,7 @@ const ConversationPage: React.FC = () => {
   const handleNewConversation = async () => {
     // If a project is selected, skip modal and use project's storage mode
     if (selectedProject) {
-      const projectStorageMode = selectedProject.storage_mode || 'cloud'
+      const projectStorageMode = isCommunityMode ? 'local' : (selectedProject.storage_mode || 'cloud')
       const defaultTitle = `${selectedProject.name} Conversation`
       await createNewConversation(projectStorageMode, defaultTitle)
       return
@@ -387,18 +388,18 @@ const ConversationPage: React.FC = () => {
     // No project selected: in Electron mode, show modal to choose storage
     if (isElectronMode) {
       setNewConvTitle('New Conversation')
-      setStorageMode('cloud') // Default to cloud
+      setStorageMode(isCommunityMode ? 'local' : 'cloud')
       setShowNewConversationModal(true)
     } else {
       // Web mode: create cloud conversation directly
-      await createNewConversation('cloud')
+      await createNewConversation(isCommunityMode ? 'local' : 'cloud')
     }
   }
 
   const createNewConversation = async (mode: StorageMode, title?: string) => {
     const payload = {
       title: title || (selectedProject ? `${selectedProject.name} Conversation` : undefined),
-      storageMode: mode,
+      storageMode: isCommunityMode ? 'local' : mode,
     }
     const result = await dispatch(createConversation(payload)).unwrap()
 
@@ -792,21 +793,23 @@ const ConversationPage: React.FC = () => {
             <div className='mb-6'>
               <label className='block text-sm font-medium mb-2 dark:text-neutral-300'>Storage Location</label>
               <div className='space-y-2'>
-                <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
-                  <input
-                    type='radio'
-                    value='cloud'
-                    checked={storageMode === 'cloud'}
-                    onChange={e => setStorageMode(e.target.value as StorageMode)}
-                    className='mr-3'
-                  />
-                  <div>
-                    <div className='font-medium dark:text-neutral-100'>Cloud</div>
-                    <div className='text-xs text-neutral-600 dark:text-neutral-400'>
-                      Synced to cloud (accessible anywhere)
+                {!isCommunityMode && (
+                  <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
+                    <input
+                      type='radio'
+                      value='cloud'
+                      checked={storageMode === 'cloud'}
+                      onChange={e => setStorageMode(e.target.value as StorageMode)}
+                      className='mr-3'
+                    />
+                    <div>
+                      <div className='font-medium dark:text-neutral-100'>Cloud</div>
+                      <div className='text-xs text-neutral-600 dark:text-neutral-400'>
+                        Synced to cloud (accessible anywhere)
+                      </div>
                     </div>
-                  </div>
-                </label>
+                  </label>
+                )}
                 <label className='flex items-center p-3 rounded-xl border border-gray-300 dark:border-neutral-700 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800'>
                   <input
                     type='radio'

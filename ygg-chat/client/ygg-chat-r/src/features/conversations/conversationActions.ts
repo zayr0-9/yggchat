@@ -2,6 +2,7 @@ import { createAsyncThunk } from '@reduxjs/toolkit'
 import type { ConversationId, ProjectId } from '../../../../../shared/types'
 import { RootState } from '../../store/store'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
+import { isCommunityMode } from '../../config/runtimeMode'
 import {
   api,
   localApi,
@@ -19,6 +20,8 @@ import { convContextSet, systemPromptSet } from './conversationSlice'
 import { Conversation } from './conversationTypes'
 import { dualSync } from '../../lib/sync/dualSyncManager'
 
+const isElectronCommunityMode = () => environment === 'electron' && isCommunityMode
+
 // Fetch conversations for current user
 // Note: fetchRecentModels has been migrated to React Query (see useRecentModels in hooks/useQueries.ts)
 
@@ -34,16 +37,21 @@ export const fetchConversations = createAsyncThunk<
       throw new Error('User not authenticated')
     }
 
+    if (isElectronCommunityMode()) {
+      return await localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+    }
+
     // In Electron mode, fetch both cloud and local conversations
     if (environment === 'electron') {
       const [cloudConversations, localConversations] = await Promise.all([
         api.get<Conversation[]>(`/users/${auth.userId}/conversations`, auth.accessToken),
-        localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+        localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`),
       ])
 
       // Merge and sort by updated_at
-      const merged = [...cloudConversations, ...localConversations]
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      const merged = [...cloudConversations, ...localConversations].sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      )
 
       return merged
     }
@@ -68,6 +76,13 @@ export const fetchRecentConversations = createAsyncThunk<
       throw new Error('User not authenticated')
     }
 
+    if (isElectronCommunityMode()) {
+      const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+      return [...localConversations]
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, limit)
+    }
+
     const query = new URLSearchParams({ limit: String(limit) }).toString()
     return await api.get<Conversation[]>(`/users/${auth.userId}/conversations/recent?${query}`, auth.accessToken)
   } catch (err) {
@@ -81,6 +96,12 @@ export const fetchConversationsByProjectId = createAsyncThunk<Conversation[], Pr
   async (projectId: ProjectId, { extra, rejectWithValue }) => {
     try {
       const { auth } = extra
+
+      if (isElectronCommunityMode()) {
+        const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+        return localConversations.filter(conversation => String(conversation.project_id) === String(projectId))
+      }
+
       return await api.get<Conversation[]>(`/conversations/project/${projectId}`, auth.accessToken)
     } catch (err) {
       return rejectWithValue(err instanceof Error ? err.message : 'Failed to fetch conversations by project')
@@ -116,21 +137,23 @@ export const createConversation = createAsyncThunk<
       const selectedProject = getState().projects.selectedProject
       const projectId = providedProjectId !== undefined ? providedProjectId : selectedProject?.id || null
 
+      const requestedStorageMode = isElectronCommunityMode() ? 'local' : storageMode
+
       // Determine storage mode from project if not explicitly provided
-      let effectiveStorageMode = storageMode
+      let effectiveStorageMode = requestedStorageMode
       if (!effectiveStorageMode && projectId) {
         const project = getState().projects.projects.find(p => p.id === projectId)
-        effectiveStorageMode = project?.storage_mode || 'cloud'
+        effectiveStorageMode = project?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
       }
-      effectiveStorageMode = effectiveStorageMode || 'cloud'
+      effectiveStorageMode = effectiveStorageMode || (isElectronCommunityMode() ? 'local' : 'cloud')
 
       // VALIDATION: If project is provided and storage mode is explicitly set,
       // ensure they match to prevent mixing cloud projects with local conversations
-      if (projectId && storageMode) {
+      if (projectId && requestedStorageMode) {
         const project = getState().projects.projects.find(p => p.id === projectId)
-        if (project && project.storage_mode !== storageMode) {
+        if (project && project.storage_mode !== requestedStorageMode) {
           throw new Error(
-            `Storage mode mismatch: Cannot create ${storageMode} conversation in ${project.storage_mode} project. ` +
+            `Storage mode mismatch: Cannot create ${requestedStorageMode} conversation in ${project.storage_mode} project. ` +
             `Conversations must use the same storage location as their project.`
           )
         }
@@ -187,7 +210,7 @@ export const updateConversation = createAsyncThunk<
     let effectiveMode = storageMode
     if (!effectiveMode) {
       const conversation = getState().conversations.items.find(c => c.id === id)
-      effectiveMode = conversation?.storage_mode || 'cloud'
+      effectiveMode = conversation?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
@@ -219,7 +242,7 @@ export const deleteConversation = createAsyncThunk<
     let effectiveMode = storageMode
     if (!effectiveMode) {
       const conversation = getState().conversations.items.find(c => c.id === id)
-      effectiveMode = conversation?.storage_mode || 'cloud'
+      effectiveMode = conversation?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
@@ -242,6 +265,14 @@ export const fetchSystemPrompt = createAsyncThunk<string | null, ConversationId,
   async (conversationId, { dispatch, extra, rejectWithValue }) => {
     try {
       const { auth } = extra
+
+      if (isElectronCommunityMode()) {
+        const conversation = await localApi.get<Conversation>(`/local/conversations/${conversationId}`)
+        const value = typeof conversation.system_prompt === 'string' ? conversation.system_prompt : null
+        dispatch(systemPromptSet(value))
+        return value
+      }
+
       const res = await getConversationSystemPrompt(conversationId, auth.accessToken)
       const value = typeof res.systemPrompt === 'string' ? res.systemPrompt : null
       dispatch(systemPromptSet(value))
@@ -259,6 +290,14 @@ export const fetchContext = createAsyncThunk<string | null, ConversationId, { ex
   async (conversationId, { dispatch, extra, rejectWithValue }) => {
     try {
       const { auth } = extra
+
+      if (isElectronCommunityMode()) {
+        const conversation = await localApi.get<Conversation>(`/local/conversations/${conversationId}`)
+        const value = conversation.conversation_context ?? null
+        dispatch(convContextSet(value))
+        return value
+      }
+
       const res = await getConversationContext(conversationId, auth.accessToken)
       const value = res.context
       // console.log('dispatching convContext ', res)
@@ -283,7 +322,7 @@ export const updateSystemPrompt = createAsyncThunk<
     let effectiveMode = storageMode
     if (!effectiveMode) {
       const conversation = getState().conversations.items.find(c => c.id === id)
-      effectiveMode = conversation?.storage_mode || 'cloud'
+      effectiveMode = conversation?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
@@ -316,7 +355,7 @@ export const updateContext = createAsyncThunk<
     let effectiveMode = storageMode
     if (!effectiveMode) {
       const conversation = getState().conversations.items.find(c => c.id === id)
-      effectiveMode = conversation?.storage_mode || 'cloud'
+      effectiveMode = conversation?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
@@ -348,7 +387,7 @@ export const updateResearchNote = createAsyncThunk<
     let effectiveMode = storageMode
     if (!effectiveMode) {
       const conversation = getState().conversations.items.find(c => c.id === id)
-      effectiveMode = conversation?.storage_mode || 'cloud'
+      effectiveMode = conversation?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
@@ -380,7 +419,7 @@ export const updateCwd = createAsyncThunk<
     let effectiveMode = storageMode
     if (!effectiveMode) {
       const conversation = getState().conversations.items.find(c => c.id === id)
-      effectiveMode = conversation?.storage_mode || 'cloud'
+      effectiveMode = conversation?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
@@ -412,6 +451,20 @@ export const searchConversations = createAsyncThunk<
 
     if (!auth.accessToken) {
       throw new Error('User not authenticated')
+    }
+
+    if (isElectronCommunityMode()) {
+      const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+      const normalizedQuery = query.trim().toLowerCase()
+      const filtered = localConversations.filter(conversation => {
+        const inProject = projectId ? String(conversation.project_id) === String(projectId) : true
+        const title = (conversation.title || '').toLowerCase()
+        return inProject && title.includes(normalizedQuery)
+      })
+
+      return filtered
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, limit)
     }
 
     const params = new URLSearchParams({ q: query, limit: String(limit) })

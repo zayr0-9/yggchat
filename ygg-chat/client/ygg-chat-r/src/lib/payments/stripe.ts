@@ -4,8 +4,15 @@ import type {
   TierInfo,
   CreditHistoryEntry,
 } from './types'
+import { isCommunityMode } from '../../config/runtimeMode'
 import { API_BASE } from '../../utils/api'
 import { TIER_INFOS } from '../../constants/pricingData'
+
+const assertPaymentsEnabled = () => {
+  if (isCommunityMode) {
+    throw new Error('Payments are disabled in community mode.')
+  }
+}
 
 /**
  * Stripe Payment Provider
@@ -14,7 +21,7 @@ import { TIER_INFOS } from '../../constants/pricingData'
  */
 export class StripePaymentProvider implements PaymentProvider {
   isSupported(): boolean {
-    return true
+    return !isCommunityMode
   }
 
   async createCheckoutSession(
@@ -22,6 +29,7 @@ export class StripePaymentProvider implements PaymentProvider {
     tier: 'high' | 'mid' | 'low',
     email?: string,
   ): Promise<{ sessionId: string; url: string }> {
+    assertPaymentsEnabled()
     const response = await fetch(`${API_BASE}/stripe/create-checkout-session`, {
       method: 'POST',
       headers: {
@@ -41,6 +49,7 @@ export class StripePaymentProvider implements PaymentProvider {
   }
 
   async getSubscriptionStatus(userId: string): Promise<SubscriptionStatus> {
+    assertPaymentsEnabled()
     const response = await fetch(`${API_BASE}/stripe/subscription-status?userId=${userId}`)
 
     if (!response.ok) {
@@ -54,6 +63,7 @@ export class StripePaymentProvider implements PaymentProvider {
   }
 
   async cancelSubscription(userId: string): Promise<void> {
+    assertPaymentsEnabled()
     const response = await fetch(`${API_BASE}/stripe/cancel-subscription`, {
       method: 'POST',
       headers: {
@@ -71,6 +81,7 @@ export class StripePaymentProvider implements PaymentProvider {
   }
 
   async getCreditHistory(userId: string, limit: number = 100): Promise<CreditHistoryEntry[]> {
+    assertPaymentsEnabled()
     const response = await fetch(
       `${API_BASE}/stripe/credit-history?userId=${userId}&limit=${limit}`,
     )

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components'
+import { isCommunityMode } from '../config/runtimeMode'
 import { useAuth } from '../hooks/useAuth'
 import { getSessionFromStorage } from '../lib/jwtUtils'
 import { getPaymentProvider, type SubscriptionStatus, type TierInfo } from '../lib/payments'
@@ -40,6 +41,7 @@ const PaymentPage: React.FC = () => {
 
   // Check if we're in Electron or local mode (payments not supported directly)
   const isElectronOrLocal =
+    isCommunityMode ||
     (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) ||
     (typeof __IS_LOCAL__ !== 'undefined' && __IS_LOCAL__) ||
     import.meta.env.VITE_ENVIRONMENT === 'electron' ||
@@ -62,6 +64,20 @@ const PaymentPage: React.FC = () => {
 
   const fetchData = async () => {
     setLoading(true)
+
+    if (isCommunityMode) {
+      const pricingData: PricingInfo = {
+        tiers: {
+          Basic: DEFAULT_TIERS.find(t => t.name === 'Basic') || DEFAULT_TIERS[0],
+          Pro: DEFAULT_TIERS.find(t => t.name === 'Pro') || DEFAULT_TIERS[1],
+          Ultra: DEFAULT_TIERS.find(t => t.name === 'Ultra') || DEFAULT_TIERS[2],
+        },
+      }
+      setSubscriptionStatus(null)
+      setPricingInfo(pricingData)
+      setLoading(false)
+      return
+    }
 
     try {
       const provider = await getPaymentProvider()
@@ -186,6 +202,11 @@ const PaymentPage: React.FC = () => {
   }
 
   const handleDeleteAccount = async () => {
+    if (isCommunityMode) {
+      setError('Account deletion via cloud backend is disabled in community mode.')
+      return
+    }
+
     if (!userId || deleteConfirmText !== 'DELETE') {
       return
     }

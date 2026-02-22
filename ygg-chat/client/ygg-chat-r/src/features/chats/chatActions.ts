@@ -2,6 +2,7 @@ import { createAsyncThunk } from '@reduxjs/toolkit'
 import type { QueryClient } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
 import { ConversationId, MessageId } from '../../../../../shared/types'
+import { isCommunityMode } from '../../config/runtimeMode'
 import { getDefaultUserSystemPromptFromCache } from '../../hooks/useQueries'
 import { dualSync } from '../../lib/sync/dualSyncManager'
 import type { RootState } from '../../store/store'
@@ -55,7 +56,8 @@ import {
 // import { conversationActions } from '../conversations'
 
 // Remote API base for syncing from cloud (Railway)
-const REMOTE_API_BASE = import.meta.env.VITE_API_URL || 'https://webdrasil-production.up.railway.app/api'
+const getRemoteApiBase = (): string | null =>
+  isCommunityMode ? null : (import.meta.env.VITE_API_URL || 'https://webdrasil-production.up.railway.app/api')
 // Tools that should not prompt for user permission before execution.
 // Server-executed tools (e.g., brave_search) are already excluded upstream.
 const TOOL_PERMISSION_ALWAYS_BYPASS = new Set(['skill_manager', 'mcp_manager'])
@@ -5800,6 +5802,8 @@ export const syncConversationToLocal = createAsyncThunk<
 >('chat/syncConversationToLocal', async ({ conversationId, messages, storageMode }, { extra, getState }) => {
   // Only run in Electron mode
   if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+  const remoteApiBase = getRemoteApiBase()
+  if (!remoteApiBase) return
 
   // Skip syncing for local-only conversations - they don't exist in cloud
   if (storageMode === 'local') {
@@ -5818,7 +5822,7 @@ export const syncConversationToLocal = createAsyncThunk<
       // Fetch conversation from REMOTE source of truth (Cloud), not local API
       let conversation: Conversation | null = null
       try {
-        const res = await fetch(`${REMOTE_API_BASE}/conversations/${conversationId}`, {
+        const res = await fetch(`${remoteApiBase}/conversations/${conversationId}`, {
           headers: {
             Authorization: `Bearer ${auth.accessToken}`,
             'Content-Type': 'application/json',
@@ -5845,7 +5849,7 @@ export const syncConversationToLocal = createAsyncThunk<
             // If not in cache, fetch from REMOTE API
             if (!project) {
               try {
-                const projRes = await fetch(`${REMOTE_API_BASE}/projects/${projectId}`, {
+                const projRes = await fetch(`${remoteApiBase}/projects/${projectId}`, {
                   headers: {
                     Authorization: `Bearer ${auth.accessToken}`,
                     'Content-Type': 'application/json',
@@ -6137,13 +6141,28 @@ export const refreshCurrentPathAfterDelete = createAsyncThunk<
 
 // Initialize user and conversation
 export const initializeUserAndConversation = createAsyncThunk<
-  { userId: number; conversationId: ConversationId },
+  { userId: string | number; conversationId: ConversationId },
   void,
   { extra: ThunkExtraArgument }
 >('chat/initializeUserAndConversation', async (_arg, { dispatch, extra, rejectWithValue }) => {
   const { auth } = extra
   dispatch(chatSliceActions.initializationStarted())
   try {
+    if (isCommunityMode && import.meta.env.VITE_ENVIRONMENT === 'electron') {
+      if (!auth.userId) {
+        throw new Error('User not authenticated')
+      }
+
+      const conversation = await localApi.post<{ id: ConversationId }>('/local/conversations', {
+        user_id: auth.userId,
+        title: 'New Conversation',
+        storage_mode: 'local',
+      })
+
+      dispatch(chatSliceActions.initializationCompleted({ userId: String(auth.userId), conversationId: conversation.id }))
+      return { userId: auth.userId, conversationId: conversation.id }
+    }
+
     // Create test user
     const user = await apiCall<{ id: number }>('/users', auth.accessToken, {
       method: 'POST',

@@ -1,5 +1,6 @@
 // utils/api.ts
 import { ConversationId, StorageMode } from '../../../../shared/types'
+import { isCommunityMode } from '../config/runtimeMode'
 import { clearClaimsCache, getSessionFromStorage, getTokenExpirationTime, refreshTokenIfNeeded } from '../lib/jwtUtils'
 import { logClientError } from '../services/clientTelemetry'
 
@@ -71,6 +72,26 @@ let pendingLocalServerStatusRequest: Promise<LocalServerStatus> | null = null
 function normalizeEndpoint(endpoint: string): string {
   if (!endpoint) return '/'
   return endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+}
+
+const PUBLIC_API_ENDPOINT_PREFIXES = ['/app-store/community'] as const
+
+function assertPublicEndpointAllowed(endpoint: string, source: string): string {
+  const normalizedEndpoint = normalizeEndpoint(endpoint)
+  const allowed = PUBLIC_API_ENDPOINT_PREFIXES.some(
+    prefix => normalizedEndpoint === prefix || normalizedEndpoint.startsWith(`${prefix}/`)
+  )
+
+  if (!allowed) {
+    throw new Error(`[${source}] Endpoint is not whitelisted for public access (${normalizedEndpoint})`)
+  }
+
+  return normalizedEndpoint
+}
+
+function assertCloudBackendAllowed(endpoint: string, source: string): void {
+  if (!isCommunityMode) return
+  throw new Error(`[${source}] Cloud backend routes are disabled in community mode (${endpoint})`)
 }
 
 function normalizeOrigin(origin: string | null | undefined): string | null {
@@ -200,7 +221,9 @@ export function buildCachedLocalWebSocketUrl(pathname: string): string {
 
 // Helper to determine if we should use local API
 export function shouldUseLocalApi(storageMode?: StorageMode, env?: string): boolean {
-  return storageMode === 'local' && (env || environment) === 'electron'
+  const runtimeEnv = env || environment
+  if (isCommunityMode && runtimeEnv === 'electron') return true
+  return storageMode === 'local' && runtimeEnv === 'electron'
 }
 
 // Local API client (mirrors cloud api object) with error handling
@@ -509,6 +532,8 @@ const redirectToLogin = () => {
 
 // Core API utility function - now accepts accessToken as parameter
 export const apiCall = async <T>(endpoint: string, accessToken: string | null, options?: RequestInit): Promise<T> => {
+  assertCloudBackendAllowed(endpoint, 'apiCall')
+
   // Ensure token is valid before making the request
   const validToken = await ensureValidToken()
   const tokenToUse = validToken || accessToken
@@ -606,6 +631,53 @@ export const apiCall = async <T>(endpoint: string, accessToken: string | null, o
   return response.json()
 }
 
+// Public cloud API utility for explicitly whitelisted read-only endpoints.
+// This bypasses community-mode cloud blocking and does not perform auth refresh/redirect behavior.
+export const publicApiCall = async <T>(endpoint: string, options?: RequestInit): Promise<T> => {
+  const normalizedEndpoint = assertPublicEndpointAllowed(endpoint, 'publicApiCall')
+  const requestStart = Date.now()
+
+  const isFormData = options?.body && typeof FormData !== 'undefined' && options.body instanceof FormData
+  const { headers: optionsHeaders, ...restOptions } = options || {}
+  const method = String(restOptions.method || 'GET').toUpperCase()
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}${normalizedEndpoint}`, {
+      ...restOptions,
+      headers: {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...optionsHeaders,
+      },
+    })
+  } catch (error) {
+    reportNetworkFailure({
+      source: 'publicApiCall',
+      endpoint: normalizedEndpoint,
+      method,
+      durationMs: Date.now() - requestStart,
+      message: getErrorMessage(error),
+    })
+    throw error
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    reportNetworkFailure({
+      source: 'publicApiCall',
+      endpoint: normalizedEndpoint,
+      method,
+      status: response.status,
+      statusText: response.statusText,
+      durationMs: Date.now() - requestStart,
+      message: errorText || response.statusText || `HTTP ${response.status}`,
+    })
+    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`)
+  }
+
+  return response.json()
+}
+
 // Convenience methods for common HTTP operations
 export const api = {
   get: <T>(endpoint: string, accessToken: string | null, options?: RequestInit) => {
@@ -648,6 +720,8 @@ export const createStreamingRequest = async (
   accessToken: string | null,
   options?: RequestInit
 ): Promise<Response> => {
+  assertCloudBackendAllowed(endpoint, 'createStreamingRequest')
+
   // Ensure token is valid before making the request
   const validToken = await ensureValidToken()
   const tokenToUse = validToken || accessToken
@@ -897,6 +971,8 @@ export const createCheckoutSession = async (
   tier: 'high' | 'mid' | 'low',
   email?: string
 ): Promise<CheckoutSessionResponse> => {
+  assertCloudBackendAllowed('/stripe/create-checkout-session', 'createCheckoutSession')
+
   const response = await fetch(`${API_BASE}/stripe/create-checkout-session`, {
     method: 'POST',
     headers: {
@@ -917,6 +993,8 @@ export const createCheckoutSession = async (
  * Get user's subscription status and credit balance
  */
 export const getSubscriptionStatus = async (userId: number): Promise<SubscriptionStatus> => {
+  assertCloudBackendAllowed('/stripe/subscription-status', 'getSubscriptionStatus')
+
   const response = await fetch(`${API_BASE}/stripe/subscription-status?userId=${userId}`)
 
   if (!response.ok) {
@@ -931,6 +1009,8 @@ export const getSubscriptionStatus = async (userId: number): Promise<Subscriptio
  * Cancel user's subscription (at period end)
  */
 export const cancelSubscription = async (userId: number): Promise<{ success: boolean; message: string }> => {
+  assertCloudBackendAllowed('/stripe/cancel-subscription', 'cancelSubscription')
+
   const response = await fetch(`${API_BASE}/stripe/cancel-subscription`, {
     method: 'POST',
     headers: {
@@ -954,6 +1034,8 @@ export const getCreditHistory = async (
   userId: number,
   limit: number = 100
 ): Promise<{ history: CreditTransaction[] }> => {
+  assertCloudBackendAllowed('/stripe/credit-history', 'getCreditHistory')
+
   const response = await fetch(`${API_BASE}/stripe/credit-history?userId=${userId}&limit=${limit}`)
 
   if (!response.ok) {
@@ -968,6 +1050,8 @@ export const getCreditHistory = async (
  * Get pricing information for all subscription tiers
  */
 export const getPricingInfo = async (): Promise<PricingInfo> => {
+  assertCloudBackendAllowed('/stripe/pricing-info', 'getPricingInfo')
+
   const response = await fetch(`${API_BASE}/stripe/pricing-info`)
 
   if (!response.ok) {

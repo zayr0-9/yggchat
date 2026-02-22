@@ -8,9 +8,12 @@ import type { Message, Model } from '../features/chats/chatTypes'
 import { fetchLmStudioModels } from '../features/chats/LMStudio'
 import { getOpenAIChatGPTModels } from '../features/chats/openaiOAuth'
 import type { Conversation } from '../features/conversations/conversationTypes'
+import { isCommunityMode } from '../config/runtimeMode'
 import { api, environment, localApi } from '../utils/api'
 import { getFavoritedModels } from '../utils/favorites'
 import { useAuth } from './useAuth'
+
+const isElectronCommunityMode = () => environment === 'electron' && isCommunityMode
 
 /**
  * Fetch all projects for the current user, sorted by latest conversation
@@ -34,6 +37,16 @@ export function useProjects() {
   const query = useQuery({
     queryKey: ['projects', userId],
     queryFn: async () => {
+      // In Electron community mode, use local projects only
+      if (isElectronCommunityMode()) {
+        const localProjects = await localApi.get<ProjectWithLatestConversation[]>(`/local/projects?userId=${userId}`)
+        return [...localProjects].sort((a, b) => {
+          const dateA = new Date(a.latest_conversation_updated_at || a.updated_at).getTime()
+          const dateB = new Date(b.latest_conversation_updated_at || b.updated_at).getTime()
+          return dateB - dateA
+        })
+      }
+
       // In Electron mode, fetch both cloud and local projects
       if (environment === 'electron') {
         const [cloudProjects, localProjects] = await Promise.all([
@@ -105,7 +118,7 @@ export function useProject(projectId: ProjectId | null, storageMode?: 'local' | 
       // console.log('[useProject] Fetching project:', projectId, 'storage_mode:', effectiveStorageMode)
 
       // Route to appropriate API based on storage mode
-      if (effectiveStorageMode === 'local' && environment === 'electron') {
+      if ((effectiveStorageMode === 'local' && environment === 'electron') || isElectronCommunityMode()) {
         // console.log('[useProject] Using local API for project:', projectId)
         return localApi.get<Project>(`/local/projects/${projectId}`)
       }
@@ -144,6 +157,12 @@ export function useConversations(enabled: boolean = true) {
     queryKey: ['conversations'],
     queryFn: async () => {
       if (!userId) throw new Error('User not authenticated')
+
+      // In Electron community mode, use local conversations only
+      if (isElectronCommunityMode()) {
+        const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+        return [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      }
 
       // In Electron mode, fetch both cloud and local conversations
       if (environment === 'electron') {
@@ -220,6 +239,24 @@ export function useConversationsInfinite(enabled: boolean = true) {
         params.set('cursor', pageParam)
       }
 
+      // In Electron community mode, use local conversations only
+      if (isElectronCommunityMode()) {
+        const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+        if (!pageParam) {
+          const sorted = [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          return {
+            conversations: sorted.slice(0, PAGE_SIZE),
+            nextCursor: null,
+            hasMore: sorted.length > PAGE_SIZE,
+          }
+        }
+        return {
+          conversations: [],
+          nextCursor: null,
+          hasMore: false,
+        }
+      }
+
       // In Electron mode, fetch both cloud and local conversations
       if (environment === 'electron') {
         const [cloudResult, localConversations] = await Promise.all([
@@ -292,6 +329,14 @@ export function useConversationsByProject(projectId: ProjectId | null) {
     queryFn: async () => {
       if (!projectId) throw new Error('Project ID is required')
 
+      // In Electron community mode, use local conversations only
+      if (isElectronCommunityMode()) {
+        const localConversations = await localApi
+          .get<Conversation[]>(`/local/conversations?userId=${userId}`)
+          .then(convs => convs.filter(c => c.project_id === projectId))
+        return [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      }
+
       // In Electron mode, fetch both cloud and local conversations
       if (environment === 'electron') {
         const [cloudConversations, localConversations] = await Promise.all([
@@ -354,7 +399,29 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
         params.set('cursor', pageParam)
       }
 
-      // Electron mode with local project conversations
+      // Electron community mode with local project conversations
+      if (isElectronCommunityMode()) {
+        const localConversations = await localApi
+          .get<Conversation[]>(`/local/conversations?userId=${userId}`)
+          .then(convs => convs.filter(c => c.project_id === projectId))
+
+        if (!pageParam) {
+          const merged = [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          return {
+            conversations: merged.slice(0, PAGE_SIZE),
+            nextCursor: null,
+            hasMore: merged.length > PAGE_SIZE,
+          }
+        }
+
+        return {
+          conversations: [],
+          nextCursor: null,
+          hasMore: false,
+        }
+      }
+
+      // Electron mode with local + cloud project conversations
       if (environment === 'electron') {
         const [cloudResult, localConversations] = await Promise.all([
           api
@@ -420,6 +487,14 @@ export function useRecentConversations(limit: number = 120) {
     queryFn: async () => {
       if (!userId) throw new Error('User not authenticated')
       const query = new URLSearchParams({ limit: String(safeLimit) }).toString()
+
+      // In Electron community mode, use local conversations only
+      if (isElectronCommunityMode()) {
+        const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+        return [...localConversations]
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          .slice(0, safeLimit)
+      }
 
       // In Electron mode, fetch both cloud and local conversations
       if (environment === 'electron') {
@@ -552,7 +627,11 @@ export function useConversationStorageMode(conversationId: ConversationId | null
   return useQuery({
     queryKey: ['conversations', conversationId, 'storage_mode'],
     queryFn: async () => {
-      if (!conversationId) return 'cloud'
+      if (!conversationId) return isElectronCommunityMode() ? 'local' : 'cloud'
+
+      if (isElectronCommunityMode()) {
+        return 'local' as const
+      }
 
       // 1. Check all cached conversation lists
       const allConversationQueries = queryClient.getQueriesData<Conversation[]>({ queryKey: ['conversations'] })
@@ -650,6 +729,16 @@ export function useConversationMessages(conversationId: ConversationId | null, s
     queryKey: ['conversations', conversationId, 'messages'],
     queryFn: async () => {
       if (!conversationId) throw new Error('Conversation ID is required')
+
+      if (isElectronCommunityMode()) {
+        const result = await localApi.get<{
+          messages: Message[]
+          tree: any
+          meta?: { storage_mode: 'local' | 'cloud' }
+        }>(`/local/conversations/${conversationId}/messages/tree`)
+        const tree = shouldFilterExAgentNodes(result.messages) ? filterExAgentNodes(result.tree) : result.tree
+        return { ...result, tree }
+      }
 
       // Determine storage mode: use parameter if provided, otherwise check cached conversations
       let effectiveStorageMode = storageMode
@@ -866,6 +955,10 @@ export function useModels(provider: string | null) {
         }
       }
 
+      if (isElectronCommunityMode()) {
+        throw new Error(`Provider "${provider}" is not available in community mode.`)
+      }
+
       let endpoint = '/models' // Default to Ollama
 
       // Map provider to appropriate endpoint
@@ -946,6 +1039,10 @@ export function useRecentModels(limit: number = 5) {
   return useQuery({
     queryKey: ['models', 'recent'],
     queryFn: async () => {
+      if (isElectronCommunityMode()) {
+        return []
+      }
+
       const query = new URLSearchParams({ limit: String(limit) }).toString()
       const response = await api.get<{ models: string[] }>(`/models/recent?${query}`, accessToken)
       const models = Array.isArray(response?.models) ? response.models : []
@@ -978,7 +1075,7 @@ export function useRecentModels(limit: number = 5) {
 
       return normalized
     },
-    enabled: !!accessToken,
+    enabled: !!accessToken && !isElectronCommunityMode(),
     staleTime: 2 * 60 * 1000, // 2 minutes - recent models are more dynamic
     refetchOnMount: false,
     refetchOnReconnect: false,
@@ -1016,7 +1113,7 @@ export function useZdrModels() {
       const response = await api.get<{ endpoints: ZdrModel[] }>('/models/openrouter/zdr', accessToken)
       return response.endpoints || []
     },
-    enabled: !!accessToken,
+    enabled: !!accessToken && !isElectronCommunityMode(),
     staleTime: 5 * 60 * 1000, // 5 minutes - ZDR endpoints don't change frequently
     refetchOnMount: false,
     refetchOnReconnect: false,
@@ -1827,10 +1924,11 @@ export function useUserSystemPromptsQuery() {
     queryKey: ['userSystemPrompts', userId],
     queryFn: async () => {
       if (!userId || !accessToken) return []
+      if (isElectronCommunityMode()) return []
       const response = await api.get<UserSystemPromptCached[]>('/system-prompts', accessToken)
       return response || []
     },
-    enabled: !!userId && !!accessToken,
+    enabled: !!userId && !!accessToken && !isElectronCommunityMode(),
     staleTime: 5 * 60 * 1000, // 5 minutes - prompts don't change often
     refetchOnMount: false,
     refetchOnReconnect: false,

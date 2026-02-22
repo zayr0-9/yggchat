@@ -1,9 +1,12 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import { Project, StorageMode } from '../../../../../shared/types'
+import { isCommunityMode } from '../../config/runtimeMode'
 import { apiCall, localApi, environment, shouldUseLocalApi } from '../../utils/api'
 import { ThunkExtraArgument } from '../../store/thunkExtra'
 import { RootState } from '../../store/store'
 import { dualSync } from '../../lib/sync/dualSyncManager'
+
+const isElectronCommunityMode = () => environment === 'electron' && isCommunityMode
 
 // Fetch all projects
 export const fetchProjects = createAsyncThunk<Project[], void, { extra: ThunkExtraArgument }>(
@@ -11,16 +14,21 @@ export const fetchProjects = createAsyncThunk<Project[], void, { extra: ThunkExt
   async (_, { extra }) => {
     const { auth } = extra
 
+    if (isElectronCommunityMode()) {
+      return await localApi.get<Project[]>(`/local/projects?userId=${auth.userId}`)
+    }
+
     // In Electron mode, fetch both cloud and local projects
     if (environment === 'electron') {
       const [cloudProjects, localProjects] = await Promise.all([
         apiCall('/projects', auth.accessToken, { method: 'GET' }) as Promise<Project[]>,
-        localApi.get<Project[]>(`/local/projects?userId=${auth.userId}`)
+        localApi.get<Project[]>(`/local/projects?userId=${auth.userId}`),
       ])
 
       // Merge and sort by updated_at
-      const merged = [...cloudProjects, ...localProjects]
-        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      const merged = [...cloudProjects, ...localProjects].sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      )
 
       return merged
     }
@@ -47,7 +55,7 @@ export const fetchProjectById = createAsyncThunk<
     let effectiveMode = storageMode
     if (!effectiveMode) {
       const project = getState().projects.projects.find(p => p.id === projectId)
-      effectiveMode = project?.storage_mode || 'cloud'
+      effectiveMode = project?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     // Route to local or cloud API
@@ -77,7 +85,7 @@ export const createProject = createAsyncThunk<Project, CreateProjectPayload, { e
     const { auth } = extra
     const { storageMode, ...restPayload } = payload
 
-    const effectiveStorageMode = storageMode || 'cloud'
+    const effectiveStorageMode = isElectronCommunityMode ? 'local' : (storageMode || 'cloud')
 
     // Route to local or cloud API
     if (shouldUseLocalApi(effectiveStorageMode, environment)) {
@@ -130,7 +138,7 @@ export const updateProject = createAsyncThunk<Project, UpdateProjectPayload, { e
     let effectiveMode = storage_mode
     if (!effectiveMode) {
       const project = getState().projects.projects.find(p => p.id === id)
-      effectiveMode = project?.storage_mode || 'cloud'
+      effectiveMode = project?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     // Route to local or cloud API
@@ -172,7 +180,7 @@ export const deleteProject = createAsyncThunk<
     let effectiveMode = storageMode
     if (!effectiveMode) {
       const project = getState().projects.projects.find(p => p.id === projectId)
-      effectiveMode = project?.storage_mode || 'cloud'
+      effectiveMode = project?.storage_mode || (isElectronCommunityMode() ? 'local' : 'cloud')
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {

@@ -1,68 +1,53 @@
 ![Banner](docs/assets/images/banner2.png)
 
-**The first AI interface designed for parallel workflows with branches.**
+# Yggdrasil
 
-While existing interfaces support editing messages and branching from them, Yggdrasil elevates this concept to its core philosophy. Built for humans first, AI second.
+Yggdrasil is a **local-first AI workspace** and an **agent harness**:
+it can **read & write files**, **search code**, **run shell commands**, and **invoke tools**—while also supporting **parallel + branching workflows** and **stateful inline apps**.
 
-## Designed For Humans
+> Core thesis: **LLMs work best with iterative workflows**
 
-We believe humans don't solve problems linearly like traditional chat interfaces suggest. Our thinking process involves:
+---
 
-- **Tangents and explorations** when questioning assumptions
-- **Non-linear knowledge building** as we discover new information
-- **Multiple parallel thought processes** working toward overarching goals
+## What you get
 
-Yggdrasil embraces this natural thinking pattern by encouraging you to branch off at any conversation point for tangents and explorations.
+### 1) Parallel + branching workflows (Heimdall tree)
 
-## Tree Navigation with Heimdall
+Humans don’t solve problems linearly. Yggdrasil is built around **branching conversations** and **tree navigation** so you can explore tangents, test alternatives, and keep clean context boundaries.
 
-As tangents lead to additional questions and even more branches, Yggdrasil incorporates **Heimdall**—a sophisticated tree navigation system that visualizes and manages your entire conversation structure.
+- **Every edit is a branch** (no history loss)
+- **Non-linear exploration** without context pollution
+- **Search across your full chat history**
 
-https://github.com/user-attachments/assets/92b94a36-7381-4b0e-a03c-6a1fae131189
+- https://github.com/user-attachments/assets/92b94a36-7381-4b0e-a03c-6a1fae131189
+- https://github.com/user-attachments/assets/84d755ea-6776-4e9d-bf08-f10490e2a965
+- https://github.com/user-attachments/assets/28e665dc-c122-46e9-afbc-67709565a19d
 
-### Core Principles
+### 2) AI apps
 
-**Every Edit is a Branch**
+Tools can return **HTML** that renders in a sandboxed iframe _inside the chat thread_ (or in a Tool Manager overlay). This enables “AI Apps”, not just text, context from these apps is excluded from the chat:
 
-https://github.com/user-attachments/assets/84d755ea-6776-4e9d-bf08-f10490e2a965
+- dashboards
+- editors
+- workflow runners
+- file/search UIs
+- generators (PDF/PPTX/media pipelines), etc.
+- games?
 
-- Preserves an accurate log of every message sent and received
-- No conversation history is ever lost
-- Complete transparency in your thought evolution
+### 4) Persistent background agent (Beta)
 
-**Complete Context Control**
+In desktop mode, Yggdrasil supports a persistent “global agent” loop that can run queued work in the background via the same chat/tool stack (with explicit permission gates).
 
-- Switch AI providers and models at any point
-- Tailor your experience to match specific task requirements
-- Optimize each interaction for its intended purpose
+### 5) A builder ecosystem (custom tools + MCP + skills)
 
-**Comprehensive Search**
+Yggdrasil includes:
 
-https://github.com/user-attachments/assets/28e665dc-c122-46e9-afbc-67709565a19d
+- built-in tools (file ops, search, shell, etc.)
+- **custom tools** (drop-in tool folders, create your own)
+- **MCP integration**
+- skills (installable capability bundles)
 
-- Search throughout your entire user database and chat history
-- Find and navigate any conversation or insight instantly
-- Transform your accumulated knowledge into an accessible resource
-
-## Flexible AI Integration
-
-### Context Control Reduces Costs
-
-Maintain granular control over conversation context to optimize token usage and computational resources. You decide what information each AI interaction needs, eliminating unnecessary context overhead.
-
-### Branching Prevents Context Pollution
-
-Traditional AI conversations accumulate irrelevant information, forcing you to pay for processing tangential discussions. Yggdrasil's branching isolates conversation threads, ensuring each branch maintains only relevant context and dramatically reducing token consumption.
-
-### Strategic Model Selection
-
-Different AI models excel at different tasks:
-
-- **Lightweight models** for simple queries
-- **Powerful models** for complex reasoning
-- **Specialized models** for domain-specific tasks
-
-All within the same conversation tree, optimizing both performance and cost efficiency.
+---
 
 ## VS Code Integration
 
@@ -70,7 +55,7 @@ The companion VS Code extension provides seamless workspace integration:
 
 - Access files in your VS Code workspace directly
 - Insert file contents into chat using the `@` symbol
-- Bridge the gap between coding and AI assistance
+- Add selected context from IDE
 
 <p align="start">
   <img src="docs/assets/images/extension-1.png" alt="Extension 1" width="460">
@@ -83,11 +68,11 @@ https://github.com/user-attachments/assets/a3020b22-6148-4389-9bc8-54942c6e7eb2
 
 ## The Vision Behind Yggdrasil
 
-Born from frustration with homogeneous LLM interfaces that fail to match human thinking patterns, Yggdrasil represents a fundamental shift in how we interact with AI systems.
+Born from frustration with linear LLM interfaces that fail to match human thinking patterns, Yggdrasil represents a fundamental shift in how we interact with AI systems.
 
 ### Preserving Thought History
 
-Our conversations with AI systems contain valuable records of how we think and reason. Yggdrasil transforms these interactions into navigable mind maps, showing how you approach any topic.
+Our conversations with AI systems contain valuable records of how we think, reason and solve problems. Yggdrasil transforms these interactions into navigable mind maps, showing how you approach any topic.
 
 ### Addressing the Documentation Crisis
 
@@ -99,109 +84,86 @@ By encapsulating different topics into isolated branches, Yggdrasil prevents bot
 
 - **Context pollution** for the LLM
 - **Visual pollution** for the user
+- **Growing token cost**
 
 This creates cleaner, more focused learning experiences.
-
-## The Data Value Proposition
 
 Our back-and-forth conversations with AI systems generate valuable data that's currently being wasted. Yggdrasil's mission is to help users better visualize and manage this conversation data, transforming ephemeral chat into persistent, navigable knowledge structures.
 
 ## Future
 
-Yggdrasil seeks to continue development into a planning and orchestration tool for AI workflows.
+This project has grown a bit too much and I think it would do better as an opensource project. I see the future of Yggdrasil as a layer running on top of windows/mac/linux, an abstraction fully automated with an agent.
+Each user can with a prompt, adjust the UI/UX of their app, make it more productive for themselves, or easier to use for someone with visual impairment for example.
+
+Bespoke software, for everyone.
 
 ## Current Status
 
-Yggdrasil is currently in beta and actively being developed. If you encounter any bug or have a feature request, please open an issue on GitHub.
+Yggdrasil is now out of beta. It is pretty stable in its main operation. If you encounter any bug or have a feature request, please open an issue on GitHub.
+
+I would love to have feedback and contributions from the community.
 
 ---
-
-## Prerequisites
-
-- Node.js 18+
-- npm
-- Ollama installed and running locally (for local models)
-- Optional: API keys if you want to use cloud providers (OpenAI, Google Gemini, Anthropic, OpenRouter)
 
 ## Project Structure
 
 ```
-Yggdrasil/
+yggdrasil_client/
 └── ygg-chat/
     ├── client/
-    │   └── ygg-chat-r/   # React client (Vite, Redux Toolkit, Tailwind, TypeScript)
-    ├── server/           # Node.js + Express API + SQLite persistence
-    │   └── src/
-    └── shared/           # Shared assets/config (e.g., providers.json)
+    │   └── ygg-chat-r/     # React UI + Electron runtime + local server + tools
+    ├── shared/             # Shared types/assets
+    └── docs/               # Documentation
 ```
 
-## Getting Started
-
-### automatic install:
-
-#### 1. Clone the repository
+````md
+## Getting Started (Development)
 
 ```bash
-git clone https://github.com/zayr0-9/Yggdrasil.git
-cd Yggdrasil/ygg-chat
-```
-
-to install and start run start_yggdrasil.bat
-to update and run, use update_start_yggdrasil.bat
-
-### manual install:
-
-#### 1. Clone the repository
-
-```bash
-git clone https://github.com/zayr0-9/Yggdrasil.git
-cd Yggdrasil/ygg-chat
-```
-
-#### 2. Install dependencies (monorepo workspaces)
-
-```bash
+cd ygg-chat
 npm install
-# Optionally, install per workspace if needed
-# (from repo root) cd client/ygg-chat-r && npm install
-# (from repo root) cd server && npm install
-```
-
-#### 3. Run the server and client in concurrent mode (port 3001 and 5173)
-
-```bash
 npm run dev
 ```
+````
 
-Server base URL: `http://localhost:3001/api`
+- Web UI: http://localhost:5173
 
-#### Open your browser to `http://localhost:5173` to access the chat UI.
+### Electron (desktop dev)
 
-## Usage
+```bash
+cd ygg-chat
+npm run dev:electron
+```
 
-1. Type a message in the input bar.
-2. Press **Send**.
-3. The request streams via SSE from the server. Click **Stop** to abort generation.
-4. Use the Heimdall tree to branch, select nodes, and navigate conversation paths.
-5. Optionally attach images to user messages; they’ll appear inline.
+## Build (Windows)
 
-## Environment Variables
+From `ygg-chat/` you can run the workspace build script:
 
-- `OPENAI_API_KEY` — required for OpenAI model listing/usage
-- `OPENROUTER_API_KEY` — required for OpenRouter model listing/usage
-- `ANTHROPIC_API_KEY` — required for Anthropic model listing/usage
-- `GEMINI_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY` — required for Gemini model listing/usage
+```bash
+cd ygg-chat
+npm install
+npm --prefix client/ygg-chat-r run build:win
+```
 
-## Roadmap
+Or run it directly inside the workspace:
 
-- **Agent Builder**: build agents to run in the background.
-- **Model settings**: more model settings through api request.
-- **Export**: export conversations/trees with attachments.
-- **Attachments**: more attachment types.
-- **Fuzzy search**
-- **RAG**
-- **Mobile**: potential React Native/Expo client.
+```bash
+cd ygg-chat/client/ygg-chat-r
+npm install
+npm run build:win
+```
 
-## License
+### If you run into native module issues, try:
 
-This project is licensed under the Yggdrasil License 2.0. See [license.md](license.md) for details.
+```bash
+npm --prefix client/ygg-chat-r run rebuild:client
+```
+
+### Why not MIT from day one?
+
+We are currently using AGPL-3.0 to discourage closed-source forks/clones during the early stage.
+We will revisit licensing (MIT) once the project reaches stronger maturity/traction.
+
+# License
+
+Licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [LICENSE](license.md). If you run a modified version as a network service, the AGPL requires you to offer the corresponding source code to users of that service.

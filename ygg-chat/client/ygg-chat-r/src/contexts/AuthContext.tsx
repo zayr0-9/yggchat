@@ -1,5 +1,6 @@
 import { Session, User } from '@supabase/supabase-js'
 import React, { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import { isCommunityMode, isElectronMode, LOCAL_AUTH_USER_ID, syncRuntimeAuthMode } from '../config/runtimeMode'
 import { clearUser, setUser } from '../features/users/usersSlice'
 import { getAuthProvider, type AuthProvider as IAuthProvider } from '../lib/auth'
 import { dualSync } from '../lib/sync/dualSyncManager'
@@ -52,6 +53,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setAuthState(prev => {
       const newState = { ...prev, ...state, loading: false }
 
+      syncRuntimeAuthMode({
+        accessToken: newState.accessToken,
+        userId: newState.userId,
+      })
+
       // Update Redux thunk extra auth
       updateThunkExtraAuth(newState.accessToken, newState.userId)
 
@@ -70,6 +76,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
+      if (isCommunityMode) {
+        const localProfile = {
+          id: userId,
+          username: 'community-user',
+          created_at: new Date(0).toISOString(),
+          max_credits: 0,
+          cached_current_credits: 0,
+          total_spent: 0,
+          credits_enabled: false,
+          reset_period: 'none' as const,
+          free_generations_remaining: 0,
+          favorite_conversation_ids: [],
+        }
+        store.dispatch(setUser(localProfile as any))
+        if (isElectronMode) {
+          dualSync.syncUser({
+            id: localProfile.id,
+            username: localProfile.username,
+            created_at: localProfile.created_at,
+          })
+        }
+        return
+      }
+
       // console.log('[AuthContext] Fetching user profile for:', userId)
       const response = await fetch(`${API_BASE}/users/${userId}`, {
         headers: {
@@ -90,9 +120,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       store.dispatch(setUser(profile))
 
       // Sync user to local SQLite database (Electron mode only)
-      const isElectronMode =
-        (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
-
       if (isElectronMode) {
         // console.log('[AuthContext] Syncing user to local SQLite:', profile.id)
         dualSync.syncUser({
@@ -116,6 +143,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userId: null,
         loading: false,
       })
+      syncRuntimeAuthMode({ accessToken: null, userId: null })
       updateThunkExtraAuth(null, null)
       store.dispatch(clearUser())
     }
@@ -247,6 +275,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signIn = useCallback(
     async (credentials: { email: string; password: string }) => {
       // console.log('[AuthContext] Signing in...')
+
+      const wantsLocalLogin = !credentials.email?.trim() && !credentials.password?.trim()
+
+      if (wantsLocalLogin) {
+        const localToken = isElectronMode ? 'electron-local-token' : 'local-mode-token'
+        const localAuthState = {
+          user: {
+            id: LOCAL_AUTH_USER_ID,
+            username: isElectronMode ? 'electron-user' : 'local-user',
+            email: isElectronMode ? 'electron@localhost' : 'local@localhost',
+          },
+          session: {
+            access_token: localToken,
+          },
+          loading: false,
+          accessToken: localToken,
+          userId: LOCAL_AUTH_USER_ID,
+        }
+
+        if (isElectronMode && window.electronAPI?.storage) {
+          try {
+            await window.electronAPI.storage.set('auth_session', localAuthState)
+          } catch (storageError) {
+            console.warn('[AuthContext] Failed to persist local auth session:', storageError)
+          }
+        }
+
+        updateAuthState({
+          user: localAuthState.user as any,
+          session: localAuthState.session as any,
+          accessToken: localAuthState.accessToken,
+          userId: localAuthState.userId,
+        })
+
+        await syncUserProfile(localAuthState.userId, localAuthState.accessToken)
+        return
+      }
 
       if (!provider) {
         console.warn('[AuthContext] Provider not initialized yet')

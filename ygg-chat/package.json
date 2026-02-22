@@ -4,8 +4,7 @@
   "description": "Full stack LLM frontend",
   "private": true,
   "workspaces": [
-    "client/ygg-chat-r",
-    "server"
+    "client/ygg-chat-r"
   ],
   "overrides": {
     "onnxruntime-web": "1.23.2",
@@ -14,27 +13,21 @@
     "immer": "^11.0.0"
   },
   "scripts": {
-    "migrate": "npm --prefix server run migrate",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:client": "prettier --write 'ygg-chat/client/**/*.{js,jsx,ts,tsx,json,css,md}'",
-    "format:server": "prettier --write 'ygg-chat/server/**/*.{js,jsx,ts,tsx,json,css,md}'",
     "format:shared": "prettier --write 'ygg-chat/shared/**/*.{js,jsx,ts,tsx,json,css,md}'",
     "format:chat": "prettier --write 'ygg-chat/**/*.{js,jsx,ts,tsx,json,css,md}'",
-    "dev": "concurrently -n server,client -c yellow,cyan \"npm --prefix server run dev\" \"npm --prefix client/ygg-chat-r run dev\"",
-    "dev:migrate": "npm run migrate && npm run dev",
-    "dev:client": "cd client/ygg-chat-r && npm run dev",
-    "dev:serverold": "cd server && npm run dev",
-    "dev:server": "nodemon server/src/index.ts --ignore src/**/*",
-    "dev:electron": "cross-env BUILD_TARGET=electron concurrently -n server,client -c yellow,cyan \"npm --prefix server run dev\" \"npm --prefix client/ygg-chat-r run dev:electron\"",
-    "build": "npm run build:client && npm run build:server && npm run build:electron",
-    "build:client": "cd client/ygg-chat-r && npm run build",
-    "build:server": "cd server && npm run build",
-    "build:web": "cross-env BUILD_TARGET=web npm run build:client && npm run build:server",
+    "dev": "npm --prefix client/ygg-chat-r run dev",
+    "dev:client": "npm --prefix client/ygg-chat-r run dev",
+    "dev:electron": "npm --prefix client/ygg-chat-r run dev:electron",
+    "build": "npm run build:client && npm run build:electron",
+    "build:client": "npm --prefix client/ygg-chat-r run build",
+    "build:web": "cross-env BUILD_TARGET=web npm run build:client",
     "build:electron": "cross-env BUILD_TARGET=electron npm run build:electron:all",
     "build:electron:all": "npm --prefix client/ygg-chat-r run build:electron && npm --prefix client/ygg-chat-r run build:electron:main",
     "package:electron": "npm --prefix client/ygg-chat-r run package:electron",
-    "install:all": "npm install && cd ygg-chat/client/ygg-chat-r && npm install && cd ../../server && npm install"
+    "install:all": "npm install && npm --prefix client/ygg-chat-r install"
   },
   "devDependencies": {
     "@types/express": "4.17.21",

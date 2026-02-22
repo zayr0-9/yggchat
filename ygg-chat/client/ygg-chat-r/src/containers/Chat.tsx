@@ -109,6 +109,7 @@ import {
   CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
   loadShowTokenUsageBar,
 } from '../helpers/chatUiSettingsStorage'
+import { isCommunityMode } from '../config/runtimeMode'
 import { isOrchestratorEnabled, toggleOrchestratorEnabled } from '../helpers/subagentToolSettings'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
@@ -584,6 +585,8 @@ function Chat() {
   // Tool jobs modal state
   const [jobsModalOpen, setJobsModalOpen] = useState(false)
   const [orchestratorEnabled, setOrchestratorEnabledState] = useState(() => isOrchestratorEnabled())
+  // OpenRouter cloud-sign-in required modal state
+  const [openRouterLoginRequiredModalOpen, setOpenRouterLoginRequiredModalOpen] = useState(false)
   // OpenAI ChatGPT login modal state
   const [openaiLoginModalOpen, setOpenaiLoginModalOpen] = useState(false)
   const [openaiAuthFlow, setOpenaiAuthFlow] = useState<{ url: string; verifier: string; state: string } | null>(null)
@@ -2277,20 +2280,48 @@ function Chat() {
     chatReasoningSettings.defaultReasoningEffort,
   ])
 
-  // Set default provider based on settings or fall back to OpenRouter
+  // Set default provider based on settings or community constraints.
   useEffect(() => {
+    const allowedProviders = providers.providers.map(p => p.name)
+
+    if (isCommunityMode) {
+      const preferredCommunityDefault = allowedProviders.includes('LM Studio')
+        ? 'LM Studio'
+        : (allowedProviders[0] || null)
+
+      if (!preferredCommunityDefault) return
+
+      if (
+        !providers.currentProvider ||
+        !allowedProviders.includes(providers.currentProvider) ||
+        providers.currentProvider === 'OpenRouter'
+      ) {
+        dispatch(chatSliceActions.providerSelected(preferredCommunityDefault))
+      }
+      return
+    }
+
     if (!providers.currentProvider) {
       // If provider selector is hidden and a default is configured, use it
       if (!providerSettings.showProviderSelector && providerSettings.defaultProvider) {
         dispatch(chatSliceActions.providerSelected(providerSettings.defaultProvider))
-      } else {
+      } else if (allowedProviders.includes('OpenRouter')) {
         dispatch(chatSliceActions.providerSelected('OpenRouter'))
+      } else if (allowedProviders.length > 0) {
+        dispatch(chatSliceActions.providerSelected(allowedProviders[0]))
       }
     }
-  }, [providers.currentProvider, dispatch, providerSettings.showProviderSelector, providerSettings.defaultProvider])
+  }, [
+    providers.currentProvider,
+    providers.providers,
+    dispatch,
+    providerSettings.showProviderSelector,
+    providerSettings.defaultProvider,
+  ])
 
   // Auto-apply default provider when visibility is toggled off
   useEffect(() => {
+    if (isCommunityMode) return
     if (!providerSettings.showProviderSelector && providerSettings.defaultProvider) {
       dispatch(chatSliceActions.providerSelected(providerSettings.defaultProvider))
     }
@@ -2345,6 +2376,11 @@ function Chat() {
   // Provider selection handler with OpenAI auth check
   const handleProviderSelect = useCallback(
     async (providerName: string) => {
+      if (providerName === 'OpenRouter' && isCommunityMode) {
+        setOpenRouterLoginRequiredModalOpen(true)
+        return
+      }
+
       // Check if OpenAI ChatGPT provider is selected and user is not authenticated
       if (providerName === 'OpenAI (ChatGPT)' && !isOpenAIAuthenticated()) {
         // Request OAuth flow from local server (server generates and stores PKCE)
@@ -3052,6 +3088,15 @@ function Chat() {
     closeDeleteModal()
   }
 
+  const closeOpenRouterLoginRequiredModal = () => {
+    setOpenRouterLoginRequiredModalOpen(false)
+  }
+
+  const confirmOpenRouterLoginRequired = () => {
+    setOpenRouterLoginRequiredModalOpen(false)
+    navigate('/login?required=cloud')
+  }
+
   // OpenAI ChatGPT login modal handlers
   const closeOpenaiLoginModal = () => {
     setOpenaiLoginModalOpen(false)
@@ -3130,9 +3175,14 @@ function Chat() {
 
   const handleOpenaiLogout = () => {
     clearOpenAITokens()
-    // If currently on OpenAI provider, switch back to OpenRouter
+    // If currently on OpenAI provider, switch back to an allowed local provider
     if (providers.currentProvider === 'OpenAI (ChatGPT)') {
-      dispatch(chatSliceActions.providerSelected('OpenRouter'))
+      const fallbackProvider = providers.providers.some(provider => provider.name === 'LM Studio')
+        ? 'LM Studio'
+        : providers.providers[0]?.name
+      if (fallbackProvider) {
+        dispatch(chatSliceActions.providerSelected(fallbackProvider))
+      }
     }
     closeOpenaiLoginModal()
   }
@@ -5064,6 +5114,35 @@ function Chat() {
         onClose={() => dispatch(chatSliceActions.freeTierLimitModalHidden())}
       />
       <ToolJobsModal isOpen={jobsModalOpen} onClose={() => setJobsModalOpen(false)} />
+
+      {/* OpenRouter login required modal */}
+      {openRouterLoginRequiredModalOpen && (
+        <div
+          className='fixed inset-0 z-[100] flex items-center justify-center bg-black/50'
+          onClick={closeOpenRouterLoginRequiredModal}
+        >
+          <div
+            className='bg-white dark:bg-yBlack-900 rounded-lg shadow-xl p-6 w-[90%] max-w-md'
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className='text-[20px] font-semibold mb-3 text-neutral-900 dark:text-neutral-100'>
+              Sign in required for Yggdrasil models
+            </h3>
+            <p className='text-[14px] text-neutral-700 dark:text-neutral-300 mb-6'>
+              you need to sign in with github or google account to access Yggdrasil models, logging in will merge your local and yggdrasil account, you wont lose any info
+            </p>
+            <div className='flex justify-end'>
+              <Button
+                variant='outline2'
+                className='bg-emerald-600 hover:bg-emerald-700 border-emerald-700 text-white active:scale-90'
+                onClick={confirmOpenRouterLoginRequired}
+              >
+                Ok
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* OpenAI ChatGPT Login Modal */}
       {openaiLoginModalOpen && (

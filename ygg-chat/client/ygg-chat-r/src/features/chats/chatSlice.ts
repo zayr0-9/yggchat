@@ -1,6 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 import providersList from '../../../../../shared/providers.json'
 import { ConversationId, MessageId } from '../../../../../shared/types'
+import { isCommunityMode } from '../../config/runtimeMode'
 import { parseId } from '../../utils/helpers'
 
 import {
@@ -36,10 +37,14 @@ const isElectronEnvironment =
   (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
 
 const webHiddenProviders = new Set(['OpenAI (ChatGPT)', 'LM Studio'])
+const communityAllowedProviders = new Set(['LM Studio', 'OpenAI (ChatGPT)', 'OpenRouter'])
 
 const getAvailableProviders = () => {
   const allProviders = Object.values(providersList.providers)
   if (isElectronEnvironment) {
+    if (isCommunityMode) {
+      return allProviders.filter(provider => communityAllowedProviders.has(provider.name))
+    }
     return allProviders
   }
   return allProviders.filter(provider => !webHiddenProviders.has(provider.name))

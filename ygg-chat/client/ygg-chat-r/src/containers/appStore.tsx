@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { isCommunityMode } from '../config/runtimeMode'
 import { reloadCustomTools } from '../features/chats/chatActions'
 import { useAppDispatch } from '../hooks/redux'
 import {
@@ -124,6 +126,8 @@ const collectInstalledToolIndex = (tools: Array<{ name?: string; sourcePath?: st
 
 export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) => {
   const isElectron = environment === 'electron'
+  const navigate = useNavigate()
+  const uploadRequiresCloudLogin = isCommunityMode
   const dispatch = useAppDispatch()
   const [storeTab, setStoreTab] = useState<StoreTab>('first-party')
   const [firstPartyApps, setFirstPartyApps] = useState<AppStoreApp[]>([])
@@ -465,6 +469,10 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
     }
   }, [])
 
+  const handleUploadLoginRequired = useCallback(() => {
+    navigate('/login?required=cloud')
+  }, [navigate])
+
   const handleUploadFileChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0] || null
@@ -509,6 +517,15 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
   )
 
   const handleUploadSubmit = useCallback(async () => {
+    if (uploadRequiresCloudLogin) {
+      setUploadStatus({
+        type: 'error',
+        message: 'You must be signed in to upload apps.',
+      })
+      handleUploadLoginRequired()
+      return
+    }
+
     if (!uploadFile || !uploadValidation) {
       setUploadStatus({
         type: 'error',
@@ -530,7 +547,7 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
         message: err instanceof Error ? err.message : 'Upload failed',
       })
     }
-  }, [reloadCommunityApps, resetUploadState, uploadFile, uploadValidation])
+  }, [handleUploadLoginRequired, reloadCommunityApps, resetUploadState, uploadFile, uploadValidation, uploadRequiresCloudLogin])
 
   useEffect(() => {
     if (!open) {
@@ -714,14 +731,23 @@ export const AppStoreModal: React.FC<AppStoreModalProps> = ({ open, onClose }) =
                     </div>
                   )}
 
-                  <div className='flex items-center gap-2'>
+                  <div className='flex items-center gap-2 flex-wrap'>
                     <button
                       onClick={handleUploadSubmit}
-                      disabled={!isElectron || !uploadValidation || uploadStatus?.type === 'uploading'}
+                      disabled={!isElectron || uploadRequiresCloudLogin || !uploadValidation || uploadStatus?.type === 'uploading'}
                       className='px-4 py-2 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
                     >
                       {uploadStatus?.type === 'uploading' ? 'Uploading...' : 'Upload to Community'}
                     </button>
+                    {uploadRequiresCloudLogin && (
+                      <button
+                        type='button'
+                        onClick={handleUploadLoginRequired}
+                        className='text-[11px] text-amber-700 dark:text-amber-200 hover:underline text-left'
+                      >
+                        you need to sign in to upload apps to the store
+                      </button>
+                    )}
                     {uploadFile && (
                       <button
                         onClick={() => {

@@ -1,3 +1,4 @@
+import { isCommunityMode } from '../../config/runtimeMode'
 import { supabase } from '../supabase'
 import type { AuthChangeCallback, AuthProvider, AuthState, Credentials, User } from './types'
 
@@ -41,6 +42,23 @@ export class ElectronAuthProvider implements AuthProvider {
     if (window.electronAPI) {
       this.electronAPI = window.electronAPI
       // console.log('[ElectronAuth] Electron API detected')
+
+      if (isCommunityMode) {
+        this.authState = {
+          user: null,
+          session: null,
+          loading: false,
+          accessToken: null,
+          userId: null,
+        }
+        this.syncCacheToWindow()
+
+        if (this.electronAPI?.storage) {
+          await this.electronAPI.storage.set('auth_session', null)
+        }
+        this.notifyListeners(this.authState.user)
+        return
+      }
 
       // Try to load saved session from Electron storage
       try {
@@ -113,7 +131,7 @@ export class ElectronAuthProvider implements AuthProvider {
     // console.log('[ElectronAuth] Login called')
 
     // Check if this is a local mode login (empty credentials)
-    const isLocalMode = !credentials.email && !credentials.password
+    const isLocalMode = isCommunityMode || (!credentials.email && !credentials.password)
 
     if (isLocalMode) {
       // console.log('[ElectronAuth] Local mode login - using default user')

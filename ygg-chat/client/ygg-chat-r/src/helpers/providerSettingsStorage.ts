@@ -1,6 +1,8 @@
 // Provider Settings Storage
 // Simple localStorage-based persistence for provider visibility and default selection
 
+import { isCommunityMode } from '../config/runtimeMode'
+
 const STORAGE_KEY = 'ygg_provider_settings'
 export const PROVIDER_SETTINGS_CHANGE_EVENT = 'ygg-provider-settings-change'
 export const MIN_OPENROUTER_TEMPERATURE = 0
@@ -21,6 +23,9 @@ const DEFAULT_SETTINGS: ProviderSettings = {
   openRouterTemperature: null,
 }
 
+const COMMUNITY_ALLOWED_PROVIDERS = new Set(['LM Studio', 'OpenAI (ChatGPT)'])
+const COMMUNITY_FALLBACK_PROVIDER = 'LM Studio'
+
 function normalizeOpenRouterTemperature(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
@@ -34,16 +39,24 @@ function normalizeOpenRouterTemperature(value: unknown): number | null {
 export function loadProviderSettings(): ProviderSettings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return { ...DEFAULT_SETTINGS }
+    const parsed = stored ? (JSON.parse(stored) as Partial<ProviderSettings>) : DEFAULT_SETTINGS
 
-    const parsed = JSON.parse(stored) as Partial<ProviderSettings>
+    const resolvedDefaultProvider = parsed.defaultProvider ?? DEFAULT_SETTINGS.defaultProvider
+    const communityDefaultProvider =
+      resolvedDefaultProvider && COMMUNITY_ALLOWED_PROVIDERS.has(resolvedDefaultProvider)
+        ? resolvedDefaultProvider
+        : COMMUNITY_FALLBACK_PROVIDER
+
     return {
-      showProviderSelector: parsed.showProviderSelector ?? DEFAULT_SETTINGS.showProviderSelector,
-      defaultProvider: parsed.defaultProvider ?? DEFAULT_SETTINGS.defaultProvider,
+      showProviderSelector: isCommunityMode ? true : (parsed.showProviderSelector ?? DEFAULT_SETTINGS.showProviderSelector),
+      defaultProvider: isCommunityMode ? communityDefaultProvider : resolvedDefaultProvider,
       openRouterTemperature: normalizeOpenRouterTemperature(parsed.openRouterTemperature),
     }
   } catch {
-    return { ...DEFAULT_SETTINGS }
+    return {
+      ...DEFAULT_SETTINGS,
+      defaultProvider: isCommunityMode ? COMMUNITY_FALLBACK_PROVIDER : DEFAULT_SETTINGS.defaultProvider,
+    }
   }
 }
 

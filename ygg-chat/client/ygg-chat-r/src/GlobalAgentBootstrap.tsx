@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { isCommunityMode } from './config/runtimeMode'
 import { useAuth } from './hooks/useAuth'
 import { globalAgentLoop } from './services'
 import { useAppDispatch } from './hooks/redux'
@@ -14,7 +15,7 @@ const GlobalAgentBootstrap = () => {
 
   // Inject queryClient into GlobalAgentLoop for React Query cache updates
   useEffect(() => {
-    if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+    if (import.meta.env.VITE_ENVIRONMENT !== 'electron' || isCommunityMode) return
 
     globalAgentLoop.setQueryClient(queryClient)
 
@@ -25,7 +26,7 @@ const GlobalAgentBootstrap = () => {
 
   // Inject Redux dispatch and getState for tool execution
   useEffect(() => {
-    if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+    if (import.meta.env.VITE_ENVIRONMENT !== 'electron' || isCommunityMode) return
 
     globalAgentLoop.setReduxContext(dispatch, () => store.getState() as RootState)
 
@@ -36,7 +37,7 @@ const GlobalAgentBootstrap = () => {
 
   // Initialize global agent
   useEffect(() => {
-    if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+    if (import.meta.env.VITE_ENVIRONMENT !== 'electron' || isCommunityMode) return
     if (!userId) return
 
     globalAgentLoop.initialize(userId, accessToken).catch(error => {

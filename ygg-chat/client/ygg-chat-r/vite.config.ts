@@ -15,7 +15,7 @@ function serveWasmPlugin(): Plugin {
         if (req.url?.includes('ort-wasm') && req.url?.endsWith('.wasm')) {
           const wasmPath = path.resolve(
             __dirname,
-            '../../node_modules/onnxruntime-web/dist',
+            'node_modules/onnxruntime-web/dist',
             path.basename(req.url.split('?')[0])
           )
           if (fs.existsSync(wasmPath)) {
@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
       viteStaticCopy({
         targets: [
           {
-            src: '../../node_modules/onnxruntime-web/dist/ort-wasm*.{wasm,mjs}',
+            src: 'node_modules/onnxruntime-web/dist/ort-wasm*.{wasm,mjs}',
             dest: 'ort-wasm',
           },
         ],
@@ -108,7 +108,7 @@ export default defineConfig(({ mode }) => {
       },
       // Allow serving files from node_modules for ONNX Runtime WASM
       fs: {
-        allow: ['..', '../../node_modules'],
+        allow: ['..', 'node_modules'],
       },
     },
 

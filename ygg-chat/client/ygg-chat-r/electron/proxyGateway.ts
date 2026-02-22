@@ -255,72 +255,31 @@ class FileCredentialVault implements CredentialVault {
 }
 
 class SupabaseCredentialVault implements CredentialVault {
-  private cache = new Map<string, ProviderCredentials>()
+  private fallback = new InMemoryCredentialVault()
+  private warned = false
+
+  private warnOnce(): void {
+    if (this.warned) return
+    this.warned = true
+    logProxyEvent('warn', 'supabase_credentials_disabled_in_client_repo', {
+      reason: 'server credential table module is not available in client-only repository',
+      fallback: 'memory',
+    })
+  }
 
   async get(tenantId: string, provider: string): Promise<ProviderCredentials | undefined> {
-    const cacheKey = `${tenantId}:${provider}`
-    const cached = this.cache.get(cacheKey)
-    const { getProviderCredential } = await loadCredentialModule()
-    const record = await getProviderCredential(tenantId, provider)
-
-    if (!record) {
-      this.cache.delete(cacheKey)
-      return undefined
-    }
-
-    const credentials = mapRecordToCredentials(record)
-    if (!credentials) {
-      this.cache.delete(cacheKey)
-      return undefined
-    }
-
-    if (cached?.type === 'oauth2' && cached.accessToken && credentials.type === 'oauth2') {
-      credentials.accessToken = cached.accessToken
-      credentials.accessTokenExpiresAt = cached.accessTokenExpiresAt
-    }
-
-    this.cache.set(cacheKey, credentials)
-    try {
-      const { touchProviderCredential } = await loadCredentialModule()
-      await touchProviderCredential(tenantId, provider)
-    } catch (error) {
-      logProxyEvent('warn', 'credentials_touch_failed', {
-        provider,
-        tenantId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-
-    return credentials
+    this.warnOnce()
+    return this.fallback.get(tenantId, provider)
   }
 
   async set(tenantId: string, provider: string, credentials: ProviderCredentials): Promise<void> {
-    if (credentials.type !== 'oauth2') {
-      throw new Error('Supabase credential store only supports oauth2 refresh tokens')
-    }
-
-    if (!credentials.refreshToken) {
-      throw new Error('Missing refresh token for Supabase credential store')
-    }
-
-    const { upsertProviderCredential } = await loadCredentialModule()
-    await upsertProviderCredential({
-      userId: tenantId,
-      provider,
-      refreshToken: credentials.refreshToken,
-      clientId: credentials.clientId,
-      clientSecret: credentials.clientSecret,
-      tokenUrl: credentials.tokenUrl,
-      scopes: credentials.scopes ?? null,
-    })
-
-    this.cache.set(`${tenantId}:${provider}`, credentials)
+    this.warnOnce()
+    await this.fallback.set(tenantId, provider, credentials)
   }
 
   async delete(tenantId: string, provider: string): Promise<void> {
-    const { deleteProviderCredential } = await loadCredentialModule()
-    await deleteProviderCredential(tenantId, provider)
-    this.cache.delete(`${tenantId}:${provider}`)
+    this.warnOnce()
+    await this.fallback.delete(tenantId, provider)
   }
 }
 
@@ -560,17 +519,6 @@ const DEFAULT_PROVIDER_POLICIES: Record<string, ProviderPolicy> = {
 }
 
 const DEFAULT_ADAPTERS = createDefaultAdapters()
-
-let credentialModulePromise:
-  | Promise<typeof import('../../../server/src/database/credential_table.js')>
-  | null = null
-
-const loadCredentialModule = async () => {
-  if (!credentialModulePromise) {
-    credentialModulePromise = import('../../../server/src/database/credential_table.js')
-  }
-  return credentialModulePromise
-}
 
 class ProxyGateway {
   private apiKey?: string

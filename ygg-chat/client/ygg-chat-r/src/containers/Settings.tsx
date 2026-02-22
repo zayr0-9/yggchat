@@ -58,6 +58,7 @@ import {
   updateCustomVideoTextColorMode,
   VIDEO_BACKGROUND_CHANGE_EVENT,
 } from '../helpers/videoBackgroundStorage'
+import { isCommunityMode } from '../config/runtimeMode'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useModels } from '../hooks/useQueries'
@@ -158,6 +159,10 @@ const Settings: React.FC = () => {
 
   // Fetch Google Drive connection status
   const fetchGoogleDriveStatus = async () => {
+    if (isCommunityMode) {
+      setGoogleDriveStatus(null)
+      return
+    }
     if (!accessToken) return
     try {
       const response = await fetch(`${API_BASE}/oauth/google-drive/status`, {
@@ -713,6 +718,11 @@ const Settings: React.FC = () => {
   }
 
   const handleGoogleDriveConnect = async () => {
+    if (isCommunityMode) {
+      showStatus({ type: 'info', text: 'Google Drive is disabled in community mode.' })
+      return
+    }
+
     if (!accessToken) {
       showStatus({ type: 'error', text: 'Sign in required to connect Google Drive.' })
       return
@@ -759,6 +769,10 @@ const Settings: React.FC = () => {
   }
 
   const handleGoogleDriveDisconnect = async () => {
+    if (isCommunityMode) {
+      showStatus({ type: 'info', text: 'Google Drive is disabled in community mode.' })
+      return
+    }
     if (!accessToken) return
 
     setGoogleDisconnecting(true)

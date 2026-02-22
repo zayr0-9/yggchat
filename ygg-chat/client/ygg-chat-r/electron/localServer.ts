@@ -4926,6 +4926,71 @@ function setupServer() {
     }
   })
 
+
+  // Merge local-only user data into a cloud-authenticated user account
+  app.post('/api/local/users/merge', (req, res) => {
+    try {
+      const { fromUserId, toUserId, toUsername, toCreatedAt } = req.body as {
+        fromUserId?: string
+        toUserId?: string
+        toUsername?: string
+        toCreatedAt?: string
+      }
+
+      if (!fromUserId || !toUserId) {
+        res.status(400).json({ error: 'fromUserId and toUserId are required' })
+        return
+      }
+
+      if (fromUserId === toUserId) {
+        res.json({ success: true, merged: false, message: 'Source and target user are the same' })
+        return
+      }
+
+      const mergeTx = db!.transaction(() => {
+        const toUserExists = db!.prepare('SELECT id FROM users WHERE id = ?').get(toUserId)
+        if (!toUserExists) {
+          db!
+            .prepare('INSERT INTO users (id, username, created_at) VALUES (?, ?, ?)')
+            .run(toUserId, toUsername || 'user', toCreatedAt || new Date().toISOString())
+        }
+
+        const projectsResult = db!.prepare('UPDATE projects SET user_id = ? WHERE user_id = ?').run(toUserId, fromUserId)
+        const conversationsResult = db!
+          .prepare('UPDATE conversations SET user_id = ? WHERE user_id = ?')
+          .run(toUserId, fromUserId)
+        const providerCostResult = db!
+          .prepare('UPDATE provider_cost SET user_id = ? WHERE user_id = ?')
+          .run(toUserId, fromUserId)
+
+        const remainingRefs = db!
+          .prepare(
+            `SELECT (
+              (SELECT COUNT(*) FROM projects WHERE user_id = ?) +
+              (SELECT COUNT(*) FROM conversations WHERE user_id = ?) +
+              (SELECT COUNT(*) FROM provider_cost WHERE user_id = ?)
+            ) as total`
+          )
+          .get(fromUserId, fromUserId, fromUserId) as { total: number }
+
+        if ((remainingRefs?.total || 0) === 0) {
+          db!.prepare('DELETE FROM users WHERE id = ?').run(fromUserId)
+        }
+
+        return {
+          projects: projectsResult.changes,
+          conversations: conversationsResult.changes,
+          providerCosts: providerCostResult.changes,
+        }
+      })()
+
+      res.json({ success: true, merged: true, ...mergeTx })
+    } catch (error) {
+      console.error('[LocalServer] Error merging local user data:', error)
+      res.status(500).json({ error: 'Failed to merge local user data' })
+    }
+  })
+
   // Local-only API endpoints
   app.get('/api/local/projects', (req, res) => {
     try {

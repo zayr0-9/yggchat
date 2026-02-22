@@ -1,18 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../components'
+import { isCloudSession, isElectronMode as isElectronRuntime, LOCAL_AUTH_USER_ID } from '../config/runtimeMode'
 import { loadStartupLandingPreference } from '../helpers/startupPreferences'
 import { useAuth } from '../hooks/useAuth'
 import { useRecentConversations } from '../hooks/useQueries'
 import { supabase } from '../lib/supabase'
 import { dualSync } from '../lib/sync/dualSyncManager'
+import { localApi } from '../utils/api'
 
 // Railway server URL for OOB auth (where Redis runs)
 const RAILWAY_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'https://webdrasil-production.up.railway.app'
 
 const Login: React.FC = () => {
   const navigate = useNavigate()
-  const { user, accessToken, loading: authLoading, reloadSession } = useAuth()
+  const [searchParams] = useSearchParams()
+  const { user, userId, accessToken, loading: authLoading, reloadSession, signIn } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const startupRedirectedRef = useRef(false)
@@ -31,9 +34,33 @@ const Login: React.FC = () => {
   const [showFallbackLink, setShowFallbackLink] = useState(false)
   const [pendingProvider, setPendingProvider] = useState<'google' | 'github' | null>(null)
 
-  // Check if we're in Electron mode (build-time or runtime detection)
-  const isElectronMode =
-    (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) || import.meta.env.VITE_ENVIRONMENT === 'electron'
+  // Check if we're in Electron mode
+  const isElectronMode = isElectronRuntime
+  const requiresCloudLogin = searchParams.get('required') === 'cloud'
+  const hasCloudSession = isCloudSession({
+    accessToken,
+    userId,
+  })
+
+  const mergeLocalDataIntoCloudAccount = async (
+    cloudUserId: string,
+    cloudUsername: string,
+    cloudCreatedAt?: string
+  ) => {
+    if (!isElectronMode) return
+    if (!cloudUserId || cloudUserId === LOCAL_AUTH_USER_ID) return
+
+    try {
+      await localApi.post('/local/users/merge', {
+        fromUserId: LOCAL_AUTH_USER_ID,
+        toUserId: cloudUserId,
+        toUsername: cloudUsername,
+        toCreatedAt: cloudCreatedAt || new Date().toISOString(),
+      })
+    } catch (mergeError) {
+      console.error('[Login] Failed to merge local user data into cloud account:', mergeError)
+    }
+  }
 
   useEffect(() => {
     if (!user) {
@@ -43,6 +70,11 @@ const Login: React.FC = () => {
 
   // Redirect after auth based on startup preference.
   useEffect(() => {
+    if (requiresCloudLogin && !hasCloudSession) {
+      startupRedirectedRef.current = false
+      return
+    }
+
     if (!user || authLoading || startupRedirectedRef.current) return
 
     if (shouldRouteToLatestChat && !accessToken) return
@@ -75,6 +107,8 @@ const Login: React.FC = () => {
     startupRecentConversations,
     navigate,
     accessToken,
+    requiresCloudLogin,
+    hasCloudSession,
   ])
 
   // Monitor auth state changes - just for logging and cleanup
@@ -82,7 +116,7 @@ const Login: React.FC = () => {
   // Having this listener active in Electron causes conflicts with the provider's state management
   useEffect(() => {
     if (!supabase) return
-    // Skip in Electron mode to prevent dual auth state management
+    // Skip in Electron mode/community mode to prevent dual auth state management
     if (isElectronMode) return
 
     // console.log('[Login] Setting up onAuthStateChange listener')
@@ -161,6 +195,8 @@ const Login: React.FC = () => {
             username: username,
             created_at: data.session.user.created_at,
           })
+
+          await mergeLocalDataIntoCloudAccount(userId, username, data.session.user.created_at)
 
           // Save OAuth session to Electron storage so ElectronAuthProvider can use it
           if (window.electronAPI?.storage) {
@@ -270,6 +306,19 @@ const Login: React.FC = () => {
     }
   }
 
+  const handleCommunityLogin = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      await signIn({ email: '', password: '' })
+      setLoading(false)
+    } catch (error: any) {
+      setError(error.message || 'Failed to sign in with local community mode')
+      setLoading(false)
+    }
+  }
+
   // OOB Login flow - for Electron when deep links don't work
   const handleOOBLogin = async (provider: 'google' | 'github') => {
     setLoading(true)
@@ -349,6 +398,8 @@ const Login: React.FC = () => {
           created_at: data.session.user.created_at,
         })
 
+        await mergeLocalDataIntoCloudAccount(userId, username, data.session.user.created_at)
+
         // Save to Electron storage
         if (window.electronAPI?.storage) {
           const authStateForStorage = {
@@ -405,6 +456,11 @@ const Login: React.FC = () => {
           <p className='mt-2 text-center text-sm text-neutral-100 dark:text-neutral-50'>
             Choose your preferred sign-in method
           </p>
+          {requiresCloudLogin && (
+            <p className='mt-2 text-center text-sm text-amber-200 dark:text-amber-300'>
+              Google or GitHub sign-in is required to unlock Yggdrasil cloud models.
+            </p>
+          )}
         </div>
 
         {error && (
@@ -504,7 +560,7 @@ const Login: React.FC = () => {
               </button>
             </div>
           ) : (
-            // Normal OAuth Buttons
+            // OAuth + local mode buttons
             <div className='space-y-8'>
               <Button
                 onClick={() => handleOAuthLogin('github')}
@@ -561,6 +617,31 @@ const Login: React.FC = () => {
                 </svg>
                 <span className='ml-3'>Continue with Google</span>
               </Button>
+
+              {!requiresCloudLogin && (
+                <>
+                  <div className='relative'>
+                    <div className='absolute inset-0 flex items-center'>
+                      <div className='w-full border-t border-2 border-stone-300 dark:border-stone-500' />
+                    </div>
+                    <div className='relative flex justify-center text-sm'>
+                      <span className='px-1.5 py-1 bg-gray-50 dark:bg-yBlack-900 border-2 dark:text-stone-300 border:stone-700 dark:border-stone-400 rounded-full text-gray-500'>
+                        Or continue locally
+                      </span>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleCommunityLogin}
+                    disabled={loading || authLoading || waitingForCallback}
+                    variant='mica'
+                    size='large'
+                    className='w-full inline-flex justify-center items-center '
+                  >
+                    <span>{loading ? 'Signing in...' : 'Continue in Local Mode'}</span>
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>

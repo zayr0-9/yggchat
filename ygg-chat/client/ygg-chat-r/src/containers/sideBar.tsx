@@ -593,7 +593,7 @@ const SideBar: React.FC<SideBarProps> = ({
 
   return (
     <aside
-      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-md rounded-r-xl border-r border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 overflow-x-hidden ${isCollapsed ? 'w-16 ' : 'w-64 md:w-72 lg:w-80 xl:w-90 '} ${className}`}
+      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-md flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 overflow-x-hidden ${isCollapsed ? 'w-16 ' : 'w-64 md:w-72 lg:w-80 xl:w-90 '} ${className}`}
       aria-label={isProjectsTab ? 'Projects and conversations' : 'Favorite conversations'}
     >
       {/* Toggle Button */}

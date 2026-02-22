@@ -37,8 +37,13 @@ export async function getAuthProvider(): Promise<AuthProvider> {
 
   let provider: AuthProvider
 
+  // Runtime hard guard: if Electron preload API exists, always use Electron auth provider.
+  if (typeof window !== 'undefined' && (window as any).electronAPI) {
+    const { ElectronAuthProvider } = await import('./electron')
+    provider = new ElectronAuthProvider()
+  }
   // Build-time selection (preferred - allows tree-shaking)
-  if (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) {
+  else if (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__) {
     // console.log('[AuthFactory] Using Electron auth provider (build-time)')
     const { ElectronAuthProvider } = await import('./electron')
     provider = new ElectronAuthProvider()

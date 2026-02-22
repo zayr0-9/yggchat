@@ -1,9 +1,16 @@
+import { isCommunityMode } from '../config/runtimeMode'
 import { supabase } from '../lib/supabase'
 import { getSessionFromStorage } from '../lib/jwtUtils'
-import { apiCall, buildLocalApiUrl, environment, localApi } from '../utils/api'
+import { buildLocalApiUrl, environment, localApi, publicApiCall } from '../utils/api'
 
 const APP_STORE_BUCKET = 'updates'
 const APP_STORE_ROOT = 'apps'
+
+const assertCloudAppStoreWriteEnabled = () => {
+  if (isCommunityMode) {
+    throw new Error('Cloud app store publishing is disabled in community mode.')
+  }
+}
 
 export interface AppStoreDescription {
   name?: string
@@ -267,7 +274,7 @@ export async function fetchPublicAppStoreApps(): Promise<AppStoreApp[]> {
   const response =
     environment === 'electron'
       ? await localApi.get<{ success: boolean; apps?: PublicAppApiRecord[] }>('/app-store/community')
-      : await apiCall<{ success: boolean; apps?: PublicAppApiRecord[] }>('/app-store/community', null, {
+      : await publicApiCall<{ success: boolean; apps?: PublicAppApiRecord[] }>('/app-store/community', {
           method: 'GET',
         })
 
@@ -319,6 +326,8 @@ export async function validateCommunityAppUpload(file: File): Promise<CommunityA
 }
 
 export async function uploadCommunityApp(file: File): Promise<AppStoreApp> {
+  assertCloudAppStoreWriteEnabled()
+
   if (environment !== 'electron') {
     throw new Error('Community app uploads are only available in the desktop app.')
   }
