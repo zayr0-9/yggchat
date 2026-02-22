@@ -23,6 +23,8 @@ export const VoiceSettings: React.FC = () => {
   const voiceInputEnabled = useAppSelector(selectVoiceInputEnabled)
 
   const disabled = !voiceInputEnabled
+  const wakeWordTemporarilyDisabled = true
+  const wakeWordDisabled = disabled || wakeWordTemporarilyDisabled
 
   return (
     <div className='space-y-6'>
@@ -50,13 +52,16 @@ export const VoiceSettings: React.FC = () => {
             <p className='text-xs text-neutral-500 dark:text-neutral-400'>
               Hands-free activation - say the wake word to start voice input
             </p>
+            {wakeWordTemporarilyDisabled && (
+              <p className='text-xs text-amber-600 dark:text-amber-400'>Temporarily disabled</p>
+            )}
           </div>
           <label className='relative inline-flex items-center cursor-pointer'>
             <input
               type='checkbox'
               checked={settings.wakeWordEnabled}
               onChange={e => dispatch(setWakeWordEnabled(e.target.checked))}
-              disabled={disabled}
+              disabled={wakeWordDisabled}
               className='sr-only peer'
             />
             <div className="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer dark:bg-neutral-600 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-neutral-600 peer-checked:bg-sky-500"></div>
@@ -71,7 +76,7 @@ export const VoiceSettings: React.FC = () => {
               <select
                 value={settings.wakeWordKeyword}
                 onChange={e => dispatch(setWakeWordKeyword(e.target.value))}
-                disabled={disabled}
+                disabled={wakeWordDisabled}
                 className='w-full px-3 py-2 text-sm rounded-lg border border-neutral-200 dark:border-neutral-600 bg-white dark:bg-neutral-700 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-sky-500'
               >
                 {WAKE_WORD_OPTIONS.map(option => (
@@ -96,7 +101,7 @@ export const VoiceSettings: React.FC = () => {
                 max='90'
                 value={settings.wakeWordThreshold * 100}
                 onChange={e => dispatch(setWakeWordThreshold(Number(e.target.value) / 100))}
-                disabled={disabled}
+                disabled={wakeWordDisabled}
                 className='w-full h-2 bg-neutral-200 dark:bg-neutral-600 rounded-lg appearance-none cursor-pointer accent-sky-500'
               />
               <div className='flex justify-between text-xs text-neutral-400'>
@@ -118,7 +123,7 @@ export const VoiceSettings: React.FC = () => {
                 step='500'
                 value={settings.wakeWordCooldownMs}
                 onChange={e => dispatch(setWakeWordCooldownMs(Number(e.target.value)))}
-                disabled={disabled}
+                disabled={wakeWordDisabled}
                 className='w-full h-2 bg-neutral-200 dark:bg-neutral-600 rounded-lg appearance-none cursor-pointer accent-sky-500'
               />
               <p className='text-xs text-neutral-400'>Time to wait between detections</p>

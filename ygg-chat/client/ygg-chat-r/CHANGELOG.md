@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+## [0.1.77] - 2026-02-22
+
+### Added
+
+- Added delete confirmation modal when message is deleted from heimdall tree.
+
+### Changed
+
+- Updated sidebar design, rounded corners, centered buttons.
+- searchbar in heimdall on open autofocuses now.
+
+### Fixed
+
+- Fixed z axis overlaps on chat page
+- Fixed agent tool call grouping leaking (its very laggy not ready for use thus disabled by default)
+- Fixed openai reasoning accumulation while streaming
+
 ## [0.1.76] - 2026-02-14
 
 ### Added

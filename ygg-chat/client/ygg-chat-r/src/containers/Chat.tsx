@@ -4,6 +4,7 @@ import 'boxicons' // Types
 import 'boxicons/css/boxicons.min.css'
 import { AnimatePresence, motion } from 'framer-motion'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { batch } from 'react-redux'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { estimateTokenCount } from 'tokenx'
 import { ConversationId, ImageConfig, MessageId, ReasoningConfig } from '../../../../shared/types'
@@ -11,6 +12,7 @@ import {
   ActionPopover,
   Button,
   ChatMessage,
+  DeleteConfirmModal,
   FreeGenerationsModal,
   Heimdall,
   InputTextArea,
@@ -28,6 +30,7 @@ import {
   SendButtonAnimationType,
   SendButtonLoadingAnimation,
 } from '../components/SettingsPane/SendButtonAnimationSettings'
+import { isCommunityMode } from '../config/runtimeMode'
 import {
   abortGeneration,
   blobToDataURL,
@@ -86,7 +89,6 @@ import { removeSelectedFileForChat, selectExtension, updateIdeContext } from '..
 import {
   selectCurrentSelection,
   selectExtensions,
-  selectMentionableFiles,
   selectSelectedExtensionId,
   selectSelectedFilesForChat,
   selectWorkspace,
@@ -96,20 +98,16 @@ import { uiActions } from '../features/ui'
 import { refreshUserCredits, selectCurrentUser } from '../features/users'
 import { selectSttConfig, selectVoiceInputEnabled, selectWakeWordConfig } from '../features/voiceSettings'
 import {
-  loadProviderSettings,
-  PROVIDER_SETTINGS_CHANGE_EVENT,
-  ProviderSettings,
-} from '../helpers/providerSettingsStorage'
-import {
   CHAT_REASONING_SETTINGS_CHANGE_EVENT,
   loadChatReasoningSettings,
   REASONING_EFFORT_OPTIONS,
 } from '../helpers/chatReasoningSettingsStorage'
+import { CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT, loadShowTokenUsageBar } from '../helpers/chatUiSettingsStorage'
 import {
-  CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
-  loadShowTokenUsageBar,
-} from '../helpers/chatUiSettingsStorage'
-import { isCommunityMode } from '../config/runtimeMode'
+  loadProviderSettings,
+  PROVIDER_SETTINGS_CHANGE_EVENT,
+  ProviderSettings,
+} from '../helpers/providerSettingsStorage'
 import { isOrchestratorEnabled, toggleOrchestratorEnabled } from '../helpers/subagentToolSettings'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
@@ -153,6 +151,7 @@ type MessageRenderRow =
       messages: Message[]
       toolCount: number
       reasoningCount: number
+      bridgedMessageId?: MessageId
     }
 
 type ChatInputUpdater = string | ((prev: string) => string)
@@ -193,6 +192,87 @@ type AddedIdeContext = {
 const EMPTY_PARSED_MESSAGE_DATA: ParsedMessageData = {}
 const COMPOSER_SLASH_COMMANDS = ['status-openai']
 const CROSS_MESSAGE_PROCESS_GROUP_MIN_MESSAGES = 3
+const DERIVED_RENDER_CACHE_LIMIT = 40
+
+const setLimitedCacheEntry = <T,>(cache: Map<string, T>, key: string, value: T, limit = DERIVED_RENDER_CACHE_LIMIT) => {
+  if (cache.has(key)) {
+    cache.delete(key)
+  }
+  cache.set(key, value)
+
+  while (cache.size > limit) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey == null) break
+    cache.delete(oldestKey)
+  }
+}
+
+const isLikelyProcessAnnotationText = (text: string): boolean => {
+  const trimmed = text.trim()
+  if (!trimmed) return true
+  if (trimmed.startsWith('```')) return false
+
+  const normalized = trimmed.replace(/[*_`>#-]/g, ' ')
+  const words = normalized.split(/\s+/).filter(Boolean)
+  return words.length <= 14
+}
+
+const countReasoningEntriesInResponsesOutputItems = (items: unknown): number => {
+  if (!Array.isArray(items)) return 0
+
+  let count = 0
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue
+    const itemRecord = item as Record<string, unknown>
+    if (itemRecord.type !== 'reasoning') continue
+
+    if (Array.isArray(itemRecord.content)) {
+      for (const part of itemRecord.content) {
+        if (!part || typeof part !== 'object') continue
+        const partRecord = part as Record<string, unknown>
+        if (
+          partRecord.type === 'reasoning_text' &&
+          typeof partRecord.text === 'string' &&
+          partRecord.text.trim().length > 0
+        ) {
+          count += 1
+        }
+      }
+    }
+
+    if (Array.isArray(itemRecord.summary)) {
+      for (const part of itemRecord.summary) {
+        if (!part || typeof part !== 'object') continue
+        const partRecord = part as Record<string, unknown>
+        if (typeof partRecord.text === 'string' && partRecord.text.trim().length > 0) {
+          count += 1
+        }
+      }
+    }
+  }
+
+  return count
+}
+
+const getResponsesOutputReasoningCount = (block: ContentBlock): number => {
+  const blockRecord = block as unknown as Record<string, unknown>
+  if (blockRecord.type !== 'responses_output_items') return 0
+  return countReasoningEntriesInResponsesOutputItems(blockRecord.items)
+}
+
+const isProcessContentBlock = (block: ContentBlock): boolean => {
+  if (
+    block.type === 'thinking' ||
+    block.type === 'tool_use' ||
+    block.type === 'tool_result' ||
+    block.type === 'reasoning_details'
+  ) {
+    return true
+  }
+
+  return getResponsesOutputReasoningCount(block) > 0
+}
 
 const parseMessageDataForRender = (msg: Message): ParsedMessageData => {
   let toolCalls: ToolCall[] | undefined
@@ -281,15 +361,12 @@ const ChatInputController = React.memo(
         [onHasTextChange]
       )
 
-      const setValue = useCallback(
-        (next: ChatInputUpdater) => {
-          const prevValue = valueRef.current
-          const nextValue = typeof next === 'function' ? next(prevValue) : next
-          valueRef.current = nextValue
-          setValueState(nextValue)
-        },
-        []
-      )
+      const setValue = useCallback((next: ChatInputUpdater) => {
+        const prevValue = valueRef.current
+        const nextValue = typeof next === 'function' ? next(prevValue) : next
+        valueRef.current = nextValue
+        setValueState(nextValue)
+      }, [])
 
       const clear = useCallback(() => {
         setValue('')
@@ -324,13 +401,10 @@ const ChatInputController = React.memo(
         [clear, focus, setValue]
       )
 
-      const handleChange = useCallback(
-        (nextValue: string) => {
-          valueRef.current = nextValue
-          setValueState(nextValue)
-        },
-        []
-      )
+      const handleChange = useCallback((nextValue: string) => {
+        valueRef.current = nextValue
+        setValueState(nextValue)
+      }, [])
 
       useEffect(() => {
         publishHasText(value)
@@ -504,7 +578,7 @@ function Chat() {
   // const isIdeConnected = useAppSelector(selectIsIdeConnected)
   // const activeFile = useAppSelector(selectActiveFile)
   const selectedFilesForChat = useAppSelector(selectSelectedFilesForChat)
-  const mentionableFilesForDebug = useAppSelector(selectMentionableFiles)
+  // const mentionableFilesForDebug = useAppSelector(selectMentionableFiles)
   const optimisticMessage = useAppSelector(state => state.chat.composition.optimisticMessage)
 
   const addCurrentIdeContextToMessage = useCallback((): boolean => {
@@ -605,28 +679,28 @@ function Chat() {
     []
   )
 
-  useEffect(() => {
-    if (!isElectronEnv) return
+  // useEffect(() => {
+  //   if (!isElectronEnv) return
 
-    const sample = mentionableFilesForDebug.slice(0, 10).map(file => ({
-      kind: file.kind,
-      name: file.name,
-      relativePath: file.relativePath,
-      relativeDirectoryPath: file.relativeDirectoryPath,
-      absolutePath: file.path,
-    }))
+  //   const sample = mentionableFilesForDebug.slice(0, 10).map(file => ({
+  //     kind: file.kind,
+  //     name: file.name,
+  //     relativePath: file.relativePath,
+  //     relativeDirectoryPath: file.relativeDirectoryPath,
+  //     absolutePath: file.path,
+  //   }))
 
-    const withDirectoryCount = mentionableFilesForDebug.filter(file => Boolean(file.relativeDirectoryPath)).length
+  //   const withDirectoryCount = mentionableFilesForDebug.filter(file => Boolean(file.relativeDirectoryPath)).length
 
-    console.log('[IDE DEBUG][Chat mentionable files for @]', {
-      workspaceName: workspace?.name ?? null,
-      workspaceRootPath: workspace?.rootPath ?? null,
-      allFilesCount: ideContext.allFiles?.length ?? 0,
-      mentionableFilesCount: mentionableFilesForDebug.length,
-      mentionableFilesWithDirectoryCount: withDirectoryCount,
-      sample,
-    })
-  }, [isElectronEnv, mentionableFilesForDebug, workspace?.name, workspace?.rootPath, ideContext.allFiles])
+  //   console.log('[IDE DEBUG][Chat mentionable files for @]', {
+  //     workspaceName: workspace?.name ?? null,
+  //     workspaceRootPath: workspace?.rootPath ?? null,
+  //     allFilesCount: ideContext.allFiles?.length ?? 0,
+  //     mentionableFilesCount: mentionableFilesForDebug.length,
+  //     mentionableFilesWithDirectoryCount: withDirectoryCount,
+  //     sample,
+  //   })
+  // }, [isElectronEnv, mentionableFilesForDebug, workspace?.name, workspace?.rootPath, ideContext.allFiles])
 
   const inputAreaBorderClasses =
     operationMode === 'plan'
@@ -659,6 +733,8 @@ function Chat() {
     },
   })
 
+  const WAKE_WORD_TEMPORARILY_DISABLED = true
+
   // Wake word hook - listens for "Hey Jarvis" to trigger voice input
   const {
     isListening: isWakeWordListening,
@@ -671,7 +747,7 @@ function Chat() {
     keywords: wakeWordConfig.keywords,
     threshold: wakeWordConfig.threshold,
     cooldownMs: wakeWordConfig.cooldownMs,
-    autoStart: wakeWordConfig.autoStart && voiceInputEnabled,
+    autoStart: !WAKE_WORD_TEMPORARILY_DISABLED && wakeWordConfig.autoStart && voiceInputEnabled,
     onDetected: () => {
       // When wake word is detected, start Whisper recording
       if (!isListening && !speechLoading) {
@@ -914,34 +990,46 @@ function Chat() {
 
   const [groupToolReasoningRuns, setGroupToolReasoningRuns] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('chat:groupToolReasoningRuns') === 'true'
+      const stored = localStorage.getItem('chat:groupToolReasoningRuns')
+      return stored === null ? false : stored === 'true'
     } catch {
       return false
     }
   })
 
+  const parsedMessageDataCacheRef = useRef<Map<string, Map<MessageId, ParsedMessageData>>>(new Map())
+  const messageRenderRowsCacheRef = useRef<Map<string, MessageRenderRow[]>>(new Map())
+
+  const filteredMessagesSignature = useMemo(
+    () => filteredMessages.map(msg => `${msg.id}:${(msg as any).updated_at ?? msg.created_at}`).join('|'),
+    [filteredMessages]
+  )
+
   // Parse message payloads once per message-list change so row props remain stable while typing.
   const parsedMessageDataById = useMemo(() => {
+    const cacheKey = filteredMessagesSignature
+    const cached = parsedMessageDataCacheRef.current.get(cacheKey)
+    if (cached) return cached
+
     const parsedById = new Map<MessageId, ParsedMessageData>()
     for (const msg of filteredMessages) {
       parsedById.set(msg.id, parseMessageDataForRender(msg))
     }
+
+    setLimitedCacheEntry(parsedMessageDataCacheRef.current, cacheKey, parsedById)
     return parsedById
-  }, [filteredMessages])
+  }, [filteredMessages, filteredMessagesSignature])
 
   const messageRenderRows = useMemo<MessageRenderRow[]>(() => {
     const debugProcessGrouping =
       typeof window !== 'undefined' && window.localStorage.getItem('chat:debugProcessGrouping') === 'true'
 
-    const isLikelyProcessAnnotationText = (text: string): boolean => {
-      const trimmed = text.trim()
-      if (!trimmed) return true
-      if (trimmed.includes('\n\n')) return false
-      if (trimmed.startsWith('```')) return false
-
-      const normalized = trimmed.replace(/[*_`>#-]/g, ' ')
-      const words = normalized.split(/\s+/).filter(Boolean)
-      return words.length <= 14
+    const rowsCacheKey = `${groupToolReasoningRuns ? 'grouped' : 'plain'}|${filteredMessagesSignature}`
+    if (!debugProcessGrouping) {
+      const cachedRows = messageRenderRowsCacheRef.current.get(rowsCacheKey)
+      if (cachedRows) {
+        return cachedRows
+      }
     }
 
     const hasSubstantialTextOrImage = (msg: Message, parsed: ParsedMessageData): boolean => {
@@ -972,25 +1060,49 @@ function Chat() {
       return false
     }
 
+    const hasProcessSignal = (msg: Message, parsed: ParsedMessageData): boolean => {
+      const hasThinking = typeof msg.thinking_block === 'string' && msg.thinking_block.trim().length > 0
+      const hasToolCalls = Array.isArray(parsed.toolCalls) && parsed.toolCalls.length > 0
+      const hasProcessBlocks = Array.isArray(parsed.contentBlocks)
+        ? parsed.contentBlocks.some(block => isProcessContentBlock(block))
+        : false
+
+      return hasThinking || hasToolCalls || hasProcessBlocks
+    }
+
+    const countToolSignals = (parsed: ParsedMessageData): number => {
+      const parsedToolCalls = Array.isArray(parsed.toolCalls) ? parsed.toolCalls.length : 0
+      if (parsedToolCalls > 0) return parsedToolCalls
+
+      return Array.isArray(parsed.contentBlocks)
+        ? parsed.contentBlocks.filter(block => block.type === 'tool_use').length
+        : 0
+    }
+
+    const countReasoningSignals = (msg: Message, parsed: ParsedMessageData): number => {
+      if (!Array.isArray(parsed.contentBlocks) || parsed.contentBlocks.length === 0) {
+        return typeof msg.thinking_block === 'string' && msg.thinking_block.trim().length > 0 ? 1 : 0
+      }
+
+      const thinkingBlockCount = parsed.contentBlocks.filter(block => block.type === 'thinking').length
+      const responsesOutputReasoningCount = parsed.contentBlocks.reduce(
+        (count, block) => count + getResponsesOutputReasoningCount(block),
+        0
+      )
+
+      const total = thinkingBlockCount + responsesOutputReasoningCount
+      if (total > 0) return total
+
+      return typeof msg.thinking_block === 'string' && msg.thinking_block.trim().length > 0 ? 1 : 0
+    }
+
     const isProcessOnlyAssistantStep = (msg: Message): boolean => {
       if (msg.role !== 'assistant' && msg.role !== 'ex_agent') {
         return false
       }
 
       const parsed = parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
-      const hasThinking = typeof msg.thinking_block === 'string' && msg.thinking_block.trim().length > 0
-      const hasToolCalls = Array.isArray(parsed.toolCalls) && parsed.toolCalls.length > 0
-      const hasProcessBlocks = Array.isArray(parsed.contentBlocks)
-        ? parsed.contentBlocks.some(block =>
-            block.type === 'thinking' ||
-            block.type === 'tool_use' ||
-            block.type === 'tool_result' ||
-            block.type === 'reasoning_details'
-          )
-        : false
-
-      const hasProcessSignal = hasThinking || hasToolCalls || hasProcessBlocks
-      if (!hasProcessSignal) {
+      if (!hasProcessSignal(msg, parsed)) {
         return false
       }
 
@@ -1002,11 +1114,17 @@ function Chat() {
     }
 
     if (!groupToolReasoningRuns) {
-      return filteredMessages.map(msg => ({
+      const plainRows = filteredMessages.map(msg => ({
         kind: 'message' as const,
         id: msg.id,
         message: msg,
       }))
+
+      if (!debugProcessGrouping) {
+        setLimitedCacheEntry(messageRenderRowsCacheRef.current, rowsCacheKey, plainRows)
+      }
+
+      return plainRows
     }
 
     const rows: MessageRenderRow[] = []
@@ -1042,28 +1160,30 @@ function Chat() {
 
       if (runMessages.length >= CROSS_MESSAGE_PROCESS_GROUP_MIN_MESSAGES) {
         const memberMessageIds = runMessages.map(message => message.id)
-        const toolCount = runMessages.reduce((count, message) => {
-          const parsed = parsedMessageDataById.get(message.id) ?? EMPTY_PARSED_MESSAGE_DATA
-          const parsedToolCalls = Array.isArray(parsed.toolCalls) ? parsed.toolCalls.length : 0
-          if (parsedToolCalls > 0) {
-            return count + parsedToolCalls
-          }
 
-          const toolUseCount = Array.isArray(parsed.contentBlocks)
-            ? parsed.contentBlocks.filter(block => block.type === 'tool_use').length
-            : 0
-          return count + toolUseCount
-        }, 0)
-        const reasoningCount = runMessages.reduce((count, message) => {
+        let toolCount = runMessages.reduce((count, message) => {
           const parsed = parsedMessageDataById.get(message.id) ?? EMPTY_PARSED_MESSAGE_DATA
-          const thinkingBlockCount = Array.isArray(parsed.contentBlocks)
-            ? parsed.contentBlocks.filter(block => block.type === 'thinking').length
-            : 0
-          if (thinkingBlockCount > 0) {
-            return count + thinkingBlockCount
-          }
-          return count + (typeof message.thinking_block === 'string' && message.thinking_block.trim().length > 0 ? 1 : 0)
+          return count + countToolSignals(parsed)
         }, 0)
+
+        let reasoningCount = runMessages.reduce((count, message) => {
+          const parsed = parsedMessageDataById.get(message.id) ?? EMPTY_PARSED_MESSAGE_DATA
+          return count + countReasoningSignals(message, parsed)
+        }, 0)
+
+        let bridgedMessageId: MessageId | undefined
+        const trailingCandidate = filteredMessages[cursor]
+        if (trailingCandidate && (trailingCandidate.role === 'assistant' || trailingCandidate.role === 'ex_agent')) {
+          const trailingParsed = parsedMessageDataById.get(trailingCandidate.id) ?? EMPTY_PARSED_MESSAGE_DATA
+          const trailingHasProcessSignal = hasProcessSignal(trailingCandidate, trailingParsed)
+          const trailingHasSubstantialContent = hasSubstantialTextOrImage(trailingCandidate, trailingParsed)
+
+          if (trailingHasProcessSignal && trailingHasSubstantialContent) {
+            bridgedMessageId = trailingCandidate.id
+            toolCount += countToolSignals(trailingParsed)
+            reasoningCount += countReasoningSignals(trailingCandidate, trailingParsed)
+          }
+        }
 
         if (debugProcessGrouping) {
           console.debug('[Chat] Grouping process-only message run', {
@@ -1071,17 +1191,21 @@ function Chat() {
             toolCount,
             reasoningCount,
             messageIds: memberMessageIds,
+            bridgedMessageId,
           })
         }
 
         rows.push({
           kind: 'process_group',
-          id: `process-group-${memberMessageIds[0]}-${memberMessageIds[memberMessageIds.length - 1]}`,
+          // Keep group identity stable while new process messages append to the run.
+          // If this key changes (e.g. first-last id), expanded state is lost and the group collapses.
+          id: memberMessageIds[0],
           anchorMessageId: memberMessageIds[0],
           memberMessageIds,
           messages: runMessages,
           toolCount,
           reasoningCount,
+          bridgedMessageId,
         })
       } else {
         if (debugProcessGrouping && runMessages.length > 0) {
@@ -1104,8 +1228,12 @@ function Chat() {
       index = cursor
     }
 
+    if (!debugProcessGrouping) {
+      setLimitedCacheEntry(messageRenderRowsCacheRef.current, rowsCacheKey, rows)
+    }
+
     return rows
-  }, [filteredMessages, groupToolReasoningRuns, parsedMessageDataById])
+  }, [filteredMessages, filteredMessagesSignature, groupToolReasoningRuns, parsedMessageDataById])
 
   const findMessageRowIndex = useCallback(
     (targetId: MessageId | null | undefined): number => {
@@ -1206,15 +1334,21 @@ function Chat() {
     return String(a) === String(b)
   }, [])
 
-  const setCcCwdFromUser = useCallback((nextValue: string) => {
-    isCwdDirtyRef.current = true
-    dispatch(chatSliceActions.ccCwdSet(nextValue))
-  }, [dispatch])
+  const setCcCwdFromUser = useCallback(
+    (nextValue: string) => {
+      isCwdDirtyRef.current = true
+      dispatch(chatSliceActions.ccCwdSet(nextValue))
+    },
+    [dispatch]
+  )
 
-  const setCcCwdFromSystem = useCallback((nextValue: string) => {
-    isCwdDirtyRef.current = false
-    dispatch(chatSliceActions.ccCwdSet(nextValue))
-  }, [dispatch])
+  const setCcCwdFromSystem = useCallback(
+    (nextValue: string) => {
+      isCwdDirtyRef.current = false
+      dispatch(chatSliceActions.ccCwdSet(nextValue))
+    },
+    [dispatch]
+  )
   // Fetch conversations for the current project using React Query
   // Use projectId from URL first (ensures correct cache is active on page refresh)
   const { data: projectConversations = [] } = useConversationsByProject(
@@ -1470,13 +1604,7 @@ function Chat() {
         })
       }
     })
-  }, [
-    conversationData,
-    conversationIdFromUrl,
-    conversationStorageMode,
-    dispatch,
-    isConversationDataFetched,
-  ])
+  }, [conversationData, conversationIdFromUrl, conversationStorageMode, dispatch, isConversationDataFetched])
 
   // Sync tree data to Redux when it arrives
   // Always dispatch even when treeData is null/undefined to keep Redux in sync with React Query
@@ -1613,7 +1741,10 @@ function Chat() {
       }
     }
 
-    window.addEventListener(CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT, handleTokenUsageVisibilityEvent as EventListener)
+    window.addEventListener(
+      CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
+      handleTokenUsageVisibilityEvent as EventListener
+    )
     window.addEventListener('storage', handleStorageEvent)
 
     return () => {
@@ -1977,7 +2108,7 @@ function Chat() {
 
       if (targetIndex !== -1) {
         // Use virtualizer to scroll to the message index
-        virtualizer.scrollToIndex(targetIndex, { align: 'start', behavior: 'smooth' })
+        virtualizer.scrollToIndex(targetIndex, { align: 'start' })
 
         // Record that we've scrolled to this focused target to avoid later auto-scrolls fighting it
         if (typeof targetId === 'number') {
@@ -2009,7 +2140,7 @@ function Chat() {
 
     if (targetIndex !== -1) {
       // Use virtualizer to scroll to the message index
-      virtualizer.scrollToIndex(targetIndex, { align: 'start', behavior: 'smooth' })
+      virtualizer.scrollToIndex(targetIndex, { align: 'start' })
       // Mark this focus as handled so we don't keep re-centering on subsequent renders
       lastFocusedScrollIdRef.current = focusedChatMessageId
     }
@@ -2175,8 +2306,6 @@ function Chat() {
       if (!path.length) return
 
       dispatch(chatSliceActions.conversationPathSet(path))
-      // Keep Heimdall selection in sync (expects string IDs)
-      dispatch(chatSliceActions.selectedNodePathSet(path.map(id => String(id))))
       // Ensure the focused message id is set so scrolling targets the correct element
       dispatch(chatSliceActions.focusedChatMessageSet(hashMessageId))
       hashAppliedRef.current = hashMessageId
@@ -2287,7 +2416,7 @@ function Chat() {
     if (isCommunityMode) {
       const preferredCommunityDefault = allowedProviders.includes('LM Studio')
         ? 'LM Studio'
-        : (allowedProviders[0] || null)
+        : allowedProviders[0] || null
 
       if (!preferredCommunityDefault) return
 
@@ -2442,9 +2571,7 @@ function Chat() {
 
     // Allow retrigger: empty input when last displayed message is from user
     const isRetrigger =
-      !hasLocalInput &&
-      displayMessages.length > 0 &&
-      displayMessages[displayMessages.length - 1]?.role === 'user'
+      !hasLocalInput && displayMessages.length > 0 && displayMessages[displayMessages.length - 1]?.role === 'user'
 
     return (hasLocalInput || isRetrigger) && isNotSending && hasModel
   }, [hasLocalInput, sendingState.sending, streamState.active, selectedModel, displayMessages])
@@ -2473,9 +2600,7 @@ function Chat() {
       if (canSendLocal && currentConversationId) {
         // Check if this is a retrigger scenario (empty input + last message is user)
         const isRetrigger =
-          !hasLocalInput &&
-          displayMessages.length > 0 &&
-          displayMessages[displayMessages.length - 1]?.role === 'user'
+          !hasLocalInput && displayMessages.length > 0 && displayMessages[displayMessages.length - 1]?.role === 'user'
 
         // CC Mode: Send via sendCCMessage instead of sendMessage (disabled in web mode)
         if (ccMode && ccModeAvailable) {
@@ -3011,28 +3136,55 @@ function Chat() {
     [displayMessages, conversationMessages, handleMessageBranch]
   )
 
-  const handleNodeSelect = (nodeId: string, path: string[]) => {
-    if (!nodeId || !path || path.length === 0) return // ignore clicks on empty space
-    // console.log('Node selected:', nodeId, 'Path:', path)
+  const handleNodeSelect = useCallback(
+    (nodeId: string, path: string[]) => {
+      if (!nodeId || !path || path.length === 0) return // ignore clicks on empty space
 
-    const parsedNodeId = parseId(nodeId)
+      const parsedNodeId = parseId(nodeId)
+      const isValidNodeId =
+        typeof parsedNodeId === 'string' || (typeof parsedNodeId === 'number' && !Number.isNaN(parsedNodeId))
+      if (!isValidNodeId) return
 
-    // Only trigger scroll if clicking a different node than currently visible
-    // This allows re-scrolling after manual navigation, but prevents redundant scrolls
-    if (parsedNodeId !== visibleMessageId) {
-      // Mark this selection as user-initiated so the scroll-to-selection effect may run
-      selectionScrollCauseRef.current = 'user'
-    }
+      const parsedPath = path
+        .map(id => parseId(id))
+        .filter(id => typeof id === 'string' || (typeof id === 'number' && !Number.isNaN(id)))
 
-    // Treat user selection during streaming as an override to bottom pinning
-    if (streamState.active) {
-      userScrolledDuringStreamRef.current = true
-    }
-    dispatch(chatSliceActions.conversationPathSet(path.map(id => parseId(id))))
-    dispatch(chatSliceActions.selectedNodePathSet(path))
+      if (parsedPath.length === 0) return
 
-    dispatch(chatSliceActions.focusedChatMessageSet(parsedNodeId))
-  }
+      const samePath =
+        selectedPath.length === parsedPath.length &&
+        selectedPath.every((id, index) => String(id) === String(parsedPath[index]))
+      const sameFocus = focusedChatMessageId != null && String(focusedChatMessageId) === String(parsedNodeId)
+
+      if (samePath && sameFocus) {
+        return
+      }
+
+      // Only trigger scroll if clicking a different node than currently visible
+      // This allows re-scrolling after manual navigation, but prevents redundant scrolls
+      if (String(parsedNodeId) !== String(visibleMessageId)) {
+        // Mark this selection as user-initiated so the scroll-to-selection effect may run
+        selectionScrollCauseRef.current = 'user'
+      }
+
+      // Treat user selection during streaming as an override to bottom pinning
+      if (streamState.active) {
+        userScrolledDuringStreamRef.current = true
+      }
+
+      React.startTransition(() => {
+        batch(() => {
+          if (!samePath) {
+            dispatch(chatSliceActions.conversationPathSet(parsedPath))
+          }
+          if (!sameFocus) {
+            dispatch(chatSliceActions.focusedChatMessageSet(parsedNodeId))
+          }
+        })
+      })
+    },
+    [dispatch, focusedChatMessageId, selectedPath, streamState.active, visibleMessageId]
+  )
 
   // const handleOnResend = (id: string) => {
   //   if (currentConversationId) {
@@ -3572,7 +3724,9 @@ function Chat() {
     // Other providers may enforce a stricter completion cap.
     const maxCompletionCap = isOpenAIChatGPT
       ? totalContextLimit
-      : (hasValidCompletionCap ? configuredCompletionCap : totalContextLimit)
+      : hasValidCompletionCap
+        ? configuredCompletionCap
+        : totalContextLimit
 
     // Cost is per 1K tokens: cost = (tokens / 1000) * costPer1K
     // So: tokens = (usd * 1000) / costPer1K
@@ -3615,9 +3769,7 @@ function Chat() {
   const inputProgress =
     tokenLimits.maxInputTokens > 0 ? Math.min((tokenUsage.inputTokens / tokenLimits.maxInputTokens) * 100, 100) : 0
   const outputProgress =
-    tokenLimits.maxOutputTokens > 0
-      ? Math.min((tokenUsage.outputTokens / tokenLimits.maxOutputTokens) * 100, 100)
-      : 0
+    tokenLimits.maxOutputTokens > 0 ? Math.min((tokenUsage.outputTokens / tokenLimits.maxOutputTokens) * 100, 100) : 0
 
   // Handler to refresh user credits
   const handleRefreshCredits = useCallback(async () => {
@@ -3639,10 +3791,10 @@ function Chat() {
       exit={{ opacity: 0, x: -10 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       ref={containerRef}
-      className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'
+      className='flex h-full rounded-tl-xl overflow-hidden bg-neutral-50 dark:bg-neutral-900'
     >
       <div
-        className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden`}
+        className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} rounded-xl min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden`}
         style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : 'auto' }}
       >
         {/* Messages Display */}
@@ -4009,6 +4161,50 @@ function Chat() {
                                   />
                                 )
                               })}
+
+                              {(() => {
+                                if (row.bridgedMessageId == null) return null
+                                const bridgedMessage = filteredMessages.find(
+                                  message => String(message.id) === String(row.bridgedMessageId)
+                                )
+                                if (!bridgedMessage) return null
+
+                                const bridgedParsed =
+                                  parsedMessageDataById.get(bridgedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                                const bridgedProcessBlocks = Array.isArray(bridgedParsed.contentBlocks)
+                                  ? bridgedParsed.contentBlocks.filter(block => isProcessContentBlock(block))
+                                  : []
+
+                                const hasThinking =
+                                  typeof bridgedMessage.thinking_block === 'string' &&
+                                  bridgedMessage.thinking_block.trim().length > 0
+                                const hasToolCalls =
+                                  Array.isArray(bridgedParsed.toolCalls) && bridgedParsed.toolCalls.length > 0
+                                const hasProcessBlocks = bridgedProcessBlocks.length > 0
+
+                                if (!hasThinking && !hasToolCalls && !hasProcessBlocks) {
+                                  return null
+                                }
+
+                                return (
+                                  <ChatMessage
+                                    key={`bridged-process-${bridgedMessage.id}`}
+                                    id={`${bridgedMessage.id}-process`}
+                                    role={bridgedMessage.role}
+                                    content=''
+                                    thinking={bridgedMessage.thinking_block}
+                                    toolCalls={bridgedParsed.toolCalls}
+                                    contentBlocks={bridgedProcessBlocks}
+                                    timestamp={bridgedMessage.created_at}
+                                    width='w-full'
+                                    modelName={bridgedMessage.model_name}
+                                    artifacts={bridgedMessage.artifacts}
+                                    fontSizeOffset={fontSizeOffset}
+                                    groupToolReasoningRuns={false}
+                                    onOpenToolHtmlModal={openToolHtmlModal}
+                                  />
+                                )
+                              })()}
                             </div>
                           </div>
                         </div>
@@ -4017,8 +4213,21 @@ function Chat() {
                   }
 
                   const msg = row.message
-                  const { toolCalls, contentBlocks } =
-                    parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                  const { toolCalls, contentBlocks } = parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
+
+                  const previousRow = virtualRow.index > 0 ? messageRenderRows[virtualRow.index - 1] : null
+                  const isProcessBridgeSourceMessage =
+                    previousRow?.kind === 'process_group' &&
+                    previousRow.bridgedMessageId != null &&
+                    String(previousRow.bridgedMessageId) === String(msg.id)
+
+                  const displayThinking = isProcessBridgeSourceMessage ? undefined : msg.thinking_block
+                  const displayToolCalls = isProcessBridgeSourceMessage ? [] : toolCalls
+                  const displayContentBlocks =
+                    isProcessBridgeSourceMessage && Array.isArray(contentBlocks)
+                      ? contentBlocks.filter(block => !isProcessContentBlock(block))
+                      : contentBlocks
+
                   return (
                     <div
                       key={msg.id}
@@ -4033,7 +4242,8 @@ function Chat() {
                         width: '100%',
                         transform: `translateY(${virtualRow.start}px)`,
                         zIndex:
-                          activeBranchEditingMessageId != null && String(msg.id) === String(activeBranchEditingMessageId)
+                          activeBranchEditingMessageId != null &&
+                          String(msg.id) === String(activeBranchEditingMessageId)
                             ? 80
                             : 0,
                       }}
@@ -4042,9 +4252,9 @@ function Chat() {
                         id={msg.id.toString()}
                         role={msg.role}
                         content={msg.content}
-                        thinking={msg.thinking_block}
-                        toolCalls={toolCalls}
-                        contentBlocks={contentBlocks}
+                        thinking={displayThinking}
+                        toolCalls={displayToolCalls}
+                        contentBlocks={displayContentBlocks}
                         timestamp={msg.created_at}
                         width='w-full'
                         modelName={msg.model_name}
@@ -4183,11 +4393,19 @@ function Chat() {
                   <div className='mt-2 space-y-1 text-xs text-neutral-700 dark:text-neutral-200'>
                     <div className='flex items-center justify-between gap-2'>
                       <span className='text-neutral-500 dark:text-neutral-400'>Session</span>
-                      <span>{openAIUsageData.session.usedPercent == null ? '—' : `${Math.round(openAIUsageData.session.usedPercent)}%`}</span>
+                      <span>
+                        {openAIUsageData.session.usedPercent == null
+                          ? '—'
+                          : `${Math.round(openAIUsageData.session.usedPercent)}%`}
+                      </span>
                     </div>
                     <div className='flex items-center justify-between gap-2'>
                       <span className='text-neutral-500 dark:text-neutral-400'>Weekly</span>
-                      <span>{openAIUsageData.weekly.usedPercent == null ? '—' : `${Math.round(openAIUsageData.weekly.usedPercent)}%`}</span>
+                      <span>
+                        {openAIUsageData.weekly.usedPercent == null
+                          ? '—'
+                          : `${Math.round(openAIUsageData.weekly.usedPercent)}%`}
+                      </span>
                     </div>
                     {openAIUsageData.reviews.usedPercent != null && (
                       <div className='flex items-center justify-between gap-2'>
@@ -4264,7 +4482,9 @@ function Chat() {
                       <span className='flex flex-col max-w-[100px] sm:max-w-[150px] md:max-w-[220px]'>
                         <span className='truncate'>{displayName}</span>
                         {directoryLabel ? (
-                          <span className='truncate text-[10px] text-neutral-600 dark:text-neutral-400'>{directoryLabel}</span>
+                          <span className='truncate text-[10px] text-neutral-600 dark:text-neutral-400'>
+                            {directoryLabel}
+                          </span>
                         ) : null}
                       </span>
                       <button
@@ -4815,21 +5035,25 @@ function Chat() {
                       }`}
                       size='large'
                       onClick={() => {
+                        if (WAKE_WORD_TEMPORARILY_DISABLED) return
+
                         if (isWakeWordListening) {
                           stopWakeWord()
                         } else {
                           startWakeWord()
                         }
                       }}
-                      disabled={wakeWordLoading}
+                      disabled={wakeWordLoading || WAKE_WORD_TEMPORARILY_DISABLED}
                       title={
-                        wakeWordError
-                          ? `Wake word error: ${wakeWordError}`
-                          : wakeWordLoading
-                            ? 'Loading wake word engine...'
-                            : isWakeWordListening
-                              ? 'Wake word active - say "Hey Jarvis" to start voice input'
-                              : 'Enable wake word detection ("Hey Jarvis")'
+                        WAKE_WORD_TEMPORARILY_DISABLED
+                          ? 'Wake word is temporarily disabled'
+                          : wakeWordError
+                            ? `Wake word error: ${wakeWordError}`
+                            : wakeWordLoading
+                              ? 'Loading wake word engine...'
+                              : isWakeWordListening
+                                ? 'Wake word active - say "Hey Jarvis" to start voice input'
+                                : 'Enable wake word detection ("Hey Jarvis")'
                       }
                     >
                       {wakeWordLoading ? (
@@ -5035,33 +5259,15 @@ function Chat() {
 
       <SettingsPane open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       {/* Centered custom delete confirmation modal */}
-      {pendingDeleteId && confirmDel && (
-        <div className='fixed inset-0 z-[100] flex items-center justify-center bg-black/50' onClick={closeDeleteModal}>
-          <div
-            className='bg-white dark:bg-yBlack-900 rounded-lg shadow-xl p-6 w-[90%] max-w-sm'
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className='text-[20px] font-semibold mb-6 text-neutral-900 dark:text-neutral-100'>Delete message?</h3>
-            <p className='text-[14px] text-neutral-700 dark:text-neutral-300 mb-4'>This action cannot be undone.</p>
-            <label className='flex items-center gap-2 mb-4 text-sm text-neutral-700 dark:text-neutral-300'>
-              <input type='checkbox' checked={dontAskAgain} onChange={e => setDontAskAgain(e.target.checked)} />
-              Don't ask again this session
-            </label>
-            <div className='flex justify-end gap-2 mt-8'>
-              <Button variant='outline2' onClick={closeDeleteModal} className='active:scale-90'>
-                Cancel
-              </Button>
-              <Button
-                variant='outline2'
-                className='bg-red-600 hover:bg-red-700 border-red-700 text-white active:scale-90'
-                onClick={confirmDeleteModal}
-              >
-                Delete
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConfirmModal
+        isOpen={Boolean(pendingDeleteId && confirmDel)}
+        title='Delete message?'
+        description='This action cannot be undone.'
+        dontAskAgain={dontAskAgain}
+        onDontAskAgainChange={setDontAskAgain}
+        onCancel={closeDeleteModal}
+        onConfirm={confirmDeleteModal}
+      />
 
       {/* Fixed expanded panel rendered at root to sit above backdrop and allow scroll */}
       {(expandedFilePath || closingFilePath) &&
@@ -5129,7 +5335,8 @@ function Chat() {
               Sign in required for Yggdrasil models
             </h3>
             <p className='text-[14px] text-neutral-700 dark:text-neutral-300 mb-6'>
-              you need to sign in with github or google account to access Yggdrasil models, logging in will merge your local and yggdrasil account, you wont lose any info
+              you need to sign in with github or google account to access Yggdrasil models, logging in will merge your
+              local and yggdrasil account, you wont lose any info
             </p>
             <div className='flex justify-end'>
               <Button

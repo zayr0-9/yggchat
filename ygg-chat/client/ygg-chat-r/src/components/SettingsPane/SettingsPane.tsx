@@ -148,7 +148,8 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
 
   const [groupToolReasoningRuns, setGroupToolReasoningRuns] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('chat:groupToolReasoningRuns') === 'true'
+      const stored = localStorage.getItem('chat:groupToolReasoningRuns')
+      return stored === null ? false : stored === 'true'
     } catch {
       return false
     }

@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
 import 'boxicons/css/boxicons.min.css'
-import { AnimatePresence, motion } from 'framer-motion'
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import type { JSX } from 'react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -29,6 +28,7 @@ import { parseId } from '../../utils/helpers'
 import stripMarkdownToText from '../../utils/markdownStripper'
 // import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { environment, localApi } from '../../utils/api'
+import { DeleteConfirmModal } from '../DeleteConfirmModal/DeleteConfirmModal'
 import { TextArea } from '../TextArea/TextArea'
 import { TextField } from '../TextField/TextField'
 
@@ -59,6 +59,22 @@ interface Bounds {
   minY: number
   maxY: number
 }
+
+interface GraphLayersProps {
+  connections: JSX.Element[]
+  nodes: JSX.Element[]
+}
+
+const HeimdallGraphLayers = React.memo<GraphLayersProps>(({ connections, nodes }) => {
+  return (
+    <>
+      <g strokeLinecap='round' strokeLinejoin='round'>
+        {connections}
+      </g>
+      {nodes}
+    </>
+  )
+})
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -110,6 +126,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const [zoom, setZoom] = useState<number>(compactMode ? 1 : 1)
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState<boolean>(false)
+  const [isPinching, setIsPinching] = useState<boolean>(false)
+  const [isWheeling, setIsWheeling] = useState<boolean>(false)
+  const [isCullingFrozen, setIsCullingFrozen] = useState<boolean>(false)
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const [selectedNode, setSelectedNode] = useState<ChatNode | null>(null)
   const [subagentPanel, setSubagentPanel] = useState<{ parentId: string; x: number; y: number } | null>(null)
@@ -127,6 +146,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   // Custom context menu after selection
   const [showContextMenu, setShowContextMenu] = useState<boolean>(false)
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [confirmDeleteSelection, setConfirmDeleteSelection] = useState<boolean>(true)
+  const [pendingDeleteNodeIds, setPendingDeleteNodeIds] = useState<MessageId[]>([])
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState<boolean>(false)
+  const [dontAskDeleteAgain, setDontAskDeleteAgain] = useState<boolean>(false)
   // Note dialog state
   const [showNoteDialog, setShowNoteDialog] = useState<boolean>(false)
   const [noteDialogPos, setNoteDialogPos] = useState<{ x: number; y: number } | null>(null)
@@ -175,9 +198,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
   // Keep a stable inner offset so the whole tree does not shift when nodes are added/removed
   const offsetRef = useRef<{ x: number; y: number } | null>(null)
-  // Track which nodes have already been seen to avoid re-playing enter animations
-  const seenNodeIdsRef = useRef<Set<string>>(new Set())
-  const firstPaintRef = useRef<boolean>(true)
   // Keep last non-null tree to avoid unmount flicker during refreshes
   const lastDataRef = useRef<ChatNode | null>(null)
   // Ensure we only auto-center once per conversation load
@@ -195,15 +215,22 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   // Refs for latest zoom and pan to avoid stale closures inside wheel listener
   const zoomRef = useRef<number>(zoom)
   const panRef = useRef<{ x: number; y: number }>(pan)
+  const interactionRafRef = useRef<number | null>(null)
+  const pendingPanRef = useRef<{ x: number; y: number } | null>(null)
+  const pendingSelectionEndRef = useRef<{ x: number; y: number } | null>(null)
+  const cullingSnapshotRef = useRef<{ pan: { x: number; y: number }; zoom: number } | null>(null)
+  const wheelIdleTimeoutRef = useRef<number | null>(null)
+  const useGlobalMoveFallbackRef = useRef<boolean>(false)
   // Focused message id from global state and flat messages for search
   const focusedChatMessageId = useSelector((state: RootState) => state.chat.conversation.focusedChatMessageId)
   const flatMessages = useSelector((state: RootState) => state.chat.conversation.messages)
+  const messageById = useMemo(() => new Map(flatMessages.map(m => [String(m.id), m])), [flatMessages])
   // Get the current message from Redux state
   const getCurrentMessage = useCallback(
     (messageId: MessageId) => {
-      return flatMessages.find(m => m.id === messageId)
+      return messageById.get(String(messageId))
     },
-    [flatMessages]
+    [messageById]
   )
 
   const normalizeContentBlocks = useCallback((blocks: any): any[] => {
@@ -549,7 +576,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const path = buildBranchPathForMessage(flatMessages as any, item.id)
       if (path.length > 0) {
         dispatch(chatSliceActions.conversationPathSet(path))
-        dispatch(chatSliceActions.selectedNodePathSet(path.map(id => String(id))))
       }
       dispatch(chatSliceActions.focusedChatMessageSet(item.id))
       setSearchOpen(false)
@@ -668,15 +694,73 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     setHoveredNote(null)
   }, [])
 
-  const onWindowMouseMove = (e: globalThis.MouseEvent): void => {
+  const flushPendingInteractionFrame = useCallback(() => {
+    if (interactionRafRef.current !== null) {
+      cancelAnimationFrame(interactionRafRef.current)
+      interactionRafRef.current = null
+    }
+
+    const nextPan = pendingPanRef.current
+    const nextSelectionEnd = pendingSelectionEndRef.current
+
+    pendingPanRef.current = null
+    pendingSelectionEndRef.current = null
+
+    if (nextPan) {
+      setPan(nextPan)
+    }
+    if (nextSelectionEnd) {
+      setSelectionEnd(nextSelectionEnd)
+    }
+  }, [])
+
+  const queueInteractionFrame = useCallback(() => {
+    if (interactionRafRef.current !== null) return
+
+    interactionRafRef.current = requestAnimationFrame(() => {
+      interactionRafRef.current = null
+
+      const nextPan = pendingPanRef.current
+      const nextSelectionEnd = pendingSelectionEndRef.current
+
+      pendingPanRef.current = null
+      pendingSelectionEndRef.current = null
+
+      if (nextPan) {
+        setPan(nextPan)
+      }
+      if (nextSelectionEnd) {
+        setSelectionEnd(nextSelectionEnd)
+      }
+    })
+  }, [])
+
+  const queuePanUpdate = useCallback(
+    (nextPan: { x: number; y: number }) => {
+      pendingPanRef.current = nextPan
+      panRef.current = nextPan
+      queueInteractionFrame()
+    },
+    [queueInteractionFrame]
+  )
+
+  const queueSelectionEndUpdate = useCallback(
+    (nextSelectionEnd: { x: number; y: number }) => {
+      pendingSelectionEndRef.current = nextSelectionEnd
+      queueInteractionFrame()
+    },
+    [queueInteractionFrame]
+  )
+
+  const onWindowPointerMove = (e: globalThis.PointerEvent): void => {
     if (isDraggingRef.current) {
-      setPan({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y })
+      queuePanUpdate({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y })
     } else if (isSelectingRef.current) {
       const svgRect = svgRef.current?.getBoundingClientRect()
       if (svgRect) {
         const svgX = e.clientX - svgRect.left
         const svgY = e.clientY - svgRect.top
-        setSelectionEnd({ x: svgX, y: svgY })
+        queueSelectionEndUpdate({ x: svgX, y: svgY })
       }
     }
   }
@@ -692,27 +776,39 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     if (!e.touches || e.touches.length === 0) return
     const t = e.touches[0]
     if (isDraggingRef.current) {
-      setPan({ x: t.clientX - dragStartRef.current.x, y: t.clientY - dragStartRef.current.y })
+      queuePanUpdate({ x: t.clientX - dragStartRef.current.x, y: t.clientY - dragStartRef.current.y })
     } else if (isSelectingRef.current) {
       const svgRect = svgRef.current?.getBoundingClientRect()
       if (svgRect) {
         const svgX = t.clientX - svgRect.left
         const svgY = t.clientY - svgRect.top
-        setSelectionEnd({ x: svgX, y: svgY })
+        queueSelectionEndUpdate({ x: svgX, y: svgY })
       }
     }
   }
 
   const addGlobalMoveListeners = (): void => {
-    window.addEventListener('mousemove', onWindowMouseMove)
-    window.addEventListener('pointermove', onWindowMouseMove)
-    window.addEventListener('touchmove', onWindowTouchMove, { passive: false })
+    window.addEventListener('pointermove', onWindowPointerMove)
+    if (!(window as any).PointerEvent) {
+      window.addEventListener('touchmove', onWindowTouchMove, { passive: false })
+    }
   }
 
   const removeGlobalMoveListeners = (): void => {
-    window.removeEventListener('mousemove', onWindowMouseMove)
-    window.removeEventListener('pointermove', onWindowMouseMove)
+    window.removeEventListener('pointermove', onWindowPointerMove)
     window.removeEventListener('touchmove', onWindowTouchMove)
+  }
+
+  const enableGlobalMoveFallback = (): void => {
+    if (useGlobalMoveFallbackRef.current) return
+    useGlobalMoveFallbackRef.current = true
+    addGlobalMoveListeners()
+  }
+
+  const disableGlobalMoveFallback = (): void => {
+    if (!useGlobalMoveFallbackRef.current) return
+    useGlobalMoveFallbackRef.current = false
+    removeGlobalMoveListeners()
   }
 
   const clampZoomValue = (value: number) => Math.max(0.1, Math.min(3, value))
@@ -791,6 +887,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       pending: null,
     }
     isPinchingRef.current = true
+    setIsPinching(true)
 
     setIsDragging(false)
     isDraggingRef.current = false
@@ -798,7 +895,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     isSelectingRef.current = false
     // These are stable utility functions defined outside hooks, safe to call directly
     removeGlobalNoSelect()
-    removeGlobalMoveListeners()
+    disableGlobalMoveFallback()
     return true
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -810,6 +907,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
     pinchStateRef.current = null
     isPinchingRef.current = false
+    setIsPinching(false)
   }, [])
 
   // Pointer Events with pointer capture for robust drag outside element
@@ -835,8 +933,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     // Hide any open custom context menu upon new interaction
     setShowContextMenu(false)
     // Capture pointer so we continue to receive move/up events outside
+    let hasPointerCapture = false
     try {
       ;(e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId)
+      hasPointerCapture = true
     } catch {}
 
     const isRightButton = e.button === 2 && e.pointerType !== 'touch'
@@ -860,20 +960,22 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           setSelectionStart({ x: svgX, y: svgY })
           setSelectionEnd({ x: svgX, y: svgY })
           addGlobalNoSelect()
-          // Fallback: also track globally in case pointer capture fails in some browsers
-          addGlobalMoveListeners()
-          const onEnd = () => {
-            removeGlobalNoSelect()
-            removeGlobalMoveListeners()
-            window.removeEventListener('mouseup', onEnd)
-            window.removeEventListener('touchend', onEnd)
-            window.removeEventListener('blur', onEnd)
-            isSelectingRef.current = false
-            isDraggingRef.current = false
+          if (!hasPointerCapture) {
+            // Fallback only when pointer capture is unavailable
+            enableGlobalMoveFallback()
+            const onEnd = () => {
+              removeGlobalNoSelect()
+              disableGlobalMoveFallback()
+              window.removeEventListener('mouseup', onEnd)
+              window.removeEventListener('touchend', onEnd)
+              window.removeEventListener('blur', onEnd)
+              isSelectingRef.current = false
+              isDraggingRef.current = false
+            }
+            window.addEventListener('mouseup', onEnd)
+            window.addEventListener('touchend', onEnd)
+            window.addEventListener('blur', onEnd)
           }
-          window.addEventListener('mouseup', onEnd)
-          window.addEventListener('touchend', onEnd)
-          window.addEventListener('blur', onEnd)
         }
       }
       // If clicking on a node, do nothing here - let the node's onContextMenu handler take over
@@ -887,20 +989,22 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       // Don't start dragging immediately - wait for movement in handlePointerMove
       dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
       addGlobalNoSelect()
-      // Fallback: also track globally in case pointer capture fails in some browsers
-      addGlobalMoveListeners()
-      const onEnd = () => {
-        removeGlobalNoSelect()
-        removeGlobalMoveListeners()
-        window.removeEventListener('mouseup', onEnd)
-        window.removeEventListener('touchend', onEnd)
-        window.removeEventListener('blur', onEnd)
-        isDraggingRef.current = false
-        isSelectingRef.current = false
+      if (!hasPointerCapture) {
+        // Fallback only when pointer capture is unavailable
+        enableGlobalMoveFallback()
+        const onEnd = () => {
+          removeGlobalNoSelect()
+          disableGlobalMoveFallback()
+          window.removeEventListener('mouseup', onEnd)
+          window.removeEventListener('touchend', onEnd)
+          window.removeEventListener('blur', onEnd)
+          isDraggingRef.current = false
+          isSelectingRef.current = false
+        }
+        window.addEventListener('mouseup', onEnd)
+        window.addEventListener('touchend', onEnd)
+        window.addEventListener('blur', onEnd)
       }
-      window.addEventListener('mouseup', onEnd)
-      window.addEventListener('touchend', onEnd)
-      window.addEventListener('blur', onEnd)
     }
   }
 
@@ -951,13 +1055,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     if (isDraggingRef.current) {
-      setPan({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y })
+      queuePanUpdate({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y })
     } else if (isSelectingRef.current) {
       const svgRect = svgRef.current?.getBoundingClientRect()
       if (svgRect) {
         const svgX = e.clientX - svgRect.left
         const svgY = e.clientY - svgRect.top
-        setSelectionEnd({ x: svgX, y: svgY })
+        queueSelectionEndUpdate({ x: svgX, y: svgY })
       }
     }
   }
@@ -1029,12 +1133,25 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     const pointerMap = pointerMapRef.current
     return () => {
       removeGlobalNoSelect()
-      removeGlobalMoveListeners()
+      disableGlobalMoveFallback()
       const state = pinchStateRef.current
       if (state && state.rafId !== null) {
         cancelAnimationFrame(state.rafId)
       }
+      if (interactionRafRef.current !== null) {
+        cancelAnimationFrame(interactionRafRef.current)
+        interactionRafRef.current = null
+      }
+      pendingPanRef.current = null
+      pendingSelectionEndRef.current = null
       pinchStateRef.current = null
+      if (wheelIdleTimeoutRef.current !== null) {
+        window.clearTimeout(wheelIdleTimeoutRef.current)
+        wheelIdleTimeoutRef.current = null
+      }
+      setIsPinching(false)
+      setIsWheeling(false)
+      useGlobalMoveFallbackRef.current = false
       pointerMap.clear()
     }
     // These are stable utility functions, not hook-created, so no dependencies needed
@@ -1057,6 +1174,23 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   useEffect(() => {
     panRef.current = pan
   }, [pan])
+
+  useEffect(() => {
+    const shouldFreeze = isDragging || isPinching || isWheeling
+
+    if (shouldFreeze) {
+      if (!isCullingFrozen) {
+        cullingSnapshotRef.current = { pan: panRef.current, zoom: zoomRef.current }
+        setIsCullingFrozen(true)
+      }
+      return
+    }
+
+    if (isCullingFrozen) {
+      cullingSnapshotRef.current = null
+      setIsCullingFrozen(false)
+    }
+  }, [isDragging, isPinching, isWheeling, isCullingFrozen])
 
   // When switching conversations, drop any cached tree so a blank/new conversation
   // does not render the previous conversation's tree.
@@ -1096,7 +1230,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     if (!loading && messagesCount === 0 && chatData == null) {
       lastDataRef.current = null
       // Also reset layout/selection state so a future conversation starts fresh
-      seenNodeIdsRef.current.clear()
       offsetRef.current = null
       hasCenteredRef.current = false
       setSelectedNode(null)
@@ -1129,7 +1262,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     // Look up full message to check for structured content (blocks, tools, etc.)
-    const fullMsg = allMessages.find(m => String(m.id) === String(node.id))
+    const fullMsg = messageById.get(String(node.id))
 
     const hasContent =
       (node.message && node.message.trim().length > 0) ||
@@ -1174,7 +1307,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
 
     return rawData
-  }, [chatData, allMessages, filterEmptyMessages])
+  }, [chatData, messageById, filterEmptyMessages])
 
   // Get the complete branch path for a selected node
   // Uses unfiltered flatMessages to ensure filtered nodes are included in the path
@@ -1257,16 +1390,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
   // Memoized set for quick membership checks of nodes on the current conversation path
   const currentPathSet = useMemo(() => new Set(currentPathIds ?? []), [currentPathIds])
-
-  // After each render commit, mark current nodes as seen.
-  // On first paint, prime the set and disable initial animations.
-  useEffect(() => {
-    const ids = Object.keys(positions)
-    ids.forEach(id => seenNodeIdsRef.current.add(id))
-    if (firstPaintRef.current) {
-      firstPaintRef.current = false
-    }
-  }, [positions])
 
   // Calculate SVG bounds (memoized)
   const bounds = useMemo(() => {
@@ -1422,6 +1545,17 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         e.stopPropagation()
       } catch {}
 
+      // Freeze culling during active wheel bursts; unfreeze shortly after wheel idle.
+      const WHEEL_IDLE_MS = 100
+      if (wheelIdleTimeoutRef.current !== null) {
+        window.clearTimeout(wheelIdleTimeoutRef.current)
+      }
+      setIsWheeling(prev => (prev ? prev : true))
+      wheelIdleTimeoutRef.current = window.setTimeout(() => {
+        wheelIdleTimeoutRef.current = null
+        setIsWheeling(false)
+      }, WHEEL_IDLE_MS)
+
       // Handle zoom centered at the cursor position
       // Normalize delta to pixels across browsers/devices
       const LINE_HEIGHT = 16
@@ -1447,6 +1581,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     return () => {
       container.removeEventListener('wheel', handleWheel)
+      if (wheelIdleTimeoutRef.current !== null) {
+        window.clearTimeout(wheelIdleTimeoutRef.current)
+        wheelIdleTimeoutRef.current = null
+      }
     }
   }, [applyZoomAtPoint])
 
@@ -1508,6 +1646,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   // (legacy mouse handlers removed in favor of pointer events)
 
   const handleMouseUp = (): void => {
+    flushPendingInteractionFrame()
+
     if (isSelecting) {
       // Calculate which nodes are within the selection rectangle
       const selectedNodeIds = getNodesInSelectionRectangle()
@@ -1526,71 +1666,158 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     isDraggingRef.current = false
     // Extra safety in case global listeners missed it
     removeGlobalNoSelect()
+    disableGlobalMoveFallback()
   }
 
   // Handle right-click context menu events
-  const handleContextMenu = (e: React.MouseEvent<SVGElement>, nodeId: string): void => {
-    e.preventDefault() // Prevent default browser context menu
-    e.stopPropagation()
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent<SVGElement>, nodeId: string): void => {
+      e.preventDefault() // Prevent default browser context menu
+      e.stopPropagation()
 
-    // Convert nodeId to parsed format for selectedNodes array
-    const nodeIdParsed = parseId(nodeId)
+      // Convert nodeId to parsed format for selectedNodes array
+      const nodeIdParsed = parseId(nodeId)
 
-    // Check if the node is already selected
-    const isAlreadySelected = selectedNodes.includes(nodeIdParsed)
+      // Check if the node is already selected
+      const isAlreadySelected = selectedNodes.includes(nodeIdParsed)
 
-    let newSelectedNodes: string[]
+      let newSelectedNodes: string[]
 
-    if (e.ctrlKey || e.metaKey) {
-      // Multi-select: toggle the node in the selection
-      if (isAlreadySelected) {
-        newSelectedNodes = selectedNodes.filter(id => id !== nodeIdParsed)
+      if (e.ctrlKey || e.metaKey) {
+        // Multi-select: toggle the node in the selection
+        if (isAlreadySelected) {
+          newSelectedNodes = selectedNodes.filter(id => id !== nodeIdParsed)
+        } else {
+          newSelectedNodes = [...selectedNodes, nodeIdParsed]
+        }
       } else {
-        newSelectedNodes = [...selectedNodes, nodeIdParsed]
+        // Without modifiers: toggle off if already selected; otherwise single-select this node
+        if (isAlreadySelected) {
+          newSelectedNodes = selectedNodes.filter(id => id !== nodeIdParsed)
+        } else {
+          newSelectedNodes = [nodeIdParsed]
+        }
       }
-    } else {
-      // Without modifiers: toggle off if already selected; otherwise single-select this node
-      if (isAlreadySelected) {
-        newSelectedNodes = selectedNodes.filter(id => id !== nodeIdParsed)
-      } else {
-        newSelectedNodes = [nodeIdParsed]
+
+      // Dispatch the nodesSelected action without branch filtering
+      dispatch(chatSliceActions.nodesSelected(newSelectedNodes))
+
+      // Show context menu at the right-click position
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (rect && newSelectedNodes.length > 0) {
+        const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+        setContextMenuPos(pos)
+        setShowContextMenu(true)
       }
+    },
+    [dispatch, selectedNodes]
+  )
+
+  const getNodeIdFromTarget = useCallback((target: EventTarget | null): string | null => {
+    if (!(target instanceof Element)) return null
+    const nodeEl = target.closest('[data-node-id]')
+    if (!nodeEl) return null
+    const nodeId = nodeEl.getAttribute('data-node-id')
+    return nodeId || null
+  }, [])
+
+  const isContextMenuExemptTarget = useCallback((target: EventTarget | null): boolean => {
+    let el = target as Node | null
+    while (el && el !== containerRef.current) {
+      if (el instanceof HTMLElement && el.dataset?.heimdallContextmenuExempt === 'true') {
+        return true
+      }
+      el = (el as HTMLElement).parentElement
     }
+    return false
+  }, [])
 
-    // Dispatch the nodesSelected action without branch filtering
-    dispatch(chatSliceActions.nodesSelected(newSelectedNodes))
+  const handleSvgClick = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      const target = e.target as SVGElement
+      if (target === e.currentTarget || target.tagName === 'svg') {
+        setFocusedNodeId(null)
+        // Clear selection when clicking on empty space
+        if (onNodeSelect) {
+          onNodeSelect('', [])
+        }
+      }
+    },
+    [onNodeSelect]
+  )
 
-    // Show context menu at the right-click position
-    const rect = containerRef.current?.getBoundingClientRect()
-    if (rect && newSelectedNodes.length > 0) {
-      const pos = { x: e.clientX - rect.left, y: e.clientY - rect.top }
-      setContextMenuPos(pos)
-      setShowContextMenu(true)
-    }
-  }
-
-  // Delete selected nodes using their message IDs
-  const handleDeleteNodes = async (): Promise<void> => {
-    try {
-      const ids = selectedNodes || []
-      if (ids.length === 0 || !conversationId) {
-        setShowContextMenu(false)
+  const handleSvgContextMenu = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (isContextMenuExemptTarget(e.target)) {
         return
       }
 
-      // Dispatch the delete action with conversationId and storageMode
-      await (dispatch as any)(deleteSelectedNodes({ ids, conversationId, storageMode })).unwrap()
+      const nodeId = getNodeIdFromTarget(e.target)
+      if (nodeId) {
+        handleContextMenu(e as unknown as React.MouseEvent<SVGElement>, nodeId)
+        return
+      }
 
-      // Clear selection after successful delete
-      dispatch(chatSliceActions.nodesSelected([]))
+      e.preventDefault()
+    },
+    [getNodeIdFromTarget, handleContextMenu, isContextMenuExemptTarget]
+  )
 
-      // Refresh the message tree (now fetches both tree and messages in one call)
-      await (dispatch as any)(fetchMessageTree({ conversationId, storageMode }))
-    } catch (error) {
-      console.error('Failed to delete nodes:', error)
-    } finally {
-      setShowContextMenu(false)
+  const performDeleteNodes = useCallback(
+    async (idsToDelete: MessageId[]): Promise<void> => {
+      try {
+        if (idsToDelete.length === 0 || !conversationId) {
+          return
+        }
+
+        // Dispatch the delete action with conversationId and storageMode
+        await (dispatch as any)(deleteSelectedNodes({ ids: idsToDelete, conversationId, storageMode })).unwrap()
+
+        // Clear selection after successful delete
+        dispatch(chatSliceActions.nodesSelected([]))
+
+        // Refresh the message tree (now fetches both tree and messages in one call)
+        await (dispatch as any)(fetchMessageTree({ conversationId, storageMode }))
+      } catch (error) {
+        console.error('Failed to delete nodes:', error)
+      }
+    },
+    [dispatch, conversationId, storageMode]
+  )
+
+  const closeDeleteNodesModal = useCallback(() => {
+    setShowDeleteConfirmModal(false)
+    setPendingDeleteNodeIds([])
+    setDontAskDeleteAgain(false)
+  }, [])
+
+  const confirmDeleteNodesModal = useCallback(async () => {
+    if (dontAskDeleteAgain) {
+      setConfirmDeleteSelection(false)
     }
+    const idsToDelete = pendingDeleteNodeIds
+    closeDeleteNodesModal()
+    await performDeleteNodes(idsToDelete)
+  }, [dontAskDeleteAgain, pendingDeleteNodeIds, closeDeleteNodesModal, performDeleteNodes])
+
+  // Delete selected nodes using their message IDs
+  const handleDeleteNodes = async (): Promise<void> => {
+    const ids = selectedNodes || []
+    if (ids.length === 0 || !conversationId) {
+      setShowContextMenu(false)
+      return
+    }
+
+    setShowContextMenu(false)
+
+    if (!confirmDeleteSelection) {
+      await performDeleteNodes(ids)
+      return
+    }
+
+    setPendingDeleteNodeIds(ids)
+    setDontAskDeleteAgain(false)
+    setShowDeleteConfirmModal(true)
   }
 
   // Copy messages along the union of root->selected-node paths
@@ -1924,6 +2151,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     }
   }, [dimensions.width, dimensions.height])
 
+  const cullingPan = isCullingFrozen ? (cullingSnapshotRef.current?.pan ?? pan) : pan
+  const cullingZoom = isCullingFrozen ? (cullingSnapshotRef.current?.zoom ?? zoom) : zoom
+
   // Filter visible positions based on viewport bounds
   const visiblePositions = useMemo(() => {
     if (!viewportBounds) {
@@ -1932,11 +2162,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     // Transform from tree coordinates to screen coordinates
     // Transform chain: translate(offsetX, offsetY) -> scale(zoom) -> translate(pan.x + width/2, pan.y + 100)
-    const tx = pan.x + dimensions.width / 2
-    const ty = pan.y + 100
+    const tx = cullingPan.x + dimensions.width / 2
+    const ty = cullingPan.y + 100
 
     const visible: Record<string, Position> = {}
-    const culled: string[] = []
 
     Object.entries(positions).forEach(([id, pos]) => {
       const { x, y, node } = pos
@@ -1945,14 +2174,14 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const height = isExpanded ? nodeHeight : circleRadius * 2
 
       // Convert tree coordinates to screen coordinates
-      const screenX = (x + offsetX) * zoom + tx
-      const screenY = (y + offsetY) * zoom + ty
+      const screenX = (x + offsetX) * cullingZoom + tx
+      const screenY = (y + offsetY) * cullingZoom + ty
 
       // Node bounds in screen space
-      const left = screenX - (width / 2) * zoom
-      const right = screenX + (width / 2) * zoom
+      const left = screenX - (width / 2) * cullingZoom
+      const right = screenX + (width / 2) * cullingZoom
       const top = screenY
-      const bottom = screenY + height * zoom
+      const bottom = screenY + height * cullingZoom
 
       // Check if node intersects viewport
       if (
@@ -1962,23 +2191,86 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         top <= viewportBounds.maxY
       ) {
         visible[id] = pos
-      } else {
-        culled.push(id)
       }
     })
 
-    // Debug logging (comment out for production)
-    // console.log(`Viewport culling: ${Object.keys(visible).length} visible, ${culled.length} culled`)
-    // if (culled.length > 0) {
-    //   console.log('Culled nodes:', culled)
-    // }
-
     return visible
-  }, [positions, viewportBounds, compactMode, focusedNodeId, pan.x, pan.y, zoom, offsetX, offsetY, dimensions.width])
+  }, [
+    positions,
+    viewportBounds,
+    compactMode,
+    focusedNodeId,
+    cullingPan.x,
+    cullingPan.y,
+    cullingZoom,
+    offsetX,
+    offsetY,
+    dimensions.width,
+  ])
+
+  const parentByChildId = useMemo(() => {
+    const parentMap = new Map<string, string>()
+    Object.values(positions).forEach(({ node }) => {
+      node.children?.forEach(child => {
+        parentMap.set(child.id, node.id)
+      })
+    })
+    return parentMap
+  }, [positions])
+
+  const visiblePositionIdSet = useMemo(() => new Set(Object.keys(visiblePositions)), [visiblePositions])
+
+  const handleNodeMouseEnter = useCallback(
+    (e: React.MouseEvent<SVGElement>) => {
+      const nodeId = getNodeIdFromTarget(e.target)
+      if (!nodeId) return
+      const pos = positions[nodeId]
+      if (pos?.node) {
+        setSelectedNode(pos.node)
+      }
+
+      const containerRect = containerRef.current?.getBoundingClientRect()
+      if (containerRect) {
+        setMousePosition({
+          x: e.clientX - containerRect.left,
+          y: e.clientY - containerRect.top,
+        })
+      }
+    },
+    [getNodeIdFromTarget, positions]
+  )
+
+  const handleNodeMouseLeave = useCallback(() => {
+    setSelectedNode(null)
+  }, [])
 
   const renderConnections = (): JSX.Element[] => {
     const connections: JSX.Element[] = []
     const drawnConnections = new Set<string>() // Track to avoid duplicates
+    const tx = cullingPan.x + dimensions.width / 2
+    const ty = cullingPan.y + 100
+
+    const toScreenPoint = (x: number, y: number) => ({
+      x: (x + offsetX) * cullingZoom + tx,
+      y: (y + offsetY) * cullingZoom + ty,
+    })
+
+    const segmentIntersectsViewport = (...points: Array<{ x: number; y: number }>) => {
+      if (!viewportBounds) return true
+      const xs = points.map(point => point.x)
+      const ys = points.map(point => point.y)
+      const minX = Math.min(...xs)
+      const maxX = Math.max(...xs)
+      const minY = Math.min(...ys)
+      const maxY = Math.max(...ys)
+
+      return (
+        maxX >= viewportBounds.minX &&
+        minX <= viewportBounds.maxX &&
+        maxY >= viewportBounds.minY &&
+        minY <= viewportBounds.maxY
+      )
+    }
 
     // Helper to draw connection from parent to child
     const drawConnection = (parentPos: Position, childPos: Position, childNode: ChatNode) => {
@@ -2006,6 +2298,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       drawnConnections.add(connectionKey)
 
       if (parent.children.length === 1) {
+        const screenParent = toScreenPoint(parentX, parentBottomY)
+        const screenChild = toScreenPoint(childX, childY)
+        if (!segmentIntersectsViewport(screenParent, screenChild)) return
+
         // Single child - straight line
         connections.push(
           <line
@@ -2024,6 +2320,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         // Multiple children - branching structure
         const verticalDropHeight = verticalSpacing * 0.4
         const branchY = parentBottomY + verticalDropHeight
+
+        const screenParent = toScreenPoint(parentX, parentBottomY)
+        const screenBranch = toScreenPoint(childX, branchY)
+        const screenChild = toScreenPoint(childX, childY)
+
+        if (!segmentIntersectsViewport(screenParent, screenBranch, screenChild)) return
 
         const path = `
           M ${parentX} ${branchY}
@@ -2060,16 +2362,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
     }
 
-    // Build parent map from all positions
-    const parentMap = new Map<string, string>() // childId -> parentId
-    Object.values(positions).forEach(({ node }) => {
-      if (node.children) {
-        node.children.forEach(child => {
-          parentMap.set(child.id, node.id)
-        })
-      }
-    })
-
     // First pass: Draw connections from visible parent nodes to all their children
     Object.values(visiblePositions).forEach(pos => {
       const { node } = pos
@@ -2088,36 +2380,40 @@ export const Heimdall: React.FC<HeimdallProps> = ({
             typeof parentNodeIdParsed === 'string') &&
           currentPathSet.has(parentNodeIdParsed)
 
-        // Draw vertical drop and junction for multi-child nodes
+        // Draw vertical drop and junction for multi-child nodes when visible
         if (node.children.length > 1) {
-          connections.push(
-            <line
-              key={`${node.id}-drop`}
-              x1={parentPos.x}
-              y1={parentBottomY}
-              x2={parentPos.x}
-              y2={branchY}
-              className={
-                isParentOnPath ? 'stroke-indigo-400 dark:stroke-neutral-200' : 'stroke-neutral-400 dark:stroke-gray-500'
-              }
-              strokeWidth='2'
-            />
-          )
+          const screenParent = toScreenPoint(parentPos.x, parentBottomY)
+          const screenBranch = toScreenPoint(parentPos.x, branchY)
+          if (segmentIntersectsViewport(screenParent, screenBranch)) {
+            connections.push(
+              <line
+                key={`${node.id}-drop`}
+                x1={parentPos.x}
+                y1={parentBottomY}
+                x2={parentPos.x}
+                y2={branchY}
+                className={
+                  isParentOnPath ? 'stroke-indigo-400 dark:stroke-neutral-200' : 'stroke-neutral-400 dark:stroke-gray-500'
+                }
+                strokeWidth='2'
+              />
+            )
 
-          connections.push(
-            <circle
-              key={`${node.id}-junction`}
-              cx={parentPos.x}
-              cy={branchY}
-              r='4'
-              className={
-                isParentOnPath
-                  ? 'fill-indigo-300 dark:fill-amber-300 stroke-indigo-400 dark:stroke-amber-400'
-                  : 'fill-gray-700 dark:fill-gray-600 stroke-gray-600 dark:stroke-gray-500'
-              }
-              strokeWidth='2'
-            />
-          )
+            connections.push(
+              <circle
+                key={`${node.id}-junction`}
+                cx={parentPos.x}
+                cy={branchY}
+                r='4'
+                className={
+                  isParentOnPath
+                    ? 'fill-indigo-300 dark:fill-amber-300 stroke-indigo-400 dark:stroke-amber-400'
+                    : 'fill-gray-700 dark:fill-gray-600 stroke-gray-600 dark:stroke-gray-500'
+                }
+                strokeWidth='2'
+              />
+            )
+          }
         }
 
         // Draw connections to each child
@@ -2133,13 +2429,15 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     // Second pass: Draw connections from visible children to their culled parents
     Object.values(visiblePositions).forEach(pos => {
       const { node } = pos
-      const parentId = parentMap.get(node.id)
-      if (parentId) {
-        const parentPos = positions[parentId]
-        // Only draw if parent exists but is NOT visible (culled)
-        if (parentPos && !visiblePositions[parentId]) {
-          drawConnection(parentPos, pos, node)
-        }
+      const parentId = parentByChildId.get(node.id)
+      if (!parentId) return
+
+      // Only draw if parent exists but is NOT visible (culled)
+      if (visiblePositionIdSet.has(parentId)) return
+
+      const parentPos = positions[parentId]
+      if (parentPos) {
+        drawConnection(parentPos, pos, node)
       }
     })
 
@@ -2159,7 +2457,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const isVisible =
         ((typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string') &&
         visibleMessageId === nodeIdParsed
-      const isNew = !firstPaintRef.current && !seenNodeIdsRef.current.has(node.id)
       const subagentNodes = subagentMapByParent[String(node.id)] || []
       const subagentCount = subagentNodes.length
       const showSubagentBadge = subagentCount > 0 && node.sender === 'user'
@@ -2167,14 +2464,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       if (isExpanded) {
         // Render full node
         return (
-          <motion.g
-            key={node.id}
-            transform={`translate(${x - nodeWidth / 2}, ${y})`}
-            initial={isNew ? { opacity: 0 } : false}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-          >
+          <g key={node.id} transform={`translate(${x - nodeWidth / 2}, ${y})`}>
             {/* Current path highlight (rendered first so selection can appear above) */}
             {/* {isOnCurrentPath && (
              
@@ -2216,31 +2506,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 filter:
                   compactMode && focusedNodeId === node.id ? `drop-shadow(0 0 10px rgba(59, 130, 246, 0.5))` : 'none',
               }}
-              onMouseEnter={e => {
-                setSelectedNode(node)
-                const containerRect = containerRef.current?.getBoundingClientRect()
-                if (containerRect) {
-                  setMousePosition({
-                    x: e.clientX - containerRect.left,
-                    y: e.clientY - containerRect.top,
-                  })
-                }
-              }}
-              onMouseLeave={() => setSelectedNode(null)}
-              onClick={() => {
-                setSubagentPanel(null)
-                if (onNodeSelect) {
-                  const nodeIdParsed = parseId(node.id)
-                  // If clicked node is already in current path, just update focused message
-                  if (currentPathIds && currentPathIds.includes(nodeIdParsed)) {
-                    dispatch(chatSliceActions.focusedChatMessageSet(nodeIdParsed))
-                    return
-                  }
-                  const path = getPathWithDescendants(node.id)
-                  onNodeSelect(node.id, path)
-                }
-              }}
-              onContextMenu={e => handleContextMenu(e, node.id)}
+              onMouseEnter={handleNodeMouseEnter}
+              onMouseLeave={handleNodeMouseLeave}
             />
             {showSubagentBadge &&
               (() => {
@@ -2381,18 +2648,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 </g>
               )
             })()}
-          </motion.g>
+          </g>
         )
       } else {
         // Render compact circle
         return (
-          <motion.g
-            key={node.id}
-            initial={isNew ? { opacity: 0 } : false}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
-          >
+          <g key={node.id}>
             {/* Current path highlight for compact mode */}
             {/* {isOnCurrentPath && (
               <circle
@@ -2448,32 +2709,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 transformOrigin: `${x}px ${y + circleRadius}px`,
                 filter: `drop-shadow(0 4px 12px rgba(0,0,0,${isDarkMode ? '0.25' : '0.05'})) drop-shadow(0 6px 18px rgba(0,0,0,0.02))`,
               }}
-              onMouseEnter={e => {
-                setSelectedNode(node)
-                const containerRect = containerRef.current?.getBoundingClientRect()
-                if (containerRect) {
-                  setMousePosition({
-                    x: e.clientX - containerRect.left,
-                    y: e.clientY - containerRect.top,
-                  })
-                }
-              }}
-              onMouseLeave={() => setSelectedNode(null)}
-              onClick={() => {
-                setSubagentPanel(null)
-                // Trigger node selection callback
-                if (onNodeSelect) {
-                  const nodeIdParsed = parseId(node.id)
-                  // If clicked node is already in current path, just update focused message
-                  if (currentPathIds && currentPathIds.includes(nodeIdParsed)) {
-                    dispatch(chatSliceActions.focusedChatMessageSet(nodeIdParsed))
-                    return
-                  }
-                  const path = getPathWithDescendants(node.id)
-                  onNodeSelect(node.id, path)
-                }
-              }}
-              onContextMenu={e => handleContextMenu(e, node.id)}
+              onMouseEnter={handleNodeMouseEnter}
+              onMouseLeave={handleNodeMouseLeave}
             />
             {showSubagentBadge &&
               (() => {
@@ -2558,11 +2795,53 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 style={{ pointerEvents: 'none', userSelect: 'none' }}
               />
             )} */}
-          </motion.g>
+          </g>
         )
       }
     })
   }
+
+  const connectionElements = useMemo(
+    () => renderConnections(),
+    [
+      visiblePositions,
+      positions,
+      parentByChildId,
+      visiblePositionIdSet,
+      compactMode,
+      focusedNodeId,
+      currentPathSet,
+      cullingPan.x,
+      cullingPan.y,
+      cullingZoom,
+      dimensions.width,
+      viewportBounds,
+      offsetX,
+      offsetY,
+      verticalSpacing,
+    ]
+  )
+
+  const nodeElements = useMemo(
+    () => renderNodes(),
+    [
+      visiblePositions,
+      compactMode,
+      focusedNodeId,
+      selectedNodes,
+      visibleMessageId,
+      subagentMapByParent,
+      selectedNode?.id,
+      isDarkMode,
+      handleNodeMouseEnter,
+      handleNodeMouseLeave,
+      handleSubagentBadgeClick,
+      handleNoteBadgeHover,
+      handleNoteBadgeLeave,
+      handleNoteBadgeClick,
+      getCurrentMessage,
+    ]
+  )
 
   // Note: loading overlay is handled within main render to avoid unmounting the tree
 
@@ -2575,14 +2854,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       ref={containerRef}
       className='group w-full h-screen border-l dark:border-neutral-800 border-neutral-200 bg-neutral-50 relative overflow-hidden dark:bg-yBlack-900 shadow-[inset_8px_0_17px_-8px_rgba(0,0,0,0.1)] dark:shadow-[inset_4px_0_6px_-2px_rgba(0,0,0,0.45)]'
       onContextMenu={e => {
-        // Check if the context menu event originates from an exempt element
-        let el = e.target as Node | null
-        while (el && el !== containerRef.current) {
-          if (el instanceof HTMLElement && el.dataset?.heimdallContextmenuExempt === 'true') {
-            // Allow the context menu in exempt elements
-            return
-          }
-          el = (el as HTMLElement).parentElement
+        if (isContextMenuExemptTarget(e.target)) {
+          return
         }
         e.preventDefault()
       }}
@@ -2594,51 +2867,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       onMouseLeave={() => setIsHovering(false)}
     >
       {/* Overlays: loading, error, empty-state (non-destructive, do not unmount SVG) */}
-      {/* <AnimatePresence>
-        {loading && (
-          <motion.div
-            className='absolute inset-0 z-20 flex items-center justify-center bg-slate-50 text-stone-800 dark:text-stone-200 dark:text-stone-200 dark:bg-neutral-900'
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-          >
-            <motion.div
-              className='text-white text-center'
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -10 }}
-              transition={{ duration: 0.3, delay: 0.1, ease: 'easeOut' }}
-            >
-              <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4'></div>
-              <p className='text-lg'>Loading conversation tree...</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence> */}
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            className='absolute inset-0 z-20 flex items-center justify-center bg-slate-50 text-stone-800 dark:text-stone-200'
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-          >
-            <motion.div
-              className='text-white text-center max-w-md'
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -10 }}
-              transition={{ duration: 0.3, delay: 0.1, ease: 'easeOut' }}
-            >
-              <div className='text-red-400 text-6xl mb-4'>⚠️</div>
-              <p className='text-lg mb-2'>Failed to load conversation</p>
-              <p className='text-sm text-gray-400'>{error}</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       {error && (
         <div className='absolute inset-0 z-20 flex items-center justify-center bg-slate-50 text-stone-800 dark:text-stone-200'>
           <div className='text-white text-center max-w-md'>
@@ -2737,38 +2965,13 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onContextMenu={e => {
-          // Check if the context menu event originates from an exempt element
-          let el = e.target as Node | null
-          while (el && el !== containerRef.current) {
-            if (el instanceof HTMLElement && el.dataset?.heimdallContextmenuExempt === 'true') {
-              // Allow the context menu in exempt elements
-              return
-            }
-            el = (el as HTMLElement).parentElement
-          }
-          e.preventDefault()
-        }}
-        onClick={e => {
-          const target = e.target as SVGElement
-          if (target === e.currentTarget || target.tagName === 'svg') {
-            setFocusedNodeId(null)
-            // Clear selection when clicking on empty space
-            if (onNodeSelect) {
-              onNodeSelect('', [])
-            }
-          }
-        }}
+        onContextMenu={handleSvgContextMenu}
+        onClick={handleSvgClick}
         style={{ cursor: isDragging ? 'grabbing' : isSelecting ? 'crosshair' : 'grab', touchAction: 'none' }}
       >
         <g transform={`translate(${pan.x + dimensions.width / 2}, ${pan.y + 100}) scale(${zoom})`}>
           <g transform={`translate(${offsetX}, ${offsetY})`}>
-            <g strokeLinecap='round' strokeLinejoin='round'>
-              {renderConnections()}
-            </g>
-            <AnimatePresence initial={false} mode='popLayout'>
-              {renderNodes()}
-            </AnimatePresence>
+            <HeimdallGraphLayers connections={connectionElements} nodes={nodeElements} />
           </g>
         </g>
         {/* Viewport bounds debug overlay - uncomment to visualize culling area */}
@@ -2850,6 +3053,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                   }
                 }}
                 size='small'
+                autoFocus
                 className='bg-amber-50 dark:bg-neutral-700'
               />
               <div className='mt-2 text-xs text-stone-500 dark:text-stone-400'>
@@ -3000,6 +3204,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           </button>
         </div>
       )}
+
+      <DeleteConfirmModal
+        isOpen={showDeleteConfirmModal && pendingDeleteNodeIds.length > 0}
+        title={pendingDeleteNodeIds.length > 1 ? `Delete ${pendingDeleteNodeIds.length} messages?` : 'Delete message?'}
+        description='This action cannot be undone.'
+        dontAskAgain={dontAskDeleteAgain}
+        onDontAskAgainChange={setDontAskDeleteAgain}
+        onCancel={closeDeleteNodesModal}
+        onConfirm={confirmDeleteNodesModal}
+      />
       {selectedNode && !hoveredNote &&
         (() => {
           const nodeIdParsed = parseId(selectedNode.id)
@@ -3203,7 +3417,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           const subagentError = subagentModalData?.parentId === parentId ? subagentModalData.error : null
 
           // Find parent node message to display
-          const parentMessage = allMessages.find(m => String(m.id) === parentId)
+          const parentMessage = messageById.get(parentId)
 
           return (
             <div

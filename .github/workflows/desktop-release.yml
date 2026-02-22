@@ -102,11 +102,13 @@ jobs:
 
       - name: Build ${{ matrix.os }}
         run: |
-          cd ygg-chat/client/ygg-chat-r
+          set -euo pipefail
+          cd ygg-chat
+          npm run build:electron
           if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            npm run build:linux
+            npm run package:electron -- --linux
           else
-            npm run build:mac
+            npm run package:electron -- --mac
           fi
         shell: bash
 

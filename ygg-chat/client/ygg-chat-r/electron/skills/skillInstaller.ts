@@ -12,7 +12,7 @@ interface GitHubContent {
   path: string
   type: 'file' | 'dir'
   download_url: string | null
-  url: string  // API URL for directories
+  url: string // API URL for directories
 }
 
 interface InstallResult {
@@ -24,7 +24,7 @@ interface InstallResult {
 interface CatalogSkill {
   name: string
   description: string
-  path: string  // Path within repo (e.g., "skills/code-review")
+  path: string // Path within repo (e.g., "skills/code-review")
 }
 
 const GITHUB_API_BASE = 'https://api.github.com'
@@ -37,7 +37,7 @@ async function fetchGitHubAPI(url: string): Promise<any> {
   const response = await fetch(url, {
     headers: {
       'User-Agent': USER_AGENT,
-      'Accept': 'application/vnd.github.v3+json',
+      Accept: 'application/vnd.github.v3+json',
     },
   })
 
@@ -72,10 +72,7 @@ async function downloadFile(url: string): Promise<string> {
 /**
  * Recursively download directory contents from GitHub
  */
-async function downloadDirectory(
-  contents: GitHubContent[],
-  targetDir: string
-): Promise<void> {
+async function downloadDirectory(contents: GitHubContent[], targetDir: string): Promise<void> {
   await fs.mkdir(targetDir, { recursive: true })
 
   for (const item of contents) {
@@ -176,7 +173,8 @@ export async function installFromGitHub(source: string): Promise<InstallResult> 
     const contents = await fetchGitHubAPI(apiUrl)
 
     // Check if this is a skill directory (has SKILL.md) or a directory of skills
-    const hasSkillMd = Array.isArray(contents) &&
+    const hasSkillMd =
+      Array.isArray(contents) &&
       contents.some((item: GitHubContent) => item.name === 'SKILL.md' && item.type === 'file')
 
     if (hasSkillMd) {
@@ -185,8 +183,7 @@ export async function installFromGitHub(source: string): Promise<InstallResult> 
     }
 
     // Check if it's a directory containing skill folders
-    const skillFolders = Array.isArray(contents) ?
-      contents.filter((item: GitHubContent) => item.type === 'dir') : []
+    const skillFolders = Array.isArray(contents) ? contents.filter((item: GitHubContent) => item.type === 'dir') : []
 
     if (skillFolders.length === 0) {
       return { success: false, error: 'No skills found at this location' }
@@ -197,13 +194,12 @@ export async function installFromGitHub(source: string): Promise<InstallResult> 
     const folderNames = skillFolders.map((f: GitHubContent) => f.name).join(', ')
     return {
       success: false,
-      error: `Multiple skill folders found: ${folderNames}. Please specify which skill to install (e.g., "${source}/folder-name")`
+      error: `Multiple skill folders found: ${folderNames}. Please specify which skill to install (e.g., "${source}/folder-name")`,
     }
-
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     }
   }
 }
@@ -257,7 +253,6 @@ async function installSingleSkill(
     await skillRegistry.reload()
 
     return { success: true, skillName }
-
   } catch (error) {
     // Cleanup on failure
     try {
@@ -266,7 +261,7 @@ async function installSingleSkill(
 
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     }
   }
 }
@@ -307,11 +302,10 @@ export async function installFromLocal(sourcePath: string): Promise<InstallResul
     await skillRegistry.reload()
 
     return { success: true, skillName }
-
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     }
   }
 }
@@ -355,7 +349,6 @@ export async function fetchSkillsCatalog(): Promise<CatalogSkill[]> {
     }
 
     return skills
-
   } catch (error) {
     console.error('[SkillInstaller] Failed to fetch catalog:', error)
     return []
@@ -409,11 +402,11 @@ export async function installFromZipUrl(zipUrl: string, sourceLabel: string): Pr
 
   try {
     // Download zip
-    console.log(`[SkillInstaller] Downloading zip from: ${zipUrl}`)
+    // console.log(`[SkillInstaller] Downloading zip from: ${zipUrl}`)
     const zipBuffer = await downloadZipFile(zipUrl)
 
     // Extract zip
-    console.log(`[SkillInstaller] Extracting zip...`)
+    // console.log(`[SkillInstaller] Extracting zip...`)
     const zip = new AdmZip(zipBuffer)
     zip.extractAllTo(tempDir, true)
 
@@ -466,7 +459,6 @@ export async function installFromZipUrl(zipUrl: string, sourceLabel: string): Pr
 
     console.log(`[SkillInstaller] Successfully installed skill: ${skillName}`)
     return { success: true, skillName }
-
   } catch (error) {
     // Cleanup on failure
     try {
@@ -475,7 +467,7 @@ export async function installFromZipUrl(zipUrl: string, sourceLabel: string): Pr
 
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error)
+      error: error instanceof Error ? error.message : String(error),
     }
   }
 }
@@ -515,7 +507,10 @@ export async function installFromUrl(url: string): Promise<InstallResult> {
     return installFromZipUrl(url, `url:${url}`)
   }
 
-  return { success: false, error: 'Unsupported URL format. Supported: ClawdHub page URLs, GitHub URLs, or direct zip URLs' }
+  return {
+    success: false,
+    error: 'Unsupported URL format. Supported: ClawdHub page URLs, GitHub URLs, or direct zip URLs',
+  }
 }
 
 // ============================================================================

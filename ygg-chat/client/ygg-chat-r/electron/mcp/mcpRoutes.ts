@@ -2,8 +2,8 @@
 // Express routes for MCP server management
 
 import { Express } from 'express'
-import { mcpManager, McpServerConfig } from './mcpManager.js'
 import { toolOrchestrator } from '../tools/orchestrator/index.js'
+import { mcpManager, McpServerConfig } from './mcpManager.js'
 
 // Helper function to refresh MCP tools with the orchestrator
 async function refreshMcpToolsWithOrchestrator(): Promise<number> {
@@ -39,12 +39,11 @@ async function refreshMcpToolsWithOrchestrator(): Promise<number> {
     registeredCount++
   }
 
-  console.log(`[McpRoutes] Refreshed ${registeredCount} MCP tools with orchestrator`)
+  // console.log(`[McpRoutes] Refreshed ${registeredCount} MCP tools with orchestrator`)
   return registeredCount
 }
 
 export function registerMcpRoutes(app: Express): void {
-
   // GET /api/mcp/settings - Get MCP settings
   app.get('/api/mcp/settings', async (_req, res) => {
     try {

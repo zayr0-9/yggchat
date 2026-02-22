@@ -740,6 +740,34 @@ const formatToolResultSummary = (content: any): string | null => {
   }
 }
 
+const normalizeReasoningTextForComparison = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
+const extractReasoningTextsFromResponsesOutputItems = (items: any[]): string[] => {
+  const extracted: string[] = []
+
+  for (const item of items) {
+    if (!item || typeof item !== 'object' || item.type !== 'reasoning') continue
+
+    if (Array.isArray(item.content)) {
+      for (const part of item.content) {
+        if (part?.type === 'reasoning_text' && typeof part.text === 'string' && part.text.trim()) {
+          extracted.push(part.text)
+        }
+      }
+    }
+
+    if (Array.isArray(item.summary)) {
+      for (const part of item.summary) {
+        if (typeof part?.text === 'string' && part.text.trim()) {
+          extracted.push(part.text)
+        }
+      }
+    }
+  }
+
+  return extracted
+}
+
 interface TodoItem {
   text: string
   done: boolean
@@ -1626,8 +1654,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const isProcessRunSeparatorText = (text: string): boolean => {
       const trimmed = text.trim()
       if (!trimmed) return true
-      if (trimmed.includes('\n\n')) return false
+
+      // Keep obviously structured markdown content out of process-run grouping.
       if (trimmed.startsWith('#') || trimmed.startsWith('```')) return false
+
+      // Short connective text (even if multiline) should not break an Agent Steps run.
       const words = trimmed.split(/\s+/).filter(Boolean)
       return words.length <= 12
     }
@@ -2335,6 +2366,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const buildStreamRenderItems = (): MessageRenderItem[] => {
       if (!Array.isArray(streamEvents) || streamEvents.length === 0) return []
 
+      // Cosmetic: hide transient streaming-only reasoning aggregate block.
+      // Persisted messages still render reasoning from content blocks.
+      const hideStreamingReasoning = id === 'streaming'
+
       const items: MessageRenderItem[] = []
       let idx = 0
 
@@ -2406,6 +2441,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         }
 
         if (event.type === 'reasoning' && event.delta) {
+          if (hideStreamingReasoning) {
+            idx += 1
+            continue
+          }
+
           if (getPreviousVisibleStreamType(idx) === 'reasoning') {
             idx += 1
             continue
@@ -2534,6 +2574,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       if (!Array.isArray(contentBlocks) || contentBlocks.length === 0) return []
 
       const items: MessageRenderItem[] = []
+      const renderedReasoningSignatures = new Set<string>()
       let idx = 0
 
       while (idx < contentBlocks.length) {
@@ -2619,8 +2660,42 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             }
           }
 
-          items.push(buildReasoningRenderItem(accumulatedThinking, block.index, `thinking-${block.index}-${idx}`))
+          const normalizedThinking = normalizeReasoningTextForComparison(accumulatedThinking)
+          if (normalizedThinking) {
+            renderedReasoningSignatures.add(normalizedThinking)
+          }
+
+          items.push(
+            buildReasoningRenderItem(
+              accumulatedThinking,
+              typeof block.index === 'number' ? block.index : idx,
+              `thinking-${block.index}-${idx}`
+            )
+          )
           idx = nextIdx
+          continue
+        }
+
+        if ((block as any).type === 'responses_output_items' && Array.isArray((block as any).items)) {
+          const responseBlock = block as any
+          const extractedReasoning = extractReasoningTextsFromResponsesOutputItems(responseBlock.items)
+          const baseIndex = typeof responseBlock.index === 'number' ? responseBlock.index : idx
+
+          extractedReasoning.forEach((reasoningText, reasoningOffset) => {
+            const normalized = normalizeReasoningTextForComparison(reasoningText)
+            if (!normalized || renderedReasoningSignatures.has(normalized)) return
+
+            renderedReasoningSignatures.add(normalized)
+            items.push(
+              buildReasoningRenderItem(
+                reasoningText,
+                900000000 + baseIndex * 100 + reasoningOffset,
+                `responses-reasoning-${baseIndex}-${idx}-${reasoningOffset}`
+              )
+            )
+          })
+
+          idx += 1
           continue
         }
 

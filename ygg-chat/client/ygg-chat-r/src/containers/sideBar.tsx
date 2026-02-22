@@ -593,7 +593,7 @@ const SideBar: React.FC<SideBarProps> = ({
 
   return (
     <aside
-      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-md flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 overflow-x-hidden ${isCollapsed ? 'w-16 ' : 'w-64 md:w-72 lg:w-80 xl:w-90 '} ${className}`}
+      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-md flex flex-col rounded-tr-xl transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 overflow-x-hidden ${isCollapsed ? 'w-14 ' : 'w-64 md:w-64 lg:w-70 xl:w-80 '} ${className}`}
       aria-label={isProjectsTab ? 'Projects and conversations' : 'Favorite conversations'}
     >
       {/* Toggle Button */}
@@ -779,46 +779,59 @@ const SideBar: React.FC<SideBarProps> = ({
           </>
         )}
       </div>
-      <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
-        <Button
-          variant='acrylic'
-          size='smaller'
-          onClick={cycleTheme}
-          rounded='full'
-          title={`Theme: ${themeMode} (click to change)`}
-          aria-label={`Theme: ${themeMode}`}
-          className='group'
-        >
-          <i
-            className={`bx ${themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun'} text-3xl md:text-2xl lg:text-[20px] xl:text-[24px] 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] p-1 transition-transform duration-100 group-active:scale-90 pointer-events-none`}
-            aria-hidden='true'
-          ></i>
-        </Button>
-        {!isCollapsed && (
-          <div className='flex flex-4 items-center justify-start text-xs pl-2 md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
-            {themeMode}
-          </div>
-        )}
-      </div>
-      <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
-        <Button variant='acrylic' size='smaller' rounded='full' className='group' onClick={() => navigate('/logging')}>
-          <i className='bx p-1 bx-line-chart text-3xl md:text-2xl lg:text-[20px] xl:text-[24px] 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] hover:scale-104 active:scale-95'></i>
-        </Button>
-        {!isCollapsed && (
-          <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] pl-2 dark:text-stone-300'>
-            <h3> Logging </h3>
-          </div>
-        )}
-      </div>
-      <div className='flex items-center justify-start py-2 md:py-1.5 lg:py-1.5 xl:py-1 px-2'>
-        <Button variant='acrylic' size='smaller' rounded='full' className='group' onClick={() => navigate('/payment')}>
-          <i className='bx p-1 bx-user-circle text-3xl md:text-2xl lg:text-[20px] xl:text-[24px] 2xl:text-[26px] 3xl:text-[28px] 4xl:text-[30px] hover:scale-104 active:scale-95'></i>
-        </Button>
-        {!isCollapsed && (
-          <div className='flex flex-4 items-center justify-start text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] pl-2 dark:text-stone-300'>
-            <h3> Profile </h3>
-          </div>
-        )}
+      <div className='border-t border-neutral-200/70 px-1 py-2 dark:border-neutral-800/70'>
+        {[
+          {
+            key: 'theme',
+            label: themeMode,
+            iconClass: themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun',
+            onClick: cycleTheme,
+            title: `Theme: ${themeMode} (click to change)`,
+            ariaLabel: `Theme: ${themeMode}`,
+          },
+          {
+            key: 'logging',
+            label: 'Logging',
+            iconClass: 'bx-line-chart',
+            onClick: () => navigate('/logging'),
+            title: 'Open logging',
+            ariaLabel: 'Open logging',
+          },
+          {
+            key: 'profile',
+            label: 'Profile',
+            iconClass: 'bx-user-circle',
+            onClick: () => navigate('/payment'),
+            title: 'Open profile',
+            ariaLabel: 'Open profile',
+          },
+        ].map(action => (
+          <button
+            key={action.key}
+            type='button'
+            onClick={action.onClick}
+            title={action.title}
+            aria-label={action.ariaLabel}
+            className={`group flex w-full items-center rounded-lg py-1.5 transition-colors hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 ${
+              isCollapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2'
+            }`}
+          >
+            <span className='acrylic-light flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent text-neutral-700 dark:bg-transparent dark:text-neutral-300 dark:outline dark:outline-1 dark:outline-neutral-400/15'>
+              <i
+                className={`bx ${action.iconClass} block text-[22px] leading-none transition-transform duration-100 ${
+                  action.key === 'theme' ? 'group-active:scale-90' : 'group-hover:scale-105 group-active:scale-95'
+                }`}
+                aria-hidden='true'
+              ></i>
+            </span>
+
+            {!isCollapsed && (
+              <span className='truncate text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
+                {action.label}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
     </aside>
   )

@@ -16,24 +16,24 @@ const FRONTMATTER_REGEX = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/
 
 export interface SkillDefinition {
   // From SKILL.md frontmatter (required)
-  name: string                      // Must match folder name, lowercase + hyphens only
-  description: string               // Max 1024 chars, used for AI to decide relevance
+  name: string // Must match folder name, lowercase + hyphens only
+  description: string // Max 1024 chars, used for AI to decide relevance
 
   // From SKILL.md frontmatter (optional)
   license?: string
-  compatibility?: string            // Environment requirements
+  compatibility?: string // Environment requirements
   metadata?: Record<string, string> // Arbitrary key-value pairs
-  allowedTools?: string[]           // Pre-approved tools (experimental)
+  allowedTools?: string[] // Pre-approved tools (experimental)
 
   // Computed by loader
-  sourcePath: string                // Absolute path to skill directory
-  bodyContent: string               // Markdown content after frontmatter
-  hasScripts: boolean               // scripts/ directory exists
-  hasReferences: boolean            // references/ directory exists
-  hasAssets: boolean                // assets/ directory exists
-  enabled: boolean                  // User can disable skills
-  installedAt: string               // ISO timestamp
-  installedFrom?: string            // GitHub source or 'local'
+  sourcePath: string // Absolute path to skill directory
+  bodyContent: string // Markdown content after frontmatter
+  hasScripts: boolean // scripts/ directory exists
+  hasReferences: boolean // references/ directory exists
+  hasAssets: boolean // assets/ directory exists
+  enabled: boolean // User can disable skills
+  installedAt: string // ISO timestamp
+  installedFrom?: string // GitHub source or 'local'
 }
 
 export interface SkillSummary {
@@ -43,15 +43,15 @@ export interface SkillSummary {
 }
 
 export interface SkillResource {
-  path: string                      // Relative path within skill (e.g., "references/FORMS.md")
-  content: string                   // File content
+  path: string // Relative path within skill (e.g., "references/FORMS.md")
+  content: string // File content
   type: 'script' | 'reference' | 'asset'
 }
 
 export interface SkillMetadata {
-  installedAt: string               // ISO timestamp
-  installedFrom: string             // "github:anthropics/skills/skills/code-review" or "local"
-  version?: string                  // From metadata.version if present
+  installedAt: string // ISO timestamp
+  installedFrom: string // "github:anthropics/skills/skills/code-review" or "local"
+  version?: string // From metadata.version if present
   enabled: boolean
 }
 
@@ -106,7 +106,7 @@ class SkillRegistry {
 
   private async _doInitialize(): Promise<void> {
     const skillsDir = this.getSkillsDirectory()
-    console.log('[SkillLoader] Initializing skills from:', skillsDir)
+    // console.log('[SkillLoader] Initializing skills from:', skillsDir)
 
     // Ensure directory exists
     await fs.mkdir(skillsDir, { recursive: true })
@@ -118,7 +118,7 @@ class SkillRegistry {
     await this.loadAllSkills()
 
     this.initialized = true
-    console.log(`[SkillLoader] Initialized ${this.skills.size} skills`)
+    // console.log(`[SkillLoader] Initialized ${this.skills.size} skills`)
   }
 
   private async ensureGuideFile(): Promise<void> {
@@ -275,8 +275,7 @@ Step-by-step instructions for the AI to follow...
       }
 
       this.skills.set(frontmatter.name, definition)
-      console.log(`[SkillLoader] Loaded skill: ${frontmatter.name}`)
-
+      // console.log(`[SkillLoader] Loaded skill: ${frontmatter.name}`)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         console.warn(`[SkillLoader] No SKILL.md found in ${skillDirName}`)
@@ -388,7 +387,7 @@ Step-by-step instructions for the AI to follow...
    * Reload all skills
    */
   async reload(): Promise<void> {
-    console.log('[SkillLoader] Reloading skills...')
+    // console.log('[SkillLoader] Reloading skills...')
     this.initialized = false
     await this.initialize()
   }

@@ -80,7 +80,10 @@ function isEnvDevMode(): boolean {
   return isTruthyEnv(process.env.DEBUG) || isTruthyEnv(process.env.ELECTRON_DEVTOOLS)
 }
 
-const shouldOpenDetachedDevTools = isEnvDevMode()
+const isNpmElectronRun = (process.env.npm_lifecycle_event || '').trim().toLowerCase() === 'electron'
+const hasDebugModeArg = process.argv.includes('--debug-mode')
+const isDebugMode = isEnvDevMode() || isNpmElectronRun || hasDebugModeArg
+const shouldOpenDetachedDevTools = isDebugMode
 
 // Set App User Model ID for Windows taskbar icon
 if (process.platform === 'win32') {
@@ -336,11 +339,18 @@ function createWindow() {
   }
 
   if (shouldOpenDetachedDevTools) {
+    // Open detached devtools as soon as possible, then retry once after load for reliability.
     mainWindow.webContents.openDevTools({ mode: 'detach' })
+    mainWindow.webContents.once('did-finish-load', () => {
+      if (!mainWindow?.webContents.isDevToolsOpened()) {
+        mainWindow?.webContents.openDevTools({ mode: 'detach' })
+      }
+    })
   }
 
   mainWindow.on('close', event => {
-    if (!isQuitting) {
+    // In debug/dev mode we want a normal close so each `npm run electron` starts fresh.
+    if (!isQuitting && !isDebugMode) {
       event.preventDefault()
       mainWindow?.hide()
     }
@@ -551,25 +561,31 @@ app.on('open-url', (event, url) => {
 })
 
 // Handle protocol on Windows/Linux (via second instance)
-const gotTheLock = app.requestSingleInstanceLock()
+// In debug mode, allow multiple instances so `npm run electron` always opens its own fresh window.
+if (!isDebugMode) {
+  const gotTheLock = app.requestSingleInstanceLock()
 
-if (!gotTheLock) {
-  app.quit()
+  if (!gotTheLock) {
+    app.quit()
+  } else {
+    app.on('second-instance', (_event, commandLine) => {
+      // Someone tried to run a second instance, we should focus our window.
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.show()
+        mainWindow.focus()
+      }
+
+      // The commandLine is an array of strings in which the last element is the deep link url
+      // On Windows/Linux, the protocol URL will be in the command line arguments
+      const url = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`))
+      if (url) {
+        handleOAuthCallback(url)
+      }
+    })
+  }
 } else {
-  app.on('second-instance', (_event, commandLine) => {
-    // Someone tried to run a second instance, we should focus our window.
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
-    }
-
-    // The commandLine is an array of strings in which the last element is the deep link url
-    // On Windows/Linux, the protocol URL will be in the command line arguments
-    const url = commandLine.find(arg => arg.startsWith(`${PROTOCOL}://`))
-    if (url) {
-      handleOAuthCallback(url)
-    }
-  })
+  console.log('[Electron] Debug mode enabled: single-instance lock disabled')
 }
 
 // Handle OAuth callback from external browser
@@ -588,6 +604,14 @@ function handleOAuthCallback(url: string) {
 app.whenReady().then(async () => {
   try {
     await initializeStore()
+
+    if (isDebugMode) {
+      const debugReasons: string[] = []
+      if (isEnvDevMode()) debugReasons.push('NODE_ENV/developer env')
+      if (isNpmElectronRun) debugReasons.push('npm_lifecycle_event=electron')
+      if (hasDebugModeArg) debugReasons.push('--debug-mode arg')
+      console.log(`[Electron] Debug mode enabled (${debugReasons.join(', ') || 'manual'})`)
+    }
 
     // Start local SQLite server for dual-sync (prefer 3002, fallback to other local ports)
     console.log(
@@ -623,7 +647,9 @@ app.whenReady().then(async () => {
 
     // console.log('[Electron] Creating window...')
     createWindow()
-    createTray()
+    if (!isDebugMode) {
+      createTray()
+    }
     configureAutoUpdater()
   } catch (error) {
     console.error('[Electron] Failed to start:', error)
@@ -632,7 +658,7 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  if (!isQuitting) {
+  if (!isQuitting && !isDebugMode) {
     return
   }
   // Stop local sync server

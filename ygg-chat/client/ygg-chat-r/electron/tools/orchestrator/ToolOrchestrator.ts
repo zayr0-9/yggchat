@@ -349,7 +349,7 @@ export class ToolOrchestrator {
     // Try to process immediately
     this.processQueue()
 
-    console.log(`[ToolOrchestrator] Job submitted: ${id} (${toolName})`)
+    // console.log(`[ToolOrchestrator] Job submitted: ${id} (${toolName})`)
     return job
   }
 
@@ -409,7 +409,7 @@ export class ToolOrchestrator {
       timestamp: job.startedAt,
     })
 
-    console.log(`[ToolOrchestrator] Job started: ${job.id} (${job.toolName})`)
+    // console.log(`[ToolOrchestrator] Job started: ${job.id} (${job.toolName})`)
 
     // Execute with timeout
     let timeoutId: NodeJS.Timeout | null = null
@@ -445,7 +445,7 @@ export class ToolOrchestrator {
         this.activeJobs.delete(job.id)
         this.persistJob(job)
 
-        console.log(`[ToolOrchestrator] Job ${job.id} failed, retrying (${job.retriesRemaining} left): ${errorMsg}`)
+        // console.log(`[ToolOrchestrator] Job ${job.id} failed, retrying (${job.retriesRemaining} left): ${errorMsg}`)
 
         // Re-queue with delay
         setTimeout(() => {

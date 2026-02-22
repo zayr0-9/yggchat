@@ -139,8 +139,11 @@ const RightBar: React.FC<RightBarProps> = ({
   const optimisticMessage = useGlobalAgentOptimisticMessage()
   const isAgentStreaming = Boolean(agentStreamBuffer) || Boolean(agentState.streamId)
   const scheduleModalVisible = scheduleModalOpen && !isCollapsed && activeTab === 'global'
-  const { data: queuedTasksData, isLoading: isLoadingQueuedTasks, isFetching: isFetchingQueuedTasks } =
-    useGlobalAgentQueuedTasks(scheduleModalVisible)
+  const {
+    data: queuedTasksData,
+    isLoading: isLoadingQueuedTasks,
+    isFetching: isFetchingQueuedTasks,
+  } = useGlobalAgentQueuedTasks(scheduleModalVisible)
   const removeQueuedTaskMutation = useRemoveGlobalAgentQueuedTask()
   const queuedTasks = queuedTasksData?.tasks || []
 
@@ -597,7 +600,7 @@ const RightBar: React.FC<RightBarProps> = ({
 
   return (
     <aside
-      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} rounded-l-xl shadow-md border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-12' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
+      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} rounded-tl-xl shadow-md border-neutral-200 dark:border-neutral-800 flex flex-col transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-12' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
       aria-label='Research Notes'
     >
       {/* Toggle Button */}
@@ -1255,7 +1258,9 @@ const RightBar: React.FC<RightBarProps> = ({
                         >
                           <div className='flex items-start gap-2'>
                             <div className='min-w-0 flex-1'>
-                              <p className='text-sm text-stone-900 dark:text-stone-100 break-words'>{task.description}</p>
+                              <p className='text-sm text-stone-900 dark:text-stone-100 break-words'>
+                                {task.description}
+                              </p>
                               <div className='mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-stone-500 dark:text-stone-400'>
                                 <span>Status: {task.status}</span>
                                 <span>Queued: {createdAtLabel}</span>
