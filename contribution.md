@@ -4,7 +4,7 @@ We require a Contributor License Agreement (CLA) so the project can be
 relicensed in the future without needing to re-contact every contributor.
 
 Current license is AGPL-3.0 to protect the project in its early stage.
-As the project matures, we may adopt a more permissive license (for example MIT)
+As the project matures, we will adopt a more permissive license (MIT)
 to reduce adoption friction.
 
 Important:
