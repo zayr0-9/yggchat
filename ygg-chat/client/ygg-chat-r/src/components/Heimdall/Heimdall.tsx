@@ -1085,9 +1085,19 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const nodeId = clickedNodeRef.current.getAttribute('data-node-id')
       if (nodeId) {
         const nodeIdParsed = parseId(nodeId)
-        // If clicked node is already in current path, just update focused message
+        // If clicked node is already in current path, keep branch selection stable.
+        // But when the same focused node is clicked again, route through onNodeSelect
+        // so Chat can force a re-scroll to that message.
         if (currentPathIds && currentPathIds.includes(nodeIdParsed)) {
-          dispatch(chatSliceActions.focusedChatMessageSet(nodeIdParsed))
+          const isSameFocusedNode =
+            focusedChatMessageId != null && String(focusedChatMessageId) === String(nodeIdParsed)
+
+          if (isSameFocusedNode) {
+            const currentPath = (currentPathIds ?? []).map(id => String(id))
+            onNodeSelect(nodeId, currentPath.length > 0 ? currentPath : getPathWithDescendants(nodeId))
+          } else {
+            dispatch(chatSliceActions.focusedChatMessageSet(nodeIdParsed))
+          }
         } else {
           const path = getPathWithDescendants(nodeId)
           onNodeSelect(nodeId, path)

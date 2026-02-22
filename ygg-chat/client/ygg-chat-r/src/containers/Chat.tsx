@@ -3157,6 +3157,15 @@ function Chat() {
       const sameFocus = focusedChatMessageId != null && String(focusedChatMessageId) === String(parsedNodeId)
 
       if (samePath && sameFocus) {
+        // Re-clicking the same already-focused node should still re-scroll to it.
+        if (streamState.active) {
+          userScrolledDuringStreamRef.current = true
+        }
+        const targetIndex = findMessageRowIndex(parsedNodeId)
+        if (targetIndex !== -1) {
+          virtualizer.scrollToIndex(targetIndex, { align: 'start' })
+          lastFocusedScrollIdRef.current = parsedNodeId
+        }
         return
       }
 
@@ -3183,7 +3192,7 @@ function Chat() {
         })
       })
     },
-    [dispatch, focusedChatMessageId, selectedPath, streamState.active, visibleMessageId]
+    [dispatch, focusedChatMessageId, selectedPath, streamState.active, visibleMessageId, findMessageRowIndex, virtualizer]
   )
 
   // const handleOnResend = (id: string) => {

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+### Changed
+
+### Fixed
+
+- made branch switching a lot more efficient
+
 ## [0.1.77] - 2026-02-22
 
 ### Added

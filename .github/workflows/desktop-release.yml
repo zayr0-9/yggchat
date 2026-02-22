@@ -34,7 +34,41 @@ jobs:
       - name: Install workspace dependencies
         run: |
           cd ygg-chat
-          npm install
+          npm ci --include=optional
+
+      - name: Ensure Rollup native binary is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ygg-chat
+
+          case "${{ matrix.os }}" in
+            ubuntu-latest)
+              ROLLUP_PKG="@rollup/rollup-linux-x64-gnu"
+              ;;
+            macos-latest)
+              NODE_ARCH="$(node -p "process.arch")"
+              if [ "${NODE_ARCH}" = "arm64" ]; then
+                ROLLUP_PKG="@rollup/rollup-darwin-arm64"
+              else
+                ROLLUP_PKG="@rollup/rollup-darwin-x64"
+              fi
+              ;;
+            *)
+              echo "Unsupported OS for rollup preflight: ${{ matrix.os }}"
+              exit 1
+              ;;
+          esac
+
+          ROLLUP_VERSION="$(node -p "require('./client/ygg-chat-r/node_modules/rollup/package.json').version")"
+          echo "Expected Rollup native package: ${ROLLUP_PKG}@${ROLLUP_VERSION}"
+
+          if node -e "require.resolve('${ROLLUP_PKG}', { paths: ['./client/ygg-chat-r'] })" >/dev/null 2>&1; then
+            echo "Rollup native package already present"
+          else
+            echo "Rollup native package missing; installing fallback"
+            npm --prefix client/ygg-chat-r install --no-save --include=optional "${ROLLUP_PKG}@${ROLLUP_VERSION}"
+          fi
 
       - name: Configure environment variables
         run: |
