@@ -1,9 +1,13 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react-swc'
 import fs from 'fs'
+import { createRequire } from 'module'
 import path from 'path'
-import { defineConfig, Plugin } from 'vite'
+import { defineConfig, normalizePath, Plugin } from 'vite'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+
+const require = createRequire(import.meta.url)
+const onnxRuntimeDistDir = path.dirname(require.resolve('onnxruntime-web'))
 
 // Custom plugin to serve WASM files with correct MIME type during dev
 function serveWasmPlugin(): Plugin {
@@ -13,11 +17,7 @@ function serveWasmPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         // Handle requests for ONNX Runtime WASM files
         if (req.url?.includes('ort-wasm') && req.url?.endsWith('.wasm')) {
-          const wasmPath = path.resolve(
-            __dirname,
-            'node_modules/onnxruntime-web/dist',
-            path.basename(req.url.split('?')[0])
-          )
+          const wasmPath = path.join(onnxRuntimeDistDir, path.basename(req.url.split('?')[0]))
           if (fs.existsSync(wasmPath)) {
             res.setHeader('Content-Type', 'application/wasm')
             fs.createReadStream(wasmPath).pipe(res)
@@ -49,7 +49,7 @@ export default defineConfig(({ mode }) => {
       viteStaticCopy({
         targets: [
           {
-            src: 'node_modules/onnxruntime-web/dist/ort-wasm*.{wasm,mjs}',
+            src: `${normalizePath(onnxRuntimeDistDir)}/ort-wasm*.{wasm,mjs}`,
             dest: 'ort-wasm',
           },
         ],
