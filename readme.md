@@ -21,10 +21,12 @@ Humans don’t solve problems linearly. Yggdrasil is built around **branching co
 
 #### Demo videos
 
-| Workflow | Demo |
-| --- | --- |
-| Branches overview | [▶ Watch video](docs/assets/videos/branches_overview.mp4) |
-| Branching conversations | [▶ Watch video](docs/assets/videos/branching.mp4) |
+https://github.com/user-attachments/assets/e57ef035-fb6d-417b-ae62-ca24cb5b8889
+
+
+
+https://github.com/user-attachments/assets/6ea5744a-6ee8-4b57-bdf1-dc6bf7132d22
+
 
 ### 2) AI apps
 
@@ -39,10 +41,13 @@ Tools can return **HTML** that renders in a sandboxed iframe _inside the chat th
 
 #### AI apps demos
 
-| Feature | Demo |
-| --- | --- |
-| Custom apps in chat | [▶ Watch video](docs/assets/videos/customapps.mp4) |
-| Extra features overview | [▶ Watch video](docs/assets/videos/extrafeatures.mp4) |
+Custom apps in chat
+
+https://github.com/user-attachments/assets/88a9b8fd-ce8a-4cec-ad94-b6ae897c72a3
+
+Extra features overview 
+
+https://github.com/user-attachments/assets/4593e725-6635-45e4-b245-31c8d39a33cc
 
 ### 4) Persistent background agent (Beta)
 
@@ -66,11 +71,6 @@ The companion VS Code extension provides seamless workspace integration:
 - Access files in your VS Code workspace directly
 - Insert file contents into chat using the `@` symbol
 - Add selected context from IDE
-
-<p align="start">
-  <img src="docs/assets/images/extension-1.png" alt="Extension 1" width="460">
-  <img src="docs/assets/images/extension-2.png" alt="Extension 2" width="460">
-</p>
 
 Get the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=YggdrasilAI97.yggdrasil-extension).
 
