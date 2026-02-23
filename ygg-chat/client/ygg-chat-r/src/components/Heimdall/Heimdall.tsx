@@ -17,7 +17,7 @@ import {
 } from '../../features/chats/chatActions'
 import { chatSliceActions } from '../../features/chats/chatSlice'
 import { buildBranchPathForMessage } from '../../features/chats/pathUtils'
-import { createConversation } from '../../features/conversations/conversationActions'
+import { createConversation, updateCwd } from '../../features/conversations/conversationActions'
 import { makeSelectConversationById } from '../../features/conversations/conversationSelectors'
 // import { selectSelectedProject } from '../../features/projects/projectSelectors'
 import { Message } from '@/features/chats'
@@ -2010,10 +2010,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const firstContent = messagesToCopy[0].content
       const title = firstContent.slice(0, 100) + (firstContent.length > 100 ? '...' : '')
 
-      // Create new conversation using the current project context and copy system prompt & context
+      // Create new conversation using the current project context and copy
+      // system prompt, context, and cwd
       const projectId = currentConversation?.project_id || null
       const systemPrompt = currentConversation?.system_prompt || null
       const conversationContext = currentConversation?.conversation_context || null
+      const sourceCwd = typeof currentConversation?.cwd === 'string' ? currentConversation.cwd : null
       const newConversation = await (dispatch as any)(
         createConversation({ title, projectId, systemPrompt, conversationContext, storageMode })
       ).unwrap()
@@ -2021,6 +2023,22 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       if (!newConversation?.id) {
         console.error('Failed to create new conversation')
         return
+      }
+
+      const inheritedCwd = sourceCwd?.trim()
+      if (inheritedCwd) {
+        const nextStorageMode = (newConversation.storage_mode || storageMode || 'cloud') as 'cloud' | 'local'
+        try {
+          await (dispatch as any)(
+            updateCwd({
+              id: newConversation.id,
+              cwd: inheritedCwd,
+              storageMode: nextStorageMode,
+            })
+          ).unwrap()
+        } catch (cwdError) {
+          console.error('Failed to copy cwd to new conversation:', cwdError)
+        }
       }
 
       // Insert messages as a chain preserving their structure
