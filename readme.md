@@ -19,9 +19,12 @@ Humans don’t solve problems linearly. Yggdrasil is built around **branching co
 - **Non-linear exploration** without context pollution
 - **Search across your full chat history**
 
-- https://github.com/user-attachments/assets/92b94a36-7381-4b0e-a03c-6a1fae131189
-- https://github.com/user-attachments/assets/84d755ea-6776-4e9d-bf08-f10490e2a965
-- https://github.com/user-attachments/assets/28e665dc-c122-46e9-afbc-67709565a19d
+#### Demo videos
+
+| Workflow | Demo |
+| --- | --- |
+| Branches overview | [▶ Watch video](docs/assets/videos/branches_overview.mp4) |
+| Branching conversations | [▶ Watch video](docs/assets/videos/branching.mp4) |
 
 ### 2) AI apps
 
@@ -33,6 +36,13 @@ Tools can return **HTML** that renders in a sandboxed iframe _inside the chat th
 - file/search UIs
 - generators (PDF/PPTX/media pipelines), etc.
 - games?
+
+#### AI apps demos
+
+| Feature | Demo |
+| --- | --- |
+| Custom apps in chat | [▶ Watch video](docs/assets/videos/customapps.mp4) |
+| Extra features overview | [▶ Watch video](docs/assets/videos/extrafeatures.mp4) |
 
 ### 4) Persistent background agent (Beta)
 
@@ -64,7 +74,6 @@ The companion VS Code extension provides seamless workspace integration:
 
 Get the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=YggdrasilAI97.yggdrasil-extension).
 
-https://github.com/user-attachments/assets/a3020b22-6148-4389-9bc8-54942c6e7eb2
 
 ## The Vision Behind Yggdrasil
 
