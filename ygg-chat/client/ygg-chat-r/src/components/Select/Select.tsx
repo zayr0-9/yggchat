@@ -35,9 +35,12 @@ interface SelectProps {
   onExpandClick?: () => void
   /** Total count of all options (for display in expand button) */
   totalOptionsCount?: number
+  /** z-index applied to the dropdown portal container */
+  dropdownZIndex?: number
 }
 
 const DROPDOWN_LIMIT = 25
+const DEFAULT_SELECT_DROPDOWN_Z_INDEX = 100
 
 export const Select: React.FC<SelectProps> = ({
   value,
@@ -58,6 +61,7 @@ export const Select: React.FC<SelectProps> = ({
   showExpandButton = false,
   onExpandClick,
   totalOptionsCount,
+  dropdownZIndex = DEFAULT_SELECT_DROPDOWN_Z_INDEX,
 }) => {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState<number>(-1)
@@ -161,12 +165,12 @@ export const Select: React.FC<SelectProps> = ({
   const sizeClass = useMemo(() => {
     switch (size) {
       case 'small':
-        return 'px-2 py-1 sm:px-3 sm:py-1.5 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-lg 4xl:text-xl leading-none'
+        return 'px-2 py-1 sm:px-3 sm:py-1.5 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] 3xl:text-lg 4xl:text-xl '
       case 'large':
-        return 'px-3 py-2 sm:px-4 sm:py-2 text-[14px] sm:text-[12px] md:text-[16px] lg:text-[16px] 2xl:text-[14px] 3xl:text-[28px] 4xl:text-[24px] leading-none'
+        return 'px-3 py-2 sm:px-4 sm:py-2 text-[14px] sm:text-[12px] md:text-[16px] lg:text-[16px] 2xl:text-[14px] 3xl:text-[28px] 4xl:text-[24px] '
       case 'medium':
       default:
-        return 'px-2.5 sm:px-3 sm:py-2.5 md:px-2.5 md:py-2.5 lg:px-2.5 lg:py-2.5 xl:px-2.5 xl:py-2.5 2xl:px-2 2xl:py-2 text-[14px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[15px] 3xl:text-xl 4xl:text-2xl leading-none'
+        return 'px-2.5 sm:px-3 sm:py-2.5 md:px-2.5 md:py-2.5 lg:px-2.5 lg:py-2.5 xl:px-2.5 xl:py-2.5 2xl:px-2 2xl:py-2 text-[14px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[15px] 3xl:text-xl 4xl:text-2xl '
     }
   }, [size])
 
@@ -263,7 +267,7 @@ export const Select: React.FC<SelectProps> = ({
       <Button
         ref={btnRef}
         variant={blur === 'high' ? 'outline2' : 'outline2'}
-        size='large'
+        size='medium'
         className={`w-full justify-between ${sizeClass}`}
         aria-haspopup='listbox'
         aria-expanded={open}
@@ -276,8 +280,8 @@ export const Select: React.FC<SelectProps> = ({
         disabled={disabled}
         title={selected?.label}
       >
-        <span className='truncate overflow-left text-left flex-1 text-[12px] sm:text-[12px] md:text-[12px] lg:text-[12px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[12px] 4xl:text-[12px]'>
-          {selected ? selected.label : <span className='text-neutral-500 dark:text-neutral-400'>{placeholder}</span>}
+        <span className='truncate overflow-left text-left flex-1 text-[12px] text-neutral-500 dark:text-neutral-200'>
+          {selected ? selected.label : placeholder}
         </span>
         <i className={`bx bx-chevron-down transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden='true' />
       </Button>
@@ -289,8 +293,9 @@ export const Select: React.FC<SelectProps> = ({
             ref={listRef}
             role='listbox'
             tabIndex={-1}
-            className={`fixed z-[100] rounded-2xl overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent flex flex-col`}
+            className={`fixed rounded-2xl overflow-hidden border border-neutral-200 dark:border-0 dark:border-neutral-700 bg-white/50 dark:bg-transparent flex flex-col`}
             style={{
+              zIndex: dropdownZIndex,
               maxHeight: listMaxHeight,
               top: dropdownPosition.top !== undefined ? `${dropdownPosition.top}px` : undefined,
               bottom: dropdownPosition.bottom !== undefined ? `${dropdownPosition.bottom}px` : undefined,
@@ -299,12 +304,12 @@ export const Select: React.FC<SelectProps> = ({
             }}
           >
             {filterUI && (
-              <div className='px-2 py-2 border-b acrylic-medium dark:bg-transparent border-neutral-200 dark:border-neutral-900'>
+              <div className='px-2 py-2 border-b acrylic-ultra-light-nb-2 dark:bg-transparent border-neutral-200 dark:border-neutral-900'>
                 {filterUI}
               </div>
             )}
             {searchBarVisible && (
-              <div className='px-2 py-2 border-b acrylic-medium dark:bg-transparent border-neutral-200 dark:border-neutral-900'>
+              <div className='px-2 py-2 border-b acrylic-ultra-light-nb-2 dark:bg-transparent border-neutral-200 dark:border-neutral-900'>
                 <input
                   ref={searchRef}
                   type='text'

@@ -39,3 +39,24 @@ await esbuild.build({
 })
 
 console.log('✅ preload.ts compiled to preload.mjs')
+
+// Bundle utility process runtime entry
+await esbuild.build({
+  entryPoints: [path.join(__dirname, 'toolRuntimeUtility.ts')],
+  bundle: true,
+  platform: 'node',
+  target: 'node20',
+  outfile: path.join(__dirname, 'toolRuntimeUtility.mjs'),
+  format: 'esm',
+  external: [
+    'electron',
+    'better-sqlite3',
+  ],
+  banner: {
+    js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
+  },
+  sourcemap: true,
+  resolveExtensions: ['.ts', '.js', '.mjs', '.json'],
+})
+
+console.log('✅ toolRuntimeUtility.ts bundled to toolRuntimeUtility.mjs')

@@ -1,7 +1,7 @@
+import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
-import * as crypto from 'crypto'
-import { resolveToWindowsPath, isWSLPath, toWslPath } from '../utils/wslBridge.js'
+import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
 
 export interface LineRange {
   startLine: number // 1-based line number to start reading from (inclusive)
@@ -45,7 +45,7 @@ export interface ReadFileResult {
   truncated: boolean
   sizeBytes: number
   contentHash?: string // SHA256 hash of returned content for validation
-  fileHash?: string // SHA256 hash of entire file (if content is partial)
+  fileHash?: string // SHA256 hash of entire file when available (requires full-file scan)
   metadata: FileMetadata
   startLine?: number
   endLine?: number
@@ -82,7 +82,7 @@ function detectLineEnding(content: string): '\n' | '\r\n' | 'mixed' {
  * Detect BOM (Byte Order Mark) in buffer
  */
 function hasBOM(buf: Buffer): boolean {
-  return buf.length >= 3 && buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF
+  return buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf
 }
 
 function resolveWslLikeAbsolutePath(inputPath: string, cwd?: string): string {
@@ -93,9 +93,7 @@ function resolveWslLikeAbsolutePath(inputPath: string, cwd?: string): string {
   }
 
   const normalizedBase = cwd ? toWslPath(cwd) : toWslPath(process.cwd())
-  const basePath = normalizedBase.startsWith('/')
-    ? normalizedBase
-    : path.posix.resolve('/', normalizedBase)
+  const basePath = normalizedBase.startsWith('/') ? normalizedBase : path.posix.resolve('/', normalizedBase)
 
   return path.posix.resolve(basePath, normalizedInput)
 }
@@ -148,10 +146,252 @@ function validateLineRangeValues(options: ReadFileOptions): void {
   }
 }
 
-export async function readTextFile(
-  inputPath: string,
-  options: ReadFileOptions = {}
-): Promise<ReadFileResult> {
+interface StreamedLineSelectionResult {
+  content: string
+  totalLines?: number
+  startLine?: number
+  endLine?: number
+  ranges?: Array<{
+    startLine: number
+    endLine: number
+    lineCount: number
+  }>
+  lineEndingStyle: '\n' | '\r\n' | 'mixed'
+  fileHash?: string
+}
+
+async function readProbeBytes(filePath: string, maxBytes: number): Promise<Buffer> {
+  const bytesToRead = Math.max(0, maxBytes)
+  if (bytesToRead === 0) {
+    return Buffer.alloc(0)
+  }
+
+  const fd = await fs.promises.open(filePath, 'r')
+  try {
+    const buf = Buffer.allocUnsafe(bytesToRead)
+    const { bytesRead } = await fd.read(buf, 0, bytesToRead, 0)
+    return bytesRead === bytesToRead ? buf : buf.subarray(0, bytesRead)
+  } finally {
+    await fd.close()
+  }
+}
+
+async function readLineSelectionFromFile(
+  filePath: string,
+  options: ReadFileOptions,
+  includeHash: boolean
+): Promise<StreamedLineSelectionResult> {
+  const hasRanges = !!options.ranges && options.ranges.length > 0
+  const requestedRanges =
+    options.ranges?.map(range => {
+      const startLine = Math.max(1, range.startLine)
+      const endLine = range.endLine
+      if (endLine < startLine) {
+        throw new Error(`Range endLine ${endLine} cannot be less than startLine ${startLine}`)
+      }
+      return {
+        startLine,
+        endLine,
+        lines: [] as string[],
+      }
+    }) || []
+
+  const singleStartLine = options.startLine !== undefined ? Math.max(1, options.startLine) : 1
+  const singleEndLine = options.endLine ?? Number.POSITIVE_INFINITY
+  if (!hasRanges && Number.isFinite(singleEndLine) && singleEndLine < singleStartLine) {
+    throw new Error(`endLine ${singleEndLine} cannot be less than startLine ${singleStartLine}`)
+  }
+
+  const maxRequestedEndLine = hasRanges
+    ? Math.max(...requestedRanges.map(range => range.endLine))
+    : Number.isFinite(singleEndLine)
+      ? singleEndLine
+      : Number.POSITIVE_INFINITY
+
+  let lineNumber = 0
+  let carry = ''
+  let endedWithLineBreak = false
+  let reachedEOF = false
+  let stoppedEarly = false
+
+  let sawCRLF = false
+  let sawLFOnly = false
+
+  const selectedLines: string[] = []
+
+  const wholeFileHasher = includeHash ? crypto.createHash('sha256') : null
+
+  const processLine = (line: string) => {
+    lineNumber += 1
+
+    if (hasRanges) {
+      for (const range of requestedRanges) {
+        if (lineNumber >= range.startLine && lineNumber <= range.endLine) {
+          range.lines.push(line)
+        }
+      }
+    } else if (lineNumber >= singleStartLine && lineNumber <= singleEndLine) {
+      selectedLines.push(line)
+    }
+  }
+
+  const shouldStopAfterLine = () => Number.isFinite(maxRequestedEndLine) && lineNumber >= maxRequestedEndLine
+
+  await new Promise<void>((resolve, reject) => {
+    const stream = fs.createReadStream(filePath, {
+      encoding: 'utf8',
+    })
+
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      resolve()
+    }
+
+    const fail = (error: unknown) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+
+    stream.on('data', chunk => {
+      if (wholeFileHasher && !stoppedEarly) {
+        wholeFileHasher.update(chunk, 'utf8')
+      }
+
+      const working = carry + chunk
+      carry = ''
+
+      let startIdx = 0
+      for (let i = 0; i < working.length; i++) {
+        if (working[i] !== '\n') continue
+
+        let line = working.slice(startIdx, i)
+        if (line.endsWith('\r')) {
+          line = line.slice(0, -1)
+          sawCRLF = true
+        } else {
+          sawLFOnly = true
+        }
+
+        processLine(line)
+        endedWithLineBreak = true
+
+        if (shouldStopAfterLine()) {
+          stoppedEarly = true
+          stream.destroy()
+          return
+        }
+
+        startIdx = i + 1
+      }
+
+      carry = working.slice(startIdx)
+      if (carry.length > 0) {
+        endedWithLineBreak = false
+      }
+    })
+
+    stream.on('end', () => {
+      if (!stoppedEarly) {
+        if (carry.length > 0) {
+          processLine(carry)
+          endedWithLineBreak = false
+        } else if (endedWithLineBreak) {
+          processLine('')
+        } else if (lineNumber === 0) {
+          // Match String.split behavior for empty files: ['']
+          processLine('')
+        }
+        reachedEOF = true
+      }
+
+      finish()
+    })
+
+    stream.on('close', () => {
+      if (stoppedEarly) {
+        finish()
+      }
+    })
+
+    stream.on('error', fail)
+  })
+
+  const lineEndingStyle: '\n' | '\r\n' | 'mixed' = sawCRLF && sawLFOnly ? 'mixed' : sawCRLF ? '\r\n' : '\n'
+  const joinLineEnding = lineEndingStyle === 'mixed' || lineEndingStyle === '\r\n' ? '\r\n' : '\n'
+
+  const totalLines = reachedEOF ? lineNumber : undefined
+  const fileHash = includeHash && reachedEOF && wholeFileHasher ? wholeFileHasher.digest('hex') : undefined
+
+  if (hasRanges) {
+    const selectedParts: string[] = []
+    const rangesInfo: Array<{ startLine: number; endLine: number; lineCount: number }> = []
+
+    for (const range of requestedRanges) {
+      if (totalLines !== undefined && range.startLine > totalLines) {
+        throw new Error(`Range startLine ${range.startLine} exceeds total lines ${totalLines} in file`)
+      }
+
+      const effectiveEndLine = totalLines !== undefined ? Math.min(totalLines, range.endLine) : range.endLine
+      if (effectiveEndLine < range.startLine) {
+        throw new Error(`Range endLine ${effectiveEndLine} cannot be less than startLine ${range.startLine}`)
+      }
+
+      selectedParts.push(range.lines.join(joinLineEnding))
+      if (requestedRanges.length > 1) {
+        selectedParts.push('')
+      }
+
+      rangesInfo.push({
+        startLine: range.startLine,
+        endLine: effectiveEndLine,
+        lineCount: range.lines.length,
+      })
+    }
+
+    if (selectedParts[selectedParts.length - 1] === '') {
+      selectedParts.pop()
+    }
+
+    return {
+      content: selectedParts.join(joinLineEnding),
+      totalLines,
+      ranges: rangesInfo,
+      lineEndingStyle,
+      fileHash,
+    }
+  }
+
+  if (totalLines !== undefined && singleStartLine > totalLines) {
+    throw new Error(`startLine ${singleStartLine} exceeds total lines ${totalLines} in file`)
+  }
+
+  const effectiveEndLine =
+    Number.isFinite(singleEndLine) && totalLines !== undefined
+      ? Math.min(totalLines, singleEndLine)
+      : Number.isFinite(singleEndLine)
+        ? singleEndLine
+        : totalLines !== undefined
+          ? totalLines
+          : lineNumber
+
+  if (effectiveEndLine < singleStartLine) {
+    throw new Error(`endLine ${effectiveEndLine} cannot be less than startLine ${singleStartLine}`)
+  }
+
+  return {
+    content: selectedLines.join(joinLineEnding),
+    startLine: singleStartLine,
+    endLine: effectiveEndLine,
+    totalLines,
+    lineEndingStyle,
+    fileHash,
+  }
+}
+
+export async function readTextFile(inputPath: string, options: ReadFileOptions = {}): Promise<ReadFileResult> {
   const maxBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 200 * 1024
   const includeHash = options.includeHash !== false // default to true
 
@@ -197,14 +437,45 @@ export async function readTextFile(
 
   // Determine if we need line-based access
   const needsLineAccess =
-    options.startLine !== undefined ||
-    options.endLine !== undefined ||
-    (options.ranges && options.ranges.length > 0)
+    options.startLine !== undefined || options.endLine !== undefined || (options.ranges && options.ranges.length > 0)
+
+  if (needsLineAccess) {
+    const probeBuf = await readProbeBytes(abs, Math.min(sizeBytes, 4096))
+
+    if (isLikelyBinary(probeBuf)) {
+      throw new Error('Binary file detected; reading binary is not supported by this tool')
+    }
+
+    const bomDetected = hasBOM(probeBuf)
+    const lineSelection = await readLineSelectionFromFile(abs, options, includeHash)
+    const contentHash = includeHash ? calculateHash(lineSelection.content) : undefined
+
+    const metadata: FileMetadata = {
+      lineEnding: lineSelection.lineEndingStyle,
+      hasBOM: bomDetected,
+      encoding: 'utf8',
+      lastModified: stats.mtime,
+      inode: stats.ino,
+    }
+
+    return {
+      content: lineSelection.content,
+      truncated: false,
+      sizeBytes,
+      contentHash,
+      fileHash: lineSelection.fileHash,
+      metadata,
+      startLine: lineSelection.startLine,
+      endLine: lineSelection.endLine,
+      totalLines: lineSelection.totalLines,
+      ranges: lineSelection.ranges,
+    }
+  }
 
   // Only apply maxBytes truncation if NOT doing line-based slicing
-  const toRead = needsLineAccess ? sizeBytes : Math.min(sizeBytes, maxBytes)
+  const toRead = Math.min(sizeBytes, maxBytes)
 
-  // Read only up to maxBytes (or full file if line ranges specified)
+  // Read only up to maxBytes
   let buf: Buffer
   if (toRead === sizeBytes) {
     buf = await fs.promises.readFile(abs)
@@ -225,97 +496,15 @@ export async function readTextFile(
 
   // Collect metadata before processing
   const bomDetected = hasBOM(buf)
-  let content = buf.toString('utf8')
-  const fullFileContent = content // Store original for hash calculation
-  const truncated = !needsLineAccess && sizeBytes > maxBytes
+  const content = buf.toString('utf8')
+  const truncated = sizeBytes > maxBytes
 
-  // Detect line ending style from original full content
+  // Detect line ending style from returned content
   const lineEndingStyle = detectLineEnding(content)
-  const lineEnding = lineEndingStyle === 'mixed' || lineEndingStyle === '\r\n' ? '\r\n' : '\n'
-
-  // Handle line-range slicing if requested
-  let actualStartLine: number | undefined
-  let actualEndLine: number | undefined
-  let totalLines: number | undefined
-  let rangesInfo: Array<{ startLine: number; endLine: number; lineCount: number }> | undefined
-
-  // Split preserving all line ending types
-  const splitLines = (text: string): string[] => {
-    // Split by any line ending but preserve the actual ending used
-    return text.split(/\r?\n/)
-  }
-
-  // Multi-range support takes precedence
-  if (options.ranges && options.ranges.length > 0) {
-    const lines = splitLines(content)
-    totalLines = lines.length
-
-    // Validate and process each range
-    const selectedParts: string[] = []
-    rangesInfo = []
-
-    for (const range of options.ranges) {
-      const start = Math.max(1, range.startLine)
-      const end = Math.min(totalLines, range.endLine)
-
-      if (start > totalLines) {
-        throw new Error(`Range startLine ${start} exceeds total lines ${totalLines} in file`)
-      }
-      if (end < start) {
-        throw new Error(`Range endLine ${end} cannot be less than startLine ${start}`)
-      }
-
-      // Extract lines for this range (convert to 0-based indexing)
-      const rangeLines = lines.slice(start - 1, end)
-
-      // CRITICAL: Do NOT add header comments - they don't exist in the actual file
-      // and will cause mismatches with editFile. Range info is in metadata.
-      selectedParts.push(rangeLines.join(lineEnding))
-      if (options.ranges && options.ranges.length > 1) {
-        // Only add separator between multiple ranges
-        selectedParts.push('') // blank line between ranges
-      }
-
-      rangesInfo.push({
-        startLine: start,
-        endLine: end,
-        lineCount: rangeLines.length,
-      })
-    }
-
-    // Remove trailing blank line
-    if (selectedParts[selectedParts.length - 1] === '') {
-      selectedParts.pop()
-    }
-
-    content = selectedParts.join(lineEnding)
-  } else if (options.startLine !== undefined || options.endLine !== undefined) {
-    // Single range support (backward compatible)
-    const lines = splitLines(content)
-    totalLines = lines.length
-
-    // Validate and normalize line numbers (1-based to 0-based)
-    const start = options.startLine !== undefined ? Math.max(1, options.startLine) : 1
-    const end = options.endLine !== undefined ? Math.min(totalLines, options.endLine) : totalLines
-
-    if (start > totalLines) {
-      throw new Error(`startLine ${start} exceeds total lines ${totalLines} in file`)
-    }
-    if (end < start) {
-      throw new Error(`endLine ${end} cannot be less than startLine ${start}`)
-    }
-
-    // Slice the lines (convert to 0-based indexing)
-    const selectedLines = lines.slice(start - 1, end)
-    content = selectedLines.join(lineEnding)
-
-    actualStartLine = start
-    actualEndLine = end
-  }
 
   // Calculate content hashes if requested
   const contentHash = includeHash ? calculateHash(content) : undefined
-  const fileHash = includeHash && content !== fullFileContent ? calculateHash(fullFileContent) : contentHash
+  const fileHash = contentHash
 
   // Build metadata
   const metadata: FileMetadata = {
@@ -333,10 +522,6 @@ export async function readTextFile(
     contentHash,
     fileHash,
     metadata,
-    startLine: actualStartLine,
-    endLine: actualEndLine,
-    totalLines,
-    ranges: rangesInfo,
   }
 }
 

@@ -290,20 +290,6 @@ const Homepage: React.FC = () => {
                   </Button>
                 </div>
               )}
-              <Button
-                variant='acrylic'
-                size='medium'
-                onClick={() => navigate('/settings')}
-                rounded='full'
-                title='Settings'
-                aria-label='Settings'
-                className=''
-              >
-                <i
-                  className='bx bx-cog text-xl sm:text-lg 2xl:text-2xl p-0.5 py-1.5 transition-all hover:scale-96 duration-200'
-                  aria-hidden='true'
-                ></i>
-              </Button>
               {isMobile && (
                 <Button
                   variant='acrylic'

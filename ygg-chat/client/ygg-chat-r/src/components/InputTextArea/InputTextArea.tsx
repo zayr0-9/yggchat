@@ -2,6 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { selectFocusedChatMessageId } from '../../features/chats/chatSelectors'
 import { chatSliceActions } from '../../features/chats/chatSlice'
+import { setCurrentSelection } from '../../features/ideContext'
 import {
   selectCurrentSelection,
   selectMentionableFiles,
@@ -12,7 +13,8 @@ import { useIdeContext } from '../../hooks/useIdeContext'
 import type { RootState } from '../../store/store'
 
 type textAreaState = 'default' | 'error' | 'disabled'
-type textAreaWidth = 'w-1/6' | 'w-1/4' | 'w-1/2' | 'w-3/4' | 'w-3/5' | 'w-5/6' | 'w-full' | 'max-w-3xl'
+// Accept any Tailwind width/max-width class combination (e.g. "w-full max-w-3xl").
+type textAreaWidth = string
 
 type SlashCommandSelectionResult = {
   handled: boolean
@@ -42,6 +44,7 @@ interface TextAreaProps {
   slashCommands?: string[]
   onSlashCommandSelect?: (command: string) => SlashCommandSelectionResult | void
   onAddCurrentIdeContext?: () => boolean
+  onClearIdeContexts?: () => void
   selectedIdeContextItems?: Array<{ id: string; label: string }>
 }
 
@@ -118,6 +121,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
   slashCommands,
   onSlashCommandSelect,
   onAddCurrentIdeContext,
+  onClearIdeContexts,
   selectedIdeContextItems = [],
   ...rest
 }) => {
@@ -173,6 +177,12 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
 
     setShowContextAddedNotice(true)
     window.setTimeout(() => setShowContextAddedNotice(false), 1200)
+  }
+
+  const handleClearIdeContextsClick = () => {
+    dispatch(setCurrentSelection(null))
+    onClearIdeContexts?.()
+    setShowContextAddedNotice(false)
   }
 
   // Slash command autocomplete state
@@ -677,12 +687,12 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
     primary:
       'text-stone-900 dark:text-stone-200 placeholder-neutral-700 dark:placeholder-neutral-200 border-secondary-600 outline-none focus:border-secondary-600 focus:ring-1 focus:ring-opacity-50 dark:focus:ring-secondary-600',
     outline:
-      'px-3 py-2 sm:px-4 sm:py-3 md:px-4 md:py-3 lg:px-5 lg:py-4 2xl:px-5 2xl:py-4 3xl:px-6 3xl:py-5 4xl:px-8 4xl:py-6 rounded-3xl overflow-hidden bg-transparent text-neutral-900 dark:text-neutral-300 border border-neutral-300 focus:border-neutral-400 dark:border-neutral-700 outline-none dark:border-neutral-700 dark:focus:border-neutral-600 ',
+      'rounded-3xl text-neutral-900 dark:text-neutral-300 border border-neutral-300 focus:border-neutral-400 dark:border-neutral-700 outline-none dark:focus:border-neutral-600',
   }
 
   const baseStyles = outline
-    ? `${width} px-3 py-1 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-3 lg:py-2 2xl:px-4 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 overflow-hidden bg-transparent text-[16px] sm:text-[16px] md:text-[16px] lg:text-[16px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[16px] ${variantStyles[variant]}`
-    : `${width} px-3 py-1 sm:px-4 sm:py-1 md:px-4 md:py-1 lg:px-3 lg:py-1 2xl:px-4 2xl:py-2 3xl:px-6 3xl:py-2 4xl:px-8 4xl:py-2 rounded-xl transition-all duration-200 overflow-hidden bg-transparent text-[16px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[16px] 4xl:text-[18px]`
+    ? `${width} px-3 py-2 sm:px-4 sm:py-2 md:px-4 md:py-2 lg:px-4 lg:py-2 2xl:px-4 2xl:py-2 overflow-hidden bg-transparent text-[16px] sm:text-[16px] md:text-[16px] lg:text-[16px] 2xl:text-[16px] ${variantStyles[variant]}`
+    : `${width} px-3 py-1 sm:px-3 sm:py-1 md:px-3 md:py-1 lg:px-3 lg:py-1 2xl:px-3 2xl:py-1 rounded-xl transition-all duration-200 overflow-hidden bg-transparent text-[16px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px]`
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
 
   const stateStyles = outline
@@ -771,23 +781,23 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
         )}
 
         {(hasIdeContextSelection || selectedIdeContextItems.length > 0) && (
-          <div className='mb-1 ml-1 flex flex-wrap items-center gap-2'>
+          <div className='mb-2 mt-1 ml-1 flex flex-wrap items-center gap-2'>
             {hasIdeContextSelection && (
               <div className='group relative inline-flex max-w-full items-center gap-1'>
-                <span className='inline-flex items-center rounded-full border border-orange-400/60 bg-orange-100/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-orange-800 dark:border-orange-500/60 dark:bg-orange-900/40 dark:text-orange-200'>
+                <span className='inline-flex items-center rounded-full border dark:border-orange-400/60 border-blue-400/60 bg-blue-100/80 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide dark:border-orange-500/60 dark:bg-neutral-900/40 text:neutral-100 dark:text-neutral-200'>
                   ide context detected
                 </span>
                 <button
                   type='button'
                   onClick={handleAddContextClick}
-                  className='inline-flex h-5 w-5 items-center justify-center rounded-full border border-orange-400/70 bg-orange-200/70 text-xs font-bold text-orange-900 hover:bg-orange-300/80 dark:border-orange-500/60 dark:bg-orange-800/60 dark:text-orange-100 dark:hover:bg-orange-700/70'
+                  className='inline-flex mt-0.5 h-5.5 w-5.5 items-center justify-center rounded-full border border-blue-400/60 dark:border-orange-400/70 bg-blue-100/80 dark:bg-transparent text-xs font-bold text-neutral-900 hover:bg-orange-300/80 dark:border-orange-500/60 dark:bg-neutral-800/60 dark:text-orange-100 dark:hover:bg-orange-700/70'
                   title='Add this IDE context to message context list'
                   aria-label='Add IDE context'
                 >
                   +
                 </button>
 
-                <div className='pointer-events-none absolute bottom-full left-0 z-50 mb-2 hidden w-[24rem] max-w-[90vw] rounded-md border border-orange-300/70 bg-orange-50/95 p-2 shadow-xl group-hover:block dark:border-orange-500/40 dark:bg-neutral-900/95'>
+                <div className='pointer-events-none thin-scrollbar absolute bottom-full left-0 z-50 mb-2 hidden w-[24rem] max-w-[90vw] rounded-md bg-neutral-100/80 dark:bg-neutral-50/95 p-2 shadow-sm group-hover:block dark:border-orange-500/40 dark:bg-neutral-900/95'>
                   {ideSelectionLocation && (
                     <div className='mb-1 text-[10px] font-semibold text-orange-900 dark:text-orange-200'>
                       {ideSelectionLocation}
@@ -801,7 +811,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
             )}
 
             {showContextAddedNotice && (
-              <span className='text-[10px] font-semibold text-orange-700 dark:text-orange-300'>context added</span>
+              <span className='text-[10px] font-semibold text-blue-700 dark:text-orange-300'>context added</span>
             )}
 
             {selectedIdeContextItems.length > 0 && (
@@ -809,7 +819,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
                 {selectedIdeContextItems.map(item => (
                   <span
                     key={item.id}
-                    className='inline-flex items-center rounded-full border border-orange-300/70 bg-orange-100/70 px-2 py-0.5 text-[10px] text-orange-900 dark:border-orange-500/40 dark:bg-orange-900/30 dark:text-orange-100'
+                    className='inline-flex items-center rounded-full shadow-sm dark:bg-orange-100/70 px-2 py-0.5 text-[11px] text-neutral-900 dark:border-orange-500/40 dark:bg-transparent dark:text-orange-100'
                     title={item.label}
                   >
                     {item.label}
@@ -817,6 +827,16 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
                 ))}
               </div>
             )}
+
+            <button
+              type='button'
+              onClick={handleClearIdeContextsClick}
+              className='ml-auto inline-flex items-center mr-2 rounded-full border border-neutral-400/70 px-2 py-0.25 text-[10px] font-semibold uppercase tracking-wide text-neutral-700 hover:bg-neutral-200/70 dark:border-orange-500/40 dark:text-orange-100 dark:hover:bg-orange-700/40'
+              title='Clear detected and added IDE contexts'
+              aria-label='Clear IDE contexts'
+            >
+              clear
+            </button>
           </div>
         )}
 
@@ -857,7 +877,7 @@ export const InputTextArea: React.FC<TextAreaProps> = ({
           //   <br />
           //   for new line
           // </div>
-          <span className='absolute top-2 right-2 hidden sm:block font-mono text-[10px] text-neutral-400/60 dark:text-neutral-600 whitespace-nowrap select-none'>
+          <span className='absolute bottom-1 right-2 hidden sm:block font-mono text-[10px] text-neutral-400/60 dark:text-neutral-600 whitespace-nowrap select-none'>
             SHIFT+ENTER <span className='opacity-50'>NEW LINE</span>
           </span>
         )}

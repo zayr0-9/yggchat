@@ -31,8 +31,8 @@ export function useProjects() {
   const { accessToken, userId } = useAuth()
   const location = useLocation()
 
-  // Always refetch on Homepage, never on Chat.tsx
-  const isHomePage = location.pathname === '/'
+  // Always refetch on Homepage route (`/homepage`), never on Chat.tsx
+  const isHomePage = location.pathname === '/homepage' || location.pathname === '/'
 
   const query = useQuery({
     queryKey: ['projects', userId],

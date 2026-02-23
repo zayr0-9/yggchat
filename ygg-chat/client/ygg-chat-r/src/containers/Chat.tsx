@@ -177,6 +177,7 @@ type ChatInputControllerProps = {
   onSubmit: () => void
   onBlurPersist: (content: string) => void
   onAddCurrentIdeContext?: () => boolean
+  onClearIdeContexts?: () => void
   selectedIdeContextItems?: Array<{ id: string; label: string }>
 }
 
@@ -193,6 +194,7 @@ const EMPTY_PARSED_MESSAGE_DATA: ParsedMessageData = {}
 const COMPOSER_SLASH_COMMANDS = ['status-openai']
 const CROSS_MESSAGE_PROCESS_GROUP_MIN_MESSAGES = 3
 const DERIVED_RENDER_CACHE_LIMIT = 40
+const ACTION_POPOVER_SELECT_DROPDOWN_Z_INDEX = 100001
 
 const setLimitedCacheEntry = <T,>(cache: Map<string, T>, key: string, value: T, limit = DERIVED_RENDER_CACHE_LIMIT) => {
   if (cache.has(key)) {
@@ -341,6 +343,7 @@ const ChatInputController = React.memo(
         onSubmit,
         onBlurPersist,
         onAddCurrentIdeContext,
+        onClearIdeContexts,
         selectedIdeContextItems,
       },
       ref
@@ -440,6 +443,7 @@ const ChatInputController = React.memo(
             slashCommands={slashCommands}
             onSlashCommandSelect={onSlashCommandSelect}
             onAddCurrentIdeContext={onAddCurrentIdeContext}
+            onClearIdeContexts={onClearIdeContexts}
             selectedIdeContextItems={selectedIdeContextItems}
           />
         </div>
@@ -610,6 +614,10 @@ function Chat() {
 
     return added
   }, [currentIdeSelection])
+
+  const clearIdeContexts = useCallback(() => {
+    setAddedIdeContexts([])
+  }, [])
 
   const [activeBranchEditingMessageId, setActiveBranchEditingMessageId] = useState<string | null>(null)
 
@@ -3192,7 +3200,15 @@ function Chat() {
         })
       })
     },
-    [dispatch, focusedChatMessageId, selectedPath, streamState.active, visibleMessageId, findMessageRowIndex, virtualizer]
+    [
+      dispatch,
+      focusedChatMessageId,
+      selectedPath,
+      streamState.active,
+      visibleMessageId,
+      findMessageRowIndex,
+      virtualizer,
+    ]
   )
 
   // const handleOnResend = (id: string) => {
@@ -4329,7 +4345,9 @@ function Chat() {
             )}
             {/* Todo List Display - shows latest todo_list tool result */}
             {latestTodoList && latestTodoList.items && latestTodoList.items.length > 0 && (
-              <div className='mx-2 mt-2 mb-1 px-2 py-0.5 rounded-[16px] bg-neutral-100/80 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700'>
+              <div
+                className={`mx-2 ${toolCallPermissionRequest ? 'mt-1' : 'mt-2'} mb-1 px-2 py-0.5 rounded-[16px] bg-neutral-100/80 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700`}
+              >
                 <div className='flex items-center justify-between'>
                   <span className='text-xs font-medium text-neutral-600 dark:text-neutral-400 flex items-center gap-1.5'>
                     <i className='bx bx-list-check text-2xl'></i>
@@ -4457,6 +4475,7 @@ function Chat() {
                 slashCommands={composerSlashCommands}
                 onSlashCommandSelect={handleComposerSlashCommandSelect}
                 onAddCurrentIdeContext={addCurrentIdeContextToMessage}
+                onClearIdeContexts={clearIdeContexts}
                 selectedIdeContextItems={addedIdeContextItems}
               />
             </div>
@@ -4475,7 +4494,7 @@ function Chat() {
                   return (
                     <div
                       key={file.path}
-                      className='relative px-2 group inline-flex items-center gap-2 max-w-full rounded-md border border-neutral-500 dark:bg-yBlack-900/20 dark:text-neutral-200 text-neutral-800 text-sm'
+                      className='relative group inline-flex max-w-full items-center gap-2 rounded-full bg-neutral-100/70 px-2.5 py-1 text-neutral-800 transition-all duration-150 hover:border-neutral-400 hover:bg-neutral-200/70 dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-100 dark:hover:border-neutral-500 dark:hover:bg-neutral-800/80'
                       title={file.relativePath || file.path}
                       onClick={e => {
                         if (!isExpanded) {
@@ -4488,17 +4507,20 @@ function Chat() {
                         }
                       }}
                     >
-                      <span className='flex flex-col max-w-[100px] sm:max-w-[150px] md:max-w-[220px]'>
-                        <span className='truncate'>{displayName}</span>
+                      <span className='inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-[11px] text-blue-700 dark:bg-blue-400/15 dark:text-blue-300'>
+                        📄
+                      </span>
+                      <span className='flex min-w-0 flex-col max-w-[110px] sm:max-w-[170px] md:max-w-[250px]'>
+                        <span className='truncate text-[12px] font-medium leading-tight'>{displayName}</span>
                         {directoryLabel ? (
-                          <span className='truncate text-[10px] text-neutral-600 dark:text-neutral-400'>
+                          <span className='truncate font-mono text-[10px] leading-tight text-neutral-600/90 dark:text-neutral-400/90'>
                             {directoryLabel}
                           </span>
                         ) : null}
                       </span>
                       <button
                         type='button'
-                        className='rounded dark:hover:bg-blue-200 hover:bg-blue-700 p-0.5 text-blue-700 dark:text-blue-200'
+                        className='inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] text-neutral-500 transition-colors hover:bg-neutral-300/80 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-700 dark:hover:text-neutral-100'
                         aria-label={`Remove ${displayName}`}
                         onClick={e => {
                           e.stopPropagation()
@@ -4510,10 +4532,10 @@ function Chat() {
 
                       {/* Hover tooltip that can expand into anchored modal */}
                       <div
-                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-xl border border-gray-600 p-3 transform transition-all duration-100 ease-out ${
+                        className={`absolute bottom-full left-0 mb-2 origin-bottom-left rounded-lg shadow-sm p-3 transform transition-all duration-100 ease-out ${
                           isExpanded
                             ? 'hidden'
-                            : 'z-50 dark:bg-neutral-900 bg-slate-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
+                            : 'z-50 dark:bg-neutral-900 bg-neutral-100 opacity-0 invisible scale-95 pointer-events-none w-64 sm:w-72 md:w-80 group-hover:opacity-100 group-hover:visible group-hover:scale-100'
                         }`}
                       >
                         <div className='text-xs text-blue-600 dark:text-blue-300 font-medium mb-1 truncate'>
@@ -4662,6 +4684,7 @@ function Chat() {
                       disabled={providers.providers.length === 0}
                       className='flex-1 basis-0 min-w-0 max-w-[200px] transition-transform duration-60 active:scale-97'
                       searchBarVisible={true}
+                      size='large'
                     />
                   )}
                   <ModelSelectControl
@@ -4763,6 +4786,7 @@ function Chat() {
                                 }
                                 placeholder='Select aspect ratio'
                                 size='small'
+                                dropdownZIndex={ACTION_POPOVER_SELECT_DROPDOWN_Z_INDEX}
                               />
                             </div>
                             <div className='flex flex-col gap-1'>
@@ -4783,6 +4807,7 @@ function Chat() {
                                 }
                                 placeholder='Select image size'
                                 size='small'
+                                dropdownZIndex={ACTION_POPOVER_SELECT_DROPDOWN_Z_INDEX}
                               />
                             </div>
                           </>
@@ -4812,6 +4837,7 @@ function Chat() {
                                 }
                                 placeholder='Select effort level'
                                 size='small'
+                                dropdownZIndex={ACTION_POPOVER_SELECT_DROPDOWN_Z_INDEX}
                               />
                             </div>
                           </>
@@ -5290,7 +5316,7 @@ function Chat() {
           const top = (expandedAnchor?.top ?? 16) - 8
           return (
             <div
-              className={`fixed z-[100000] -translate-y-full rounded-lg shadow-2xl border border-gray-600 p-3 transform transition-all duration-100 ease-out dark:bg-neutral-900 bg-slate-100 pointer-events-auto`}
+              className={`fixed z-[99999] -translate-y-full rounded-lg shadow-2xl overflow-y-auto shadow-sm p-3 transform transition-all duration-100 ease-out dark:bg-neutral-900 bg-neutral-100 pointer-events-auto`}
               style={{ left, top, maxWidth: '30vw', width: 'clamp(90vw, 90vw, 56rem)' }}
               onMouseDown={e => e.stopPropagation()}
               onMouseUp={e => e.stopPropagation()}
@@ -5303,7 +5329,7 @@ function Chat() {
               <div className='flex items-center justify-between mb-2 gap-3'>
                 <div className='text-xs text-blue-600 dark:text-blue-300 font-medium truncate'>{name}</div>
                 <button
-                  className='text-xs px-2 text-neutral-800 dark:text-neutral-300 py-1 rounded border border-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800'
+                  className='text-xs px-2 text-neutral-800 dark:text-neutral-300 py-1 rounded-xl border border-neutral-200 dark:border-neutral-600 hover:bg-neutral-200 dark:hover:bg-neutral-800'
                   onClick={handleCloseExpandedPreview}
                 >
                   Close

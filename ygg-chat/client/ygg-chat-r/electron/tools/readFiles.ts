@@ -1,6 +1,6 @@
 import * as path from 'path'
-import { readTextFile, ReadFileOptions } from './readFile.js'
-import { resolveToWindowsPath, isWSLPath, toWslPath } from '../utils/wslBridge.js'
+import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
+import { ReadFileOptions, readTextFile } from './readFile.js'
 
 export interface ReadMultipleOptions extends ReadFileOptions {
   baseDir?: string // used to compute the header-relative path separator
@@ -10,11 +10,13 @@ export interface ReadMultipleOptions extends ReadFileOptions {
 export async function readMultipleTextFiles(
   inputPaths: string[],
   options: ReadMultipleOptions = {}
-): Promise<Array<{
-  filename: string
-  content: string
-  totalLines: number
-}>> {
+): Promise<
+  Array<{
+    filename: string
+    content: string
+    totalLines: number
+  }>
+> {
   if (!Array.isArray(inputPaths) || inputPaths.length === 0) {
     throw new Error('No file paths provided')
   }
@@ -27,15 +29,15 @@ export async function readMultipleTextFiles(
       ? options.baseDir
       : path.resolve(cwdBase, options.baseDir)
     : // Default to cwd or current working directory
-    cwdBase
+      cwdBase
 
   const results: Array<{
     filename: string
     content: string
     totalLines: number
-  }> = []
+  }> = new Array(inputPaths.length)
 
-  for (const p of inputPaths) {
+  const readOne = async (p: string, index: number): Promise<void> => {
     try {
       const res = await readTextFile(p, {
         maxBytes: options.maxBytes,
@@ -64,21 +66,37 @@ export async function readMultipleTextFiles(
         totalLines = res.content.split(/\r?\n/).length
       }
 
-      results.push({
+      results[index] = {
         filename: rel,
         content: res.content,
         totalLines,
-      })
+      }
     } catch (error: any) {
       const errorMsg = `[Error reading file: ${error.message}]`
 
-      results.push({
+      results[index] = {
         filename: p,
         content: errorMsg,
         totalLines: 0,
-      })
+      }
     }
   }
+
+  const concurrency = Math.min(4, inputPaths.length)
+  let nextIndex = 0
+
+  const workers = Array.from({ length: concurrency }, async () => {
+    while (true) {
+      const currentIndex = nextIndex++
+      if (currentIndex >= inputPaths.length) {
+        return
+      }
+
+      await readOne(inputPaths[currentIndex], currentIndex)
+    }
+  })
+
+  await Promise.all(workers)
 
   return results
 }

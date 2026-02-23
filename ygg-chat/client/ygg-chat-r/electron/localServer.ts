@@ -40,6 +40,7 @@ import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
+import { UtilityToolRuntimeHost } from './tools/runtime/UtilityToolRuntimeHost.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -347,6 +348,46 @@ type BuiltInToolHandler = (
 
 // Registry for built-in tools (initialized in setupServer)
 const builtInTools: Map<string, BuiltInToolHandler> = new Map()
+const utilityToolRuntimeHost = new UtilityToolRuntimeHost()
+let utilityRuntimeAvailable = false
+
+function getToolRuntimeMode(): 'local' | 'utility' {
+  return process.env.YGG_TOOLS_RUNTIME?.trim().toLowerCase() === 'utility' ? 'utility' : 'local'
+}
+
+function isUtilityRuntimeFallbackDisabled(): boolean {
+  const rawValue = process.env.DISABLE_TOOL_RUNTIME_FALLBACK?.trim().toLowerCase()
+  if (!rawValue) return false
+  return rawValue === '1' || rawValue === 'true' || rawValue === 'yes' || rawValue === 'on'
+}
+
+const UTILITY_RUNTIME_TOOL_WHITELIST = new Set<string>([
+  'read_file',
+  'read_file_continuation',
+  'read_files',
+  'create_file',
+  'edit_file',
+  'delete_file',
+  'directory',
+  'glob',
+  'ripgrep',
+  'bash',
+  'html_renderer',
+])
+
+function shouldUseUtilityRuntimeForTool(toolName: string): boolean {
+  if (getToolRuntimeMode() !== 'utility') return false
+  if (!utilityRuntimeAvailable) return false
+  if (!builtInTools.has(toolName)) return false
+  return UTILITY_RUNTIME_TOOL_WHITELIST.has(toolName)
+}
+
+function shouldUseUtilityRuntimeForCustomTool(toolName: string): boolean {
+  if (getToolRuntimeMode() !== 'utility') return false
+  if (!utilityRuntimeAvailable) return false
+  if (!customToolRegistry.hasCustomTool(toolName)) return false
+  return true
+}
 
 // Initialize built-in tools registry
 function initializeBuiltInToolRegistry() {
@@ -576,6 +617,26 @@ function registerCustomToolsWithOrchestrator(): number {
   const definitions = customToolRegistry.getDefinitions()
   for (const customToolDef of definitions) {
     toolOrchestrator.registerTool(customToolDef.name, async (args, options) => {
+      if (shouldUseUtilityRuntimeForCustomTool(customToolDef.name)) {
+        try {
+          return await utilityToolRuntimeHost.executeTool(customToolDef.name, args, {
+            rootPath: options?.rootPath,
+            operationMode: options?.operationMode,
+            conversationId: options?.conversationId,
+            messageId: options?.messageId,
+            streamId: options?.streamId,
+          })
+        } catch (utilityError) {
+          if (isUtilityRuntimeFallbackDisabled()) {
+            throw utilityError
+          }
+          console.warn(
+            `[LocalServer] Utility runtime failed for orchestrator custom tool ${customToolDef.name}; falling back to local execution:`,
+            utilityError
+          )
+        }
+      }
+
       return customToolRegistry.executeTool(customToolDef.name, args, {
         cwd: options?.rootPath,
         rootPath: options?.rootPath,
@@ -598,6 +659,26 @@ function bindCustomToolsLifecycleListener(): void {
   customToolRegistry.on('toolsChanged', (event: CustomToolsChangedEvent) => {
     registerCustomToolsWithOrchestrator()
     console.log(`[LocalServer] Custom tools changed (${event.reason}); total=${event.totalCount}`)
+
+    if (!utilityRuntimeAvailable) {
+      return
+    }
+
+    void utilityToolRuntimeHost
+      .reloadCustomTools(`local:${event.reason}`)
+      .then(result => {
+        console.log(
+          `[LocalServer] Synced custom tools to utility runtime (${event.reason}); total=${
+            result.totalCount ?? event.totalCount
+          }; durationMs=${result.durationMs ?? 'n/a'}`
+        )
+      })
+      .catch(error => {
+        console.warn(
+          `[LocalServer] Failed syncing custom tools to utility runtime (${event.reason}); utility runtime may be temporarily stale:`,
+          error
+        )
+      })
   })
 }
 
@@ -3230,7 +3311,22 @@ function setupServer() {
       // Check built-in tools first
       const builtInHandler = builtInTools.get(normalizedToolName)
       if (builtInHandler) {
-        result = await builtInHandler(parsedArgs, toolOptions)
+        if (shouldUseUtilityRuntimeForTool(normalizedToolName)) {
+          try {
+            result = await utilityToolRuntimeHost.executeTool(normalizedToolName, parsedArgs, toolOptions)
+          } catch (utilityError) {
+            if (isUtilityRuntimeFallbackDisabled()) {
+              throw utilityError
+            }
+            console.warn(
+              `[LocalServer] Utility runtime failed for ${normalizedToolName}; falling back to local execution:`,
+              utilityError
+            )
+            result = await builtInHandler(parsedArgs, toolOptions)
+          }
+        } else {
+          result = await builtInHandler(parsedArgs, toolOptions)
+        }
       }
       // Then check MCP tools (format: mcp__serverName__toolName)
       else if (typeof normalizedToolName === 'string' && normalizedToolName.startsWith('mcp__')) {
@@ -3261,11 +3357,36 @@ function setupServer() {
       }
       // Then check custom tools
       else if (customToolRegistry.hasCustomTool(normalizedToolName)) {
-        result = await customToolRegistry.executeTool(normalizedToolName, parsedArgs, {
-          rootPath,
-          operationMode: operationMode as 'plan' | 'execute' | undefined,
-          cwd: rootPath,
-        })
+        if (shouldUseUtilityRuntimeForCustomTool(normalizedToolName)) {
+          try {
+            result = await utilityToolRuntimeHost.executeTool(normalizedToolName, parsedArgs, toolOptions)
+          } catch (utilityError) {
+            if (isUtilityRuntimeFallbackDisabled()) {
+              throw utilityError
+            }
+            console.warn(
+              `[LocalServer] Utility runtime failed for custom tool ${normalizedToolName}; falling back to local execution:`,
+              utilityError
+            )
+            result = await customToolRegistry.executeTool(normalizedToolName, parsedArgs, {
+              rootPath,
+              operationMode: operationMode as 'plan' | 'execute' | undefined,
+              conversationId: conversationId ?? null,
+              messageId: messageId ?? null,
+              streamId: streamId ?? null,
+              cwd: rootPath,
+            })
+          }
+        } else {
+          result = await customToolRegistry.executeTool(normalizedToolName, parsedArgs, {
+            rootPath,
+            operationMode: operationMode as 'plan' | 'execute' | undefined,
+            conversationId: conversationId ?? null,
+            messageId: messageId ?? null,
+            streamId: streamId ?? null,
+            cwd: rootPath,
+          })
+        }
       }
       // Unknown tool
       else {
@@ -6975,12 +7096,67 @@ export async function startLocalServer(
     // Initialize tool registries
     initializeBuiltInToolRegistry()
     await customToolRegistry.initialize()
+
+    utilityRuntimeAvailable = false
+    if (getToolRuntimeMode() === 'utility') {
+      try {
+        const customToolsDir = customToolRegistry.getCustomToolsDirectoryPath()
+        process.env.YGG_CUSTOM_TOOLS_DIRECTORY = path.dirname(customToolsDir)
+      } catch (error) {
+        console.warn('[LocalServer] Failed to derive custom tools directory override for utility runtime:', error)
+      }
+
+      try {
+        await utilityToolRuntimeHost.initialize()
+        utilityRuntimeAvailable = true
+        console.log('[LocalServer] Utility tool runtime enabled')
+
+        try {
+          const syncResult = await utilityToolRuntimeHost.reloadCustomTools('startup_sync')
+          console.log(
+            `[LocalServer] Utility runtime custom tools startup sync complete; total=${syncResult.totalCount ?? 'unknown'} durationMs=${
+              syncResult.durationMs ?? 'n/a'
+            }`
+          )
+        } catch (syncError) {
+          console.warn('[LocalServer] Utility runtime custom tools startup sync failed:', syncError)
+        }
+      } catch (error) {
+        utilityRuntimeAvailable = false
+        console.error('[LocalServer] Failed to initialize utility tool runtime; falling back to local tools:', error)
+      }
+    }
     await skillRegistry.initialize()
     await mcpManager.initialize()
 
     // Initialize tool orchestrator with database and register tools
     toolOrchestrator.initialize(db!)
-    toolOrchestrator.registerTools(builtInTools)
+
+    if (utilityRuntimeAvailable) {
+      for (const [toolName, handler] of builtInTools.entries()) {
+        toolOrchestrator.registerTool(toolName, async (args, options) => {
+          if (shouldUseUtilityRuntimeForTool(toolName)) {
+            try {
+              return await utilityToolRuntimeHost.executeTool(toolName, args, options)
+            } catch (utilityError) {
+              if (isUtilityRuntimeFallbackDisabled()) {
+                throw utilityError
+              }
+              console.warn(
+                `[LocalServer] Utility runtime failed for orchestrator tool ${toolName}; falling back to local execution:`,
+                utilityError
+              )
+              return await handler(args, options)
+            }
+          }
+          return await handler(args, options)
+        })
+      }
+      console.log(`[LocalServer] Registered ${builtInTools.size} built-in tools with utility runtime`)
+    } else {
+      toolOrchestrator.registerTools(builtInTools)
+    }
+
     bindCustomToolsLifecycleListener()
 
     // Register custom tools with the orchestrator
@@ -7081,6 +7257,10 @@ export function stopLocalServer(): Promise<void> {
     // Shutdown tool orchestrator first
     toolOrchestrator.shutdown()
     customToolRegistry.shutdown()
+    utilityRuntimeAvailable = false
+    utilityToolRuntimeHost.shutdown().catch(error => {
+      console.error('[LocalServer] Failed to shutdown utility tool runtime:', error)
+    })
 
     // Close OAuth callback server if running
     if (oauthCallbackServer) {

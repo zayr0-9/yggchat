@@ -199,7 +199,7 @@ const InlineDiffView: React.FC<InlineDiffViewProps> = ({ original, replacement }
  */
 export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result, className = '' }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('inline')
-  const [isExpanded, setIsExpanded] = useState(true)
+  // const [isExpanded] = useState(true)
 
   const parsedResult = useMemo(() => parseResult(result), [result])
   const language = useMemo(() => getLanguageFromPath(args.path || ''), [args.path])
@@ -228,35 +228,31 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
     '[&_pre]:!m-0 [&_pre]:!p-2 [&_pre]:!bg-transparent [&_pre]:!border-0 [&_code]:!text-[10px] [&_code]:!leading-snug [&_code]:!font-mono [&_code]:!bg-transparent [&_.hljs]:!bg-transparent [&_pre_code]:!p-0'
 
   return (
-    <div
-      className={`rounded-md border border-neutral-300 dark:border-neutral-700/60 bg-white dark:bg-neutral-900 overflow-hidden ${className}`}
-    >
+    <div className={`rounded-md bg-white dark:bg-neutral-900 overflow-hidden ${className}`}>
       {/* Header bar */}
-      <div className='flex items-center justify-between px-2 py-0 bg-neutral-100 dark:bg-neutral-800/80 border-b border-neutral-300 dark:border-neutral-700/60'>
-        <div className='flex items-center gap-2'>
+      <div className='flex items-center justify-between gap-2 px-2 py-0 bg-neutral-100 dark:bg-neutral-900/80'>
+        <div className='flex min-w-0 flex-1 items-center gap-2'>
           {/* Status indicator */}
-          <div
-            className={`w-1.5 h-1.5 rounded-full ${isSuccess ? 'bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.6)]'}`}
-          />
-
           {/* Operation badge */}
-          <span className='px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide rounded bg-blue-500/20 text-blue-600 dark:text-blue-400'>
+          <span className='text-[9px] font-bold uppercase tracking-wide rounded  text-blue-600 dark:text-blue-400'>
             {args.operation || 'replace'}
           </span>
 
           {/* File path */}
           <span
-            className='flex items-center gap-1 text-[10px] font-mono text-neutral-600 dark:text-neutral-500'
+            className='flex min-w-0 items-center gap-1 text-[10px] font-mono overflow-left text-neutral-600 dark:text-neutral-500'
             title={args.path}
           >
-            <span className='max-w-[150px] truncate'>{filename}</span>
+            <span className='block min-w-0 max-w-[150px] sm:max-w-[250px] md:max-w-[350px] lg:max-w-[600px] truncate'>
+              {filename}
+            </span>
           </span>
         </div>
 
-        <div className='flex items-center gap-1'>
+        <div className='flex shrink-0 items-center gap-1'>
           {/* Changes badge */}
           {hasChanges && (
-            <span className='px-1.5 py-0.5 text-[9px] font-medium rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'>
+            <span className='px-1.5 py-0.5 text-[9px] ml-1 font-medium rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'>
               {parsedResult.replacements}
             </span>
           )}
@@ -289,17 +285,17 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
           )}
 
           {/* Collapse button */}
-          <button
+          {/* <button
             className='px-1 py-0.5 rounded text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 hover:text-neutral-700 dark:hover:text-neutral-300 transition-all'
             onClick={() => setIsExpanded(!isExpanded)}
           >
             <i className={`bx ${isExpanded ? 'bx-chevron-up' : 'bx-chevron-down'} text-xs`} />
-          </button>
+          </button> */}
         </div>
       </div>
 
       {/* Collapsed view - show only new content */}
-      {!isExpanded && (
+      {/* {!isExpanded && (
         <div className='p-1'>
           <div className='rounded overflow-hidden'>
             <div className='flex items-center gap-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-500/10 border-b border-emerald-200 dark:border-emerald-500/20'>
@@ -314,10 +310,10 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Diff content - full view when expanded */}
-      {isExpanded && (
+      {
         <div className='p-1'>
           {isAppendOperation ? (
             /* Append operation - single content block */
@@ -335,11 +331,11 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
             </div>
           ) : viewMode === 'inline' ? (
             /* Inline diff mode - git-style merged view */
-            <div className='rounded overflow-hidden border border-neutral-200 dark:border-neutral-700'>
-              <div className='flex items-center gap-1.5 px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700'>
+            <div className='rounded overflow-hidden pb-1'>
+              {/* <div className='flex items-center gap-1.5 px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700'>
                 <i className='bx bx-git-compare text-[10px] text-neutral-500 dark:text-neutral-400' />
                 <span className='text-[9px] font-medium text-neutral-600 dark:text-neutral-400'>Inline Diff</span>
-              </div>
+              </div> */}
               <div className='bg-neutral-50 dark:bg-neutral-900'>
                 <InlineDiffView original={args.searchPattern || ''} replacement={args.replacement || ''} />
               </div>
@@ -404,7 +400,7 @@ export const EditFileDiffView: React.FC<EditFileDiffViewProps> = ({ args, result
             </div>
           )}
         </div>
-      )}
+      }
 
       {/* Result message footer */}
       {parsedResult.message && (

@@ -12,7 +12,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
-- made branch switching a lot more efficient
+## [0.1.78] - 2026-02-23
+
+### Added
+
+- new tool runtime (isolated in an electron utility worker now instead of main render thread) [if building yourself: in client/.env add YGG_TOOLS_RUNTIME=utility and DISABLE_TOOL_RUNTIME_FALLBACK=true if you dont fall back]
+
+### Changed
+
+- Moved settings button to sidebar for easier access.
+- updated permission modal design.
+- removed to do list tool call ui from chatMessage.
+- less x padding in chat input.
+
+### Fixed
+
+- made branch switching a lot more efficient.
+- chat page is a lot snappier.
+- can clear selected context with clear button.
 
 ## [0.1.77] - 2026-02-22
 

@@ -768,94 +768,6 @@ const extractReasoningTextsFromResponsesOutputItems = (items: any[]): string[] =
   return extracted
 }
 
-interface TodoItem {
-  text: string
-  done: boolean
-}
-
-const TODO_ITEM_REGEX = /^\s*[-*]\s*\[(x|X| )\]\s*(.*)$/
-
-const parseTodoListFromMarkdown = (content?: string): TodoItem[] => {
-  if (!content) return []
-  const items: TodoItem[] = []
-  const lines = content.split('\n')
-  for (const line of lines) {
-    const match = TODO_ITEM_REGEX.exec(line)
-    if (match) {
-      items.push({
-        done: match[1].toLowerCase() === 'x',
-        text: match[2].trim(),
-      })
-    }
-  }
-  return items
-}
-
-const extractTodoTitleFromMarkdown = (content?: string): string | null => {
-  if (!content) return null
-  const match = content.match(/^#+\s*(.+)$/m)
-  if (match) {
-    return match[1].trim()
-  }
-  return null
-}
-
-const getTodoContentForAction = (group: ToolCallRenderGroup, action: string): string | null => {
-  const normalizedAction = action.toLowerCase()
-  // For 'create' action, content is in the input args
-  if (normalizedAction === 'create') {
-    if (typeof group.args?.content === 'string' && group.args.content.trim().length > 0) {
-      return group.args.content
-    }
-  }
-
-  // For 'read' action, content is in the result
-  if (group.results.length > 0) {
-    let primary = group.results[0].content
-
-    // If primary is a JSON string, try to parse it
-    if (typeof primary === 'string') {
-      try {
-        const parsed = JSON.parse(primary)
-        if (typeof parsed === 'object' && parsed !== null && 'content' in parsed) {
-          return parsed.content
-        }
-      } catch {
-        // Not JSON, might be raw markdown content - return as is
-        return primary
-      }
-    }
-
-    // Handle object result with content property (from readTodoList)
-    if (typeof primary === 'object' && primary !== null && 'content' in primary) {
-      return (primary as any).content
-    }
-
-    return formatToolResultContent(primary)
-  }
-
-  return null
-}
-
-const TODO_TOOL_ACTIONS_WITH_CARD = new Set(['read', 'create'])
-
-const isTodoListGroup = (group: ToolCallRenderGroup): boolean => {
-  const action = typeof group.args?.action === 'string' ? group.args.action.toLowerCase() : ''
-  return (group.name ?? '').toLowerCase() === 'todo_list' && TODO_TOOL_ACTIONS_WITH_CARD.has(action)
-}
-
-const todoActionLabel = (action: string) => {
-  const normalized = action.toLowerCase()
-  switch (normalized) {
-    case 'read':
-      return 'Current Todo List'
-    case 'create':
-      return 'New Todo List'
-    default:
-      return 'Todo List'
-  }
-}
-
 const parseMcpQualifiedName = (qualifiedName: string) => {
   const match = qualifiedName.match(/^mcp__([^_]+)__(.+)$/)
   if (!match) return null
@@ -1877,18 +1789,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
       const toggleKey = `tool-group-${key}`
 
-      if (isTodoListGroup(group)) {
-        return (
-          <TodoListView
-            key={toggleKey}
-            group={group}
-            toggleState={expandedBlocks.toolCalls}
-            toggleFn={toggleBlock}
-            keySuffix={toggleKey}
-          />
-        )
-      }
-
       const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
       const isMcpGroup = (group.name ?? '').startsWith('mcp__')
       const parsedMcp = isMcpGroup ? parseMcpQualifiedName(group.name ?? '') : null
@@ -2020,14 +1920,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       const isAppendOperation = (group.args?.operation ?? '').toLowerCase() === 'append' && group.args?.content
       if (isEditFileTool && group.args && (isReplaceOperation || isAppendOperation)) {
         const editResult = group.results.length > 0 ? group.results[0].content : {}
+        const isEditFileSuccess = formatToolResultSummary(editResult) === 'success'
         return (
           <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
-            {/* Status pip indicator */}
+            {/* Status pip indicator - align with EditFileDiffView success logic */}
             <div
               className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
-                hasResults && hasError
-                  ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
-                  : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+                isEditFileSuccess
+                  ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+                  : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
               }`}
             />
             {/* Tool header */}
@@ -2476,6 +2377,9 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           const isExpanded = expandedBlocks.toolCalls.has(toggleKey)
           const pathParam = extractPathParam(toolCall.arguments)
           const isHtmlToolCall = (toolCall.name ?? '').toLowerCase() === 'html_renderer'
+          const isEditFileToolCall = (toolCall.name ?? '').toLowerCase() === 'edit_file'
+          const isEditFileToolCallSuccess =
+            isEditFileToolCall && formatToolResultSummary(toolCall.result) === 'success'
           const hasHtmlOutput = isHtmlToolCall || Boolean(extractHtmlFromToolResult(toolCall.result)?.html)
 
           items.push({
@@ -2487,7 +2391,15 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 key={`tool-${toolCall.id}-${idx}`}
                 className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
               >
-                <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
+                <div
+                  className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
+                    isEditFileToolCall
+                      ? isEditFileToolCallSuccess
+                        ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+                        : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+                      : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+                  }`}
+                />
 
                 <button
                   onClick={() => toggleBlock('toolCalls', toggleKey)}
@@ -3205,80 +3117,6 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     )
   }
 )
-
-const TodoListView: React.FC<{
-  group: ToolCallRenderGroup
-  toggleState: Set<string>
-  toggleFn: (type: 'toolCalls' | 'toolResults' | 'reasoning' | 'groupRuns', id: string | number) => void
-  keySuffix: string
-}> = ({ group, toggleState, toggleFn, keySuffix }) => {
-  const action = (group.args?.action as string | undefined)?.toLowerCase() || 'read'
-  const actionLabel = todoActionLabel(action)
-  const key = `todo-list-${keySuffix}`
-  const isExpanded = toggleState.has(key)
-  const summaryContent = getTodoContentForAction(group, action)
-  const todoItems = parseTodoListFromMarkdown(summaryContent)
-  const title = extractTodoTitleFromMarkdown(summaryContent)
-
-  const handleToggle = () => {
-    toggleFn('toolCalls', key)
-  }
-
-  return (
-    <div
-      key={key}
-      className='todo-list-card relative mb-4 mx-3 rounded-xl border border-blue-200 bg-white/60 dark:border-yellow-700/40 dark:bg-yBlack-900 shadow-[0px_0px_5px_0px_rgba(0,0,0,0.08)] dark:shadow-[0px_0px_4px_0px_rgba(0,0,0,0.35)]'
-    >
-      <div className='flex items-center justify-between px-4 py-3'>
-        <div>
-          <p className='text-sm font-semibold uppercase tracking-wide text-neutral-700 dark:text-neutral-200'>
-            {actionLabel}
-          </p>
-          {title && <p className='text-xs text-blue-600 dark:text-blue-500'>{title}</p>}
-        </div>
-        <Button
-          variant='outline2'
-          size='small'
-          onClick={handleToggle}
-          title={isExpanded ? 'Hide todo list' : 'Show todo list'}
-        >
-          {isExpanded ? (
-            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M5 15l7-7 7 7' />
-            </svg>
-          ) : (
-            <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
-            </svg>
-          )}
-        </Button>
-      </div>
-      {isExpanded && (
-        <div className='px-4 pb-4 space-y-2'>
-          {todoItems.length === 0 ? (
-            <p className='text-xs text-blue-700 dark:text-blue-200'>No todo items to display yet.</p>
-          ) : (
-            <ul className='space-y-2'>
-              {todoItems.map((item, idx) => (
-                <li
-                  key={`todo-item-${idx}`}
-                  className={`flex items-center gap-3 rounded-xl text-[12px] xl:text-[16px]  ${
-                    item.done
-                      ? ' bg-neutral-50/40 text-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                      : 'border-neutral-200 bg-white/70 text-neutral-800 dark:border-neutral-800 dark:bg-yBlack-900 dark:text-neutral-200'
-                  }`}
-                >
-                  <span className='text-sm xl:text-[18px]'> {item.done ? '[✓]' : `[  \u00A0 ]`}</span>
-                  <span className={`${item.done ? 'line-through opacity-80' : ''}`}>{item.text}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // Display name for debugging
 ChatMessage.displayName = 'ChatMessage'

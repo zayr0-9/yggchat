@@ -422,8 +422,18 @@ const SideBar: React.FC<SideBarProps> = ({
   }
 
   const handleToggleProjectExpansion = (projectId: string) => {
+    const normalizedProjectId = String(projectId)
+
+    if (isCollapsed) {
+      setIsCollapsed(false)
+      setExpandedProjectIds(prev => (prev.includes(normalizedProjectId) ? prev : [normalizedProjectId, ...prev]))
+      return
+    }
+
     setExpandedProjectIds(prev =>
-      prev.includes(projectId) ? prev.filter(id => id !== projectId) : [...prev, String(projectId)]
+      prev.includes(normalizedProjectId)
+        ? prev.filter(id => id !== normalizedProjectId)
+        : [...prev, normalizedProjectId]
     )
   }
 
@@ -593,7 +603,7 @@ const SideBar: React.FC<SideBarProps> = ({
 
   return (
     <aside
-      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-md flex flex-col rounded-tr-xl transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 overflow-x-hidden ${isCollapsed ? 'w-14 ' : 'w-64 md:w-64 lg:w-70 xl:w-80 '} ${className}`}
+      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-md flex flex-col rounded-tr-xl transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 overflow-x-hidden ${isCollapsed ? 'w-15 ' : 'w-64 md:w-64 lg:w-70 xl:w-80 '} ${className}`}
       aria-label={isProjectsTab ? 'Projects and conversations' : 'Favorite conversations'}
     >
       {/* Toggle Button */}
@@ -805,6 +815,14 @@ const SideBar: React.FC<SideBarProps> = ({
             title: 'Open profile',
             ariaLabel: 'Open profile',
           },
+          {
+            key: 'settings',
+            label: 'Settings',
+            iconClass: 'bx-cog',
+            onClick: () => navigate('/settings'),
+            title: 'Open settings',
+            ariaLabel: 'Open settings',
+          },
         ].map(action => (
           <button
             key={action.key}
@@ -812,14 +830,14 @@ const SideBar: React.FC<SideBarProps> = ({
             onClick={action.onClick}
             title={action.title}
             aria-label={action.ariaLabel}
-            className={`group flex w-full items-center rounded-lg py-1.5 transition-colors hover:bg-neutral-200/50 dark:hover:bg-neutral-800/40 ${
+            className={`group flex w-full items-center rounded-3xl py-1.5 transition-colors ${
               isCollapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2'
             }`}
           >
             <span className='acrylic-light flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent text-neutral-700 dark:bg-transparent dark:text-neutral-300 dark:outline dark:outline-1 dark:outline-neutral-400/15'>
               <i
                 className={`bx ${action.iconClass} block text-[22px] leading-none transition-transform duration-100 ${
-                  action.key === 'theme' ? 'group-active:scale-90' : 'group-hover:scale-105 group-active:scale-95'
+                  action.key === 'theme' ? 'group-active:scale-90' : 'group-hover:scale-108 group-active:scale-95'
                 }`}
                 aria-hidden='true'
               ></i>

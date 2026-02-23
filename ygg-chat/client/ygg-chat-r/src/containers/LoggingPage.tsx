@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { environment } from '../utils/api'
 import { type LoggingFilters, useCloudLoggingAnalytics, useLocalLoggingAnalytics } from '../hooks/useLoggingAnalytics'
+import { environment } from '../utils/api'
 
 const RANGE_OPTIONS = [7, 30, 90]
 
@@ -99,7 +99,7 @@ const LoggingPage: React.FC = () => {
           <button
             type='button'
             onClick={() => navigate('/homepage')}
-            className='px-4 py-2 rounded-lg bg-neutral-900 text-white dark:bg-neutral-800 dark:text-neutral-100 dark:border dark:border-neutral-700 text-sm font-medium'
+            className='px-4 py-2 rounded-lg bg-neutral-100 text-white dark:bg-neutral-800 dark:text-neutral-100 dark:border dark:border-neutral-700 text-sm font-medium'
           >
             Back Home
           </button>
@@ -115,7 +115,11 @@ const LoggingPage: React.FC = () => {
                 onChange={e => setFilter('rangeDays', Number(e.target.value))}
               >
                 {RANGE_OPTIONS.map(day => (
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' key={day} value={day}>
+                  <option
+                    className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100'
+                    key={day}
+                    value={day}
+                  >
                     Last {day} days
                   </option>
                 ))}
@@ -130,8 +134,12 @@ const LoggingPage: React.FC = () => {
                   value={storageView}
                   onChange={e => setStorageView(e.target.value as StorageView)}
                 >
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value='cloud'>Cloud</option>
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value='local'>Local</option>
+                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value='cloud'>
+                    Cloud
+                  </option>
+                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value='local'>
+                    Local
+                  </option>
                 </select>
               </label>
             )}
@@ -146,9 +154,15 @@ const LoggingPage: React.FC = () => {
                   setFilters(prev => ({ ...prev, projectId: value, conversationId: null }))
                 }}
               >
-                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>All</option>
+                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>
+                  All
+                </option>
                 {available?.projects.map(project => (
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' key={project.id} value={project.id}>
+                  <option
+                    className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100'
+                    key={project.id}
+                    value={project.id}
+                  >
                     {project.name}
                   </option>
                 ))}
@@ -162,9 +176,15 @@ const LoggingPage: React.FC = () => {
                 value={selectedConversation}
                 onChange={e => setFilter('conversationId', e.target.value || null)}
               >
-                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>All</option>
+                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>
+                  All
+                </option>
                 {available?.conversations.map(conversation => (
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' key={conversation.id} value={conversation.id}>
+                  <option
+                    className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100'
+                    key={conversation.id}
+                    value={conversation.id}
+                  >
                     {conversation.title || conversation.id}
                   </option>
                 ))}
@@ -178,9 +198,15 @@ const LoggingPage: React.FC = () => {
                 value={selectedModel}
                 onChange={e => setFilter('model', e.target.value || null)}
               >
-                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>All</option>
+                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>
+                  All
+                </option>
                 {available?.models.map(model => (
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' key={model} value={model}>
+                  <option
+                    className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100'
+                    key={model}
+                    value={model}
+                  >
                     {model}
                   </option>
                 ))}
@@ -194,9 +220,15 @@ const LoggingPage: React.FC = () => {
                 value={selectedStatus}
                 onChange={e => setFilter('providerRunStatus', e.target.value || null)}
               >
-                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>All</option>
+                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>
+                  All
+                </option>
                 {(available?.providerRunStatuses || []).map(status => (
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' key={status} value={status}>
+                  <option
+                    className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100'
+                    key={status}
+                    value={status}
+                  >
                     {status}
                   </option>
                 ))}
@@ -210,9 +242,15 @@ const LoggingPage: React.FC = () => {
                 value={selectedToolName}
                 onChange={e => setFilter('toolName', e.target.value || null)}
               >
-                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>All</option>
+                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>
+                  All
+                </option>
                 {(available?.toolNames || []).map(toolName => (
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' key={toolName} value={toolName}>
+                  <option
+                    className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100'
+                    key={toolName}
+                    value={toolName}
+                  >
                     {toolName}
                   </option>
                 ))}
@@ -226,9 +264,15 @@ const LoggingPage: React.FC = () => {
                 value={selectedToolStatus}
                 onChange={e => setFilter('toolStatus', e.target.value || null)}
               >
-                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>All</option>
+                <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' value=''>
+                  All
+                </option>
                 {(available?.toolJobStatuses || []).map(status => (
-                  <option className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100' key={status} value={status}>
+                  <option
+                    className='bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100'
+                    key={status}
+                    value={status}
+                  >
                     {status}
                   </option>
                 ))}
@@ -238,9 +282,7 @@ const LoggingPage: React.FC = () => {
         </div>
 
         {isLoading && (
-          <div className={`${panelClass} p-6 text-sm text-neutral-600 dark:text-neutral-300`}>
-            Loading analytics…
-          </div>
+          <div className={`${panelClass} p-6 text-sm text-neutral-600 dark:text-neutral-300`}>Loading analytics…</div>
         )}
 
         {error && (
@@ -253,10 +295,7 @@ const LoggingPage: React.FC = () => {
           <>
             <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3'>
               {cards.map(card => (
-                <div
-                  key={card.label}
-                  className={`${panelClass} p-4`}
-                >
+                <div key={card.label} className={`${panelClass} p-4`}>
                   <p className='text-xs text-neutral-500 dark:text-neutral-400'>{card.label}</p>
                   <p className='text-2xl font-semibold text-neutral-900 dark:text-neutral-100 mt-1'>{card.value}</p>
                 </div>
@@ -266,7 +305,9 @@ const LoggingPage: React.FC = () => {
             <div className='grid grid-cols-1 xl:grid-cols-2 gap-4'>
               <section className={`${panelClass} p-4`}>
                 <h2 className='text-lg font-semibold text-neutral-900 dark:text-neutral-100'>Spend Timeline</h2>
-                <p className='text-xs text-neutral-500 dark:text-neutral-400 mb-3'>Latest {spendRows.length} day buckets</p>
+                <p className='text-xs text-neutral-500 dark:text-neutral-400 mb-3'>
+                  Latest {spendRows.length} day buckets
+                </p>
                 <div className='overflow-auto max-h-80'>
                   <table className='w-full text-xs'>
                     <thead>
@@ -327,48 +368,22 @@ const LoggingPage: React.FC = () => {
 
             <div className='grid grid-cols-1 xl:grid-cols-3 gap-4'>
               <section className={`${panelClass} p-4`}>
-                <h2 className='text-lg font-semibold text-neutral-900 dark:text-neutral-100 mb-3'>Run Health</h2>
-                <div className='space-y-2'>
-                  {Object.entries(data.providerRuns.statusCounts).map(([status, count]) => {
-                    const total = Math.max(1, data.providerRuns.quality.total)
-                    const pct = (count / total) * 100
-                    return (
-                      <div key={status}>
-                        <div className='flex justify-between text-xs text-neutral-600 dark:text-neutral-300'>
-                          <span>{status}</span>
-                          <span>
-                            {count} ({pct.toFixed(1)}%)
-                          </span>
-                        </div>
-                        <div className='h-2 rounded bg-neutral-200 dark:bg-neutral-700 mt-1'>
-                          <div className='h-2 rounded bg-indigo-500' style={{ width: `${Math.min(100, pct)}%` }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className='grid grid-cols-2 gap-2 mt-4 text-xs'>
-                  <StatMini label='Reconciled' value={formatPercent(data.providerRuns.quality.reconciledPct)} />
-                  <StatMini label='With generation_id' value={formatPercent(data.providerRuns.quality.withGenerationIdPct)} />
-                  <StatMini label='With message link' value={formatPercent(data.providerRuns.quality.withMessageLinkPct)} />
-                  <StatMini label='With conv link' value={formatPercent(data.providerRuns.quality.withConversationLinkPct)} />
-                  <StatMini label='Lag P50 (min)' value={formatNumber(data.providerRuns.reconcileLagMinutes.p50)} />
-                  <StatMini label='Lag P90 (min)' value={formatNumber(data.providerRuns.reconcileLagMinutes.p90)} />
-                </div>
-              </section>
-
-              <section className={`${panelClass} p-4`}>
                 <h2 className='text-lg font-semibold text-neutral-900 dark:text-neutral-100 mb-3'>Activity</h2>
                 <div className='space-y-2'>
                   {Object.entries(data.activity.messagesByRole).map(([role, count]) => (
                     <div key={role} className='flex items-center justify-between text-xs'>
                       <span className='text-neutral-600 dark:text-neutral-300'>{role}</span>
-                      <span className='font-medium text-neutral-900 dark:text-neutral-100'>{integerFormatter.format(count)}</span>
+                      <span className='font-medium text-neutral-900 dark:text-neutral-100'>
+                        {integerFormatter.format(count)}
+                      </span>
                     </div>
                   ))}
                 </div>
                 <div className='grid grid-cols-3 gap-2 mt-4 text-xs'>
-                  <StatMini label='Branch Points' value={integerFormatter.format(data.activity.branching.branchPoints || 0)} />
+                  <StatMini
+                    label='Branch Points'
+                    value={integerFormatter.format(data.activity.branching.branchPoints || 0)}
+                  />
                   <StatMini label='Avg Depth' value={formatNumber(data.activity.branching.averageDepth)} />
                   <StatMini label='Max Depth' value={integerFormatter.format(data.activity.branching.maxDepth || 0)} />
                 </div>
@@ -450,7 +465,9 @@ const LoggingPage: React.FC = () => {
                   <div>
                     <p className='font-medium mb-1 text-neutral-700 dark:text-neutral-200'>Monthly Allocation</p>
                     <div className='space-y-1 max-h-28 overflow-auto'>
-                      {monthlyAllocation.length === 0 && <p className='text-neutral-500 dark:text-neutral-400'>No data</p>}
+                      {monthlyAllocation.length === 0 && (
+                        <p className='text-neutral-500 dark:text-neutral-400'>No data</p>
+                      )}
                       {monthlyAllocation.slice(0, 8).map((item: any) => (
                         <div key={String(item.id)} className='flex justify-between'>
                           <span>{String(item.created_at || '').slice(0, 10)}</span>

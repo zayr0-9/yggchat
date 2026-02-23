@@ -1,7 +1,7 @@
 // electron/tools/customToolLoader.ts
 // Dynamic loader for user-defined custom tools from userData/custom-tools/
 
-import { app } from 'electron'
+import { createRequire as createNodeRequire } from 'module'
 import { EventEmitter } from 'events'
 import fs, { FSWatcher } from 'fs'
 import fsPromises from 'fs/promises'
@@ -19,6 +19,30 @@ const DEFAULT_REFRESH_DEBOUNCE_MS = 500
 // Cached base directory
 let cachedBaseDir: string | null = null
 
+type ElectronAppLike = {
+  getPath: (name: string) => string
+  getAppPath: () => string
+  isPackaged?: boolean
+}
+
+const electronRequire = createNodeRequire(import.meta.url)
+let cachedElectronApp: ElectronAppLike | null | undefined
+
+function getElectronApp(): ElectronAppLike | null {
+  if (cachedElectronApp !== undefined) {
+    return cachedElectronApp
+  }
+
+  try {
+    const electronModule = electronRequire('electron') as any
+    cachedElectronApp = (electronModule?.app as ElectronAppLike | undefined) || null
+  } catch {
+    cachedElectronApp = null
+  }
+
+  return cachedElectronApp
+}
+
 function resolveBaseDir(): string {
   if (cachedBaseDir) {
     return cachedBaseDir
@@ -31,13 +55,18 @@ function resolveBaseDir(): string {
     return cachedBaseDir
   }
 
-  // Use Electron's userData path, with fallback for non-Electron environments
+  // Use Electron's userData path when available, with fallback for non-Electron environments
   try {
-    cachedBaseDir = app.getPath('userData')
+    const electronApp = getElectronApp()
+    if (electronApp) {
+      cachedBaseDir = electronApp.getPath('userData')
+      return cachedBaseDir
+    }
   } catch {
-    cachedBaseDir = path.resolve(process.cwd(), '.ygg-chat-r', 'custom-tools-storage')
+    // Fall through to cwd fallback below.
   }
 
+  cachedBaseDir = path.resolve(process.cwd(), '.ygg-chat-r', 'custom-tools-storage')
   return cachedBaseDir
 }
 
@@ -50,15 +79,21 @@ function getCustomToolsStatePath(): string {
 }
 
 function resolveGuideSourcePath(): string {
-  if (app.isPackaged) {
+  const electronApp = getElectronApp()
+
+  if (electronApp?.isPackaged) {
     return path.join(process.resourcesPath, CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
   }
 
   try {
-    return path.join(app.getAppPath(), CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
+    if (electronApp) {
+      return path.join(electronApp.getAppPath(), CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
+    }
   } catch {
-    return path.join(process.cwd(), CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
+    // Fall through to cwd fallback below.
   }
+
+  return path.join(process.cwd(), CUSTOM_TOOLS_DIR_NAME, CUSTOM_TOOLS_GUIDE_FILE)
 }
 
 function isWithinDirectory(targetPath: string, parentPath: string): boolean {
@@ -250,6 +285,7 @@ class CustomToolRegistry extends EventEmitter {
 
   private watcherMode: 'none' | 'recursive' | 'shallow' = 'none'
   private rootWatcher: FSWatcher | null = null
+  private stateWatcher: FSWatcher | null = null
   private toolWatchers: Map<string, FSWatcher> = new Map()
   private watcherDebounceTimer: NodeJS.Timeout | null = null
 
@@ -527,6 +563,35 @@ class CustomToolRegistry extends EventEmitter {
     this.toolWatchers.clear()
   }
 
+  private startStateWatcher(): void {
+    if (this.stateWatcher || !this.settings.autoRefresh) return
+
+    const statePath = getCustomToolsStatePath()
+    const stateDir = path.dirname(statePath)
+
+    try {
+      this.stateWatcher = fs.watch(stateDir, (_event, filename) => {
+        const name = typeof filename === 'string' ? filename : filename?.toString()
+        if (!name) return
+        if (path.basename(name) !== CUSTOM_TOOLS_STATE_FILE) return
+        this.scheduleWatcherReload('state')
+      })
+
+      this.stateWatcher.on('error', error => {
+        console.warn('[CustomToolLoader] State watcher error:', error)
+        this.scheduleWatcherReload('state_error')
+      })
+    } catch (error) {
+      console.warn('[CustomToolLoader] Failed to watch state file directory:', error)
+    }
+  }
+
+  private stopStateWatcher(): void {
+    if (!this.stateWatcher) return
+    this.stateWatcher.close()
+    this.stateWatcher = null
+  }
+
   private syncToolWatchers(): void {
     if (this.watcherMode !== 'shallow') {
       this.closeToolWatchers()
@@ -569,6 +634,8 @@ class CustomToolRegistry extends EventEmitter {
   private startWatcher(): void {
     if (this.rootWatcher || !this.settings.autoRefresh) return
 
+    this.startStateWatcher()
+
     const dir = getCustomToolsDirectory()
     try {
       this.rootWatcher = fs.watch(dir, { recursive: true }, (_event, filename) => {
@@ -604,6 +671,7 @@ class CustomToolRegistry extends EventEmitter {
       this.rootWatcher.close()
       this.rootWatcher = null
     }
+    this.stopStateWatcher()
     this.closeToolWatchers()
     this.watcherMode = 'none'
   }
@@ -617,6 +685,7 @@ class CustomToolRegistry extends EventEmitter {
     if (!this.rootWatcher) {
       this.startWatcher()
     } else {
+      this.startStateWatcher()
       this.syncToolWatchers()
     }
   }
