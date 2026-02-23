@@ -309,13 +309,18 @@ export const HtmlToolsModal: React.FC = () => {
     }
   }, [clampDockWidth, handleDockMouseMove, isRightDockedLayout, stopDockResize])
 
-  const renderEntry = (entry: (typeof entries)[number], options?: { fillHeight?: boolean; compactView?: boolean }) => {
+  const renderEntry = (
+    entry: (typeof entries)[number],
+    options?: { fillHeight?: boolean; compactView?: boolean; showLabel?: boolean }
+  ) => {
     const isCollapsed = collapsedTools[entry.key] ?? false
     const isHibernated = entry.status === 'hibernated'
     const isFavorite = entry.favorite
     const isFullscreen = fullscreenKey === entry.key
     const mcpEntry = entry.kind === 'mcp' ? entry : null
     const isCompact = options?.compactView === true
+    const shouldShowLabel = options?.showLabel === true
+    const entryLabel = displayLabels.get(entry.key) ?? resolveEntryLabel(entry)
     const dockEdgeInsetClass = isRightDockedLayout ? 'pl-2' : ''
     const iframeHeightClass = isCollapsed
       ? 'h-0 overflow-hidden opacity-0 pointer-events-none'
@@ -355,6 +360,11 @@ export const HtmlToolsModal: React.FC = () => {
             {mcpEntry && (
               <span className='text-[10px] uppercase tracking-[0.15em] text-emerald-600 dark:text-emerald-400'>
                 MCP App
+              </span>
+            )}
+            {shouldShowLabel && (
+              <span className='min-w-0 truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-200'>
+                {entryLabel}
               </span>
             )}
             <span className='font-mono text-[10px] px-2 py-0 rounded bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20'>
@@ -716,7 +726,7 @@ export const HtmlToolsModal: React.FC = () => {
               </div>
             ) : (
               favoriteEntries.map(entry => (
-                <React.Fragment key={entry.key}>{renderEntry(entry, { compactView: true })}</React.Fragment>
+                <React.Fragment key={entry.key}>{renderEntry(entry, { compactView: true, showLabel: true })}</React.Fragment>
               ))
             )}
           </div>
@@ -728,7 +738,7 @@ export const HtmlToolsModal: React.FC = () => {
             {hibernatedEntries.length === 0 ? (
               <div className='font-mono text-xs text-neutral-500 dark:text-neutral-600'>No hibernated tools.</div>
             ) : (
-              hibernatedEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
+              hibernatedEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry, { showLabel: true })}</React.Fragment>)
             )}
           </div>
         )}
@@ -756,7 +766,7 @@ export const HtmlToolsModal: React.FC = () => {
               </div>
             ) : (
               favoriteEntries.map(entry => (
-                <React.Fragment key={entry.key}>{renderEntry(entry, { compactView: true })}</React.Fragment>
+                <React.Fragment key={entry.key}>{renderEntry(entry, { compactView: true, showLabel: true })}</React.Fragment>
               ))
             )}
           </div>
@@ -767,7 +777,7 @@ export const HtmlToolsModal: React.FC = () => {
             {hibernatedEntries.length === 0 ? (
               <div className='font-mono text-xs text-neutral-500 dark:text-neutral-600'>No hibernated tools.</div>
             ) : (
-              hibernatedEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry)}</React.Fragment>)
+              hibernatedEntries.map(entry => <React.Fragment key={entry.key}>{renderEntry(entry, { showLabel: true })}</React.Fragment>)
             )}
           </div>
         )}

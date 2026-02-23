@@ -12,6 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+## [0.1.79] - 2026-02-23
+
+### Fixed
+
+- fixed readme build instructions
+- textfiled font size is now smaller when branching
+- Html Tools modal now shows app names in Favorites and Hibernated lists (in addition to IDs), matching opened app visibility in the top tabs.
+
 ## [0.1.78] - 2026-02-23
 
 ### Added

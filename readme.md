@@ -131,6 +131,12 @@ npm install --workspaces=false --include=optional
 npm run build:win
 ```
 
+Dependent on your platform you can use -
+
+`npm run build:win`
+`npm run build:linux`
+`npm run build:mac`
+
 ### If you run into native module issues, try:
 
 ```bash
