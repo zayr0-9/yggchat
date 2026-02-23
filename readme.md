@@ -23,10 +23,7 @@ Humans don’t solve problems linearly. Yggdrasil is built around **branching co
 
 https://github.com/user-attachments/assets/e57ef035-fb6d-417b-ae62-ca24cb5b8889
 
-
-
 https://github.com/user-attachments/assets/6ea5744a-6ee8-4b57-bdf1-dc6bf7132d22
-
 
 ### 2) AI apps
 
@@ -45,7 +42,7 @@ Custom apps in chat
 
 https://github.com/user-attachments/assets/88a9b8fd-ce8a-4cec-ad94-b6ae897c72a3
 
-Extra features overview 
+Extra features overview
 
 https://github.com/user-attachments/assets/4593e725-6635-45e4-b245-31c8d39a33cc
 
@@ -73,7 +70,6 @@ The companion VS Code extension provides seamless workspace integration:
 - Add selected context from IDE
 
 Get the extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=YggdrasilAI97.yggdrasil-extension).
-
 
 ## The Vision Behind Yggdrasil
 
@@ -125,26 +121,9 @@ yggdrasil_client/
     └── docs/               # Documentation
 ```
 
-````md
 ## Getting Started (Development)
 
-```bash
-cd ygg-chat
-npm install
-npm run dev
-```
-````
-
-- Web UI: http://localhost:5173
-
-### Electron (desktop dev)
-
-```bash
-cd ygg-chat
-npm run dev:electron
-```
-
-## Build (Windows)
+## Build
 
 ```bash
 cd ygg-chat/client/ygg-chat-r
@@ -156,6 +135,21 @@ npm run build:win
 
 ```bash
 npm --prefix client/ygg-chat-r run rebuild:client
+```
+
+```bash
+cd ygg-chat/client/ygg-chat-r
+npm install --workspaces=false --include=optional
+npm run dev
+```
+
+- Web UI: http://localhost:5173
+
+### Electron (desktop dev)
+
+```bash
+cd ygg-chat/client/ygg-chat-r
+npm run electron
 ```
 
 ### Why not MIT from day one?

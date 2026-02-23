@@ -432,7 +432,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
     }
   }, [showFileList])
 
-  const baseStyles = `${width} resize-none px-4 py-3 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-neutral-900 text-[16px] md:text-[14px] lg:text-[14px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[20px] `
+  const baseStyles = `${width} resize-none px-4 py-3 rounded-xl transition-all duration-200 overflow-hidden bg-neutral-50 dark:bg-neutral-900 text-[16px] sm:text-[14px] md:text-[14px] lg:text-[14px] 2xl:text-[16px] `
   const labelClasses = state === 'disabled' ? 'opacity-40' : ''
   // focus:border-gray-500 focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 dark:focus:ring-2 dark:focus:ring-secondary-600
   const stateStyles = {
