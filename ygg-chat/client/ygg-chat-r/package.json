@@ -13,7 +13,7 @@
     "build:web": "cross-env BUILD_TARGET=web tsc -b && cross-env BUILD_TARGET=web vite build",
     "build:electron": "cross-env BUILD_TARGET=electron tsc -b && cross-env BUILD_TARGET=electron vite build",
     "build:electron:main": "node electron/esbuild.main.mjs",
-    "rebuild:client": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:client": "npx @electron/rebuild -f -w better-sqlite3",
     "build:win": "npm run build:electron && npm run build:electron:main && electron-builder --win",
     "build:linux": "npm run build:electron && npm run build:electron:main && electron-builder --linux",
     "build:mac": "npm run build:electron && npm run build:electron:main && electron-builder --mac",
@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.5",
+    "@esbuild/darwin-arm64": "^0.27.3",
     "@huggingface/transformers": "^3.8.1",
     "@mdxeditor/editor": "^3.40.1",
     "@reduxjs/toolkit": "^2.8.2",
@@ -98,7 +99,6 @@
     "bindings": "^1.5.0",
     "electron": "34.0.0",
     "electron-builder": "^26.0.0",
-    "electron-rebuild": "^3.2.9",
     "electron-updater": "^6.6.2",
     "file-uri-to-path": "^2.0.0"
   },
