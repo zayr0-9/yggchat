@@ -232,12 +232,17 @@ export interface OpenAIChatGPTRequestPayload {
 
 function toInputTextContent(content: any): Array<{ type: 'input_text'; text: string }> {
   if (Array.isArray(content)) {
-    return content.map(item => {
-      if (typeof item === 'string') {
-        return { type: 'input_text', text: item }
-      }
-      return item
-    })
+    return content
+      .map(item => {
+        if (typeof item === 'string') {
+          return { type: 'input_text', text: item }
+        }
+        if (item && typeof item === 'object' && item.type === 'text' && typeof item.text === 'string') {
+          return { type: 'input_text', text: item.text }
+        }
+        return item
+      })
+      .filter(item => item && typeof item.text === 'string')
   }
   if (typeof content === 'string') {
     return [{ type: 'input_text', text: content }]
@@ -246,6 +251,136 @@ function toInputTextContent(content: any): Array<{ type: 'input_text'; text: str
     return []
   }
   return [{ type: 'input_text', text: String(content) }]
+}
+
+function extractImageUrlFromContentPart(part: any): string | null {
+  if (!part || typeof part !== 'object') return null
+
+  if (part.type === 'input_image') {
+    return normalizeAttachmentImageUrl(part.image_url || part.imageUrl || part.url || part.dataUrl || null)
+  }
+
+  if (part.type === 'image_url') {
+    const nested = part.image_url
+    const candidate = typeof nested === 'string' ? nested : nested?.url
+    return normalizeAttachmentImageUrl(candidate)
+  }
+
+  if (part.type === 'file') {
+    const mediaType = typeof part.mediaType === 'string' ? part.mediaType : typeof part.mime === 'string' ? part.mime : ''
+    if (mediaType && mediaType.startsWith('image/')) {
+      const direct = normalizeAttachmentImageUrl(part.url || part.dataUrl || part.image_url || null)
+      if (direct) return direct
+
+      if (typeof part.data === 'string' && part.data.trim().length > 0) {
+        const trimmed = part.data.trim()
+        if (/^data:image\//i.test(trimmed) || /^https?:\/\//i.test(trimmed)) {
+          return trimmed
+        }
+        return `data:${mediaType};base64,${trimmed}`
+      }
+    }
+  }
+
+  return null
+}
+
+function collectUserMessageImageUrls(msg: any): string[] {
+  const urls: string[] = []
+  const seen = new Set<string>()
+
+  const add = (candidate: any) => {
+    const normalized = normalizeAttachmentImageUrl(candidate)
+    if (!normalized || seen.has(normalized)) return
+    seen.add(normalized)
+    urls.push(normalized)
+  }
+
+  const addFromPart = (part: any) => {
+    const url = extractImageUrlFromContentPart(part)
+    if (url) add(url)
+  }
+
+  if (Array.isArray(msg?.content)) {
+    for (const part of msg.content) {
+      addFromPart(part)
+    }
+  }
+
+  const artifacts = Array.isArray(msg?.artifacts) ? msg.artifacts : []
+  for (const artifact of artifacts) {
+    add(artifact)
+  }
+
+  const attachments = Array.isArray(msg?.attachments) ? msg.attachments : []
+  for (const attachment of attachments) {
+    add(attachment)
+  }
+
+  const contentBlocks = parseContentBlocks(msg?.content_blocks)
+  for (const block of contentBlocks) {
+    if (!block || typeof block !== 'object') continue
+    addFromPart(block)
+    add(block.image_url)
+    add(block.imageUrl)
+    add(block.url)
+    add(block.dataUrl)
+
+    if (Array.isArray(block.content)) {
+      for (const part of block.content) {
+        addFromPart(part)
+      }
+    }
+  }
+
+  return urls
+}
+
+function toUserInputContent(msg: any): any[] {
+  const contentParts: any[] = []
+
+  if (Array.isArray(msg?.content)) {
+    for (const item of msg.content) {
+      if (typeof item === 'string') {
+        contentParts.push({ type: 'input_text', text: item })
+        continue
+      }
+      if (item && typeof item === 'object') {
+        if (item.type === 'input_text' && typeof item.text === 'string') {
+          contentParts.push({ type: 'input_text', text: item.text })
+          continue
+        }
+        if (item.type === 'text' && typeof item.text === 'string') {
+          contentParts.push({ type: 'input_text', text: item.text })
+          continue
+        }
+
+        const imageUrl = extractImageUrlFromContentPart(item)
+        if (imageUrl) {
+          contentParts.push({ type: 'input_image', image_url: imageUrl })
+        }
+      }
+    }
+  } else if (typeof msg?.content === 'string') {
+    contentParts.push({ type: 'input_text', text: msg.content })
+  } else if (msg?.content != null) {
+    contentParts.push({ type: 'input_text', text: String(msg.content) })
+  }
+
+  const existingImageUrls = new Set(
+    contentParts
+      .filter(part => part?.type === 'input_image' && typeof part?.image_url === 'string')
+      .map(part => part.image_url)
+  )
+
+  for (const url of collectUserMessageImageUrls(msg)) {
+    if (!existingImageUrls.has(url)) {
+      contentParts.push({ type: 'input_image', image_url: url })
+      existingImageUrls.add(url)
+    }
+  }
+
+  return contentParts
 }
 
 function toOutputTextContent(content: any): Array<{ type: 'output_text'; text: string }> {
@@ -399,10 +534,15 @@ function transformMessagesForChatGPT(messages: any[]): any[] {
       // System prompts are sent via instructions for the Codex backend
       continue
     } else if (msg.role === 'user') {
+      const userContent = toUserInputContent(msg)
+      if (userContent.length === 0) {
+        continue
+      }
+
       input.push({
         type: 'message',
         role: 'user',
-        content: toInputTextContent(msg.content),
+        content: userContent,
       })
     } else if (msg.role === 'assistant') {
       const storedResponseItems = extractStoredResponseOutputItemsFromMessage(msg)

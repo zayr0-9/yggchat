@@ -3,7 +3,7 @@
 
 import { Express } from 'express'
 import { toolOrchestrator } from '../tools/orchestrator/index.js'
-import { mcpManager, McpServerConfig } from './mcpManager.js'
+import { mcpManager, McpServerConfig, type McpOAuthConfig } from './mcpManager.js'
 
 // Helper function to refresh MCP tools with the orchestrator
 async function refreshMcpToolsWithOrchestrator(): Promise<number> {
@@ -41,6 +41,85 @@ async function refreshMcpToolsWithOrchestrator(): Promise<number> {
 
   // console.log(`[McpRoutes] Refreshed ${registeredCount} MCP tools with orchestrator`)
   return registeredCount
+}
+
+function parseOAuthConfig(raw: unknown): McpOAuthConfig | undefined {
+  if (raw === undefined) return undefined
+
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('"oauth" must be an object')
+  }
+
+  const source = raw as Record<string, unknown>
+  const asString = (key: string): string | undefined => {
+    const value = source[key]
+    if (value === undefined || value === null || value === '') return undefined
+    if (typeof value !== 'string') {
+      throw new Error(`"oauth.${key}" must be a string`)
+    }
+    return value
+  }
+
+  const asNumber = (key: string): number | undefined => {
+    const value = source[key]
+    if (value === undefined || value === null || value === '') return undefined
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new Error(`"oauth.${key}" must be a number`)
+    }
+    return value
+  }
+
+  const scopesRaw = source.scopes
+  let scopes: string[] | undefined
+  if (scopesRaw !== undefined && scopesRaw !== null) {
+    if (!Array.isArray(scopesRaw) || scopesRaw.some(item => typeof item !== 'string')) {
+      throw new Error('"oauth.scopes" must be an array of strings')
+    }
+    scopes = scopesRaw.map(scope => scope.trim()).filter(Boolean)
+  }
+
+  const tokenEndpointAuthMethodRaw = source.tokenEndpointAuthMethod
+  let tokenEndpointAuthMethod: 'client_secret_post' | 'none' | undefined
+  if (tokenEndpointAuthMethodRaw !== undefined && tokenEndpointAuthMethodRaw !== null && tokenEndpointAuthMethodRaw !== '') {
+    if (tokenEndpointAuthMethodRaw !== 'client_secret_post' && tokenEndpointAuthMethodRaw !== 'none') {
+      throw new Error('"oauth.tokenEndpointAuthMethod" must be "client_secret_post" or "none"')
+    }
+    tokenEndpointAuthMethod = tokenEndpointAuthMethodRaw
+  }
+
+  return {
+    resourceMetadataUrl: asString('resourceMetadataUrl'),
+    resource: asString('resource'),
+    authorizationServer: asString('authorizationServer'),
+    authorizationEndpoint: asString('authorizationEndpoint'),
+    tokenEndpoint: asString('tokenEndpoint'),
+    registrationEndpoint: asString('registrationEndpoint'),
+    scopes,
+    clientId: asString('clientId'),
+    clientSecret: asString('clientSecret'),
+    tokenEndpointAuthMethod,
+    accessToken: asString('accessToken'),
+    refreshToken: asString('refreshToken'),
+    expiresAt: asNumber('expiresAt'),
+  }
+}
+
+function sanitizeOAuthForResponse(oauth: McpOAuthConfig | undefined): Record<string, unknown> | undefined {
+  if (!oauth) return undefined
+
+  return {
+    authorizationServer: oauth.authorizationServer,
+    resourceMetadataUrl: oauth.resourceMetadataUrl,
+    tokenEndpoint: oauth.tokenEndpoint,
+    registrationEndpoint: oauth.registrationEndpoint,
+    scopes: oauth.scopes,
+    tokenEndpointAuthMethod: oauth.tokenEndpointAuthMethod,
+    hasClientId: Boolean(oauth.clientId),
+    hasClientSecret: Boolean(oauth.clientSecret),
+    hasAccessToken: Boolean(oauth.accessToken),
+    hasRefreshToken: Boolean(oauth.refreshToken),
+    expiresAt: oauth.expiresAt,
+  }
 }
 
 export function registerMcpRoutes(app: Express): void {
@@ -100,14 +179,7 @@ export function registerMcpRoutes(app: Express): void {
           ? Object.fromEntries(Object.keys(config.headers).map(key => [key, '<redacted>']))
           : undefined
 
-        const oauth = config.oauth
-          ? {
-              authorizationServer: config.oauth.authorizationServer,
-              hasAccessToken: Boolean(config.oauth.accessToken),
-              hasRefreshToken: Boolean(config.oauth.refreshToken),
-              expiresAt: config.oauth.expiresAt,
-            }
-          : undefined
+        const oauth = sanitizeOAuthForResponse(config.oauth)
 
         return {
           ...config,
@@ -150,7 +222,7 @@ export function registerMcpRoutes(app: Express): void {
   app.post('/api/mcp/servers', async (req, res) => {
     try {
       await mcpManager.initialize()
-      const { name, command, args, env, enabled, autoStart, url, headers, transport, type } = req.body
+      const { name, command, args, env, enabled, autoStart, url, headers, transport, type, oauth } = req.body
 
       if (!name || typeof name !== 'string') {
         res.status(400).json({ success: false, error: 'Missing "name" in request body' })
@@ -200,6 +272,8 @@ export function registerMcpRoutes(app: Express): void {
         return
       }
 
+      const parsedOAuth = parseOAuthConfig(oauth)
+
       const config: McpServerConfig = {
         name,
         enabled: enabled !== false,
@@ -211,6 +285,7 @@ export function registerMcpRoutes(app: Express): void {
         env: env || undefined,
         url: typeof url === 'string' ? url : undefined,
         headers: headers || undefined,
+        oauth: parsedOAuth,
       }
 
       await mcpManager.addServer(config)
@@ -229,7 +304,7 @@ export function registerMcpRoutes(app: Express): void {
   app.put('/api/mcp/servers/:name', async (req, res) => {
     try {
       await mcpManager.initialize()
-      const { command, args, env, enabled, autoStart, url, headers, transport, type } = req.body
+      const { command, args, env, enabled, autoStart, url, headers, transport, type, oauth } = req.body
 
       if (args !== undefined && !Array.isArray(args)) {
         res.status(400).json({ success: false, error: '"args" must be an array' })
@@ -261,6 +336,8 @@ export function registerMcpRoutes(app: Express): void {
         return
       }
 
+      const parsedOAuth = parseOAuthConfig(oauth)
+
       const updates: Partial<McpServerConfig> = {}
       if (command !== undefined) updates.command = command
       if (args !== undefined) updates.args = args
@@ -271,6 +348,7 @@ export function registerMcpRoutes(app: Express): void {
       if (headers !== undefined) updates.headers = headers
       if (transport !== undefined) updates.transport = transport
       if (type !== undefined) updates.type = type
+      if (oauth !== undefined) updates.oauth = parsedOAuth
 
       await mcpManager.updateServer(req.params.name, updates)
 

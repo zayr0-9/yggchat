@@ -1014,6 +1014,7 @@ const executeSubagentCall = async (
     parentMessageId: string
     streamId?: string
     rootPath: string | null
+    operationMode: OperationMode
   }
 ): Promise<string> => {
   const args = toolCall.arguments || {}
@@ -1034,7 +1035,7 @@ const executeSubagentCall = async (
     throw new Error('Subagent requires a prompt')
   }
 
-  const { dispatch, getState, conversationId, parentMessageId, rootPath } = context
+  const { dispatch, getState, conversationId, parentMessageId, rootPath, operationMode } = context
   const streamId = context.streamId
   const state = getState()
 
@@ -1376,23 +1377,21 @@ const executeSubagentCall = async (
         }
 
         try {
-          // Read live settings per tool call so toggles apply mid-stream.
-          const liveState = getState()
-          const parentAutoApprove = liveState.chat.toolAutoApprove
-          const liveOperationMode = liveState.chat.operationMode
+          // Determine if we should auto-approve based on inheritAutoApprove setting
+          const parentAutoApprove = state.chat.toolAutoApprove
           const shouldAutoApprove = inheritAutoApprove && parentAutoApprove
 
           let result: string
           if (shouldAutoApprove) {
             // Execute directly without permission check
-            result = await executeLocalTool(tc, rootPath, liveOperationMode, {
+            result = await executeLocalTool(tc, rootPath, operationMode, {
               conversationId,
               messageId: assistantMessageId,
               accessToken,
             })
           } else {
             // Show permission dialog
-            result = await executeToolWithPermissionCheck(dispatch, getState, tc, rootPath, liveOperationMode, {
+            result = await executeToolWithPermissionCheck(dispatch, getState, tc, rootPath, operationMode, {
               conversationId,
               messageId: assistantMessageId,
               accessToken,
@@ -1652,6 +1651,7 @@ export const executeLocalTool = async (
       parentMessageId: context.messageId,
       streamId: context.streamId,
       rootPath,
+      operationMode,
     })
   }
 
@@ -1808,13 +1808,9 @@ const executeToolWithPermissionCheck = async (
     accessToken?: string | null
   }
 ) => {
-  const readLiveState = () => getState() as RootState
-
-  // Always resolve operation mode at execution time so Chat/Agent toggles apply mid-stream.
-  const runToolWithLiveOperationMode = async () => {
-    const liveOperationMode = readLiveState().chat.operationMode ?? operationMode
-    return await executeLocalTool(toolCall, rootPath, liveOperationMode, extendedContext)
-  }
+  // Check if auto-approve is enabled
+  const state = getState() as RootState
+  const autoApprove = state.chat.toolAutoApprove
 
   // Extend context with dispatch/getState for subagent execution
   const extendedContext = {
@@ -1824,14 +1820,12 @@ const executeToolWithPermissionCheck = async (
   }
 
   if (shouldBypassToolPermission(toolCall)) {
-    return await runToolWithLiveOperationMode()
+    return await executeLocalTool(toolCall, rootPath, operationMode, extendedContext)
   }
-
-  const autoApprove = readLiveState().chat.toolAutoApprove
 
   if (autoApprove) {
     // Auto-approve enabled: execute immediately without showing dialog
-    return await runToolWithLiveOperationMode()
+    return await executeLocalTool(toolCall, rootPath, operationMode, extendedContext)
   }
 
   // Auto-approve disabled: show dialog and wait for user response
@@ -1844,7 +1838,7 @@ const executeToolWithPermissionCheck = async (
 
   // Execute or bail based on user decision
   if (allowed) {
-    return await runToolWithLiveOperationMode()
+    return await executeLocalTool(toolCall, rootPath, operationMode, extendedContext)
   }
 
   // User explicitly denied the tool execution — surface as an error to halt generation
@@ -2019,24 +2013,31 @@ export const sendMessage = createAsyncThunk<
         projectContext && conversationContextSource
           ? `${projectContext}\n\n${conversationContextSource}`
           : projectContext || conversationContextSource || null
-// Get selected files for chat from IDE context
-const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
-const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
-// Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
-const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
-// Keep cwd for tool execution context only (do not inject cwd into system prompt)
-const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
-const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
-// Append custom tools explanation to system prompt
-systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
+      // Get selected files for chat from IDE context
+      const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
-// Determine execution mode
-const isElectronMode =
-  import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
-// For local tool execution support (GemTools), we prefer client mode even in web environment
-// This allows the client to intercept tool calls and execute them via the discovered local server endpoint.
-const executionMode = 'client'
+      const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
+      // Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
+      const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
+      // Prepend cwd to system prompt if provided or stored on the conversation
+      const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
+      const effectiveCwd = payloadCwd || conversationMeta?.cwd || null
+      const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
+      if (effectiveCwd) {
+        const cwdPrefix = `Current working directory: ${effectiveCwd}\n\n`
+        systemPrompt = cwdPrefix + systemPrompt
+      }
+      // Append custom tools explanation to system prompt
+      systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
+
+      // Determine execution mode
+      const isElectronMode =
+        import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
+      // For local tool execution support (GemTools), we prefer client mode even in web environment
+      // This allows the client to intercept tool calls and execute them via the discovered local server endpoint.
+      const executionMode = 'client'
+
       let currentTurnHistory = [...currentPathMessages]
       let currentTurnContent = input.content.trim()
       let continueTurn = true
@@ -2355,13 +2356,7 @@ const executionMode = 'client'
                 if (lastContent && lastContent.trim() === userContent.trim()) {
                   continue
                 }
-                chatgptMessages.push({
-                  role: 'user',
-                  content: m.content,
-                  artifacts: Array.isArray((m as any).artifacts) ? (m as any).artifacts : undefined,
-                  content_blocks: (m as any).content_blocks,
-                  attachments: (m as any).attachments,
-                })
+                chatgptMessages.push({ role: 'user', content: m.content })
               } else if (m.role === 'assistant') {
                 const assistantMsg: any = {
                   role: 'assistant',
@@ -2800,13 +2795,7 @@ const executionMode = 'client'
             // Build OpenAI-compatible messages from history
             for (const m of currentTurnHistory) {
               if (m.role === 'user') {
-                chatgptMessages.push({
-                  role: 'user',
-                  content: m.content,
-                  artifacts: Array.isArray((m as any).artifacts) ? (m as any).artifacts : undefined,
-                  content_blocks: (m as any).content_blocks,
-                  attachments: (m as any).attachments,
-                })
+                chatgptMessages.push({ role: 'user', content: m.content })
               } else if (m.role === 'assistant') {
                 const assistantMsg: any = {
                   role: 'assistant',
@@ -3812,21 +3801,28 @@ export const editMessageWithBranching = createAsyncThunk<
       if (!modelName) {
         throw new Error('No model selected')
       }
-const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
-const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
-// Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
-const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
-// Keep cwd for tool execution context only (do not inject cwd into system prompt)
-const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
-const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
-// Append custom tools explanation to system prompt
-systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
+      const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
-// Determine execution mode
-const isElectronMode =
-  import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
-const executionMode = 'client' // Prefer client execution for tools
+      const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
+      // Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
+      const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
+      // Prepend cwd to system prompt if provided or stored on the conversation
+      const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
+      const effectiveCwd = payloadCwd || conversationMeta?.cwd || null
+      const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
+      if (effectiveCwd) {
+        const cwdPrefix = `Current working directory: ${effectiveCwd}\n\n`
+        systemPrompt = cwdPrefix + systemPrompt
+      }
+      // Append custom tools explanation to system prompt
+      systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
+
+      // Determine execution mode
+      const isElectronMode =
+        import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
+      const executionMode = 'client' // Prefer client execution for tools
+
       let currentTurnHistory = [...currentPathMessages]
       let currentTurnContent = newContent
       let continueTurn = true
@@ -4149,13 +4145,7 @@ const executionMode = 'client' // Prefer client execution for tools
               if (lastContent && lastContent.trim() === userContent.trim()) {
                 continue
               }
-              chatgptMessages.push({
-                role: 'user',
-                content: m.content,
-                artifacts: Array.isArray((m as any).artifacts) ? (m as any).artifacts : undefined,
-                content_blocks: (m as any).content_blocks,
-                attachments: (m as any).attachments,
-              })
+              chatgptMessages.push({ role: 'user', content: m.content })
             } else if (m.role === 'assistant') {
               const assistantMsg: any = {
                 role: 'assistant',
@@ -4870,23 +4860,33 @@ export const sendMessageToBranch = createAsyncThunk<
         projectContext && conversationContextSource
           ? `${projectContext}\n\n${conversationContextSource}`
           : projectContext || conversationContextSource || null
-// Get selected files for chat from IDE context
-const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
-const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
-// Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
-const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
-// Keep cwd for tool execution context only (do not inject cwd into system prompt)
-let effectiveSystemPrompt = systemPrompt
-const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
-const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
-// Append custom tools explanation to system prompt
-effectiveSystemPrompt = (effectiveSystemPrompt || '') + '\n\n' + sysPromptConfig.customToolsPrompt
+      // Get selected files for chat from IDE context
+      const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
-// Determine execution mode
-const isElectronMode =
-  import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
-const executionMode = 'client'
+      const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
+      // Use React Query cache as fallback for storage mode detection (handles local conversations not yet in Redux)
+      const storageMode = conversationMeta?.storage_mode || getStorageModeFromCache(extra.queryClient, conversationId)
+      // Prepend cwd to system prompt if provided or stored on the conversation
+      let effectiveSystemPrompt = systemPrompt
+      const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
+      const effectiveCwd = payloadCwd || conversationMeta?.cwd || null
+      const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
+      if (effectiveCwd) {
+        const cwdPrefix = `Current working directory: ${effectiveCwd}\n\n`
+        effectiveSystemPrompt = cwdPrefix + (effectiveSystemPrompt || '')
+      }
+      // Append custom tools explanation to system prompt
+      effectiveSystemPrompt = (effectiveSystemPrompt || '') + '\n\n' + sysPromptConfig.customToolsPrompt
+
+      if (!modelName) {
+        throw new Error('No model selected')
+      }
+
+      // Determine execution mode
+      const isElectronMode =
+        import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
+      const executionMode = 'client'
 
       let currentTurnContent = content
       let currentParentId = parentId
@@ -5212,13 +5212,7 @@ const executionMode = 'client'
           }
           for (const m of currentTurnHistory) {
             if (m.role === 'user') {
-              chatgptMessages.push({
-                role: 'user',
-                content: m.content,
-                artifacts: Array.isArray((m as any).artifacts) ? (m as any).artifacts : undefined,
-                content_blocks: (m as any).content_blocks,
-                attachments: (m as any).attachments,
-              })
+              chatgptMessages.push({ role: 'user', content: m.content })
             } else if (m.role === 'assistant') {
               const assistantMsg: any = {
                 role: 'assistant',

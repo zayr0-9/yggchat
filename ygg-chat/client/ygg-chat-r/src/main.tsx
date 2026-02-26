@@ -144,10 +144,17 @@ root.render(
       persister,
       maxAge: 24 * 60 * 60 * 1000, // Persist cache for 24 hours max
       dehydrateOptions: {
-        // Only persist conversations and projects queries to avoid bloating localStorage
+        // Persist lightweight conversation/project queries, but exclude heavy per-conversation message payloads.
         shouldDehydrateQuery: query => {
-          const queryKey = query.queryKey[0]
-          return queryKey === 'conversations' || queryKey === 'projects'
+          const queryKey = query.queryKey
+          if (!Array.isArray(queryKey) || queryKey.length === 0) return false
+
+          const rootKey = queryKey[0]
+          if (rootKey === 'projects') return true
+          if (rootKey !== 'conversations') return false
+
+          // Exclude ['conversations', conversationId, 'messages'] from localStorage persistence.
+          return queryKey[2] !== 'messages'
         },
       },
     }}

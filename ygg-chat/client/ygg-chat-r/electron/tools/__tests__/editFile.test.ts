@@ -83,6 +83,13 @@ describe('editFile replace and replace_first behavior', () => {
     expect(result.success).toBe(true)
     expect(result.replacements).toBe(2)
     expect(result.matchStrategy).toBe('exact')
+    expect(result.lineInfo).toMatchObject({
+      oldStartLine: 1,
+      oldLineCount: 1,
+      newStartLine: 1,
+      newLineCount: 1,
+      scope: 'first_of_many',
+    })
     expect(await harness.readFile('replace-all.txt')).toBe('bar and bar and baz')
   })
 
@@ -98,6 +105,13 @@ describe('editFile replace and replace_first behavior', () => {
 
     expect(result.success).toBe(true)
     expect(result.replacements).toBe(1)
+    expect(result.lineInfo).toMatchObject({
+      oldStartLine: 1,
+      oldLineCount: 1,
+      newStartLine: 1,
+      newLineCount: 1,
+      scope: 'single',
+    })
     expect(await harness.readFile('replace-first.txt')).toBe('bar and foo and baz')
   })
 
@@ -887,6 +901,13 @@ describe('editFile append behavior', () => {
     })
 
     expect(result.success).toBe(true)
+    expect(result.lineInfo).toMatchObject({
+      oldStartLine: 1,
+      oldLineCount: 0,
+      newStartLine: 1,
+      newLineCount: 1,
+      scope: 'append',
+    })
     expect(await harness.fileExists('append-new.txt')).toBe(true)
     expect(await harness.readFile('append-new.txt')).toBe('hello')
   })
@@ -932,7 +953,10 @@ describe('editFile read/edit validation coordination', () => {
     const harness = await createToolFsHarness()
     await harness.writeFile('validation-pass.txt', 'version=1\n')
 
-    const readResult = await readTextFile('validation-pass.txt', { cwd: harness.workspaceDir })
+    const readResult = await readTextFile('validation-pass.txt', {
+      cwd: harness.workspaceDir,
+      includeHash: true,
+    })
 
     const result = await editFile('validation-pass.txt', 'replace', {
       searchPattern: '1',
@@ -952,7 +976,10 @@ describe('editFile read/edit validation coordination', () => {
     const harness = await createToolFsHarness()
     await harness.writeFile('validation-hash-fail.txt', 'alpha=old\n')
     const absolutePath = harness.absolutePath('validation-hash-fail.txt')
-    const readResult = await readTextFile('validation-hash-fail.txt', { cwd: harness.workspaceDir })
+    const readResult = await readTextFile('validation-hash-fail.txt', {
+      cwd: harness.workspaceDir,
+      includeHash: true,
+    })
 
     await fs.writeFile(absolutePath, 'alpha=changed\n', 'utf8')
 
@@ -974,7 +1001,10 @@ describe('editFile read/edit validation coordination', () => {
     const harness = await createToolFsHarness()
     await harness.writeFile('validation-bypass.txt', 'alpha=old\n')
     const absolutePath = harness.absolutePath('validation-bypass.txt')
-    const readResult = await readTextFile('validation-bypass.txt', { cwd: harness.workspaceDir })
+    const readResult = await readTextFile('validation-bypass.txt', {
+      cwd: harness.workspaceDir,
+      includeHash: true,
+    })
 
     await fs.writeFile(absolutePath, 'alpha=changed\n', 'utf8')
 
@@ -1070,5 +1100,176 @@ describe('editFile workspace restrictions (POSIX)', () => {
 
     expect(result.success).toBe(false)
     expect(result.message).toContain('Access denied')
+  })
+})
+
+
+describe('editFile non-fuzzy replacements on chatActions fixture via read_file workflow', () => {
+  const fixturePath = path.resolve(process.cwd(), 'electron/tools/__tests__/dummyFilechatAction.ts.test')
+
+  const seedFixture = async (harness: Awaited<ReturnType<typeof createToolFsHarness>>, targetPath: string) => {
+    const original = await fs.readFile(fixturePath, 'utf8')
+    await harness.writeFile(targetPath, original)
+    return original
+  }
+
+  const readExecutionModeBlock = async (
+    harness: Awaited<ReturnType<typeof createToolFsHarness>>,
+    targetPath: string
+  ) => {
+    const read = await readTextFile(targetPath, {
+      cwd: harness.workspaceDir,
+      maxBytes: 400_000,
+    })
+
+    const source = read.content
+    const startToken = '      // Get selected files for chat from IDE context'
+    const endToken = "      const executionMode = 'client'"
+
+    const start = source.indexOf(startToken)
+    if (start === -1) {
+      throw new Error('Could not locate selectedFilesForChat block start from read_file output')
+    }
+
+    const endTokenStart = source.indexOf(endToken, start)
+    if (endTokenStart === -1) {
+      throw new Error('Could not locate executionMode line from read_file output')
+    }
+
+    const endOfLine = source.indexOf('\n', endTokenStart)
+    const end = endOfLine === -1 ? source.length : endOfLine + 1
+    return source.slice(start, end)
+  }
+
+  it('uses exact strategy when search pattern comes directly from read_file output', async () => {
+    const harness = await createToolFsHarness()
+    const targetPath = 'fixture-chatActions-readflow-exact.ts'
+    await seedFixture(harness, targetPath)
+
+    const searchPattern = await readExecutionModeBlock(harness, targetPath)
+    const replacement = searchPattern.replace(
+      "      const executionMode = 'client'",
+      "      const executionMode = 'client' // from-read-file exact"
+    )
+
+    const result = await editFile(targetPath, 'replace_first', {
+      searchPattern,
+      replacement,
+      enableFuzzyMatching: false,
+      interpretEscapeSequences: false,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile(targetPath)
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('exact')
+    expect(result.replacements).toBe(1)
+    expect(updated).toContain("const executionMode = 'client' // from-read-file exact")
+  })
+
+  it('uses line_ending_normalized when read_file output is converted to LF only', async () => {
+    const harness = await createToolFsHarness()
+    const targetPath = 'fixture-chatActions-readflow-line-ending.ts'
+    await seedFixture(harness, targetPath)
+
+    const rawFromReadFile = await readExecutionModeBlock(harness, targetPath)
+    const searchPattern = rawFromReadFile.replace(/\r\n/g, '\n')
+
+    const result = await editFile(targetPath, 'replace_first', {
+      searchPattern,
+      replacement: '      /*from-read-file-line-ending*/',
+      enableFuzzyMatching: false,
+      interpretEscapeSequences: false,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile(targetPath)
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('line_ending_normalized')
+    expect(result.replacements).toBe(1)
+    expect(updated).toContain('      /*from-read-file-line-ending*/')
+  })
+
+  it('uses whitespace_normalized when read_file output is de-indented', async () => {
+    const harness = await createToolFsHarness()
+    const targetPath = 'fixture-chatActions-readflow-whitespace.ts'
+    await seedFixture(harness, targetPath)
+
+    const rawFromReadFile = await readExecutionModeBlock(harness, targetPath)
+    const searchPattern = rawFromReadFile
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map(line => line.trimStart())
+      .join('\n')
+
+    const result = await editFile(targetPath, 'replace_first', {
+      searchPattern,
+      replacement: "const executionMode = 'client' // from-read-file whitespace",
+      preserveIndentation: true,
+      enableFuzzyMatching: false,
+      interpretEscapeSequences: false,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile(targetPath)
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('whitespace_normalized')
+    expect(result.replacements).toBe(1)
+    expect(updated).toContain("      const executionMode = 'client' // from-read-file whitespace")
+  })
+
+  it('replace remains single-span for non-exact read_file-derived patterns', async () => {
+    const harness = await createToolFsHarness()
+    const targetPath = 'fixture-chatActions-readflow-single-span.ts'
+    const original = await seedFixture(harness, targetPath)
+    const originalPayloadCwdCount =
+      (original.match(/const payloadCwd = typeof cwd === 'string' \? cwd.trim\(\) : \(cwd \?\? null\)/g) || []).length
+
+    const rawFromReadFile = await readExecutionModeBlock(harness, targetPath)
+
+    const searchPattern = rawFromReadFile
+      .replace(/\r\n/g, '\n')
+      .split('\n')
+      .map(line => line.trimStart())
+      .join('\n')
+
+    const result = await editFile(targetPath, 'replace', {
+      searchPattern,
+      replacement: '/*from-read-file-single-span*/',
+      enableFuzzyMatching: false,
+      interpretEscapeSequences: false,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile(targetPath)
+    const updatedPayloadCwdCount =
+      (updated.match(/const payloadCwd = typeof cwd === 'string' \? cwd.trim\(\) : \(cwd \?\? null\)/g) || []).length
+
+    expect(result.success).toBe(true)
+    expect(result.matchStrategy).toBe('whitespace_normalized')
+    expect(result.replacements).toBe(1)
+    expect((updated.match(/\/\*from-read-file-single-span\*\//g) || []).length).toBe(1)
+    expect(updatedPayloadCwdCount).toBe(originalPayloadCwdCount - 1)
+  })
+
+  it('fails with non-fuzzy strategies when read_file pattern is typo-mutated', async () => {
+    const harness = await createToolFsHarness()
+    const targetPath = 'fixture-chatActions-readflow-no-fuzzy-fail.ts'
+    await seedFixture(harness, targetPath)
+
+    const rawFromReadFile = await readExecutionModeBlock(harness, targetPath)
+    const searchPattern = rawFromReadFile.replace('selectedFilesForChat', 'selectedFilesForChta')
+
+    const result = await editFile(targetPath, 'replace_first', {
+      searchPattern,
+      replacement: rawFromReadFile,
+      enableFuzzyMatching: false,
+      interpretEscapeSequences: false,
+      cwd: harness.workspaceDir,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.attemptedStrategies).toEqual(['exact', 'line_ending_normalized', 'whitespace_normalized'])
+    expect(result.message).toContain('Search pattern not found in file')
   })
 })

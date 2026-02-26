@@ -1,3 +1,4 @@
+import path from 'path'
 import { runBashCommand } from './tools/bash.js'
 import { createTextFile } from './tools/createFile.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
@@ -27,6 +28,53 @@ function logLifecycle(event: string, details: Record<string, unknown>): void {
   console.log(line)
 }
 
+function validateAndResolvePath(
+  inputPath: string | undefined,
+  rootPath: string | undefined,
+  fallbackToRoot = true
+): string {
+  const normalizedInput = typeof inputPath === 'string' ? inputPath.trim() : ''
+
+  if (!normalizedInput) {
+    if (fallbackToRoot && rootPath) return rootPath
+    return '.'
+  }
+
+  const usePosix =
+    process.platform === 'win32' &&
+    ((typeof inputPath === 'string' && inputPath.startsWith('/')) ||
+      (typeof rootPath === 'string' && rootPath.startsWith('/')))
+
+  const pathModule = usePosix ? path.posix : path
+
+  if (!rootPath) {
+    return pathModule.resolve(normalizedInput)
+  }
+
+  const normalizedRoot = pathModule.resolve(rootPath)
+  const resolvedPath = pathModule.isAbsolute(normalizedInput)
+    ? pathModule.resolve(normalizedInput)
+    : pathModule.resolve(normalizedRoot, normalizedInput)
+
+  const relativeToRoot = pathModule.relative(normalizedRoot, resolvedPath)
+  const outsideWorkspace =
+    relativeToRoot === '..' || relativeToRoot.startsWith(`..${pathModule.sep}`) || pathModule.isAbsolute(relativeToRoot)
+
+  if (outsideWorkspace) {
+    throw new Error(`Path must be within workspace: ${rootPath}`)
+  }
+
+  return resolvedPath
+}
+
+function resolveToolWorkspaceCwd(requestedCwd: unknown, rootPath: string | undefined): string | undefined {
+  const normalizedRequested = typeof requestedCwd === 'string' ? requestedCwd.trim() : ''
+  if (!normalizedRequested) {
+    return rootPath || undefined
+  }
+  return validateAndResolvePath(normalizedRequested, rootPath)
+}
+
 async function ensureCustomToolsInitialized(): Promise<void> {
   if (customToolsInitialized) return
   if (customToolsInitPromise) {
@@ -54,25 +102,39 @@ function initializeBuiltInToolRegistry(): void {
   })
 
   builtInTools.set('read_file', async (args, { rootPath }) => {
-    const { path: filePath, maxBytes, startLine, endLine, ranges, includeHash } = args
+    const { path: filePath, maxBytes, startLine, endLine, ranges, includeHash, cwd } = args
     if (!filePath) throw new Error('path is required')
-    const fileRes = await readTextFile(filePath, { maxBytes, startLine, endLine, ranges, includeHash, cwd: rootPath })
+    const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
+    const fileRes = await readTextFile(filePath, {
+      maxBytes,
+      startLine,
+      endLine,
+      ranges,
+      includeHash,
+      cwd: effectiveCwd,
+    })
     return { success: true, ...fileRes }
   })
 
   builtInTools.set('read_file_continuation', async (args, { rootPath }) => {
-    const { path: filePath, afterLine, numLines, maxBytes, includeHash } = args
+    const { path: filePath, afterLine, numLines, maxBytes, includeHash, cwd } = args
     if (!filePath) throw new Error('path is required')
     if (afterLine === undefined) throw new Error('afterLine is required')
     if (!numLines) throw new Error('numLines is required')
-    const fileRes = await readFileContinuation(filePath, afterLine, numLines, { maxBytes, includeHash, cwd: rootPath })
+    const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
+    const fileRes = await readFileContinuation(filePath, afterLine, numLines, {
+      maxBytes,
+      includeHash,
+      cwd: effectiveCwd,
+    })
     return { success: true, ...fileRes }
   })
 
   builtInTools.set('read_files', async (args, { rootPath }) => {
-    const { paths, baseDir, maxBytes, startLine, endLine } = args
+    const { paths, baseDir, maxBytes, startLine, endLine, cwd } = args
     if (!paths) throw new Error('paths are required')
-    const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine, cwd: rootPath })
+    const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
+    const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine, cwd: effectiveCwd })
     return { success: true, files: filesRes }
   })
 
@@ -138,7 +200,8 @@ function initializeBuiltInToolRegistry(): void {
 
   builtInTools.set('directory', async (args, { rootPath }) => {
     const { path: dirPath, maxDepth, includeHidden, includeSizes } = args
-    const structure = await extractDirectoryStructure(dirPath || rootPath || '.', {
+    const finalDirPath = validateAndResolvePath(dirPath, rootPath)
+    const structure = await extractDirectoryStructure(finalDirPath, {
       maxDepth,
       includeHidden,
       includeSizes,
@@ -149,7 +212,8 @@ function initializeBuiltInToolRegistry(): void {
   builtInTools.set('glob', async (args, { rootPath }) => {
     const { pattern, cwd, ignore, dot, absolute } = args
     if (!pattern) throw new Error('pattern is required')
-    return await globSearch(pattern, { cwd: cwd || rootPath || '.', ignore, dot, absolute })
+    const actualCwd = validateAndResolvePath(cwd, rootPath)
+    return await globSearch(pattern, { cwd: actualCwd, ignore, dot, absolute })
   })
 
   builtInTools.set('ripgrep', async (args, { rootPath }) => {
@@ -170,7 +234,7 @@ function initializeBuiltInToolRegistry(): void {
     } = args
     const query = regex || pattern
     if (!query) throw new Error('pattern or regex is required')
-    const finalSearchPath = dirPath || altSearchPath || rootPath || '.'
+    const finalSearchPath = validateAndResolvePath(dirPath || altSearchPath, rootPath)
     return await ripgrepSearch(query, finalSearchPath, {
       caseSensitive: !case_insensitive,
       glob: globPattern,
@@ -187,8 +251,9 @@ function initializeBuiltInToolRegistry(): void {
   builtInTools.set('bash', async (args, { rootPath }) => {
     const { command, cwd, env, timeoutMs, maxOutputChars } = args
     if (!command) throw new Error('command is required')
+    const finalCwd = validateAndResolvePath(cwd, rootPath)
     return await runBashCommand(command, {
-      cwd: cwd || rootPath,
+      cwd: finalCwd,
       env,
       timeoutMs,
       maxOutputChars,

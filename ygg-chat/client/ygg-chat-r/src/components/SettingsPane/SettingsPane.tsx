@@ -118,6 +118,13 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       args?: string[]
       url?: string
       headers?: Record<string, string>
+      oauth?: {
+        tokenEndpointAuthMethod?: 'client_secret_post' | 'none'
+        hasClientId?: boolean
+        hasAccessToken?: boolean
+        hasRefreshToken?: boolean
+        expiresAt?: number
+      }
       enabled: boolean
       status: 'disconnected' | 'connecting' | 'connected' | 'error'
       error?: string
@@ -134,6 +141,12 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const [newServerArgs, setNewServerArgs] = useState('')
   const [newServerUrl, setNewServerUrl] = useState('')
   const [newServerHeadersText, setNewServerHeadersText] = useState('')
+  const [newServerOauthClientId, setNewServerOauthClientId] = useState('')
+  const [newServerOauthClientSecret, setNewServerOauthClientSecret] = useState('')
+  const [newServerOauthScopes, setNewServerOauthScopes] = useState('')
+  const [newServerOauthTokenAuthMethod, setNewServerOauthTokenAuthMethod] = useState<'client_secret_post' | 'none'>(
+    'client_secret_post'
+  )
   const [mcpActionStatus, setMcpActionStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Font size offset state (persisted to localStorage)
@@ -407,6 +420,12 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     const command = newServerCommand.trim()
     const args = newServerArgs.trim().split(/\s+/).filter(Boolean)
     const url = newServerUrl.trim()
+    const oauthClientId = newServerOauthClientId.trim()
+    const oauthClientSecret = newServerOauthClientSecret.trim()
+    const oauthScopes = newServerOauthScopes
+      .split(/[,\s]+/)
+      .map(scope => scope.trim())
+      .filter(Boolean)
 
     let parsedHeaders: Record<string, string> | undefined
     const headersText = newServerHeadersText.trim()
@@ -446,6 +465,29 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       return
     }
 
+    if (
+      newServerTransport === 'http' &&
+      oauthClientId &&
+      newServerOauthTokenAuthMethod === 'client_secret_post' &&
+      !oauthClientSecret
+    ) {
+      setMcpActionStatus({
+        type: 'error',
+        message: 'OAuth client secret is required when using client_secret_post auth',
+      })
+      return
+    }
+
+    const parsedOAuth =
+      newServerTransport === 'http' && (oauthClientId || oauthClientSecret || oauthScopes.length > 0)
+        ? {
+            clientId: oauthClientId || undefined,
+            clientSecret: oauthClientSecret || undefined,
+            scopes: oauthScopes.length > 0 ? oauthScopes : undefined,
+            tokenEndpointAuthMethod: newServerOauthTokenAuthMethod,
+          }
+        : undefined
+
     try {
       const payload =
         newServerTransport === 'http'
@@ -455,6 +497,7 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
               type: 'http' as const,
               url,
               headers: parsedHeaders,
+              oauth: parsedOAuth,
               enabled: true,
             }
           : {
@@ -474,6 +517,10 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
         setNewServerArgs('')
         setNewServerUrl('')
         setNewServerHeadersText('')
+        setNewServerOauthClientId('')
+        setNewServerOauthClientSecret('')
+        setNewServerOauthScopes('')
+        setNewServerOauthTokenAuthMethod('client_secret_post')
         setNewServerTransport('stdio')
         setMcpAddMode(false)
         fetchMcpServers()
@@ -496,6 +543,10 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     newServerArgs,
     newServerUrl,
     newServerHeadersText,
+    newServerOauthClientId,
+    newServerOauthClientSecret,
+    newServerOauthScopes,
+    newServerOauthTokenAuthMethod,
     fetchMcpServers,
     dispatch,
   ])
@@ -1386,6 +1437,64 @@ ${block}`
                               Example: {`{"Authorization":"Bearer <token>","x-api-key":"abc123"}`}
                             </p>
                           </div>
+
+                          <div className='space-y-2'>
+                            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+                              OAuth Client ID (optional)
+                            </label>
+                            <input
+                              type='text'
+                              value={newServerOauthClientId}
+                              onChange={e => setNewServerOauthClientId(e.target.value)}
+                              placeholder='github-oauth-client-id'
+                              className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                            />
+                          </div>
+
+                          <div className='space-y-2'>
+                            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+                              OAuth Client Secret (optional)
+                            </label>
+                            <input
+                              type='password'
+                              value={newServerOauthClientSecret}
+                              onChange={e => setNewServerOauthClientSecret(e.target.value)}
+                              placeholder='Only needed for client_secret_post'
+                              className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                            />
+                          </div>
+
+                          <div className='space-y-2'>
+                            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+                              OAuth Scopes (optional)
+                            </label>
+                            <input
+                              type='text'
+                              value={newServerOauthScopes}
+                              onChange={e => setNewServerOauthScopes(e.target.value)}
+                              placeholder='repo read:user user:email'
+                              className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                            />
+                            <p className='text-[11px] text-neutral-500 dark:text-neutral-400'>
+                              Space or comma separated. Leave blank to use server defaults/challenges.
+                            </p>
+                          </div>
+
+                          <div className='space-y-2'>
+                            <label className='text-xs font-medium text-neutral-600 dark:text-neutral-400'>
+                              Token Endpoint Auth Method
+                            </label>
+                            <select
+                              value={newServerOauthTokenAuthMethod}
+                              onChange={e =>
+                                setNewServerOauthTokenAuthMethod(e.target.value as 'client_secret_post' | 'none')
+                              }
+                              className='w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                            >
+                              <option value='client_secret_post'>client_secret_post</option>
+                              <option value='none'>none (public client)</option>
+                            </select>
+                          </div>
                         </>
                       )}
 
@@ -1411,6 +1520,10 @@ ${block}`
                             setNewServerArgs('')
                             setNewServerUrl('')
                             setNewServerHeadersText('')
+                            setNewServerOauthClientId('')
+                            setNewServerOauthClientSecret('')
+                            setNewServerOauthScopes('')
+                            setNewServerOauthTokenAuthMethod('client_secret_post')
                           }}
                           className='px-3 py-1.5 text-sm text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors'
                         >
@@ -1480,6 +1593,15 @@ ${block}`
                               {server.headers && Object.keys(server.headers).length > 0 && (
                                 <p className='text-xs text-neutral-500 dark:text-neutral-400 mt-0.5'>
                                   Headers: {Object.keys(server.headers).join(', ')}
+                                </p>
+                              )}
+                              {server.oauth && (
+                                <p className='text-xs text-neutral-500 dark:text-neutral-400 mt-0.5'>
+                                  OAuth: {server.oauth.hasAccessToken ? 'token' : 'no token'}
+                                  {server.oauth.hasRefreshToken ? ', refresh token' : ''}
+                                  {server.oauth.tokenEndpointAuthMethod
+                                    ? `, ${server.oauth.tokenEndpointAuthMethod}`
+                                    : ''}
                                 </p>
                               )}
                               {server.error && (

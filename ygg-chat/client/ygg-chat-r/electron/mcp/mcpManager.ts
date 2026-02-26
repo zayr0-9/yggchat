@@ -9,6 +9,11 @@ import path from 'path'
 import { EventEmitter } from 'events'
 import { createServer, type Server as HttpServer } from 'http'
 import { randomBytes, createHash } from 'crypto'
+import {
+  buildAuthorizationServerMetadataCandidates,
+  buildProtectedResourceMetadataCandidates,
+  parseWwwAuthenticateBearerChallenge,
+} from './oauthDiscovery.js'
 
 // ============================================================================
 // Types and Interfaces
@@ -26,6 +31,7 @@ export interface McpOAuthConfig {
   scopes?: string[]
   clientId?: string
   clientSecret?: string
+  tokenEndpointAuthMethod?: 'client_secret_post' | 'none'
   accessToken?: string
   refreshToken?: string
   expiresAt?: number
@@ -145,6 +151,9 @@ interface OAuthAuthorizationServerMetadata {
   authorization_endpoint: string
   token_endpoint: string
   registration_endpoint?: string
+  code_challenge_methods_supported?: string[]
+  token_endpoint_auth_methods_supported?: string[]
+  client_id_metadata_document_supported?: boolean
 }
 
 interface OAuthTokenResponse {
@@ -165,6 +174,9 @@ function resolveTransport(config: Partial<McpServerConfig>): McpServerTransport 
   return normalizeTransport(config.transport) ?? normalizeTransport(config.type) ?? (config.url ? 'http' : 'stdio')
 }
 
+const MCP_PROTOCOL_VERSION = '2025-11-25'
+const OAUTH_ACCESS_TOKEN_CLOCK_SKEW_MS = 60_000
+
 // ============================================================================
 // MCP Client - Handles communication with a single MCP server
 // ============================================================================
@@ -182,6 +194,7 @@ class McpClient extends EventEmitter {
   private readonly transport: McpServerTransport
   private oauth?: McpOAuthConfig
   private authFlowPromise: Promise<void> | null = null
+  private lastOAuthError?: string
 
   public status: 'disconnected' | 'connecting' | 'connected' | 'error' = 'disconnected'
   public error?: string
@@ -327,7 +340,7 @@ class McpClient extends EventEmitter {
 
   private async initialize(): Promise<void> {
     const result = await this.sendRequest('initialize', {
-      protocolVersion: '2025-06-18',
+      protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {
         roots: { listChanged: true },
         sampling: {},
@@ -499,6 +512,7 @@ class McpClient extends EventEmitter {
     const timeout = setTimeout(() => controller.abort(), 30000)
 
     try {
+      this.lastOAuthError = undefined
       const headers = this.buildHttpHeaders()
 
       const response = await fetch(this.config.url, {
@@ -528,9 +542,11 @@ class McpClient extends EventEmitter {
           response.status === 401 && wwwAuthenticate
             ? ` | OAuth required. WWW-Authenticate: ${wwwAuthenticate}`
             : ''
+        const oauthFailureHint =
+          response.status === 401 && this.lastOAuthError ? ` | OAuth flow failed: ${this.lastOAuthError}` : ''
 
         throw new Error(
-          `MCP HTTP request failed (${response.status} ${response.statusText})${payload ? `: ${payload.slice(0, 400)}` : ''}${oauthHint}`
+          `MCP HTTP request failed (${response.status} ${response.statusText})${payload ? `: ${payload.slice(0, 400)}` : ''}${oauthHint}${oauthFailureHint}`
         )
       }
 
@@ -564,7 +580,7 @@ class McpClient extends EventEmitter {
     const headers: Record<string, string> = {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',
-      'mcp-protocol-version': '2025-06-18',
+      'mcp-protocol-version': MCP_PROTOCOL_VERSION,
       ...(this.config.headers || {}),
     }
 
@@ -579,35 +595,40 @@ class McpClient extends EventEmitter {
     return headers
   }
 
-  private extractWwwAuthenticateParam(headerValue: string | null, paramName: string): string | undefined {
-    if (!headerValue) return undefined
-    const pattern = new RegExp(`${paramName}="([^"]+)"`, 'i')
-    const match = headerValue.match(pattern)
-    return match?.[1]
-  }
-
   private async tryHandleHttpUnauthorized(response: Response): Promise<boolean> {
     if (this.transport !== 'http') return false
 
     // If caller explicitly configured a static Authorization header and we don't have OAuth state,
     // do not override with interactive auth.
     if (this.config.headers?.Authorization && !this.oauth?.refreshToken && !this.oauth?.accessToken) {
+      this.lastOAuthError =
+        'Static Authorization header is configured; skipping interactive OAuth because no OAuth token state is present.'
       return false
     }
 
     const wwwAuthenticate = response.headers.get('www-authenticate')
-    const resourceMetadataUrl = this.extractWwwAuthenticateParam(wwwAuthenticate, 'resource_metadata')
+    const challenge = parseWwwAuthenticateBearerChallenge(wwwAuthenticate)
 
     try {
-      await this.ensureOAuthAccessToken(resourceMetadataUrl)
-      return Boolean(this.oauth?.accessToken)
+      await this.ensureOAuthAccessToken({
+        resourceMetadataUrlHint: challenge.resourceMetadataUrl,
+        challengeScope: challenge.scope,
+      })
+      const authenticated = Boolean(this.oauth?.accessToken)
+      this.lastOAuthError = authenticated ? undefined : 'OAuth flow completed without obtaining an access token.'
+      return authenticated
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.lastOAuthError = message
       console.error(`[MCP:${this.name}] OAuth flow failed:`, error)
       return false
     }
   }
 
-  private async ensureOAuthAccessToken(resourceMetadataUrlHint?: string): Promise<void> {
+  private async ensureOAuthAccessToken(input?: {
+    resourceMetadataUrlHint?: string
+    challengeScope?: string
+  }): Promise<void> {
     if (!this.config.url) {
       throw new Error(`MCP HTTP server '${this.name}' is missing url`)
     }
@@ -620,17 +641,12 @@ class McpClient extends EventEmitter {
       this.oauth = this.oauth || this.config.oauth || {}
 
       const now = Date.now()
-      if (this.oauth.accessToken && this.oauth.expiresAt && this.oauth.expiresAt > now + 60_000) {
+      if (this.oauth.accessToken && (!this.oauth.expiresAt || this.oauth.expiresAt > now + OAUTH_ACCESS_TOKEN_CLOCK_SKEW_MS)) {
         this.applyAccessToken(this.oauth.accessToken)
         return
       }
 
-      if (
-        this.oauth.refreshToken &&
-        this.oauth.tokenEndpoint &&
-        this.oauth.clientId &&
-        this.oauth.clientSecret
-      ) {
+      if (this.canRefreshOAuthToken()) {
         try {
           await this.refreshOAuthToken()
           return
@@ -639,7 +655,7 @@ class McpClient extends EventEmitter {
         }
       }
 
-      await this.runInteractiveOAuthFlow(resourceMetadataUrlHint)
+      await this.runInteractiveOAuthFlow(input)
     })()
 
     try {
@@ -649,7 +665,23 @@ class McpClient extends EventEmitter {
     }
   }
 
-  private async runInteractiveOAuthFlow(resourceMetadataUrlHint?: string): Promise<void> {
+  private canRefreshOAuthToken(): boolean {
+    if (!this.oauth?.refreshToken || !this.oauth?.tokenEndpoint || !this.oauth?.clientId) {
+      return false
+    }
+
+    const authMethod = this.oauth.tokenEndpointAuthMethod || (this.oauth.clientSecret ? 'client_secret_post' : 'none')
+    if (authMethod === 'none') {
+      return true
+    }
+
+    return Boolean(this.oauth.clientSecret)
+  }
+
+  private async runInteractiveOAuthFlow(input?: {
+    resourceMetadataUrlHint?: string
+    challengeScope?: string
+  }): Promise<void> {
     if (!this.config.url) {
       throw new Error(`MCP HTTP server '${this.name}' is missing url`)
     }
@@ -661,8 +693,8 @@ class McpClient extends EventEmitter {
     const callbackServer = await this.createOAuthCallbackServer(state)
 
     try {
-      const oauthMeta = await this.discoverOAuthMetadata(resourceMetadataUrlHint)
-      const client = await this.registerDynamicClient(oauthMeta.registrationEndpoint, callbackServer.redirectUri)
+      const oauthMeta = await this.discoverOAuthMetadata(input)
+      const client = await this.resolveOAuthClientCredentials(oauthMeta, callbackServer.redirectUri)
 
       const authUrl = new URL(oauthMeta.authorizationEndpoint)
       authUrl.searchParams.set('response_type', 'code')
@@ -687,6 +719,7 @@ class McpClient extends EventEmitter {
         tokenEndpoint: oauthMeta.tokenEndpoint,
         clientId: client.clientId,
         clientSecret: client.clientSecret,
+        tokenEndpointAuthMethod: client.tokenEndpointAuthMethod,
         resource: oauthMeta.resource,
       })
 
@@ -701,6 +734,7 @@ class McpClient extends EventEmitter {
         scopes: oauthMeta.scope ? oauthMeta.scope.split(' ').filter(Boolean) : this.oauth?.scopes,
         clientId: client.clientId,
         clientSecret: client.clientSecret,
+        tokenEndpointAuthMethod: client.tokenEndpointAuthMethod,
         accessToken: token.access_token,
         refreshToken: token.refresh_token || this.oauth?.refreshToken,
         expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined,
@@ -708,12 +742,16 @@ class McpClient extends EventEmitter {
 
       this.config.oauth = { ...this.oauth }
       this.applyAccessToken(token.access_token)
+      this.lastOAuthError = undefined
     } finally {
       await callbackServer.close().catch(() => undefined)
     }
   }
 
-  private async discoverOAuthMetadata(resourceMetadataUrlHint?: string): Promise<{
+  private async discoverOAuthMetadata(input?: {
+    resourceMetadataUrlHint?: string
+    challengeScope?: string
+  }): Promise<{
     resourceMetadataUrl: string
     resource: string
     authorizationServer: string
@@ -721,45 +759,94 @@ class McpClient extends EventEmitter {
     tokenEndpoint: string
     registrationEndpoint?: string
     scope?: string
+    tokenEndpointAuthMethod: 'client_secret_post' | 'none'
   }> {
     if (!this.config.url) {
       throw new Error(`MCP HTTP server '${this.name}' is missing url`)
     }
 
     const mcpUrl = new URL(this.config.url)
-    const resourceMetadataUrl =
-      resourceMetadataUrlHint ||
-      this.oauth?.resourceMetadataUrl ||
-      `${mcpUrl.origin}/.well-known/oauth-protected-resource${mcpUrl.pathname}${mcpUrl.search}`
+    const resourceMetadataCandidates = [
+      input?.resourceMetadataUrlHint,
+      this.oauth?.resourceMetadataUrl,
+      ...buildProtectedResourceMetadataCandidates(mcpUrl),
+    ].filter((value): value is string => Boolean(value))
 
-    const protectedResource = await this.fetchJson<OAuthProtectedResourceMetadata>(resourceMetadataUrl)
-    const authorizationServer = protectedResource.authorization_servers?.[0]
+    const protectedResourceResult = await this.fetchFirstJson<OAuthProtectedResourceMetadata>(resourceMetadataCandidates)
+    const protectedResource = protectedResourceResult.value
+
+    const authorizationServer = this.oauth?.authorizationServer || protectedResource.authorization_servers?.[0]
     if (!authorizationServer) {
       throw new Error('OAuth discovery failed: authorization server not provided by protected resource metadata')
     }
 
-    const authServerMetadataUrl = `${authorizationServer.replace(/\/+$/, '')}/.well-known/oauth-authorization-server`
-    const authServerMetadata = await this.fetchJson<OAuthAuthorizationServerMetadata>(authServerMetadataUrl)
+    const authServerMetadataCandidates = buildAuthorizationServerMetadataCandidates(authorizationServer)
+    const authServerMetadataResult = await this.fetchFirstJson<OAuthAuthorizationServerMetadata>(authServerMetadataCandidates)
+    const authServerMetadata = authServerMetadataResult.value
 
     if (!authServerMetadata.authorization_endpoint || !authServerMetadata.token_endpoint) {
       throw new Error('OAuth discovery failed: authorization/token endpoints missing in auth server metadata')
     }
 
+    const pkceMethods = authServerMetadata.code_challenge_methods_supported
+    if (!Array.isArray(pkceMethods) || !pkceMethods.includes('S256')) {
+      throw new Error('OAuth discovery failed: authorization server does not advertise PKCE S256 support')
+    }
+
     const scope =
+      input?.challengeScope ||
       this.oauth?.scopes?.join(' ') ||
       (Array.isArray(protectedResource.scopes_supported) && protectedResource.scopes_supported.length > 0
         ? protectedResource.scopes_supported.join(' ')
         : undefined)
 
+    const tokenEndpointAuthMethod = this.selectTokenEndpointAuthMethod(
+      this.oauth?.tokenEndpointAuthMethod,
+      authServerMetadata.token_endpoint_auth_methods_supported
+    )
+
     return {
-      resourceMetadataUrl,
+      resourceMetadataUrl: protectedResourceResult.url,
       resource: protectedResource.resource || this.config.url,
       authorizationServer,
       authorizationEndpoint: authServerMetadata.authorization_endpoint,
       tokenEndpoint: authServerMetadata.token_endpoint,
       registrationEndpoint: authServerMetadata.registration_endpoint,
       scope,
+      tokenEndpointAuthMethod,
     }
+  }
+
+  private selectTokenEndpointAuthMethod(
+    configured: McpOAuthConfig['tokenEndpointAuthMethod'],
+    supported: string[] | undefined
+  ): 'client_secret_post' | 'none' {
+    if (configured === 'client_secret_post' || configured === 'none') {
+      return configured
+    }
+
+    if (Array.isArray(supported) && supported.length > 0) {
+      if (supported.includes('client_secret_post')) return 'client_secret_post'
+      if (supported.includes('none')) return 'none'
+    }
+
+    return this.oauth?.clientSecret ? 'client_secret_post' : 'none'
+  }
+
+  private async fetchFirstJson<T>(candidates: string[]): Promise<{ value: T; url: string }> {
+    const errors: string[] = []
+
+    for (const candidate of candidates) {
+      try {
+        const value = await this.fetchJson<T>(candidate)
+        return { value, url: candidate }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        errors.push(`${candidate} -> ${message}`)
+      }
+    }
+
+    throw new Error(`OAuth discovery failed: unable to fetch metadata from candidates. ${errors.join(' | ')}`)
   }
 
   private async fetchJson<T>(url: string): Promise<T> {
@@ -781,15 +868,43 @@ class McpClient extends EventEmitter {
     }
   }
 
+  private async resolveOAuthClientCredentials(
+    oauthMeta: {
+      registrationEndpoint?: string
+      tokenEndpointAuthMethod: 'client_secret_post' | 'none'
+    },
+    redirectUri: string
+  ): Promise<{ clientId: string; clientSecret?: string; tokenEndpointAuthMethod: 'client_secret_post' | 'none' }> {
+    if (this.oauth?.clientId) {
+      if (oauthMeta.tokenEndpointAuthMethod === 'none') {
+        return {
+          clientId: this.oauth.clientId,
+          clientSecret: this.oauth.clientSecret,
+          tokenEndpointAuthMethod: 'none',
+        }
+      }
+
+      if (this.oauth.clientSecret) {
+        return {
+          clientId: this.oauth.clientId,
+          clientSecret: this.oauth.clientSecret,
+          tokenEndpointAuthMethod: 'client_secret_post',
+        }
+      }
+    }
+
+    return this.registerDynamicClient(oauthMeta.registrationEndpoint, redirectUri, oauthMeta.tokenEndpointAuthMethod)
+  }
+
   private async registerDynamicClient(
     registrationEndpoint: string | undefined,
-    redirectUri: string
-  ): Promise<{ clientId: string; clientSecret: string }> {
+    redirectUri: string,
+    tokenEndpointAuthMethod: 'client_secret_post' | 'none'
+  ): Promise<{ clientId: string; clientSecret?: string; tokenEndpointAuthMethod: 'client_secret_post' | 'none' }> {
     if (!registrationEndpoint) {
-      if (this.oauth?.clientId && this.oauth?.clientSecret) {
-        return { clientId: this.oauth.clientId, clientSecret: this.oauth.clientSecret }
-      }
-      throw new Error('Authorization server does not expose dynamic client registration endpoint')
+      throw new Error(
+        'Authorization server does not expose dynamic client registration endpoint and no preregistered OAuth client credentials were supplied'
+      )
     }
 
     const response = await fetch(registrationEndpoint, {
@@ -803,7 +918,7 @@ class McpClient extends EventEmitter {
         redirect_uris: [redirectUri],
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
-        token_endpoint_auth_method: 'client_secret_post',
+        token_endpoint_auth_method: tokenEndpointAuthMethod,
       }),
     })
 
@@ -814,12 +929,26 @@ class McpClient extends EventEmitter {
       )
     }
 
-    const payload = JSON.parse(body) as { client_id?: string; client_secret?: string }
-    if (!payload.client_id || !payload.client_secret) {
-      throw new Error('Dynamic client registration response missing client_id/client_secret')
+    const payload = JSON.parse(body) as {
+      client_id?: string
+      client_secret?: string
+      token_endpoint_auth_method?: 'client_secret_post' | 'none'
     }
 
-    return { clientId: payload.client_id, clientSecret: payload.client_secret }
+    if (!payload.client_id) {
+      throw new Error('Dynamic client registration response missing client_id')
+    }
+
+    const resolvedAuthMethod = payload.token_endpoint_auth_method || tokenEndpointAuthMethod
+    if (resolvedAuthMethod === 'client_secret_post' && !payload.client_secret) {
+      throw new Error('Dynamic client registration response missing client_secret for client_secret_post auth')
+    }
+
+    return {
+      clientId: payload.client_id,
+      clientSecret: payload.client_secret,
+      tokenEndpointAuthMethod: resolvedAuthMethod,
+    }
   }
 
   private async exchangeAuthorizationCodeForToken(input: {
@@ -828,7 +957,8 @@ class McpClient extends EventEmitter {
     redirectUri: string
     tokenEndpoint: string
     clientId: string
-    clientSecret: string
+    clientSecret?: string
+    tokenEndpointAuthMethod: 'client_secret_post' | 'none'
     resource: string
   }): Promise<OAuthTokenResponse> {
     const params = new URLSearchParams()
@@ -837,7 +967,12 @@ class McpClient extends EventEmitter {
     params.set('redirect_uri', input.redirectUri)
     params.set('code_verifier', input.codeVerifier)
     params.set('client_id', input.clientId)
-    params.set('client_secret', input.clientSecret)
+    if (input.tokenEndpointAuthMethod === 'client_secret_post') {
+      if (!input.clientSecret) {
+        throw new Error('Token exchange requires client_secret for client_secret_post auth')
+      }
+      params.set('client_secret', input.clientSecret)
+    }
     params.set('resource', input.resource)
 
     const response = await fetch(input.tokenEndpoint, {
@@ -865,15 +1000,24 @@ class McpClient extends EventEmitter {
   }
 
   private async refreshOAuthToken(): Promise<void> {
-    if (!this.oauth?.refreshToken || !this.oauth?.tokenEndpoint || !this.oauth?.clientId || !this.oauth?.clientSecret) {
+    if (!this.oauth?.refreshToken || !this.oauth?.tokenEndpoint || !this.oauth?.clientId) {
       throw new Error('Missing OAuth refresh token configuration')
     }
+
+    const authMethod = this.oauth.tokenEndpointAuthMethod || (this.oauth.clientSecret ? 'client_secret_post' : 'none')
 
     const params = new URLSearchParams()
     params.set('grant_type', 'refresh_token')
     params.set('refresh_token', this.oauth.refreshToken)
     params.set('client_id', this.oauth.clientId)
-    params.set('client_secret', this.oauth.clientSecret)
+
+    if (authMethod === 'client_secret_post') {
+      if (!this.oauth.clientSecret) {
+        throw new Error('Missing clientSecret for OAuth refresh token request using client_secret_post')
+      }
+      params.set('client_secret', this.oauth.clientSecret)
+    }
+
     if (this.oauth.resource) {
       params.set('resource', this.oauth.resource)
     }
@@ -901,6 +1045,7 @@ class McpClient extends EventEmitter {
 
     this.oauth = {
       ...this.oauth,
+      tokenEndpointAuthMethod: authMethod,
       accessToken: token.access_token,
       refreshToken: token.refresh_token || this.oauth.refreshToken,
       expiresAt: token.expires_in ? Date.now() + token.expires_in * 1000 : undefined,
@@ -908,6 +1053,7 @@ class McpClient extends EventEmitter {
 
     this.config.oauth = { ...this.oauth }
     this.applyAccessToken(token.access_token)
+    this.lastOAuthError = undefined
   }
 
   private applyAccessToken(accessToken: string): void {
@@ -1121,7 +1267,7 @@ class McpClient extends EventEmitter {
     const headers: Record<string, string> = {
       'content-type': 'application/json',
       accept: 'application/json, text/event-stream',
-      'mcp-protocol-version': '2025-06-18',
+      'mcp-protocol-version': MCP_PROTOCOL_VERSION,
       ...(this.config.headers || {}),
     }
 

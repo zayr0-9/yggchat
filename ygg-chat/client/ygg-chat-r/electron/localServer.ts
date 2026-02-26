@@ -90,6 +90,14 @@ function validateAndResolvePath(
   return resolvedPath
 }
 
+function resolveToolWorkspaceCwd(requestedCwd: unknown, rootPath: string | undefined): string | undefined {
+  const normalizedRequested = typeof requestedCwd === 'string' ? requestedCwd.trim() : ''
+  if (!normalizedRequested) {
+    return rootPath || undefined
+  }
+  return validateAndResolvePath(normalizedRequested, rootPath)
+}
+
 function sanitizeZipEntryName(entryName: string): string {
   return entryName.replace(/\\/g, '/').replace(/^\/+/, '')
 }
@@ -375,11 +383,8 @@ const UTILITY_RUNTIME_TOOL_WHITELIST = new Set<string>([
   'html_renderer',
 ])
 
-function shouldUseUtilityRuntimeForTool(toolName: string): boolean {
-  if (getToolRuntimeMode() !== 'utility') return false
-  if (!utilityRuntimeAvailable) return false
-  if (!builtInTools.has(toolName)) return false
-  return UTILITY_RUNTIME_TOOL_WHITELIST.has(toolName)
+function shouldUseUtilityRuntimeForTool(_toolName: string): boolean {
+  return true
 }
 
 function shouldUseUtilityRuntimeForCustomTool(toolName: string): boolean {
@@ -399,36 +404,39 @@ function initializeBuiltInToolRegistry() {
   })
 
   builtInTools.set('read_file', async (args, { rootPath }) => {
-    const { path: filePath, maxBytes, startLine, endLine, ranges, includeHash } = args
+    const { path: filePath, maxBytes, startLine, endLine, ranges, includeHash, cwd } = args
     if (!filePath) throw new Error('path is required')
+    const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
     const fileRes = await readTextFile(filePath, {
       maxBytes,
       startLine,
       endLine,
       ranges,
       includeHash,
-      cwd: rootPath,
+      cwd: effectiveCwd,
     })
     return { success: true, ...fileRes }
   })
 
   builtInTools.set('read_file_continuation', async (args, { rootPath }) => {
-    const { path: filePath, afterLine, numLines, maxBytes, includeHash } = args
+    const { path: filePath, afterLine, numLines, maxBytes, includeHash, cwd } = args
     if (!filePath) throw new Error('path is required')
     if (afterLine === undefined) throw new Error('afterLine is required')
     if (!numLines) throw new Error('numLines is required')
+    const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
     const fileRes = await readFileContinuation(filePath, afterLine, numLines, {
       maxBytes,
       includeHash,
-      cwd: rootPath,
+      cwd: effectiveCwd,
     })
     return { success: true, ...fileRes }
   })
 
   builtInTools.set('read_files', async (args, { rootPath }) => {
-    const { paths, baseDir, maxBytes, startLine, endLine } = args
+    const { paths, baseDir, maxBytes, startLine, endLine, cwd } = args
     if (!paths) throw new Error('paths are required')
-    const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine, cwd: rootPath })
+    const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
+    const filesRes = await readMultipleTextFiles(paths, { baseDir, maxBytes, startLine, endLine, cwd: effectiveCwd })
     return { success: true, files: filesRes }
   })
 
@@ -947,6 +955,7 @@ function initializeLocalDatabase(dbPath: string) {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
     CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_storage_project_updated ON conversations(user_id, storage_mode, project_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_parent_id ON messages(parent_id);
     CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
   `)
@@ -1013,6 +1022,9 @@ function initializeLocalDatabase(dbPath: string) {
     getConversationById: db.prepare('SELECT * FROM conversations WHERE id = ?'),
     getLocalConversations: db.prepare(
       "SELECT * FROM conversations WHERE user_id = ? AND storage_mode = 'local' ORDER BY updated_at DESC"
+    ),
+    getLocalConversationsByUserAndProject: db.prepare(
+      "SELECT * FROM conversations WHERE user_id = ? AND project_id = ? AND storage_mode = 'local' ORDER BY updated_at DESC"
     ),
     getFavoriteConversations: db.prepare(
       'SELECT * FROM conversations WHERE user_id = ? AND favorite = 1 ORDER BY updated_at DESC'
@@ -2508,7 +2520,7 @@ function setupServer() {
         name: 'GPT-5.3 Codex',
         displayName: 'GPT-5.3 Codex',
         description: 'Latest GPT-5.3 Codex model for coding tasks',
-        contextLength: 200000,
+        contextLength: 400000,
         maxCompletionTokens: 16384,
       },
       {
@@ -5260,17 +5272,22 @@ function setupServer() {
     }
   })
 
-  // GET /api/local/conversations?userId=xxx
+  // GET /api/local/conversations?userId=xxx[&projectId=yyy]
   app.get('/api/local/conversations', (req, res) => {
     try {
       const userId = req.query.userId as string
-      // console.log('[LocalServer] 📋 GET /api/local/conversations - userId:', userId)
+      const projectId = (req.query.projectId as string | undefined) || undefined
+      // console.log('[LocalServer] 📋 GET /api/local/conversations - userId:', userId, 'projectId:', projectId)
       if (!userId) {
         // console.log('[LocalServer] ❌ Missing userId parameter')
         res.status(400).json({ error: 'userId required' })
         return
       }
-      const conversations = statements.getLocalConversations.all(userId)
+
+      const conversations = projectId
+        ? statements.getLocalConversationsByUserAndProject.all(userId, projectId)
+        : statements.getLocalConversations.all(userId)
+
       // console.log('[LocalServer] ✅ Found', conversations.length, 'local conversations for user:', userId)
       // console.log('[LocalServer] 📊 Conversations:', JSON.stringify(conversations, null, 2))
       res.json(conversations)

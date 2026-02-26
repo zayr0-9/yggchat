@@ -82,6 +82,11 @@ const builtInToolDefinitions: ToolDefinition[] = [
       type: 'object',
       properties: {
         path: { type: 'string', description: 'The file path to read (absolute or relative)' },
+        cwd: {
+          type: 'string',
+          description:
+            'Optional working directory to resolve relative paths from. Must stay within workspace scope when a workspace root is set.',
+        },
         maxBytes: {
           type: 'integer',
           minimum: 1,
@@ -115,7 +120,7 @@ const builtInToolDefinitions: ToolDefinition[] = [
         },
         includeHash: {
           type: 'boolean',
-          description: 'Calculate SHA256 content hash for validation with edit_file (default true)',
+          description: 'Calculate SHA256 content hash for validation with edit_file (default false)',
         },
       },
       required: ['path'],
@@ -139,6 +144,11 @@ const builtInToolDefinitions: ToolDefinition[] = [
         baseDir: {
           type: 'string',
           description: 'Optional base directory used to compute the relative path header.',
+        },
+        cwd: {
+          type: 'string',
+          description:
+            'Optional working directory to resolve relative paths from. Must stay within workspace scope when a workspace root is set.',
         },
         maxBytes: {
           type: 'integer',
@@ -164,11 +174,16 @@ const builtInToolDefinitions: ToolDefinition[] = [
     name: 'read_file_continuation',
     enabled: true,
     description:
-      'Read the next chunk of a file after a specific line number. Designed for pagination to avoid duplicate reads. Use this when you previously read a file up to line N and want to continue reading from line N+1. Returns file metadata and content hash for validation.',
+      'Read the next chunk of a file after a specific line number. Designed for pagination to avoid duplicate reads. Use this when you previously read a file up to line N and want to continue reading from line N+1. Returns file metadata and optional content hash for validation.',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'The file path to read (absolute or relative)' },
+        cwd: {
+          type: 'string',
+          description:
+            'Optional working directory to resolve relative paths from. Must stay within workspace scope when a workspace root is set.',
+        },
         afterLine: {
           type: 'integer',
           minimum: 0,
@@ -187,7 +202,7 @@ const builtInToolDefinitions: ToolDefinition[] = [
         },
         includeHash: {
           type: 'boolean',
-          description: 'Calculate SHA256 content hash for validation with edit_file (default true)',
+          description: 'Calculate SHA256 content hash for validation with edit_file (default false)',
         },
       },
       required: ['path', 'afterLine', 'numLines'],

@@ -13,7 +13,7 @@ export interface ReadFileOptions {
   startLine?: number // 1-based line number to start reading from (inclusive) - for single range
   endLine?: number // 1-based line number to stop reading at (inclusive) - for single range
   ranges?: LineRange[] // multiple disjoint ranges to read in a single call
-  includeHash?: boolean // Calculate content hash for validation (default: true)
+  includeHash?: boolean // Calculate content hash for validation (default: false)
   cwd?: string // workspace directory for path resolution and restriction
   // Note: if 'ranges' is provided, startLine/endLine are ignored
 }
@@ -393,7 +393,7 @@ async function readLineSelectionFromFile(
 
 export async function readTextFile(inputPath: string, options: ReadFileOptions = {}): Promise<ReadFileResult> {
   const maxBytes = options.maxBytes && options.maxBytes > 0 ? options.maxBytes : 200 * 1024
-  const includeHash = options.includeHash !== false // default to true
+  const includeHash = options.includeHash === true // default to false
 
   validateLineRangeValues(options)
 

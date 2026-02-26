@@ -154,6 +154,44 @@ type MessageRenderRow =
       bridgedMessageId?: MessageId
     }
 
+type VirtualRenderRow =
+  | {
+      kind: 'message_row'
+      key: string
+      row: MessageRenderRow
+    }
+  | {
+      kind: 'optimistic_message'
+      key: string
+      message: Message
+    }
+  | {
+      kind: 'optimistic_branch_message'
+      key: string
+      message: Message
+    }
+  | {
+      kind: 'streaming_message'
+      key: 'streaming'
+    }
+
+type BenchAction = 'on' | 'off' | 'status' | 'export' | 'reset'
+
+type BenchEvent = {
+  ts: number
+  kind: string
+  details?: Record<string, unknown>
+}
+
+type BenchStats = {
+  count: number
+  min: number
+  max: number
+  avg: number
+  p50: number
+  p95: number
+}
+
 type ChatInputUpdater = string | ((prev: string) => string)
 
 type ChatInputControllerHandle = {
@@ -191,10 +229,64 @@ type AddedIdeContext = {
 }
 
 const EMPTY_PARSED_MESSAGE_DATA: ParsedMessageData = {}
-const COMPOSER_SLASH_COMMANDS = ['status-openai']
+const COMPOSER_SLASH_COMMANDS = [
+  'status-openai',
+  'bench on',
+  'bench off',
+  'bench status',
+  'bench export',
+  'bench reset',
+]
 const CROSS_MESSAGE_PROCESS_GROUP_MIN_MESSAGES = 3
 const DERIVED_RENDER_CACHE_LIMIT = 40
 const ACTION_POPOVER_SELECT_DROPDOWN_Z_INDEX = 100001
+const VIRTUAL_ROWS_FEATURE_FLAG = 'chat:virtualRowsV2'
+const BENCH_MAX_SAMPLES = 3000
+const BENCH_MAX_EVENTS = 1200
+const BENCH_SCROLL_ACTIVE_WINDOW_MS = 140
+
+const VIRTUAL_ROW_BASE_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: '100%',
+}
+
+type VirtualizedRowContainerProps = {
+  id: string
+  index: number
+  start: number
+  className?: string
+  zIndex?: number
+  measureElement?: ((element: Element | null) => void) | null
+  children: React.ReactNode
+}
+
+const VirtualizedRowContainer = React.memo(function VirtualizedRowContainer({
+  id,
+  index,
+  start,
+  className,
+  zIndex,
+  measureElement,
+  children,
+}: VirtualizedRowContainerProps) {
+  return (
+    <div
+      id={id}
+      data-index={index}
+      ref={measureElement as React.Ref<HTMLDivElement>}
+      className={className}
+      style={{
+        ...VIRTUAL_ROW_BASE_STYLE,
+        transform: `translateY(${start}px)`,
+        ...(zIndex != null ? { zIndex } : null),
+      }}
+    >
+      {children}
+    </div>
+  )
+})
 
 const setLimitedCacheEntry = <T,>(cache: Map<string, T>, key: string, value: T, limit = DERIVED_RENDER_CACHE_LIMIT) => {
   if (cache.has(key)) {
@@ -207,6 +299,48 @@ const setLimitedCacheEntry = <T,>(cache: Map<string, T>, key: string, value: T, 
     if (oldestKey == null) break
     cache.delete(oldestKey)
   }
+}
+
+const pushLimitedSample = (samples: number[], value: number, limit = BENCH_MAX_SAMPLES) => {
+  if (!Number.isFinite(value)) return
+  samples.push(value)
+  if (samples.length > limit) {
+    samples.splice(0, samples.length - limit)
+  }
+}
+
+const pushLimitedEvent = (events: BenchEvent[], event: BenchEvent, limit = BENCH_MAX_EVENTS) => {
+  events.push(event)
+  if (events.length > limit) {
+    events.splice(0, events.length - limit)
+  }
+}
+
+const calculateBenchStats = (values: number[]): BenchStats | null => {
+  if (!Array.isArray(values) || values.length === 0) return null
+
+  const sorted = [...values].sort((a, b) => a - b)
+  const count = sorted.length
+  const min = sorted[0]
+  const max = sorted[count - 1]
+  const avg = sorted.reduce((sum, value) => sum + value, 0) / count
+  const pick = (ratio: number) => sorted[Math.min(count - 1, Math.max(0, Math.round((count - 1) * ratio)))]
+
+  return {
+    count,
+    min,
+    max,
+    avg,
+    p50: pick(0.5),
+    p95: pick(0.95),
+  }
+}
+
+const parseBenchAction = (command: string): BenchAction | null => {
+  const normalized = command.trim().toLowerCase().replace(/^\/+/g, '').replace(/\s+/g, ' ')
+  const match = normalized.match(/^bench(?:[\s-]+(on|off|status|export|reset))?$/)
+  if (!match) return null
+  return (match[1] as BenchAction | undefined) ?? 'status'
 }
 
 const isLikelyProcessAnnotationText = (text: string): boolean => {
@@ -679,6 +813,24 @@ function Chat() {
   const [openAIUsageData, setOpenAIUsageData] = useState<OpenAIUsageSnapshot | null>(null)
   const [openAIUsageLoading, setOpenAIUsageLoading] = useState(false)
   const [openAIUsageError, setOpenAIUsageError] = useState<string | null>(null)
+
+  const [benchEnabled, setBenchEnabled] = useState(false)
+  const [benchStatusMessage, setBenchStatusMessage] = useState<string | null>(null)
+  const benchStatusTimeoutRef = useRef<number | null>(null)
+  const benchStartedAtRef = useRef<number | null>(null)
+  const benchStoppedAtRef = useRef<number | null>(null)
+  const benchLastRafTsRef = useRef<number | null>(null)
+  const benchLastScrollEventTsRef = useRef<number>(0)
+  const benchRafIdRef = useRef<number | null>(null)
+  const benchEventsRef = useRef<BenchEvent[]>([])
+  const benchCommitDurationsRef = useRef<number[]>([])
+  const benchDeriveDurationsRef = useRef<number[]>([])
+  const benchFrameDurationsRef = useRef<number[]>([])
+  const benchScrollFrameDurationsRef = useRef<number[]>([])
+  const benchLatestMessageCountRef = useRef(0)
+  const benchLatestVirtualRowCountRef = useRef(0)
+  const benchLatestConversationIdRef = useRef<string | null>(null)
+
   const composerSlashCommands = COMPOSER_SLASH_COMMANDS
   const isElectronEnv = useMemo(
     () =>
@@ -686,6 +838,235 @@ function Chat() {
       (typeof window !== 'undefined' && (window as any).__IS_ELECTRON__),
     []
   )
+
+  const appendBenchEvent = useCallback((kind: string, details?: Record<string, unknown>) => {
+    const ts = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    pushLimitedEvent(benchEventsRef.current, { ts, kind, details })
+  }, [])
+
+  const clearBenchData = useCallback(() => {
+    benchEventsRef.current = []
+    benchCommitDurationsRef.current = []
+    benchDeriveDurationsRef.current = []
+    benchFrameDurationsRef.current = []
+    benchScrollFrameDurationsRef.current = []
+    benchLastRafTsRef.current = null
+    benchLastScrollEventTsRef.current = 0
+  }, [])
+
+  const showBenchNotice = useCallback((message: string) => {
+    setBenchStatusMessage(message)
+    if (benchStatusTimeoutRef.current != null) {
+      window.clearTimeout(benchStatusTimeoutRef.current)
+    }
+    benchStatusTimeoutRef.current = window.setTimeout(() => {
+      setBenchStatusMessage(null)
+      benchStatusTimeoutRef.current = null
+    }, 6000)
+  }, [])
+
+  const setBenchEnabledState = useCallback(
+    (enabled: boolean) => {
+      if (enabled) {
+        clearBenchData()
+        benchStartedAtRef.current = Date.now()
+        benchStoppedAtRef.current = null
+        appendBenchEvent('bench_started', {
+          conversationId: currentConversationId != null ? String(currentConversationId) : null,
+        })
+        setBenchEnabled(true)
+        showBenchNotice('Benchmark enabled. Use /bench export to save logs.')
+        return
+      }
+
+      if (benchEnabled) {
+        appendBenchEvent('bench_stopped')
+      }
+      benchStoppedAtRef.current = Date.now()
+      setBenchEnabled(false)
+      showBenchNotice('Benchmark disabled.')
+    },
+    [appendBenchEvent, benchEnabled, clearBenchData, currentConversationId, showBenchNotice]
+  )
+
+  const createBenchReport = useCallback(() => {
+    const now = Date.now()
+    const startedAt = benchStartedAtRef.current
+    const stoppedAt = benchStoppedAtRef.current
+    const endedAt = benchEnabled ? now : (stoppedAt ?? now)
+
+    const durationMs = startedAt != null ? Math.max(0, endedAt - startedAt) : 0
+
+    return {
+      exportedAtIso: new Date(now).toISOString(),
+      benchmark: {
+        active: benchEnabled,
+        startedAtIso: startedAt != null ? new Date(startedAt).toISOString() : null,
+        stoppedAtIso: stoppedAt != null ? new Date(stoppedAt).toISOString() : null,
+        durationMs,
+      },
+      environment: {
+        mode: import.meta.env.VITE_ENVIRONMENT,
+        electron: isElectronEnv,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
+        platform: typeof navigator !== 'undefined' ? navigator.platform : 'unknown',
+        hardwareConcurrency: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? null : null,
+        deviceMemory: typeof navigator !== 'undefined' ? (navigator as any).deviceMemory ?? null : null,
+      },
+      conversation: {
+        id: benchLatestConversationIdRef.current,
+        messageCount: benchLatestMessageCountRef.current,
+        virtualRowCount: benchLatestVirtualRowCountRef.current,
+      },
+      summary: {
+        renderFrameMs: calculateBenchStats(benchFrameDurationsRef.current),
+        scrollFrameMs: calculateBenchStats(benchScrollFrameDurationsRef.current),
+        scrollFps:
+          benchScrollFrameDurationsRef.current.length > 0
+            ? calculateBenchStats(benchScrollFrameDurationsRef.current.map(ms => (ms > 0 ? 1000 / ms : 0)))
+            : null,
+        commitDurationMs: calculateBenchStats(benchCommitDurationsRef.current),
+        deriveDurationMs: calculateBenchStats(benchDeriveDurationsRef.current),
+      },
+      sampleCounts: {
+        events: benchEventsRef.current.length,
+        renderFrames: benchFrameDurationsRef.current.length,
+        scrollFrames: benchScrollFrameDurationsRef.current.length,
+        commits: benchCommitDurationsRef.current.length,
+        derives: benchDeriveDurationsRef.current.length,
+      },
+      samples: {
+        renderFrameMs: benchFrameDurationsRef.current,
+        scrollFrameMs: benchScrollFrameDurationsRef.current,
+        commitDurationMs: benchCommitDurationsRef.current,
+        deriveDurationMs: benchDeriveDurationsRef.current,
+      },
+      events: benchEventsRef.current,
+    }
+  }, [benchEnabled, isElectronEnv])
+
+  const exportBenchReport = useCallback(async () => {
+    const report = createBenchReport()
+    const payload = JSON.stringify(report, null, 2)
+    const fileName = `chat-bench-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+
+    try {
+      const electronApi = (window as any).electronAPI
+      if (electronApi?.dialog?.saveFile && electronApi?.fs?.writeFile) {
+        const result = await electronApi.dialog.saveFile({
+          title: 'Export Chat Benchmark',
+          defaultPath: fileName,
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+        })
+
+        if (result?.success && result?.filePath) {
+          const writeResult = await electronApi.fs.writeFile(result.filePath, payload, 'utf8')
+          if (writeResult?.success === false) {
+            throw new Error(writeResult?.error || 'Failed to write benchmark file')
+          }
+          appendBenchEvent('bench_exported', { mode: 'electron', filePath: result.filePath })
+          showBenchNotice(`Benchmark exported: ${result.filePath}`)
+          return true
+        }
+      }
+
+      const blob = new Blob([payload], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+      appendBenchEvent('bench_exported', { mode: 'browser-download', fileName })
+      showBenchNotice(`Benchmark exported: ${fileName}`)
+      return true
+    } catch (error) {
+      console.error('Failed to export benchmark report:', error)
+      appendBenchEvent('bench_export_failed', {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      showBenchNotice('Benchmark export failed. Check console for details.')
+      return false
+    }
+  }, [appendBenchEvent, createBenchReport, showBenchNotice])
+
+  const handleBenchAction = useCallback(
+    async (action: BenchAction): Promise<ComposerSlashCommandResult> => {
+      switch (action) {
+        case 'on':
+          setBenchEnabledState(true)
+          return { handled: true, clearInput: true }
+        case 'off':
+          setBenchEnabledState(false)
+          return { handled: true, clearInput: true }
+        case 'reset':
+          clearBenchData()
+          benchStartedAtRef.current = benchEnabled ? Date.now() : null
+          benchStoppedAtRef.current = null
+          appendBenchEvent('bench_reset', { active: benchEnabled })
+          showBenchNotice('Benchmark samples reset.')
+          return { handled: true, clearInput: true }
+        case 'export':
+          await exportBenchReport()
+          return { handled: true, clearInput: true }
+        case 'status':
+        default: {
+          const startedAt = benchStartedAtRef.current
+          const stoppedAt = benchStoppedAtRef.current
+          const endedAt = benchEnabled ? Date.now() : (stoppedAt ?? Date.now())
+          const durationSeconds = startedAt != null ? Math.round((endedAt - startedAt) / 1000) : 0
+          showBenchNotice(
+            `Bench ${benchEnabled ? 'ON' : 'OFF'} • commits: ${benchCommitDurationsRef.current.length} • derives: ${benchDeriveDurationsRef.current.length} • duration: ${durationSeconds}s`
+          )
+          return { handled: true, clearInput: true }
+        }
+      }
+    },
+    [appendBenchEvent, benchEnabled, clearBenchData, exportBenchReport, setBenchEnabledState, showBenchNotice]
+  )
+
+  const runComposerCommand = useCallback(
+    async (rawCommand: string): Promise<ComposerSlashCommandResult> => {
+      const normalized = rawCommand.trim().toLowerCase().replace(/^\/+/, '')
+      if (normalized === 'status-openai') {
+        setShowOpenAIUsagePanel(true)
+        setOpenAIUsageLoading(true)
+        setOpenAIUsageError(null)
+
+        void (async () => {
+          const result = await fetchOpenAIUsageStatus()
+          if (result.type === 'success') {
+            setOpenAIUsageData(result.data)
+            setOpenAIUsageError(null)
+          } else {
+            setOpenAIUsageData(null)
+            setOpenAIUsageError(result.error)
+          }
+          setOpenAIUsageLoading(false)
+        })()
+
+        return { handled: true, clearInput: true }
+      }
+
+      const benchAction = parseBenchAction(rawCommand)
+      if (benchAction) {
+        return handleBenchAction(benchAction)
+      }
+
+      return { handled: false }
+    },
+    [handleBenchAction]
+  )
+
+  useEffect(() => {
+    return () => {
+      if (benchStatusTimeoutRef.current != null) {
+        window.clearTimeout(benchStatusTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // useEffect(() => {
   //   if (!isElectronEnv) return
@@ -886,6 +1267,7 @@ function Chat() {
   const selectionScrollCauseRef = useRef<'user' | null>(null)
   // Track if the user manually scrolled during the current stream; disables bottom pin until finished
   const userScrolledDuringStreamRef = useRef<boolean>(false)
+  const streamActiveRef = useRef<boolean>(false)
   // Sentinel at the end of the list for robust bottom scrolling
   const bottomRef = useRef<HTMLDivElement>(null)
   // rAF id to coalesce frequent scroll requests during streaming
@@ -894,6 +1276,7 @@ function Chat() {
   const lastFocusedScrollIdRef = useRef<MessageId | null>(null)
   // Track the most visible message ID for Heimdall highlighting
   const [visibleMessageId, setVisibleMessageId] = useState<MessageId | null>(null)
+  const updateVisibleMessageRef = useRef<(() => void) | null>(null)
   // Ref for input area to measure its height dynamically
   const inputAreaRef = useRef<HTMLDivElement>(null)
 
@@ -1005,6 +1388,20 @@ function Chat() {
     }
   })
 
+  const [virtualRowsV2Enabled] = useState<boolean>(() => {
+    try {
+      const stored = localStorage.getItem(VIRTUAL_ROWS_FEATURE_FLAG)
+      return stored == null ? true : stored !== 'false'
+    } catch {
+      return true
+    }
+  })
+
+  const virtualizationMetricsRef = useRef<{
+    lastRowDeriveMs: number
+    lastRenderRowsCount: number
+  }>({ lastRowDeriveMs: 0, lastRenderRowsCount: 0 })
+
   const parsedMessageDataCacheRef = useRef<Map<string, Map<MessageId, ParsedMessageData>>>(new Map())
   const messageRenderRowsCacheRef = useRef<Map<string, MessageRenderRow[]>>(new Map())
 
@@ -1029,6 +1426,7 @@ function Chat() {
   }, [filteredMessages, filteredMessagesSignature])
 
   const messageRenderRows = useMemo<MessageRenderRow[]>(() => {
+    const deriveStart = typeof performance !== 'undefined' ? performance.now() : Date.now()
     const debugProcessGrouping =
       typeof window !== 'undefined' && window.localStorage.getItem('chat:debugProcessGrouping') === 'true'
 
@@ -1036,6 +1434,10 @@ function Chat() {
     if (!debugProcessGrouping) {
       const cachedRows = messageRenderRowsCacheRef.current.get(rowsCacheKey)
       if (cachedRows) {
+        virtualizationMetricsRef.current = {
+          lastRowDeriveMs: 0,
+          lastRenderRowsCount: cachedRows.length,
+        }
         return cachedRows
       }
     }
@@ -1132,6 +1534,11 @@ function Chat() {
         setLimitedCacheEntry(messageRenderRowsCacheRef.current, rowsCacheKey, plainRows)
       }
 
+      const deriveEnd = typeof performance !== 'undefined' ? performance.now() : Date.now()
+      virtualizationMetricsRef.current = {
+        lastRowDeriveMs: Math.max(0, deriveEnd - deriveStart),
+        lastRenderRowsCount: plainRows.length,
+      }
       return plainRows
     }
 
@@ -1169,15 +1576,13 @@ function Chat() {
       if (runMessages.length >= CROSS_MESSAGE_PROCESS_GROUP_MIN_MESSAGES) {
         const memberMessageIds = runMessages.map(message => message.id)
 
-        let toolCount = runMessages.reduce((count, message) => {
+        let toolCount = 0
+        let reasoningCount = 0
+        for (const message of runMessages) {
           const parsed = parsedMessageDataById.get(message.id) ?? EMPTY_PARSED_MESSAGE_DATA
-          return count + countToolSignals(parsed)
-        }, 0)
-
-        let reasoningCount = runMessages.reduce((count, message) => {
-          const parsed = parsedMessageDataById.get(message.id) ?? EMPTY_PARSED_MESSAGE_DATA
-          return count + countReasoningSignals(message, parsed)
-        }, 0)
+          toolCount += countToolSignals(parsed)
+          reasoningCount += countReasoningSignals(message, parsed)
+        }
 
         let bridgedMessageId: MessageId | undefined
         const trailingCandidate = filteredMessages[cursor]
@@ -1240,21 +1645,50 @@ function Chat() {
       setLimitedCacheEntry(messageRenderRowsCacheRef.current, rowsCacheKey, rows)
     }
 
+    const deriveEnd = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    virtualizationMetricsRef.current = {
+      lastRowDeriveMs: Math.max(0, deriveEnd - deriveStart),
+      lastRenderRowsCount: rows.length,
+    }
+
     return rows
   }, [filteredMessages, filteredMessagesSignature, groupToolReasoningRuns, parsedMessageDataById])
+
+  const messageById = useMemo(() => {
+    const map = new Map<string, Message>()
+    for (const msg of filteredMessages) {
+      map.set(String(msg.id), msg)
+    }
+    return map
+  }, [filteredMessages])
+
+  const messageRowIndexByMessageId = useMemo(() => {
+    const rowIndexByMessageId = new Map<string, number>()
+
+    for (let index = 0; index < messageRenderRows.length; index++) {
+      const row = messageRenderRows[index]
+      if (row.kind === 'message') {
+        rowIndexByMessageId.set(String(row.message.id), index)
+        continue
+      }
+
+      for (const memberId of row.memberMessageIds) {
+        const key = String(memberId)
+        if (!rowIndexByMessageId.has(key)) {
+          rowIndexByMessageId.set(key, index)
+        }
+      }
+    }
+
+    return rowIndexByMessageId
+  }, [messageRenderRows])
 
   const findMessageRowIndex = useCallback(
     (targetId: MessageId | null | undefined): number => {
       if (targetId == null) return -1
-      const target = String(targetId)
-      return messageRenderRows.findIndex(row => {
-        if (row.kind === 'message') {
-          return String(row.message.id) === target
-        }
-        return row.memberMessageIds.some(id => String(id) === target)
-      })
+      return messageRowIndexByMessageId.get(String(targetId)) ?? -1
     },
-    [messageRenderRows]
+    [messageRowIndexByMessageId]
   )
 
   // Calculate padding for end of list - allows last message to scroll to middle of viewport
@@ -1262,33 +1696,193 @@ function Chat() {
     return Math.max(500, containerHeight * 0.6)
   }, [containerHeight])
 
-  // Determine if optimistic messages should be shown (all modes for instant feedback)
+  // Determine if optimistic/streaming messages should be shown (all modes for instant feedback)
   const showOptimisticMessage = !!optimisticMessage
   const showOptimisticBranchMessage = !!optimisticBranchMessage
+  const showStreamingMessage =
+    streamState.active &&
+    (Boolean(streamState.buffer) ||
+      Boolean(streamState.thinkingBuffer) ||
+      streamState.toolCalls.length > 0 ||
+      streamState.events.length > 0)
 
-  // Determine if streaming message should be shown (include in virtualizer)
-  const showStreamingMessage = useMemo(
-    () =>
-      streamState.active &&
-      (Boolean(streamState.buffer) ||
-        Boolean(streamState.thinkingBuffer) ||
-        streamState.toolCalls.length > 0 ||
-        streamState.events.length > 0),
-    [streamState.active, streamState.buffer, streamState.thinkingBuffer, streamState.toolCalls, streamState.events]
-  )
+  const virtualRows = useMemo<VirtualRenderRow[]>(() => {
+    const rows: VirtualRenderRow[] = messageRenderRows.map((row, index) => ({
+      kind: 'message_row',
+      key: virtualRowsV2Enabled
+        ? row.kind === 'message'
+          ? `message-${row.message.id}`
+          : `group-${row.id}`
+        : `legacy-row-${index}`,
+      row,
+    }))
 
-  // Calculate extra items count for virtualizer (optimistic + streaming)
-  const extraItemsCount =
-    (showOptimisticMessage ? 1 : 0) + (showOptimisticBranchMessage ? 1 : 0) + (showStreamingMessage ? 1 : 0)
+    if (showOptimisticMessage && optimisticMessage) {
+      rows.push({
+        kind: 'optimistic_message',
+        key: `optimistic-${optimisticMessage.id}`,
+        message: optimisticMessage,
+      })
+    }
+
+    if (showOptimisticBranchMessage && optimisticBranchMessage) {
+      rows.push({
+        kind: 'optimistic_branch_message',
+        key: `optimistic-branch-${optimisticBranchMessage.id}`,
+        message: optimisticBranchMessage,
+      })
+    }
+
+    if (showStreamingMessage) {
+      rows.push({
+        kind: 'streaming_message',
+        key: 'streaming',
+      })
+    }
+
+    return rows
+  }, [
+    messageRenderRows,
+    showOptimisticMessage,
+    optimisticMessage,
+    showOptimisticBranchMessage,
+    optimisticBranchMessage,
+    showStreamingMessage,
+    virtualRowsV2Enabled,
+  ])
+
+  useEffect(() => {
+    benchLatestMessageCountRef.current = filteredMessages.length
+    benchLatestVirtualRowCountRef.current = virtualRows.length
+    benchLatestConversationIdRef.current = currentConversationId != null ? String(currentConversationId) : null
+  }, [currentConversationId, filteredMessages.length, virtualRows.length])
 
   // Virtualizer for efficient message list rendering
   const virtualizer = useVirtualizer({
-    count: messageRenderRows.length + extraItemsCount,
+    count: virtualRows.length,
+    getItemKey: index => (virtualRowsV2Enabled ? virtualRows[index]?.key ?? index : index),
     getScrollElement: () => messagesContainerRef.current,
     estimateSize: () => 200, // Estimated average message height
-    overscan: 5, // Buffer 5 messages above/below viewport
+    overscan: 6, // Buffer rows above/below viewport
     paddingEnd: virtualizerPaddingEnd,
   })
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.localStorage.getItem('chat:debugVirtualizerMetrics') !== 'true') return
+
+    console.debug('[Chat] Virtual rows derived', {
+      v2: virtualRowsV2Enabled,
+      rows: virtualRows.length,
+      deriveMs: virtualizationMetricsRef.current.lastRowDeriveMs,
+      baseRows: virtualizationMetricsRef.current.lastRenderRowsCount,
+    })
+  }, [virtualRows.length, filteredMessagesSignature, virtualRowsV2Enabled])
+
+  const scrollToMessageRowIndex = useCallback(
+    (targetIndex: number, align: 'start' | 'center' | 'end' | 'auto' = 'start'): boolean => {
+      if (targetIndex < 0) return false
+      virtualizer.scrollToIndex(targetIndex, { align })
+      return true
+    },
+    [virtualizer]
+  )
+
+  const handleVirtualListProfilerRender = useCallback<React.ProfilerOnRenderCallback>(
+    (id, phase, actualDuration, baseDuration, startTime, commitTime) => {
+      if (!benchEnabled) return
+      pushLimitedSample(benchCommitDurationsRef.current, actualDuration)
+      appendBenchEvent('virtual_list_commit', {
+        id,
+        phase,
+        actualDuration,
+        baseDuration,
+        startTime,
+        commitTime,
+      })
+    },
+    [appendBenchEvent, benchEnabled]
+  )
+
+  useEffect(() => {
+    if (!benchEnabled) return
+
+    const deriveMs = virtualizationMetricsRef.current.lastRowDeriveMs
+    if (deriveMs > 0) {
+      pushLimitedSample(benchDeriveDurationsRef.current, deriveMs)
+      appendBenchEvent('virtual_rows_derived', {
+        rows: virtualRows.length,
+        deriveMs,
+      })
+    }
+  }, [appendBenchEvent, benchEnabled, filteredMessagesSignature, virtualRows.length])
+
+  useEffect(() => {
+    if (!benchEnabled) {
+      if (benchRafIdRef.current != null) {
+        cancelAnimationFrame(benchRafIdRef.current)
+        benchRafIdRef.current = null
+      }
+      return
+    }
+
+    const tick = (timestamp: number) => {
+      const previous = benchLastRafTsRef.current
+      if (previous != null) {
+        const frameDelta = timestamp - previous
+        pushLimitedSample(benchFrameDurationsRef.current, frameDelta)
+
+        if (timestamp - benchLastScrollEventTsRef.current <= BENCH_SCROLL_ACTIVE_WINDOW_MS) {
+          pushLimitedSample(benchScrollFrameDurationsRef.current, frameDelta)
+        }
+      }
+
+      benchLastRafTsRef.current = timestamp
+      benchRafIdRef.current = requestAnimationFrame(tick)
+    }
+
+    benchRafIdRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (benchRafIdRef.current != null) {
+        cancelAnimationFrame(benchRafIdRef.current)
+        benchRafIdRef.current = null
+      }
+    }
+  }, [benchEnabled])
+
+  useEffect(() => {
+    if (!benchEnabled) return
+
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    const onScroll = () => {
+      benchLastScrollEventTsRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now()
+    }
+
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', onScroll)
+    }
+  }, [benchEnabled])
+
+  useEffect(() => {
+    if (!benchEnabled) return
+    appendBenchEvent(streamState.active ? 'stream_started' : 'stream_stopped', {
+      streamId: streamState.id,
+      hasBuffer: Boolean(streamState.buffer),
+      toolCalls: streamState.toolCalls.length,
+      events: streamState.events.length,
+    })
+  }, [
+    appendBenchEvent,
+    benchEnabled,
+    streamState.active,
+    streamState.id,
+    streamState.buffer,
+    streamState.toolCalls.length,
+    streamState.events.length,
+  ])
 
   // Consider the user to be "at the bottom" if within this many pixels
   const NEAR_BOTTOM_PX = 48
@@ -1418,6 +2012,8 @@ function Chat() {
   const [titleInput, setTitleInput] = useState(currentConversation?.title ?? '')
   const [editingTitle, setEditingTitle] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
+  const editingTitleRef = useRef(false)
+  const optionsOpenRef = useRef(false)
   const [cloningConversation, setCloningConversation] = useState(false)
   const [isTitleBarVisible, setIsTitleBarVisible] = useState(true)
   const lastScrollTopRef = useRef(0)
@@ -1426,6 +2022,14 @@ function Chat() {
   useEffect(() => {
     setTitleInput(currentConversation?.title ?? '')
   }, [currentConversation?.title])
+
+  useEffect(() => {
+    editingTitleRef.current = editingTitle
+  }, [editingTitle])
+
+  useEffect(() => {
+    optionsOpenRef.current = optionsOpen
+  }, [optionsOpen])
 
   useEffect(() => {
     setAddedIdeContexts([])
@@ -1469,7 +2073,7 @@ function Chat() {
         if (nearTop) {
           setIsTitleBarVisible(true)
         } else if (absDelta > 8) {
-          if (delta > 0 && !editingTitle && !optionsOpen) {
+          if (delta > 0 && !editingTitleRef.current && !optionsOpenRef.current) {
             setIsTitleBarVisible(false)
           } else if (delta < 0) {
             setIsTitleBarVisible(true)
@@ -1486,7 +2090,7 @@ function Chat() {
       el.removeEventListener('scroll', onScroll)
       if (rafId != null) cancelAnimationFrame(rafId)
     }
-  }, [editingTitle, optionsOpen])
+  }, [])
 
   // Debounce title updates to avoid dispatching on every keystroke
   useEffect(() => {
@@ -1551,9 +2155,24 @@ function Chat() {
   }, [titleInput, currentConversationId, currentConversation?.title, dispatch, queryClient, selectedProject?.id])
 
   // Reset visible messages immediately when switching conversations to prevent stale message bleed.
+  // Also evict inactive message caches from previously visited conversations to reduce memory pressure.
   useEffect(() => {
+    queryClient.removeQueries({
+      queryKey: ['conversations'],
+      type: 'inactive',
+      predicate: query => {
+        const key = query.queryKey
+        return (
+          Array.isArray(key) &&
+          key[0] === 'conversations' &&
+          key[2] === 'messages' &&
+          String(key[1]) !== String(conversationIdFromUrl ?? '')
+        )
+      },
+    })
+
     dispatch(chatSliceActions.messagesLoaded([]))
-  }, [conversationIdFromUrl, dispatch])
+  }, [conversationIdFromUrl, dispatch, queryClient])
 
   // Sync React Query messages to Redux when query resolves, including empty conversations.
   // This keeps Redux state updated for components that still depend on it.
@@ -2066,23 +2685,27 @@ function Chat() {
     }
   }, [])
 
+  useEffect(() => {
+    streamActiveRef.current = streamState.active
+  }, [streamState.active])
+
   // Listen for user scrolls; while streaming, toggle override based on proximity to bottom
   useEffect(() => {
     const el = messagesContainerRef.current
     if (!el) return
+
     const onScroll = (e: Event) => {
-      // Only treat as user scroll if the event is trusted (user-initiated)
-      if (e.isTrusted && streamState.active) {
-        const nearBottom = isNearBottom(el as HTMLElement, NEAR_BOTTOM_PX)
-        // If the user is near the bottom, allow auto-pinning; otherwise, suppress it
-        userScrolledDuringStreamRef.current = !nearBottom
-      }
+      if (!e.isTrusted || !streamActiveRef.current) return
+      const nearBottom = isNearBottom(el, NEAR_BOTTOM_PX)
+      // If the user is near the bottom, allow auto-pinning; otherwise, suppress it
+      userScrolledDuringStreamRef.current = !nearBottom
     }
+
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       el.removeEventListener('scroll', onScroll)
     }
-  }, [streamState.active])
+  }, [])
 
   // Reset the user scroll override when the stream finishes
   useEffect(() => {
@@ -2116,7 +2739,7 @@ function Chat() {
 
       if (targetIndex !== -1) {
         // Use virtualizer to scroll to the message index
-        virtualizer.scrollToIndex(targetIndex, { align: 'start' })
+        scrollToMessageRowIndex(targetIndex, 'start')
 
         // Record that we've scrolled to this focused target to avoid later auto-scrolls fighting it
         if (typeof targetId === 'number') {
@@ -2127,7 +2750,7 @@ function Chat() {
       // After handling, reset so programmatic path changes (e.g., during send/stream) won't recenter
       selectionScrollCauseRef.current = null
     }
-  }, [selectedPath, focusedChatMessageId, findMessageRowIndex, virtualizer])
+  }, [selectedPath, focusedChatMessageId, findMessageRowIndex, scrollToMessageRowIndex])
 
   // Scroll to the focused message when focus changes via hash/search (non user-click cases)
   useEffect(() => {
@@ -2148,11 +2771,11 @@ function Chat() {
 
     if (targetIndex !== -1) {
       // Use virtualizer to scroll to the message index
-      virtualizer.scrollToIndex(targetIndex, { align: 'start' })
+      scrollToMessageRowIndex(targetIndex, 'start')
       // Mark this focus as handled so we don't keep re-centering on subsequent renders
       lastFocusedScrollIdRef.current = focusedChatMessageId
     }
-  }, [focusedChatMessageId, findMessageRowIndex, virtualizer, streamState.active])
+  }, [focusedChatMessageId, findMessageRowIndex, scrollToMessageRowIndex, streamState.active])
 
   // Helper to check if a message should be excluded from visibility tracking
   // (tool-only or reasoning-only messages without meaningful text content)
@@ -2189,6 +2812,24 @@ function Chat() {
     return false
   }, [])
 
+  const visibilityInputsRef = useRef<{
+    filteredMessages: Message[]
+    virtualRows: VirtualRenderRow[]
+    isToolOrReasoningOnly: (msg: Message) => boolean
+  }>({
+    filteredMessages,
+    virtualRows,
+    isToolOrReasoningOnly,
+  })
+
+  useEffect(() => {
+    visibilityInputsRef.current = {
+      filteredMessages,
+      virtualRows,
+      isToolOrReasoningOnly,
+    }
+  }, [filteredMessages, virtualRows, isToolOrReasoningOnly])
+
   // Track the most visible message using virtualizer's virtual items on scroll
   // Since elements are virtualized, we compute visibility based on scroll position
   useEffect(() => {
@@ -2196,23 +2837,23 @@ function Chat() {
     if (!container) return
 
     const updateVisibleMessage = () => {
+      const { filteredMessages: currentMessages, virtualRows: currentVirtualRows, isToolOrReasoningOnly: isExcluded } =
+        visibilityInputsRef.current
       const virtualItems = virtualizer.getVirtualItems()
 
-      // Helper to find the first allowed message in the list (fallback)
       const findFirstAllowedMessage = (): MessageId | null => {
-        for (const msg of filteredMessages) {
-          if (msg && !isToolOrReasoningOnly(msg)) {
+        for (const msg of currentMessages) {
+          if (msg && !isExcluded(msg)) {
             return msg.id
           }
         }
         return null
       }
 
-      // Helper to find the last allowed message in the list (fallback)
       const findLastAllowedMessage = (): MessageId | null => {
-        for (let i = filteredMessages.length - 1; i >= 0; i--) {
-          const msg = filteredMessages[i]
-          if (msg && !isToolOrReasoningOnly(msg)) {
+        for (let i = currentMessages.length - 1; i >= 0; i--) {
+          const msg = currentMessages[i]
+          if (msg && !isExcluded(msg)) {
             return msg.id
           }
         }
@@ -2220,69 +2861,66 @@ function Chat() {
       }
 
       if (virtualItems.length === 0) {
-        // No virtual items - fall back to first allowed message, never set null
         const fallback = findFirstAllowedMessage()
         if (fallback) {
           setVisibleMessageId(fallback)
         }
-        // If no fallback found, keep current value (don't set null)
         return
       }
 
       const scrollTop = container.scrollTop
       const viewportHeight = container.clientHeight
-      // Offset detection point 20px below scroll position for better alignment
       const detectionOffset = 20
       const adjustedScrollTop = scrollTop + detectionOffset
 
-      // Find the first allowed message whose top edge is at or past the scroll position
-      // (i.e., the message currently at the top of the viewport)
       let closestItem: (typeof virtualItems)[0] | null = null
 
       for (const item of virtualItems) {
-        const row = messageRenderRows[item.index]
-        if (!row || row.kind !== 'message') continue
-        const msg = row.message
-        if (!msg || isToolOrReasoningOnly(msg)) continue
+        const virtualRenderRow = currentVirtualRows[item.index]
+        if (!virtualRenderRow || virtualRenderRow.kind !== 'message_row' || virtualRenderRow.row.kind !== 'message') {
+          continue
+        }
+
+        const msg = virtualRenderRow.row.message
+        if (!msg || isExcluded(msg)) continue
 
         const itemTop = item.start
         const itemBottom = item.start + item.size
-
-        // Message is visible if it overlaps the top 50% of the viewport (with offset)
         const topHalfEnd = adjustedScrollTop + viewportHeight * 0.5
         if (itemBottom < adjustedScrollTop || itemTop > topHalfEnd) continue
 
-        // Pick the first (topmost) allowed message in the top half
         if (!closestItem || item.start < closestItem.start) {
           closestItem = item
         }
       }
 
-      // If all visible items are excluded types, fall back to the last allowed message
       if (!closestItem) {
         const fallback = findLastAllowedMessage()
         if (fallback) {
           setVisibleMessageId(fallback)
         }
-        // If no fallback found, keep current value (don't set null)
         return
       }
 
-      const row = messageRenderRows[closestItem.index]
-      if (row && row.kind === 'message') {
-        setVisibleMessageId(row.message.id)
+      const closestVirtualRenderRow = currentVirtualRows[closestItem.index]
+      if (closestVirtualRenderRow?.kind === 'message_row' && closestVirtualRenderRow.row.kind === 'message') {
+        setVisibleMessageId(closestVirtualRenderRow.row.message.id)
       }
     }
 
-    // Initial update
+    updateVisibleMessageRef.current = updateVisibleMessage
     updateVisibleMessage()
 
-    // Update on scroll
     container.addEventListener('scroll', updateVisibleMessage, { passive: true })
     return () => {
+      updateVisibleMessageRef.current = null
       container.removeEventListener('scroll', updateVisibleMessage)
     }
-  }, [filteredMessages, messageRenderRows, virtualizer, isToolOrReasoningOnly])
+  }, [virtualizer])
+
+  useEffect(() => {
+    updateVisibleMessageRef.current?.()
+  }, [filteredMessagesSignature, virtualRows])
 
   // If URL contains a #messageId fragment, capture it once
   // const location = useLocation() // Moved to top
@@ -2545,32 +3183,21 @@ function Chat() {
     [dispatch]
   )
 
-  const handleComposerSlashCommandSelect = useCallback((command: string): ComposerSlashCommandResult | void => {
-    if (command !== 'status-openai' && command !== '/status-openai') {
-      return { handled: false }
-    }
-
-    setShowOpenAIUsagePanel(true)
-    setOpenAIUsageLoading(true)
-    setOpenAIUsageError(null)
-
-    void (async () => {
-      const result = await fetchOpenAIUsageStatus()
-      if (result.type === 'success') {
-        setOpenAIUsageData(result.data)
-        setOpenAIUsageError(null)
-      } else {
-        setOpenAIUsageData(null)
-        setOpenAIUsageError(result.error)
+  const handleComposerSlashCommandSelect = useCallback(
+    (command: string): ComposerSlashCommandResult | void => {
+      const normalized = command.trim().toLowerCase().replace(/^\/+/, '')
+      if (normalized !== 'status-openai' && !parseBenchAction(command)) {
+        return { handled: false }
       }
-      setOpenAIUsageLoading(false)
-    })()
 
-    return {
-      handled: true,
-      clearInput: true,
-    }
-  }, [])
+      void runComposerCommand(command)
+      return {
+        handled: true,
+        clearInput: true,
+      }
+    },
+    [runComposerCommand]
+  )
 
   // Local version of canSend that checks input controller state.
   const canSendLocal = useMemo(() => {
@@ -2600,6 +3227,19 @@ function Chat() {
   const handleSend = useCallback(
     (value: number) => {
       const localInputValue = getLocalInput()
+      const trimmedInputValue = localInputValue.trim()
+      const normalizedInput = trimmedInputValue.toLowerCase().replace(/^\/+/, '')
+      const slashBenchAction = parseBenchAction(trimmedInputValue)
+      const isKnownSlashCommand = normalizedInput === 'status-openai' || slashBenchAction != null
+
+      if (trimmedInputValue.startsWith('/') && isKnownSlashCommand) {
+        void runComposerCommand(trimmedInputValue).then(result => {
+          if (result.handled && result.clearInput) {
+            clearLocalInput()
+          }
+        })
+        return
+      }
 
       // Re-enable auto-pinning for CC mode sends until the user scrolls during this stream
       if (ccMode) {
@@ -2864,6 +3504,7 @@ function Chat() {
       selectedProject,
       currentConversation,
       findLastExAgentSession,
+      runComposerCommand,
     ]
   )
 
@@ -3171,7 +3812,7 @@ function Chat() {
         }
         const targetIndex = findMessageRowIndex(parsedNodeId)
         if (targetIndex !== -1) {
-          virtualizer.scrollToIndex(targetIndex, { align: 'start' })
+          scrollToMessageRowIndex(targetIndex, 'start')
           lastFocusedScrollIdRef.current = parsedNodeId
         }
         return
@@ -3207,7 +3848,7 @@ function Chat() {
       streamState.active,
       visibleMessageId,
       findMessageRowIndex,
-      virtualizer,
+      scrollToMessageRowIndex,
     ]
   )
 
@@ -3487,8 +4128,24 @@ function Chat() {
   )
 
   const handleComposerSubmit = useCallback(() => {
+    const content = getLocalInput().trim()
+    if (content.startsWith('/')) {
+      void (async () => {
+        const commandResult = await runComposerCommand(content)
+        if (commandResult.handled) {
+          if (commandResult.clearInput) {
+            clearLocalInput()
+          }
+          return
+        }
+
+        handleSend(multiReplyCount)
+      })()
+      return
+    }
+
     handleSend(multiReplyCount)
-  }, [handleSend, multiReplyCount])
+  }, [clearLocalInput, getLocalInput, handleSend, multiReplyCount, runComposerCommand])
 
   const handleComposerBlurPersist = useCallback(
     (content: string) => {
@@ -3690,40 +4347,53 @@ function Chat() {
   // Get current credits from user state (in USD cents)
   const current_credits = currentUser?.cached_current_credits ?? 0
 
-  // Calculate token counts from displayed messages (current branch)
-  // Includes system prompts and context from both project and conversation
+  // Calculate context usage from displayed messages (current branch).
+  // Includes project/conversation prompts + message content + nested content_blocks/tool_calls.
   const tokenUsage = useMemo(() => {
-    let inputTokens = 0
-    let outputTokens = 0
-
-    // Include project system prompt and context (counted as input tokens)
-    if (selectedProject?.system_prompt) {
-      inputTokens += estimateTokenCount(selectedProject.system_prompt)
-    }
-    if (selectedProject?.context) {
-      inputTokens += estimateTokenCount(selectedProject.context)
-    }
-
-    // Include conversation system prompt and context (counted as input tokens)
-    if (currentConversation?.system_prompt) {
-      inputTokens += estimateTokenCount(currentConversation.system_prompt)
-    }
-    if (currentConversation?.conversation_context) {
-      inputTokens += estimateTokenCount(currentConversation.conversation_context)
-    }
-
-    // Count tokens from messages
-    displayMessages.forEach(msg => {
-      if (!msg || !msg.content) return
-      const tokens = estimateTokenCount(msg.content) + estimateTokenCount(JSON.stringify(msg.content_blocks))
-      if (msg.role === 'user') {
-        inputTokens += tokens
-      } else if (msg.role === 'assistant' || msg.role === 'ex_agent') {
-        outputTokens += tokens
+    const safeEstimateTokenCount = (value: unknown): number => {
+      if (value == null) return 0
+      if (typeof value === 'string') {
+        if (value.length === 0) return 0
+        return estimateTokenCount(value)
       }
+
+      try {
+        const serialized = JSON.stringify(value)
+        if (!serialized) return 0
+        return estimateTokenCount(serialized)
+      } catch {
+        return 0
+      }
+    }
+
+    let promptAndContextTokens = 0
+    let messageTokens = 0
+
+    // Include project system prompt and context.
+    promptAndContextTokens += safeEstimateTokenCount(selectedProject?.system_prompt)
+    promptAndContextTokens += safeEstimateTokenCount(selectedProject?.context)
+
+    // Include conversation system prompt and context.
+    promptAndContextTokens += safeEstimateTokenCount(currentConversation?.system_prompt)
+    promptAndContextTokens += safeEstimateTokenCount(currentConversation?.conversation_context)
+
+    // Count all visible message payloads, including nested tool data.
+    displayMessages.forEach(msg => {
+      if (!msg) return
+
+      const contentTokens = safeEstimateTokenCount(msg.content)
+      const contentBlockTokens = safeEstimateTokenCount((msg as any).content_blocks)
+      const toolCallTokens = safeEstimateTokenCount((msg as any).tool_calls)
+
+      // This ensures messages with empty content but non-empty content_blocks/tool_calls are counted.
+      messageTokens += contentTokens + contentBlockTokens + toolCallTokens
     })
 
-    return { inputTokens, outputTokens }
+    return {
+      promptAndContextTokens,
+      messageTokens,
+      totalContextTokens: promptAndContextTokens + messageTokens,
+    }
   }, [
     displayMessages,
     selectedProject?.system_prompt,
@@ -3732,33 +4402,19 @@ function Chat() {
     currentConversation?.conversation_context,
   ])
 
-  // Calculate token limits: shared context budget between input and output
+  // Calculate total context budget (single combined budget for easier interpretation).
   const tokenLimits = useMemo(() => {
     const usdValue = current_credits / 100 // Convert credits to USD
-    const providerSlug = (providers.currentProvider || '').toLowerCase().replace(/\s+/g, '')
-    const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
 
-    // Model context limit (shared between input + output)
+    // Model context limit.
     const totalContextLimit = selectedModel?.contextLength || 128_000
-    const configuredCompletionCap = selectedModel?.maxCompletionTokens
-    const hasValidCompletionCap =
-      typeof configuredCompletionCap === 'number' &&
-      Number.isFinite(configuredCompletionCap) &&
-      configuredCompletionCap > 0
-    // For OpenAI ChatGPT, use the full context window as the hard cap.
-    // Other providers may enforce a stricter completion cap.
-    const maxCompletionCap = isOpenAIChatGPT
-      ? totalContextLimit
-      : hasValidCompletionCap
-        ? configuredCompletionCap
-        : totalContextLimit
 
     // Cost is per 1K tokens: cost = (tokens / 1000) * costPer1K
     // So: tokens = (usd * 1000) / costPer1K
     const promptCostPer1K = selectedModel?.promptCost ?? 0
     const completionCostPer1K = selectedModel?.completionCost ?? 0
 
-    // Calculate credit-based limits
+    // Calculate credit-based limits.
     let creditInputLimit = Infinity
     let creditOutputLimit = Infinity
 
@@ -3769,32 +4425,15 @@ function Chat() {
       creditOutputLimit = Math.floor((usdValue * 1000) / completionCostPer1K)
     }
 
-    // Total budget is the minimum of context limit and credit-based limits
-    const totalBudget = Math.min(totalContextLimit, creditInputLimit, creditOutputLimit)
+    // Single budget: constrained by model context and available credit limits.
+    const totalBudget = Math.max(0, Math.min(totalContextLimit, creditInputLimit, creditOutputLimit))
 
-    // Adaptive limits: as one grows, the other shrinks
-    // Input limit = total budget minus output tokens already used
-    // Output limit = total budget minus input tokens already used (capped by maxCompletionTokens)
-    const maxInputTokens = Math.max(0, totalBudget - tokenUsage.outputTokens)
-    const maxOutputTokens = Math.min(Math.max(0, totalBudget - tokenUsage.inputTokens), maxCompletionCap)
+    return { totalBudget, totalContextLimit }
+  }, [selectedModel?.promptCost, selectedModel?.completionCost, selectedModel?.contextLength, current_credits])
 
-    return { maxInputTokens, maxOutputTokens, totalBudget }
-  }, [
-    selectedModel?.promptCost,
-    selectedModel?.completionCost,
-    selectedModel?.contextLength,
-    selectedModel?.maxCompletionTokens,
-    providers.currentProvider,
-    current_credits,
-    tokenUsage.inputTokens,
-    tokenUsage.outputTokens,
-  ])
-
-  // Calculate progress percentages
-  const inputProgress =
-    tokenLimits.maxInputTokens > 0 ? Math.min((tokenUsage.inputTokens / tokenLimits.maxInputTokens) * 100, 100) : 0
-  const outputProgress =
-    tokenLimits.maxOutputTokens > 0 ? Math.min((tokenUsage.outputTokens / tokenLimits.maxOutputTokens) * 100, 100) : 0
+  // Calculate single progress percentage.
+  const totalContextProgress =
+    tokenLimits.totalBudget > 0 ? Math.min((tokenUsage.totalContextTokens / tokenLimits.totalBudget) * 100, 100) : 0
 
   // Handler to refresh user credits
   const handleRefreshCredits = useCallback(async () => {
@@ -3986,320 +4625,289 @@ function Chat() {
               willChange: 'scroll-position',
             }}
           >
-            {messageRenderRows.length === 0 && extraItemsCount === 0 ? (
+            <React.Profiler id='chat-virtual-list' onRender={handleVirtualListProfilerRender}>
+              {virtualRows.length === 0 ? (
               <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
             ) : (
-              <div
-                style={{
-                  minHeight: `${virtualizer.getTotalSize()}px`,
-                  height: `${virtualizer.getTotalSize()}px`,
-                  width: '100%',
-                  position: 'relative',
-                  flexShrink: 0,
-                }}
-              >
-                {virtualizer.getVirtualItems().map(virtualRow => {
-                  // Calculate indices for extra items (order: optimistic, optimisticBranch, streaming)
-                  const optimisticIndex = showOptimisticMessage ? messageRenderRows.length : -1
-                  const optimisticBranchIndex = showOptimisticBranchMessage
-                    ? messageRenderRows.length + (showOptimisticMessage ? 1 : 0)
-                    : -1
-                  const streamingIndex = showStreamingMessage
-                    ? messageRenderRows.length + (showOptimisticMessage ? 1 : 0) + (showOptimisticBranchMessage ? 1 : 0)
-                    : -1
+              (() => {
+                const totalSize = virtualizer.getTotalSize()
+                const virtualItems = virtualizer.getVirtualItems()
 
-                  // Render optimistic message
-                  if (virtualRow.index === optimisticIndex && optimisticMessage) {
-                    return (
-                      <div
-                        key={`optimistic-${optimisticMessage.id}`}
-                        id={`message-optimistic-${optimisticMessage.id}`}
-                        data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          transform: `translateY(${virtualRow.start}px)`,
-                        }}
-                      >
-                        <ChatMessage
-                          id={optimisticMessage.id.toString()}
-                          role={optimisticMessage.role}
-                          content={optimisticMessage.content}
-                          timestamp={optimisticMessage.created_at}
-                          modelName={optimisticMessage.model_name}
-                          artifacts={optimisticMessage.artifacts}
-                          width='w-full'
-                          fontSizeOffset={fontSizeOffset}
-                          groupToolReasoningRuns={groupToolReasoningRuns}
-                          className='opacity-70'
-                          onOpenToolHtmlModal={openToolHtmlModal}
-                        />
-                      </div>
-                    )
-                  }
+                return (
+                  <div
+                    style={{
+                      minHeight: `${totalSize}px`,
+                      height: `${totalSize}px`,
+                      width: '100%',
+                      position: 'relative',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {virtualItems.map(virtualRow => {
+                      const renderRow = virtualRows[virtualRow.index]
+                      if (!renderRow) return null
 
-                  // Render optimistic branch message
-                  if (virtualRow.index === optimisticBranchIndex && optimisticBranchMessage) {
-                    return (
-                      <div
-                        key={`optimistic-branch-${optimisticBranchMessage.id}`}
-                        id={`message-optimistic-branch-${optimisticBranchMessage.id}`}
-                        data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          transform: `translateY(${virtualRow.start}px)`,
-                        }}
-                      >
-                        <ChatMessage
-                          id={optimisticBranchMessage.id.toString()}
-                          role={optimisticBranchMessage.role}
-                          content={optimisticBranchMessage.content}
-                          timestamp={optimisticBranchMessage.created_at}
-                          modelName={optimisticBranchMessage.model_name}
-                          artifacts={optimisticBranchMessage.artifacts}
-                          width='w-full'
-                          fontSizeOffset={fontSizeOffset}
-                          groupToolReasoningRuns={groupToolReasoningRuns}
-                          className='opacity-70'
-                          onOpenToolHtmlModal={openToolHtmlModal}
-                        />
-                      </div>
-                    )
-                  }
-
-                  // Render streaming message
-                  if (virtualRow.index === streamingIndex) {
-                    return (
-                      <div
-                        key='streaming'
-                        id='message-streaming'
-                        data-index={virtualRow.index}
-                        // DISABLED: Skip measuring during stream to prevent scroll jumps
-                        // ref={virtualizer.measureElement}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          transform: `translateY(${virtualRow.start}px)`,
-                        }}
-                      >
-                        <ChatMessage
-                          id='streaming'
-                          role='assistant'
-                          content={streamState.buffer}
-                          thinking={streamState.thinkingBuffer}
-                          toolCalls={streamState.toolCalls}
-                          streamEvents={streamState.events}
-                          width='w-full'
-                          fontSizeOffset={fontSizeOffset}
-                          groupToolReasoningRuns={groupToolReasoningRuns}
-                          modelName={selectedModel?.name || undefined}
-                          className=''
-                          onOpenToolHtmlModal={openToolHtmlModal}
-                        />
-                      </div>
-                    )
-                  }
-
-                  // Render regular message row or grouped process-only run
-                  const row = messageRenderRows[virtualRow.index]
-                  if (!row) return null
-
-                  if (row.kind === 'process_group') {
-                    const runId = String(row.id)
-                    const isExpanded = expandedProcessMessageRuns.has(runId)
-                    const summaryParts: string[] = []
-                    if (row.toolCount > 0) {
-                      summaryParts.push(`${row.toolCount} tool${row.toolCount === 1 ? '' : 's'}`)
-                    }
-                    if (row.reasoningCount > 0) {
-                      summaryParts.push(`${row.reasoningCount} reasoning`)
-                    }
-
-                    return (
-                      <div
-                        key={runId}
-                        id={`message-group-${runId}`}
-                        data-index={virtualRow.index}
-                        ref={virtualizer.measureElement}
-                        className='z-0'
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          transform: `translateY(${virtualRow.start}px)`,
-                        }}
-                      >
-                        <div className='relative pl-6 py-3 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
-                          <div className='absolute -left-[5px] top-4 w-2.5 h-2.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.35)]' />
-                          <button
-                            onClick={() => toggleProcessMessageRun(runId)}
-                            className='flex items-center gap-2 group/run hover:opacity-80 transition-opacity cursor-pointer outline-none'
+                      if (renderRow.kind === 'optimistic_message') {
+                        const message = renderRow.message
+                        return (
+                          <VirtualizedRowContainer
+                            key={renderRow.key}
+                            id={`message-optimistic-${message.id}`}
+                            index={virtualRow.index}
+                            start={virtualRow.start}
+                            measureElement={virtualizer.measureElement}
                           >
-                            <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
-                              Agent Steps ({row.messages.length})
-                            </span>
-                            {!isExpanded && summaryParts.length > 0 && (
-                              <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[320px]'>
-                                {summaryParts.join(' • ')}
-                              </span>
-                            )}
-                            <svg
-                              className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/run:text-neutral-500 dark:group-hover/run:text-neutral-400 ${isExpanded ? 'open' : ''}`}
-                              fill='none'
-                              viewBox='0 0 24 24'
-                              stroke='currentColor'
-                            >
-                              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
-                            </svg>
-                          </button>
-                          <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
-                            <div className='tool-expand-content pt-2'>
-                              {row.messages.map(groupedMessage => {
-                                const { toolCalls, contentBlocks } =
-                                  parsedMessageDataById.get(groupedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
-                                return (
-                                  <ChatMessage
-                                    key={groupedMessage.id}
-                                    id={groupedMessage.id.toString()}
-                                    role={groupedMessage.role}
-                                    content={groupedMessage.content}
-                                    thinking={groupedMessage.thinking_block}
-                                    toolCalls={toolCalls}
-                                    contentBlocks={contentBlocks}
-                                    timestamp={groupedMessage.created_at}
-                                    width='w-full'
-                                    modelName={groupedMessage.model_name}
-                                    artifacts={groupedMessage.artifacts}
-                                    fontSizeOffset={fontSizeOffset}
-                                    groupToolReasoningRuns={false}
-                                    onOpenToolHtmlModal={openToolHtmlModal}
-                                  />
-                                )
-                              })}
+                            <ChatMessage
+                              id={message.id.toString()}
+                              role={message.role}
+                              content={message.content}
+                              timestamp={message.created_at}
+                              modelName={message.model_name}
+                              artifacts={message.artifacts}
+                              width='w-full'
+                              fontSizeOffset={fontSizeOffset}
+                              groupToolReasoningRuns={groupToolReasoningRuns}
+                              className='opacity-70'
+                              onOpenToolHtmlModal={openToolHtmlModal}
+                            />
+                          </VirtualizedRowContainer>
+                        )
+                      }
 
-                              {(() => {
-                                if (row.bridgedMessageId == null) return null
-                                const bridgedMessage = filteredMessages.find(
-                                  message => String(message.id) === String(row.bridgedMessageId)
-                                )
-                                if (!bridgedMessage) return null
+                      if (renderRow.kind === 'optimistic_branch_message') {
+                        const message = renderRow.message
+                        return (
+                          <VirtualizedRowContainer
+                            key={renderRow.key}
+                            id={`message-optimistic-branch-${message.id}`}
+                            index={virtualRow.index}
+                            start={virtualRow.start}
+                            measureElement={virtualizer.measureElement}
+                          >
+                            <ChatMessage
+                              id={message.id.toString()}
+                              role={message.role}
+                              content={message.content}
+                              timestamp={message.created_at}
+                              modelName={message.model_name}
+                              artifacts={message.artifacts}
+                              width='w-full'
+                              fontSizeOffset={fontSizeOffset}
+                              groupToolReasoningRuns={groupToolReasoningRuns}
+                              className='opacity-70'
+                              onOpenToolHtmlModal={openToolHtmlModal}
+                            />
+                          </VirtualizedRowContainer>
+                        )
+                      }
 
-                                const bridgedParsed =
-                                  parsedMessageDataById.get(bridgedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
-                                const bridgedProcessBlocks = Array.isArray(bridgedParsed.contentBlocks)
-                                  ? bridgedParsed.contentBlocks.filter(block => isProcessContentBlock(block))
-                                  : []
+                      if (renderRow.kind === 'streaming_message') {
+                        return (
+                          <VirtualizedRowContainer
+                            key={renderRow.key}
+                            id='message-streaming'
+                            index={virtualRow.index}
+                            start={virtualRow.start}
+                          >
+                            <ChatMessage
+                              id='streaming'
+                              role='assistant'
+                              content={streamState.buffer}
+                              thinking={streamState.thinkingBuffer}
+                              toolCalls={streamState.toolCalls}
+                              streamEvents={streamState.events}
+                              width='w-full'
+                              fontSizeOffset={fontSizeOffset}
+                              groupToolReasoningRuns={groupToolReasoningRuns}
+                              modelName={selectedModel?.name || undefined}
+                              className=''
+                              onOpenToolHtmlModal={openToolHtmlModal}
+                            />
+                          </VirtualizedRowContainer>
+                        )
+                      }
 
-                                const hasThinking =
-                                  typeof bridgedMessage.thinking_block === 'string' &&
-                                  bridgedMessage.thinking_block.trim().length > 0
-                                const hasToolCalls =
-                                  Array.isArray(bridgedParsed.toolCalls) && bridgedParsed.toolCalls.length > 0
-                                const hasProcessBlocks = bridgedProcessBlocks.length > 0
+                      const row = renderRow.row
 
-                                if (!hasThinking && !hasToolCalls && !hasProcessBlocks) {
-                                  return null
-                                }
+                      if (row.kind === 'process_group') {
+                        const runId = String(row.id)
+                        const isExpanded = expandedProcessMessageRuns.has(runId)
+                        const summaryParts: string[] = []
+                        if (row.toolCount > 0) {
+                          summaryParts.push(`${row.toolCount} tool${row.toolCount === 1 ? '' : 's'}`)
+                        }
+                        if (row.reasoningCount > 0) {
+                          summaryParts.push(`${row.reasoningCount} reasoning`)
+                        }
 
-                                return (
-                                  <ChatMessage
-                                    key={`bridged-process-${bridgedMessage.id}`}
-                                    id={`${bridgedMessage.id}-process`}
-                                    role={bridgedMessage.role}
-                                    content=''
-                                    thinking={bridgedMessage.thinking_block}
-                                    toolCalls={bridgedParsed.toolCalls}
-                                    contentBlocks={bridgedProcessBlocks}
-                                    timestamp={bridgedMessage.created_at}
-                                    width='w-full'
-                                    modelName={bridgedMessage.model_name}
-                                    artifacts={bridgedMessage.artifacts}
-                                    fontSizeOffset={fontSizeOffset}
-                                    groupToolReasoningRuns={false}
-                                    onOpenToolHtmlModal={openToolHtmlModal}
-                                  />
-                                )
-                              })()}
+                        return (
+                          <VirtualizedRowContainer
+                            key={renderRow.key}
+                            id={`message-group-${runId}`}
+                            index={virtualRow.index}
+                            start={virtualRow.start}
+                            measureElement={virtualizer.measureElement}
+                            className='z-0'
+                          >
+                            <div className='relative pl-6 py-3 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+                              <div className='absolute -left-[5px] top-4 w-2.5 h-2.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.35)]' />
+                              <button
+                                onClick={() => toggleProcessMessageRun(runId)}
+                                className='flex items-center gap-2 group/run hover:opacity-80 transition-opacity cursor-pointer outline-none'
+                              >
+                                <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
+                                  Agent Steps ({row.messages.length})
+                                </span>
+                                {!isExpanded && summaryParts.length > 0 && (
+                                  <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[320px]'>
+                                    {summaryParts.join(' • ')}
+                                  </span>
+                                )}
+                                <svg
+                                  className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/run:text-neutral-500 dark:group-hover/run:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                                  fill='none'
+                                  viewBox='0 0 24 24'
+                                  stroke='currentColor'
+                                >
+                                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
+                                </svg>
+                              </button>
+                              <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+                                <div className='tool-expand-content pt-2'>
+                                  {row.messages.map(groupedMessage => {
+                                    const { toolCalls, contentBlocks } =
+                                      parsedMessageDataById.get(groupedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                                    return (
+                                      <ChatMessage
+                                        key={groupedMessage.id}
+                                        id={groupedMessage.id.toString()}
+                                        role={groupedMessage.role}
+                                        content={groupedMessage.content}
+                                        thinking={groupedMessage.thinking_block}
+                                        toolCalls={toolCalls}
+                                        contentBlocks={contentBlocks}
+                                        timestamp={groupedMessage.created_at}
+                                        width='w-full'
+                                        modelName={groupedMessage.model_name}
+                                        artifacts={groupedMessage.artifacts}
+                                        fontSizeOffset={fontSizeOffset}
+                                        groupToolReasoningRuns={false}
+                                        onOpenToolHtmlModal={openToolHtmlModal}
+                                      />
+                                    )
+                                  })}
+
+                                  {(() => {
+                                    if (row.bridgedMessageId == null) return null
+                                    const bridgedMessage = messageById.get(String(row.bridgedMessageId))
+                                    if (!bridgedMessage) return null
+
+                                    const bridgedParsed =
+                                      parsedMessageDataById.get(bridgedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                                    const bridgedProcessBlocks = Array.isArray(bridgedParsed.contentBlocks)
+                                      ? bridgedParsed.contentBlocks.filter(block => isProcessContentBlock(block))
+                                      : []
+
+                                    const hasThinking =
+                                      typeof bridgedMessage.thinking_block === 'string' &&
+                                      bridgedMessage.thinking_block.trim().length > 0
+                                    const hasToolCalls =
+                                      Array.isArray(bridgedParsed.toolCalls) && bridgedParsed.toolCalls.length > 0
+                                    const hasProcessBlocks = bridgedProcessBlocks.length > 0
+
+                                    if (!hasThinking && !hasToolCalls && !hasProcessBlocks) {
+                                      return null
+                                    }
+
+                                    return (
+                                      <ChatMessage
+                                        key={`bridged-process-${bridgedMessage.id}`}
+                                        id={`${bridgedMessage.id}-process`}
+                                        role={bridgedMessage.role}
+                                        content=''
+                                        thinking={bridgedMessage.thinking_block}
+                                        toolCalls={bridgedParsed.toolCalls}
+                                        contentBlocks={bridgedProcessBlocks}
+                                        timestamp={bridgedMessage.created_at}
+                                        width='w-full'
+                                        modelName={bridgedMessage.model_name}
+                                        artifacts={bridgedMessage.artifacts}
+                                        fontSizeOffset={fontSizeOffset}
+                                        groupToolReasoningRuns={false}
+                                        onOpenToolHtmlModal={openToolHtmlModal}
+                                      />
+                                    )
+                                  })()}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  }
+                          </VirtualizedRowContainer>
+                        )
+                      }
 
-                  const msg = row.message
-                  const { toolCalls, contentBlocks } = parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                      const msg = row.message
+                      const { toolCalls, contentBlocks } = parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                      const previousRenderRow = virtualRow.index > 0 ? virtualRows[virtualRow.index - 1] : null
+                      const previousRow =
+                        previousRenderRow?.kind === 'message_row' ? previousRenderRow.row : null
 
-                  const previousRow = virtualRow.index > 0 ? messageRenderRows[virtualRow.index - 1] : null
-                  const isProcessBridgeSourceMessage =
-                    previousRow?.kind === 'process_group' &&
-                    previousRow.bridgedMessageId != null &&
-                    String(previousRow.bridgedMessageId) === String(msg.id)
+                      const isProcessBridgeSourceMessage =
+                        previousRow?.kind === 'process_group' &&
+                        previousRow.bridgedMessageId != null &&
+                        String(previousRow.bridgedMessageId) === String(msg.id)
 
-                  const displayThinking = isProcessBridgeSourceMessage ? undefined : msg.thinking_block
-                  const displayToolCalls = isProcessBridgeSourceMessage ? [] : toolCalls
-                  const displayContentBlocks =
-                    isProcessBridgeSourceMessage && Array.isArray(contentBlocks)
-                      ? contentBlocks.filter(block => !isProcessContentBlock(block))
-                      : contentBlocks
+                      const displayThinking = isProcessBridgeSourceMessage ? undefined : msg.thinking_block
+                      const displayToolCalls = isProcessBridgeSourceMessage ? [] : toolCalls
+                      const displayContentBlocks =
+                        isProcessBridgeSourceMessage && Array.isArray(contentBlocks)
+                          ? contentBlocks.filter(block => !isProcessContentBlock(block))
+                          : contentBlocks
 
-                  return (
-                    <div
-                      key={msg.id}
-                      id={`message-${msg.id}`}
-                      data-index={virtualRow.index}
-                      ref={virtualizer.measureElement}
-                      className='z-0 focus-within:z-[70]'
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        transform: `translateY(${virtualRow.start}px)`,
-                        zIndex:
-                          activeBranchEditingMessageId != null &&
-                          String(msg.id) === String(activeBranchEditingMessageId)
-                            ? 80
-                            : 0,
-                      }}
-                    >
-                      <ChatMessage
-                        id={msg.id.toString()}
-                        role={msg.role}
-                        content={msg.content}
-                        thinking={displayThinking}
-                        toolCalls={displayToolCalls}
-                        contentBlocks={displayContentBlocks}
-                        timestamp={msg.created_at}
-                        width='w-full'
-                        modelName={msg.model_name}
-                        artifacts={msg.artifacts}
-                        fontSizeOffset={fontSizeOffset}
-                        groupToolReasoningRuns={groupToolReasoningRuns}
-                        onEdit={handleMessageEdit}
-                        onBranch={handleMessageBranch}
-                        onDelete={handleRequestDelete}
-                        onResend={handleResend}
-                        onAddToNote={handleAddToNote}
-                        onExplainFromSelection={handleExplainFromSelection}
-                        onOpenToolHtmlModal={openToolHtmlModal}
-                        onEditingStateChange={handleMessageEditingStateChange}
-                      />
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+                      return (
+                        <VirtualizedRowContainer
+                          key={renderRow.key}
+                          id={`message-${msg.id}`}
+                          index={virtualRow.index}
+                          start={virtualRow.start}
+                          measureElement={virtualizer.measureElement}
+                          className='z-0 focus-within:z-[70]'
+                          zIndex={
+                            activeBranchEditingMessageId != null &&
+                            String(msg.id) === String(activeBranchEditingMessageId)
+                              ? 80
+                              : 0
+                          }
+                        >
+                          <ChatMessage
+                            id={msg.id.toString()}
+                            role={msg.role}
+                            content={msg.content}
+                            thinking={displayThinking}
+                            toolCalls={displayToolCalls}
+                            contentBlocks={displayContentBlocks}
+                            timestamp={msg.created_at}
+                            width='w-full'
+                            modelName={msg.model_name}
+                            artifacts={msg.artifacts}
+                            fontSizeOffset={fontSizeOffset}
+                            groupToolReasoningRuns={groupToolReasoningRuns}
+                            onEdit={handleMessageEdit}
+                            onBranch={handleMessageBranch}
+                            onDelete={handleRequestDelete}
+                            onResend={handleResend}
+                            onAddToNote={handleAddToNote}
+                            onExplainFromSelection={handleExplainFromSelection}
+                            onOpenToolHtmlModal={openToolHtmlModal}
+                            onEditingStateChange={handleMessageEditingStateChange}
+                          />
+                        </VirtualizedRowContainer>
+                      )
+                    })}
+                  </div>
+                )
+              })()
+              )}
+            </React.Profiler>
 
             {/* {streamState.active && (
               <div className='pb-4 px-3 flex justify-end'>
@@ -4463,6 +5071,24 @@ function Chat() {
               </div>
             )}
 
+            {(benchEnabled || benchStatusMessage) && (
+              <div className='mx-2 mt-2 mb-1 rounded-[16px] border border-violet-300/80 dark:border-violet-600/50 bg-violet-100/70 dark:bg-violet-900/30 px-3 py-2'>
+                <div className='flex items-center justify-between gap-2'>
+                  <div className='text-xs font-semibold text-violet-700 dark:text-violet-300'>
+                    Benchmark {benchEnabled ? 'ON' : 'OFF'}
+                  </div>
+                  {benchEnabled && (
+                    <div className='text-[10px] text-violet-700/80 dark:text-violet-300/80'>
+                      commits {benchCommitDurationsRef.current.length} • derives {benchDeriveDurationsRef.current.length}
+                    </div>
+                  )}
+                </div>
+                {benchStatusMessage && (
+                  <div className='mt-1 text-[11px] text-violet-700 dark:text-violet-200'>{benchStatusMessage}</div>
+                )}
+              </div>
+            )}
+
             {/* Textarea with shortcut hint */}
             <div className=''>
               <ChatInputController
@@ -4563,30 +5189,16 @@ function Chat() {
               <div className='mx-1 mb-0.5 group relative cursor-pointer'>
                 <div className='flex items-center gap-2'>
                   <div className='flex-1 h-1 bg-neutral-300/50 dark:bg-neutral-700/50 rounded-full overflow-hidden relative'>
-                    {/* Render larger bar first (bottom), smaller bar second (top) */}
-                    {inputProgress >= outputProgress ? (
-                      <>
-                        <div
-                          className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-400 rounded-full transition-all duration-300'
-                          style={{ width: `${inputProgress}%` }}
-                        />
-                        <div
-                          className='absolute inset-0 h-full bg-emerald-500 dark:bg-emerald-400 rounded-full transition-all duration-300'
-                          style={{ width: `${outputProgress}%` }}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <div
-                          className='absolute inset-0 h-full bg-emerald-500 dark:bg-emerald-600 rounded-full transition-all duration-300'
-                          style={{ width: `${outputProgress}%` }}
-                        />
-                        <div
-                          className='absolute inset-0 h-full bg-blue-500 dark:bg-blue-600 rounded-full transition-all duration-300'
-                          style={{ width: `${inputProgress}%` }}
-                        />
-                      </>
-                    )}
+                    <div
+                      className={`absolute inset-0 h-full rounded-full transition-all duration-300 ${
+                        totalContextProgress >= 95
+                          ? 'bg-red-500 dark:bg-red-400'
+                          : totalContextProgress >= 80
+                            ? 'bg-amber-500 dark:bg-amber-400'
+                            : 'bg-blue-500 dark:bg-blue-400'
+                      }`}
+                      style={{ width: `${totalContextProgress}%` }}
+                    />
                   </div>
                   {/* Refresh credits button */}
                   <button
@@ -4614,16 +5226,22 @@ function Chat() {
                 <div className='absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50'>
                   <div className='bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white rounded-lg shadow-lg px-3 py-2 whitespace-nowrap'>
                     <div className='flex items-center gap-2 text-xs'>
-                      <span className='text-blue-700 dark:text-blue-400'>Input:</span>
+                      <span className='text-blue-700 dark:text-blue-400'>Context:</span>
                       <span>
-                        {tokenUsage.inputTokens.toLocaleString()} / {tokenLimits.maxInputTokens.toLocaleString()}
+                        {tokenUsage.totalContextTokens.toLocaleString()} / {tokenLimits.totalBudget.toLocaleString()}
                       </span>
                     </div>
                     <div className='flex items-center gap-2 text-xs mt-1'>
-                      <span className='text-emerald-600 dark:text-emerald-400'>Output:</span>
-                      <span>
-                        {tokenUsage.outputTokens.toLocaleString()} / {tokenLimits.maxOutputTokens.toLocaleString()}
-                      </span>
+                      <span className='text-neutral-700 dark:text-neutral-300'>Messages:</span>
+                      <span>{tokenUsage.messageTokens.toLocaleString()}</span>
+                    </div>
+                    <div className='flex items-center gap-2 text-xs mt-1'>
+                      <span className='text-neutral-700 dark:text-neutral-300'>Prompts + Context:</span>
+                      <span>{tokenUsage.promptAndContextTokens.toLocaleString()}</span>
+                    </div>
+                    <div className='flex items-center gap-2 text-xs mt-1'>
+                      <span className='text-neutral-700 dark:text-neutral-300'>Model window:</span>
+                      <span>{tokenLimits.totalContextLimit.toLocaleString()}</span>
                     </div>
                     <div className='flex items-center gap-2 text-xs mt-1'>
                       <span className='text-neutral-900 dark:text-neutral-200'>Credits:</span>

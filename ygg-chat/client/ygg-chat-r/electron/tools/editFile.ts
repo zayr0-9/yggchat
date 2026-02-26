@@ -2,14 +2,14 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as crypto from 'crypto'
 import { readTextFile, FileMetadata } from './readFile.js'
-import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
+import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
 
 const FULL_FILE_READ_MAX_BYTES = Number.MAX_SAFE_INTEGER
 
 export interface EditFileOptions {
   createBackup?: boolean
   encoding?: BufferEncoding
-  enableFuzzyMatching?: boolean // Enable layered matching strategies (default: true)
+  enableFuzzyMatching?: boolean // Enable layered matching strategies (default: false; fuzzy matching currently disabled)
   fuzzyThreshold?: number // Similarity threshold for fuzzy matching (default: 0.8)
   preserveIndentation?: boolean // Preserve original indentation style (default: true)
   interpretEscapeSequences?: boolean // Deprecated: applies to both search/replacement when specific flags are absent
@@ -44,6 +44,16 @@ export interface FileValidationResult {
   actualModified?: Date
 }
 
+export interface EditFileLineInfo {
+  oldStartLine: number
+  oldEndLine: number
+  oldLineCount: number
+  newStartLine: number
+  newEndLine: number
+  newLineCount: number
+  scope: 'single' | 'first_of_many' | 'append'
+}
+
 export interface EditFileResult {
   success: boolean
   sizeBytes: number
@@ -53,12 +63,14 @@ export interface EditFileResult {
   matchStrategy?: MatchStrategy // Which strategy succeeded
   attemptedStrategies?: string[] // For debugging failed matches
   validation?: FileValidationResult // Validation result if performed
+  lineInfo?: EditFileLineInfo // Real file line metadata for the displayed diff hunk
 }
 
 async function readFullTextFileForEdit(filePath: string, cwd?: string) {
   const fileData = await readTextFile(filePath, {
     cwd,
     maxBytes: FULL_FILE_READ_MAX_BYTES,
+    includeHash: false,
   })
 
   if (fileData.truncated) {
@@ -99,9 +111,8 @@ export async function editFileSearchReplace(
   options: EditFileOptions = {}
 ): Promise<EditFileResult> {
   const {
-    createBackup = false,
     encoding = 'utf8',
-    enableFuzzyMatching = true,
+    enableFuzzyMatching = false,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
     validateContent = true,
@@ -169,9 +180,9 @@ export async function editFileSearchReplace(
     const fileData = await readFullTextFileForEdit(filePath, options.cwd)
     const originalContent = fileData.content
 
-    // Validate file content if requested
+    // Validate file content if expected state was provided
     let validation: FileValidationResult | undefined
-    if (validateContent) {
+    if (shouldValidateAgainstExpectations(options, validateContent)) {
       validation = await validateFileContent(fsPath, originalContent, options)
       if (!validation.valid) {
         return {
@@ -230,6 +241,7 @@ export async function editFileSearchReplace(
     )
 
     // Keep replacement scope aligned with the strategy that actually matched.
+    let lineInfoScope: EditFileLineInfo['scope'] = 'single'
     if (matchResult.strategy === 'exact') {
       const exactRegex = new RegExp(escapeRegExp(processedSearchPattern), 'g')
       const exactMatches = originalContent.match(exactRegex)
@@ -238,6 +250,9 @@ export async function editFileSearchReplace(
         replacements = 0
       } else {
         replacements = exactMatches.length
+        if (replacements > 1) {
+          lineInfoScope = 'first_of_many'
+        }
         // Use a replacer function so replacement text is treated literally (no $&/$1 interpolation).
         newContent = originalContent.replace(exactRegex, () => finalReplacement)
       }
@@ -254,21 +269,18 @@ export async function editFileSearchReplace(
       }
     }
 
-    // Create backup if requested
-    let backupPath: string | undefined
-    if (createBackup && replacements > 0) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      backupPath = `${fsPath}.backup.${timestamp}`
-      await fs.promises.writeFile(backupPath, originalContent, encoding)
-    }
+    const lineInfo = buildLineInfo(
+      originalContent,
+      matchResult.startIndex,
+      matchResult.matchedText,
+      finalReplacement,
+      lineInfoScope
+    )
 
     // Write the modified content back to file
     if (replacements > 0) {
       await fs.promises.writeFile(fsPath, newContent, encoding)
     }
-
-    // Get new file size
-    const newStats = await fs.promises.stat(fsPath)
 
     const strategyMessage =
       matchStrategy && matchStrategy !== 'exact'
@@ -277,16 +289,17 @@ export async function editFileSearchReplace(
 
     return {
       success: true,
-      sizeBytes: newStats.size,
+      sizeBytes: estimateTextSizeBytes(replacements > 0 ? newContent : originalContent, encoding),
       replacements,
       message:
         replacements > 0
           ? `Successfully replaced ${replacements} occurrence(s)${strategyMessage} in ${filePath}`
           : `No changes needed in ${filePath}`,
-      backup: backupPath ? (pathType === 'windows' ? backupPath : toWslPath(backupPath)) : undefined,
+      backup: undefined,
       matchStrategy,
       attemptedStrategies,
       validation,
+      lineInfo,
     }
   } catch (error: any) {
     return {
@@ -308,9 +321,8 @@ export async function editFileSearchReplaceFirst(
   options: EditFileOptions = {}
 ): Promise<EditFileResult> {
   const {
-    createBackup = false,
     encoding = 'utf8',
-    enableFuzzyMatching = true,
+    enableFuzzyMatching = false,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
     validateContent = true,
@@ -377,9 +389,9 @@ export async function editFileSearchReplaceFirst(
     const fileData = await readFullTextFileForEdit(filePath, options.cwd)
     const originalContent = fileData.content
 
-    // Validate file content if requested
+    // Validate file content if expected state was provided
     let validation: FileValidationResult | undefined
-    if (validateContent) {
+    if (shouldValidateAgainstExpectations(options, validateContent)) {
       validation = await validateFileContent(fsPath, originalContent, options)
       if (!validation.valid) {
         return {
@@ -434,36 +446,34 @@ export async function editFileSearchReplaceFirst(
         finalReplacement +
         originalContent.substring(matchResult.endIndex)
       : originalContent
-
-    // Create backup if requested
-    let backupPath: string | undefined
-    if (createBackup && hasChanges) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      backupPath = `${fsPath}.backup.${timestamp}`
-      await fs.promises.writeFile(backupPath, originalContent, encoding)
-    }
+    const lineInfo = buildLineInfo(
+      originalContent,
+      matchResult.startIndex,
+      matchResult.matchedText,
+      finalReplacement,
+      'single'
+    )
 
     // Write the modified content if needed
     if (hasChanges) {
       await fs.promises.writeFile(fsPath, newContent, encoding)
     }
 
-    const newStats = await fs.promises.stat(fsPath)
-
     const strategyMessage =
       matchResult.strategy !== 'exact' ? ` (matched using ${matchResult.strategy} strategy)` : ''
 
     return {
       success: true,
-      sizeBytes: newStats.size,
+      sizeBytes: estimateTextSizeBytes(hasChanges ? newContent : originalContent, encoding),
       replacements: hasChanges ? 1 : 0,
       message: hasChanges
         ? `Successfully replaced first occurrence${strategyMessage} in ${filePath}`
         : `No changes needed in ${filePath}`,
-      backup: backupPath ? (pathType === 'windows' ? backupPath : toWslPath(backupPath)) : undefined,
+      backup: undefined,
       matchStrategy: matchResult.strategy,
       attemptedStrategies: matchResult.attemptedStrategies,
       validation,
+      lineInfo,
     }
   } catch (error: any) {
     return {
@@ -483,7 +493,7 @@ export async function appendToFile(
   content: string,
   options: EditFileOptions = {}
 ): Promise<EditFileResult> {
-  const { createBackup = false, encoding = 'utf8' } = options
+  const { encoding = 'utf8' } = options
 
   try {
     // Resolve path for fs operations and track path type
@@ -541,37 +551,27 @@ export async function appendToFile(
       fsPath = await resolveToWindowsPath(fsPath)
     }
 
-    let originalContent = ''
-    let fileExists = true
+    const existingStats = await fs.promises.stat(fsPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null
+      throw error
+    })
 
-    try {
-      const fileData = await readFullTextFileForEdit(filePath, options.cwd)
-      originalContent = fileData.content
-      // Note: fileData.absolutePath is already in WSL format, don't use it for fs operations
-    } catch {
-      fileExists = false
-    }
-
-    // Create backup if file exists and backup requested
-    let backupPath: string | undefined
-    if (createBackup && fileExists) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      backupPath = `${fsPath}.backup.${timestamp}`
-      await fs.promises.writeFile(backupPath, originalContent, encoding)
+    if (existingStats && !existingStats.isFile()) {
+      throw new Error(`'${filePath}' is not a file`)
     }
 
     // Append content using fsPath (UNC format on Windows)
     await fs.promises.appendFile(fsPath, content, encoding)
 
-    const newStats = await fs.promises.stat(fsPath)
+    const previousSizeBytes = existingStats?.size ?? 0
+    const appendedSizeBytes = estimateTextSizeBytes(content, encoding)
 
     return {
       success: true,
-      sizeBytes: newStats.size,
+      sizeBytes: previousSizeBytes + appendedSizeBytes,
       replacements: 1, // Consider append as one "replacement"
       message: `Successfully appended content to ${filePath}`,
-      backup: backupPath ? (pathType === 'windows' ? backupPath : toWslPath(backupPath)) : undefined,
-
+      backup: undefined,
     }
 
   } catch (error: any) {
@@ -659,6 +659,79 @@ function calculateHash(content: string): string {
   return crypto.createHash('sha256').update(content, 'utf8').digest('hex')
 }
 
+function shouldValidateAgainstExpectations(options: EditFileOptions, validateContent: boolean): boolean {
+  if (!validateContent) return false
+
+  return Boolean(
+    options.expectedHash ||
+    options.expectedMetadata?.lastModified ||
+    options.expectedMetadata?.inode !== undefined
+  )
+}
+
+function estimateTextSizeBytes(content: string, encoding: BufferEncoding): number {
+  return Buffer.byteLength(content, encoding)
+}
+
+function countDisplayLines(text: string): number {
+  if (text.length === 0) return 0
+
+  let lines = 1
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 10) {
+      lines += 1
+    }
+  }
+
+  if (text.endsWith('\n')) {
+    lines -= 1
+  }
+
+  return Math.max(lines, 0)
+}
+
+function lineNumberAtIndex(content: string, index: number): number {
+  if (content.length === 0) return 1
+
+  const clampedIndex = Math.min(Math.max(index, 0), content.length)
+  let line = 1
+
+  for (let i = 0; i < clampedIndex; i++) {
+    if (content.charCodeAt(i) === 10) {
+      line += 1
+    }
+  }
+
+  return line
+}
+
+function endLineFromStart(startLine: number, lineCount: number): number {
+  return lineCount > 0 ? startLine + lineCount - 1 : startLine
+}
+
+function buildLineInfo(
+  originalContent: string,
+  startIndex: number,
+  oldText: string,
+  newText: string,
+  scope: EditFileLineInfo['scope']
+): EditFileLineInfo {
+  const oldStartLine = lineNumberAtIndex(originalContent, startIndex)
+  const oldLineCount = countDisplayLines(oldText)
+  const newLineCount = countDisplayLines(newText)
+  const newStartLine = oldStartLine
+
+  return {
+    oldStartLine,
+    oldEndLine: endLineFromStart(oldStartLine, oldLineCount),
+    oldLineCount,
+    newStartLine,
+    newEndLine: endLineFromStart(newStartLine, newLineCount),
+    newLineCount,
+    scope,
+  }
+}
+
 /**
  * Validate file content hasn't changed since it was read
  */
@@ -671,11 +744,18 @@ async function validateFileContent(
     return { valid: true }
   }
 
-  const stats = await fs.promises.stat(absolutePath)
-  const currentHash = options.expectedHash ? calculateHash(content) : undefined
+  const needsHashCheck = Boolean(options.expectedHash)
+  const expectedModified = options.expectedMetadata?.lastModified
+  const expectedInode = options.expectedMetadata?.inode
+
+  if (!needsHashCheck && !expectedModified && expectedInode === undefined) {
+    return { valid: true }
+  }
+
+  const currentHash = needsHashCheck ? calculateHash(content) : undefined
 
   // Check hash if provided
-  if (options.expectedHash && currentHash !== options.expectedHash) {
+  if (needsHashCheck && currentHash !== options.expectedHash) {
     return {
       valid: false,
       reason: 'Content hash mismatch - file may have been modified',
@@ -684,16 +764,30 @@ async function validateFileContent(
     }
   }
 
+  // Hash-only validation does not require a filesystem stat call.
+  if (!expectedModified && expectedInode === undefined) {
+    return { valid: true }
+  }
+
+  const stats = await fs.promises.stat(absolutePath)
+
+  if (expectedInode !== undefined && stats.ino !== expectedInode) {
+    return {
+      valid: false,
+      reason: 'File identity changed (inode mismatch) - file may have been replaced',
+    }
+  }
+
   // Check modification time if metadata provided
-  if (options.expectedMetadata?.lastModified) {
-    const expectedTime = new Date(options.expectedMetadata.lastModified).getTime()
+  if (expectedModified) {
+    const expectedTime = new Date(expectedModified).getTime()
     const actualTime = stats.mtime.getTime()
 
     if (actualTime > expectedTime) {
       return {
         valid: false,
         reason: 'File has been modified since it was read',
-        expectedModified: options.expectedMetadata.lastModified,
+        expectedModified,
         actualModified: stats.mtime,
       }
     }
@@ -1012,7 +1106,7 @@ function applyIndentation(replacement: string, originalIndentation: string[]): s
 function findMatchWithStrategies(
   content: string,
   pattern: string,
-  enableFuzzy: boolean = true,
+  enableFuzzy: boolean = false,
   fuzzyThreshold: number = 0.8,
   interpretEscapes: boolean = true
 ): MatchResult & { attemptedStrategies: string[] } {
@@ -1078,8 +1172,9 @@ function findMatchWithStrategies(
     }
   }
 
-  // Strategy 4: Fuzzy match (only if enabled)
-  if (enableFuzzy) {
+  // Strategy 4: Fuzzy match (temporarily disabled)
+  const fuzzyMatchingTemporarilyDisabled = true
+  if (!fuzzyMatchingTemporarilyDisabled && enableFuzzy) {
     attemptedStrategies.push('fuzzy')
     const fuzzyMatch = findFuzzyMatch(content, processedPattern, fuzzyThreshold)
     if (fuzzyMatch.found) {

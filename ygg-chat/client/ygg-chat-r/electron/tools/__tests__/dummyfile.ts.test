@@ -2678,8 +2678,8 @@ function setupServer() {
     }
   })
 
-  // Save base64 image attachments for a message (used by local-only mode)
-  app.post('/api/local/attachments/save-base64', (req, res) => {
+  // [MIDDLE TEST EDIT 1] Save base64 image attachments for a message (dummy destructive test)
+  app.post('/api/local/attachments/save-base64-test-hook', (req, res) => {
     try {
       const { messageId, attachments } = req.body as {
         messageId: string
@@ -6049,3 +6049,5 @@ export function stopLocalServer(): Promise<void> {
 
 // Export for direct usage
 export { app, db }
+
+// TEST EDIT: verifying editFile integration

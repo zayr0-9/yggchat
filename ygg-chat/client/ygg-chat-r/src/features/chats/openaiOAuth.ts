@@ -624,7 +624,7 @@ export const CHATGPT_MODELS = [
     name: 'GPT-5.3 Codex',
     displayName: 'GPT-5.3 Codex',
     description: 'Latest GPT-5.3 Codex model for coding tasks',
-    contextLength: 200000,
+    contextLength: 400000,
     maxCompletionTokens: 16384,
   },
   {

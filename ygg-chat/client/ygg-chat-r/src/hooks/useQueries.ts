@@ -331,9 +331,9 @@ export function useConversationsByProject(projectId: ProjectId | null) {
 
       // In Electron community mode, use local conversations only
       if (isElectronCommunityMode()) {
-        const localConversations = await localApi
-          .get<Conversation[]>(`/local/conversations?userId=${userId}`)
-          .then(convs => convs.filter(c => c.project_id === projectId))
+        const localConversations = await localApi.get<Conversation[]>(
+          `/local/conversations?userId=${userId}&projectId=${projectId}`
+        )
         return [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
       }
 
@@ -345,8 +345,7 @@ export function useConversationsByProject(projectId: ProjectId | null) {
             return []
           }),
           localApi
-            .get<Conversation[]>(`/local/conversations?userId=${userId}`)
-            .then(convs => convs.filter(c => c.project_id === projectId))
+            .get<Conversation[]>(`/local/conversations?userId=${userId}&projectId=${projectId}`)
             .catch(err => {
               console.error('Failed to fetch local project conversations:', err)
               return []
@@ -401,9 +400,9 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
 
       // Electron community mode with local project conversations
       if (isElectronCommunityMode()) {
-        const localConversations = await localApi
-          .get<Conversation[]>(`/local/conversations?userId=${userId}`)
-          .then(convs => convs.filter(c => c.project_id === projectId))
+        const localConversations = await localApi.get<Conversation[]>(
+          `/local/conversations?userId=${userId}&projectId=${projectId}`
+        )
 
         if (!pageParam) {
           const merged = [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
@@ -434,8 +433,7 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
               return { conversations: [], nextCursor: null, hasMore: false }
             }),
           localApi
-            .get<Conversation[]>(`/local/conversations?userId=${userId}`)
-            .then(convs => convs.filter(c => c.project_id === projectId))
+            .get<Conversation[]>(`/local/conversations?userId=${userId}&projectId=${projectId}`)
             .catch(err => {
               console.error('Failed to fetch local project conversations:', err)
               return []
