@@ -92,6 +92,7 @@
     "yaml": "^2.8.2"
   },
   "optionalDependencies": {
+    "@esbuild/darwin-arm64": "^0.27.3",
     "@electron/get": "^2.0.3",
     "@electron/rebuild": "^4.0.1",
     "better-sqlite3": "^11.8.1",
