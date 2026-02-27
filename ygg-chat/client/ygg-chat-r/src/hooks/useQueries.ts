@@ -663,6 +663,35 @@ export function useConversationStorageMode(conversationId: ConversationId | null
   })
 }
 
+export interface TopLevelUserMessagePreview {
+  id: string
+  conversation_id: string
+  content: string
+  plain_text_content: string | null
+  note: string | null
+  created_at: string
+}
+
+/**
+ * Fetch top-level user messages for a conversation from local SQLite API.
+ * Used for sidebar hover preview in expanded sidebar modal.
+ * Cache key: ['conversations', conversationId, 'top-level-user-messages']
+ */
+export function useLocalTopLevelUserMessages(conversationId: ConversationId | null, enabled: boolean = true) {
+  return useQuery({
+    queryKey: ['conversations', conversationId, 'top-level-user-messages'],
+    queryFn: async () => {
+      if (!conversationId) throw new Error('Conversation ID is required')
+      return localApi.get<TopLevelUserMessagePreview[]>(`/local/conversations/${conversationId}/messages/top-level-users`)
+    },
+    enabled: enabled && !!conversationId && environment === 'electron',
+    staleTime: 60 * 1000,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
 /**
  * Fetch messages and tree data for a conversation in a single request
  * Cache key: ['conversations', conversationId, 'messages']

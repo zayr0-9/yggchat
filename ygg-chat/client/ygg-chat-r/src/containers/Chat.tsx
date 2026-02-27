@@ -33,8 +33,10 @@ import {
 import { isCommunityMode } from '../config/runtimeMode'
 import {
   abortGeneration,
+  AUTO_COMPACTION_NOTE,
   blobToDataURL,
   chatSliceActions,
+  compactBranch,
   deleteMessage,
   editMessageWithBranching,
   initializeUserAndConversation,
@@ -641,6 +643,7 @@ function Chat() {
   const persistedCcCwdRef = useRef('')
   const cwdLoadSeqRef = useRef(0)
   const pendingManualExtensionSyncRef = useRef(false)
+  const pendingCwdAnnouncementByConversationRef = useRef(new Map<string, string>())
 
   // Image generation configuration (aspect ratio and size for Gemini image models)
   const [imageConfig, setImageConfig] = useState<ImageConfig>({})
@@ -667,6 +670,8 @@ function Chat() {
 
   // Provider settings from localStorage
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(() => loadProviderSettings())
+
+  const autoCompactionInFlightRef = useRef(false)
 
   // Redux selectors
   const currentUser = useAppSelector(selectCurrentUser)
@@ -910,8 +915,8 @@ function Chat() {
         electron: isElectronEnv,
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
         platform: typeof navigator !== 'undefined' ? navigator.platform : 'unknown',
-        hardwareConcurrency: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? null : null,
-        deviceMemory: typeof navigator !== 'undefined' ? (navigator as any).deviceMemory ?? null : null,
+        hardwareConcurrency: typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency ?? null) : null,
+        deviceMemory: typeof navigator !== 'undefined' ? ((navigator as any).deviceMemory ?? null) : null,
       },
       conversation: {
         id: benchLatestConversationIdRef.current,
@@ -1760,7 +1765,7 @@ function Chat() {
   // Virtualizer for efficient message list rendering
   const virtualizer = useVirtualizer({
     count: virtualRows.length,
-    getItemKey: index => (virtualRowsV2Enabled ? virtualRows[index]?.key ?? index : index),
+    getItemKey: index => (virtualRowsV2Enabled ? (virtualRows[index]?.key ?? index) : index),
     getScrollElement: () => messagesContainerRef.current,
     estimateSize: () => 200, // Estimated average message height
     overscan: 6, // Buffer rows above/below viewport
@@ -1936,12 +1941,57 @@ function Chat() {
     return String(a) === String(b)
   }, [])
 
+  const formatCwdChangedFooter = useCallback((cwdValue: string) => {
+    const escapedCwd = cwdValue.replace(/```/g, '\`\`\`')
+    const displayCwd = escapedCwd.length > 0 ? escapedCwd : '(cleared)'
+    return `\n\n\`\`\`cwd_changed\n${displayCwd}\n\`\`\``
+  }, [])
+
+  const withPendingCwdAnnouncement = useCallback(
+    (conversationId: ConversationId | null, baseContent: string) => {
+      if (!conversationId) {
+        return { content: baseContent, pendingCwdValue: null as string | null }
+      }
+
+      const key = String(conversationId)
+      const hasPending = pendingCwdAnnouncementByConversationRef.current.has(key)
+      if (!hasPending) {
+        return { content: baseContent, pendingCwdValue: null as string | null }
+      }
+
+      const pendingCwdValue = pendingCwdAnnouncementByConversationRef.current.get(key) ?? ''
+      return {
+        content: `${baseContent}${formatCwdChangedFooter(pendingCwdValue)}`,
+        pendingCwdValue,
+      }
+    },
+    [formatCwdChangedFooter]
+  )
+
+  const clearPendingCwdAnnouncement = useCallback(
+    (conversationId: ConversationId | null, pendingCwdValue: string | null) => {
+      if (!conversationId || pendingCwdValue == null) return
+      const key = String(conversationId)
+      const hasPending = pendingCwdAnnouncementByConversationRef.current.has(key)
+      if (!hasPending) return
+
+      const currentPending = pendingCwdAnnouncementByConversationRef.current.get(key) ?? ''
+      if (currentPending === pendingCwdValue) {
+        pendingCwdAnnouncementByConversationRef.current.delete(key)
+      }
+    },
+    []
+  )
+
   const setCcCwdFromUser = useCallback(
     (nextValue: string) => {
       isCwdDirtyRef.current = true
+      if (currentConversationId) {
+        pendingCwdAnnouncementByConversationRef.current.set(String(currentConversationId), nextValue.trim())
+      }
       dispatch(chatSliceActions.ccCwdSet(nextValue))
     },
-    [dispatch]
+    [currentConversationId, dispatch]
   )
 
   const setCcCwdFromSystem = useCallback(
@@ -2837,8 +2887,11 @@ function Chat() {
     if (!container) return
 
     const updateVisibleMessage = () => {
-      const { filteredMessages: currentMessages, virtualRows: currentVirtualRows, isToolOrReasoningOnly: isExcluded } =
-        visibilityInputsRef.current
+      const {
+        filteredMessages: currentMessages,
+        virtualRows: currentVirtualRows,
+        isToolOrReasoningOnly: isExcluded,
+      } = visibilityInputsRef.current
       const virtualItems = virtualizer.getVirtualItems()
 
       const findFirstAllowedMessage = (): MessageId | null => {
@@ -3201,7 +3254,7 @@ function Chat() {
 
   // Local version of canSend that checks input controller state.
   const canSendLocal = useMemo(() => {
-    const isNotSending = !sendingState.sending && !streamState.active
+    const isNotSending = !sendingState.sending && !sendingState.compacting && !streamState.active
     const hasModel = !!selectedModel
 
     // Allow retrigger: empty input when last displayed message is from user
@@ -3209,7 +3262,7 @@ function Chat() {
       !hasLocalInput && displayMessages.length > 0 && displayMessages[displayMessages.length - 1]?.role === 'user'
 
     return (hasLocalInput || isRetrigger) && isNotSending && hasModel
-  }, [hasLocalInput, sendingState.sending, streamState.active, selectedModel, displayMessages])
+  }, [hasLocalInput, sendingState.sending, sendingState.compacting, streamState.active, selectedModel, displayMessages])
 
   // Helper: scroll to bottom immediately using the sentinel or container fallback
   const scrollToBottomNow = useCallback((behavior: ScrollBehavior = 'auto') => {
@@ -3242,6 +3295,7 @@ function Chat() {
       }
 
       // Re-enable auto-pinning for CC mode sends until the user scrolls during this stream
+      //CC mode is defunct now
       if (ccMode) {
         userScrolledDuringStreamRef.current = false
       }
@@ -3250,7 +3304,21 @@ function Chat() {
         const isRetrigger =
           !hasLocalInput && displayMessages.length > 0 && displayMessages[displayMessages.length - 1]?.role === 'user'
 
+        console.log('[AutoCompaction][send] invoked', {
+          conversationId: currentConversationId,
+          canSendLocal,
+          ccMode,
+          ccModeAvailable,
+          isRetrigger,
+          hasLocalInput,
+          trimmedInputLength: trimmedInputValue.length,
+          streamActive: streamState.active,
+          sending: sendingState.sending,
+          compacting: sendingState.compacting,
+        })
+
         // CC Mode: Send via sendCCMessage instead of sendMessage (disabled in web mode)
+        //defunct
         if (ccMode && ccModeAvailable) {
           const parent: MessageId | null = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
           const lastExAgentSessionId = findLastExAgentSession(selectedPath)
@@ -3335,12 +3403,16 @@ function Chat() {
 
             const parent: MessageId | null = lastUserMessage.parent_id || null
             const contentToRetrigger = lastUserMessage.content
+            const { content: retriggerContent, pendingCwdValue } = withPendingCwdAnnouncement(
+              currentConversationId,
+              contentToRetrigger
+            )
 
             // Dispatch sendMessage with retrigger flag
             dispatch(
               sendMessage({
                 conversationId: currentConversationId,
-                input: { content: contentToRetrigger },
+                input: { content: retriggerContent },
                 parent,
                 repeatNum: value,
                 think: think,
@@ -3352,6 +3424,7 @@ function Chat() {
             )
               .unwrap()
               .then(result => {
+                clearPendingCwdAnnouncement(currentConversationId, pendingCwdValue)
                 if (!result?.userMessage) {
                   console.warn('Server did not confirm user message')
                 }
@@ -3367,115 +3440,297 @@ function Chat() {
             // Process file mentions with actual content before sending
             const processedContent = replaceFileMentionsWithPath(localInputValue)
             const contentWithIdeContext = appendIdeContextToMessage(processedContent)
+            const selectedParent: MessageId | null =
+              selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
 
-            // Update Redux state with processed content before sending
-            dispatch(chatSliceActions.inputChanged({ content: contentWithIdeContext }))
-
-            const parent: MessageId | null = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
-
-            // Optimistically update conversation title if this is the first message
-            if (parent === null) {
-              const generatedTitle = processedContent.slice(0, 100) + (processedContent.length > 100 ? '...' : '')
-              const projectId = selectedProject?.id || currentConversation?.project_id
-
-              // Update all relevant React Query caches
-              // Only update if cache exists to avoid creating invalid cache entries
-              const conversationsCache = queryClient.getQueryData<Conversation[]>(['conversations'])
-              if (conversationsCache) {
-                queryClient.setQueryData(
-                  ['conversations'],
-                  conversationsCache.map(conv =>
-                    conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
-                  )
-                )
+            const latestCompaction = (() => {
+              for (let i = displayMessages.length - 1; i >= 0; i--) {
+                const message = displayMessages[i]
+                if (message?.role === 'system' && message?.note === AUTO_COMPACTION_NOTE) {
+                  return { index: i, message }
+                }
               }
+              return { index: -1, message: null as Message | null }
+            })()
 
-              if (projectId) {
-                const projectConversationsCache = queryClient.getQueryData<Conversation[]>([
-                  'conversations',
-                  'project',
-                  projectId,
-                ])
-                if (projectConversationsCache) {
+            let effectiveParent: MessageId | null = selectedParent
+            if (latestCompaction.message) {
+              const selectedParentIndex =
+                selectedParent == null
+                  ? -1
+                  : displayMessages.findIndex(message => String(message?.id) === String(selectedParent))
+
+              if (selectedParentIndex < latestCompaction.index) {
+                effectiveParent = latestCompaction.message.id
+              }
+            }
+
+            const sendWithParent = (parentForSend: MessageId | null) => {
+              const { content: contentToSend, pendingCwdValue } = withPendingCwdAnnouncement(
+                currentConversationId,
+                contentWithIdeContext
+              )
+
+              // Update Redux state with processed content before sending
+              dispatch(chatSliceActions.inputChanged({ content: contentToSend }))
+
+              // Optimistically update conversation title if this is the first message in branch
+              if (parentForSend === null) {
+                const generatedTitle = processedContent.slice(0, 100) + (processedContent.length > 100 ? '...' : '')
+                const projectId = selectedProject?.id || currentConversation?.project_id
+
+                // Update all relevant React Query caches
+                // Only update if cache exists to avoid creating invalid cache entries
+                const conversationsCache = queryClient.getQueryData<Conversation[]>(['conversations'])
+                if (conversationsCache) {
                   queryClient.setQueryData(
-                    ['conversations', 'project', projectId],
-                    projectConversationsCache.map(conv =>
+                    ['conversations'],
+                    conversationsCache.map(conv =>
                       conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
                     )
                   )
                 }
-              }
 
-              // Update recent conversations cache
-              const recentCache = queryClient.getQueryData<Conversation[]>(['conversations', 'recent'])
-              if (recentCache) {
-                queryClient.setQueryData(
-                  ['conversations', 'recent'],
-                  recentCache.map(conv =>
-                    conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
-                  )
-                )
-              }
-
-              // Also update Redux to ensure components using Redux see the change immediately
-              const updatedConversations = projectConversations.map(conv =>
-                conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
-              )
-              dispatch(conversationsLoaded(updatedConversations))
-            }
-
-            // Create optimistic message for instant UI feedback
-            const optimisticUserMessage: Message = {
-              id: `temp-${Date.now()}`,
-              conversation_id: currentConversationId,
-              role: 'user' as const,
-              content: contentWithIdeContext,
-              content_plain_text: contentWithIdeContext,
-              parent_id: parent || null,
-              children_ids: [],
-              created_at: new Date().toISOString(),
-              model_name: selectedModel?.name || '',
-              partial: false,
-              pastedContext: [],
-              artifacts: [],
-            }
-            dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
-
-            // Use processed content for immediate send
-            const inputToSend = { content: contentWithIdeContext }
-            // Clear local input immediately after sending
-            clearLocalInput()
-
-            // Dispatch a single sendMessage with repeatNum set to value.
-            dispatch(
-              sendMessage({
-                conversationId: currentConversationId,
-                input: inputToSend,
-                parent,
-                repeatNum: value,
-                think: think,
-                imageConfig: isImageGenerationModel ? imageConfig : undefined,
-                reasoningConfig: think ? reasoningConfig : undefined,
-                cwd: ccCwd || undefined,
-              })
-            )
-              .unwrap()
-              .then(result => {
-                // Optional: warn if server didn't confirm message
-                if (!result?.userMessage) {
-                  console.warn('Server did not confirm user message')
+                if (projectId) {
+                  const projectConversationsCache = queryClient.getQueryData<Conversation[]>([
+                    'conversations',
+                    'project',
+                    projectId,
+                  ])
+                  if (projectConversationsCache) {
+                    queryClient.setQueryData(
+                      ['conversations', 'project', projectId],
+                      projectConversationsCache.map(conv =>
+                        conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
+                      )
+                    )
+                  }
                 }
-                setAddedIdeContexts([])
-                // ✅ No refetch needed - messages already added to Redux via SSE stream
-                // Stream sends: user_message event + complete event with full message data
-                // Redux already updated via messageAdded() + messageBranchCreated() dispatches
+
+                // Update recent conversations cache
+                const recentCache = queryClient.getQueryData<Conversation[]>(['conversations', 'recent'])
+                if (recentCache) {
+                  queryClient.setQueryData(
+                    ['conversations', 'recent'],
+                    recentCache.map(conv =>
+                      conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
+                    )
+                  )
+                }
+
+                // Also update Redux to ensure components using Redux see the change immediately
+                const updatedConversations = projectConversations.map(conv =>
+                  conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
+                )
+                dispatch(conversationsLoaded(updatedConversations))
+              }
+
+              // Create optimistic message for instant UI feedback
+              const optimisticUserMessage: Message = {
+                id: `temp-${Date.now()}`,
+                conversation_id: currentConversationId,
+                role: 'user' as const,
+                content: contentToSend,
+                content_plain_text: contentToSend,
+                parent_id: parentForSend || null,
+                children_ids: [],
+                created_at: new Date().toISOString(),
+                model_name: selectedModel?.name || '',
+                partial: false,
+                pastedContext: [],
+                artifacts: [],
+              }
+              dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
+
+              // Use processed content for immediate send
+              const inputToSend = { content: contentToSend }
+              // Clear local input immediately after sending
+              clearLocalInput()
+
+              // Dispatch a single sendMessage with repeatNum set to value.
+              dispatch(
+                sendMessage({
+                  conversationId: currentConversationId,
+                  input: inputToSend,
+                  parent: parentForSend,
+                  repeatNum: value,
+                  think: think,
+                  imageConfig: isImageGenerationModel ? imageConfig : undefined,
+                  reasoningConfig: think ? reasoningConfig : undefined,
+                  cwd: ccCwd || undefined,
+                })
+              )
+                .unwrap()
+                .then(result => {
+                  clearPendingCwdAnnouncement(currentConversationId, pendingCwdValue)
+                  // Optional: warn if server didn't confirm message
+                  if (!result?.userMessage) {
+                    console.warn('Server did not confirm user message')
+                  }
+                  setAddedIdeContexts([])
+                  // ✅ No refetch needed - messages already added to Redux via SSE stream
+                  // Stream sends: user_message event + complete event with full message data
+                  // Redux already updated via messageAdded() + messageBranchCreated() dispatches
+                })
+                .catch(error => {
+                  // Clear optimistic message on error
+                  // Note: Success case is handled in chatActions when user_message chunk arrives
+                  dispatch(chatSliceActions.optimisticMessageCleared())
+                  console.error('Failed to send message:', error)
+                })
+            }
+
+            void (async () => {
+              const safeEstimateTokenCount = (value: unknown): number => {
+                if (value == null) return 0
+                if (typeof value === 'string') {
+                  return value.length > 0 ? estimateTokenCount(value) : 0
+                }
+
+                try {
+                  const serialized = JSON.stringify(value)
+                  return serialized ? estimateTokenCount(serialized) : 0
+                } catch {
+                  return 0
+                }
+              }
+
+              const usageStartIndex = latestCompaction.index >= 0 ? latestCompaction.index : 0
+              const usageMessages = displayMessages.slice(usageStartIndex)
+              const compactionSourceMessages = (
+                latestCompaction.index >= 0 ? displayMessages.slice(latestCompaction.index + 1) : displayMessages
+              ).filter(Boolean)
+
+              let promptAndContextTokens = 0
+              promptAndContextTokens += safeEstimateTokenCount(selectedProject?.system_prompt)
+              promptAndContextTokens += safeEstimateTokenCount(selectedProject?.context)
+              promptAndContextTokens += safeEstimateTokenCount(currentConversation?.system_prompt)
+              promptAndContextTokens += safeEstimateTokenCount(currentConversation?.conversation_context)
+
+              let messageTokens = 0
+              usageMessages.forEach(message => {
+                if (!message) return
+                messageTokens += safeEstimateTokenCount(message.content)
+                messageTokens += safeEstimateTokenCount((message as any).content_blocks)
+                messageTokens += safeEstimateTokenCount((message as any).tool_calls)
               })
-              .catch(error => {
-                // Clear optimistic message on error
-                // Note: Success case is handled in chatActions when user_message chunk arrives
-                dispatch(chatSliceActions.optimisticMessageCleared())
-                console.error('Failed to send message:', error)
+
+              const totalContextTokens = promptAndContextTokens + messageTokens
+              const usdValue = (currentUser?.cached_current_credits ?? 0) / 100
+              const totalContextLimit = selectedModel?.contextLength || 128_000
+              const promptCostPer1K = selectedModel?.promptCost ?? 0
+              const completionCostPer1K = selectedModel?.completionCost ?? 0
+
+              let creditInputLimit = Infinity
+              let creditOutputLimit = Infinity
+              if (promptCostPer1K > 0) {
+                creditInputLimit = Math.floor((usdValue * 1000) / promptCostPer1K)
+              }
+              if (completionCostPer1K > 0) {
+                creditOutputLimit = Math.floor((usdValue * 1000) / completionCostPer1K)
+              }
+
+              const totalBudget = Math.max(0, Math.min(totalContextLimit, creditInputLimit, creditOutputLimit))
+              const totalContextProgress = totalBudget > 0 ? Math.min((totalContextTokens / totalBudget) * 100, 100) : 0
+              const modelContextProgress =
+                totalContextLimit > 0 ? Math.min((totalContextTokens / totalContextLimit) * 100, 100) : 0
+
+              const lastMessage = displayMessages[displayMessages.length - 1]
+              const shouldAutoCompact =
+                totalContextLimit > 0 &&
+                (modelContextProgress >= 85 || totalContextProgress >= 85) &&
+                Boolean(lastMessage) &&
+                lastMessage?.note !== AUTO_COMPACTION_NOTE &&
+                compactionSourceMessages.length >= 2 &&
+                !autoCompactionInFlightRef.current
+
+              console.log('[AutoCompaction][send] precheck', {
+                conversationId: currentConversationId,
+                selectedParent,
+                effectiveParentBeforeCompaction: effectiveParent,
+                latestCompactionId: latestCompaction.message?.id ?? null,
+                hasLatestCompaction: Boolean(latestCompaction.message),
+                sourceMessagesCount: compactionSourceMessages.length,
+                totalContextTokens,
+                totalBudget,
+                totalContextProgress,
+                totalContextLimit,
+                modelContextProgress,
+                hasLastMessage: Boolean(lastMessage),
+                lastMessageId: lastMessage?.id ?? null,
+                lastMessageRole: lastMessage?.role ?? null,
+                lastMessageNote: lastMessage?.note ?? null,
+                inFlight: autoCompactionInFlightRef.current,
+                shouldAutoCompact,
               })
+
+              if (shouldAutoCompact && lastMessage) {
+                autoCompactionInFlightRef.current = true
+
+                try {
+                  console.log('[AutoCompaction][send] dispatch compactBranch', {
+                    conversationId: currentConversationId,
+                    parentMessageId: lastMessage.id,
+                    providerName: providerSettings.compactionProvider || providers.currentProvider,
+                    modelName: providerSettings.compactionModel || selectedModel?.name || null,
+                    sourceMessagesCount: compactionSourceMessages.length,
+                  })
+
+                  const compactionResult = await dispatch(
+                    compactBranch({
+                      conversationId: currentConversationId,
+                      parentMessageId: lastMessage.id,
+                      messages: compactionSourceMessages,
+                      providerName: providerSettings.compactionProvider || providers.currentProvider,
+                      modelName: providerSettings.compactionModel || selectedModel?.name || null,
+                    })
+                  ).unwrap()
+
+                  const compactedMessage = compactionResult?.message ?? null
+                  const hasValidCompactionMarker =
+                    compactedMessage?.role === 'system' &&
+                    compactedMessage?.note === AUTO_COMPACTION_NOTE &&
+                    String(compactedMessage?.parent_id ?? '') === String(lastMessage.id)
+
+                  console.log('[AutoCompaction][send] compactBranch result', {
+                    messageId: compactedMessage?.id ?? null,
+                    role: compactedMessage?.role ?? null,
+                    note: compactedMessage?.note ?? null,
+                    parentId: compactedMessage?.parent_id ?? null,
+                    hasValidCompactionMarker,
+                  })
+
+                  if (!compactedMessage || !hasValidCompactionMarker) {
+                    console.error('[AutoCompaction][send] invalid attached summary message. Send aborted.')
+                    return
+                  }
+
+                  effectiveParent = compactedMessage.id
+                } catch (error) {
+                  console.error('[AutoCompaction][send] compactBranch failed. Send aborted:', error)
+                  return
+                } finally {
+                  autoCompactionInFlightRef.current = false
+                }
+              } else {
+                console.log('[AutoCompaction][send] skip compactBranch', {
+                  reason: {
+                    noContextLimit: totalContextLimit <= 0,
+                    belowThreshold: modelContextProgress < 85 && totalContextProgress < 85,
+                    missingLastMessage: !lastMessage,
+                    lastIsCompaction: lastMessage?.note === AUTO_COMPACTION_NOTE,
+                    tooFewSourceMessages: compactionSourceMessages.length < 2,
+                    inFlight: autoCompactionInFlightRef.current,
+                  },
+                })
+              }
+
+              console.log('[AutoCompaction][send] sendWithParent', {
+                effectiveParent,
+                contentLength: contentWithIdeContext.length,
+              })
+              sendWithParent(effectiveParent)
+            })()
           }
         }
       } else if (!currentConversationId) {
@@ -3490,6 +3745,8 @@ function Chat() {
       dispatch,
       getLocalInput,
       hasLocalInput,
+      sendingState.sending,
+      sendingState.compacting,
       clearLocalInput,
       displayMessages,
       replaceFileMentionsWithPath,
@@ -3503,7 +3760,16 @@ function Chat() {
       queryClient,
       selectedProject,
       currentConversation,
+      currentUser,
+      providerSettings.compactionProvider,
+      providerSettings.compactionModel,
+      providers.currentProvider,
+      isImageGenerationModel,
+      imageConfig,
+      reasoningConfig,
       findLastExAgentSession,
+      withPendingCwdAnnouncement,
+      clearPendingCwdAnnouncement,
       runComposerCommand,
     ]
   )
@@ -3542,6 +3808,10 @@ function Chat() {
         const contentWithIdeContext = appendIdeContextToMessage(processed)
         const parsedId = parseId(id)
         const originalMessage = conversationMessages.find(m => m.id === parsedId)
+        const { content: contentWithCwdAnnouncement, pendingCwdValue } = withPendingCwdAnnouncement(
+          currentConversationId,
+          contentWithIdeContext
+        )
 
         // If Claude Code mode is enabled, fork the CC session instead of branching normally (disabled in web mode)
         if (ccMode && ccModeAvailable && originalMessage) {
@@ -3576,8 +3846,8 @@ function Chat() {
               id: `branch-temp-${Date.now()}`,
               conversation_id: currentConversationId,
               role: 'user' as const,
-              content: contentWithIdeContext,
-              content_plain_text: contentWithIdeContext,
+              content: contentWithCwdAnnouncement,
+              content_plain_text: contentWithCwdAnnouncement,
               parent_id: originalMessage.parent_id,
               children_ids: [],
               created_at: new Date().toISOString(),
@@ -3593,7 +3863,7 @@ function Chat() {
             editMessageWithBranching({
               conversationId: currentConversationId,
               originalMessageId: parsedId,
-              newContent: contentWithIdeContext,
+              newContent: contentWithCwdAnnouncement,
               modelOverride: selectedModel?.name,
               think: think,
               cwd: ccCwd || undefined,
@@ -3601,6 +3871,7 @@ function Chat() {
           )
             .unwrap()
             .then(() => {
+              clearPendingCwdAnnouncement(currentConversationId, pendingCwdValue)
               // Invalidate React Query cache after successful branch to fetch new messages
               // Note: messages query now includes tree data, so only one invalidation needed
               queryClient.invalidateQueries({
@@ -3628,6 +3899,8 @@ function Chat() {
       appendIdeContextToMessage,
       conversationMessages,
       queryClient,
+      withPendingCwdAnnouncement,
+      clearPendingCwdAnnouncement,
     ]
   )
 
@@ -3642,6 +3915,10 @@ function Chat() {
         // Find the message to check if it has children
         const parsedId = parseId(id)
         const originalMessage = conversationMessages.find(m => m.id === parsedId)
+        const { content: contentWithCwdAnnouncement, pendingCwdValue } = withPendingCwdAnnouncement(
+          currentConversationId,
+          contentWithIdeContext
+        )
 
         if (!originalMessage) {
           console.error('Message not found:', id)
@@ -3658,8 +3935,8 @@ function Chat() {
             id: `temp-${Date.now()}`,
             conversation_id: currentConversationId,
             role: 'user' as const,
-            content: contentWithIdeContext,
-            content_plain_text: contentWithIdeContext,
+            content: contentWithCwdAnnouncement,
+            content_plain_text: contentWithCwdAnnouncement,
             parent_id: parsedId,
             children_ids: [],
             created_at: new Date().toISOString(),
@@ -3674,7 +3951,7 @@ function Chat() {
           dispatch(
             sendMessage({
               conversationId: currentConversationId,
-              input: { content: contentWithIdeContext },
+              input: { content: contentWithCwdAnnouncement },
               parent: parsedId,
               repeatNum: 1,
               think: think,
@@ -3685,6 +3962,7 @@ function Chat() {
           )
             .unwrap()
             .then(result => {
+              clearPendingCwdAnnouncement(currentConversationId, pendingCwdValue)
               if (!result?.userMessage) {
                 console.warn('Server did not confirm user message')
               }
@@ -3702,8 +3980,8 @@ function Chat() {
             id: `branch-temp-${Date.now()}`,
             conversation_id: currentConversationId,
             role: 'user' as const,
-            content: contentWithIdeContext,
-            content_plain_text: contentWithIdeContext,
+            content: contentWithCwdAnnouncement,
+            content_plain_text: contentWithCwdAnnouncement,
             parent_id: originalMessage.parent_id,
             children_ids: [],
             created_at: new Date().toISOString(),
@@ -3718,7 +3996,7 @@ function Chat() {
             editMessageWithBranching({
               conversationId: currentConversationId,
               originalMessageId: parsedId,
-              newContent: contentWithIdeContext,
+              newContent: contentWithCwdAnnouncement,
               modelOverride: selectedModel?.name,
               think: think,
               cwd: ccCwd || undefined,
@@ -3726,6 +4004,7 @@ function Chat() {
           )
             .unwrap()
             .then(() => {
+              clearPendingCwdAnnouncement(currentConversationId, pendingCwdValue)
               // Invalidate React Query cache after successful branch to fetch new messages
               queryClient.invalidateQueries({
                 queryKey: ['conversations', currentConversationId, 'messages'],
@@ -3752,6 +4031,8 @@ function Chat() {
       ccCwd,
       isImageGenerationModel,
       imageConfig,
+      withPendingCwdAnnouncement,
+      clearPendingCwdAnnouncement,
     ]
   )
 
@@ -4377,8 +4658,16 @@ function Chat() {
     promptAndContextTokens += safeEstimateTokenCount(currentConversation?.system_prompt)
     promptAndContextTokens += safeEstimateTokenCount(currentConversation?.conversation_context)
 
-    // Count all visible message payloads, including nested tool data.
-    displayMessages.forEach(msg => {
+    // Count visible branch payload from the latest compaction marker (if any) onward.
+    let startIndex = 0
+    for (let i = displayMessages.length - 1; i >= 0; i--) {
+      if (displayMessages[i]?.note === AUTO_COMPACTION_NOTE) {
+        startIndex = i
+        break
+      }
+    }
+
+    displayMessages.slice(startIndex).forEach(msg => {
       if (!msg) return
 
       const contentTokens = safeEstimateTokenCount(msg.content)
@@ -4431,9 +4720,11 @@ function Chat() {
     return { totalBudget, totalContextLimit }
   }, [selectedModel?.promptCost, selectedModel?.completionCost, selectedModel?.contextLength, current_credits])
 
-  // Calculate single progress percentage.
+  // Calculate progress percentages.
   const totalContextProgress =
     tokenLimits.totalBudget > 0 ? Math.min((tokenUsage.totalContextTokens / tokenLimits.totalBudget) * 100, 100) : 0
+  // Auto-compaction now runs as part of the explicit user send flow (handleSend),
+  // so we intentionally avoid passive threshold-triggered compaction effects here.
 
   // Handler to refresh user credits
   const handleRefreshCredits = useCallback(async () => {
@@ -4627,285 +4918,290 @@ function Chat() {
           >
             <React.Profiler id='chat-virtual-list' onRender={handleVirtualListProfilerRender}>
               {virtualRows.length === 0 ? (
-              <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
-            ) : (
-              (() => {
-                const totalSize = virtualizer.getTotalSize()
-                const virtualItems = virtualizer.getVirtualItems()
+                <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
+              ) : (
+                (() => {
+                  const totalSize = virtualizer.getTotalSize()
+                  const virtualItems = virtualizer.getVirtualItems()
 
-                return (
-                  <div
-                    style={{
-                      minHeight: `${totalSize}px`,
-                      height: `${totalSize}px`,
-                      width: '100%',
-                      position: 'relative',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {virtualItems.map(virtualRow => {
-                      const renderRow = virtualRows[virtualRow.index]
-                      if (!renderRow) return null
+                  return (
+                    <div
+                      style={{
+                        minHeight: `${totalSize}px`,
+                        height: `${totalSize}px`,
+                        width: '100%',
+                        position: 'relative',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {virtualItems.map(virtualRow => {
+                        const renderRow = virtualRows[virtualRow.index]
+                        if (!renderRow) return null
 
-                      if (renderRow.kind === 'optimistic_message') {
-                        const message = renderRow.message
-                        return (
-                          <VirtualizedRowContainer
-                            key={renderRow.key}
-                            id={`message-optimistic-${message.id}`}
-                            index={virtualRow.index}
-                            start={virtualRow.start}
-                            measureElement={virtualizer.measureElement}
-                          >
-                            <ChatMessage
-                              id={message.id.toString()}
-                              role={message.role}
-                              content={message.content}
-                              timestamp={message.created_at}
-                              modelName={message.model_name}
-                              artifacts={message.artifacts}
-                              width='w-full'
-                              fontSizeOffset={fontSizeOffset}
-                              groupToolReasoningRuns={groupToolReasoningRuns}
-                              className='opacity-70'
-                              onOpenToolHtmlModal={openToolHtmlModal}
-                            />
-                          </VirtualizedRowContainer>
-                        )
-                      }
-
-                      if (renderRow.kind === 'optimistic_branch_message') {
-                        const message = renderRow.message
-                        return (
-                          <VirtualizedRowContainer
-                            key={renderRow.key}
-                            id={`message-optimistic-branch-${message.id}`}
-                            index={virtualRow.index}
-                            start={virtualRow.start}
-                            measureElement={virtualizer.measureElement}
-                          >
-                            <ChatMessage
-                              id={message.id.toString()}
-                              role={message.role}
-                              content={message.content}
-                              timestamp={message.created_at}
-                              modelName={message.model_name}
-                              artifacts={message.artifacts}
-                              width='w-full'
-                              fontSizeOffset={fontSizeOffset}
-                              groupToolReasoningRuns={groupToolReasoningRuns}
-                              className='opacity-70'
-                              onOpenToolHtmlModal={openToolHtmlModal}
-                            />
-                          </VirtualizedRowContainer>
-                        )
-                      }
-
-                      if (renderRow.kind === 'streaming_message') {
-                        return (
-                          <VirtualizedRowContainer
-                            key={renderRow.key}
-                            id='message-streaming'
-                            index={virtualRow.index}
-                            start={virtualRow.start}
-                          >
-                            <ChatMessage
-                              id='streaming'
-                              role='assistant'
-                              content={streamState.buffer}
-                              thinking={streamState.thinkingBuffer}
-                              toolCalls={streamState.toolCalls}
-                              streamEvents={streamState.events}
-                              width='w-full'
-                              fontSizeOffset={fontSizeOffset}
-                              groupToolReasoningRuns={groupToolReasoningRuns}
-                              modelName={selectedModel?.name || undefined}
-                              className=''
-                              onOpenToolHtmlModal={openToolHtmlModal}
-                            />
-                          </VirtualizedRowContainer>
-                        )
-                      }
-
-                      const row = renderRow.row
-
-                      if (row.kind === 'process_group') {
-                        const runId = String(row.id)
-                        const isExpanded = expandedProcessMessageRuns.has(runId)
-                        const summaryParts: string[] = []
-                        if (row.toolCount > 0) {
-                          summaryParts.push(`${row.toolCount} tool${row.toolCount === 1 ? '' : 's'}`)
-                        }
-                        if (row.reasoningCount > 0) {
-                          summaryParts.push(`${row.reasoningCount} reasoning`)
+                        if (renderRow.kind === 'optimistic_message') {
+                          const message = renderRow.message
+                          return (
+                            <VirtualizedRowContainer
+                              key={renderRow.key}
+                              id={`message-optimistic-${message.id}`}
+                              index={virtualRow.index}
+                              start={virtualRow.start}
+                              measureElement={virtualizer.measureElement}
+                            >
+                              <ChatMessage
+                                id={message.id.toString()}
+                                role={message.role}
+                                content={message.content}
+                                timestamp={message.created_at}
+                                modelName={message.model_name}
+                                artifacts={message.artifacts}
+                                width='w-full'
+                                fontSizeOffset={fontSizeOffset}
+                                groupToolReasoningRuns={groupToolReasoningRuns}
+                                className='opacity-70'
+                                onOpenToolHtmlModal={openToolHtmlModal}
+                              />
+                            </VirtualizedRowContainer>
+                          )
                         }
 
-                        return (
-                          <VirtualizedRowContainer
-                            key={renderRow.key}
-                            id={`message-group-${runId}`}
-                            index={virtualRow.index}
-                            start={virtualRow.start}
-                            measureElement={virtualizer.measureElement}
-                            className='z-0'
-                          >
-                            <div className='relative pl-6 py-3 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
-                              <div className='absolute -left-[5px] top-4 w-2.5 h-2.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.35)]' />
-                              <button
-                                onClick={() => toggleProcessMessageRun(runId)}
-                                className='flex items-center gap-2 group/run hover:opacity-80 transition-opacity cursor-pointer outline-none'
-                              >
-                                <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
-                                  Agent Steps ({row.messages.length})
-                                </span>
-                                {!isExpanded && summaryParts.length > 0 && (
-                                  <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[320px]'>
-                                    {summaryParts.join(' • ')}
-                                  </span>
-                                )}
-                                <svg
-                                  className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/run:text-neutral-500 dark:group-hover/run:text-neutral-400 ${isExpanded ? 'open' : ''}`}
-                                  fill='none'
-                                  viewBox='0 0 24 24'
-                                  stroke='currentColor'
+                        if (renderRow.kind === 'optimistic_branch_message') {
+                          const message = renderRow.message
+                          return (
+                            <VirtualizedRowContainer
+                              key={renderRow.key}
+                              id={`message-optimistic-branch-${message.id}`}
+                              index={virtualRow.index}
+                              start={virtualRow.start}
+                              measureElement={virtualizer.measureElement}
+                            >
+                              <ChatMessage
+                                id={message.id.toString()}
+                                role={message.role}
+                                content={message.content}
+                                timestamp={message.created_at}
+                                modelName={message.model_name}
+                                artifacts={message.artifacts}
+                                width='w-full'
+                                fontSizeOffset={fontSizeOffset}
+                                groupToolReasoningRuns={groupToolReasoningRuns}
+                                className='opacity-70'
+                                onOpenToolHtmlModal={openToolHtmlModal}
+                              />
+                            </VirtualizedRowContainer>
+                          )
+                        }
+
+                        if (renderRow.kind === 'streaming_message') {
+                          return (
+                            <VirtualizedRowContainer
+                              key={renderRow.key}
+                              id='message-streaming'
+                              index={virtualRow.index}
+                              start={virtualRow.start}
+                            >
+                              <ChatMessage
+                                id='streaming'
+                                role='assistant'
+                                content={streamState.buffer}
+                                thinking={streamState.thinkingBuffer}
+                                toolCalls={streamState.toolCalls}
+                                streamEvents={streamState.events}
+                                width='w-full'
+                                fontSizeOffset={fontSizeOffset}
+                                groupToolReasoningRuns={groupToolReasoningRuns}
+                                modelName={selectedModel?.name || undefined}
+                                className=''
+                                onOpenToolHtmlModal={openToolHtmlModal}
+                              />
+                            </VirtualizedRowContainer>
+                          )
+                        }
+
+                        const row = renderRow.row
+
+                        if (row.kind === 'process_group') {
+                          const runId = String(row.id)
+                          const isExpanded = expandedProcessMessageRuns.has(runId)
+                          const summaryParts: string[] = []
+                          if (row.toolCount > 0) {
+                            summaryParts.push(`${row.toolCount} tool${row.toolCount === 1 ? '' : 's'}`)
+                          }
+                          if (row.reasoningCount > 0) {
+                            summaryParts.push(`${row.reasoningCount} reasoning`)
+                          }
+
+                          return (
+                            <VirtualizedRowContainer
+                              key={renderRow.key}
+                              id={`message-group-${runId}`}
+                              index={virtualRow.index}
+                              start={virtualRow.start}
+                              measureElement={virtualizer.measureElement}
+                              className='z-0'
+                            >
+                              <div className='relative pl-6 py-3 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+                                <div className='absolute -left-[5px] top-4 w-2.5 h-2.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.35)]' />
+                                <button
+                                  onClick={() => toggleProcessMessageRun(runId)}
+                                  className='flex items-center gap-2 group/run hover:opacity-80 transition-opacity cursor-pointer outline-none'
                                 >
-                                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M9 5l7 7-7 7' />
-                                </svg>
-                              </button>
-                              <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
-                                <div className='tool-expand-content pt-2'>
-                                  {row.messages.map(groupedMessage => {
-                                    const { toolCalls, contentBlocks } =
-                                      parsedMessageDataById.get(groupedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
-                                    return (
-                                      <ChatMessage
-                                        key={groupedMessage.id}
-                                        id={groupedMessage.id.toString()}
-                                        role={groupedMessage.role}
-                                        content={groupedMessage.content}
-                                        thinking={groupedMessage.thinking_block}
-                                        toolCalls={toolCalls}
-                                        contentBlocks={contentBlocks}
-                                        timestamp={groupedMessage.created_at}
-                                        width='w-full'
-                                        modelName={groupedMessage.model_name}
-                                        artifacts={groupedMessage.artifacts}
-                                        fontSizeOffset={fontSizeOffset}
-                                        groupToolReasoningRuns={false}
-                                        onOpenToolHtmlModal={openToolHtmlModal}
-                                      />
-                                    )
-                                  })}
+                                  <span className='text-[10px] uppercase tracking-wider text-neutral-500 dark:text-neutral-500 font-bold'>
+                                    Agent Steps ({row.messages.length})
+                                  </span>
+                                  {!isExpanded && summaryParts.length > 0 && (
+                                    <span className='text-xs text-neutral-500 dark:text-neutral-500 line-clamp-1 max-w-[320px]'>
+                                      {summaryParts.join(' • ')}
+                                    </span>
+                                  )}
+                                  <svg
+                                    className={`tool-chevron w-3.5 h-3.5 text-neutral-400 dark:text-neutral-600 group-hover/run:text-neutral-500 dark:group-hover/run:text-neutral-400 ${isExpanded ? 'open' : ''}`}
+                                    fill='none'
+                                    viewBox='0 0 24 24'
+                                    stroke='currentColor'
+                                  >
+                                    <path
+                                      strokeLinecap='round'
+                                      strokeLinejoin='round'
+                                      strokeWidth={2}
+                                      d='M9 5l7 7-7 7'
+                                    />
+                                  </svg>
+                                </button>
+                                <div className={`tool-expand-container ${isExpanded ? 'open' : ''}`}>
+                                  <div className='tool-expand-content pt-2'>
+                                    {row.messages.map(groupedMessage => {
+                                      const { toolCalls, contentBlocks } =
+                                        parsedMessageDataById.get(groupedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                                      return (
+                                        <ChatMessage
+                                          key={groupedMessage.id}
+                                          id={groupedMessage.id.toString()}
+                                          role={groupedMessage.role}
+                                          content={groupedMessage.content}
+                                          thinking={groupedMessage.thinking_block}
+                                          toolCalls={toolCalls}
+                                          contentBlocks={contentBlocks}
+                                          timestamp={groupedMessage.created_at}
+                                          width='w-full'
+                                          modelName={groupedMessage.model_name}
+                                          artifacts={groupedMessage.artifacts}
+                                          fontSizeOffset={fontSizeOffset}
+                                          groupToolReasoningRuns={false}
+                                          onOpenToolHtmlModal={openToolHtmlModal}
+                                        />
+                                      )
+                                    })}
 
-                                  {(() => {
-                                    if (row.bridgedMessageId == null) return null
-                                    const bridgedMessage = messageById.get(String(row.bridgedMessageId))
-                                    if (!bridgedMessage) return null
+                                    {(() => {
+                                      if (row.bridgedMessageId == null) return null
+                                      const bridgedMessage = messageById.get(String(row.bridgedMessageId))
+                                      if (!bridgedMessage) return null
 
-                                    const bridgedParsed =
-                                      parsedMessageDataById.get(bridgedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
-                                    const bridgedProcessBlocks = Array.isArray(bridgedParsed.contentBlocks)
-                                      ? bridgedParsed.contentBlocks.filter(block => isProcessContentBlock(block))
-                                      : []
+                                      const bridgedParsed =
+                                        parsedMessageDataById.get(bridgedMessage.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                                      const bridgedProcessBlocks = Array.isArray(bridgedParsed.contentBlocks)
+                                        ? bridgedParsed.contentBlocks.filter(block => isProcessContentBlock(block))
+                                        : []
 
-                                    const hasThinking =
-                                      typeof bridgedMessage.thinking_block === 'string' &&
-                                      bridgedMessage.thinking_block.trim().length > 0
-                                    const hasToolCalls =
-                                      Array.isArray(bridgedParsed.toolCalls) && bridgedParsed.toolCalls.length > 0
-                                    const hasProcessBlocks = bridgedProcessBlocks.length > 0
+                                      const hasThinking =
+                                        typeof bridgedMessage.thinking_block === 'string' &&
+                                        bridgedMessage.thinking_block.trim().length > 0
+                                      const hasToolCalls =
+                                        Array.isArray(bridgedParsed.toolCalls) && bridgedParsed.toolCalls.length > 0
+                                      const hasProcessBlocks = bridgedProcessBlocks.length > 0
 
-                                    if (!hasThinking && !hasToolCalls && !hasProcessBlocks) {
-                                      return null
-                                    }
+                                      if (!hasThinking && !hasToolCalls && !hasProcessBlocks) {
+                                        return null
+                                      }
 
-                                    return (
-                                      <ChatMessage
-                                        key={`bridged-process-${bridgedMessage.id}`}
-                                        id={`${bridgedMessage.id}-process`}
-                                        role={bridgedMessage.role}
-                                        content=''
-                                        thinking={bridgedMessage.thinking_block}
-                                        toolCalls={bridgedParsed.toolCalls}
-                                        contentBlocks={bridgedProcessBlocks}
-                                        timestamp={bridgedMessage.created_at}
-                                        width='w-full'
-                                        modelName={bridgedMessage.model_name}
-                                        artifacts={bridgedMessage.artifacts}
-                                        fontSizeOffset={fontSizeOffset}
-                                        groupToolReasoningRuns={false}
-                                        onOpenToolHtmlModal={openToolHtmlModal}
-                                      />
-                                    )
-                                  })()}
+                                      return (
+                                        <ChatMessage
+                                          key={`bridged-process-${bridgedMessage.id}`}
+                                          id={`${bridgedMessage.id}-process`}
+                                          role={bridgedMessage.role}
+                                          content=''
+                                          thinking={bridgedMessage.thinking_block}
+                                          toolCalls={bridgedParsed.toolCalls}
+                                          contentBlocks={bridgedProcessBlocks}
+                                          timestamp={bridgedMessage.created_at}
+                                          width='w-full'
+                                          modelName={bridgedMessage.model_name}
+                                          artifacts={bridgedMessage.artifacts}
+                                          fontSizeOffset={fontSizeOffset}
+                                          groupToolReasoningRuns={false}
+                                          onOpenToolHtmlModal={openToolHtmlModal}
+                                        />
+                                      )
+                                    })()}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            </VirtualizedRowContainer>
+                          )
+                        }
+
+                        const msg = row.message
+                        const { toolCalls, contentBlocks } =
+                          parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
+                        const previousRenderRow = virtualRow.index > 0 ? virtualRows[virtualRow.index - 1] : null
+                        const previousRow = previousRenderRow?.kind === 'message_row' ? previousRenderRow.row : null
+
+                        const isProcessBridgeSourceMessage =
+                          previousRow?.kind === 'process_group' &&
+                          previousRow.bridgedMessageId != null &&
+                          String(previousRow.bridgedMessageId) === String(msg.id)
+
+                        const displayThinking = isProcessBridgeSourceMessage ? undefined : msg.thinking_block
+                        const displayToolCalls = isProcessBridgeSourceMessage ? [] : toolCalls
+                        const displayContentBlocks =
+                          isProcessBridgeSourceMessage && Array.isArray(contentBlocks)
+                            ? contentBlocks.filter(block => !isProcessContentBlock(block))
+                            : contentBlocks
+
+                        return (
+                          <VirtualizedRowContainer
+                            key={renderRow.key}
+                            id={`message-${msg.id}`}
+                            index={virtualRow.index}
+                            start={virtualRow.start}
+                            measureElement={virtualizer.measureElement}
+                            className='z-0 focus-within:z-[70]'
+                            zIndex={
+                              activeBranchEditingMessageId != null &&
+                              String(msg.id) === String(activeBranchEditingMessageId)
+                                ? 80
+                                : 0
+                            }
+                          >
+                            <ChatMessage
+                              id={msg.id.toString()}
+                              role={msg.role}
+                              content={msg.content}
+                              thinking={displayThinking}
+                              toolCalls={displayToolCalls}
+                              contentBlocks={displayContentBlocks}
+                              timestamp={msg.created_at}
+                              width='w-full'
+                              modelName={msg.model_name}
+                              artifacts={msg.artifacts}
+                              fontSizeOffset={fontSizeOffset}
+                              groupToolReasoningRuns={groupToolReasoningRuns}
+                              onEdit={handleMessageEdit}
+                              onBranch={handleMessageBranch}
+                              onDelete={handleRequestDelete}
+                              onResend={handleResend}
+                              onAddToNote={handleAddToNote}
+                              onExplainFromSelection={handleExplainFromSelection}
+                              onOpenToolHtmlModal={openToolHtmlModal}
+                              onEditingStateChange={handleMessageEditingStateChange}
+                            />
                           </VirtualizedRowContainer>
                         )
-                      }
-
-                      const msg = row.message
-                      const { toolCalls, contentBlocks } = parsedMessageDataById.get(msg.id) ?? EMPTY_PARSED_MESSAGE_DATA
-                      const previousRenderRow = virtualRow.index > 0 ? virtualRows[virtualRow.index - 1] : null
-                      const previousRow =
-                        previousRenderRow?.kind === 'message_row' ? previousRenderRow.row : null
-
-                      const isProcessBridgeSourceMessage =
-                        previousRow?.kind === 'process_group' &&
-                        previousRow.bridgedMessageId != null &&
-                        String(previousRow.bridgedMessageId) === String(msg.id)
-
-                      const displayThinking = isProcessBridgeSourceMessage ? undefined : msg.thinking_block
-                      const displayToolCalls = isProcessBridgeSourceMessage ? [] : toolCalls
-                      const displayContentBlocks =
-                        isProcessBridgeSourceMessage && Array.isArray(contentBlocks)
-                          ? contentBlocks.filter(block => !isProcessContentBlock(block))
-                          : contentBlocks
-
-                      return (
-                        <VirtualizedRowContainer
-                          key={renderRow.key}
-                          id={`message-${msg.id}`}
-                          index={virtualRow.index}
-                          start={virtualRow.start}
-                          measureElement={virtualizer.measureElement}
-                          className='z-0 focus-within:z-[70]'
-                          zIndex={
-                            activeBranchEditingMessageId != null &&
-                            String(msg.id) === String(activeBranchEditingMessageId)
-                              ? 80
-                              : 0
-                          }
-                        >
-                          <ChatMessage
-                            id={msg.id.toString()}
-                            role={msg.role}
-                            content={msg.content}
-                            thinking={displayThinking}
-                            toolCalls={displayToolCalls}
-                            contentBlocks={displayContentBlocks}
-                            timestamp={msg.created_at}
-                            width='w-full'
-                            modelName={msg.model_name}
-                            artifacts={msg.artifacts}
-                            fontSizeOffset={fontSizeOffset}
-                            groupToolReasoningRuns={groupToolReasoningRuns}
-                            onEdit={handleMessageEdit}
-                            onBranch={handleMessageBranch}
-                            onDelete={handleRequestDelete}
-                            onResend={handleResend}
-                            onAddToNote={handleAddToNote}
-                            onExplainFromSelection={handleExplainFromSelection}
-                            onOpenToolHtmlModal={openToolHtmlModal}
-                            onEditingStateChange={handleMessageEditingStateChange}
-                          />
-                        </VirtualizedRowContainer>
-                      )
-                    })}
-                  </div>
-                )
-              })()
+                      })}
+                    </div>
+                  )
+                })()
               )}
             </React.Profiler>
 
@@ -5079,7 +5375,8 @@ function Chat() {
                   </div>
                   {benchEnabled && (
                     <div className='text-[10px] text-violet-700/80 dark:text-violet-300/80'>
-                      commits {benchCommitDurationsRef.current.length} • derives {benchDeriveDurationsRef.current.length}
+                      commits {benchCommitDurationsRef.current.length} • derives{' '}
+                      {benchDeriveDurationsRef.current.length}
                     </div>
                   )}
                 </div>
@@ -5731,11 +6028,11 @@ function Chat() {
                 )}
                 {!currentConversationId ? (
                   <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Creating...</span>
-                ) : sendingState.streaming || sendingState.sending ? (
+                ) : sendingState.compacting || sendingState.streaming || sendingState.sending ? (
                   <button
                     onClick={handleStopGeneration}
                     disabled={!streamState.active}
-                    title={streamState.active ? 'Stop generation' : 'Generating...'}
+                    title={sendingState.compacting ? 'Compacting context...' : streamState.active ? 'Stop generation' : 'Generating...'}
                     className='cursor-pointer hover:scale-105 active:scale-95 transition-transform'
                   >
                     <SendButtonLoadingAnimation animationType={sendButtonAnimation} bgColor={sendButtonColor} />

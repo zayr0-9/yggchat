@@ -27,6 +27,19 @@ import {
 } from '../helpers/chatReasoningSettingsStorage'
 import { loadShowTokenUsageBar, saveShowTokenUsageBar } from '../helpers/chatUiSettingsStorage'
 import {
+  applyAppFontSettings,
+  AppFontSettings,
+  clearStoredLocalFont,
+  FONT_SETTINGS_CHANGE_EVENT,
+  hasStoredLocalFont,
+  isSupportedLocalFontFile,
+  loadAppFontSettings,
+  MAX_FONT_UPLOAD_SIZE_BYTES,
+  saveAppFontSettings,
+  saveUploadedLocalFont,
+  validateGoogleFontUrl,
+} from '../helpers/fontSettingsStorage'
+import {
   loadProviderSettings,
   MAX_OPENROUTER_TEMPERATURE,
   MIN_OPENROUTER_TEMPERATURE,
@@ -49,22 +62,29 @@ import {
 } from '../helpers/toolExecutionSettings'
 import {
   addCustomVideo,
+  BackgroundColorSettings,
+  BackgroundMode,
   clearCustomVideoLibrary,
   CustomVideoEntry,
   loadActiveCustomVideoId,
+  loadBackgroundColors,
+  loadBackgroundMode,
   loadSavedVideos,
   persistActiveCustomVideoId,
+  persistBackgroundColors,
+  persistBackgroundMode,
   removeCustomVideo,
   updateCustomVideoTextColorMode,
   VIDEO_BACKGROUND_CHANGE_EVENT,
 } from '../helpers/videoBackgroundStorage'
-import { isCommunityMode } from '../config/runtimeMode'
+import { isCommunityMode, LOCAL_AUTH_USER_ID } from '../config/runtimeMode'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useModels } from '../hooks/useQueries'
-import { API_BASE } from '../utils/api'
+import { API_BASE, localApi } from '../utils/api'
 
 const MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024 // 8MB
+const LOCAL_FONT_ACCEPT = '.woff2,.ttf,.otf'
 
 type StatusMessage = {
   type: 'success' | 'error' | 'info'
@@ -94,10 +114,28 @@ interface GoogleDriveStatus {
   lastUsedAt: string | null
 }
 
+interface LocalUserSummary {
+  id: string
+  username: string | null
+  created_at: string | null
+  project_count: number
+  conversation_count: number
+  provider_cost_count: number
+}
+
+interface LocalMergeResult {
+  success: boolean
+  merged: boolean
+  projects: number
+  conversations: number
+  providerCosts: number
+  message?: string
+}
+
 const Settings: React.FC = () => {
   const navigate = useNavigate()
   const dispatch = useAppDispatch()
-  const { accessToken } = useAuth()
+  const { accessToken, userId } = useAuth()
   const providers = useAppSelector(selectProviderState)
   const htmlRegistry = useHtmlIframeRegistry()
   const htmlEntries = htmlRegistry?.entries.filter(entry => entry.kind === 'html') ?? []
@@ -110,14 +148,26 @@ const Settings: React.FC = () => {
   const [updatingTools, setUpdatingTools] = useState<Set<string>>(new Set())
   const [reloadingTools, setReloadingTools] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const fontFileInputRef = useRef<HTMLInputElement | null>(null)
   const timeoutRef = useRef<number | null>(null)
+  const [fontUploading, setFontUploading] = useState(false)
+  const [fontSettings, setFontSettings] = useState<AppFontSettings>(() => loadAppFontSettings())
+  const [googleFontUrlInput, setGoogleFontUrlInput] = useState<string>(() => loadAppFontSettings().googleFontUrl ?? '')
+  const [hasLocalFontSaved, setHasLocalFontSaved] = useState(false)
   const [videos, setVideos] = useState<CustomVideoEntry[]>(() => loadSavedVideos())
   const [activeVideoId, setActiveVideoId] = useState<string | null>(() => loadActiveCustomVideoId())
+  const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>(() => loadBackgroundMode())
+  const [backgroundColors, setBackgroundColors] = useState<BackgroundColorSettings>(() => loadBackgroundColors())
   const [uploading, setUploading] = useState(false)
   const [googleConnecting, setGoogleConnecting] = useState(false)
   const [googleDisconnecting, setGoogleDisconnecting] = useState(false)
   const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null)
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
+  const [localUsers, setLocalUsers] = useState<LocalUserSummary[]>([])
+  const [localUsersLoading, setLocalUsersLoading] = useState(false)
+  const [migratingOwnership, setMigratingOwnership] = useState(false)
+  const [fromUserId, setFromUserId] = useState('')
+  const [toUserId, setToUserId] = useState('')
   const [isChangelogOpen, setIsChangelogOpen] = useState(false)
   const [providerSettings, setProviderSettings] = useState<ProviderSettings>(() => loadProviderSettings())
   const [openRouterTemperatureInput, setOpenRouterTemperatureInput] = useState<string>(() => {
@@ -156,6 +206,8 @@ const Settings: React.FC = () => {
   const [agentSettingsLoading, setAgentSettingsLoading] = useState(true)
   const [agentSettingsSaving, setAgentSettingsSaving] = useState(false)
   const { data: openRouterModelsData } = useModels('OpenRouter')
+  const compactionProviderForModels = providerSettings.compactionProvider || providers.currentProvider || 'OpenRouter'
+  const { data: compactionModelsData } = useModels(compactionProviderForModels)
 
   // Fetch Google Drive connection status
   const fetchGoogleDriveStatus = async () => {
@@ -185,6 +237,8 @@ const Settings: React.FC = () => {
     const handleBackgroundChange = () => {
       setVideos(loadSavedVideos())
       setActiveVideoId(loadActiveCustomVideoId())
+      setBackgroundMode(loadBackgroundMode())
+      setBackgroundColors(loadBackgroundColors())
     }
 
     window.addEventListener(VIDEO_BACKGROUND_CHANGE_EVENT, handleBackgroundChange)
@@ -233,6 +287,33 @@ const Settings: React.FC = () => {
       )
   }, [])
 
+  useEffect(() => {
+    let active = true
+
+    hasStoredLocalFont()
+      .then(hasLocal => {
+        if (active) {
+          setHasLocalFontSaved(hasLocal)
+        }
+      })
+      .catch(error => {
+        console.error('Failed to check local font availability:', error)
+      })
+
+    const handleFontSettingsChange = (event: CustomEvent<AppFontSettings>) => {
+      if (!active) return
+      setFontSettings(event.detail)
+      setGoogleFontUrlInput(event.detail.googleFontUrl ?? '')
+    }
+
+    window.addEventListener(FONT_SETTINGS_CHANGE_EVENT, handleFontSettingsChange as EventListener)
+
+    return () => {
+      active = false
+      window.removeEventListener(FONT_SETTINGS_CHANGE_EVENT, handleFontSettingsChange as EventListener)
+    }
+  }, [])
+
   const handleProviderVisibilityToggle = () => {
     const updated = {
       ...providerSettings,
@@ -256,6 +337,35 @@ const Settings: React.FC = () => {
     showStatus({
       type: 'success',
       text: providerName ? `Default provider set to "${providerName}".` : 'Default provider cleared.',
+    })
+  }
+
+  const handleCompactionProviderChange = (providerName: string) => {
+    const updated = {
+      ...providerSettings,
+      compactionProvider: providerName || null,
+      compactionModel: null,
+    }
+    saveProviderSettings(updated)
+    setProviderSettings(updated)
+    showStatus({
+      type: 'success',
+      text: providerName
+        ? `Compaction provider set to "${providerName}".`
+        : 'Compaction provider will follow the current chat provider.',
+    })
+  }
+
+  const handleCompactionModelChange = (modelName: string) => {
+    const updated = {
+      ...providerSettings,
+      compactionModel: modelName || null,
+    }
+    saveProviderSettings(updated)
+    setProviderSettings(updated)
+    showStatus({
+      type: 'success',
+      text: modelName ? 'Compaction model updated.' : 'Compaction model will use provider default/current model.',
     })
   }
 
@@ -360,6 +470,100 @@ const Settings: React.FC = () => {
     timeoutRef.current = window.setTimeout(() => setStatusMessage(null), 4000)
   }
 
+  const formatLocalUserOptionLabel = (user: LocalUserSummary) => {
+    const baseName = user.username?.trim() || 'unnamed-user'
+    const isDefaultLocal = user.id === LOCAL_AUTH_USER_ID
+    const suffix = isDefaultLocal ? ' (default local)' : ''
+    return `${baseName}${suffix} • ${user.conversation_count} conv • ${user.project_count} proj`
+  }
+
+  const fetchLocalUsers = async () => {
+    if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+
+    setLocalUsersLoading(true)
+    try {
+      const users = await localApi.get<LocalUserSummary[]>('/local/users')
+      setLocalUsers(users)
+
+      setFromUserId(prev => {
+        if (prev && users.some(user => user.id === prev)) return prev
+        return users[0]?.id || ''
+      })
+
+      setToUserId(prev => {
+        if (prev && users.some(user => user.id === prev)) return prev
+
+        if (userId && users.some(user => user.id === userId)) {
+          return userId
+        }
+
+        const first = users[0]?.id || ''
+        const second = users.find(user => user.id !== first)?.id
+        return second || first
+      })
+    } catch (error) {
+      console.error('Failed to fetch local users:', error)
+      showStatus({ type: 'error', text: 'Failed to load local users for migration.' })
+    } finally {
+      setLocalUsersLoading(false)
+    }
+  }
+
+  const handleManualOwnershipMigration = async () => {
+    if (!fromUserId || !toUserId) {
+      showStatus({ type: 'error', text: 'Select both source and destination users.' })
+      return
+    }
+
+    if (fromUserId === toUserId) {
+      showStatus({ type: 'info', text: 'Source and destination users are the same.' })
+      return
+    }
+
+    const source = localUsers.find(user => user.id === fromUserId)
+    const destination = localUsers.find(user => user.id === toUserId)
+
+    const sourceName = source?.username?.trim() || fromUserId
+    const destinationName = destination?.username?.trim() || toUserId
+
+    const confirmed = window.confirm(
+      `Migrate local ownership from "${sourceName}" to "${destinationName}"?\n\nThis reassigns local projects, conversations, and provider costs.`
+    )
+
+    if (!confirmed) return
+
+    setMigratingOwnership(true)
+    try {
+      const result = await localApi.post<LocalMergeResult>('/local/users/merge', {
+        fromUserId,
+        toUserId,
+        toUsername: destination?.username || 'user',
+        toCreatedAt: destination?.created_at || new Date().toISOString(),
+      })
+
+      if (!result?.merged) {
+        showStatus({ type: 'info', text: result?.message || 'No migration was needed.' })
+      } else {
+        showStatus({
+          type: 'success',
+          text: `Migration complete: ${result.projects} projects, ${result.conversations} conversations, ${result.providerCosts} provider-cost rows moved.`,
+        })
+      }
+
+      await fetchLocalUsers()
+    } catch (error) {
+      console.error('Failed to migrate local ownership:', error)
+      showStatus({ type: 'error', text: 'Failed to migrate local ownership.' })
+    } finally {
+      setMigratingOwnership(false)
+    }
+  }
+
+  useEffect(() => {
+    if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+    fetchLocalUsers()
+  }, [userId])
+
   const handleStartupLandingPreferenceChange = (value: string) => {
     const nextPreference: StartupLandingPreference = value === 'latest-chat' ? 'latest-chat' : 'homepage'
     saveStartupLandingPreference(nextPreference)
@@ -396,6 +600,115 @@ const Settings: React.FC = () => {
       type: 'success',
       text: nextValue ? 'Token usage bar enabled in Chat.' : 'Token usage bar hidden in Chat.',
     })
+  }
+
+  const persistAndApplyFontSettings = async (nextSettings: AppFontSettings) => {
+    const saved = saveAppFontSettings(nextSettings)
+    setFontSettings(saved)
+    await applyAppFontSettings(saved)
+  }
+
+  const handleGoogleFontUrlApply = async () => {
+    const validation = validateGoogleFontUrl(googleFontUrlInput)
+    if (!validation.valid || !validation.normalizedUrl || !validation.family) {
+      showStatus({ type: 'error', text: validation.error ?? 'Invalid Google Font URL.' })
+      return
+    }
+
+    await persistAndApplyFontSettings({
+      ...fontSettings,
+      source: 'google',
+      googleFontUrl: validation.normalizedUrl,
+      googleFontFamily: validation.family,
+    })
+
+    showStatus({ type: 'success', text: `Google Font "${validation.family}" applied.` })
+  }
+
+  const handleResetAppFont = async () => {
+    await persistAndApplyFontSettings({
+      ...fontSettings,
+      source: 'default',
+    })
+    showStatus({ type: 'success', text: 'App font reset to DM Sans.' })
+  }
+
+  const handleLocalFontUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!isSupportedLocalFontFile(file)) {
+      showStatus({ type: 'error', text: 'Only .woff2, .ttf, or .otf files are supported.' })
+      if (fontFileInputRef.current) {
+        fontFileInputRef.current.value = ''
+      }
+      return
+    }
+
+    if (file.size > MAX_FONT_UPLOAD_SIZE_BYTES) {
+      showStatus({
+        type: 'error',
+        text: `Font file must be under ${formatSize(MAX_FONT_UPLOAD_SIZE_BYTES)}.`,
+      })
+      if (fontFileInputRef.current) {
+        fontFileInputRef.current.value = ''
+      }
+      return
+    }
+
+    setFontUploading(true)
+
+    try {
+      await saveUploadedLocalFont(file)
+      setHasLocalFontSaved(true)
+
+      await persistAndApplyFontSettings({
+        ...fontSettings,
+        source: 'local',
+      })
+
+      showStatus({ type: 'success', text: `Local font "${file.name}" uploaded and applied.` })
+    } catch (error) {
+      console.error('Failed to upload local font:', error)
+      showStatus({ type: 'error', text: 'Unable to upload local font.' })
+    } finally {
+      setFontUploading(false)
+      if (fontFileInputRef.current) {
+        fontFileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleUseLocalFont = async () => {
+    if (!hasLocalFontSaved) {
+      showStatus({ type: 'error', text: 'Upload a local font first.' })
+      return
+    }
+
+    await persistAndApplyFontSettings({
+      ...fontSettings,
+      source: 'local',
+    })
+
+    showStatus({ type: 'success', text: 'Local font applied.' })
+  }
+
+  const handleRemoveLocalFont = async () => {
+    try {
+      await clearStoredLocalFont()
+      setHasLocalFontSaved(false)
+
+      const nextSettings: AppFontSettings = {
+        ...fontSettings,
+        source: fontSettings.source === 'local' ? 'default' : fontSettings.source,
+      }
+
+      await persistAndApplyFontSettings(nextSettings)
+      showStatus({ type: 'success', text: 'Stored local font removed.' })
+    } catch (error) {
+      console.error('Failed to remove local font:', error)
+      showStatus({ type: 'error', text: 'Failed to remove local font.' })
+    }
   }
 
   const handleDefaultReasoningEffortChange = (value: string) => {
@@ -685,7 +998,9 @@ const Settings: React.FC = () => {
 
   const handleSelectVideo = (id: string) => {
     persistActiveCustomVideoId(id)
+    persistBackgroundMode('video')
     setActiveVideoId(id)
+    setBackgroundMode('video')
     showStatus({ type: 'success', text: 'Active background updated.' })
   }
 
@@ -707,7 +1022,9 @@ const Settings: React.FC = () => {
 
   const handleResetToDefault = () => {
     persistActiveCustomVideoId(null)
+    persistBackgroundMode('video')
     setActiveVideoId(null)
+    setBackgroundMode('video')
     showStatus({ type: 'success', text: 'Reverted to the built-in defaults.' })
   }
 
@@ -715,6 +1032,21 @@ const Settings: React.FC = () => {
     updateCustomVideoTextColorMode(id, mode)
     setVideos(loadSavedVideos())
     showStatus({ type: 'success', text: `Text color mode set to "${mode}".` })
+  }
+
+  const handleBackgroundModeChange = (mode: BackgroundMode) => {
+    persistBackgroundMode(mode, backgroundColors)
+    setBackgroundMode(mode)
+    showStatus({
+      type: 'success',
+      text: mode === 'color' ? 'Solid color background enabled.' : 'Video wallpaper enabled.',
+    })
+  }
+
+  const handleBackgroundColorChange = (variant: 'light' | 'dark', value: string) => {
+    const nextColors = { ...backgroundColors, [variant]: value }
+    persistBackgroundColors(nextColors)
+    setBackgroundColors(loadBackgroundColors())
   }
 
   const handleGoogleDriveConnect = async () => {
@@ -986,6 +1318,77 @@ const Settings: React.FC = () => {
           </div>
         </section>
 
+        <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+          <div className='flex flex-col gap-1'>
+            <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Typography</h2>
+            <p className='text-sm text-stone-500 dark:text-stone-200'>
+              Set app font from a Google Fonts URL or a local font file.
+            </p>
+          </div>
+
+          <div className='mt-4 flex flex-col gap-5'>
+            <div className='flex flex-col gap-2'>
+              <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Google Fonts URL</p>
+              <p className='text-sm text-stone-500 dark:text-stone-400'>
+                Only <code>https://fonts.googleapis.com/css</code> and <code>/css2</code> links are accepted.
+              </p>
+              <input
+                type='url'
+                value={googleFontUrlInput}
+                onChange={event => setGoogleFontUrlInput(event.target.value)}
+                placeholder='https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap'
+                className='w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+              />
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button variant='primary' size='small' onClick={handleGoogleFontUrlApply}>
+                  Apply Google Font
+                </Button>
+                <Button variant='outline2' size='small' onClick={handleResetAppFont}>
+                  Reset to DM Sans
+                </Button>
+              </div>
+            </div>
+
+            <div className='pt-3 border-t border-stone-200 dark:border-stone-700 flex flex-col gap-2'>
+              <input
+                ref={fontFileInputRef}
+                type='file'
+                accept={LOCAL_FONT_ACCEPT}
+                className='hidden'
+                onChange={handleLocalFontUpload}
+              />
+              <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Local Font Upload</p>
+              <p className='text-sm text-stone-500 dark:text-stone-400'>
+                Upload <code>.woff2</code>, <code>.ttf</code>, or <code>.otf</code> (max {formatSize(MAX_FONT_UPLOAD_SIZE_BYTES)}).
+              </p>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button
+                  variant='acrylic'
+                  size='small'
+                  onClick={() => fontFileInputRef.current?.click()}
+                  disabled={fontUploading}
+                >
+                  {fontUploading ? 'Uploading…' : 'Upload Local Font'}
+                </Button>
+                <Button variant='outline2' size='small' onClick={handleUseLocalFont} disabled={!hasLocalFontSaved}>
+                  Use Local Font
+                </Button>
+                <Button variant='outline2' size='small' onClick={handleRemoveLocalFont} disabled={!hasLocalFontSaved}>
+                  Remove Local Font
+                </Button>
+              </div>
+              <p className='text-xs text-stone-500 dark:text-stone-400'>
+                Active source:{' '}
+                <span className='font-mono'>
+                  {fontSettings.source === 'google'
+                    ? `google (${fontSettings.googleFontFamily ?? 'unknown'})`
+                    : fontSettings.source}
+                </span>
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Provider Settings Section */}
         {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
           <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
@@ -1045,6 +1448,36 @@ const Settings: React.FC = () => {
                   )}
                 </div>
               )}
+
+
+              <div className='flex flex-col gap-2 pt-2 border-t border-stone-200 dark:border-stone-700'>
+                <div>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Auto-Compaction Provider</p>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>
+                    Provider/model used when chat auto-compacts context near the token limit.
+                  </p>
+                </div>
+                <Select
+                  value={providerSettings.compactionProvider || ''}
+                  onChange={handleCompactionProviderChange}
+                  options={[
+                    { value: '', label: 'Follow current chat provider' },
+                    ...providers.providers.map(p => ({ value: p.name, label: p.name })),
+                  ]}
+                  placeholder='Follow current chat provider'
+                  className='max-w-xs'
+                />
+                <Select
+                  value={providerSettings.compactionModel || ''}
+                  onChange={handleCompactionModelChange}
+                  options={[
+                    { value: '', label: 'Use provider default/current model' },
+                    ...((compactionModelsData?.models || []).map(model => ({ value: model.name, label: model.name })) as any[]),
+                  ]}
+                  placeholder='Use provider default/current model'
+                  className='max-w-xl'
+                />
+              </div>
 
               <div className='flex flex-col gap-2 pt-2 border-t border-stone-200 dark:border-stone-700'>
                 <div>
@@ -1114,6 +1547,80 @@ const Settings: React.FC = () => {
                   </Button>
                 </div>
               </div>
+            </div>
+          </section>
+        )}
+
+        {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
+          <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+            <div className='flex flex-col gap-1'>
+              <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Local Ownership Migration</h2>
+              <p className='text-sm text-stone-500 dark:text-stone-200'>
+                Manually move local project/conversation ownership from one user ID to another.
+              </p>
+            </div>
+
+            <div className='mt-4 flex flex-col gap-4'>
+              <div className='flex flex-col gap-2'>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>From User</p>
+                <Select
+                  value={fromUserId}
+                  onChange={setFromUserId}
+                  options={localUsers.map(user => ({ value: user.id, label: formatLocalUserOptionLabel(user) }))}
+                  placeholder={localUsersLoading ? 'Loading users...' : 'Select source user'}
+                  disabled={localUsersLoading || localUsers.length === 0 || migratingOwnership}
+                  className='max-w-2xl'
+                />
+                <p className='text-xs text-stone-500 dark:text-stone-400 break-all'>
+                  Source ID: {fromUserId || '—'}
+                </p>
+              </div>
+
+              <div className='flex flex-col gap-2'>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>To User</p>
+                <Select
+                  value={toUserId}
+                  onChange={setToUserId}
+                  options={localUsers.map(user => ({ value: user.id, label: formatLocalUserOptionLabel(user) }))}
+                  placeholder={localUsersLoading ? 'Loading users...' : 'Select destination user'}
+                  disabled={localUsersLoading || localUsers.length === 0 || migratingOwnership}
+                  className='max-w-2xl'
+                />
+                <p className='text-xs text-stone-500 dark:text-stone-400 break-all'>
+                  Destination ID: {toUserId || '—'}
+                </p>
+              </div>
+
+              <div className='flex flex-wrap items-center gap-3 pt-2 border-t border-stone-200 dark:border-stone-700'>
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={fetchLocalUsers}
+                  disabled={localUsersLoading || migratingOwnership}
+                >
+                  {localUsersLoading ? 'Refreshing users...' : 'Refresh user list'}
+                </Button>
+
+                <Button
+                  variant='outline2'
+                  size='small'
+                  onClick={handleManualOwnershipMigration}
+                  disabled={
+                    localUsersLoading ||
+                    migratingOwnership ||
+                    localUsers.length < 2 ||
+                    !fromUserId ||
+                    !toUserId ||
+                    fromUserId === toUserId
+                  }
+                >
+                  {migratingOwnership ? 'Migrating...' : 'Migrate local ownership'}
+                </Button>
+              </div>
+
+              <p className='text-xs text-amber-700 dark:text-amber-300'>
+                This only updates local SQLite ownership (projects, conversations, provider costs).
+              </p>
             </div>
           </section>
         )}
@@ -1719,6 +2226,76 @@ const Settings: React.FC = () => {
               </Button>
             </div>
           </div>
+        </section>
+
+        <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:bg-zinc-900/60 dark:shadow-black/20'>
+          <div className='flex flex-col gap-1'>
+            <div className='flex flex-wrap items-center justify-between gap-3'>
+              <div>
+                <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100'>Solid Color Background</h2>
+                <p className='text-sm text-stone-500 dark:text-stone-400'>Pick colors for light and dark themes.</p>
+              </div>
+              <div className='flex flex-wrap gap-2'>
+                <Button
+                  variant={backgroundMode === 'video' ? 'primary' : 'outline2'}
+                  size='small'
+                  onClick={() => handleBackgroundModeChange('video')}
+                  className='group'
+                >
+                  <p className='transition-transform duration-100 group-active:scale-95'>Video wallpaper</p>
+                </Button>
+                <Button
+                  variant={backgroundMode === 'color' ? 'primary' : 'outline2'}
+                  size='small'
+                  onClick={() => handleBackgroundModeChange('color')}
+                  className='group'
+                >
+                  <p className='transition-transform duration-100 group-active:scale-95'>Solid colors</p>
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className='mt-5 grid gap-4 md:grid-cols-2'>
+            {(['light', 'dark'] as const).map(mode => {
+              const label = mode === 'light' ? 'Light mode color' : 'Dark mode color'
+              const description =
+                mode === 'light'
+                  ? 'Used when the interface is in light theme.'
+                  : 'Used when the interface is in dark theme.'
+              const colorValue = backgroundColors[mode]
+              return (
+                <div
+                  key={mode}
+                  className='rounded-xl border border-stone-200 bg-stone-50/70 p-4 transition dark:border-stone-700 dark:bg-zinc-900/70'
+                >
+                  <div className='flex items-start justify-between gap-3'>
+                    <div>
+                      <p className='text-base font-semibold text-stone-900 dark:text-stone-100'>{label}</p>
+                      <p className='text-xs text-stone-500 dark:text-stone-400'>{description}</p>
+                    </div>
+                    <span
+                      className='h-10 w-10 rounded-full border border-stone-200 dark:border-stone-600'
+                      style={{ backgroundColor: colorValue }}
+                      aria-hidden='true'
+                    ></span>
+                  </div>
+                  <div className='mt-4 flex items-center gap-3'>
+                    <input
+                      type='color'
+                      value={colorValue}
+                      onChange={event => handleBackgroundColorChange(mode, event.target.value)}
+                      aria-label={`${label} picker`}
+                      className='h-10 w-10 rounded-full border border-stone-200 bg-white p-0 dark:border-stone-600'
+                    />
+                    <p className='text-xs font-mono text-stone-500 dark:text-stone-300'>{colorValue}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <p className='mt-4 text-xs text-stone-500 dark:text-stone-400'>
+            Solid colors automatically switch with the theme. When you’re ready for motion, switch back to video wallpapers.
+          </p>
         </section>
 
         <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:bg-zinc-900 dark:shadow-black/20'>

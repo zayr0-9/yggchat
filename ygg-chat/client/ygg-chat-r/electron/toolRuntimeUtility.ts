@@ -166,6 +166,8 @@ function initializeBuiltInToolRegistry(): void {
       validateContent,
       expectedHash,
       expectedMetadata,
+      approxStartLine,
+      approxEndLine,
     } = args
     if (!filePath) throw new Error('path is required')
     return await editFile(filePath, operation, {
@@ -182,6 +184,8 @@ function initializeBuiltInToolRegistry(): void {
       validateContent,
       expectedHash,
       expectedMetadata,
+      approxStartLine,
+      approxEndLine,
       operationMode,
       cwd: rootPath,
     })

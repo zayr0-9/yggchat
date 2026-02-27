@@ -250,7 +250,7 @@ const builtInToolDefinitions: ToolDefinition[] = [
     name: 'edit_file',
     enabled: true,
     description:
-      'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy. Escape sequences like \\n, \\t, \\r are interpreted in search patterns by default. Replacement text is treated literally by default to avoid accidental source corruption. Supports content validation using hash and metadata from read_file to prevent editing stale content.',
+      'Edit a file using search/replace or append. Operations: "replace" (all occurrences), "replace_first" (first match only), "append" (add to end). Uses layered matching: exact -> line-ending normalized -> whitespace normalized -> fuzzy. approxStartLine and approxEndLine are required on every call; replace_first uses them to search a local window first, then falls back to full-file search if needed. Escape sequences like \\n, \\t, \\r are interpreted in search patterns by default. Replacement text is treated literally by default to avoid accidental source corruption. Supports content validation using hash and metadata from read_file to prevent editing stale content.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -269,6 +269,18 @@ const builtInToolDefinitions: ToolDefinition[] = [
           type: 'string',
           description:
             'REQUIRED for replace/replace_first operations. The text to replace the search pattern with. Treated literally by default; include actual newlines in the string when needed.',
+        },
+        approxStartLine: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'REQUIRED. Approximate start line hint. replace_first searches a local window around this line first (default ±100 lines) before falling back to full-file search.',
+        },
+        approxEndLine: {
+          type: 'integer',
+          minimum: 1,
+          description:
+            'REQUIRED. Approximate end line hint. Combine with approxStartLine to bound the preferred window. For non-range edits you can pass the same value for start and end.',
         },
         content: {
           type: 'string',
@@ -296,7 +308,7 @@ const builtInToolDefinitions: ToolDefinition[] = [
           description: 'Expected file metadata from read_file for validation',
         },
       },
-      required: ['path', 'operation'],
+      required: ['path', 'operation', 'approxStartLine', 'approxEndLine'],
     },
   },
   {

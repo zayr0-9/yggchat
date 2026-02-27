@@ -1,6 +1,7 @@
 import { createAsyncThunk } from '@reduxjs/toolkit'
 import type { QueryClient } from '@tanstack/react-query'
 import { v4 as uuidv4 } from 'uuid'
+import { estimateTokenCount } from 'tokenx'
 import { ConversationId, MessageId } from '../../../../../shared/types'
 import { isCommunityMode } from '../../config/runtimeMode'
 import { getDefaultUserSystemPromptFromCache } from '../../hooks/useQueries'
@@ -764,6 +765,30 @@ const resolveOpenRouterTemperature = (providerSlug: string): number | undefined 
   if (providerSlug !== 'openrouter') return undefined
   const configured = loadProviderSettings().openRouterTemperature
   return typeof configured === 'number' ? configured : undefined
+}
+
+
+export const AUTO_COMPACTION_NOTE = '__auto_compaction_summary__'
+
+const isAutoCompactionSummaryMessage = (msg: Message | undefined | null): boolean => {
+  if (!msg) return false
+  return typeof msg.note === 'string' && msg.note === AUTO_COMPACTION_NOTE
+}
+
+const trimHistoryToLatestCompaction = (messages: Array<Message | undefined>): Message[] => {
+  const resolved = messages.filter(Boolean) as Message[]
+  if (resolved.length === 0) return []
+
+  let lastCompactionIdx = -1
+  for (let i = resolved.length - 1; i >= 0; i--) {
+    if (isAutoCompactionSummaryMessage(resolved[i])) {
+      lastCompactionIdx = i
+      break
+    }
+  }
+
+  if (lastCompactionIdx < 0) return resolved
+  return resolved.slice(lastCompactionIdx)
 }
 
 /**
@@ -1917,8 +1942,269 @@ const persistAssistantMessageWithFallback = async (
 // See useModels, useRecentModels, useRefreshModels, and useSelectModel in hooks/useQueries.ts
 // Model selection state is now managed entirely by React Query and localStorage
 
+
+interface CompactBranchPayload {
+  conversationId: ConversationId
+  parentMessageId: MessageId | null
+  messages: Message[]
+  providerName?: string | null
+  modelName?: string | null
+}
+
+export const compactBranch = createAsyncThunk<
+  { message: Message | null },
+  CompactBranchPayload,
+  { state: RootState; extra: ThunkExtraArgument }
+>(
+  'chat/compactBranch',
+  async ({ conversationId, parentMessageId, messages, providerName, modelName }, { dispatch, getState, extra, rejectWithValue }) => {
+    dispatch(chatSliceActions.compactingStarted())
+
+    try {
+      const { auth } = extra
+      const state = getState() as RootState
+
+      const provider = providerName || state.chat.providerState.currentProvider || 'OpenRouter'
+      const providerSlug = provider.toLowerCase().replace(/\s+/g, '')
+      const isLmStudio = providerSlug === 'lmstudio'
+      const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
+
+      console.log('[compactBranch] start', {
+        conversationId,
+        parentMessageId,
+        inputMessages: messages.length,
+        providerName: provider,
+        modelName: modelName ?? null,
+        providerSlug,
+      })
+
+      const modelsData = extra.queryClient?.getQueryData<{ models: Model[]; default: Model; selected: Model }>([
+        'models',
+        provider,
+      ])
+      const resolvedModelName = modelName || modelsData?.selected?.name || modelsData?.default?.name
+      if (!resolvedModelName) {
+        throw new Error('No model selected for compaction')
+      }
+
+      const compactableHistory = trimHistoryToLatestCompaction(messages)
+      const historyLines = compactableHistory
+        .map(msg => {
+          const role = msg.role === 'assistant' || msg.role === 'ex_agent' ? 'assistant' : msg.role
+          const content = typeof msg.content === 'string' ? msg.content.trim() : ''
+          return `${role.toUpperCase()}: ${content}`
+        })
+        .filter(Boolean)
+
+      console.log('[compactBranch] prepared', {
+        resolvedModelName,
+        compactableHistoryCount: compactableHistory.length,
+        historyLinesCount: historyLines.length,
+      })
+
+      if (historyLines.length === 0) {
+        console.log('[compactBranch] skip: no history lines')
+        return { message: null }
+      }
+
+      const compactionSystemPrompt =
+        'You compact chat history. Return concise markdown that preserves goals, hard requirements, key facts, decisions, pending tasks, and unresolved questions. Do not include tool protocol chatter.'
+      const compactionUserPrompt = [
+        'Compact this branch context for continued conversation.',
+        'Output sections:',
+        '1) Objective',
+        '2) Confirmed facts',
+        '3) Decisions made',
+        '4) Open tasks / next steps',
+        '5) Risks / ambiguities',
+        '',
+        'Conversation history:',
+        historyLines.join('\n\n'),
+      ].join('\n')
+
+      let summaryText = ''
+
+      console.log('[compactBranch] execution route', {
+        provider,
+        providerSlug,
+        isLmStudio,
+        isOpenAIChatGPT,
+        usingEphemeral: !isLmStudio && !isOpenAIChatGPT,
+      })
+
+      if (isLmStudio) {
+        await createLmStudioStreamingRequest(
+          {
+            conversationId,
+            parentId: parentMessageId,
+            modelName: resolvedModelName,
+            systemPrompt: compactionSystemPrompt,
+            messages: [
+              { role: 'system', content: compactionSystemPrompt },
+              { role: 'user', content: compactionUserPrompt },
+            ],
+            tools: [],
+          },
+          {
+            onChunk: chunk => {
+              if (chunk?.part === 'text' && typeof chunk?.delta === 'string') {
+                summaryText += chunk.delta
+              }
+              if (chunk?.type === 'complete' && chunk?.message?.content) {
+                summaryText = chunk.message.content
+              }
+            },
+          }
+        )
+      } else if (isOpenAIChatGPT) {
+        await createOpenAIChatGPTStreamingRequest(
+          {
+            conversationId,
+            parentId: parentMessageId,
+            modelName: resolvedModelName,
+            systemPrompt: compactionSystemPrompt,
+            messages: [
+              { role: 'system', content: compactionSystemPrompt },
+              { role: 'user', content: compactionUserPrompt },
+            ],
+            tools: [],
+          },
+          {
+            onChunk: chunk => {
+              if (chunk?.part === 'text' && typeof chunk?.delta === 'string') {
+                summaryText += chunk.delta
+              }
+              if (chunk?.type === 'complete' && chunk?.message?.content) {
+                summaryText = chunk.message.content
+              }
+            },
+          }
+        )
+      } else {
+        const response = await createStreamingRequest('/generate/ephemeral', auth.accessToken, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: resolvedModelName,
+            systemPrompt: compactionSystemPrompt,
+            prompt: compactionUserPrompt,
+            temperature: 0.2,
+            maxTokens: 1200,
+          }),
+        })
+
+        if (!response.ok) {
+          const text = await response.text()
+          throw new Error(`Compaction request failed: HTTP ${response.status}: ${text}`)
+        }
+
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('Compaction response stream missing')
+
+        const decoder = new TextDecoder()
+        let sseBuffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          sseBuffer += decoder.decode(value, { stream: true })
+          const lines = sseBuffer.split('\n')
+          sseBuffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const data = line.slice(6)
+            if (data === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(data)
+              if (typeof parsed.text === 'string') {
+                summaryText += parsed.text
+              }
+            } catch {
+              if (data.trim()) summaryText += data
+            }
+          }
+        }
+      }
+
+      const finalSummary = summaryText.trim()
+      console.log('[compactBranch] summary received', {
+        summaryChars: finalSummary.length,
+      })
+      if (!finalSummary) {
+        throw new Error('Compaction returned empty summary')
+      }
+
+      const summaryMessage: Message = {
+        id: uuidv4(),
+        conversation_id: conversationId,
+        parent_id: parentMessageId,
+        children_ids: [],
+        role: 'system',
+        content: finalSummary,
+        content_plain_text: finalSummary,
+        thinking_block: '',
+        tool_calls: [],
+        content_blocks: [],
+        created_at: new Date().toISOString(),
+        model_name: resolvedModelName,
+        partial: false,
+        artifacts: [],
+        pastedContext: [],
+        note: AUTO_COMPACTION_NOTE,
+      }
+
+      dispatch(chatSliceActions.messageAdded(summaryMessage))
+      dispatch(chatSliceActions.messageBranchCreated({ newMessage: summaryMessage }))
+      updateMessageCache(extra.queryClient, conversationId, summaryMessage)
+
+      const selectedProject = selectSelectedProject(state)
+      const storageMode = getStorageModeFromCache(extra.queryClient, conversationId)
+
+      dualSync.syncMessage({
+        ...summaryMessage,
+        user_id: auth.userId,
+        project_id: selectedProject?.id || null,
+        storage_mode: storageMode,
+      })
+
+      if (import.meta.env.VITE_ENVIRONMENT === 'electron') {
+        localApi
+          .post('/sync/message', {
+            ...summaryMessage,
+            conversation_id: conversationId,
+            children_ids: summaryMessage.children_ids,
+            content_blocks: summaryMessage.content_blocks,
+            tool_calls: summaryMessage.tool_calls,
+            user_id: auth.userId,
+            owner_id: auth.userId,
+            project_id: selectedProject?.id || null,
+            storage_mode: storageMode,
+          })
+          .catch(err => console.error('[compactBranch] Failed to sync compaction message locally:', err))
+      }
+
+      console.log('[compactBranch] saved summary message', {
+        messageId: summaryMessage.id,
+        role: summaryMessage.role,
+        note: summaryMessage.note,
+        parentId: summaryMessage.parent_id,
+        modelName: summaryMessage.model_name,
+      })
+
+      return { message: summaryMessage }
+    } catch (error) {
+      console.error('[compactBranch] failed', error)
+      return rejectWithValue(error instanceof Error ? error.message : 'Failed to compact branch')
+    } finally {
+      dispatch(chatSliceActions.compactingFinished())
+    }
+  }
+)
+
 // Streaming message sending with proper error handling
 export const sendMessage = createAsyncThunk<
+
   { messageId: MessageId | null; userMessage: any; streamId: string },
   SendMessagePayload & { streamId?: string },
   { state: RootState; extra: ThunkExtraArgument }
@@ -1965,7 +2251,17 @@ export const sendMessage = createAsyncThunk<
       const state = getState() as RootState
       const { messages: currentMessages } = state.chat.conversation
       const currentPathIds = state.chat.conversation.currentPath.filter(id => id !== 'root')
-      const currentPathMessages = currentPathIds.map(id => currentMessages.find(m => m.id === id))
+      const currentPathMessages = trimHistoryToLatestCompaction(
+        currentPathIds.map(id => currentMessages.find(m => m.id === id))
+      )
+      const latestCompactionMessage = currentPathMessages.find(isAutoCompactionSummaryMessage) ?? null
+      if (latestCompactionMessage) {
+        const allowedParentIds = new Set(currentPathMessages.map(msg => String(msg.id)))
+        const parentIsInPostCompactionPath = parent != null && allowedParentIds.has(String(parent))
+        if (!parentIsInPostCompactionPath) {
+          parent = latestCompactionMessage.id
+        }
+      }
       const isFirstMessage = (currentMessages?.length || 0) === 0
 
       // Read selected model from React Query cache
@@ -3707,9 +4003,9 @@ export const editMessageWithBranching = createAsyncThunk<
       // Truncate path to only include messages strictly before the originalMessageId
       const idxOriginal = currentPathIds.indexOf(originalMessageId)
       const truncatedPathIds = idxOriginal >= 0 ? currentPathIds.slice(0, idxOriginal) : currentPathIds
-      const currentPathMessages = truncatedPathIds
-        .map(id => currentMessages.find(m => m.id === id))
-        .filter(Boolean) as Message[]
+      const currentPathMessages = trimHistoryToLatestCompaction(
+        truncatedPathIds.map(id => currentMessages.find(m => m.id === id))
+      )
 
       // Read selected model from React Query cache
       const provider = state.chat.providerState.currentProvider
@@ -3812,6 +4108,126 @@ export const editMessageWithBranching = createAsyncThunk<
       if (!modelName) {
         throw new Error('No model selected')
       }
+
+      const safeEstimateTokenCount = (value: unknown): number => {
+        if (value == null) return 0
+        if (typeof value === 'string') {
+          if (value.length === 0) return 0
+          return estimateTokenCount(value)
+        }
+
+        try {
+          const serialized = JSON.stringify(value)
+          if (!serialized) return 0
+          return estimateTokenCount(serialized)
+        } catch {
+          return 0
+        }
+      }
+
+      const resolvedModel =
+        modelsData?.models?.find(model => model.name === modelName) || modelsData?.selected || modelsData?.default || null
+      const branchContextLimit = resolvedModel?.contextLength || 128_000
+
+      let promptAndContextTokens = 0
+      promptAndContextTokens += safeEstimateTokenCount(selectedProject?.system_prompt)
+      promptAndContextTokens += safeEstimateTokenCount(selectedProject?.context)
+      promptAndContextTokens += safeEstimateTokenCount(state.conversations.systemPrompt)
+      promptAndContextTokens += safeEstimateTokenCount(state.conversations.convContext)
+
+      let messageTokens = 0
+      currentPathMessages.forEach(message => {
+        if (!message) return
+        messageTokens += safeEstimateTokenCount(message.content)
+        messageTokens += safeEstimateTokenCount((message as any).content_blocks)
+        messageTokens += safeEstimateTokenCount((message as any).tool_calls)
+      })
+
+      const branchContextTokens = promptAndContextTokens + messageTokens
+      const branchContextProgress =
+        branchContextLimit > 0 ? Math.min((branchContextTokens / branchContextLimit) * 100, 100) : 0
+
+      const currentCreditsUsd = Number((state as any)?.users?.currentUser?.cached_current_credits ?? 0) / 100
+      const promptCostPer1K = resolvedModel?.promptCost ?? 0
+      const completionCostPer1K = resolvedModel?.completionCost ?? 0
+      let creditInputLimit = Infinity
+      let creditOutputLimit = Infinity
+      if (promptCostPer1K > 0) {
+        creditInputLimit = Math.floor((currentCreditsUsd * 1000) / promptCostPer1K)
+      }
+      if (completionCostPer1K > 0) {
+        creditOutputLimit = Math.floor((currentCreditsUsd * 1000) / completionCostPer1K)
+      }
+      const branchTotalBudget = Math.max(0, Math.min(branchContextLimit, creditInputLimit, creditOutputLimit))
+      const branchTotalProgress =
+        branchTotalBudget > 0 ? Math.min((branchContextTokens / branchTotalBudget) * 100, 100) : 0
+
+      let branchHistoryForSend = [...currentPathMessages]
+      const shouldAutoCompactBranch =
+        branchContextLimit > 0 &&
+        (branchContextProgress >= 85 || branchTotalProgress >= 85) &&
+        currentPathMessages.length >= 2 &&
+        activeParentId != null
+
+      console.log('[AutoCompaction][branch] precheck', {
+        conversationId,
+        originalMessageId,
+        activeParentId,
+        branchContextTokens,
+        branchContextLimit,
+        branchContextProgress,
+        branchTotalBudget,
+        branchTotalProgress,
+        historyCount: currentPathMessages.length,
+        shouldAutoCompactBranch,
+      })
+
+      if (shouldAutoCompactBranch && activeParentId != null) {
+        try {
+          console.log('[AutoCompaction][branch] dispatch compactBranch', {
+            conversationId,
+            parentMessageId: activeParentId,
+            sourceMessagesCount: currentPathMessages.length,
+            providerName: provider,
+            modelName,
+          })
+
+          const compactionResult = await dispatch(
+            compactBranch({
+              conversationId,
+              parentMessageId: activeParentId,
+              messages: currentPathMessages,
+              providerName: provider,
+              modelName,
+            })
+          ).unwrap()
+
+          const compactedMessage = compactionResult?.message ?? null
+          const hasValidCompaction =
+            compactedMessage?.role === 'system' &&
+            compactedMessage?.note === AUTO_COMPACTION_NOTE &&
+            String(compactedMessage?.parent_id ?? '') === String(activeParentId)
+
+          console.log('[AutoCompaction][branch] compactBranch result', {
+            messageId: compactedMessage?.id ?? null,
+            role: compactedMessage?.role ?? null,
+            note: compactedMessage?.note ?? null,
+            parentId: compactedMessage?.parent_id ?? null,
+            hasValidCompaction,
+          })
+
+          if (!compactedMessage || !hasValidCompaction) {
+            throw new Error('Invalid branch compaction summary returned')
+          }
+
+          activeParentId = compactedMessage.id
+          branchHistoryForSend = trimHistoryToLatestCompaction([...currentPathMessages, compactedMessage])
+        } catch (error) {
+          console.error('[AutoCompaction][branch] compaction failed. Branch send aborted:', error)
+          throw error instanceof Error ? error : new Error(String(error))
+        }
+      }
+
 const selectedFilesForChat = state.ideContext.selectedFilesForChat || []
 
 const conversationMeta = state.conversations.items.find(c => c.id === conversationId)
@@ -3827,7 +4243,7 @@ systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
 const isElectronMode =
   import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
 const executionMode = 'client' // Prefer client execution for tools
-      let currentTurnHistory = [...currentPathMessages]
+      let currentTurnHistory = [...branchHistoryForSend]
       let currentTurnContent = newContent
       let continueTurn = true
       let turnCount = 0

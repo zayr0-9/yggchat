@@ -20,6 +20,7 @@ import { Provider } from 'react-redux'
 import App from './App'
 import { AuthProvider } from './contexts/AuthContext'
 import './index.css'
+import { applyAppFontSettings, FONT_SETTINGS_CHANGE_EVENT, FONT_SETTINGS_STORAGE_KEY } from './helpers/fontSettingsStorage'
 import { initClientTelemetry } from './services/clientTelemetry'
 import { store } from './store/store'
 import { updateThunkExtraQueryClient } from './store/thunkExtra'
@@ -123,6 +124,33 @@ initClientTelemetry()
   // React to preference changes from other tabs/windows
   window.addEventListener('storage', e => {
     if (e.key === 'theme') apply()
+  })
+})()
+
+// Global font manager: applies saved app font preferences across routes.
+;(function initFontManager() {
+  if (typeof window === 'undefined') return
+  const w = window as any
+  if (w.__yggFontInit) return
+  w.__yggFontInit = true
+
+  const apply = () => {
+    applyAppFontSettings().catch(error => {
+      console.error('Failed to apply font settings:', error)
+    })
+  }
+
+  // Initial apply
+  apply()
+
+  // React to in-app settings changes
+  window.addEventListener(FONT_SETTINGS_CHANGE_EVENT, apply as EventListener)
+
+  // React to updates from other tabs/windows
+  window.addEventListener('storage', event => {
+    if (event.key === FONT_SETTINGS_STORAGE_KEY) {
+      apply()
+    }
   })
 })()
 

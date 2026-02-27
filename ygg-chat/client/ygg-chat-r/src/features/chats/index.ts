@@ -22,6 +22,7 @@ export { default as chatReducer, chatSliceActions } from './chatSlice'
 // Note: Model selection (selectModel) has been migrated to React Query. See hooks/useQueries.ts for useSelectModel
 // Model fetching thunks (fetchModels, fetchModelsForCurrentProvider, etc.) have been migrated to React Query
 export {
+  AUTO_COMPACTION_NOTE,
   abortGeneration,
   abortStreaming,
   deleteMessage,
@@ -31,6 +32,7 @@ export {
   refreshCurrentPathAfterDelete,
   respondToToolPermission,
   respondToToolPermissionAndEnableAll,
+  compactBranch,
   sendCCBranch,
   sendCCMessage,
   sendMessage,

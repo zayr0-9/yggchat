@@ -31,6 +31,7 @@ export interface SearchListProps {
   placeholder?: string
   className?: string
   dropdownVariant?: Variant
+  dropdownZIndex?: number
 }
 
 const variantBorderClass: Record<Variant, string> = {
@@ -48,6 +49,7 @@ const SearchList: React.FC<SearchListProps> = ({
   placeholder = 'Search messages...',
   className = '',
   dropdownVariant = 'neutral',
+  dropdownZIndex = 50,
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition>({
@@ -145,8 +147,9 @@ const SearchList: React.FC<SearchListProps> = ({
     ? loading
       ? (
           <div
-            className='fixed z-50 bg-indigo-50 dark:bg-yBlack-900 p-4 md:p-3 lg:p-2.5 xl:p-2 text-sm md:text-xs lg:text-xs xl:text-[10px]'
+            className='fixed bg-indigo-50 dark:bg-yBlack-900 p-4 md:p-3 lg:p-2.5 xl:p-2 text-sm md:text-xs lg:text-xs xl:text-[10px]'
             style={{
+              zIndex: dropdownZIndex,
               top: `${dropdownPosition.top}px`,
               left: `${dropdownPosition.left}px`,
               width: `${dropdownPosition.width}px`,
@@ -159,8 +162,9 @@ const SearchList: React.FC<SearchListProps> = ({
         ? (
             <ul
               ref={dropdownRef}
-              className={`fixed z-50 overflow-y-auto bg-slate-50 border border-indigo-100 ${borderVariantClass} rounded shadow-lg dark:bg-neutral-700 thin-scrollbar`}
+              className={`fixed overflow-y-auto bg-slate-50 border border-indigo-100 ${borderVariantClass} rounded shadow-lg dark:bg-neutral-700 thin-scrollbar`}
               style={{
+                zIndex: dropdownZIndex,
                 colorScheme: 'dark',
                 top: `${dropdownPosition.top}px`,
                 left: `${dropdownPosition.left}px`,

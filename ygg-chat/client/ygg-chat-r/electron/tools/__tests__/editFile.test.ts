@@ -115,6 +115,54 @@ describe('editFile replace and replace_first behavior', () => {
     expect(await harness.readFile('replace-first.txt')).toBe('bar and foo and baz')
   })
 
+  it('replace_first can prioritize a hinted line window before full-file ordering', async () => {
+    const harness = await createToolFsHarness()
+    const lines = Array.from({ length: 260 }, (_, idx) => `line ${idx + 1}`)
+    lines[9] = 'const value = TARGET'
+    lines[209] = 'const value = TARGET'
+    await harness.writeFile('replace-first-hint-window.txt', `${lines.join('\n')}\n`)
+
+    const result = await editFile('replace-first-hint-window.txt', 'replace_first', {
+      searchPattern: 'const value = TARGET',
+      replacement: 'const value = UPDATED',
+      approxStartLine: 210,
+      approxEndLine: 210,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('replace-first-hint-window.txt')
+    const updatedLines = updated.split('\n')
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(updatedLines[9]).toBe('const value = TARGET')
+    expect(updatedLines[209]).toBe('const value = UPDATED')
+    expect(result.attemptedStrategies?.some(s => s.includes('line_hint_window('))).toBe(true)
+  })
+
+  it('replace_first falls back to full-file search when hinted window misses', async () => {
+    const harness = await createToolFsHarness()
+    const lines = Array.from({ length: 260 }, (_, idx) => `line ${idx + 1}`)
+    lines[9] = 'const value = TARGET'
+    await harness.writeFile('replace-first-hint-fallback.txt', `${lines.join('\n')}\n`)
+
+    const result = await editFile('replace-first-hint-fallback.txt', 'replace_first', {
+      searchPattern: 'const value = TARGET',
+      replacement: 'const value = UPDATED',
+      approxStartLine: 240,
+      approxEndLine: 245,
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('replace-first-hint-fallback.txt')
+    const updatedLines = updated.split('\n')
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(updatedLines[9]).toBe('const value = UPDATED')
+    expect(result.attemptedStrategies?.some(s => s.includes('fallback_to_full_file'))).toBe(true)
+  })
+
   it('replace is a no-op when processed search and replacement are equivalent', async () => {
     const harness = await createToolFsHarness()
     const original = 'section one\nsection two\n'

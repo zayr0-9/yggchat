@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
-import React, { memo, useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ConversationId, Project } from '../../../../shared/types'
 import { Button } from '../components'
 import SearchList, { type SearchResultItem } from '../components/SearchList/SearchList'
@@ -19,6 +20,7 @@ import { useAuth } from '../hooks/useAuth'
 import {
   useConversationsByProject,
   useFavoritedConversations,
+  useLocalTopLevelUserMessages,
   useProjects,
   useSearchConversations,
 } from '../hooks/useQueries'
@@ -36,6 +38,13 @@ interface SideBarProps {
 }
 
 const LOCAL_MODE_RECENT_PROJECTS_LIMIT = 100
+const SIDEBAR_RAIL_WIDTH_PX = 60
+const SIDEBAR_PORTAL_GAP_PX = 10
+const SIDEBAR_PORTAL_MAX_WIDTH_PX = 420
+const SIDEBAR_PREVIEW_PORTAL_GAP_PX = 12
+const SIDEBAR_PREVIEW_PORTAL_MAX_WIDTH_PX = 440
+const SIDEBAR_PREVIEW_PORTAL_MIN_WIDTH_PX = 260
+const SIDEBAR_PREVIEW_CLOSE_DELAY_MS = 120
 
 const DATE_FORMATTER = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' })
 
@@ -66,6 +75,9 @@ interface ProjectAccordionItemProps {
   onCreateConversation: (project: SidebarProject) => void
   onDeleteProject: (project: SidebarProject) => void
   onDeleteConversation: (conversation: Conversation) => void
+  enableConversationHoverPreview?: boolean
+  onConversationHoverStart?: (conversation: Conversation) => void
+  onConversationHoverEnd?: () => void
 }
 
 interface ProjectConversationsPanelProps {
@@ -73,10 +85,21 @@ interface ProjectConversationsPanelProps {
   activeConversationId: ConversationId | null
   onSelectConversation: (conversation: Conversation) => void
   onDeleteConversation: (conversation: Conversation) => void
+  enableConversationHoverPreview?: boolean
+  onConversationHoverStart?: (conversation: Conversation) => void
+  onConversationHoverEnd?: () => void
 }
 
 const ProjectConversationsPanel: React.FC<ProjectConversationsPanelProps> = memo(
-  ({ projectId, activeConversationId, onSelectConversation, onDeleteConversation }) => {
+  ({
+    projectId,
+    activeConversationId,
+    onSelectConversation,
+    onDeleteConversation,
+    enableConversationHoverPreview = false,
+    onConversationHoverStart,
+    onConversationHoverEnd,
+  }) => {
     const {
       data: projectConversations = [],
       isLoading: projectConversationsLoading,
@@ -109,6 +132,14 @@ const ProjectConversationsPanel: React.FC<ProjectConversationsPanelProps> = memo
                 key={conversation.id}
                 className='group/conv flex items-start gap-1 mb-1 min-w-0 overflow-hidden'
                 style={CONVERSATION_ROW_VISIBILITY_STYLE}
+                onMouseEnter={() => {
+                  if (!enableConversationHoverPreview) return
+                  onConversationHoverStart?.(conversation)
+                }}
+                onMouseLeave={() => {
+                  if (!enableConversationHoverPreview) return
+                  onConversationHoverEnd?.()
+                }}
               >
                 <button
                   type='button'
@@ -160,6 +191,9 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = memo(
     onCreateConversation,
     onDeleteProject,
     onDeleteConversation,
+    enableConversationHoverPreview = false,
+    onConversationHoverStart,
+    onConversationHoverEnd,
   }) => {
     const projectLastActivityDate =
       project.latest_conversation_updated_at || project.updated_at || project.created_at || null
@@ -258,6 +292,9 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = memo(
                 activeConversationId={activeConversationId}
                 onSelectConversation={onSelectConversation}
                 onDeleteConversation={onDeleteConversation}
+                enableConversationHoverPreview={enableConversationHoverPreview}
+                onConversationHoverStart={onConversationHoverStart}
+                onConversationHoverEnd={onConversationHoverEnd}
               />
             )}
           </div>
@@ -292,6 +329,7 @@ const SideBar: React.FC<SideBarProps> = ({
   const { userId } = useAuth()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const location = useLocation()
   const isWeb = import.meta.env.VITE_ENVIRONMENT === 'web'
 
   const [conversationTab, setConversationTab] = useState<ConversationTab>('recent')
@@ -388,6 +426,17 @@ const SideBar: React.FC<SideBarProps> = ({
       return false
     }
   })
+  const [isExpandPortalOpen, setIsExpandPortalOpen] = useState(false)
+  const [portalLeftOffset, setPortalLeftOffset] = useState(SIDEBAR_RAIL_WIDTH_PX + SIDEBAR_PORTAL_GAP_PX)
+  const [expandPortalWidth, setExpandPortalWidth] = useState(SIDEBAR_PORTAL_MAX_WIDTH_PX)
+  const [previewPortalLeftOffset, setPreviewPortalLeftOffset] = useState(
+    SIDEBAR_RAIL_WIDTH_PX + SIDEBAR_PORTAL_GAP_PX + SIDEBAR_PORTAL_MAX_WIDTH_PX + SIDEBAR_PREVIEW_PORTAL_GAP_PX
+  )
+  const [previewPortalWidth, setPreviewPortalWidth] = useState(SIDEBAR_PREVIEW_PORTAL_MIN_WIDTH_PX)
+  const [hoveredPreviewConversation, setHoveredPreviewConversation] = useState<Conversation | null>(null)
+  const hoverPreviewCloseTimeoutRef = useRef<number | null>(null)
+  const sidebarRef = useRef<HTMLElement | null>(null)
+  const expandButtonRef = useRef<HTMLButtonElement | null>(null)
 
   // Theme state
   const [themeMode, setThemeMode] = useState<'Light' | 'Dark' | 'System'>(() => {
@@ -428,12 +477,118 @@ const SideBar: React.FC<SideBarProps> = ({
     setThemeMode(prev => (prev === 'Light' ? 'Dark' : prev === 'Dark' ? 'System' : 'Light'))
   }, [])
 
+  const clearHoverPreviewCloseTimeout = useCallback(() => {
+    if (hoverPreviewCloseTimeoutRef.current !== null) {
+      window.clearTimeout(hoverPreviewCloseTimeoutRef.current)
+      hoverPreviewCloseTimeoutRef.current = null
+    }
+  }, [])
+
+  const scheduleHoverPreviewClose = useCallback(() => {
+    clearHoverPreviewCloseTimeout()
+    hoverPreviewCloseTimeoutRef.current = window.setTimeout(() => {
+      setHoveredPreviewConversation(null)
+      hoverPreviewCloseTimeoutRef.current = null
+    }, SIDEBAR_PREVIEW_CLOSE_DELAY_MS)
+  }, [clearHoverPreviewCloseTimeout])
+
+  const closeExpandPortal = useCallback(
+    (restoreFocus = true) => {
+      setIsExpandPortalOpen(false)
+      setHoveredPreviewConversation(null)
+      clearHoverPreviewCloseTimeout()
+
+      if (restoreFocus && typeof window !== 'undefined') {
+        window.requestAnimationFrame(() => {
+          expandButtonRef.current?.focus()
+        })
+      }
+    },
+    [clearHoverPreviewCloseTimeout]
+  )
+
+  const openExpandPortal = useCallback(() => {
+    setIsExpandPortalOpen(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isExpandPortalOpen) return
+
+    const updatePortalAnchor = () => {
+      const railRect = sidebarRef.current?.getBoundingClientRect()
+      const baseLeft = railRect?.right ?? SIDEBAR_RAIL_WIDTH_PX
+      const desiredLeft = baseLeft + SIDEBAR_PORTAL_GAP_PX
+      const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : SIDEBAR_PORTAL_MAX_WIDTH_PX
+      const panelWidth = Math.min(SIDEBAR_PORTAL_MAX_WIDTH_PX, Math.max(280, viewportWidth - 32))
+      const maxLeft = Math.max(8, viewportWidth - panelWidth - 8)
+      const computedLeft = Math.max(8, Math.min(desiredLeft, maxLeft))
+
+      setPortalLeftOffset(computedLeft)
+      setExpandPortalWidth(panelWidth)
+
+      const desiredPreviewLeft = computedLeft + panelWidth + SIDEBAR_PREVIEW_PORTAL_GAP_PX
+      const maxPreviewLeft = Math.max(8, viewportWidth - SIDEBAR_PREVIEW_PORTAL_MIN_WIDTH_PX - 8)
+      const computedPreviewLeft = Math.max(8, Math.min(desiredPreviewLeft, maxPreviewLeft))
+      const availablePreviewWidth = Math.max(SIDEBAR_PREVIEW_PORTAL_MIN_WIDTH_PX, viewportWidth - computedPreviewLeft - 8)
+      const computedPreviewWidth = Math.min(SIDEBAR_PREVIEW_PORTAL_MAX_WIDTH_PX, availablePreviewWidth)
+
+      setPreviewPortalLeftOffset(computedPreviewLeft)
+      setPreviewPortalWidth(computedPreviewWidth)
+    }
+
+    updatePortalAnchor()
+    window.addEventListener('resize', updatePortalAnchor)
+
+    return () => {
+      window.removeEventListener('resize', updatePortalAnchor)
+    }
+  }, [isExpandPortalOpen])
+
+  useEffect(() => {
+    if (!isExpandPortalOpen) return
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeExpandPortal()
+      }
+    }
+
+    window.addEventListener('keydown', handleEscape)
+    return () => {
+      window.removeEventListener('keydown', handleEscape)
+    }
+  }, [closeExpandPortal, isExpandPortalOpen])
+
+  const previousPathnameRef = useRef(location.pathname)
+
+  useEffect(() => {
+    const pathChanged = previousPathnameRef.current !== location.pathname
+    if (pathChanged && isExpandPortalOpen) {
+      closeExpandPortal(false)
+    }
+    previousPathnameRef.current = location.pathname
+  }, [closeExpandPortal, isExpandPortalOpen, location.pathname])
+
+  useEffect(() => {
+    if (!isCollapsed && isExpandPortalOpen) {
+      setIsExpandPortalOpen(false)
+      setHoveredPreviewConversation(null)
+      clearHoverPreviewCloseTimeout()
+    }
+  }, [clearHoverPreviewCloseTimeout, isCollapsed, isExpandPortalOpen])
+
   useEffect(() => {
     if (!isProjectsTab && searchQuery) {
       setSearchQuery('')
       clearSearch()
     }
   }, [isProjectsTab, searchQuery, clearSearch])
+
+  useEffect(() => {
+    return () => {
+      clearHoverPreviewCloseTimeout()
+    }
+  }, [clearHoverPreviewCloseTimeout])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
@@ -461,8 +616,27 @@ const SideBar: React.FC<SideBarProps> = ({
     clearSearch()
   }
 
+  const handleConversationHoverStart = useCallback(
+    (conversation: Conversation) => {
+      if (!isCollapsed || !isExpandPortalOpen) return
+      if (conversation.storage_mode !== 'local') {
+        setHoveredPreviewConversation(null)
+        return
+      }
+
+      clearHoverPreviewCloseTimeout()
+      setHoveredPreviewConversation(conversation)
+    },
+    [clearHoverPreviewCloseTimeout, isCollapsed, isExpandPortalOpen]
+  )
+
+  const handleConversationHoverEnd = useCallback(() => {
+    scheduleHoverPreviewClose()
+  }, [scheduleHoverPreviewClose])
+
   const handleSelect = (id: ConversationId) => {
     const conversation = favoriteConversations.find(c => c.id === id)
+    closeExpandPortal(false)
     dispatch(chatSliceActions.conversationSet(id))
     dispatch(activeConversationIdSet(id))
     navigate(`/chat/${conversation?.project_id || 'unknown'}/${id}`)
@@ -470,22 +644,23 @@ const SideBar: React.FC<SideBarProps> = ({
 
   const handleProjectConversationSelect = useCallback(
     (conversation: Conversation) => {
+      closeExpandPortal(false)
       dispatch(chatSliceActions.conversationSet(conversation.id))
       dispatch(activeConversationIdSet(conversation.id))
       navigate(`/chat/${conversation.project_id || 'unknown'}/${conversation.id}`, {
         state: conversation.storage_mode ? { storageMode: conversation.storage_mode } : undefined,
       })
     },
-    [dispatch, navigate]
+    [closeExpandPortal, dispatch, navigate]
   )
 
   const handleToggleProjectExpansion = useCallback(
     (projectId: string) => {
       const normalizedProjectId = String(projectId)
 
-      if (isCollapsed) {
-        setIsCollapsed(false)
+      if (isCollapsed && !isExpandPortalOpen) {
         setExpandedProjectIds(prev => (prev.includes(normalizedProjectId) ? prev : [normalizedProjectId, ...prev]))
+        openExpandPortal()
         return
       }
 
@@ -495,7 +670,7 @@ const SideBar: React.FC<SideBarProps> = ({
           : [...prev, normalizedProjectId]
       )
     },
-    [isCollapsed]
+    [isCollapsed, isExpandPortalOpen, openExpandPortal]
   )
 
   const handleDeleteSidebarProject = useCallback(
@@ -656,6 +831,7 @@ const SideBar: React.FC<SideBarProps> = ({
         // the just-promoted project row to "jump" back down momentarily.
         queryClient.invalidateQueries({ queryKey: ['projects'], refetchType: 'none' })
 
+        closeExpandPortal(false)
         dispatch(chatSliceActions.conversationSet(createdConversation.id))
         dispatch(activeConversationIdSet(createdConversation.id))
         navigate(`/chat/${createdConversation.project_id || project.id}/${createdConversation.id}`, {
@@ -667,269 +843,438 @@ const SideBar: React.FC<SideBarProps> = ({
         console.error('Failed to create conversation from sidebar:', createError)
       }
     },
-    [dispatch, navigate, queryClient, userId]
+    [closeExpandPortal, dispatch, navigate, queryClient, userId]
   )
 
-  const toggleCollapse = useCallback(() => {
-    setIsCollapsed(prev => !prev)
-  }, [])
+  const sidebarActions = useMemo(
+    () => [
+      {
+        key: 'theme',
+        label: themeMode,
+        iconClass: themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun',
+        onClick: cycleTheme,
+        title: `Theme: ${themeMode} (click to change)`,
+        ariaLabel: `Theme: ${themeMode}`,
+      },
+      {
+        key: 'logging',
+        label: 'Logging',
+        iconClass: 'bx-line-chart',
+        onClick: () => navigate('/logging'),
+        title: 'Open logging',
+        ariaLabel: 'Open logging',
+      },
+      {
+        key: 'profile',
+        label: 'Profile',
+        iconClass: 'bx-user-circle',
+        onClick: () => navigate('/payment'),
+        title: 'Open profile',
+        ariaLabel: 'Open profile',
+      },
+      {
+        key: 'settings',
+        label: 'Settings',
+        iconClass: 'bx-cog',
+        onClick: () => navigate('/settings'),
+        title: 'Open settings',
+        ariaLabel: 'Open settings',
+      },
+    ],
+    [cycleTheme, navigate, themeMode]
+  )
 
-  return (
-    <aside
-      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'}  shadow-md flex flex-col rounded-tr-xl transition-all duration-300 ease-in-out backdrop-blur-sm bg-neutral-100/70 dark:bg-transparent flex-shrink-0 overflow-x-hidden ${isCollapsed ? 'w-15 ' : 'w-64 md:w-64 lg:w-70 xl:w-80 '} ${className}`}
-      aria-label={isProjectsTab ? 'Projects and conversations' : 'Favorite conversations'}
-    >
-      {/* Toggle Button */}
-      <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
-        {!isCollapsed && (
-          <h2 className='text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] pl-2 font-semibold text-neutral-700 dark:text-neutral-200 truncate'>
-            {isProjectsTab ? 'Projects' : 'Favorites'}
-          </h2>
-        )}
-        <Button
-          variant='outline2'
-          size='circle'
-          rounded='full'
-          onClick={toggleCollapse}
-          className={`${isCollapsed ? 'mx-auto' : ' mr-2'} transition-transform duration-200 hover:scale-103 p-3`}
-          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          <i className={`bx ${isCollapsed ? 'bx-chevron-right' : 'bx-chevron-left'} text-lg `} aria-hidden='true'></i>
-        </Button>
-      </div>
+  const renderSidebarBody = (renderCollapsed: boolean, enableMiniHoverPreview: boolean = false) => {
+    const actionIconShellClass = renderCollapsed
+      ? 'acrylic-light flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent text-neutral-700 dark:bg-transparent dark:text-neutral-300 dark:outline dark:outline-1 dark:outline-neutral-400/15'
+      : 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-neutral-200/80 bg-neutral-50 text-neutral-700 dark:border-neutral-700/70 dark:bg-neutral-900 dark:text-neutral-300'
 
-      {!isCollapsed && (
-        <div className='px-2 pb-2'>
-          <div className='flex items-center gap-1 rounded-md bg-neutral-200/60 dark:bg-neutral-800/60 p-1'>
-            <button
-              type='button'
-              onClick={() => setConversationTab('recent')}
-              className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                conversationTab === 'recent'
-                  ? 'bg-white/80 text-neutral-900 shadow-sm dark:bg-neutral-700/65 dark:text-neutral-100'
-                  : 'text-neutral-600 hover:bg-white/40 dark:text-neutral-300 dark:hover:bg-neutral-700/60'
-              }`}
-            >
-              Projects
-            </button>
-            <button
-              type='button'
-              onClick={() => setConversationTab('favorites')}
-              className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                conversationTab === 'favorites'
-                  ? 'bg-white/80 text-neutral-900 shadow-sm dark:bg-neutral-700/65 dark:text-neutral-100'
-                  : 'text-neutral-600 hover:bg-white/40 dark:text-neutral-300 dark:hover:bg-neutral-700/60'
-              }`}
-            >
-              Favorites
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Search */}
-      {!isCollapsed && isProjectsTab && (
-        <div className='px-2 pb-2 relative z-50'>
-          <SearchList
-            value={searchQuery}
-            onChange={handleSearchChange}
-            onSubmit={handleSearchSubmit}
-            results={sidebarSearchResults}
-            loading={isSearching}
-            onResultClick={conversationId => handleSearchResultClick(conversationId)}
-            placeholder='Search chat...'
-            dropdownVariant='neutral'
-          />
-        </div>
-      )}
-
-      {/* Conversations List */}
-      <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-2 2xl:pt-2 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0'>
-        {loading && (
-          <div
-            className={`text-xs text-gray-500 dark:text-gray-300 px-2 py-1 ${isCollapsed ? 'text-center' : ''}`}
-            title={isCollapsed ? 'Loading...' : undefined}
-          >
-            {isCollapsed ? '...' : 'Loading...'}
-          </div>
-        )}
-        {error && (
-          <div
-            className={`text-xs text-red-600 dark:text-red-400 px-2 py-1 ${isCollapsed ? 'text-center' : ''}`}
-            role='alert'
-            title={isCollapsed ? error : undefined}
-          >
-            {isCollapsed ? '!' : error}
-          </div>
-        )}
-        {isProjectsTab ? (
-          <>
-            {visibleProjects.map(project => (
-              <ProjectAccordionItem
-                key={project.id}
-                project={project}
-                isExpanded={expandedProjectIdSet.has(String(project.id))}
-                isCollapsed={isCollapsed}
-                activeConversationId={activeConversationId}
-                onToggle={handleToggleProjectExpansion}
-                onSelectConversation={handleProjectConversationSelect}
-                onCreateConversation={handleCreateConversationForProject}
-                onDeleteProject={handleDeleteSidebarProject}
-                onDeleteConversation={handleDeleteSidebarConversation}
-              />
-            ))}
-            {visibleProjects.length === 0 && !loading && !error && (
-              <div
-                className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${isCollapsed ? 'hidden' : ''}`}
+    return (
+      <>
+        {!renderCollapsed && (
+          <div className='px-2 pb-2'>
+            <div className='flex items-center gap-1 rounded-md bg-neutral-200/60 dark:bg-neutral-800/60 p-1'>
+              <button
+                type='button'
+                onClick={() => setConversationTab('recent')}
+                className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  conversationTab === 'recent'
+                    ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100'
+                    : 'text-neutral-600 hover:bg-white/70 dark:text-neutral-300 dark:hover:bg-neutral-700/60'
+                }`}
               >
-                No projects
-              </div>
-            )}
-          </>
-        ) : (
-          // Recent Conversations List
-          <>
-            {favoriteConversations.map(conv => {
-              const isActive = activeConversationId === conv.id
-              const projectName = conv.project_id ? projectNameById.get(String(conv.project_id)) : undefined
-              const conversationUpdatedDate = formatDate(conv.updated_at)
+                Projects
+              </button>
+              <button
+                type='button'
+                onClick={() => setConversationTab('favorites')}
+                className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  conversationTab === 'favorites'
+                    ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100'
+                    : 'text-neutral-600 hover:bg-white/70 dark:text-neutral-300 dark:hover:bg-neutral-700/60'
+                }`}
+              >
+                Favorites
+              </button>
+            </div>
+          </div>
+        )}
 
-              return (
+        {!renderCollapsed && isProjectsTab && (
+          <div className='px-2 pb-2 relative z-50'>
+            <SearchList
+              value={searchQuery}
+              onChange={handleSearchChange}
+              onSubmit={handleSearchSubmit}
+              results={sidebarSearchResults}
+              loading={isSearching}
+              onResultClick={conversationId => handleSearchResultClick(conversationId)}
+              placeholder='Search chat...'
+              dropdownVariant='neutral'
+              dropdownZIndex={enableMiniHoverPreview ? 1301 : 50}
+            />
+          </div>
+        )}
+
+        <div className='flex-1 overflow-y-auto overflow-x-hidden p-2 pt-2 2xl:pt-2 no-scrollbar scroll-fade dark:border-neutral-800 rounded-xl border-t-0'>
+          {loading && (
+            <div
+              className={`text-xs text-gray-500 dark:text-gray-300 px-2 py-1 ${renderCollapsed ? 'text-center' : ''}`}
+              title={renderCollapsed ? 'Loading...' : undefined}
+            >
+              {renderCollapsed ? '...' : 'Loading...'}
+            </div>
+          )}
+          {error && (
+            <div
+              className={`text-xs text-red-600 dark:text-red-400 px-2 py-1 ${renderCollapsed ? 'text-center' : ''}`}
+              role='alert'
+              title={renderCollapsed ? error : undefined}
+            >
+              {renderCollapsed ? '!' : error}
+            </div>
+          )}
+
+          {isProjectsTab ? (
+            <>
+              {visibleProjects.map(project => (
+                <ProjectAccordionItem
+                  key={project.id}
+                  project={project}
+                  isExpanded={expandedProjectIdSet.has(String(project.id))}
+                  isCollapsed={renderCollapsed}
+                  activeConversationId={activeConversationId}
+                  onToggle={handleToggleProjectExpansion}
+                  onSelectConversation={handleProjectConversationSelect}
+                  onCreateConversation={handleCreateConversationForProject}
+                  onDeleteProject={handleDeleteSidebarProject}
+                  onDeleteConversation={handleDeleteSidebarConversation}
+                  enableConversationHoverPreview={enableMiniHoverPreview}
+                  onConversationHoverStart={handleConversationHoverStart}
+                  onConversationHoverEnd={handleConversationHoverEnd}
+                />
+              ))}
+              {visibleProjects.length === 0 && !loading && !error && (
                 <div
-                  key={conv.id}
-                  className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'
-                  style={CONVERSATION_ROW_VISIBILITY_STYLE}
+                  className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${renderCollapsed ? 'hidden' : ''}`}
                 >
+                  No projects
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {favoriteConversations.map(conv => {
+                const isActive = activeConversationId === conv.id
+                const projectName = conv.project_id ? projectNameById.get(String(conv.project_id)) : undefined
+                const conversationUpdatedDate = formatDate(conv.updated_at)
+
+                return (
                   <div
-                    role='button'
-                    tabIndex={0}
-                    onClick={() => handleSelect(conv.id)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        handleSelect(conv.id)
-                      }
+                    key={conv.id}
+                    className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'
+                    style={CONVERSATION_ROW_VISIBILITY_STYLE}
+                    onMouseEnter={() => {
+                      if (!enableMiniHoverPreview) return
+                      handleConversationHoverStart(conv)
                     }}
-                    className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
-                      isCollapsed
-                        ? 'py-2 flex items-center hover:scale-90 justify-center'
-                        : 'hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
-                    } ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
-                    title={isCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
+                    onMouseLeave={() => {
+                      if (!enableMiniHoverPreview) return
+                      handleConversationHoverEnd()
+                    }}
                   >
-                    {isCollapsed ? (
-                      <Button
-                        variant='outline2'
-                        size='circle'
-                        rounded='full'
-                        className='h-10 w-10 text-md font-semibold text-lg md:text-base lg:text-sm xl:text-sm 2xl:text-lg'
-                      >
-                        {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
-                      </Button>
-                    ) : (
-                      <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
-                        <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
-                          {conv.title || `Conversation ${conv.id}`}
-                        </span>
-                        {projectName && (
-                          <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
-                            Project: {projectName}
+                    <div
+                      role='button'
+                      tabIndex={0}
+                      onClick={() => handleSelect(conv.id)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleSelect(conv.id)
+                        }
+                      }}
+                      className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
+                        renderCollapsed
+                          ? 'py-2 flex items-center hover:scale-90 justify-center'
+                          : 'hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
+                      } ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
+                      title={renderCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
+                    >
+                      {renderCollapsed ? (
+                        <Button
+                          variant='outline2'
+                          size='circle'
+                          rounded='full'
+                          className='h-10 w-10 text-md font-semibold text-lg md:text-base lg:text-sm xl:text-sm 2xl:text-lg'
+                        >
+                          {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
+                        </Button>
+                      ) : (
+                        <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
+                          <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
+                            {conv.title || `Conversation ${conv.id}`}
                           </span>
-                        )}
-                        {conversationUpdatedDate && (
-                          <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-500 dark:text-neutral-400 text-right'>
-                            {conversationUpdatedDate}
-                          </span>
-                        )}
+                          {projectName && (
+                            <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
+                              Project: {projectName}
+                            </span>
+                          )}
+                          {conversationUpdatedDate && (
+                            <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-500 dark:text-neutral-400 text-right'>
+                              {conversationUpdatedDate}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {renderCollapsed && (
+                      <div className='absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50'>
+                        <div className='bg-neutral-900 dark:bg-neutral-700 text-white dark:text-neutral-100 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap max-w-xs'>
+                          <div className='font-medium'>{conv.title || `Conversation ${conv.id}`}</div>
+                          {projectName && <div className='text-xs opacity-80 mt-1'>Project: {projectName}</div>}
+                        </div>
                       </div>
                     )}
                   </div>
-
-                  {/* Tooltip for collapsed state */}
-                  {isCollapsed && (
-                    <div className='absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50'>
-                      <div className='bg-neutral-900 dark:bg-neutral-700 text-white dark:text-neutral-100 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap max-w-xs'>
-                        <div className='font-medium'>{conv.title || `Conversation ${conv.id}`}</div>
-                        {projectName && <div className='text-xs opacity-80 mt-1'>Project: {projectName}</div>}
-                      </div>
-                    </div>
-                  )}
+                )
+              })}
+              {favoriteConversations.length === 0 && !loading && !error && (
+                <div
+                  className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${renderCollapsed ? 'hidden' : ''}`}
+                >
+                  No favorite conversations
                 </div>
-              )
-            })}
-            {favoriteConversations.length === 0 && !loading && !error && (
-              <div
-                className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${isCollapsed ? 'hidden' : ''}`}
-              >
-                No favorite conversations
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      <div className='border-t border-neutral-200/70 px-1 py-2 dark:border-neutral-800/70'>
-        {[
-          {
-            key: 'theme',
-            label: themeMode,
-            iconClass: themeMode === 'System' ? 'bx-desktop' : themeMode === 'Dark' ? 'bx-moon' : 'bx-sun',
-            onClick: cycleTheme,
-            title: `Theme: ${themeMode} (click to change)`,
-            ariaLabel: `Theme: ${themeMode}`,
-          },
-          {
-            key: 'logging',
-            label: 'Logging',
-            iconClass: 'bx-line-chart',
-            onClick: () => navigate('/logging'),
-            title: 'Open logging',
-            ariaLabel: 'Open logging',
-          },
-          {
-            key: 'profile',
-            label: 'Profile',
-            iconClass: 'bx-user-circle',
-            onClick: () => navigate('/payment'),
-            title: 'Open profile',
-            ariaLabel: 'Open profile',
-          },
-          {
-            key: 'settings',
-            label: 'Settings',
-            iconClass: 'bx-cog',
-            onClick: () => navigate('/settings'),
-            title: 'Open settings',
-            ariaLabel: 'Open settings',
-          },
-        ].map(action => (
-          <button
-            key={action.key}
-            type='button'
-            onClick={action.onClick}
-            title={action.title}
-            aria-label={action.ariaLabel}
-            className={`group flex w-full items-center rounded-3xl py-1.5 transition-colors ${
-              isCollapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2'
-            }`}
-          >
-            <span className='acrylic-light flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent text-neutral-700 dark:bg-transparent dark:text-neutral-300 dark:outline dark:outline-1 dark:outline-neutral-400/15'>
-              <i
-                className={`bx ${action.iconClass} block text-[22px] leading-none transition-transform duration-100 ${
-                  action.key === 'theme' ? 'group-active:scale-90' : 'group-hover:scale-108 group-active:scale-95'
-                }`}
-                aria-hidden='true'
-              ></i>
-            </span>
+              )}
+            </>
+          )}
+        </div>
 
-            {!isCollapsed && (
-              <span className='truncate text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
-                {action.label}
+        <div className='border-t border-neutral-200/70 px-1 py-2 dark:border-neutral-800/70'>
+          {sidebarActions.map(action => (
+            <button
+              key={action.key}
+              type='button'
+              onClick={action.onClick}
+              title={action.title}
+              aria-label={action.ariaLabel}
+              className={`group flex w-full items-center rounded-3xl py-1.5 transition-colors ${
+                renderCollapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2'
+              }`}
+            >
+              <span className={actionIconShellClass}>
+                <i
+                  className={`bx ${action.iconClass} block text-[22px] leading-none transition-transform duration-100 ${
+                    action.key === 'theme' ? 'group-active:scale-90' : 'group-hover:scale-108 group-active:scale-95'
+                  }`}
+                  aria-hidden='true'
+                ></i>
               </span>
+
+              {!renderCollapsed && (
+                <span className='truncate text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
+                  {action.label}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </>
+    )
+  }
+
+  const handleToggleSidebar = useCallback(() => {
+    if (isCollapsed) {
+      openExpandPortal()
+      return
+    }
+
+    setIsCollapsed(true)
+  }, [isCollapsed, openExpandPortal])
+
+  const handleDockSidebar = useCallback(() => {
+    setIsCollapsed(false)
+    setIsExpandPortalOpen(false)
+    setHoveredPreviewConversation(null)
+    clearHoverPreviewCloseTimeout()
+  }, [clearHoverPreviewCloseTimeout])
+
+  const showExpandedPortal = isCollapsed && isExpandPortalOpen
+  const hoveredPreviewConversationId = hoveredPreviewConversation?.id ?? null
+  const shouldShowConversationPreviewPortal =
+    showExpandedPortal && hoveredPreviewConversation?.storage_mode === 'local' && !!hoveredPreviewConversationId
+
+  const {
+    data: topLevelUserPreviewMessages = [],
+    isLoading: topLevelUserPreviewLoading,
+    error: topLevelUserPreviewError,
+  } = useLocalTopLevelUserMessages(hoveredPreviewConversationId, shouldShowConversationPreviewPortal)
+
+  return (
+    <>
+      <aside
+        ref={sidebarRef}
+        className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} flex flex-col flex-shrink-0 overflow-hidden border-r border-neutral-200/70 bg-neutral-100/95 shadow-sm transition-[width] duration-200 ease-out dark:border-neutral-800/80 dark:bg-neutral-950/90 ${isCollapsed ? 'w-15' : 'w-64 md:w-64 lg:w-70 xl:w-80'} ${className}`}
+        aria-label={isProjectsTab ? 'Projects and conversations' : 'Favorite conversations'}
+      >
+        <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
+          {!isCollapsed && (
+            <h2 className='text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] pl-2 font-semibold text-neutral-700 dark:text-neutral-200 truncate'>
+              {isProjectsTab ? 'Projects' : 'Favorites'}
+            </h2>
+          )}
+          <Button
+            ref={expandButtonRef}
+            variant='outline2'
+            size='circle'
+            rounded='full'
+            onClick={handleToggleSidebar}
+            className={`${isCollapsed ? 'mx-auto' : 'mr-2'} transition-transform duration-200 hover:scale-103 p-3`}
+            aria-label={isCollapsed ? 'Open sidebar panel' : 'Collapse sidebar'}
+            aria-haspopup={isCollapsed ? 'dialog' : undefined}
+            aria-expanded={isCollapsed ? showExpandedPortal : undefined}
+          >
+            <i className={`bx ${isCollapsed ? 'bx-chevron-right' : 'bx-chevron-left'} text-lg`} aria-hidden='true'></i>
+          </Button>
+        </div>
+
+        {renderSidebarBody(isCollapsed)}
+      </aside>
+
+      {showExpandedPortal &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className='fixed inset-x-0 bottom-0 z-[1200]' style={{ top: 'var(--titlebar-height, 0px)' }}>
+            <button
+              type='button'
+              className='absolute inset-0 bg-neutral-950/45'
+              aria-label='Close sidebar panel'
+              onClick={() => closeExpandPortal()}
+            />
+
+            <section
+              role='dialog'
+              aria-modal='true'
+              aria-label='Sidebar panel'
+              className='absolute top-3 bottom-3 rounded-xl border border-neutral-200/90 bg-neutral-50 shadow-2xl dark:border-neutral-700/80 dark:bg-neutral-900'
+              style={{ left: `${portalLeftOffset}px`, width: `${expandPortalWidth}px` }}
+            >
+              <div className='h-full min-h-0 flex flex-col'>
+                <div className='flex items-center justify-between px-3 py-2 border-b border-neutral-200/80 dark:border-neutral-800/80'>
+                  <h2 className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>Sidebar</h2>
+                  <div className='flex items-center gap-1'>
+                    <Button
+                      variant='outline2'
+                      size='circle'
+                      rounded='full'
+                      className='p-2'
+                      onClick={handleDockSidebar}
+                      title='Keep sidebar expanded'
+                      aria-label='Keep sidebar expanded'
+                    >
+                      <i className='bx bx-pin text-base' aria-hidden='true'></i>
+                    </Button>
+                    <Button
+                      variant='outline2'
+                      size='circle'
+                      rounded='full'
+                      className='p-2'
+                      onClick={() => closeExpandPortal()}
+                      aria-label='Close sidebar panel'
+                    >
+                      <i className='bx bx-x text-lg' aria-hidden='true'></i>
+                    </Button>
+                  </div>
+                </div>
+
+                {renderSidebarBody(false, true)}
+              </div>
+            </section>
+
+            {shouldShowConversationPreviewPortal && (
+              <section
+                role='dialog'
+                aria-modal='false'
+                aria-label='Top level user messages preview'
+                className='absolute top-3 bottom-3 rounded-xl border border-neutral-200/90 bg-white/95 shadow-2xl backdrop-blur-sm dark:border-neutral-700/80 dark:bg-neutral-900/95'
+                style={{ left: `${previewPortalLeftOffset}px`, width: `${previewPortalWidth}px` }}
+                onMouseEnter={() => {
+                  clearHoverPreviewCloseTimeout()
+                }}
+                onMouseLeave={() => {
+                  scheduleHoverPreviewClose()
+                }}
+              >
+                <div className='h-full min-h-0 flex flex-col'>
+                  <div className='px-3 py-2 border-b border-neutral-200/80 dark:border-neutral-800/80'>
+                    <h3 className='text-sm font-semibold text-neutral-800 dark:text-neutral-100 truncate'>
+                      {hoveredPreviewConversation?.title || 'Untitled conversation'}
+                    </h3>
+                    <p className='text-[11px] text-neutral-500 dark:text-neutral-400'>Top-level user messages</p>
+                  </div>
+
+                  <div className='flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-2'>
+                    {topLevelUserPreviewLoading && (
+                      <div className='text-xs text-neutral-500 dark:text-neutral-400'>Loading top-level messages...</div>
+                    )}
+
+                    {!topLevelUserPreviewLoading && topLevelUserPreviewError && (
+                      <div className='text-xs text-red-500 dark:text-red-400'>
+                        {String(topLevelUserPreviewError) || 'Failed to load messages'}
+                      </div>
+                    )}
+
+                    {!topLevelUserPreviewLoading &&
+                      !topLevelUserPreviewError &&
+                      topLevelUserPreviewMessages.length === 0 && (
+                        <div className='text-xs text-neutral-500 dark:text-neutral-400'>No top-level user messages</div>
+                      )}
+
+                    {!topLevelUserPreviewLoading &&
+                      !topLevelUserPreviewError &&
+                      topLevelUserPreviewMessages.map(message => (
+                        <article
+                          key={message.id}
+                          className='rounded-lg border border-neutral-200/80 bg-neutral-50 px-3 py-2 dark:border-neutral-700/70 dark:bg-neutral-900/80'
+                        >
+                          {message.note && (
+                            <p className='mb-1 text-[11px] font-medium whitespace-pre-wrap break-words text-blue-600 dark:text-orange-400'>
+                              {message.note}
+                            </p>
+                          )}
+                          <p className='text-xs text-neutral-800 dark:text-neutral-100 whitespace-pre-wrap break-words'>
+                            {message.plain_text_content || message.content}
+                          </p>
+                        </article>
+                      ))}
+                  </div>
+                </div>
+              </section>
             )}
-          </button>
-        ))}
-      </div>
-    </aside>
+          </div>,
+          document.body
+        )}
+    </>
   )
 }
 

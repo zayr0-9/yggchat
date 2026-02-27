@@ -106,6 +106,7 @@ const makeInitialState = (): ChatState => {
         modelOverride: undefined,
       },
       sending: false,
+      compacting: false,
       validationError: null,
       draftMessage: null,
       multiReplyCount: 1,
@@ -228,6 +229,14 @@ export const chatSlice = createSlice({
     // Branch editing flag
     editingBranchSet: (state, action: PayloadAction<boolean>) => {
       state.composition.editingBranch = action.payload
+    },
+
+    compactingStarted: state => {
+      state.composition.compacting = true
+    },
+
+    compactingFinished: state => {
+      state.composition.compacting = false
     },
 
     sendingStarted: (state, action: PayloadAction<SendingStartedPayload | undefined>) => {

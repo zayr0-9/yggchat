@@ -17,6 +17,20 @@ export interface VideoSource {
   type: 'video/webm' | 'video/mp4'
 }
 
+export type BackgroundMode = 'video' | 'color'
+
+export interface BackgroundColorSettings {
+  light: string
+  dark: string
+}
+
+export const DEFAULT_BACKGROUND_COLORS: BackgroundColorSettings = {
+  light: '#f7f9fb',
+  dark: '#050505',
+}
+
+const HEX_COLOR_REGEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
+const BACKGROUND_PREFERENCE_KEY = 'yggdrasil_background_preference'
 const CUSTOM_VIDEO_LIBRARY_KEY = 'yggdrasil_custom_video_library'
 const CUSTOM_VIDEO_ACTIVE_KEY = 'yggdrasil_custom_video_active'
 const VIDEO_BACKGROUND_EVENT = 'yggdrasil:video-background-change'
@@ -37,6 +51,73 @@ const dispatchBackgroundChange = () => {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new Event(VIDEO_BACKGROUND_EVENT))
 }
+
+const normalizeColorString = (value: string): string | null => {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const normalizedWithHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`
+  if (!HEX_COLOR_REGEX.test(normalizedWithHash)) return null
+  const hex = normalizedWithHash.slice(1)
+  const expanded = hex.length === 3 ? hex.split('').map(char => char + char).join('') : hex
+  return `#${expanded.toUpperCase()}`
+}
+
+const normalizeColorSettings = (colors: BackgroundColorSettings): BackgroundColorSettings => ({
+  light: normalizeColorString(colors.light) ?? DEFAULT_BACKGROUND_COLORS.light,
+  dark: normalizeColorString(colors.dark) ?? DEFAULT_BACKGROUND_COLORS.dark,
+})
+
+interface StoredBackgroundPreference {
+  mode?: BackgroundMode
+  colors?: Partial<BackgroundColorSettings>
+}
+
+const readBackgroundPreference = (): { mode: BackgroundMode; colors: BackgroundColorSettings } => {
+  if (typeof window === 'undefined') {
+    return { mode: 'video', colors: DEFAULT_BACKGROUND_COLORS }
+  }
+
+  const stored = safeParse(window.localStorage.getItem(BACKGROUND_PREFERENCE_KEY)) as StoredBackgroundPreference | null
+  const normalized: StoredBackgroundPreference = typeof stored === 'object' && stored !== null ? stored : {}
+  const mode = normalized.mode === 'color' ? 'color' : 'video'
+
+  const colors = normalizeColorSettings({
+    light: normalized.colors?.light ?? DEFAULT_BACKGROUND_COLORS.light,
+    dark: normalized.colors?.dark ?? DEFAULT_BACKGROUND_COLORS.dark,
+  })
+
+  return { mode, colors }
+}
+
+const persistBackgroundPreference = (next: {
+  mode?: BackgroundMode
+  colors?: BackgroundColorSettings
+}) => {
+  if (typeof window === 'undefined') return
+  const current = readBackgroundPreference()
+  const merged = {
+    mode: next.mode ?? current.mode,
+    colors: normalizeColorSettings(next.colors ?? current.colors),
+  }
+
+  try {
+    window.localStorage.setItem(BACKGROUND_PREFERENCE_KEY, JSON.stringify(merged))
+    dispatchBackgroundChange()
+  } catch (error) {
+    console.error('Failed to persist background preference', error)
+  }
+}
+
+export const loadBackgroundMode = (): BackgroundMode => readBackgroundPreference().mode
+export const loadBackgroundColors = (): BackgroundColorSettings => readBackgroundPreference().colors
+export const persistBackgroundMode = (mode: BackgroundMode, colors?: BackgroundColorSettings) => {
+  persistBackgroundPreference({ mode, colors })
+}
+export const persistBackgroundColors = (colors: BackgroundColorSettings) => {
+  persistBackgroundPreference({ colors })
+}
+
+export const normalizeHexColor = normalizeColorString
 
 const generateId = (): string => {
   if (typeof window !== 'undefined' && window.crypto?.randomUUID) {

@@ -106,6 +106,7 @@ export const selectIsStreaming = createSelector([selectPrimaryStreamState], stre
 // Legacy: sending state - now checks if ANY stream is active
 export const selectSendingState = createSelector([selectChatState, selectActiveStreamIds], (chat, activeIds) => ({
   sending: chat.composition.sending,
+  compacting: chat.composition.compacting,
   streaming: activeIds.length > 0,
   error: null, // Error now per-stream, use selectStreamError for specific stream
 }))

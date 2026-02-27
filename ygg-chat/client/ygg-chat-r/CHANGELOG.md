@@ -8,7 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- auto summarisation added
+- solid background support
+- custom font support
+- sidebar shows messages in each chat in popover list
+
 ### Changed
+
+- sidebar makeover
+- edit file optimised
+- cwd change sent as user message
 
 ### Fixed
 
@@ -19,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - fixed readme build instructions
 - textfiled font size is now smaller when branching
 - Html Tools modal now shows app names in Favorites and Hibernated lists (in addition to IDs), matching opened app visibility in the top tabs.
+- create new chat carries over cwd now.
 
 ## [0.1.78] - 2026-02-23
 

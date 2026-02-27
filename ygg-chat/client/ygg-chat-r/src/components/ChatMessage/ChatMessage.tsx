@@ -13,7 +13,7 @@ import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
-import { fetchMcpTools } from '../../features/chats/chatActions'
+import { AUTO_COMPACTION_NOTE, fetchMcpTools } from '../../features/chats/chatActions'
 import { chatSliceActions } from '../../features/chats/chatSlice'
 import { useAppDispatch } from '../../hooks/redux'
 import { useAuth } from '../../hooks/useAuth'
@@ -900,6 +900,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const messageData = useSelector((state: RootState) =>
       state.chat.conversation.messages.find(m => String(m.id) === String(id))
     )
+    const isCompactionSummary = messageData?.note === AUTO_COMPACTION_NOTE
     const toolDefinitions = useSelector((state: RootState) => state.chat.tools)
     const conversationId = messageData?.conversation_id ?? null
     const projectId = useSelector((state: RootState) => {
@@ -2657,13 +2658,22 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       <div
         id={`message-${id}`}
         ref={messageRef}
-        className={`group px-0 sm:px-2 md:px-2 mb-0 sm:mb-0 md:mb-0 ${styles.container} ${contextHighlightClass} ${width} transition-[background-color,opacity] duration-200 rounded-md hover:bg-opacity-80 ${className ?? ''}`}
+        className={`group px-0 sm:px-2 md:px-2 mb-0 sm:mb-0 md:mb-0 ${styles.container} ${contextHighlightClass} ${width} transition-[background-color,opacity] duration-200 rounded-md hover:bg-opacity-80 ${isCompactionSummary ? 'border border-emerald-300/50 dark:border-emerald-600/50 bg-emerald-50/40 dark:bg-emerald-900/10' : ''} ${className ?? ''}`}
         onContextMenu={handleContextMenu}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
         onClick={handleMobileMessageActivate}
         onTouchStart={handleMobileMessageActivate}
       >
+        {isCompactionSummary && (
+          <div className='inline-flex mt-4 items-center gap-2 py-[3px] px-2.5 bg-emerald-100/70 dark:bg-emerald-900/40 border border-emerald-300/70 dark:border-emerald-700 rounded-md mb-3'>
+            <div className='w-1.5 h-1.5 rounded-full bg-emerald-500' />
+            <span className='font-mono text-[11px] uppercase tracking-[0.08em] text-emerald-700 dark:text-emerald-300'>
+              Compaction Summary
+            </span>
+          </div>
+        )}
+
         {/* Header with role */}
         {role === 'user' && (
           <div className='inline-flex mt-8 items-center gap-2 py-[3px] px-2.5 bg-white/[0.03] border border-white/[0.08] rounded-md mb-3 backdrop-blur cursor-default transition-all duration-200'>

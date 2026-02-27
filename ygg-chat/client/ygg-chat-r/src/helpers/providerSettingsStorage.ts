@@ -15,12 +15,18 @@ export interface ProviderSettings {
   defaultProvider: string | null
   /** Optional default temperature for OpenRouter generations. Null = provider/model default. */
   openRouterTemperature: number | null
+  /** Preferred provider for automatic branch compaction. Null = use current chat provider. */
+  compactionProvider: string | null
+  /** Preferred model for automatic branch compaction. Null = use provider default/current model. */
+  compactionModel: string | null
 }
 
 const DEFAULT_SETTINGS: ProviderSettings = {
   showProviderSelector: true,
   defaultProvider: null,
   openRouterTemperature: null,
+  compactionProvider: null,
+  compactionModel: null,
 }
 
 const COMMUNITY_ALLOWED_PROVIDERS = new Set(['LM Studio', 'OpenAI (ChatGPT)'])
@@ -51,6 +57,8 @@ export function loadProviderSettings(): ProviderSettings {
       showProviderSelector: isCommunityMode ? true : (parsed.showProviderSelector ?? DEFAULT_SETTINGS.showProviderSelector),
       defaultProvider: isCommunityMode ? communityDefaultProvider : resolvedDefaultProvider,
       openRouterTemperature: normalizeOpenRouterTemperature(parsed.openRouterTemperature),
+      compactionProvider: parsed.compactionProvider ?? DEFAULT_SETTINGS.compactionProvider,
+      compactionModel: parsed.compactionModel ?? DEFAULT_SETTINGS.compactionModel,
     }
   } catch {
     return {

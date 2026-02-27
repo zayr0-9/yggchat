@@ -39,8 +39,8 @@ import { JobFilter, JobOptions, toolOrchestrator } from './tools/orchestrator/in
 import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
-import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
 import { UtilityToolRuntimeHost } from './tools/runtime/UtilityToolRuntimeHost.js'
+import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
 
 /**
  * Validates and resolves a path to ensure it's within the allowed rootPath scope.
@@ -223,10 +223,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-function detectZipToolDirectoryName(
-  entries: { entryName: string }[],
-  strippedPrefix?: string | null
-): string | null {
+function detectZipToolDirectoryName(entries: { entryName: string }[], strippedPrefix?: string | null): string | null {
   const rootDirs = new Set<string>()
 
   for (const entry of entries) {
@@ -468,6 +465,8 @@ function initializeBuiltInToolRegistry() {
       validateContent,
       expectedHash,
       expectedMetadata,
+      approxStartLine,
+      approxEndLine,
     } = args
     if (!filePath) throw new Error('path is required')
     return await editFile(filePath, operation, {
@@ -486,6 +485,8 @@ function initializeBuiltInToolRegistry() {
       validateContent,
       expectedHash,
       expectedMetadata,
+      approxStartLine,
+      approxEndLine,
       operationMode,
       cwd: rootPath,
     })
@@ -958,6 +959,9 @@ function initializeLocalDatabase(dbPath: string) {
     CREATE INDEX IF NOT EXISTS idx_conversations_user_storage_project_updated ON conversations(user_id, storage_mode, project_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_messages_parent_id ON messages(parent_id);
     CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_top_user_by_conv_created
+      ON messages(conversation_id, created_at)
+      WHERE parent_id IS NULL AND role = 'user';
   `)
 
   // Triggers to maintain children_ids integrity
@@ -1081,6 +1085,14 @@ function initializeLocalDatabase(dbPath: string) {
     deleteMessage: db.prepare('DELETE FROM messages WHERE id = ?'),
     getMessageById: db.prepare('SELECT * FROM messages WHERE id = ?'),
     getMessagesByConversationId: db.prepare('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at ASC'),
+    getTopLevelUserMessagesByConversationId: db.prepare(`
+      SELECT id, conversation_id, content, plain_text_content, note, created_at
+      FROM messages
+      WHERE conversation_id = ?
+        AND parent_id IS NULL
+        AND role = 'user'
+      ORDER BY created_at ASC
+    `),
     getLastMessageByConversationId: db.prepare(
       'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1'
     ),
@@ -1704,17 +1716,25 @@ function setupServer() {
         return
       }
 
-      const { heartbeatTime, agentName, model, modelContextLength, loopIntervalMs, autoResume, toolAllowlist, workDirectory } =
-        req.body as {
-          heartbeatTime?: string | null
-          agentName?: string | null
-          model?: string | null
-          modelContextLength?: number | null
-          loopIntervalMs?: number | null
-          autoResume?: boolean | number | null
-          toolAllowlist?: string[] | null
-          workDirectory?: string | null
-        }
+      const {
+        heartbeatTime,
+        agentName,
+        model,
+        modelContextLength,
+        loopIntervalMs,
+        autoResume,
+        toolAllowlist,
+        workDirectory,
+      } = req.body as {
+        heartbeatTime?: string | null
+        agentName?: string | null
+        model?: string | null
+        modelContextLength?: number | null
+        loopIntervalMs?: number | null
+        autoResume?: boolean | number | null
+        toolAllowlist?: string[] | null
+        workDirectory?: string | null
+      }
       const normalized =
         typeof heartbeatTime === 'string' && heartbeatTime.trim().length > 0 ? heartbeatTime.trim() : null
       const normalizedAgentName = typeof agentName === 'string' && agentName.trim().length > 0 ? agentName.trim() : null
@@ -1804,9 +1824,7 @@ function setupServer() {
       const current = statements.getAgentState.get() as any
       const hasField = (field: keyof typeof body) => Object.prototype.hasOwnProperty.call(body, field)
 
-      const nextStatus = hasField('status')
-        ? (status ?? current?.status ?? 'stopped')
-        : (current?.status ?? 'stopped')
+      const nextStatus = hasField('status') ? (status ?? current?.status ?? 'stopped') : (current?.status ?? 'stopped')
       const nextSessionId = hasField('sessionId') ? (sessionId ?? null) : (current?.session_id ?? null)
       const nextConversationId = hasField('conversationId')
         ? (conversationId ?? null)
@@ -2135,10 +2153,7 @@ function setupServer() {
   <div class="container">
     <div class="success-icon">✓</div>
     <h1>Authentication Successful!</h1>
-    <p>Copy the code below and paste it in the app to complete sign-in:</p>
-    <div class="token-box">
-      <code id="authCode">${code}#${state}</code>
-    </div>
+    
     <button class="copy-btn" onclick="copyCode()">Copy Code</button>
     <p style="font-size: 12px; opacity: 0.6; margin-top: 24px;">Or close this window if the app detected the callback automatically.</p>
   </div>
@@ -4528,13 +4543,15 @@ function setupServer() {
 
       const rangeDaysParam = Number(req.query.rangeDays)
       const rangeDays = Number.isFinite(rangeDaysParam) ? clamp(Math.trunc(rangeDaysParam), 1, 365) : 30
-      const projectId = typeof req.query.projectId === 'string' && req.query.projectId.trim() ? req.query.projectId.trim() : null
+      const projectId =
+        typeof req.query.projectId === 'string' && req.query.projectId.trim() ? req.query.projectId.trim() : null
       const conversationId =
         typeof req.query.conversationId === 'string' && req.query.conversationId.trim()
           ? req.query.conversationId.trim()
           : null
       const modelFilter = typeof req.query.model === 'string' && req.query.model.trim() ? req.query.model.trim() : null
-      const toolNameFilter = typeof req.query.toolName === 'string' && req.query.toolName.trim() ? req.query.toolName.trim() : null
+      const toolNameFilter =
+        typeof req.query.toolName === 'string' && req.query.toolName.trim() ? req.query.toolName.trim() : null
       const toolStatusFilter =
         typeof req.query.toolStatus === 'string' && req.query.toolStatus.trim() ? req.query.toolStatus.trim() : null
 
@@ -4555,7 +4572,9 @@ function setupServer() {
       }>
 
       const messages = db!
-        .prepare('SELECT id, conversation_id, parent_id, role, model_name, tool_calls, created_at FROM messages ORDER BY created_at ASC')
+        .prepare(
+          'SELECT id, conversation_id, parent_id, role, model_name, tool_calls, created_at FROM messages ORDER BY created_at ASC'
+        )
         .all() as Array<{
         id: string
         conversation_id: string
@@ -4770,14 +4789,18 @@ function setupServer() {
           apiCredits: round(row.apiCredits),
         }))
 
-      const modelStatsMap = new Map<string, { runs: number; totalApproxCost: number; totalApiCredits: number; tokens: number }>()
+      const modelStatsMap = new Map<
+        string,
+        { runs: number; totalApproxCost: number; totalApiCredits: number; tokens: number }
+      >()
       for (const row of filteredProviderCosts) {
         const model = row.model_name || 'unknown'
         const existing = modelStatsMap.get(model) || { runs: 0, totalApproxCost: 0, totalApiCredits: 0, tokens: 0 }
         existing.runs += 1
         existing.totalApproxCost += toNumber(row.approx_cost)
         existing.totalApiCredits += toNumber(row.api_credit_cost)
-        existing.tokens += toNumber(row.prompt_tokens) + toNumber(row.completion_tokens) + toNumber(row.reasoning_tokens)
+        existing.tokens +=
+          toNumber(row.prompt_tokens) + toNumber(row.completion_tokens) + toNumber(row.reasoning_tokens)
         modelStatsMap.set(model, existing)
       }
 
@@ -4859,7 +4882,11 @@ function setupServer() {
             providerRunStatuses: [],
             toolNames: availableToolNames,
             toolJobStatuses: Array.from(new Set(toolJobs.map(job => job.status))).sort(),
-            projects: scopedProjects.map(project => ({ id: project.id, name: project.name, storage_mode: project.storage_mode })),
+            projects: scopedProjects.map(project => ({
+              id: project.id,
+              name: project.name,
+              storage_mode: project.storage_mode,
+            })),
             conversations: scopedConversations.map(conversation => ({
               id: conversation.id,
               title: conversation.title,
@@ -5059,6 +5086,29 @@ function setupServer() {
     }
   })
 
+  // List local users available for manual ownership migration
+  app.get('/api/local/users', (_req, res) => {
+    try {
+      const users = db!
+        .prepare(
+          `SELECT
+             u.id,
+             u.username,
+             u.created_at,
+             (SELECT COUNT(*) FROM projects p WHERE p.user_id = u.id) AS project_count,
+             (SELECT COUNT(*) FROM conversations c WHERE c.user_id = u.id) AS conversation_count,
+             (SELECT COUNT(*) FROM provider_cost pc WHERE pc.user_id = u.id) AS provider_cost_count
+           FROM users u
+           ORDER BY conversation_count DESC, project_count DESC, created_at DESC`
+        )
+        .all()
+
+      res.json(users)
+    } catch (error) {
+      console.error('[LocalServer] Error listing local users:', error)
+      res.status(500).json({ error: 'Failed to list local users' })
+    }
+  })
 
   // Merge local-only user data into a cloud-authenticated user account
   app.post('/api/local/users/merge', (req, res) => {
@@ -5080,6 +5130,22 @@ function setupServer() {
         return
       }
 
+      // Strict safety rule: only allow migration when there are NO existing non-default users.
+      // If any cloud user already exists locally, do not re-parent default-local data.
+      const existingNonDefaultUsers = db!
+        .prepare('SELECT COUNT(*) as count FROM users WHERE id != ?')
+        .get(fromUserId) as { count: number }
+
+      if ((existingNonDefaultUsers?.count || 0) > 0) {
+        res.json({
+          success: true,
+          merged: false,
+          reason: 'existing_cloud_user_present',
+          message: 'Migration skipped because a non-default user already exists locally',
+        })
+        return
+      }
+
       const mergeTx = db!.transaction(() => {
         const toUserExists = db!.prepare('SELECT id FROM users WHERE id = ?').get(toUserId)
         if (!toUserExists) {
@@ -5088,7 +5154,9 @@ function setupServer() {
             .run(toUserId, toUsername || 'user', toCreatedAt || new Date().toISOString())
         }
 
-        const projectsResult = db!.prepare('UPDATE projects SET user_id = ? WHERE user_id = ?').run(toUserId, fromUserId)
+        const projectsResult = db!
+          .prepare('UPDATE projects SET user_id = ? WHERE user_id = ?')
+          .run(toUserId, fromUserId)
         const conversationsResult = db!
           .prepare('UPDATE conversations SET user_id = ? WHERE user_id = ?')
           .run(toUserId, fromUserId)
@@ -5531,6 +5599,18 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] ❌ Error fetching messages:', error)
       res.status(500).json({ error: 'Failed to fetch messages' })
+    }
+  })
+
+  // GET /api/local/conversations/:id/messages/top-level-users
+  app.get('/api/local/conversations/:id/messages/top-level-users', (req, res) => {
+    try {
+      const { id } = req.params
+      const topLevelUserMessages = statements.getTopLevelUserMessagesByConversationId.all(id)
+      res.json(topLevelUserMessages)
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error fetching top-level user messages:', error)
+      res.status(500).json({ error: 'Failed to fetch top-level user messages' })
     }
   })
 
@@ -7093,7 +7173,7 @@ export async function startLocalServer(
     normalizePortCandidate(port, `fallback port at index ${index}`)
   )
   const host = typeof optionsOrPort === 'number' ? '127.0.0.1' : optionsOrPort.host || '127.0.0.1'
-  const allowEphemeralPort = typeof optionsOrPort === 'number' ? false : optionsOrPort.allowEphemeralPort ?? false
+  const allowEphemeralPort = typeof optionsOrPort === 'number' ? false : (optionsOrPort.allowEphemeralPort ?? false)
   const actualDbPath =
     typeof optionsOrPort === 'number' ? legacyDbPath || defaultDbPath : optionsOrPort.dbPath || defaultDbPath
 

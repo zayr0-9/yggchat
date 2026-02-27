@@ -26,7 +26,12 @@
     "build:electron": "cross-env BUILD_TARGET=electron npm run build:electron:all",
     "build:electron:all": "npm --prefix client/ygg-chat-r run build:electron && npm --prefix client/ygg-chat-r run build:electron:main",
     "package:electron": "npm --prefix client/ygg-chat-r run package:electron",
-    "install:all": "npm install && npm --prefix client/ygg-chat-r install"
+    "install:all": "npm install && npm --prefix client/ygg-chat-r install",
+    "clean:deps": "node scripts/clean-deps.mjs",
+    "install:fresh": "npm run clean:deps && npm install && npm --prefix client/ygg-chat-r install",
+    "build:win:fresh": "npm run install:fresh && npm --prefix client/ygg-chat-r run build:win",
+    "build:linux:fresh": "npm run install:fresh && npm --prefix client/ygg-chat-r run build:linux",
+    "build:mac:fresh": "npm run install:fresh && npm --prefix client/ygg-chat-r run build:mac"
   },
   "devDependencies": {
     "@types/express": "4.17.21",

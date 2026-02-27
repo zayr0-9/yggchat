@@ -21,7 +21,7 @@ export interface CreateFileResult {
 /**
  * Create a file with the specified content.
  * Supports automatic parent directory creation and optional overwrite.
- * 
+ *
  * @param filePath - The path to the file (absolute or relative)
  * @param content - The content to write to the file
  * @param options - Optional settings for file creation
@@ -32,14 +32,7 @@ export async function createTextFile(
   content: string = '',
   options: CreateFileOptions = {}
 ): Promise<CreateFileResult> {
-  const {
-    directory,
-    createParentDirs = true,
-    overwrite = false,
-    executable = false,
-    operationMode,
-    cwd,
-  } = options
+  const { directory, createParentDirs = true, overwrite = false, executable = false, operationMode, cwd } = options
 
   // Block file creation in plan mode
   if (operationMode === 'plan') {
@@ -47,7 +40,8 @@ export async function createTextFile(
       success: false,
       created: false,
       sizeBytes: 0,
-      message: 'You are in planning mode. File creation is not allowed. Please describe your implementation plan instead.',
+      message:
+        'You are in planning mode. File modification is not allowed. Please describe your implementation plan instead. Do not try to edit the code or make changes. Do not use bash to skip this warning.',
     }
   }
 
@@ -59,7 +53,8 @@ export async function createTextFile(
     if (directory && isWSLPath(directory)) {
       isWSL = true
       // Join manually for WSL paths to avoid backslash issues
-      if (isWSLPath(filePath)) { // Absolute WSL path
+      if (isWSLPath(filePath)) {
+        // Absolute WSL path
         targetPath = filePath
       } else {
         // Assume relative path, simple join
@@ -96,7 +91,7 @@ export async function createTextFile(
             success: false,
             created: false,
             sizeBytes: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+            message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`,
           }
         }
       } else {
@@ -108,7 +103,7 @@ export async function createTextFile(
             success: false,
             created: false,
             sizeBytes: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+            message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`,
           }
         }
       }
@@ -194,7 +189,6 @@ export async function createTextFile(
       sizeBytes: stats.size,
       message,
     }
-
   } catch (error: any) {
     return {
       success: false,

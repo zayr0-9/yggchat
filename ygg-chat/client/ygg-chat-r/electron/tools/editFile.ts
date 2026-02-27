@@ -1,10 +1,11 @@
+import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
-import * as crypto from 'crypto'
-import { readTextFile, FileMetadata } from './readFile.js'
 import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
+import { FileMetadata, readTextFile } from './readFile.js'
 
 const FULL_FILE_READ_MAX_BYTES = Number.MAX_SAFE_INTEGER
+const DEFAULT_LINE_HINT_WINDOW = 100
 
 export interface EditFileOptions {
   createBackup?: boolean
@@ -20,6 +21,9 @@ export interface EditFileOptions {
   expectedHash?: string // Expected content hash from previous read
   expectedMetadata?: FileMetadata // Expected file metadata from previous read
   cwd?: string // Workspace directory for path resolution and restriction
+  approxStartLine?: number // Optional approximate start line hint for replace_first windowed matching
+  approxEndLine?: number // Optional approximate end line hint for replace_first windowed matching
+  lineHintWindow?: number // Optional +/- window size (lines) around hints for replace_first (default: 100)
 }
 
 export type EditOperation = 'replace' | 'replace_first' | 'append'
@@ -74,9 +78,7 @@ async function readFullTextFileForEdit(filePath: string, cwd?: string) {
   })
 
   if (fileData.truncated) {
-    throw new Error(
-      `Refusing to edit '${filePath}' because the file read was truncated.`
-    )
+    throw new Error(`Refusing to edit '${filePath}' because the file read was truncated.`)
   }
 
   return fileData
@@ -87,10 +89,8 @@ function resolveEscapeHandling(options: EditFileOptions) {
   const legacyValue = options.interpretEscapeSequences ?? true
 
   return {
-    interpretSearchEscapes:
-      options.interpretSearchEscapes ?? (hasLegacyFlag ? legacyValue : true),
-    interpretReplacementEscapes:
-      options.interpretReplacementEscapes ?? (hasLegacyFlag ? legacyValue : false),
+    interpretSearchEscapes: options.interpretSearchEscapes ?? (hasLegacyFlag ? legacyValue : true),
+    interpretReplacementEscapes: options.interpretReplacementEscapes ?? (hasLegacyFlag ? legacyValue : false),
   }
 }
 
@@ -117,12 +117,11 @@ export async function editFileSearchReplace(
     preserveIndentation = true,
     validateContent = true,
   } = options
-  const { interpretSearchEscapes, interpretReplacementEscapes } =
-    resolveEscapeHandling(options)
+  const { interpretSearchEscapes, interpretReplacementEscapes } = resolveEscapeHandling(options)
 
   try {
     // Resolve path for fs operations and track path type
-    let fsPath: string = filePath  // Path for fs.promises operations
+    let fsPath: string = filePath // Path for fs.promises operations
     let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
     const willBeWsl = isWSLPath(filePath)
 
@@ -152,7 +151,7 @@ export async function editFileSearchReplace(
             success: false,
             sizeBytes: 0,
             replacements: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`,
           }
         }
       } else {
@@ -165,7 +164,7 @@ export async function editFileSearchReplace(
             success: false,
             sizeBytes: 0,
             replacements: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`,
           }
         }
       }
@@ -200,10 +199,7 @@ export async function editFileSearchReplace(
     let replacements: number
     let matchStrategy: MatchStrategy | undefined
     let attemptedStrategies: string[] = []
-    const processedSearchPattern = interpretEscapeSequences(
-      searchPattern,
-      interpretSearchEscapes
-    )
+    const processedSearchPattern = interpretEscapeSequences(searchPattern, interpretSearchEscapes)
 
     // Try layered matching strategies
     const matchResult = findMatchWithStrategies(
@@ -235,10 +231,7 @@ export async function editFileSearchReplace(
     }
 
     // Interpret escape sequences in replacement
-    finalReplacement = interpretEscapeSequences(
-      finalReplacement,
-      interpretReplacementEscapes
-    )
+    finalReplacement = interpretEscapeSequences(finalReplacement, interpretReplacementEscapes)
 
     // Keep replacement scope aligned with the strategy that actually matched.
     let lineInfoScope: EditFileLineInfo['scope'] = 'single'
@@ -283,9 +276,7 @@ export async function editFileSearchReplace(
     }
 
     const strategyMessage =
-      matchStrategy && matchStrategy !== 'exact'
-        ? ` (matched using ${matchStrategy} strategy)`
-        : ''
+      matchStrategy && matchStrategy !== 'exact' ? ` (matched using ${matchStrategy} strategy)` : ''
 
     return {
       success: true,
@@ -326,13 +317,13 @@ export async function editFileSearchReplaceFirst(
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
     validateContent = true,
+    lineHintWindow = DEFAULT_LINE_HINT_WINDOW,
   } = options
-  const { interpretSearchEscapes, interpretReplacementEscapes } =
-    resolveEscapeHandling(options)
+  const { interpretSearchEscapes, interpretReplacementEscapes } = resolveEscapeHandling(options)
 
   try {
     // Resolve path for fs operations and track path type
-    let fsPath: string = filePath  // Path for fs.promises operations
+    let fsPath: string = filePath // Path for fs.promises operations
     let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
     const willBeWsl = isWSLPath(filePath)
 
@@ -362,7 +353,7 @@ export async function editFileSearchReplaceFirst(
             success: false,
             sizeBytes: 0,
             replacements: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`,
           }
         }
       } else {
@@ -375,7 +366,7 @@ export async function editFileSearchReplaceFirst(
             success: false,
             sizeBytes: 0,
             replacements: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`,
           }
         }
       }
@@ -404,14 +395,16 @@ export async function editFileSearchReplaceFirst(
       }
     }
 
-    // Try layered matching strategies
-    const processedSearchPattern = interpretEscapeSequences(
-      searchPattern,
-      interpretSearchEscapes
-    )
-    const matchResult = findMatchWithStrategies(
+    // Try line-hinted matching first for replace_first, then fall back to full-file layered matching.
+    const processedSearchPattern = interpretEscapeSequences(searchPattern, interpretSearchEscapes)
+    const matchResult = findMatchWithLineHintFallback(
       originalContent,
       processedSearchPattern,
+      {
+        approxStartLine: options.approxStartLine,
+        approxEndLine: options.approxEndLine,
+        lineHintWindow,
+      },
       enableFuzzyMatching,
       fuzzyThreshold,
       false
@@ -435,10 +428,7 @@ export async function editFileSearchReplaceFirst(
     }
 
     // Interpret escape sequences in replacement
-    finalReplacement = interpretEscapeSequences(
-      finalReplacement,
-      interpretReplacementEscapes
-    )
+    finalReplacement = interpretEscapeSequences(finalReplacement, interpretReplacementEscapes)
 
     const hasChanges = finalReplacement !== matchResult.matchedText
     const newContent = hasChanges
@@ -459,8 +449,7 @@ export async function editFileSearchReplaceFirst(
       await fs.promises.writeFile(fsPath, newContent, encoding)
     }
 
-    const strategyMessage =
-      matchResult.strategy !== 'exact' ? ` (matched using ${matchResult.strategy} strategy)` : ''
+    const strategyMessage = matchResult.strategy !== 'exact' ? ` (matched using ${matchResult.strategy} strategy)` : ''
 
     return {
       success: true,
@@ -497,7 +486,7 @@ export async function appendToFile(
 
   try {
     // Resolve path for fs operations and track path type
-    let fsPath: string = filePath  // Path for fs.promises operations
+    let fsPath: string = filePath // Path for fs.promises operations
     let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
     const willBeWsl = isWSLPath(filePath)
 
@@ -527,7 +516,7 @@ export async function appendToFile(
             success: false,
             sizeBytes: 0,
             replacements: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`,
           }
         }
       } else {
@@ -540,7 +529,7 @@ export async function appendToFile(
             success: false,
             sizeBytes: 0,
             replacements: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`
+            message: `Access denied: Path '${filePath}' is outside the workspace '${options.cwd}'. File operations are restricted to the workspace directory.`,
           }
         }
       }
@@ -573,7 +562,6 @@ export async function appendToFile(
       message: `Successfully appended content to ${filePath}`,
       backup: undefined,
     }
-
   } catch (error: any) {
     return {
       success: false,
@@ -602,7 +590,8 @@ export async function editFile(
       success: false,
       sizeBytes: 0,
       replacements: 0,
-      message: 'You are in planning mode. File modification is not allowed. Please describe your implementation plan instead.',
+      message:
+        'You are in planning mode. File modification is not allowed. Please describe your implementation plan instead. Do not try to edit the code or make changes. Do not use bash to skip this warning.',
     }
   }
 
@@ -663,9 +652,7 @@ function shouldValidateAgainstExpectations(options: EditFileOptions, validateCon
   if (!validateContent) return false
 
   return Boolean(
-    options.expectedHash ||
-    options.expectedMetadata?.lastModified ||
-    options.expectedMetadata?.inode !== undefined
+    options.expectedHash || options.expectedMetadata?.lastModified || options.expectedMetadata?.inode !== undefined
   )
 }
 
@@ -729,6 +716,115 @@ function buildLineInfo(
     newEndLine: endLineFromStart(newStartLine, newLineCount),
     newLineCount,
     scope,
+  }
+}
+
+interface LineHintBounds {
+  approxStartLine?: number
+  approxEndLine?: number
+  lineHintWindow?: number
+}
+
+interface ResolvedLineHintBounds {
+  startLine: number
+  endLine: number
+  startIndex: number
+  endIndex: number
+}
+
+function coercePositiveInteger(value: unknown): number | null {
+  if (typeof value !== 'number') return null
+  if (!Number.isFinite(value)) return null
+  const rounded = Math.round(value)
+  if (rounded < 1) return null
+  return rounded
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function getLineStartIndex(content: string, lineNumber: number): number {
+  if (lineNumber <= 1) return 0
+
+  let currentLine = 1
+  for (let i = 0; i < content.length; i++) {
+    if (content.charCodeAt(i) === 10) {
+      currentLine += 1
+      if (currentLine === lineNumber) {
+        return i + 1
+      }
+    }
+  }
+
+  return content.length
+}
+
+function resolveLineHintBounds(content: string, bounds: LineHintBounds): ResolvedLineHintBounds | null {
+  const normalizedStart = coercePositiveInteger(bounds.approxStartLine)
+  const normalizedEnd = coercePositiveInteger(bounds.approxEndLine)
+
+  if (!normalizedStart && !normalizedEnd) {
+    return null
+  }
+
+  const anchorStart = normalizedStart ?? normalizedEnd!
+  const anchorEnd = normalizedEnd ?? normalizedStart!
+  const orderedStart = Math.min(anchorStart, anchorEnd)
+  const orderedEnd = Math.max(anchorStart, anchorEnd)
+  const windowSize = Math.max(0, coercePositiveInteger(bounds.lineHintWindow) ?? DEFAULT_LINE_HINT_WINDOW)
+
+  const totalLines = Math.max(1, lineNumberAtIndex(content, content.length))
+  const startLine = clamp(orderedStart - windowSize, 1, totalLines)
+  const endLine = clamp(orderedEnd + windowSize, startLine, totalLines)
+
+  const startIndex = getLineStartIndex(content, startLine)
+  const endIndex = endLine >= totalLines ? content.length : getLineStartIndex(content, endLine + 1)
+
+  return {
+    startLine,
+    endLine,
+    startIndex,
+    endIndex,
+  }
+}
+
+function findMatchWithLineHintFallback(
+  content: string,
+  pattern: string,
+  lineHints: LineHintBounds,
+  enableFuzzy: boolean = false,
+  fuzzyThreshold: number = 0.8,
+  interpretEscapes: boolean = true
+): MatchResult & { attemptedStrategies: string[] } {
+  const resolvedHints = resolveLineHintBounds(content, lineHints)
+
+  if (!resolvedHints) {
+    return findMatchWithStrategies(content, pattern, enableFuzzy, fuzzyThreshold, interpretEscapes)
+  }
+
+  const scopedContent = content.slice(resolvedHints.startIndex, resolvedHints.endIndex)
+  const scopeLabel = `line_hint_window(${resolvedHints.startLine}-${resolvedHints.endLine})`
+  const scopedResult = findMatchWithStrategies(scopedContent, pattern, enableFuzzy, fuzzyThreshold, interpretEscapes)
+
+  if (scopedResult.found) {
+    return {
+      ...scopedResult,
+      startIndex: scopedResult.startIndex + resolvedHints.startIndex,
+      endIndex: scopedResult.endIndex + resolvedHints.startIndex,
+      attemptedStrategies: scopedResult.attemptedStrategies.map(strategy => `${scopeLabel}:${strategy}`),
+    }
+  }
+
+  const fallbackResult = findMatchWithStrategies(content, pattern, enableFuzzy, fuzzyThreshold, interpretEscapes)
+
+  return {
+    ...fallbackResult,
+    attemptedStrategies: [
+      ...scopedResult.attemptedStrategies.map(strategy => `${scopeLabel}:${strategy}`),
+      `${scopeLabel}:fallback_to_full_file`,
+      ...fallbackResult.attemptedStrategies.map(strategy => `full_file:${strategy}`),
+    ],
   }
 }
 
@@ -953,10 +1049,7 @@ function normalizeLineEndings(str: string): string {
  * and trimming each line
  */
 function normalizeWhitespace(str: string): string {
-  return str
-    .split('\n')
-    .map(normalizeWhitespaceLine)
-    .join('\n')
+  return str.split('\n').map(normalizeWhitespaceLine).join('\n')
 }
 
 function normalizeWhitespaceLine(line: string): string {
@@ -1089,9 +1182,7 @@ function applyIndentation(replacement: string, originalIndentation: string[]): s
 
       // Calculate how much this line is indented relative to the first replacement line
       const relativeIndent =
-        lineIndent.length <= replacementBaseIndent.length
-          ? ''
-          : lineIndent.slice(replacementBaseIndent.length)
+        lineIndent.length <= replacementBaseIndent.length ? '' : lineIndent.slice(replacementBaseIndent.length)
 
       // Apply original base indent while preserving tabs/spaces from relative indentation
       const newIndent = baseIndent + relativeIndent
@@ -1137,10 +1228,7 @@ function findMatchWithStrategies(
   if (lineEndingIndex !== -1) {
     // Map both normalized start/end indices back to original content.
     const actualStartIndex = mapNormalizedIndexToOriginal(content, lineEndingIndex)
-    const actualEndIndex = mapNormalizedIndexToOriginal(
-      content,
-      lineEndingIndex + normalizedPattern.length
-    )
+    const actualEndIndex = mapNormalizedIndexToOriginal(content, lineEndingIndex + normalizedPattern.length)
     const matchedText = content.substring(actualStartIndex, actualEndIndex)
     return {
       found: true,
