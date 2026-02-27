@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [0.1.79] - 2026-02-23
+
+### Added
+
 - auto summarisation added
 - solid background support
 - custom font support
@@ -18,10 +26,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - sidebar makeover
 - edit file optimised
 - cwd change sent as user message
-
-### Fixed
-
-## [0.1.79] - 2026-02-23
 
 ### Fixed
 
