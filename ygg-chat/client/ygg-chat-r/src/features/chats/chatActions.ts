@@ -31,6 +31,7 @@ import {
   OperationMode,
   SendCCBranchPayload,
   SendCCMessagePayload,
+  SendHermesMessagePayload,
   SendMessagePayload,
   ToolDefinition,
 } from './chatTypes'
@@ -7173,6 +7174,356 @@ export const fetchCCSlashCommands = createAsyncThunk<
     return rejectWithValue(message)
   }
 })
+
+/**
+ * Send message to Hermes bridge agent with SSE streaming.
+ * Always uses local server - Hermes bridge is local-only.
+ */
+export const sendHermesMessage = createAsyncThunk<
+  { sessionId: string; messageCount: number; userMessageId?: MessageId; streamId: string },
+  SendHermesMessagePayload & { streamId?: string },
+  { state: RootState; extra: ThunkExtraArgument }
+>(
+  'chat/sendHermesMessage',
+  async (
+    {
+      conversationId,
+      message,
+      cwd,
+      resume,
+      parentId,
+      sessionId: resumeSessionId,
+      forkSession,
+      model,
+      maxIterations,
+      streamId: providedStreamId,
+    },
+    { dispatch, extra, rejectWithValue, signal, getState }
+  ) => {
+    const streamId = providedStreamId ?? generateStreamId('primary')
+
+    dispatch(
+      chatSliceActions.sendingStarted({
+        streamId,
+        streamType: 'primary',
+      })
+    )
+
+    let controller: AbortController | undefined
+    let unregisterGenerationAbortController = () => {}
+
+    try {
+      controller = new AbortController()
+      signal.addEventListener('abort', () => controller?.abort())
+      unregisterGenerationAbortController = registerGenerationAbortController(streamId, controller)
+
+      const requestBody: any = { message }
+      if (cwd) requestBody.cwd = cwd
+      if (resume !== undefined) requestBody.resume = resume
+      if (parentId !== undefined) requestBody.parentId = parentId
+      if (resumeSessionId) requestBody.sessionId = resumeSessionId
+      if (forkSession !== undefined) requestBody.forkSession = forkSession
+      if (model) requestBody.model = model
+      if (typeof maxIterations === 'number') requestBody.maxIterations = maxIterations
+
+      const response = await fetch(await buildLocalApiUrl(`/agents/hermes-messages/${conversationId}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to send Hermes message'}`)
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('No stream reader available')
+
+      const decoder = new TextDecoder()
+      let sessionId: string | null = null
+      let messageCount = 0
+      let userMessageId: MessageId | undefined
+      let buffer = ''
+      let shouldInvalidateMessages = false
+      let completedMessageIdForStream: MessageId | null = null
+      let sawHermesIncrementalTextDelta = false
+      const currentPath = getState().chat.conversation.currentPath
+      const inferredParentId =
+        parentId !== undefined
+          ? parentId
+          : currentPath.length > 0
+            ? currentPath[currentPath.length - 1]
+            : null
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+
+            try {
+              const chunk = JSON.parse(line.slice(6))
+
+              if (chunk.messageType === 'tool_start' && chunk.event) {
+                const event = chunk.event
+                const toolCallId =
+                  typeof event.tool_call_id === 'string' && event.tool_call_id.length > 0
+                    ? event.tool_call_id
+                    : uuidv4()
+                const toolName =
+                  typeof event.name === 'string' && event.name.length > 0 ? event.name : 'tool'
+                const toolArgs =
+                  event.arguments && typeof event.arguments === 'object'
+                    ? event.arguments
+                    : {}
+
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    streamId,
+                    chunk: {
+                      type: 'chunk',
+                      part: 'tool_call',
+                      chunkType: 'tool_start',
+                      toolCall: {
+                        id: toolCallId,
+                        name: toolName,
+                        arguments: JSON.stringify(toolArgs),
+                      },
+                    },
+                  })
+                )
+              } else if (chunk.messageType === 'tool_result' && chunk.event) {
+                const event = chunk.event
+                const toolResult = {
+                  tool_use_id:
+                    typeof event.tool_call_id === 'string' && event.tool_call_id.length > 0
+                      ? event.tool_call_id
+                      : uuidv4(),
+                  tool_name:
+                    typeof event.name === 'string' && event.name.length > 0 ? event.name : 'tool',
+                  content:
+                    typeof event.content === 'string'
+                      ? event.content
+                      : JSON.stringify(event.content ?? event.result ?? ''),
+                  is_error: event.ok === false,
+                }
+
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    streamId,
+                    chunk: {
+                      type: 'chunk',
+                      part: 'tool_result',
+                      chunkType: 'tool_end',
+                      toolResult,
+                    },
+                  })
+                )
+              } else if (chunk.type === 'user_message' && chunk.message) {
+                const normalizedUserMessage: Message = {
+                  id: String(chunk.message.id) as MessageId,
+                  conversation_id: conversationId,
+                  role: 'user',
+                  content:
+                    typeof chunk.message.content === 'string' && chunk.message.content.length > 0
+                      ? chunk.message.content
+                      : message,
+                  content_plain_text:
+                    typeof chunk.message.content_plain_text === 'string' && chunk.message.content_plain_text.length > 0
+                      ? chunk.message.content_plain_text
+                      : typeof chunk.message.content === 'string' && chunk.message.content.length > 0
+                        ? chunk.message.content
+                        : message,
+                  parent_id: chunk.message.parent_id ?? inferredParentId ?? null,
+                  children_ids: Array.isArray(chunk.message.children_ids) ? chunk.message.children_ids : [],
+                  created_at:
+                    typeof chunk.message.created_at === 'string' && chunk.message.created_at.length > 0
+                      ? chunk.message.created_at
+                      : new Date().toISOString(),
+                  model_name:
+                    typeof chunk.message.model_name === 'string' && chunk.message.model_name.length > 0
+                      ? chunk.message.model_name
+                      : 'user-input',
+                  partial: typeof chunk.message.partial === 'boolean' ? chunk.message.partial : false,
+                  pastedContext: Array.isArray(chunk.message.pastedContext) ? chunk.message.pastedContext : [],
+                  artifacts: Array.isArray(chunk.message.artifacts) ? chunk.message.artifacts : [],
+                }
+
+                userMessageId = normalizedUserMessage.id
+
+                const existsInStore = getState().chat.conversation.messages.some(
+                  m => String(m.id) === String(normalizedUserMessage.id)
+                )
+
+                if (!existsInStore) {
+                  dispatch(chatSliceActions.messageAdded(normalizedUserMessage))
+                  dispatch(chatSliceActions.messageBranchCreated({ newMessage: normalizedUserMessage }))
+                  updateMessageCache(extra.queryClient, conversationId, normalizedUserMessage)
+                }
+
+                dispatch(
+                  chatSliceActions.streamLineageUpdated({
+                    streamId,
+                    targetParentId: normalizedUserMessage.id,
+                  })
+                )
+              } else if (chunk.type === 'chunk') {
+                const normalizedPart = chunk.part || 'text'
+                const normalizedDelta = chunk.delta || chunk.content || ''
+                const normalizedChunkType = chunk.chunkType
+
+                // Hermes bridge can emit a full assistant_message/final text event after
+                // native assistant_delta streaming. If we've already seen incremental text,
+                // skip the synthetic full-text replay to avoid duplicate output in UI.
+                if (
+                  normalizedPart === 'text' &&
+                  typeof normalizedDelta === 'string' &&
+                  normalizedDelta.length > 0
+                ) {
+                  if (normalizedChunkType === 'content_delta') {
+                    sawHermesIncrementalTextDelta = true
+                  }
+
+                  const isSyntheticReplay =
+                    sawHermesIncrementalTextDelta &&
+                    (normalizedChunkType === 'assistant_message' || normalizedChunkType === 'final')
+
+                  if (isSyntheticReplay) {
+                    continue
+                  }
+                }
+
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    streamId,
+                    chunk: {
+                      type: 'chunk',
+                      delta: normalizedDelta,
+                      part: normalizedPart,
+                      chunkType: normalizedChunkType,
+                    },
+                  })
+                )
+              } else if (chunk.type === 'complete') {
+                sessionId = chunk.sessionId || sessionId
+                messageCount = chunk.messageCount || messageCount
+
+                const completedMessageId =
+                  typeof chunk.messageId === 'string' && chunk.messageId.length > 0
+                    ? (chunk.messageId as MessageId)
+                    : null
+
+                if (completedMessageId) {
+                  let completedMessage = getState().chat.conversation.messages.find(
+                    msg => String(msg.id) === String(completedMessageId)
+                  )
+
+                  if (!completedMessage) {
+                    try {
+                      const latest = await localApi.get<{ messages: Message[]; tree: any }>(
+                        `/local/conversations/${conversationId}/messages/tree`
+                      )
+                      completedMessage = latest.messages?.find(msg => String(msg.id) === String(completedMessageId))
+                    } catch (fetchError) {
+                      console.warn('[sendHermesMessage] Failed to fetch completed Hermes message:', fetchError)
+                    }
+                  }
+
+                  if (completedMessage) {
+                    const normalizedCompletedMessage: Message = {
+                      ...completedMessage,
+                      pastedContext: Array.isArray(completedMessage.pastedContext) ? completedMessage.pastedContext : [],
+                      artifacts: Array.isArray(completedMessage.artifacts) ? completedMessage.artifacts : [],
+                    }
+
+                    const completedExistsInStore = getState().chat.conversation.messages.some(
+                      msg => String(msg.id) === String(normalizedCompletedMessage.id)
+                    )
+
+                    dispatch(chatSliceActions.messageAdded(normalizedCompletedMessage))
+                    dispatch(chatSliceActions.messageBranchCreated({ newMessage: normalizedCompletedMessage }))
+
+                    if (!completedExistsInStore) {
+                      updateMessageCache(extra.queryClient, conversationId, normalizedCompletedMessage)
+                    }
+                  }
+
+                  completedMessageIdForStream = completedMessageId
+                }
+
+                shouldInvalidateMessages = true
+              } else if (chunk.type === 'error') {
+                dispatch(
+                  chatSliceActions.streamChunkReceived({
+                    streamId,
+                    chunk: {
+                      type: 'error',
+                      error: chunk.error || 'Hermes bridge error',
+                    },
+                  })
+                )
+                throw new Error(chunk.error || 'Hermes stream error')
+              }
+            } catch (parseError) {
+              if (line.length > 100) {
+                console.warn('Failed to parse Hermes chunk:', line.substring(0, 100) + '...', parseError)
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock()
+      }
+
+      if (completedMessageIdForStream) {
+        dispatch(
+          chatSliceActions.streamCompleted({
+            streamId,
+            messageId: completedMessageIdForStream,
+            updatePath: true,
+          })
+        )
+      }
+
+      if (shouldInvalidateMessages) {
+        await extra.queryClient.invalidateQueries({ queryKey: ['conversations', conversationId, 'messages'] })
+      }
+
+      if (!sessionId) {
+        throw new Error('No session ID received from Hermes bridge')
+      }
+
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
+      dispatch(chatSliceActions.inputCleared())
+
+      setTimeout(() => {
+        dispatch(chatSliceActions.streamPruned({ streamId }))
+      }, STREAM_PRUNE_DELAY)
+
+      return { sessionId, messageCount, userMessageId, streamId }
+    } catch (error) {
+      dispatch(chatSliceActions.sendingCompleted({ streamId }))
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        return rejectWithValue('Hermes message cancelled')
+      }
+
+      const message = error instanceof Error ? error.message : 'Failed to send Hermes message'
+      dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'error', error: message } }))
+      return rejectWithValue(message)
+    } finally {
+      unregisterGenerationAbortController()
+    }
+  }
+)
 
 /**
  * Send message to Claude Code agent with SSE streaming

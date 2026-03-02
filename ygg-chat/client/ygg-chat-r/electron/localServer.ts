@@ -33,6 +33,7 @@ import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
 import { editFile } from './tools/editFile.js'
 import { globSearch } from './tools/glob.js'
+import { executeHermesAgent, getHermesSession, setHermesSession } from './tools/hermesAgent.js'
 import htmlRenderer from './tools/htmlRenderer.js'
 import { execute as executeMcpManagerTool } from './tools/mcpManagerTool.js'
 import { JobFilter, JobOptions, toolOrchestrator } from './tools/orchestrator/index.js'
@@ -438,15 +439,16 @@ function initializeBuiltInToolRegistry() {
   })
 
   builtInTools.set('create_file', async (args, { rootPath, operationMode }) => {
-    const { path: filePath, content, directory, createParentDirs, overwrite, executable } = args
+    const { path: filePath, content, directory, createParentDirs, overwrite, executable, cwd } = args
     if (!filePath) throw new Error('path is required')
+    const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
     return await createTextFile(filePath, content, {
       directory,
       createParentDirs,
       overwrite,
       executable,
       operationMode,
-      cwd: rootPath,
+      cwd: effectiveCwd,
     })
   })
 
@@ -5899,6 +5901,337 @@ function setupServer() {
       return { ...block, index }
     })
   }
+
+  // GET /api/agents/hermes-session/:conversationId - Get Hermes session info
+  app.get('/api/agents/hermes-session/:conversationId', (req, res) => {
+    try {
+      const { conversationId } = req.params
+      const conversation = statements.getConversationById.get(conversationId) as any
+
+      if (!conversation) {
+        res.json({ hasSession: false })
+        return
+      }
+
+      const cwd = conversation.cwd || process.cwd()
+      const sessionId = getHermesSession(conversationId, cwd)
+
+      if (sessionId) {
+        res.json({
+          hasSession: true,
+          sessionId,
+          cwd,
+        })
+        return
+      }
+
+      const lastHermesMessage = db!
+        .prepare(
+          `
+          SELECT ex_agent_session_id, created_at
+          FROM messages
+          WHERE conversation_id = ?
+            AND ex_agent_session_id IS NOT NULL
+            AND ex_agent_session_id != ''
+            AND (
+              role = 'assistant'
+              OR (role = 'ex_agent' AND ex_agent_type = 'hermes_agent')
+            )
+          ORDER BY created_at DESC
+          LIMIT 1
+        `
+        )
+        .get(conversationId) as any
+
+      if (lastHermesMessage?.ex_agent_session_id) {
+        setHermesSession(conversationId, cwd, lastHermesMessage.ex_agent_session_id)
+      }
+
+      res.json({
+        hasSession: !!lastHermesMessage?.ex_agent_session_id,
+        sessionId: lastHermesMessage?.ex_agent_session_id,
+        lastMessageAt: lastHermesMessage?.created_at,
+        cwd,
+      })
+    } catch (error) {
+      console.error('[LocalServer] ❌ Error getting Hermes session:', error)
+      res.status(500).json({ error: 'Failed to get Hermes session' })
+    }
+  })
+
+  // POST /api/agents/hermes-messages/:conversationId - Send message to Hermes bridge
+  app.post('/api/agents/hermes-messages/:conversationId', async (req, res) => {
+    const { conversationId } = req.params
+    const {
+      message,
+      cwd: requestedCwd,
+      resume,
+      parentId: requestedParentId,
+      sessionId: providedSessionId,
+      forkSession,
+      model,
+      maxIterations,
+    } = req.body as {
+      message: string
+      cwd?: string
+      resume?: boolean
+      parentId?: string | null
+      sessionId?: string
+      forkSession?: boolean
+      model?: string
+      maxIterations?: number
+    }
+
+    if (!message) {
+      res.status(400).json({ error: 'Message content required' })
+      return
+    }
+
+    const conversation = statements.getConversationById.get(conversationId) as any
+    const cwd = requestedCwd || conversation?.cwd || process.cwd()
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    })
+
+    try {
+      const lastMessage = statements.getLastMessageByConversationId.get(conversationId) as any
+      const parentId = requestedParentId !== undefined ? requestedParentId : lastMessage?.id || null
+
+      const userMsgId = uuidv4()
+      const now = new Date().toISOString()
+      statements.upsertMessage.run(
+        userMsgId,
+        conversationId,
+        parentId,
+        '[]',
+        'user',
+        message,
+        null,
+        null,
+        null,
+        null,
+        'user-input',
+        null,
+        null,
+        null,
+        null,
+        now
+      )
+
+      res.write(
+        `data: ${JSON.stringify({ type: 'user_message', message: { id: userMsgId, role: 'user', content: message } })}\n\n`
+      )
+
+      let sessionId = providedSessionId || getHermesSession(conversationId, cwd)
+
+      if (!sessionId && parentId) {
+        let current = statements.getMessageById.get(parentId) as any
+        while (current && !sessionId) {
+          if (
+            typeof current.ex_agent_session_id === 'string' &&
+            current.ex_agent_session_id.trim().length > 0 &&
+            (current.role === 'assistant' || (current.role === 'ex_agent' && current.ex_agent_type === 'hermes_agent'))
+          ) {
+            sessionId = current.ex_agent_session_id
+            break
+          }
+          if (!current.parent_id) break
+          current = statements.getMessageById.get(current.parent_id)
+        }
+      }
+
+      const shouldResume = resume !== undefined ? resume : !!sessionId
+
+      let contentBlocks: any[] = []
+      let textParts: string[] = []
+      let currentSessionId: string | null = sessionId || null
+      let hasPersistedFinalAssistant = false
+      let sawHermesContentDelta = false
+
+      const onStream = (data: any) => {
+        try {
+          res.write(`data: ${JSON.stringify(data)}\n\n`)
+        } catch (error) {
+          console.error('[LocalServer] Error writing Hermes stream data:', error)
+        }
+      }
+
+      const onStreamingChunk = async (chunk: any) => {
+        try {
+          // Only forward true token deltas here.
+          // Tool lifecycle is streamed via messageType events (tool_start/tool_result).
+          if (chunk.type !== 'content_delta' && chunk.type !== 'thinking_delta') {
+            return
+          }
+
+          if (chunk.type === 'content_delta' && typeof chunk.delta === 'string' && chunk.delta.length > 0) {
+            sawHermesContentDelta = true
+          }
+
+          res.write(
+            `data: ${JSON.stringify({
+              type: 'chunk',
+              part: chunk.contentType === 'thinking' ? 'reasoning' : 'text',
+              delta: chunk.delta || '',
+              chunkType: chunk.type,
+            })}\n\n`
+          )
+        } catch (error) {
+          console.error('[LocalServer] Error writing Hermes streaming chunk:', error)
+        }
+      }
+
+      const onResponse = async (response: any) => {
+        onStream(response)
+
+        if (response.sessionId) {
+          currentSessionId = response.sessionId
+          setHermesSession(conversationId, cwd, response.sessionId)
+        }
+
+        const event = response.event || {}
+
+        if (response.messageType === 'assistant_message' || response.messageType === 'final') {
+          const assistantText =
+            (typeof event.content === 'string' && event.content) || (typeof event.text === 'string' && event.text) || ''
+
+          if (assistantText) {
+            const isDuplicateFinalText =
+              response.messageType === 'final' &&
+              textParts.length > 0 &&
+              textParts[textParts.length - 1] === assistantText
+
+            if (!isDuplicateFinalText) {
+              contentBlocks.push({ type: 'text', text: assistantText })
+              textParts.push(assistantText)
+              if (!sawHermesContentDelta) {
+                res.write(
+                  `data: ${JSON.stringify({
+                    type: 'chunk',
+                    part: 'text',
+                    delta: assistantText,
+                    chunkType: response.messageType,
+                  })}\n\n`
+                )
+              }
+            }
+          }
+        }
+
+        if (response.messageType === 'tool_start') {
+          const toolId = event.tool_call_id || event.toolCallId || uuidv4()
+          const toolName = event.name || event.tool_name || 'tool'
+          contentBlocks.push({
+            type: 'tool_use',
+            id: toolId,
+            name: toolName,
+            input: event.arguments || event.args || {},
+          })
+        }
+
+        if (response.messageType === 'tool_result') {
+          const toolCallId = event.tool_call_id || event.toolCallId || null
+          const toolName = event.name || event.tool_name || 'tool'
+          const toolContentRaw = event.content ?? event.result ?? ''
+
+          contentBlocks.push({
+            type: 'tool_result',
+            tool_use_id: toolCallId,
+            tool_name: toolName,
+            content: toolContentRaw,
+            is_error: event.ok === false,
+          })
+        }
+
+        if (response.messageType === 'error') {
+          const errorMessage = response.error?.message || event.message || 'Hermes bridge error'
+          if (errorMessage) {
+            contentBlocks.push({ type: 'text', text: `[Hermes Error] ${errorMessage}` })
+            textParts.push(`[Hermes Error] ${errorMessage}`)
+          }
+        }
+
+        if (
+          response.messageType === 'final' ||
+          response.messageType === 'conversation_end' ||
+          response.messageType === 'error'
+        ) {
+          if (!hasPersistedFinalAssistant && contentBlocks.length > 0) {
+            if (!currentSessionId) {
+              currentSessionId = sessionId || `hermes-${conversationId}`
+              setHermesSession(conversationId, cwd, currentSessionId)
+            }
+
+            const hermesMsgId = uuidv4()
+            const textContent = textParts.join('\n\n').trim()
+
+            statements.upsertMessage.run(
+              hermesMsgId,
+              conversationId,
+              userMsgId,
+              '[]',
+              'assistant',
+              textContent || '[Hermes response]',
+              null,
+              null,
+              null,
+              null,
+              model || 'hermes-bridge',
+              response.messageType === 'error' ? response.error?.message || event.message || 'Hermes error' : null,
+              currentSessionId,
+              null,
+              JSON.stringify(normalizeContentBlocksForStorage(contentBlocks)),
+              new Date().toISOString()
+            )
+
+            res.write(
+              `data: ${JSON.stringify({
+                type: 'complete',
+                sessionId: currentSessionId,
+                messageId: hermesMsgId,
+                messageCount: contentBlocks.length,
+              })}\n\n`
+            )
+
+            hasPersistedFinalAssistant = true
+          }
+
+          contentBlocks = []
+          textParts = []
+        }
+      }
+
+      await executeHermesAgent(
+        conversationId,
+        message,
+        cwd,
+        onResponse,
+        onStreamingChunk,
+        shouldResume ? sessionId : undefined,
+        forkSession,
+        model,
+        maxIterations
+      )
+
+      if (cwd && conversation && conversation.cwd !== cwd) {
+        statements.updateConversationCwd.run(cwd, conversationId)
+      }
+    } catch (error) {
+      console.error('[LocalServer] Hermes bridge error:', error)
+      res.write(
+        `data: ${JSON.stringify({
+          type: 'error',
+          error: error instanceof Error ? error.message : 'Unknown Hermes bridge error',
+        })}\n\n`
+      )
+    }
+
+    res.end()
+  })
 
   // GET /api/agents/cc-session/:conversationId - Get CC session info
   app.get('/api/agents/cc-session/:conversationId', (req, res) => {

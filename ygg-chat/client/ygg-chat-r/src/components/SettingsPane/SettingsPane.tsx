@@ -11,6 +11,7 @@ import { useUserSystemPrompts } from '../../hooks/useUserSystemPrompts'
 import { localApi } from '../../utils/api'
 import { extractTextFromPdf } from '../../utils/pdfUtils'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
+import { ThemeManager } from '../ThemeManager/ThemeManager'
 import { SendButtonAnimationSettings } from './SendButtonAnimationSettings'
 import { ToolsSettings } from './ToolsSettings'
 import { VoiceSettingsSection } from './VoiceSettingsSection'
@@ -1093,6 +1094,11 @@ ${block}`
             {/* Send Button Animation Section */}
             <div className='space-y-2'>
               <SendButtonAnimationSettings />
+            </div>
+
+            {/* Custom Theme Section */}
+            <div className='space-y-2'>
+              <ThemeManager />
             </div>
 
             {/* Tools Section */}

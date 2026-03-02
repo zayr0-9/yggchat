@@ -29,6 +29,12 @@ import stripMarkdownToText from '../../utils/markdownStripper'
 // import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { environment, localApi } from '../../utils/api'
 import { DeleteConfirmModal } from '../DeleteConfirmModal/DeleteConfirmModal'
+import {
+  getThemeModeColor,
+  resolveHeimdallNodeThemeKey,
+  useCustomChatTheme,
+  useHtmlDarkMode,
+} from '../ThemeManager/themeConfig'
 import { TextArea } from '../TextArea/TextArea'
 import { TextField } from '../TextField/TextField'
 
@@ -164,7 +170,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   // Store message content in ref to avoid stale closures in debounced update
   const noteMessageContentRef = useRef<string>('')
   // Track dark mode for shadows
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  const isDarkMode = useHtmlDarkMode()
+  const { theme: customTheme, enabled: customThemeEnabled } = useCustomChatTheme()
   // Track hover state for showing/hiding controls
   const [isHovering, setIsHovering] = useState<boolean>(false)
   // Track pointers for pinch-to-zoom gesture
@@ -508,24 +515,6 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       cancelled = true
     }
   }, [flatMessages])
-
-  // Detect dark mode changes
-  useEffect(() => {
-    const checkDarkMode = () => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'))
-    }
-
-    checkDarkMode()
-
-    // Watch for class changes on document.documentElement
-    const observer = new MutationObserver(checkDarkMode)
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    })
-
-    return () => observer.disconnect()
-  }, [])
 
   // Search UI state
   const [searchQuery, setSearchQuery] = useState<string>('')
@@ -2472,6 +2461,27 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     return connections
   }
 
+  const getNodeThemeColors = useCallback(
+    (sender: ChatNode['sender'], isVisible: boolean) => {
+      if (!customThemeEnabled) {
+        return null
+      }
+
+      const senderKey = resolveHeimdallNodeThemeKey(sender)
+      const nodeTheme = customTheme.colors.heimdallNodes[senderKey]
+
+      return {
+        fill: getThemeModeColor(nodeTheme.fill, isDarkMode),
+        stroke: getThemeModeColor(isVisible ? nodeTheme.visibleStroke : nodeTheme.stroke, isDarkMode),
+      }
+    },
+    [customTheme, customThemeEnabled, isDarkMode]
+  )
+
+  const heimdallPanelBackgroundColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.heimdallPanelBg, isDarkMode)
+    : undefined
+
   const renderNodes = (): JSX.Element[] => {
     return Object.values(visiblePositions).map(({ x, y, node }) => {
       const isExpanded = !compactMode || node.id === focusedNodeId
@@ -2485,6 +2495,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       const isVisible =
         ((typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string') &&
         visibleMessageId === nodeIdParsed
+      const themedNodeColors = getNodeThemeColors(node.sender, isVisible)
       const subagentNodes = subagentMapByParent[String(node.id)] || []
       const subagentCount = subagentNodes.length
       const showSubagentBadge = subagentCount > 0 && node.sender === 'user'
@@ -2529,10 +2540,24 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               strokeWidth='2'
               className={`cursor-pointer hover:opacity-90 transition-colors duration-200 ${
                 compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
-              } ${node.sender === 'user' ? `fill-neutral-100 dark:fill-neutral-900 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-neutral-300 dark:stroke-neutral-800'}` : node.sender === 'ex_agent' ? `fill-slate-50 dark:fill-yBlack-900 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-600' : 'stroke-orange-600 dark:stroke-orange-600'}` : `fill-slate-100 dark:fill-neutral-900 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-neutral-200 dark:stroke-neutral-800'}`}`}
+              } ${
+                customThemeEnabled
+                  ? ''
+                  : node.sender === 'user'
+                    ? `fill-neutral-100 dark:fill-neutral-900 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-neutral-300 dark:stroke-neutral-800'}`
+                    : node.sender === 'ex_agent'
+                      ? `fill-slate-50 dark:fill-yBlack-900 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-600' : 'stroke-orange-600 dark:stroke-orange-600'}`
+                      : `fill-slate-100 dark:fill-neutral-900 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-neutral-200 dark:stroke-neutral-800'}`
+              }`}
               style={{
                 filter:
                   compactMode && focusedNodeId === node.id ? `drop-shadow(0 0 10px rgba(59, 130, 246, 0.5))` : 'none',
+                ...(themedNodeColors
+                  ? {
+                      fill: themedNodeColors.fill,
+                      stroke: themedNodeColors.stroke,
+                    }
+                  : {}),
               }}
               onMouseEnter={handleNodeMouseEnter}
               onMouseLeave={handleNodeMouseLeave}
@@ -2725,17 +2750,27 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               cx={x}
               cy={y + circleRadius}
               r={circleRadius}
-              className={`cursor-pointer transition-transform duration-150 ${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-neutral-800 dark:stroke-neutral-900'} ${
-                node.sender === 'user'
-                  ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-neutral-900'
-                  : node.sender === 'ex_agent'
-                    ? 'fill-orange-50 stroke-orange-600'
-                    : 'fill-indigo-50 stroke-yPurple-500'
+              className={`cursor-pointer transition-transform duration-150 ${
+                customThemeEnabled
+                  ? ''
+                  : `${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-neutral-800 dark:stroke-neutral-900'} ${
+                      node.sender === 'user'
+                        ? 'fill-slate-50 stroke-vtestb-100 dark:fill-yBlack-900 dark:stroke-neutral-900'
+                        : node.sender === 'ex_agent'
+                          ? 'fill-orange-50 stroke-orange-600'
+                          : 'fill-indigo-50 stroke-yPurple-500'
+                    }`
               } `}
               style={{
                 transform: selectedNode?.id === node.id ? 'scale(1.1)' : 'scale(1)',
                 transformOrigin: `${x}px ${y + circleRadius}px`,
                 filter: `drop-shadow(0 4px 12px rgba(0,0,0,${isDarkMode ? '0.25' : '0.05'})) drop-shadow(0 6px 18px rgba(0,0,0,0.02))`,
+                ...(themedNodeColors
+                  ? {
+                      fill: themedNodeColors.fill,
+                      stroke: themedNodeColors.stroke,
+                    }
+                  : {}),
               }}
               onMouseEnter={handleNodeMouseEnter}
               onMouseLeave={handleNodeMouseLeave}
@@ -2861,6 +2896,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       subagentMapByParent,
       selectedNode?.id,
       isDarkMode,
+      customThemeEnabled,
+      getNodeThemeColors,
       handleNodeMouseEnter,
       handleNodeMouseLeave,
       handleSubagentBadgeClick,
@@ -2890,6 +2927,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       style={{
         filter: isTransitioning ? 'none' : 'none',
         transition: 'filter 100ms ease-in-out',
+        backgroundColor: heimdallPanelBackgroundColor,
       }}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}

@@ -26,6 +26,13 @@ import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
+import {
+  type CustomChatTheme,
+  getCustomChatThemeEnabled,
+  getStoredCustomChatTheme,
+  getThemeModeColor,
+  resolveRoleThemeKey,
+} from '../ThemeManager/themeConfig'
 import { TextArea } from '../TextArea/TextArea'
 
 type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
@@ -70,6 +77,9 @@ interface ChatMessageProps {
   fontSizeOffset?: number
   // Optional UX setting to group long consecutive reasoning/tool chains
   groupToolReasoningRuns?: boolean
+  customTheme?: CustomChatTheme
+  customThemeEnabled?: boolean
+  isDarkMode?: boolean
   onEditingStateChange?: (id: string, isEditing: boolean, mode: 'edit' | 'branch' | null) => void
 }
 
@@ -845,10 +855,22 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     showInlineActions = true,
     fontSizeOffset = 0,
     groupToolReasoningRuns = false,
+    customTheme: customThemeProp,
+    customThemeEnabled: customThemeEnabledProp,
+    isDarkMode: isDarkModeProp,
     onEditingStateChange,
   }) => {
     const dispatch = useAppDispatch()
     const isMobile = useIsMobile()
+    const isDarkMode =
+      typeof isDarkModeProp === 'boolean'
+        ? isDarkModeProp
+        : typeof document !== 'undefined'
+          ? document.documentElement.classList.contains('dark')
+          : false
+    const customTheme = customThemeProp ?? getStoredCustomChatTheme()
+    const customThemeEnabled =
+      typeof customThemeEnabledProp === 'boolean' ? customThemeEnabledProp : getCustomChatThemeEnabled()
     const [editingState, setEditingState] = useState(isEditing)
     const [editContent, setEditContent] = useState(content)
     const [editMode, setEditMode] = useState<'edit' | 'branch'>('edit')
@@ -1434,45 +1456,87 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const getRoleStyles = () => {
       const transparentContainer = 'border-l-4 border-l-transparent bg-transparent dark:bg-transparent'
       const useColored = !!colored
+
+      if (useColored && customThemeEnabled) {
+        const roleThemeKey = resolveRoleThemeKey(role)
+        const roleTheme = customTheme.colors.messageRoles[roleThemeKey]
+        const roleText =
+          roleThemeKey === 'user'
+            ? 'User'
+            : roleThemeKey === 'assistant'
+              ? 'Assistant'
+              : roleThemeKey === 'system'
+                ? 'System'
+                : roleThemeKey === 'ex_agent'
+                  ? 'Claude Code'
+                  : 'Unknown'
+
+        const borderColor = 'transparent'
+        const containerStyle: React.CSSProperties = {
+          backgroundColor: getThemeModeColor(roleTheme.containerBg, isDarkMode),
+          ...(roleThemeKey === 'ex_agent' ? { borderColor } : { borderLeftColor: borderColor }),
+        }
+
+        return {
+          container: roleThemeKey === 'ex_agent' ? 'border-2' : 'border-l-4',
+          role: '',
+          roleStyle: {
+            color: getThemeModeColor(roleTheme.roleText, isDarkMode),
+          } as React.CSSProperties,
+          containerStyle,
+          roleText,
+        }
+      }
+
       switch (role) {
         case 'user':
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-0 border-l-yellow-500 dark:border-l-yPurple-400 bg-neutral-50 dark:bg-neutral-900'
+              ? 'bg-gray-800 border-l-0 border-l-transparent bg-neutral-50 dark:bg-neutral-900'
               : transparentContainer,
             role: 'text-indigo-800 dark:text-yPurple-50',
+            roleStyle: undefined,
+            containerStyle: undefined,
             roleText: 'User',
           }
         case 'assistant':
           return {
             container: useColored
-              ? 'bg-gray-850 border-l-0 border-l-blue-500 dark:border-l-yBrown-400 bg-neutral-50  dark:bg-neutral-900'
+              ? 'bg-gray-850 border-l-0 border-l-transparent bg-neutral-50 dark:bg-neutral-900'
               : transparentContainer,
             role: 'text-lime-800 dark:text-yBrown-50',
+            roleStyle: undefined,
+            containerStyle: undefined,
             roleText: 'Assistant',
           }
         case 'system':
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-0 border-l-purple-500 bg-purple-50 dark:bg-neutral-800'
+              ? 'bg-gray-800 border-l-0 border-l-transparent bg-purple-50 dark:bg-neutral-800'
               : transparentContainer,
             role: 'text-purple-400',
+            roleStyle: undefined,
+            containerStyle: undefined,
             roleText: 'System',
           }
         case 'ex_agent':
           return {
             container: useColored
-              ? 'bg-gray-800 border-2 border-orange-600 bg-emerald-50 bg-neutral-50 dark:bg-neutral-800'
+              ? 'bg-gray-800 border-2 border-transparent bg-emerald-50 bg-neutral-50 dark:bg-neutral-800'
               : transparentContainer,
             role: 'text-orange-700 dark:text-orange-400',
+            roleStyle: undefined,
+            containerStyle: undefined,
             roleText: 'Claude Code',
           }
         default:
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-4 border-l-gray-500 bg-gray-50 dark:bg-neutral-800'
+              ? 'bg-gray-800 border-l-4 border-l-transparent bg-gray-50 dark:bg-neutral-800'
               : transparentContainer,
             role: 'text-gray-400',
+            roleStyle: undefined,
+            containerStyle: undefined,
             roleText: 'Unknown',
           }
       }
@@ -2658,6 +2722,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         id={`message-${id}`}
         ref={messageRef}
         className={`group px-0 sm:px-2 md:px-2 mb-0 sm:mb-0 md:mb-0 ${styles.container} ${contextHighlightClass} ${width} transition-[background-color,opacity] duration-200 rounded-md hover:bg-opacity-80 ${isCompactionSummary ? 'border border-emerald-300/50 dark:border-emerald-600/50 bg-emerald-50/40 dark:bg-emerald-900/10' : ''} ${className ?? ''}`}
+        style={styles.containerStyle}
         onContextMenu={handleContextMenu}
         onMouseEnter={() => setIsHovering(true)}
         onMouseLeave={() => setIsHovering(false)}
@@ -2677,7 +2742,12 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         {role === 'user' && (
           <div className='inline-flex mt-8 items-center gap-2 py-[3px] px-2.5 bg-white/[0.03] border border-white/[0.08] rounded-md mb-3 backdrop-blur cursor-default transition-all duration-200'>
             <div className='w-1 h-1 rounded-full bg-neutral-500 shadow-[0_0_8px_rgba(115,115,115,0.4)]'></div>
-            <span className='font-mono text-[11px] uppercase tracking-[0.1em] text-neutral-500'>{styles.roleText}</span>
+            <span
+              className={`font-mono text-[11px] uppercase tracking-[0.1em] ${styles.role || 'text-neutral-500'}`}
+              style={styles.roleStyle}
+            >
+              {styles.roleText}
+            </span>
           </div>
         )}
 

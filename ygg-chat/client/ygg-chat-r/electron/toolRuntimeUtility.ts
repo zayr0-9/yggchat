@@ -139,15 +139,16 @@ function initializeBuiltInToolRegistry(): void {
   })
 
   builtInTools.set('create_file', async (args, { rootPath, operationMode }) => {
-    const { path: filePath, content, directory, createParentDirs, overwrite, executable } = args
+    const { path: filePath, content, directory, createParentDirs, overwrite, executable, cwd } = args
     if (!filePath) throw new Error('path is required')
+    const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
     return await createTextFile(filePath, content, {
       directory,
       createParentDirs,
       overwrite,
       executable,
       operationMode,
-      cwd: rootPath,
+      cwd: effectiveCwd,
     })
   })
 

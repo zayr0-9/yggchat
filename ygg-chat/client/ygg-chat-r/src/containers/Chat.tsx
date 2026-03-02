@@ -30,6 +30,7 @@ import {
   SendButtonAnimationType,
   SendButtonLoadingAnimation,
 } from '../components/SettingsPane/SendButtonAnimationSettings'
+import { getThemeModeColor, useCustomChatTheme, useHtmlDarkMode } from '../components/ThemeManager/themeConfig'
 import { isCommunityMode } from '../config/runtimeMode'
 import {
   abortGeneration,
@@ -62,8 +63,7 @@ import {
   selectOperationMode,
   selectProviderState,
   selectSendingState,
-  sendCCBranch,
-  sendCCMessage,
+  sendHermesMessage,
   sendMessage,
   syncConversationToLocal,
   updateConversationTitle,
@@ -633,10 +633,17 @@ function Chat() {
     </div>
   ) : null
 
-  // Claude Code mode toggle (disabled in web mode)
-  const [ccMode, _setCCMode] = useState(import.meta.env.VITE_ENVIRONMENT === 'web' ? false : false)
+  // Hermes bridge mode toggle (desktop-only)
+  const [hermesMode, setHermesMode] = useState(() => {
+    if (import.meta.env.VITE_ENVIRONMENT === 'web') return false
+    try {
+      return window.localStorage.getItem('chat:agentMode') === 'hermes'
+    } catch {
+      return false
+    }
+  })
 
-  // Claude Code working directory input (disabled in web mode)
+  // Working directory input for local agent flows
   const ccCwd = useAppSelector(selectCcCwd)
   const isCwdDirtyRef = useRef(false)
   const latestCcCwdRef = useRef('')
@@ -655,8 +662,8 @@ function Chat() {
     effort: chatReasoningSettings.defaultReasoningEffort,
   }))
 
-  // Check if CC mode should be available
-  const ccModeAvailable = import.meta.env.VITE_ENVIRONMENT !== 'web'
+  // Hermes mode is available in desktop builds
+  const hermesModeAvailable = import.meta.env.VITE_ENVIRONMENT !== 'web'
 
   // Get conversation ID and project ID from URL params FIRST (before any hooks that depend on it)
   const { id: conversationIdParam, projectId: projectIdParam } = useParams<{ id?: string; projectId?: string }>()
@@ -1290,16 +1297,16 @@ function Chat() {
   // Track if we already applied the URL hash-based path to avoid overriding user branch switches
   const hashAppliedRef = useRef<MessageId | null>(null)
 
-  // Helper function to find the last ex_agent session ID in a message path
-  // This is used for CC mode to resume sessions
-  const findLastExAgentSession = useCallback(
+  // Helper function to find the last Hermes session ID in a message path
+  // This is used for Hermes mode to resume sessions
+  const findLastHermesSession = useCallback(
     (messageIds: MessageId[]): string | undefined => {
       if (!messageIds || messageIds.length === 0) return undefined
 
-      // Iterate messageIds in reverse to find the last ex_agent message
+      // Iterate messageIds in reverse to find the last message carrying a Hermes session ID
       for (let i = messageIds.length - 1; i >= 0; i--) {
         const message = conversationMessages.find(m => m.id === messageIds[i])
-        if (message?.role === 'ex_agent' && message?.ex_agent_session_id) {
+        if (typeof message?.ex_agent_session_id === 'string' && message.ex_agent_session_id.trim().length > 0) {
           return message.ex_agent_session_id
         }
       }
@@ -2001,6 +2008,21 @@ function Chat() {
     },
     [dispatch]
   )
+
+  const setHermesModeEnabled = useCallback((enabled: boolean) => {
+    if (!hermesModeAvailable) {
+      setHermesMode(false)
+      return
+    }
+
+    setHermesMode(enabled)
+    try {
+      window.localStorage.setItem('chat:agentMode', enabled ? 'hermes' : 'default')
+    } catch {
+      // noop
+    }
+  }, [hermesModeAvailable])
+
   // Fetch conversations for the current project using React Query
   // Use projectId from URL first (ensures correct cache is active on page refresh)
   const { data: projectConversations = [] } = useConversationsByProject(
@@ -2346,6 +2368,15 @@ function Chat() {
     }
   })
 
+  const { theme: customTheme, enabled: customThemeEnabled } = useCustomChatTheme()
+  const isDarkMode = useHtmlDarkMode()
+  const chatPanelBackgroundColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.chatPanelBg, isDarkMode)
+    : undefined
+  const chatMessageListBackgroundColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.chatMessageListBg, isDarkMode)
+    : undefined
+
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
   const [expandedProcessMessageRuns, setExpandedProcessMessageRuns] = useState<Set<string>>(() => new Set())
   useEffect(() => {
@@ -2684,15 +2715,15 @@ function Chat() {
   }, [])
 
   // Auto-scroll to bottom when messages update, with refined behavior:
-  // - Only enabled when CC mode is active
+  // - Only enabled when Hermes mode is active
   // - While streaming: keep pinned unless user scrolled away. If user returns near bottom, re-enable pinning.
   // - After streaming completes: only auto-scroll when there is no explicit selection path
   useEffect(() => {
     const container = messagesContainerRef.current
     if (!container) return
 
-    // Only enable auto-scroll when in CC mode
-    if (!ccMode) return
+    // Only enable auto-scroll when in Hermes mode
+    if (!hermesMode) return
 
     // During streaming, keep pinned unless the user opted out by scrolling away.
     // If they scroll back near bottom, re-enable pinning and scroll.
@@ -2725,7 +2756,7 @@ function Chat() {
     streamState.finished,
     selectedPath,
     scheduleScrollToBottom,
-    ccMode,
+    hermesMode,
   ])
 
   // Cleanup any pending rAF on unmount
@@ -2771,14 +2802,14 @@ function Chat() {
   // Scroll to show new message at top when stream starts (normal mode only)
   // DISABLED: Auto-scroll temporarily disabled
   // useEffect(() => {
-  //   if (streamState.active && !ccMode) {
+  //   if (streamState.active && !hermesMode) {
   //     // Scroll to position new message at top of viewport
   //     // setTimeout(() => {
   //     //   scrollToShowLatestAtTop('smooth')
   //     // }, 450)
   //     scrollToShowLatestAtTop('smooth')
   //   }
-  // }, [streamState.active, ccMode, scrollToShowLatestAtTop])
+  // }, [streamState.active, hermesMode, scrollToShowLatestAtTop])
 
   // Scroll to selected node when path changes (only for user-initiated selections)
   useEffect(() => {
@@ -3294,9 +3325,8 @@ function Chat() {
         return
       }
 
-      // Re-enable auto-pinning for CC mode sends until the user scrolls during this stream
-      //CC mode is defunct now
-      if (ccMode) {
+      // Re-enable auto-pinning for Hermes mode sends until the user scrolls during this stream
+      if (hermesMode) {
         userScrolledDuringStreamRef.current = false
       }
       if (canSendLocal && currentConversationId) {
@@ -3307,8 +3337,8 @@ function Chat() {
         console.log('[AutoCompaction][send] invoked', {
           conversationId: currentConversationId,
           canSendLocal,
-          ccMode,
-          ccModeAvailable,
+          hermesMode,
+          hermesModeAvailable,
           isRetrigger,
           hasLocalInput,
           trimmedInputLength: trimmedInputValue.length,
@@ -3317,14 +3347,12 @@ function Chat() {
           compacting: sendingState.compacting,
         })
 
-        // CC Mode: Send via sendCCMessage instead of sendMessage (disabled in web mode)
-        //defunct
-        if (ccMode && ccModeAvailable) {
+        // Hermes mode routes messages to the local Hermes bridge endpoint.
+        if (hermesMode && hermesModeAvailable) {
           const parent: MessageId | null = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
-          const lastExAgentSessionId = findLastExAgentSession(selectedPath)
+          const lastHermesSessionId = findLastHermesSession(selectedPath)
 
           if (isRetrigger) {
-            // Retrigger in CC mode: Use the last user message's content
             const lastUserMessage = displayMessages[displayMessages.length - 1]
 
             if (!lastUserMessage) {
@@ -3334,51 +3362,37 @@ function Chat() {
 
             const contentToRetrigger = lastUserMessage.content
 
-            // Immediately scroll to bottom for CC mode retrigger
-            // DISABLED: Auto-scroll temporarily disabled
-            // scrollToBottomNow('auto')
-
-            // Dispatch sendCCMessage with retrigger content
             dispatch(
-              sendCCMessage({
+              sendHermesMessage({
                 conversationId: currentConversationId,
                 message: contentToRetrigger,
                 cwd: ccCwd || undefined,
-                permissionMode: 'default',
+                model: selectedModel?.name,
                 resume: true,
                 parentId: parent,
-                sessionId: lastExAgentSessionId,
+                sessionId: lastHermesSessionId,
               })
             )
               .unwrap()
               .catch(error => {
-                console.error('Failed to send CC retrigger message:', error)
+                console.error('Failed to send Hermes retrigger message:', error)
               })
           } else {
-            // Normal CC mode send
             const processedContent = replaceFileMentionsWithPath(localInputValue)
             const contentWithIdeContext = appendIdeContextToMessage(processedContent)
 
-            // Update Redux state with processed content before sending
             dispatch(chatSliceActions.inputChanged({ content: contentWithIdeContext }))
-
-            // Clear local input immediately after sending
             clearLocalInput()
 
-            // Immediately scroll to bottom for CC mode send
-            // DISABLED: Auto-scroll temporarily disabled
-            // scrollToBottomNow('auto')
-
-            // Dispatch sendCCMessage
             dispatch(
-              sendCCMessage({
+              sendHermesMessage({
                 conversationId: currentConversationId,
                 message: contentWithIdeContext,
                 cwd: ccCwd || undefined,
-                permissionMode: 'default',
+                model: selectedModel?.name,
                 resume: true,
                 parentId: parent,
-                sessionId: lastExAgentSessionId,
+                sessionId: lastHermesSessionId,
               })
             )
               .unwrap()
@@ -3386,11 +3400,11 @@ function Chat() {
                 setAddedIdeContexts([])
               })
               .catch(error => {
-                console.error('Failed to send CC message:', error)
+                console.error('Failed to send Hermes message:', error)
               })
           }
         } else {
-          // Regular message send (non-CC mode)
+          // Regular model send (non-Hermes mode)
           if (isRetrigger) {
             // Retrigger: Use the last user message's content and parent
             const lastUserMessage = displayMessages[displayMessages.length - 1]
@@ -3753,9 +3767,9 @@ function Chat() {
       appendIdeContextToMessage,
       scrollToBottomNow,
       selectedModel,
-      ccMode,
+      hermesMode,
       ccCwd,
-      ccModeAvailable,
+      hermesModeAvailable,
       projectConversations,
       queryClient,
       selectedProject,
@@ -3767,7 +3781,7 @@ function Chat() {
       isImageGenerationModel,
       imageConfig,
       reasoningConfig,
-      findLastExAgentSession,
+      findLastHermesSession,
       withPendingCwdAnnouncement,
       clearPendingCwdAnnouncement,
       runComposerCommand,
@@ -3813,33 +3827,33 @@ function Chat() {
           contentWithIdeContext
         )
 
-        // If Claude Code mode is enabled, fork the CC session instead of branching normally (disabled in web mode)
-        if (ccMode && ccModeAvailable && originalMessage) {
-          // Use shared helper to find last ex_agent session ID
-          const lastExAgentSessionId = findLastExAgentSession(selectedPath)
+        // Hermes mode uses the bridge session and explicit parent pointer for branch sends.
+        if (hermesMode && hermesModeAvailable && originalMessage) {
+          const lastHermesSessionId = findLastHermesSession(selectedPath)
 
           const branchParentId =
-            originalMessage.role === 'ex_agent' ? originalMessage.id : (originalMessage.parent_id ?? null)
+            originalMessage.role === 'assistant' || originalMessage.role === 'ex_agent'
+              ? originalMessage.id
+              : (originalMessage.parent_id ?? null)
 
-          // Always use sendCCBranch for branching operations, even when parentId is null (root branch)
           dispatch(
-            sendCCBranch({
+            sendHermesMessage({
               conversationId: currentConversationId,
               message: contentWithIdeContext,
               cwd: ccCwd || undefined,
-              permissionMode: 'default',
+              model: selectedModel?.name,
               resume: true,
               parentId: branchParentId,
-              sessionId: lastExAgentSessionId,
+              sessionId: lastHermesSessionId,
               forkSession: true,
             })
           )
             .unwrap()
             .catch(error => {
-              console.error('Failed to fork CC branch session:', error)
+              console.error('Failed to send Hermes branch session:', error)
             })
         } else {
-          // Regular message branching logic (non-CC mode)
+          // Regular message branching logic (non-Hermes mode)
           if (originalMessage) {
             // Create optimistic branch message for instant UI feedback
             const optimisticBranchMessage: Message = {
@@ -3891,9 +3905,9 @@ function Chat() {
       currentConversationId,
       selectedModel?.name,
       think,
-      ccMode,
+      hermesMode,
       ccCwd,
-      ccModeAvailable,
+      hermesModeAvailable,
       dispatch,
       replaceFileMentionsWithPath,
       appendIdeContextToMessage,
@@ -4746,11 +4760,14 @@ function Chat() {
       exit={{ opacity: 0, x: -10 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       ref={containerRef}
-      className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'
+      className='flex h-full overflow-hidden bg-neutral-50 dark:bg-transparent'
     >
       <div
-        className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} rounded-xl min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-yellow-900 bg-neutral-50 overflow-hidden`}
-        style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : 'auto' }}
+        className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} rounded-xl min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full bg-neutral-50 dark:bg-neutral-900 overflow-hidden`}
+        style={{
+          width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : 'auto',
+          backgroundColor: chatPanelBackgroundColor,
+        }}
       >
         {/* Messages Display */}
 
@@ -4914,6 +4931,7 @@ function Chat() {
             style={{
               ['overflowAnchor' as any]: 'none',
               willChange: 'scroll-position',
+              backgroundColor: chatMessageListBackgroundColor,
             }}
           >
             <React.Profiler id='chat-virtual-list' onRender={handleVirtualListProfilerRender}>
@@ -4958,6 +4976,9 @@ function Chat() {
                                 width='w-full'
                                 fontSizeOffset={fontSizeOffset}
                                 groupToolReasoningRuns={groupToolReasoningRuns}
+                                customTheme={customTheme}
+                                customThemeEnabled={customThemeEnabled}
+                                isDarkMode={isDarkMode}
                                 className='opacity-70'
                                 onOpenToolHtmlModal={openToolHtmlModal}
                               />
@@ -4985,6 +5006,9 @@ function Chat() {
                                 width='w-full'
                                 fontSizeOffset={fontSizeOffset}
                                 groupToolReasoningRuns={groupToolReasoningRuns}
+                                customTheme={customTheme}
+                                customThemeEnabled={customThemeEnabled}
+                                isDarkMode={isDarkMode}
                                 className='opacity-70'
                                 onOpenToolHtmlModal={openToolHtmlModal}
                               />
@@ -5010,6 +5034,9 @@ function Chat() {
                                 width='w-full'
                                 fontSizeOffset={fontSizeOffset}
                                 groupToolReasoningRuns={groupToolReasoningRuns}
+                                customTheme={customTheme}
+                                customThemeEnabled={customThemeEnabled}
+                                isDarkMode={isDarkMode}
                                 modelName={selectedModel?.name || undefined}
                                 className=''
                                 onOpenToolHtmlModal={openToolHtmlModal}
@@ -5088,6 +5115,9 @@ function Chat() {
                                           artifacts={groupedMessage.artifacts}
                                           fontSizeOffset={fontSizeOffset}
                                           groupToolReasoningRuns={false}
+                                          customTheme={customTheme}
+                                          customThemeEnabled={customThemeEnabled}
+                                          isDarkMode={isDarkMode}
                                           onOpenToolHtmlModal={openToolHtmlModal}
                                         />
                                       )
@@ -5130,6 +5160,9 @@ function Chat() {
                                           artifacts={bridgedMessage.artifacts}
                                           fontSizeOffset={fontSizeOffset}
                                           groupToolReasoningRuns={false}
+                                          customTheme={customTheme}
+                                          customThemeEnabled={customThemeEnabled}
+                                          isDarkMode={isDarkMode}
                                           onOpenToolHtmlModal={openToolHtmlModal}
                                         />
                                       )
@@ -5187,6 +5220,9 @@ function Chat() {
                               artifacts={msg.artifacts}
                               fontSizeOffset={fontSizeOffset}
                               groupToolReasoningRuns={groupToolReasoningRuns}
+                              customTheme={customTheme}
+                              customThemeEnabled={customThemeEnabled}
+                              isDarkMode={isDarkMode}
                               onEdit={handleMessageEdit}
                               onBranch={handleMessageBranch}
                               onDelete={handleRequestDelete}
@@ -5623,7 +5659,7 @@ function Chat() {
                     isActive={
                       toolAutoApprove ||
                       operationMode === 'plan' ||
-                      ccMode ||
+                      hermesMode ||
                       !!imageConfig.aspectRatio ||
                       !!imageConfig.imageSize ||
                       (think && reasoningConfig.effort !== 'medium')
@@ -5632,6 +5668,20 @@ function Chat() {
                       <div className='flex flex-col gap-2'>
                         {import.meta.env.VITE_ENVIRONMENT === 'electron' && conversationIdFromUrl && (
                           <>
+                            <span className='text-black dark:text-neutral-200 text-[16px]'>Agent backend:</span>
+                            <Select
+                              value={hermesMode ? 'hermes' : 'default'}
+                              options={[
+                                { value: 'default', label: 'Default model backend' },
+                                { value: 'hermes', label: 'Hermes bridge backend' },
+                              ]}
+                              onChange={value => setHermesModeEnabled(value === 'hermes')}
+                              placeholder='Select backend'
+                              size='small'
+                              dropdownZIndex={ACTION_POPOVER_SELECT_DROPDOWN_Z_INDEX}
+                              disabled={!hermesModeAvailable}
+                            />
+
                             <span className='text-black dark:text-neutral-200 text-[16px]'>Work directory:</span>
                             <div className='flex gap-2'>
                               <input
@@ -5640,7 +5690,7 @@ function Chat() {
                                 onChange={e => setCcCwdFromUser(e.target.value)}
                                 placeholder='Working directory (optional)'
                                 className='flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
-                                title='Specify the working directory for Claude Code agent'
+                                title='Specify the working directory used by local agent backends'
                               />
                               <button
                                 type='button'
@@ -5797,23 +5847,6 @@ function Chat() {
                           <i className='bx bx-task pb-0.5' aria-hidden='true'></i>
                           Jobs
                         </Button>
-                        {/* <Button
-                            variant={ccMode ? 'outline2' : 'outline2'}
-                            size='medium'
-                            onClick={() => setCCMode(!ccMode)}
-                            title='Toggle Claude Code Agent Mode'
-                          >
-                            <i
-                              className={`bx bx-terminal mr-1 ${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
-                              aria-hidden='true'
-                            ></i>
-                            <div
-                              className={`${ccMode ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'}`}
-                            >
-                              {ccMode ? 'CC On' : 'CC Off'}
-                            </div>
-                          </Button> */}
-
                         {/* Allow All / Ask toggle */}
                         <Button
                           variant='outline2'
@@ -5859,7 +5892,6 @@ function Chat() {
                         </Button>
                       </>
                     )}
-                    {/* Claude Code toggle */}
                   </ActionPopover>
                 )}
                 {/* Thinking toggle - next to popover, disabled when not supported */}

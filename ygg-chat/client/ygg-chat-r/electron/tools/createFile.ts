@@ -84,9 +84,15 @@ export async function createTextFile(
     if (cwd) {
       if (isWSL) {
         // Both are Linux paths - compare directly using POSIX rules
-        const normalizedCwd = cwd.replace(/\/$/, '')
-        const normalizedTarget = targetPath.replace(/\/$/, '')
-        if (!normalizedTarget.startsWith(normalizedCwd + '/') && normalizedTarget !== normalizedCwd) {
+        const normalizedCwd = path.posix.resolve(cwd)
+        const normalizedTarget = path.posix.resolve(targetPath)
+        const relativeToWorkspace = path.posix.relative(normalizedCwd, normalizedTarget)
+        const outsideWorkspace =
+          relativeToWorkspace === '..' ||
+          relativeToWorkspace.startsWith(`..${path.posix.sep}`) ||
+          path.posix.isAbsolute(relativeToWorkspace)
+
+        if (outsideWorkspace) {
           return {
             success: false,
             created: false,
@@ -98,7 +104,13 @@ export async function createTextFile(
         // Windows or native paths - use Node's path module
         const normalizedCwd = path.resolve(cwd)
         const normalizedTarget = path.resolve(targetPath)
-        if (!normalizedTarget.startsWith(normalizedCwd + path.sep) && normalizedTarget !== normalizedCwd) {
+        const relativeToWorkspace = path.relative(normalizedCwd, normalizedTarget)
+        const outsideWorkspace =
+          relativeToWorkspace === '..' ||
+          relativeToWorkspace.startsWith(`..${path.sep}`) ||
+          path.isAbsolute(relativeToWorkspace)
+
+        if (outsideWorkspace) {
           return {
             success: false,
             created: false,

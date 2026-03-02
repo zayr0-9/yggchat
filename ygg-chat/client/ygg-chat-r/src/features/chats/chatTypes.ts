@@ -385,6 +385,22 @@ export interface SendCCBranchPayload extends Omit<SendCCMessagePayload, 'parentI
   parentId: MessageId
 }
 
+export interface SendHermesMessagePayload {
+  conversationId: ConversationId
+  message: string
+  cwd?: string
+  resume?: boolean
+  parentId?: MessageId | null
+  sessionId?: string
+  forkSession?: boolean
+  model?: string
+  maxIterations?: number
+}
+
+export interface SendHermesBranchPayload extends SendHermesMessagePayload {
+  parentId: MessageId
+}
+
 export interface ModelSelectionPayload {
   model: Model
   persist?: boolean
