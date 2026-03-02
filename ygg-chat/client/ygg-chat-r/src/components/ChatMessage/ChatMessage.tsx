@@ -1864,7 +1864,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             >
               <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
               <div className='flex items-center gap-2 mb-2 flex-wrap'>
-                <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
+                <span className='font-mono text-xs bg-neutral-100  px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
                   {group.name || 'mcp_app'}
                 </span>
                 <span className='text-[10px] uppercase tracking-[0.15em] text-emerald-600 dark:text-emerald-400'>
@@ -2379,8 +2379,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           const pathParam = extractPathParam(toolCall.arguments)
           const isHtmlToolCall = (toolCall.name ?? '').toLowerCase() === 'html_renderer'
           const isEditFileToolCall = (toolCall.name ?? '').toLowerCase() === 'edit_file'
-          const isEditFileToolCallSuccess =
-            isEditFileToolCall && formatToolResultSummary(toolCall.result) === 'success'
+          const isEditFileToolCallSuccess = isEditFileToolCall && formatToolResultSummary(toolCall.result) === 'success'
           const hasHtmlOutput = isHtmlToolCall || Boolean(extractHtmlFromToolResult(toolCall.result)?.html)
 
           items.push({

@@ -107,7 +107,9 @@ const ProjectConversationsPanel: React.FC<ProjectConversationsPanelProps> = memo
     } = useConversationsByProject(projectId)
 
     const sortedConversations = useMemo(() => {
-      return [...projectConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      return [...projectConversations].sort(
+        (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      )
     }, [projectConversations])
 
     return (
@@ -529,7 +531,10 @@ const SideBar: React.FC<SideBarProps> = ({
       const desiredPreviewLeft = computedLeft + panelWidth + SIDEBAR_PREVIEW_PORTAL_GAP_PX
       const maxPreviewLeft = Math.max(8, viewportWidth - SIDEBAR_PREVIEW_PORTAL_MIN_WIDTH_PX - 8)
       const computedPreviewLeft = Math.max(8, Math.min(desiredPreviewLeft, maxPreviewLeft))
-      const availablePreviewWidth = Math.max(SIDEBAR_PREVIEW_PORTAL_MIN_WIDTH_PX, viewportWidth - computedPreviewLeft - 8)
+      const availablePreviewWidth = Math.max(
+        SIDEBAR_PREVIEW_PORTAL_MIN_WIDTH_PX,
+        viewportWidth - computedPreviewLeft - 8
+      )
       const computedPreviewWidth = Math.min(SIDEBAR_PREVIEW_PORTAL_MAX_WIDTH_PX, availablePreviewWidth)
 
       setPreviewPortalLeftOffset(computedPreviewLeft)
@@ -957,29 +962,26 @@ const SideBar: React.FC<SideBarProps> = ({
 
           {isProjectsTab ? (
             <>
-              {visibleProjects.map(project => (
-                <ProjectAccordionItem
-                  key={project.id}
-                  project={project}
-                  isExpanded={expandedProjectIdSet.has(String(project.id))}
-                  isCollapsed={renderCollapsed}
-                  activeConversationId={activeConversationId}
-                  onToggle={handleToggleProjectExpansion}
-                  onSelectConversation={handleProjectConversationSelect}
-                  onCreateConversation={handleCreateConversationForProject}
-                  onDeleteProject={handleDeleteSidebarProject}
-                  onDeleteConversation={handleDeleteSidebarConversation}
-                  enableConversationHoverPreview={enableMiniHoverPreview}
-                  onConversationHoverStart={handleConversationHoverStart}
-                  onConversationHoverEnd={handleConversationHoverEnd}
-                />
-              ))}
-              {visibleProjects.length === 0 && !loading && !error && (
-                <div
-                  className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${renderCollapsed ? 'hidden' : ''}`}
-                >
-                  No projects
-                </div>
+              {!renderCollapsed &&
+                visibleProjects.map(project => (
+                  <ProjectAccordionItem
+                    key={project.id}
+                    project={project}
+                    isExpanded={expandedProjectIdSet.has(String(project.id))}
+                    isCollapsed={renderCollapsed}
+                    activeConversationId={activeConversationId}
+                    onToggle={handleToggleProjectExpansion}
+                    onSelectConversation={handleProjectConversationSelect}
+                    onCreateConversation={handleCreateConversationForProject}
+                    onDeleteProject={handleDeleteSidebarProject}
+                    onDeleteConversation={handleDeleteSidebarConversation}
+                    enableConversationHoverPreview={enableMiniHoverPreview}
+                    onConversationHoverStart={handleConversationHoverStart}
+                    onConversationHoverEnd={handleConversationHoverEnd}
+                  />
+                ))}
+              {visibleProjects.length === 0 && !loading && !error && !renderCollapsed && (
+                <div className='text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1'>No projects</div>
               )}
             </>
           ) : (
@@ -1134,7 +1136,7 @@ const SideBar: React.FC<SideBarProps> = ({
     <>
       <aside
         ref={sidebarRef}
-        className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} flex flex-col flex-shrink-0 overflow-hidden border-r border-neutral-200/70 bg-neutral-100/95 shadow-sm transition-[width] duration-200 ease-out dark:border-neutral-800/80 dark:bg-neutral-950/90 ${isCollapsed ? 'w-15' : 'w-64 md:w-64 lg:w-70 xl:w-80'} ${className}`}
+        className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} flex flex-col flex-shrink-0 overflow-hidden border-r border-neutral-200/70 bg-neutral-100/95 shadow-sm transition-[width] duration-200 ease-out dark:border-neutral-800/80 dark:bg-transparent ${isCollapsed ? 'w-15' : 'w-64 md:w-64 lg:w-70 xl:w-80'} ${className}`}
         aria-label={isProjectsTab ? 'Projects and conversations' : 'Favorite conversations'}
       >
         <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
@@ -1235,7 +1237,9 @@ const SideBar: React.FC<SideBarProps> = ({
 
                   <div className='flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-2'>
                     {topLevelUserPreviewLoading && (
-                      <div className='text-xs text-neutral-500 dark:text-neutral-400'>Loading top-level messages...</div>
+                      <div className='text-xs text-neutral-500 dark:text-neutral-400'>
+                        Loading top-level messages...
+                      </div>
                     )}
 
                     {!topLevelUserPreviewLoading && topLevelUserPreviewError && (

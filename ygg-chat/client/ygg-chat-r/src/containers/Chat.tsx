@@ -4746,10 +4746,10 @@ function Chat() {
       exit={{ opacity: 0, x: -10 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       ref={containerRef}
-      className='flex h-full rounded-tl-xl overflow-hidden bg-neutral-50 dark:bg-neutral-900'
+      className='flex h-full overflow-hidden bg-neutral-50 dark:bg-neutral-900'
     >
       <div
-        className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} rounded-xl min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-neutral-900 bg-neutral-50 overflow-hidden`}
+        className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} rounded-xl min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full dark:bg-yellow-900 bg-neutral-50 overflow-hidden`}
         style={{ width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : 'auto' }}
       >
         {/* Messages Display */}
@@ -4910,7 +4910,7 @@ function Chat() {
 
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col ${currentConversationId && isTitleBarVisible ? 'pt-25' : 'pt-6'} transition-[padding-top] duration-300 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-neutral-900`}
+            className={`flex flex-col ${currentConversationId && isTitleBarVisible ? 'pt-25' : 'pt-6'} transition-[padding-top] duration-300 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-transparent`}
             style={{
               ['overflowAnchor' as any]: 'none',
               willChange: 'scroll-position',
@@ -6032,7 +6032,13 @@ function Chat() {
                   <button
                     onClick={handleStopGeneration}
                     disabled={!streamState.active}
-                    title={sendingState.compacting ? 'Compacting context...' : streamState.active ? 'Stop generation' : 'Generating...'}
+                    title={
+                      sendingState.compacting
+                        ? 'Compacting context...'
+                        : streamState.active
+                          ? 'Stop generation'
+                          : 'Generating...'
+                    }
                     className='cursor-pointer hover:scale-105 active:scale-95 transition-transform'
                   >
                     <SendButtonLoadingAnimation animationType={sendButtonAnimation} bgColor={sendButtonColor} />
