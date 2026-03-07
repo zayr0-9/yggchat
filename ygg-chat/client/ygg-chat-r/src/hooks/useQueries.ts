@@ -39,7 +39,7 @@ export function useProjects() {
     queryFn: async () => {
       // In Electron community mode, use local projects only
       if (isElectronCommunityMode()) {
-        const localProjects = await localApi.get<ProjectWithLatestConversation[]>(`/local/projects?userId=${userId}`)
+        const localProjects = await localApi.get<ProjectWithLatestConversation[]>(`/app/projects?userId=${userId}`)
         return [...localProjects].sort((a, b) => {
           const dateA = new Date(a.latest_conversation_updated_at || a.updated_at).getTime()
           const dateB = new Date(b.latest_conversation_updated_at || b.updated_at).getTime()
@@ -56,7 +56,7 @@ export function useProjects() {
               console.error('Failed to fetch cloud projects:', err)
               return []
             }),
-          localApi.get<ProjectWithLatestConversation[]>(`/local/projects?userId=${userId}`).catch(err => {
+          localApi.get<ProjectWithLatestConversation[]>(`/app/projects?userId=${userId}`).catch(err => {
             console.error('Failed to fetch local projects:', err)
             return []
           }),
@@ -120,7 +120,7 @@ export function useProject(projectId: ProjectId | null, storageMode?: 'local' | 
       // Route to appropriate API based on storage mode
       if ((effectiveStorageMode === 'local' && environment === 'electron') || isElectronCommunityMode()) {
         // console.log('[useProject] Using local API for project:', projectId)
-        return localApi.get<Project>(`/local/projects/${projectId}`)
+        return localApi.get<Project>(`/app/projects/${projectId}`)
       }
 
       // Default to cloud API
@@ -160,7 +160,7 @@ export function useConversations(enabled: boolean = true) {
 
       // In Electron community mode, use local conversations only
       if (isElectronCommunityMode()) {
-        const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+        const localConversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`)
         return [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
       }
 
@@ -171,7 +171,7 @@ export function useConversations(enabled: boolean = true) {
             console.error('Failed to fetch cloud conversations:', err)
             return []
           }),
-          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`).catch(err => {
+          localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`).catch(err => {
             console.error('Failed to fetch local conversations:', err)
             return []
           }),
@@ -241,7 +241,7 @@ export function useConversationsInfinite(enabled: boolean = true) {
 
       // In Electron community mode, use local conversations only
       if (isElectronCommunityMode()) {
-        const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+        const localConversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`)
         if (!pageParam) {
           const sorted = [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
           return {
@@ -269,7 +269,7 @@ export function useConversationsInfinite(enabled: boolean = true) {
               console.error('Failed to fetch cloud conversations:', err)
               return { conversations: [], nextCursor: null, hasMore: false }
             }),
-          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`).catch(err => {
+          localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`).catch(err => {
             console.error('Failed to fetch local conversations:', err)
             return []
           }),
@@ -332,7 +332,7 @@ export function useConversationsByProject(projectId: ProjectId | null) {
       // In Electron community mode, use local conversations only
       if (isElectronCommunityMode()) {
         const localConversations = await localApi.get<Conversation[]>(
-          `/local/conversations?userId=${userId}&projectId=${projectId}`
+          `/app/conversations?userId=${userId}&projectId=${projectId}`
         )
         return [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
       }
@@ -345,7 +345,7 @@ export function useConversationsByProject(projectId: ProjectId | null) {
             return []
           }),
           localApi
-            .get<Conversation[]>(`/local/conversations?userId=${userId}&projectId=${projectId}`)
+            .get<Conversation[]>(`/app/conversations?userId=${userId}&projectId=${projectId}`)
             .catch(err => {
               console.error('Failed to fetch local project conversations:', err)
               return []
@@ -401,7 +401,7 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
       // Electron community mode with local project conversations
       if (isElectronCommunityMode()) {
         const localConversations = await localApi.get<Conversation[]>(
-          `/local/conversations?userId=${userId}&projectId=${projectId}`
+          `/app/conversations?userId=${userId}&projectId=${projectId}`
         )
 
         if (!pageParam) {
@@ -433,7 +433,7 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
               return { conversations: [], nextCursor: null, hasMore: false }
             }),
           localApi
-            .get<Conversation[]>(`/local/conversations?userId=${userId}&projectId=${projectId}`)
+            .get<Conversation[]>(`/app/conversations?userId=${userId}&projectId=${projectId}`)
             .catch(err => {
               console.error('Failed to fetch local project conversations:', err)
               return []
@@ -488,7 +488,7 @@ export function useRecentConversations(limit: number = 120) {
 
       // In Electron community mode, use local conversations only
       if (isElectronCommunityMode()) {
-        const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+        const localConversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`)
         return [...localConversations]
           .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
           .slice(0, safeLimit)
@@ -501,7 +501,7 @@ export function useRecentConversations(limit: number = 120) {
             console.error('Failed to fetch cloud recent conversations:', err)
             return []
           }),
-          localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`).catch(err => {
+          localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`).catch(err => {
             console.error('Failed to fetch local conversations:', err)
             return []
           }),
@@ -566,7 +566,7 @@ export function useFavoritedConversations(limit: number | null = 8) {
       if (hasLimit) {
         params.set('limit', String(limit))
       }
-      return localApi.get<Conversation[]>(`/local/conversations/favorites?${params}`)
+      return localApi.get<Conversation[]>(`/app/conversations/favorites?${params}`)
     },
     enabled: !!userId && environment === 'electron',
     staleTime: 5 * 60 * 1000,
@@ -645,7 +645,7 @@ export function useConversationStorageMode(conversationId: ConversationId | null
       // 2. If in Electron, try fetching from local server first (fastest for local)
       if (environment === 'electron') {
         try {
-          const localConv = await localApi.get<Conversation>(`/local/conversations/${conversationId}`)
+          const localConv = await localApi.get<Conversation>(`/app/conversations/${conversationId}`)
           if (localConv) {
             return localConv.storage_mode || 'local'
           }
@@ -682,7 +682,7 @@ export function useLocalTopLevelUserMessages(conversationId: ConversationId | nu
     queryKey: ['conversations', conversationId, 'top-level-user-messages'],
     queryFn: async () => {
       if (!conversationId) throw new Error('Conversation ID is required')
-      return localApi.get<TopLevelUserMessagePreview[]>(`/local/conversations/${conversationId}/messages/top-level-users`)
+      return localApi.get<TopLevelUserMessagePreview[]>(`/app/conversations/${conversationId}/messages/top-level-users`)
     },
     enabled: enabled && !!conversationId && environment === 'electron',
     staleTime: 60 * 1000,
@@ -762,7 +762,7 @@ export function useConversationMessages(conversationId: ConversationId | null, s
           messages: Message[]
           tree: any
           meta?: { storage_mode: 'local' | 'cloud' }
-        }>(`/local/conversations/${conversationId}/messages/tree`)
+        }>(`/app/conversations/${conversationId}/messages/tree`)
         const tree = shouldFilterExAgentNodes(result.messages) ? filterExAgentNodes(result.tree) : result.tree
         return { ...result, tree }
       }
@@ -815,7 +815,7 @@ export function useConversationMessages(conversationId: ConversationId | null, s
               messages: Message[]
               tree: any
               meta?: { storage_mode: 'local' | 'cloud' }
-            }>(`/local/conversations/${conversationId}/messages/tree`)
+            }>(`/app/conversations/${conversationId}/messages/tree`)
             // If local API succeeds, return it with ex_agent nodes filtered from tree
             if (localResult) {
               const tree = shouldFilterExAgentNodes(localResult.messages)
@@ -838,7 +838,7 @@ export function useConversationMessages(conversationId: ConversationId | null, s
           messages: Message[]
           tree: any
           meta?: { storage_mode: 'local' | 'cloud' }
-        }>(`/local/conversations/${conversationId}/messages/tree`)
+        }>(`/app/conversations/${conversationId}/messages/tree`)
         const tree = shouldFilterExAgentNodes(result.messages) ? filterExAgentNodes(result.tree) : result.tree
         return { ...result, tree }
       }
@@ -1832,7 +1832,7 @@ export function useSearchConversations(
         }
 
         try {
-          const results = await localApi.get<Conversation[]>(`/local/conversations/search?${params.toString()}`)
+          const results = await localApi.get<Conversation[]>(`/app/conversations/search?${params.toString()}`)
           return results || []
         } catch (error) {
           console.error('Local conversation title search failed:', error)

@@ -1,7 +1,7 @@
 {
   "name": "yggdrasil",
   "private": true,
-  "version": "0.1.79",
+  "version": "0.1.81",
   "type": "module",
   "main": "electron/main.mjs",
   "overrides": {},
@@ -22,6 +22,8 @@
     "test:tools": "vitest run --config vitest.tools.config.ts",
     "test:tools:watch": "vitest --config vitest.tools.config.ts",
     "test:tools:coverage": "vitest run --config vitest.tools.config.ts --coverage",
+    "test:headless": "vitest run --config vitest.headless.config.ts",
+    "test:headless:watch": "vitest --config vitest.headless.config.ts",
     "preview": "vite preview",
     "predev": "node scripts/check-env.js",
     "electron": "electron .",

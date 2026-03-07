@@ -1676,7 +1676,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
         }
 
         logHtmlTools('bootstrap-start', { userId })
-        const conversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${userId}`)
+        const conversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`)
         if (!Array.isArray(conversations) || conversations.length === 0) return
         const sorted = [...conversations].sort(
           (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
@@ -1691,7 +1691,7 @@ export const HtmlIframeRegistryProvider: React.FC<{
           try {
             logHtmlTools('bootstrap-conversation', { id: conversation.id })
             const result = await localApi.get<{ messages: Message[] }>(
-              `/local/conversations/${conversation.id}/messages/tree`
+              `/app/conversations/${conversation.id}/messages/tree`
             )
             const messages = Array.isArray(result?.messages) ? result.messages : []
             const cachedEntries = buildHtmlEntriesFromMessages(messages)

@@ -2590,7 +2590,7 @@ function Chat() {
 
     void (async () => {
       try {
-        const localConversation = await localApi.get<Conversation>(`/local/conversations/${currentConversationId}`)
+        const localConversation = await localApi.get<Conversation>(`/app/conversations/${currentConversationId}`)
         if (cwdLoadSeqRef.current !== loadSeq) return
         const loadedCwd = typeof localConversation?.cwd === 'string' ? localConversation.cwd : ''
         persistedCcCwdRef.current = loadedCwd.trim()

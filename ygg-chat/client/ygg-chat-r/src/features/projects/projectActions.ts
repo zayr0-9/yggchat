@@ -15,14 +15,14 @@ export const fetchProjects = createAsyncThunk<Project[], void, { extra: ThunkExt
     const { auth } = extra
 
     if (isElectronCommunityMode()) {
-      return await localApi.get<Project[]>(`/local/projects?userId=${auth.userId}`)
+      return await localApi.get<Project[]>(`/app/projects?userId=${auth.userId}`)
     }
 
     // In Electron mode, fetch both cloud and local projects
     if (environment === 'electron') {
       const [cloudProjects, localProjects] = await Promise.all([
         apiCall('/projects', auth.accessToken, { method: 'GET' }) as Promise<Project[]>,
-        localApi.get<Project[]>(`/local/projects?userId=${auth.userId}`),
+        localApi.get<Project[]>(`/app/projects?userId=${auth.userId}`),
       ])
 
       // Merge and sort by updated_at
@@ -60,7 +60,7 @@ export const fetchProjectById = createAsyncThunk<
 
     // Route to local or cloud API
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      return await localApi.get<Project>(`/local/projects/${projectId}`)
+      return await localApi.get<Project>(`/app/projects/${projectId}`)
     }
 
     const response = await apiCall(`/projects/${projectId}`, auth.accessToken, {
@@ -89,7 +89,7 @@ export const createProject = createAsyncThunk<Project, CreateProjectPayload, { e
 
     // Route to local or cloud API
     if (shouldUseLocalApi(effectiveStorageMode, environment)) {
-      const project = await localApi.post<Project>('/local/projects', {
+      const project = await localApi.post<Project>('/app/projects', {
         user_id: auth.userId,
         name: restPayload.name,
         context: restPayload.context || null,
@@ -143,7 +143,7 @@ export const updateProject = createAsyncThunk<Project, UpdateProjectPayload, { e
 
     // Route to local or cloud API
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      const project = await localApi.patch<Project>(`/local/projects/${id}`, {
+      const project = await localApi.patch<Project>(`/app/projects/${id}`, {
         name: updateData.name,
         context: updateData.context || null,
         system_prompt: updateData.system_prompt || null,
@@ -184,7 +184,7 @@ export const deleteProject = createAsyncThunk<
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      await localApi.delete(`/local/projects/${projectId}`)
+      await localApi.delete(`/app/projects/${projectId}`)
     } else {
       await apiCall(`/projects/${projectId}`, auth.accessToken, {
         method: 'DELETE',

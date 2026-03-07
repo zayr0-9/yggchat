@@ -209,7 +209,7 @@ export function createMessageHandler(
             response = { success: false, error: 'No active agent conversation' }
             break
           }
-          const messages = await localApi.get<any[]>(`/local/conversations/${conversationId}/messages`)
+          const messages = await localApi.get<any[]>(`/app/conversations/${conversationId}/messages`)
           const limit = Number.isFinite(options?.limit) ? Math.max(0, Math.floor(options.limit)) : null
           const sliced = limit && limit > 0 ? messages.slice(-limit) : messages
           response = { success: true, conversationId, messages: sliced }

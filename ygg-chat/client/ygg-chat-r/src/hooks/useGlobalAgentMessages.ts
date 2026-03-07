@@ -51,8 +51,8 @@ export function useGlobalAgentMessages() {
 
       // Fetch conversation and messages in parallel
       const [conversation, messages] = await Promise.all([
-        localApi.get<any>(`/local/conversations/${conversationId}`).catch(() => null),
-        localApi.get<any[]>(`/local/conversations/${conversationId}/messages`).catch(() => [])
+        localApi.get<any>(`/app/conversations/${conversationId}`).catch(() => null),
+        localApi.get<any[]>(`/app/conversations/${conversationId}/messages`).catch(() => [])
       ])
 
       return {

@@ -246,7 +246,7 @@ class GlobalAgentLoop {
       })
     }
 
-    const newConversation = await localApi.post<{ id: string }>('/local/conversations', {
+    const newConversation = await localApi.post<{ id: string }>('/app/conversations', {
       user_id: this.userId,
       project_id: this.systemProjectId,
       title: this.settings?.agentName || 'Global Agent',
@@ -441,10 +441,10 @@ class GlobalAgentLoop {
   private async ensureSystemProjectAndSession(): Promise<void> {
     if (!this.userId) return
 
-    const projects = await localApi.get<any[]>(`/local/projects?userId=${this.userId}`)
+    const projects = await localApi.get<any[]>(`/app/projects?userId=${this.userId}`)
     let systemProject = projects.find(p => p.name === 'system')
     if (!systemProject) {
-      systemProject = await localApi.post('/local/projects', {
+      systemProject = await localApi.post('/app/projects', {
         name: 'system',
         user_id: this.userId,
         storage_mode: 'local',
@@ -453,7 +453,7 @@ class GlobalAgentLoop {
     this.systemProjectId = systemProject.id
 
     if (!this.state.conversationId) {
-      const conversation = await localApi.post<{ id: string }>('/local/conversations', {
+      const conversation = await localApi.post<{ id: string }>('/app/conversations', {
         user_id: this.userId,
         project_id: systemProject.id,
         title: this.settings?.agentName || 'Global Agent',
@@ -502,7 +502,7 @@ class GlobalAgentLoop {
       const now = new Date()
 
       // System project/session bootstrap is needed only when missing.
-      // Avoid re-checking /local/projects on every tick.
+      // Avoid re-checking /app/projects on every tick.
       if (!this.systemProjectId || !this.state.conversationId) {
         await this.ensureSystemProjectAndSession()
       }
@@ -575,7 +575,7 @@ class GlobalAgentLoop {
   private async maybeRolloverSession(): Promise<void> {
     if (!this.state.conversationId || !this.settings?.modelContextLength) return
 
-    const messages = await localApi.get<any[]>(`/local/conversations/${this.state.conversationId}/messages`)
+    const messages = await localApi.get<any[]>(`/app/conversations/${this.state.conversationId}/messages`)
     const totalText = messages.map(msg => msg.content || '').join('\\n')
     const estimatedTokens = this.estimateTokens(totalText)
 
@@ -654,7 +654,7 @@ class GlobalAgentLoop {
       rolloverReason: 'context_limit',
     })
 
-    const newConversation = await localApi.post<{ id: string }>('/local/conversations', {
+    const newConversation = await localApi.post<{ id: string }>('/app/conversations', {
       user_id: this.userId,
       project_id: this.systemProjectId,
       title: this.settings?.agentName || 'Global Agent',
@@ -684,7 +684,7 @@ class GlobalAgentLoop {
     if (!this.state.conversationId || !this.userId) return
 
     const conversationId = this.state.conversationId
-    const messages = await localApi.get<any[]>(`/local/conversations/${conversationId}/messages`)
+    const messages = await localApi.get<any[]>(`/app/conversations/${conversationId}/messages`)
 
     const history = messages.map(msg => ({
       role: msg.role,

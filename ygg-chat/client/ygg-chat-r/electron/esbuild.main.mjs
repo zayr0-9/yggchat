@@ -60,3 +60,21 @@ await esbuild.build({
 })
 
 console.log('✅ toolRuntimeUtility.ts bundled to toolRuntimeUtility.mjs')
+
+// Bundle mobile headless UI (React) for LAN access
+await esbuild.build({
+  entryPoints: [path.join(__dirname, 'headlessServer', 'ui', 'mobile', 'src', 'main.tsx')],
+  bundle: true,
+  platform: 'browser',
+  target: 'es2020',
+  outfile: path.join(__dirname, 'headlessServer', 'ui', 'mobile', 'assets', 'mobile-app.js'),
+  format: 'esm',
+  sourcemap: true,
+  define: {
+    'process.env.NODE_ENV': '"production"',
+  },
+  resolveExtensions: ['.tsx', '.ts', '.js', '.mjs', '.json'],
+  logLevel: 'info',
+})
+
+console.log('✅ mobile React UI bundled to headlessServer/ui/mobile/assets/mobile-app.js')

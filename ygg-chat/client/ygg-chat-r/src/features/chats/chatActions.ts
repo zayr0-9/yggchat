@@ -3829,7 +3829,7 @@ export const updateMessage = createAsyncThunk<
           body.content_blocks = content_blocks
         }
 
-        updated = await localApi.put<Message>(`/local/messages/${id}`, body)
+        updated = await localApi.put<Message>(`/app/messages/${id}`, body)
       } else {
         const body: any = { content, note }
         if (content_blocks) {
@@ -3932,8 +3932,8 @@ export const deleteMessage = createAsyncThunk<
     // })
 
     if (isLocalMode) {
-      // console.log('[deleteMessage] -> Routing to LOCAL API: /local/messages/' + id)
-      await localApi.delete(`/local/messages/${id}`)
+      // console.log('[deleteMessage] -> Routing to LOCAL API: /app/messages/' + id)
+      await localApi.delete(`/app/messages/${id}`)
     } else {
       // console.log('[deleteMessage] -> Routing to CLOUD API: /messages/' + id)
       await apiCall(`/messages/${id}`, auth.accessToken, { method: 'DELETE' })
@@ -6363,7 +6363,7 @@ export const fetchMessageTree = createAsyncThunk<
     if (shouldUseLocalApi(storageMode, environment)) {
       // console.log('[fetchMessageTree] Routing to LOCAL API')
       response = await localApi.get<{ messages: Message[]; tree: any }>(
-        `/local/conversations/${conversationId}/messages/tree`
+        `/app/conversations/${conversationId}/messages/tree`
       )
     } else {
       // console.log('[fetchMessageTree] Routing to CLOUD API')
@@ -6573,7 +6573,7 @@ export const initializeUserAndConversation = createAsyncThunk<
         throw new Error('User not authenticated')
       }
 
-      const conversation = await localApi.post<{ id: ConversationId }>('/local/conversations', {
+      const conversation = await localApi.post<{ id: ConversationId }>('/app/conversations', {
         user_id: auth.userId,
         title: 'New Conversation',
         storage_mode: 'local',
@@ -6627,8 +6627,8 @@ export const deleteSelectedNodes = createAsyncThunk<
 
     let response: { deleted: number }
     if (isLocalMode) {
-      // console.log('[deleteSelectedNodes] -> Routing to LOCAL API: /local/messages/deleteMany')
-      response = await localApi.post<{ deleted: number }>('/local/messages/deleteMany', { ids })
+      // console.log('[deleteSelectedNodes] -> Routing to LOCAL API: /app/messages/deleteMany')
+      response = await localApi.post<{ deleted: number }>('/app/messages/deleteMany', { ids })
     } else {
       // console.log('[deleteSelectedNodes] -> Routing to CLOUD API: /messages/deleteMany')
       response = await apiCall<{ deleted: number }>('/messages/deleteMany', auth.accessToken, {
@@ -6663,7 +6663,7 @@ export const updateConversationTitle = createAsyncThunk<
 
     // Route to appropriate API based on storage mode
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { title })
+      const updated = await localApi.patch<Conversation>(`/app/conversations/${id}`, { title })
       syncConversationTitleAcrossCaches(extra.queryClient, updated)
       return updated
     }
@@ -7100,7 +7100,7 @@ export const insertBulkMessages = createAsyncThunk<
     const effectiveStorageMode = storageMode || getStorageModeFromCache(extra.queryClient, conversationId)
     if (shouldUseLocalApi(effectiveStorageMode, environment)) {
       const response = await localApi.post<{ messages: Message[] }>(
-        `/local/conversations/${conversationId}/messages/bulk`,
+        `/app/conversations/${conversationId}/messages/bulk`,
         { messages }
       )
       return response.messages
@@ -7429,7 +7429,7 @@ export const sendHermesMessage = createAsyncThunk<
                   if (!completedMessage) {
                     try {
                       const latest = await localApi.get<{ messages: Message[]; tree: any }>(
-                        `/local/conversations/${conversationId}/messages/tree`
+                        `/app/conversations/${conversationId}/messages/tree`
                       )
                       completedMessage = latest.messages?.find(msg => String(msg.id) === String(completedMessageId))
                     } catch (fetchError) {

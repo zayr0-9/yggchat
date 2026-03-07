@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>YGG Headless OpenAI OAuth Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #0b1020; color: #e5e7eb; }
+    .wrap { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #121a32; border: 1px solid #243154; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+    h1 { margin: 0 0 10px; font-size: 20px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    input, select, button, textarea { background: #0e152a; color: #e5e7eb; border: 1px solid #2a3d68; border-radius: 8px; padding: 8px; }
+    textarea { width: 100%; min-height: 90px; resize: vertical; }
+    button { cursor: pointer; }
+    button.primary { background: #2563eb; border-color: #2563eb; }
+    .muted { color: #9ca3af; font-size: 12px; }
+    #chat { min-height: 260px; max-height: 520px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+    .msg { padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; }
+    .user { background: #1f3b78; align-self: flex-end; }
+    .assistant { background: #1f2937; align-self: flex-start; }
+    .sys { background: #2d1b4a; align-self: stretch; }
+    #toolsPanel > summary { cursor: pointer; list-style: none; }
+    #toolsPanel > summary::-webkit-details-marker { display: none; }
+    #toolsSummaryTitle { font-weight: 700; }
+    #toolsSummaryChevron { margin-left: 8px; color: #9ca3af; }
+    #toolsPanel[open] #toolsSummaryChevron { transform: rotate(90deg); display: inline-block; }
+    #toolsControls { margin-top: 10px; }
+    #toolsList { max-height: 230px; overflow: auto; border: 1px solid #2a3d68; border-radius: 8px; padding: 8px; margin-top: 8px; }
+    .tool-item { display: block; padding: 4px 0; }
+    .tool-name { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }
+    .tool-desc { color: #9ca3af; font-size: 11px; margin-left: 22px; }
+    @media (max-width: 768px) {
+      .wrap { margin: 12px auto; }
+      .card { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Headless OpenAI OAuth + Chat Harness</h1>
+      <div class="row">
+        <label>User ID <input id="userId" value="headless-test-user" /></label>
+        <label>Model
+          <select id="model">
+            <option>gpt-5.1-codex-mini</option>
+            <option>gpt-5.1-codex</option>
+            <option>gpt-5.2-codex</option>
+            <option>gpt-5.3-codex</option>
+            <option>gpt-5.1</option>
+            <option>gpt-5.2</option>
+            <option>gpt-4o</option>
+          </select>
+        </label>
+        <button id="oauthBtn" class="primary">Connect OpenAI OAuth</button>
+        <button id="resetBtn">Reset Session</button>
+      </div>
+      <div id="status" class="muted" style="margin-top:8px;">Not authenticated.</div>
+      <div class="muted" style="margin-top:6px;">Modes: Provider-only = single Responses turn. Orchestrator = full headless tool loop.</div>
+      <!-- route refs: /api/openai/auth/start /api/openai/auth/complete /api/provider-auth/openai/token /api/headless/provider/openai/responses /api/conversations/:id/messages /api/headless/ephemeral/chat /api/headless/ephemeral/tools -->
+    </div>
+
+    <div class="card">
+      <details id="toolsPanel" open>
+        <summary>
+          <span id="toolsSummaryTitle">Loaded Tools</span>
+          <span id="toolsSummaryChevron">▶</span>
+        </summary>
+        <div id="toolsControls" class="row">
+          <button id="refreshToolsBtn">Refresh Tools</button>
+          <button id="selectAllToolsBtn">Select All</button>
+          <button id="clearToolsBtn">Clear</button>
+        </div>
+        <div id="toolsMeta" class="muted" style="margin-top:8px;">Loading tools...</div>
+        <div id="toolsList"></div>
+      </details>
+    </div>
+
+    <div class="card">
+      <div id="chat"></div>
+    </div>
+
+    <div class="card">
+      <textarea id="prompt" placeholder="Type a message..."></textarea>
+      <div class="row" style="margin-top:8px;">
+        <label>Mode
+          <select id="sendMode">
+            <option value="provider">Provider only (single turn)</option>
+            <option value="orchestrator">Headless orchestrator (tool loop)</option>
+          </select>
+        </label>
+        <button id="sendBtn" class="primary">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/api/headless/ephemeral/harness.js" onerror="document.getElementById('status').textContent='Failed to load /api/headless/ephemeral/harness.js';"></script>
+  <script>
+    if (!window.__headlessHarnessBooted) {
+      var statusEl = document.getElementById('status')
+      if (statusEl) statusEl.textContent = 'Harness script did not boot. Check /api/headless/ephemeral/harness.js response.'
+    }
+  </script>
+</body>
+</html>

@@ -437,7 +437,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
       try {
         const result = await localApi.get<{ messages: Message[] }>(
-          `/local/conversations/${conversationId}/messages/tree`
+          `/app/conversations/${conversationId}/messages/tree`
         )
         if (cancelled) return
         const map = buildSubagentMap(Array.isArray(result?.messages) ? result.messages : [])

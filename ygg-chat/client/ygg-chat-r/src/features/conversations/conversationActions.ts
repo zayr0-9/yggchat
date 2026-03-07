@@ -38,14 +38,14 @@ export const fetchConversations = createAsyncThunk<
     }
 
     if (isElectronCommunityMode()) {
-      return await localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+      return await localApi.get<Conversation[]>(`/app/conversations?userId=${auth.userId}`)
     }
 
     // In Electron mode, fetch both cloud and local conversations
     if (environment === 'electron') {
       const [cloudConversations, localConversations] = await Promise.all([
         api.get<Conversation[]>(`/users/${auth.userId}/conversations`, auth.accessToken),
-        localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`),
+        localApi.get<Conversation[]>(`/app/conversations?userId=${auth.userId}`),
       ])
 
       // Merge and sort by updated_at
@@ -77,7 +77,7 @@ export const fetchRecentConversations = createAsyncThunk<
     }
 
     if (isElectronCommunityMode()) {
-      const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+      const localConversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${auth.userId}`)
       return [...localConversations]
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
         .slice(0, limit)
@@ -98,7 +98,7 @@ export const fetchConversationsByProjectId = createAsyncThunk<Conversation[], Pr
       const { auth } = extra
 
       if (isElectronCommunityMode()) {
-        const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+        const localConversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${auth.userId}`)
         return localConversations.filter(conversation => String(conversation.project_id) === String(projectId))
       }
 
@@ -161,7 +161,7 @@ export const createConversation = createAsyncThunk<
 
       // Route to local or cloud API
       if (shouldUseLocalApi(effectiveStorageMode, environment)) {
-        const conversation = await localApi.post<Conversation>('/local/conversations', {
+        const conversation = await localApi.post<Conversation>('/app/conversations', {
           user_id: auth.userId,
           title: title || null,
           project_id: projectId,
@@ -214,7 +214,7 @@ export const updateConversation = createAsyncThunk<
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      const conversation = await localApi.patch<Conversation>(`/local/conversations/${id}`, { title })
+      const conversation = await localApi.patch<Conversation>(`/app/conversations/${id}`, { title })
       return conversation
     }
 
@@ -246,7 +246,7 @@ export const deleteConversation = createAsyncThunk<
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      await localApi.delete(`/local/conversations/${id}`)
+      await localApi.delete(`/app/conversations/${id}`)
     } else {
       await api.delete(`/conversations/${id}/`, auth.accessToken)
       // Sync deletion to local SQLite
@@ -267,7 +267,7 @@ export const fetchSystemPrompt = createAsyncThunk<string | null, ConversationId,
       const { auth } = extra
 
       if (isElectronCommunityMode()) {
-        const conversation = await localApi.get<Conversation>(`/local/conversations/${conversationId}`)
+        const conversation = await localApi.get<Conversation>(`/app/conversations/${conversationId}`)
         const value = typeof conversation.system_prompt === 'string' ? conversation.system_prompt : null
         dispatch(systemPromptSet(value))
         return value
@@ -292,7 +292,7 @@ export const fetchContext = createAsyncThunk<string | null, ConversationId, { ex
       const { auth } = extra
 
       if (isElectronCommunityMode()) {
-        const conversation = await localApi.get<Conversation>(`/local/conversations/${conversationId}`)
+        const conversation = await localApi.get<Conversation>(`/app/conversations/${conversationId}`)
         const value = conversation.conversation_context ?? null
         dispatch(convContextSet(value))
         return value
@@ -326,7 +326,7 @@ export const updateSystemPrompt = createAsyncThunk<
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { system_prompt: systemPrompt })
+      const updated = await localApi.patch<Conversation>(`/app/conversations/${id}`, { system_prompt: systemPrompt })
       // Mirror to client state
       dispatch(systemPromptSet(updated.system_prompt ?? null))
       return { id: updated.id, system_prompt: updated.system_prompt } as SystemPromptPatchResponse
@@ -359,7 +359,7 @@ export const updateContext = createAsyncThunk<
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { conversation_context: context })
+      const updated = await localApi.patch<Conversation>(`/app/conversations/${id}`, { conversation_context: context })
       const next = { id: updated.id, context: updated.conversation_context ?? null }
       dispatch(convContextSet(next.context))
       return next
@@ -391,7 +391,7 @@ export const updateResearchNote = createAsyncThunk<
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { research_note: researchNote })
+      const updated = await localApi.patch<Conversation>(`/app/conversations/${id}`, { research_note: researchNote })
       return updated
     }
 
@@ -423,7 +423,7 @@ export const updateCwd = createAsyncThunk<
     }
 
     if (shouldUseLocalApi(effectiveMode, environment)) {
-      const updated = await localApi.patch<Conversation>(`/local/conversations/${id}`, { cwd })
+      const updated = await localApi.patch<Conversation>(`/app/conversations/${id}`, { cwd })
       return updated
     }
 
@@ -454,7 +454,7 @@ export const searchConversations = createAsyncThunk<
     }
 
     if (isElectronCommunityMode()) {
-      const localConversations = await localApi.get<Conversation[]>(`/local/conversations?userId=${auth.userId}`)
+      const localConversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${auth.userId}`)
       const normalizedQuery = query.trim().toLowerCase()
       const filtered = localConversations.filter(conversation => {
         const inProject = projectId ? String(conversation.project_id) === String(projectId) : true

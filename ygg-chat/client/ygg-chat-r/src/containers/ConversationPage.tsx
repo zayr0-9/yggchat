@@ -272,7 +272,7 @@ const ConversationPage: React.FC = () => {
     const nextFavorite = favoriteConversationIds.has(conv.id) ? 0 : 1
 
     try {
-      await localApi.patch(`/local/conversations/${conv.id}/favorite`, { favorite: nextFavorite })
+      await localApi.patch(`/app/conversations/${conv.id}/favorite`, { favorite: nextFavorite })
       refetchConversations()
       queryClient.invalidateQueries({ queryKey: ['conversations', 'favorites'] })
       queryClient.invalidateQueries({ queryKey: ['conversations', 'recent'] })
