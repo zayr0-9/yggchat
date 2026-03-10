@@ -9,6 +9,8 @@ interface MessageListProps {
   scrollToMessageId?: string | null
   onScrollToMessageHandled?: () => void
   userActionsDisabled?: boolean
+  currentUserId?: string | null
+  rootPath?: string | null
   onBranchUserMessage?: (message: MobileMessage) => void
   onDeleteUserMessage?: (message: MobileMessage) => void
 }
@@ -20,6 +22,8 @@ export const MessageList: React.FC<MessageListProps> = ({
   scrollToMessageId = null,
   onScrollToMessageHandled,
   userActionsDisabled = false,
+  currentUserId = null,
+  rootPath = null,
   onBranchUserMessage,
   onDeleteUserMessage,
 }) => {
@@ -73,7 +77,11 @@ export const MessageList: React.FC<MessageListProps> = ({
               message={message}
               showUserActions
               userActionsDisabled={userActionsDisabled}
-              isBranchTarget={branchTargetMessageId === message.id}
+              isBranchTarget={
+                branchTargetMessageId !== null && String(branchTargetMessageId) === String(message.id)
+              }
+              currentUserId={currentUserId}
+              rootPath={rootPath}
               onBranchUserMessage={onBranchUserMessage}
               onDeleteUserMessage={onDeleteUserMessage}
             />
@@ -81,7 +89,9 @@ export const MessageList: React.FC<MessageListProps> = ({
         )
       })}
 
-      {streamingMessage ? <MessageBubble message={streamingMessage} isStreaming /> : null}
+      {streamingMessage ? (
+        <MessageBubble message={streamingMessage} isStreaming currentUserId={currentUserId} rootPath={rootPath} />
+      ) : null}
     </div>
   )
 }

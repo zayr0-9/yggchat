@@ -2535,6 +2535,14 @@ function setupServer() {
     // Return hardcoded list of ChatGPT models available with Plus/Pro subscription
     const models = [
       {
+        id: 'gpt-5.4',
+        name: 'GPT-5.4',
+        displayName: 'GPT-5.4',
+        description: 'Latest GPT-5.4 frontier model for professional work',
+        contextLength: 400000,
+        maxCompletionTokens: 16384,
+      },
+      {
         id: 'gpt-5.3-codex',
         name: 'GPT-5.3 Codex',
         displayName: 'GPT-5.3 Codex',

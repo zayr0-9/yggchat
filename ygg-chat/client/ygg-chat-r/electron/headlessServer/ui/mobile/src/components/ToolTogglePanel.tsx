@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Badge, Button } from './ui'
 import type { MobileCustomTool } from '../types'
 
 interface ToolTogglePanelProps {
@@ -37,9 +38,9 @@ export const ToolTogglePanel: React.FC<ToolTogglePanelProps> = ({
 
         <div className='mobile-tool-panel-body'>
           <div className='mobile-tool-panel-actions'>
-            <button type='button' onClick={onRefresh} disabled={disabled || loading}>
+            <Button onClick={onRefresh} disabled={disabled || loading} variant='outline' size='sm'>
               {loading ? 'Refreshing…' : 'Refresh'}
-            </button>
+            </Button>
           </div>
 
           {tools.length === 0 ? (
@@ -53,19 +54,20 @@ export const ToolTogglePanel: React.FC<ToolTogglePanelProps> = ({
                     <div>
                       <strong>{tool.name}</strong>
                       <div className='mobile-tool-toggle-meta'>
-                        <span>{tool.enabled ? 'Enabled' : 'Disabled'}</span>
-                        <span>{tool.loaded ? 'Loaded' : 'Not loaded'}</span>
+                        <Badge variant={tool.enabled ? 'success' : 'outline'}>{tool.enabled ? 'Enabled' : 'Disabled'}</Badge>
+                        <Badge variant={tool.loaded ? 'default' : 'outline'}>{tool.loaded ? 'Loaded' : 'Not loaded'}</Badge>
                       </div>
                       {tool.description ? <p>{tool.description}</p> : null}
                     </div>
 
-                    <button
-                      type='button'
+                    <Button
                       onClick={() => onToggleTool(tool.name, !tool.enabled)}
                       disabled={disabled || toggling || loading}
+                      variant={tool.enabled ? 'secondary' : 'default'}
+                      size='sm'
                     >
                       {toggling ? 'Saving…' : tool.enabled ? 'Disable' : 'Enable'}
-                    </button>
+                    </Button>
                   </div>
                 )
               })}

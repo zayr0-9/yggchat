@@ -209,6 +209,32 @@ describeIfSqlite('registerAppAutomationRoutes', () => {
     expect(persisted.storage_mode).toBe('local')
   })
 
+  it('returns latest conversation via single endpoint', async () => {
+    const now = new Date().toISOString()
+
+    db!.prepare(
+      `
+      INSERT INTO conversations (id, project_id, user_id, title, model_name, system_prompt, conversation_context, research_note, cwd, storage_mode, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+    ).run('conv-old', null, 'latest-user', 'Old', 'unknown', null, null, null, null, 'local', now, '2026-01-01T00:00:00.000Z')
+
+    db!.prepare(
+      `
+      INSERT INTO conversations (id, project_id, user_id, title, model_name, system_prompt, conversation_context, research_note, cwd, storage_mode, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+    ).run('conv-new', null, 'latest-user', 'New', 'unknown', null, null, null, null, 'local', now, '2026-02-01T00:00:00.000Z')
+
+    const latestRes = await fetch(`${baseUrl}/api/app/conversations/latest?userId=latest-user`)
+    expect(latestRes.status).toBe(200)
+    const latestPayload = (await latestRes.json()) as any
+    expect(latestPayload.id).toBe('conv-new')
+
+    const missingUserRes = await fetch(`${baseUrl}/api/app/conversations/latest`)
+    expect(missingUserRes.status).toBe(400)
+  })
+
   it('maintains message tree invariants for children_ids and recursive deletes', async () => {
     const convRes = await postJson(baseUrl, '/api/app/conversations', {
       title: 'Tree Test',

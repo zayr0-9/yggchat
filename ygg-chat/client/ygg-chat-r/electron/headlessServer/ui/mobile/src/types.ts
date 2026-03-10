@@ -55,8 +55,8 @@ export interface MobileMessageTreePayload {
 export interface ToolCallLike {
   id: string
   name: string
-  arguments?: Record<string, unknown>
-  result?: string
+  arguments?: unknown
+  result?: unknown
   status?: string
 }
 
@@ -106,4 +106,11 @@ export interface MobileInferenceTool {
   name: string
   description?: string
   inputSchema?: Record<string, unknown>
+}
+
+export interface MobileLocalFileEntry {
+  name: string
+  isDirectory: boolean
+  path: string
+  relativePath?: string
 }

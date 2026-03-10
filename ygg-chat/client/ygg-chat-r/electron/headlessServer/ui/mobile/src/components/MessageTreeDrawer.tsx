@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from './ui'
 import type { MobileMessageTreeNode } from '../types'
 
 interface PositionedNode {
@@ -27,6 +28,8 @@ interface MessageTreeDrawerProps {
   tree: MobileMessageTreeNode | null
   activePathIds: string[]
   activeTipId?: string | null
+  hideEmptyAssistantMessages: boolean
+  onToggleHideEmptyAssistantMessages: () => void
   onSelectMessage: (messageId: string) => void
   onClose: () => void
 }
@@ -56,20 +59,10 @@ const normalizeRoots = (tree: MobileMessageTreeNode | null): MobileMessageTreeNo
   return [tree]
 }
 
-const compareNodeId = (left: string, right: string): number => {
-  const leftNum = Number(left)
-  const rightNum = Number(right)
-  const leftIsNumeric = Number.isFinite(leftNum)
-  const rightIsNumeric = Number.isFinite(rightNum)
-
-  if (leftIsNumeric && rightIsNumeric) return leftNum - rightNum
-  return left.localeCompare(right)
-}
-
-const sortChildren = (children: MobileMessageTreeNode[] | undefined): MobileMessageTreeNode[] => {
-  const list = Array.isArray(children) ? [...children] : []
-  list.sort((a, b) => compareNodeId(String(a.id), String(b.id)))
-  return list
+const getChildrenInDisplayOrder = (children: MobileMessageTreeNode[] | undefined): MobileMessageTreeNode[] => {
+  // Keep backend-provided sibling order (children_ids sequence) so mobile matches desktop
+  // branch ordering semantics (latest branch appears on the same side as desktop).
+  return Array.isArray(children) ? [...children] : []
 }
 
 const getPreviewLines = (message: string): [string, string] => {
@@ -98,7 +91,7 @@ const buildTreeLayout = (tree: MobileMessageTreeNode | null): TreeLayout => {
     const id = String(node.id)
     if (widthCache.has(id)) return widthCache.get(id) as number
 
-    const children = sortChildren(node.children)
+    const children = getChildrenInDisplayOrder(node.children)
     const width = children.length === 0 ? 1 : children.reduce((sum, child) => sum + subtreeWidth(child), 0)
     widthCache.set(id, width)
     return width
@@ -110,7 +103,7 @@ const buildTreeLayout = (tree: MobileMessageTreeNode | null): TreeLayout => {
   const edges: PositionedEdge[] = []
 
   const placeNode = (node: MobileMessageTreeNode, centerXUnit: number, depth: number): void => {
-    const children = sortChildren(node.children)
+    const children = getChildrenInDisplayOrder(node.children)
 
     nodes.push({
       id: String(node.id),
@@ -159,6 +152,8 @@ export const MessageTreeDrawer: React.FC<MessageTreeDrawerProps> = ({
   tree,
   activePathIds,
   activeTipId = null,
+  hideEmptyAssistantMessages,
+  onToggleHideEmptyAssistantMessages,
   onSelectMessage,
   onClose,
 }) => {
@@ -459,9 +454,9 @@ export const MessageTreeDrawer: React.FC<MessageTreeDrawerProps> = ({
           <div className='mobile-tree-drawer-grabber' />
           <div className='mobile-tree-drawer-title-row'>
             <strong>Chat Tree</strong>
-            <button type='button' onClick={onClose}>
+            <Button onClick={onClose} variant='outline' size='sm'>
               Close
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -471,15 +466,18 @@ export const MessageTreeDrawer: React.FC<MessageTreeDrawerProps> = ({
           {layout.nodes.length ? (
             <>
               <div className='mobile-tree-canvas-toolbar'>
-                <button type='button' onClick={() => handleZoomStep(1.2)}>
+                <Button onClick={() => handleZoomStep(1.2)} variant='outline' size='sm'>
                   +
-                </button>
-                <button type='button' onClick={() => handleZoomStep(1 / 1.2)}>
+                </Button>
+                <Button onClick={() => handleZoomStep(1 / 1.2)} variant='outline' size='sm'>
                   −
-                </button>
-                <button type='button' onClick={fitToView}>
+                </Button>
+                <Button onClick={fitToView} variant='outline' size='sm'>
                   Fit
-                </button>
+                </Button>
+                <Button onClick={onToggleHideEmptyAssistantMessages} variant='outline' size='sm'>
+                  {hideEmptyAssistantMessages ? 'Show Empty AI' : 'Hide Empty AI'}
+                </Button>
                 <span>Zoom {Math.round(zoom * 100)}%</span>
               </div>
 

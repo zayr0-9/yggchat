@@ -43,6 +43,22 @@ const extractReasoningTextsFromResponsesOutputItems = (items: unknown): string[]
   return reasoningTexts
 }
 
+const normalizeReasoningText = (value: string): string => value.trim().replace(/\s+/g, ' ')
+
+const pushUniqueReasoningItem = (
+  renderItems: ParsedRenderItem[],
+  seen: Set<string>,
+  key: string,
+  text: string
+) => {
+  const normalized = normalizeReasoningText(text)
+  if (!normalized) return
+  if (seen.has(normalized)) return
+
+  seen.add(normalized)
+  renderItems.push({ type: 'reasoning', key, text })
+}
+
 const toToolCallArray = (message: MobileMessage): ToolCallLike[] => {
   const raw = parseMaybeJson<unknown>(message.tool_calls)
   if (Array.isArray(raw)) return raw as ToolCallLike[]
@@ -50,18 +66,87 @@ const toToolCallArray = (message: MobileMessage): ToolCallLike[] => {
   return []
 }
 
-const ensureToolGroup = (groups: Map<string, ToolGroup>, order: string[], id: string, name: string, args?: Record<string, unknown>) => {
+const normalizeToolArgs = (value: unknown): Record<string, unknown> | undefined => {
+  if (value == null) return undefined
+
+  if (typeof value === 'string') {
+    const parsed = parseMaybeJson<unknown>(value)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+    return undefined
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+
+  return undefined
+}
+
+export type HtmlToolPayload = {
+  html: string
+  toolName?: string | null
+}
+
+const extractHtmlFromResolvedPayload = (resolved: unknown): HtmlToolPayload | null => {
+  if (!resolved || typeof resolved !== 'object') return null
+
+  const resolvedRecord = resolved as Record<string, unknown>
+
+  if (typeof resolvedRecord.html === 'string' && resolvedRecord.html.trim()) {
+    return {
+      html: resolvedRecord.html,
+      toolName:
+        typeof resolvedRecord.toolName === 'string'
+          ? resolvedRecord.toolName
+          : typeof resolvedRecord.tool_name === 'string'
+            ? resolvedRecord.tool_name
+            : null,
+    }
+  }
+
+  if (resolvedRecord.type === 'text/html' && typeof resolvedRecord.content === 'string' && resolvedRecord.content.trim()) {
+    return {
+      html: resolvedRecord.content,
+      toolName:
+        typeof resolvedRecord.toolName === 'string'
+          ? resolvedRecord.toolName
+          : typeof resolvedRecord.tool_name === 'string'
+            ? resolvedRecord.tool_name
+            : null,
+    }
+  }
+
+  return null
+}
+
+export const extractHtmlFromToolResult = (content: unknown): HtmlToolPayload | null => {
+  if (content == null) return null
+
+  if (typeof content === 'string') {
+    const parsed = parseMaybeJson<unknown>(content)
+    if (parsed == null) return null
+    return extractHtmlFromResolvedPayload(parsed)
+  }
+
+  return extractHtmlFromResolvedPayload(content)
+}
+
+const ensureToolGroup = (groups: Map<string, ToolGroup>, order: string[], id: string, name: string, args?: unknown) => {
+  const normalizedArgs = normalizeToolArgs(args)
+
   if (groups.has(id)) {
     const existing = groups.get(id)!
     if (!existing.name && name) existing.name = name
-    if (!existing.args && args) existing.args = args
+    if (!existing.args && normalizedArgs) existing.args = normalizedArgs
     return existing
   }
 
   const next: ToolGroup = {
     id,
     name: name || 'tool',
-    args,
+    args: normalizedArgs,
     results: [],
   }
 
@@ -72,6 +157,7 @@ const ensureToolGroup = (groups: Map<string, ToolGroup>, order: string[], id: st
 
 export const buildRenderItemsForMessage = (message: MobileMessage): ParsedRenderItem[] => {
   const renderItems: ParsedRenderItem[] = []
+  const seenReasoningTexts = new Set<string>()
   const toolGroups = new Map<string, ToolGroup>()
   const toolOrder: string[] = []
 
@@ -83,6 +169,15 @@ export const buildRenderItemsForMessage = (message: MobileMessage): ParsedRender
       return left - right
     })
 
+    const hasPrimaryReasoningBlock = sorted.some(block => {
+      if (!block || typeof block !== 'object') return false
+      if (block.type === 'thinking' && typeof block.content === 'string' && block.content.trim()) return true
+      if (block.type === 'reasoning_details' && Array.isArray(block.reasoningDetails)) {
+        return block.reasoningDetails.some((detail: any) => typeof detail?.text === 'string' && detail.text.trim())
+      }
+      return false
+    })
+
     sorted.forEach((block, index) => {
       if (!block || typeof block !== 'object') return
 
@@ -92,7 +187,7 @@ export const buildRenderItemsForMessage = (message: MobileMessage): ParsedRender
       }
 
       if (block.type === 'thinking' && typeof block.content === 'string' && block.content.trim()) {
-        renderItems.push({ type: 'reasoning', key: `thinking-${index}`, text: block.content })
+        pushUniqueReasoningItem(renderItems, seenReasoningTexts, `thinking-${index}`, block.content)
         return
       }
 
@@ -102,7 +197,7 @@ export const buildRenderItemsForMessage = (message: MobileMessage): ParsedRender
           .filter(Boolean)
           .join('\n')
         if (text.trim()) {
-          renderItems.push({ type: 'reasoning', key: `reasoning-details-${index}`, text })
+          pushUniqueReasoningItem(renderItems, seenReasoningTexts, `reasoning-details-${index}`, text)
         }
         return
       }
@@ -125,14 +220,13 @@ export const buildRenderItemsForMessage = (message: MobileMessage): ParsedRender
       }
 
       if (block.type === 'responses_output_items') {
+        // Prefer content_blocks reasoning as the primary source of truth.
+        // Only fall back to responses_output_items when no primary reasoning block exists.
+        if (hasPrimaryReasoningBlock) return
+
         const extracted = extractReasoningTextsFromResponsesOutputItems(block.items)
         extracted.forEach((text, reasoningIndex) => {
-          if (!text.trim()) return
-          renderItems.push({
-            type: 'reasoning',
-            key: `responses-reasoning-${index}-${reasoningIndex}`,
-            text,
-          })
+          pushUniqueReasoningItem(renderItems, seenReasoningTexts, `responses-reasoning-${index}-${reasoningIndex}`, text)
         })
       }
     })
@@ -140,16 +234,19 @@ export const buildRenderItemsForMessage = (message: MobileMessage): ParsedRender
     renderItems.push({ type: 'text', key: 'message-content', text: message.content })
   }
 
-  const legacyToolCalls = toToolCallArray(message)
-  for (const toolCall of legacyToolCalls) {
-    const id = String(toolCall.id || `legacy-tool-${toolOrder.length}`)
-    const group = ensureToolGroup(toolGroups, toolOrder, id, String(toolCall.name || 'tool'), toolCall.arguments)
-    if (toolCall.result) {
-      group.results.push({
-        tool_use_id: id,
-        content: toolCall.result,
-        is_error: toolCall.status === 'failed',
-      })
+  // Legacy fallback: only consume message.tool_calls when content_blocks did not already define tool groups.
+  if (toolOrder.length === 0) {
+    const legacyToolCalls = toToolCallArray(message)
+    for (const toolCall of legacyToolCalls) {
+      const id = String(toolCall.id || `legacy-tool-${toolOrder.length}`)
+      const group = ensureToolGroup(toolGroups, toolOrder, id, String(toolCall.name || 'tool'), toolCall.arguments)
+      if (toolCall.result) {
+        group.results.push({
+          tool_use_id: id,
+          content: toolCall.result,
+          is_error: toolCall.status === 'failed',
+        })
+      }
     }
   }
 

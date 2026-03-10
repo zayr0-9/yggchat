@@ -7,7 +7,6 @@ import { default as projectsReducer } from '../features/projects/projectSlice'
 import { default as searchReducer } from '../features/search/searchSlice'
 import { uiReducer } from '../features/ui'
 import { usersReducer } from '../features/users'
-import { voiceSettingsReducer } from '../features/voiceSettings'
 import { thunkExtraArg } from './thunkExtra'
 
 // Root reducer configuration
@@ -18,7 +17,6 @@ const rootReducer = {
   search: searchReducer,
   projects: projectsReducer,
   ideContext: ideContextReducer,
-  voiceSettings: voiceSettingsReducer,
   ui: uiReducer,
 }
 

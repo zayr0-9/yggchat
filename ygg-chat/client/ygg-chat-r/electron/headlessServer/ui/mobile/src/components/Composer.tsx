@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react'
+import { Button, Textarea } from './ui'
 
 interface ComposerProps {
   value: string
@@ -11,8 +12,8 @@ interface ComposerProps {
   onCancelBranch?: () => void
 }
 
-const DEFAULT_ROWS = 3
-const MAX_ROWS = 8
+const DEFAULT_ROWS = 1
+const MAX_ROWS = 6
 
 export const Composer: React.FC<ComposerProps> = ({
   value,
@@ -54,14 +55,14 @@ export const Composer: React.FC<ComposerProps> = ({
         <div className='mobile-branch-banner'>
           <span>{branchLabel || 'Branching from selected message'}</span>
           {onCancelBranch ? (
-            <button type='button' onClick={onCancelBranch} disabled={disabled || sending}>
+            <Button onClick={onCancelBranch} disabled={disabled || sending} variant='ghost' size='sm'>
               Cancel branch
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}
 
-      <textarea
+      <Textarea
         ref={textareaRef}
         rows={DEFAULT_ROWS}
         value={value}
@@ -76,9 +77,9 @@ export const Composer: React.FC<ComposerProps> = ({
           }
         }}
       />
-      <button type='button' onClick={onSubmit} disabled={disabled || !value.trim() || sending}>
-        {sending ? 'Sending…' : isBranching ? 'Send Branch' : 'Send'}
-      </button>
+      <Button onClick={onSubmit} disabled={disabled || sending || !value.trim()}>
+        {sending ? 'Stop' : isBranching ? 'Send Branch' : 'Send'}
+      </Button>
     </div>
   )
 }

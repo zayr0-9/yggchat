@@ -62,6 +62,7 @@ export interface LocalServerStatus {
   localServerRunning: boolean
   localServerPort: number | null
   localServerUrl: string | null
+  localServerLanUrl: string | null
   localServerError?: string | null
 }
 
@@ -130,12 +131,14 @@ function getDefaultLocalServerStatus(): LocalServerStatus {
     localServerRunning: false,
     localServerPort: null,
     localServerUrl: null,
+    localServerLanUrl: null,
     localServerError: null,
   }
 }
 
 function normalizeLocalServerStatus(raw: Partial<LocalServerStatus> | null | undefined): LocalServerStatus {
   const normalizedUrl = normalizeOrigin(raw?.localServerUrl)
+  const normalizedLanUrl = normalizeOrigin(raw?.localServerLanUrl)
   const normalizedPort =
     typeof raw?.localServerPort === 'number' && Number.isInteger(raw.localServerPort) ? raw.localServerPort : null
 
@@ -143,6 +146,7 @@ function normalizeLocalServerStatus(raw: Partial<LocalServerStatus> | null | und
     localServerRunning: Boolean(raw?.localServerRunning),
     localServerPort: normalizedPort,
     localServerUrl: normalizedUrl,
+    localServerLanUrl: normalizedLanUrl,
     localServerError: raw?.localServerError ?? null,
   }
 }
@@ -189,8 +193,17 @@ export async function getLocalServerOrigin(): Promise<string> {
   return normalizeOrigin(status.localServerUrl) || DEFAULT_LOCAL_SERVER_ORIGIN
 }
 
+export async function getLocalServerLanOrigin(): Promise<string | null> {
+  const status = await fetchLocalServerStatus()
+  return normalizeOrigin(status.localServerLanUrl)
+}
+
 export function getCachedLocalServerOrigin(): string {
   return normalizeOrigin(cachedLocalServerStatus?.localServerUrl) || DEFAULT_LOCAL_SERVER_ORIGIN
+}
+
+export function getCachedLocalServerLanOrigin(): string | null {
+  return normalizeOrigin(cachedLocalServerStatus?.localServerLanUrl)
 }
 
 export async function getLocalApiBase(): Promise<string> {

@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { Badge, Button } from './ui'
 import remarkGfm from 'remark-gfm'
 import type { MobileMessage } from '../types'
 import { buildRenderItemsForMessage } from '../messageParser'
@@ -12,6 +13,8 @@ interface MessageBubbleProps {
   showUserActions?: boolean
   userActionsDisabled?: boolean
   isBranchTarget?: boolean
+  currentUserId?: string | null
+  rootPath?: string | null
   onBranchUserMessage?: (message: MobileMessage) => void
   onDeleteUserMessage?: (message: MobileMessage) => void
 }
@@ -29,6 +32,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   showUserActions = false,
   userActionsDisabled = false,
   isBranchTarget = false,
+  currentUserId = null,
+  rootPath = null,
   onBranchUserMessage,
   onDeleteUserMessage,
 }) => {
@@ -38,7 +43,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
     <article className={`mobile-message ${message.role}${isBranchTarget ? ' branch-target' : ''}`}>
       <header className='mobile-message-header'>
         <span className='mobile-message-role'>{roleLabel(message.role)}</span>
-        {isStreaming ? <span className='mobile-streaming-badge'>streaming</span> : null}
+        {isStreaming ? <Badge className='mobile-streaming-badge'>streaming</Badge> : null}
       </header>
 
       <div className='mobile-message-body'>
@@ -57,18 +62,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             return <ReasoningCard key={item.key} text={item.text} />
           }
 
-          return <ToolCallCard key={item.key} group={item.group} defaultExpanded={false} />
+          return (
+            <ToolCallCard
+              key={item.key}
+              group={item.group}
+              defaultExpanded={false}
+              currentUserId={currentUserId}
+              rootPath={rootPath}
+            />
+          )
         })}
       </div>
 
       {showUserActions && message.role === 'user' && !isStreaming ? (
         <footer className='mobile-message-actions'>
-          <button type='button' onClick={() => onBranchUserMessage?.(message)} disabled={userActionsDisabled}>
+          <Button onClick={() => onBranchUserMessage?.(message)} disabled={userActionsDisabled} variant='outline' size='sm'>
             Branch
-          </button>
-          <button type='button' onClick={() => onDeleteUserMessage?.(message)} disabled={userActionsDisabled}>
+          </Button>
+          <Button
+            onClick={() => onDeleteUserMessage?.(message)}
+            disabled={userActionsDisabled}
+            variant='destructive'
+            size='sm'
+          >
             Delete
-          </button>
+          </Button>
         </footer>
       ) : null}
     </article>

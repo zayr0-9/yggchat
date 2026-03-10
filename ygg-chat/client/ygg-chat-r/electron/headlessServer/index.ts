@@ -11,6 +11,7 @@ import { registerCrudRoutes } from './routes/crudRoutes.js'
 import { registerProviderAuthRoutes } from './routes/providerAuthRoutes.js'
 import { registerMobileUiRoutes } from './routes/mobileUiRoutes.js'
 import { registerCustomToolsRoutes } from './routes/customToolsRoutes.js'
+import { registerCustomToolRpcRoutes } from './routes/customToolRpcRoutes.js'
 import { registerTestHarnessRoutes } from './routes/testHarnessRoutes.js'
 import { ChatOrchestrator } from './services/chatOrchestrator.js'
 import type { ToolExecutor } from './services/toolLoopService.js'
@@ -167,6 +168,7 @@ export function registerHeadlessServerRoutes(app: Express, deps: HeadlessServerR
   registerProviderAuthRoutes(app, { tokenStore })
   registerMobileUiRoutes(app)
   registerCustomToolsRoutes(app)
+  registerCustomToolRpcRoutes(app)
   registerCapabilityRoutes(app, { getDefaultTools: resolveDefaultInferenceTools })
   registerTestHarnessRoutes(app, {
     tokenStore,

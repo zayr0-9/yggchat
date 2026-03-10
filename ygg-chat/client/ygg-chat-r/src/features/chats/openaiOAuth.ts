@@ -22,6 +22,7 @@ const CODEX_GITHUB_HTML_RELEASES = 'https://github.com/openai/codex/releases/lat
 const CODEX_CACHE_TTL_MS = 15 * 60 * 1000
 
 type CodexModelFamily =
+  | 'gpt-5.4'
   | 'gpt-5.3-codex'
   | 'gpt-5.2-codex'
   | 'gpt-5.1-codex-mini'
@@ -31,6 +32,8 @@ type CodexModelFamily =
   | 'gpt-5.1'
 
 const CODEX_PROMPT_FILES: Record<CodexModelFamily, string> = {
+  // GPT-5.4 currently reuses the GPT-5.2 general prompt in codex-rs/core.
+  'gpt-5.4': 'gpt_5_2_prompt.md',
   // GPT-5.3 Codex currently shares the GPT-5.2 Codex instruction prompt in codex-rs/core.
   'gpt-5.3-codex': 'gpt-5.2-codex_prompt.md',
   'gpt-5.2-codex': 'gpt-5.2-codex_prompt.md',
@@ -42,6 +45,7 @@ const CODEX_PROMPT_FILES: Record<CodexModelFamily, string> = {
 }
 
 const CODEX_CACHE_KEYS: Record<CodexModelFamily, string> = {
+  'gpt-5.4': 'openai_codex_instructions_gpt-5.4',
   'gpt-5.3-codex': 'openai_codex_instructions_gpt-5.3-codex',
   'gpt-5.2-codex': 'openai_codex_instructions_gpt-5.2-codex',
   'gpt-5.1-codex-mini': 'openai_codex_instructions_gpt-5.1-codex-mini',
@@ -52,6 +56,7 @@ const CODEX_CACHE_KEYS: Record<CodexModelFamily, string> = {
 }
 
 const CODEX_CACHE_META_KEYS: Record<CodexModelFamily, string> = {
+  'gpt-5.4': 'openai_codex_instructions_gpt-5.4_meta',
   'gpt-5.3-codex': 'openai_codex_instructions_gpt-5.3-codex_meta',
   'gpt-5.2-codex': 'openai_codex_instructions_gpt-5.2-codex_meta',
   'gpt-5.1-codex-mini': 'openai_codex_instructions_gpt-5.1-codex-mini_meta',
@@ -125,6 +130,9 @@ function getCodexModelFamily(model: string): CodexModelFamily {
   const normalized = (model || '')
     .toLowerCase()
     .replace(/\s+/g, '-')
+  if (normalized.includes('gpt-5.4') || normalized.includes('gpt 5.4')) {
+    return 'gpt-5.4'
+  }
   if (normalized.includes('gpt-5.3-codex')) {
     return 'gpt-5.3-codex'
   }
@@ -619,6 +627,14 @@ export function parseAuthorizationInput(input: string): { code?: string; state?:
 
 // Available ChatGPT models (based on Plus/Pro subscription)
 export const CHATGPT_MODELS = [
+  {
+    id: 'gpt-5.4',
+    name: 'GPT-5.4',
+    displayName: 'GPT-5.4',
+    description: 'Latest GPT-5.4 frontier model for professional work',
+    contextLength: 400000,
+    maxCompletionTokens: 16384,
+  },
   {
     id: 'gpt-5.3-codex',
     name: 'GPT-5.3 Codex',

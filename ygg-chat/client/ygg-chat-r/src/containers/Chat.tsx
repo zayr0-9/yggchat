@@ -98,7 +98,6 @@ import {
 import { selectSelectedProject } from '../features/projects/projectSelectors'
 import { uiActions } from '../features/ui'
 import { refreshUserCredits, selectCurrentUser } from '../features/users'
-import { selectSttConfig, selectVoiceInputEnabled, selectWakeWordConfig } from '../features/voiceSettings'
 import {
   CHAT_REASONING_SETTINGS_CHANGE_EVENT,
   loadChatReasoningSettings,
@@ -126,8 +125,6 @@ import {
   useSelectModel,
 } from '../hooks/useQueries'
 import { useSubscriptionStatus } from '../hooks/useSubscriptionStatus'
-import { useWakeWord } from '../hooks/useWakeWord'
-import { useWhisperSpeechToText } from '../hooks/useWhisperSpeechToText'
 import { cloneConversation, localApi } from '../utils/api'
 import { getAssetPath } from '../utils/assetPath'
 import { parseId } from '../utils/helpers'
@@ -1108,54 +1105,6 @@ function Chat() {
       ? 'outline-1 outline-blue-200/70 dark:outline-neutral-700/50'
       : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
 
-  // Get voice settings from Redux
-  const voiceInputEnabled = useAppSelector(selectVoiceInputEnabled)
-  const sttConfig = useAppSelector(selectSttConfig)
-  const wakeWordConfig = useAppSelector(selectWakeWordConfig)
-
-  // Speech-to-text hook for voice input (Whisper-based, works offline)
-  const {
-    isListening,
-    transcript: _speechTranscript,
-    error: speechError,
-    isLoading: speechLoading,
-    isModelLoaded: speechModelLoaded,
-    loadProgress: speechLoadProgress,
-    toggleListening,
-    startListening: startWhisperListening,
-    preloadModel: preloadSpeechModel,
-  } = useWhisperSpeechToText({
-    model: sttConfig.model,
-    language: sttConfig.language,
-    silenceThreshold: sttConfig.silenceThreshold,
-    onFinalTranscript: (text: string) => {
-      // Append final transcript to input with a space separator
-      updateLocalInput(prev => (prev ? prev + ' ' + text : text.trim()))
-    },
-  })
-
-  const WAKE_WORD_TEMPORARILY_DISABLED = true
-
-  // Wake word hook - listens for "Hey Jarvis" to trigger voice input
-  const {
-    isListening: isWakeWordListening,
-    isLoading: wakeWordLoading,
-    error: wakeWordError,
-    lastDetected: wakeWordLastDetected,
-    startListening: startWakeWord,
-    stopListening: stopWakeWord,
-  } = useWakeWord({
-    keywords: wakeWordConfig.keywords,
-    threshold: wakeWordConfig.threshold,
-    cooldownMs: wakeWordConfig.cooldownMs,
-    autoStart: !WAKE_WORD_TEMPORARILY_DISABLED && wakeWordConfig.autoStart && voiceInputEnabled,
-    onDetected: () => {
-      // When wake word is detected, start Whisper recording
-      if (!isListening && !speechLoading) {
-        startWhisperListening()
-      }
-    },
-  })
 
   const handleCloseExpandedPreview = useCallback(() => {
     if (!expandedFilePath) return
@@ -3487,57 +3436,6 @@ function Chat() {
 
               // Update Redux state with processed content before sending
               dispatch(chatSliceActions.inputChanged({ content: contentToSend }))
-
-              // Optimistically update conversation title if this is the first message in branch
-              if (parentForSend === null) {
-                const generatedTitle = processedContent.slice(0, 100) + (processedContent.length > 100 ? '...' : '')
-                const projectId = selectedProject?.id || currentConversation?.project_id
-
-                // Update all relevant React Query caches
-                // Only update if cache exists to avoid creating invalid cache entries
-                const conversationsCache = queryClient.getQueryData<Conversation[]>(['conversations'])
-                if (conversationsCache) {
-                  queryClient.setQueryData(
-                    ['conversations'],
-                    conversationsCache.map(conv =>
-                      conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
-                    )
-                  )
-                }
-
-                if (projectId) {
-                  const projectConversationsCache = queryClient.getQueryData<Conversation[]>([
-                    'conversations',
-                    'project',
-                    projectId,
-                  ])
-                  if (projectConversationsCache) {
-                    queryClient.setQueryData(
-                      ['conversations', 'project', projectId],
-                      projectConversationsCache.map(conv =>
-                        conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
-                      )
-                    )
-                  }
-                }
-
-                // Update recent conversations cache
-                const recentCache = queryClient.getQueryData<Conversation[]>(['conversations', 'recent'])
-                if (recentCache) {
-                  queryClient.setQueryData(
-                    ['conversations', 'recent'],
-                    recentCache.map(conv =>
-                      conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
-                    )
-                  )
-                }
-
-                // Also update Redux to ensure components using Redux see the change immediately
-                const updatedConversations = projectConversations.map(conv =>
-                  conv.id === currentConversationId ? { ...conv, title: generatedTitle } : conv
-                )
-                dispatch(conversationsLoaded(updatedConversations))
-              }
 
               // Create optimistic message for instant UI feedback
               const optimisticUserMessage: Message = {
@@ -5952,112 +5850,6 @@ function Chat() {
                     <path d='m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.51a2 2 0 0 1-2.83-2.83l8.49-8.48' />
                   </svg>
                 </button>
-                {/* Speech-to-text microphone button (Whisper-based, offline) */}
-                {/* {import.meta.env.VITE_ENVIRONMENT === 'electron' && ( */}
-                {false && (
-                  <>
-                    <Button
-                      variant='outline2'
-                      className={`rounded-full relative ${
-                        isListening
-                          ? 'bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700/50'
-                          : speechLoading
-                            ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700/50'
-                            : ''
-                      }`}
-                      size='large'
-                      onClick={toggleListening}
-                      onMouseEnter={() => {
-                        // Preload model on hover for faster first use
-                        if (!speechModelLoaded && !speechLoading) {
-                          preloadSpeechModel()
-                        }
-                      }}
-                      disabled={speechLoading}
-                      title={
-                        speechError
-                          ? `Speech error: ${speechError}`
-                          : speechLoading
-                            ? `Loading speech model... ${speechLoadProgress.toFixed(0)}%`
-                            : isListening
-                              ? 'Stop listening (processing will begin)'
-                              : speechModelLoaded
-                                ? 'Start voice input (Whisper)'
-                                : 'Start voice input (will download ~40MB model)'
-                      }
-                    >
-                      {speechLoading ? (
-                        <div className='relative'>
-                          <i
-                            className='bx bx-loader-alt text-[22px] text-blue-600 dark:text-blue-400 animate-spin'
-                            aria-hidden='true'
-                          ></i>
-                          <span className='absolute -bottom-3 left-1/2 -translate-x-1/2 text-[10px] text-blue-600 dark:text-blue-400'>
-                            {speechLoadProgress.toFixed(0)}%
-                          </span>
-                        </div>
-                      ) : (
-                        <i
-                          className={`bx ${isListening ? 'bx-stop' : 'bx-microphone'} text-[22px] ${
-                            isListening ? 'text-red-600 dark:text-red-400 animate-pulse' : ''
-                          }`}
-                          aria-hidden='true'
-                        ></i>
-                      )}
-                    </Button>
-                    {/* Wake word toggle button - "Hey Jarvis" detection */}
-                    <Button
-                      variant='outline2'
-                      className={`rounded-full relative ${
-                        isWakeWordListening
-                          ? 'bg-purple-100 dark:bg-purple-900/30 border-purple-300 dark:border-purple-700/50'
-                          : wakeWordLoading
-                            ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700/50'
-                            : ''
-                      }`}
-                      size='large'
-                      onClick={() => {
-                        if (WAKE_WORD_TEMPORARILY_DISABLED) return
-
-                        if (isWakeWordListening) {
-                          stopWakeWord()
-                        } else {
-                          startWakeWord()
-                        }
-                      }}
-                      disabled={wakeWordLoading || WAKE_WORD_TEMPORARILY_DISABLED}
-                      title={
-                        WAKE_WORD_TEMPORARILY_DISABLED
-                          ? 'Wake word is temporarily disabled'
-                          : wakeWordError
-                            ? `Wake word error: ${wakeWordError}`
-                            : wakeWordLoading
-                              ? 'Loading wake word engine...'
-                              : isWakeWordListening
-                                ? 'Wake word active - say "Hey Jarvis" to start voice input'
-                                : 'Enable wake word detection ("Hey Jarvis")'
-                      }
-                    >
-                      {wakeWordLoading ? (
-                        <i
-                          className='bx bx-loader-alt text-[22px] text-yellow-600 dark:text-yellow-400 animate-spin'
-                          aria-hidden='true'
-                        ></i>
-                      ) : (
-                        <i
-                          className={`bx bx-bot text-[22px] ${
-                            isWakeWordListening ? 'text-purple-600 dark:text-purple-400 animate-pulse' : ''
-                          }`}
-                          aria-hidden='true'
-                        ></i>
-                      )}
-                      {/* Visual indicator when wake word is detected */}
-                      {wakeWordLastDetected && Date.now() - wakeWordLastDetected.timestamp < 2000 && (
-                        <span className='absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping'></span>
-                      )}
-                    </Button>
-                  </>
-                )}
                 {!currentConversationId ? (
                   <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Creating...</span>
                 ) : sendingState.compacting || sendingState.streaming || sendingState.sending ? (

@@ -5,6 +5,8 @@ import './TitleBar.css'
 
 import { chatSliceActions, selectCcCwd, selectCurrentConversationId } from '../../features/chats'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
+import { buildRemoteMobileUrl, loadRemoteServerSettings } from '../../helpers/remoteServerSettingsStorage'
+import { getLocalServerLanOrigin, getLocalServerOrigin } from '../../utils/api'
 
 export const TitleBar = () => {
   const dispatch = useAppDispatch()
@@ -92,6 +94,34 @@ export const TitleBar = () => {
     }
   }
 
+  const handleOpenRemoteServerUi = async () => {
+    try {
+      const configuredRemoteBaseUrl = loadRemoteServerSettings().remoteBaseUrl
+      const configuredMobileUrl = buildRemoteMobileUrl(configuredRemoteBaseUrl)
+
+      const lanOrigin = await getLocalServerLanOrigin()
+      const lanMobileUrl = buildRemoteMobileUrl(lanOrigin)
+      const fallbackOrigin = await getLocalServerOrigin()
+      const fallbackMobileUrl = buildRemoteMobileUrl(fallbackOrigin)
+      const url = configuredMobileUrl || lanMobileUrl || fallbackMobileUrl
+
+      if (!url) {
+        throw new Error('Unable to resolve remote server URL')
+      }
+
+      if (window.electronAPI?.auth?.openExternal) {
+        const result = await window.electronAPI.auth.openExternal(url)
+        if (!result?.success) {
+          window.open(url, '_blank', 'noopener,noreferrer')
+        }
+      } else {
+        window.open(url, '_blank', 'noopener,noreferrer')
+      }
+    } catch (err) {
+      console.error('Failed to open remote server UI from title bar:', err)
+    }
+  }
+
   return (
     <div className={`titlebar ${isChatPage ? 'titlebar-chat' : ''}`}>
       <div className='titlebar-drag-region'>
@@ -157,6 +187,33 @@ export const TitleBar = () => {
         </div>
       </div>
       <div className='titlebar-controls'>
+        <button
+          type='button'
+          onClick={handleOpenRemoteServerUi}
+          style={{
+            marginRight: '6px',
+            marginTop: '4px',
+            marginBottom: '4px',
+            fontSize: '11px',
+            lineHeight: '1',
+            color: 'rgb(255, 255, 255)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'flex',
+            alignItems: 'center',
+            userSelect: 'none',
+            cursor: 'pointer',
+            backgroundColor: 'rgba(255, 255, 255, 0.34)',
+            borderRadius: '9999px',
+            padding: '1px 10px',
+            minHeight: '18px',
+            border: 'none',
+          }}
+          title='Open remote server UI (/mobile) in default browser'
+        >
+          <span style={{ fontWeight: 500 }}>remote server</span>
+        </button>
         <button
           type='button'
           className='cwd-pill'

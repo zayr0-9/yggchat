@@ -4,6 +4,7 @@ import type {
   MobileConversation,
   MobileCustomTool,
   MobileInferenceTool,
+  MobileLocalFileEntry,
   MobileMessage,
   MobileMessageTreePayload,
   MobileProject,
@@ -72,7 +73,12 @@ export const mobileApi = {
 
   async listConversations(userId: string, projectId?: string | null): Promise<MobileConversation[]> {
     const query = new URLSearchParams({ userId })
-    if (projectId) query.set('projectId', projectId)
+
+    if (projectId === null) {
+      query.set('projectId', '__none__')
+    } else if (projectId) {
+      query.set('projectId', projectId)
+    }
 
     const payload = await jsonFetch<MobileConversation[]>(`/api/app/conversations?${query.toString()}`, {
       method: 'GET',
@@ -104,6 +110,31 @@ export const mobileApi = {
     })
   },
 
+  async getConversation(conversationId: string): Promise<MobileConversation | null> {
+    try {
+      const payload = await jsonFetch<MobileConversation>(`/api/app/conversations/${encodeURIComponent(conversationId)}`, {
+        method: 'GET',
+      })
+      return payload || null
+    } catch {
+      return null
+    }
+  },
+
+  async getLatestConversation(userId: string): Promise<MobileConversation | null> {
+    try {
+      const payload = await jsonFetch<MobileConversation | null>(
+        `/api/app/conversations/latest?userId=${encodeURIComponent(userId)}`,
+        {
+          method: 'GET',
+        }
+      )
+      return payload || null
+    } catch {
+      return null
+    }
+  },
+
   async listMessages(conversationId: string): Promise<MobileMessage[]> {
     const payload = await jsonFetch<MobileMessage[]>(`/api/app/conversations/${encodeURIComponent(conversationId)}/messages`, {
       method: 'GET',
@@ -123,6 +154,66 @@ export const mobileApi = {
       messages: Array.isArray(payload?.messages) ? payload.messages : [],
       tree: payload?.tree || null,
       meta: payload?.meta,
+    }
+  },
+
+  async listLocalFiles(directoryPath: string): Promise<{ path: string; files: MobileLocalFileEntry[] }> {
+    const payload = await jsonFetch<{ path?: string; files?: MobileLocalFileEntry[] }>(
+      `/api/local/files?path=${encodeURIComponent(directoryPath)}`,
+      { method: 'GET' }
+    )
+
+    return {
+      path: typeof payload?.path === 'string' ? payload.path : directoryPath,
+      files: Array.isArray(payload?.files) ? payload.files : [],
+    }
+  },
+
+  async searchLocalFiles(params: {
+    directoryPath: string
+    query: string
+    limit?: number
+    followGitignore?: boolean
+  }): Promise<{ path: string; query: string; files: MobileLocalFileEntry[]; truncated: boolean; respectingGitignore: boolean }> {
+    const query = String(params.query || '').trim()
+    if (!query) {
+      return {
+        path: params.directoryPath,
+        query: '',
+        files: [],
+        truncated: false,
+        respectingGitignore: Boolean(params.followGitignore ?? true),
+      }
+    }
+
+    const searchParams = new URLSearchParams({
+      path: params.directoryPath,
+      query,
+    })
+
+    if (typeof params.limit === 'number' && Number.isFinite(params.limit)) {
+      searchParams.set('limit', String(Math.max(1, Math.floor(params.limit))))
+    }
+
+    searchParams.set('followGitignore', params.followGitignore === false ? '0' : '1')
+
+    const payload = await jsonFetch<{
+      path?: string
+      query?: string
+      files?: MobileLocalFileEntry[]
+      truncated?: boolean
+      respectingGitignore?: boolean
+    }>(
+      `/api/local/files/search?${searchParams.toString()}`,
+      { method: 'GET' }
+    )
+
+    return {
+      path: typeof payload?.path === 'string' ? payload.path : params.directoryPath,
+      query: typeof payload?.query === 'string' ? payload.query : query,
+      files: Array.isArray(payload?.files) ? payload.files : [],
+      truncated: Boolean(payload?.truncated),
+      respectingGitignore: Boolean(payload?.respectingGitignore),
     }
   },
 

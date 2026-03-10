@@ -1,12 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { mobileApi } from './api'
 import { Composer } from './components/Composer'
+import { FilePathPickerModal } from './components/FilePathPickerModal'
 import { MessageList } from './components/MessageList'
 import { MessageTreeDrawer } from './components/MessageTreeDrawer'
 import { MobileHeader } from './components/MobileHeader'
-import { ProfilePicker } from './components/ProfilePicker'
 import { ProjectConversationTree } from './components/ProjectConversationTree'
-import { ToolTogglePanel } from './components/ToolTogglePanel'
 import { buildRenderItemsForMessage } from './messageParser'
 import type {
   HeadlessSseEvent,
@@ -38,6 +37,32 @@ const createStreamingState = (): StreamingState => ({
 })
 
 const projectKey = (projectId: string | null | undefined) => projectId || '__none__'
+
+const MOBILE_LAST_USER_STORAGE_KEY = 'mobile:lastUserId'
+const mobileLastConversationStorageKey = (userId: string) => `mobile:lastConversationId:${userId}`
+
+const readStorageValue = (key: string): string | null => {
+  if (typeof window === 'undefined') return null
+  try {
+    const value = window.localStorage.getItem(key)
+    return value && value.trim().length > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+const writeStorageValue = (key: string, value: string | null) => {
+  if (typeof window === 'undefined') return
+  try {
+    if (!value || value.trim().length === 0) {
+      window.localStorage.removeItem(key)
+      return
+    }
+    window.localStorage.setItem(key, value)
+  } catch {
+    // ignore storage failures
+  }
+}
 
 const normalizeCwd = (value: string | null | undefined): string | null => {
   if (typeof value !== 'string') return null
@@ -256,7 +281,7 @@ export const App: React.FC = () => {
   const [statusText, setStatusText] = useState('Loading…')
 
   const [users, setUsers] = useState<LocalUserProfile[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(() => readStorageValue(MOBILE_LAST_USER_STORAGE_KEY))
 
   const [projects, setProjects] = useState<MobileProject[]>([])
   const [expandedProjectKeys, setExpandedProjectKeys] = useState<string[]>([])
@@ -271,6 +296,7 @@ export const App: React.FC = () => {
   const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null)
   const [isTreeDrawerOpen, setIsTreeDrawerOpen] = useState(false)
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState(false)
+  const [isPathPickerOpen, setIsPathPickerOpen] = useState(false)
   const [hideEmptyAssistantMessages, setHideEmptyAssistantMessages] = useState(true)
 
   const [draft, setDraft] = useState('')
@@ -292,12 +318,6 @@ export const App: React.FC = () => {
   const currentPathIdsRef = useRef<string[]>([])
 
   const streamingMessage = useMemo(() => makeStreamingMessage(streamingState), [streamingState])
-
-  const hiddenEmptyAssistantCount = useMemo(
-    () =>
-      messages.filter(message => message.role === 'assistant' && buildRenderItemsForMessage(message).length === 0).length,
-    [messages]
-  )
 
   const displayedMessages = useMemo(() => {
     if (!hideEmptyAssistantMessages) return messages
@@ -353,7 +373,13 @@ export const App: React.FC = () => {
       return
     }
 
-    setSelectedUserId(current => current || listed[0].id)
+    const storedUserId = readStorageValue(MOBILE_LAST_USER_STORAGE_KEY)
+
+    setSelectedUserId(current => {
+      const preferred = current || storedUserId
+      const exists = preferred ? listed.some(user => user.id === preferred) : false
+      return exists && preferred ? preferred : listed[0].id
+    })
   }
 
   const loadProjects = async (userId: string) => {
@@ -710,9 +736,31 @@ export const App: React.FC = () => {
     setStatusText(`Switched branch at message ${normalizedId.slice(0, 8)}…`)
   }
 
+  const handleInsertPathIntoDraft = (insertPath: string) => {
+    const nextPath = String(insertPath || '').trim()
+    if (!nextPath) return
+
+    setDraft(previous => {
+      const trimmed = previous.trimEnd()
+      if (!trimmed) return nextPath
+      return `${trimmed}\n${nextPath}`
+    })
+
+    setStatusText(`Inserted path: ${nextPath}`)
+  }
+
   useEffect(() => {
     currentPathIdsRef.current = currentPathMessageIds
   }, [currentPathMessageIds])
+
+  useEffect(() => {
+    writeStorageValue(MOBILE_LAST_USER_STORAGE_KEY, selectedUserId)
+  }, [selectedUserId])
+
+  useEffect(() => {
+    if (!selectedUserId) return
+    writeStorageValue(mobileLastConversationStorageKey(selectedUserId), activeConversationId)
+  }, [selectedUserId, activeConversationId])
 
   useEffect(() => {
     let cancelled = false
@@ -760,6 +808,7 @@ export const App: React.FC = () => {
       setCurrentPathMessageIds([])
       setScrollToMessageId(null)
       setIsTreeDrawerOpen(false)
+      setIsPathPickerOpen(false)
       setBranchSourceMessage(null)
       setOpenAiConnected(false)
       setPendingOpenAiState(null)
@@ -791,9 +840,50 @@ export const App: React.FC = () => {
         setIsTreeDrawerOpen(false)
         setBranchSourceMessage(null)
 
-        await loadConversationsForProject(selectedUserId, null)
-        if (cancelled) return
-        setExpandedProjectKeys([projectKey(null)])
+        const savedConversationId = readStorageValue(mobileLastConversationStorageKey(selectedUserId))
+        let restoredFromSavedConversation = false
+
+        if (savedConversationId) {
+          try {
+            const savedConversation = await mobileApi.getConversation(savedConversationId)
+            if (cancelled) return
+
+            if (savedConversation && savedConversation.user_id === selectedUserId) {
+              const savedProjectId = savedConversation.project_id ? String(savedConversation.project_id) : null
+              const savedKey = projectKey(savedProjectId)
+
+              await loadConversationsForProject(selectedUserId, savedProjectId)
+              if (cancelled) return
+
+              setExpandedProjectKeys([savedKey])
+              setActiveConversationId(savedConversationId)
+              restoredFromSavedConversation = true
+            }
+          } catch {
+            // fall back to default no-project bucket
+          }
+        }
+
+        if (!restoredFromSavedConversation) {
+          const latestConversation = await mobileApi.getLatestConversation(selectedUserId)
+          if (cancelled) return
+
+          if (latestConversation) {
+            const latestProjectId = latestConversation.project_id ? String(latestConversation.project_id) : null
+            const latestKey = projectKey(latestProjectId)
+
+            await loadConversationsForProject(selectedUserId, latestProjectId)
+            if (cancelled) return
+
+            setExpandedProjectKeys([latestKey])
+            setActiveConversationId(String(latestConversation.id))
+          } else {
+            await loadConversationsForProject(selectedUserId, null)
+            if (cancelled) return
+            setExpandedProjectKeys([projectKey(null)])
+          }
+        }
+
         setStatusText('Ready')
       } catch (error) {
         if (cancelled) return
@@ -823,6 +913,7 @@ export const App: React.FC = () => {
     if (!activeConversationId) return
 
     setIsTreeDrawerOpen(false)
+    setIsPathPickerOpen(false)
     setScrollToMessageId(null)
     let cancelled = false
 
@@ -1008,55 +1099,34 @@ export const App: React.FC = () => {
       <MobileHeader
         modelName={modelName}
         statusText={statusText}
+        users={users}
+        selectedUserId={selectedUserId}
         onModelChange={setModelName}
+        onUserSelect={setSelectedUserId}
+        selectorsDisabled={sending}
         openAiAuthenticated={openAiConnected}
         openAiBusy={openAiBusy}
         hasPendingOpenAiFlow={Boolean(pendingOpenAiState)}
         onOpenAiLoginStart={handleOpenAiLoginStart}
         onOpenAiLoginComplete={handleOpenAiLoginComplete}
         onOpenAiLogout={handleOpenAiLogout}
+        customTools={customTools}
+        customToolBusyNames={customToolBusyNames}
+        customToolsLoading={customToolsLoading}
+        onRefreshCustomTools={loadCustomTools}
+        onToggleCustomTool={handleToggleCustomTool}
+        activeConversationId={activeConversationId}
+        conversationCwdInput={conversationCwdInput}
+        onConversationCwdInputChange={setConversationCwdInput}
+        onSaveConversationCwd={handleSaveConversationCwd}
+        savingConversationCwd={savingConversationCwd}
+        onOpenProjectConversationPicker={() => setIsProjectsModalOpen(true)}
+        canOpenProjectConversationPicker={!sending && Boolean(selectedUserId)}
+        onOpenBranchTree={() => setIsTreeDrawerOpen(true)}
+        canOpenBranchTree={Boolean(activeConversationId) && !sending && allMessages.length > 0}
+        onOpenPathPicker={() => setIsPathPickerOpen(true)}
+        canOpenPathPicker={Boolean(activeProjectCwd) && !sending && Boolean(activeConversationId)}
       />
-
-      <ProfilePicker users={users} selectedUserId={selectedUserId} onSelect={setSelectedUserId} disabled={sending} />
-
-      <ToolTogglePanel
-        tools={customTools}
-        busyToolNames={customToolBusyNames}
-        loading={customToolsLoading}
-        disabled={sending}
-        onRefresh={loadCustomTools}
-        onToggleTool={handleToggleCustomTool}
-      />
-
-      <div className='mobile-project-launcher'>
-        <button type='button' onClick={() => setIsProjectsModalOpen(true)} disabled={sending || !selectedUserId}>
-          {activeConversation ? 'Switch Project / Conversation' : 'Open Projects'}
-        </button>
-      </div>
-
-      <div className='mobile-conversation-cwd'>
-        <label htmlFor='conversation-cwd-input'>Conversation working directory (cwd)</label>
-        <div className='mobile-conversation-cwd-row'>
-          <input
-            id='conversation-cwd-input'
-            type='text'
-            value={conversationCwdInput}
-            onChange={event => setConversationCwdInput(event.target.value)}
-            placeholder='e.g. D:\\projects\\my-repo'
-            disabled={!activeConversationId || sending || savingConversationCwd}
-          />
-          <button
-            type='button'
-            onClick={handleSaveConversationCwd}
-            disabled={!activeConversationId || sending || savingConversationCwd}
-          >
-            {savingConversationCwd ? 'Saving…' : 'Save cwd'}
-          </button>
-        </div>
-        <span className='mobile-conversation-cwd-hint'>
-          Used as tool execution root for this conversation. Leave empty to fall back to project cwd.
-        </span>
-      </div>
 
       <ProjectConversationTree
         open={isProjectsModalOpen}
@@ -1076,35 +1146,6 @@ export const App: React.FC = () => {
         disabled={sending || !selectedUserId}
       />
 
-      <div className='mobile-branch-toolbar'>
-        <div className='mobile-branch-toolbar-actions'>
-          <button
-            type='button'
-            onClick={() => setIsTreeDrawerOpen(true)}
-            disabled={!activeConversationId || sending || allMessages.length === 0}
-          >
-            Open Branch Tree
-          </button>
-          <button
-            type='button'
-            onClick={() => setHideEmptyAssistantMessages(previous => !previous)}
-            disabled={!activeConversationId}
-          >
-            {hideEmptyAssistantMessages ? 'Show Empty AI' : 'Hide Empty AI'}
-          </button>
-        </div>
-        <span>
-          {currentPathMessageIds.length > 0
-            ? `Branch depth ${currentPathMessageIds.length}${activeBranchTipId ? ` · tip ${String(activeBranchTipId).slice(0, 8)}…` : ''}`
-            : allMessages.length > 0
-              ? `Messages ${allMessages.length}`
-              : 'No messages yet'}
-          {hideEmptyAssistantMessages && hiddenEmptyAssistantCount > 0
-            ? ` · hidden empty AI ${hiddenEmptyAssistantCount}`
-            : ''}
-        </span>
-      </div>
-
       <MessageList
         messages={displayedMessages}
         streamingMessage={streamingMessage}
@@ -1112,6 +1153,8 @@ export const App: React.FC = () => {
         scrollToMessageId={scrollToMessageId}
         onScrollToMessageHandled={() => setScrollToMessageId(null)}
         userActionsDisabled={sending || !activeConversationId || !selectedUserId}
+        currentUserId={selectedUserId}
+        rootPath={activeProjectCwd}
         onBranchUserMessage={handleBranchUserMessage}
         onDeleteUserMessage={handleDeleteUserMessage}
       />
@@ -1131,11 +1174,20 @@ export const App: React.FC = () => {
         disabled={!activeConversationId || !selectedUserId || !openAiConnected}
       />
 
+      <FilePathPickerModal
+        open={isPathPickerOpen}
+        rootPath={activeProjectCwd}
+        onClose={() => setIsPathPickerOpen(false)}
+        onInsertPath={handleInsertPathIntoDraft}
+      />
+
       <MessageTreeDrawer
         open={isTreeDrawerOpen}
         tree={treeForDrawer}
         activePathIds={currentPathMessageIds}
         activeTipId={activeBranchTipId}
+        hideEmptyAssistantMessages={hideEmptyAssistantMessages}
+        onToggleHideEmptyAssistantMessages={() => setHideEmptyAssistantMessages(previous => !previous)}
         onSelectMessage={handleSelectTreeNode}
         onClose={() => setIsTreeDrawerOpen(false)}
       />

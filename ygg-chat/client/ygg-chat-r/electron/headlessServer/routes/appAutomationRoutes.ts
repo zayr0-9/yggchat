@@ -191,22 +191,26 @@ export function registerAppAutomationRoutes(app: Express, deps: AppAutomationRou
   app.get('/api/app/conversations', (req, res) => {
     try {
       const userId = (req.query.userId as string) || (req.query.user_id as string) || ''
-      const projectId = (req.query.projectId as string) || (req.query.project_id as string) || undefined
+      const rawProjectId = (req.query.projectId as string) || (req.query.project_id as string) || undefined
+      const noProjectOnly = rawProjectId === '__none__' || rawProjectId === 'null'
+      const projectId = noProjectOnly ? undefined : rawProjectId
 
       if (!userId) {
         res.status(400).json({ error: 'userId required' })
         return
       }
 
-      const conversations = projectId
-        ? typeof statements.getLocalConversationsByUserAndProject?.all === 'function'
-          ? statements.getLocalConversationsByUserAndProject.all(userId, projectId)
-          : db
-              .prepare('SELECT * FROM conversations WHERE user_id = ? AND project_id = ? ORDER BY updated_at DESC')
-              .all(userId, projectId)
-        : typeof statements.getLocalConversations?.all === 'function'
-          ? statements.getLocalConversations.all(userId)
-          : db.prepare('SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC').all(userId)
+      const conversations = noProjectOnly
+        ? db.prepare('SELECT * FROM conversations WHERE user_id = ? AND project_id IS NULL ORDER BY updated_at DESC').all(userId)
+        : projectId
+          ? typeof statements.getLocalConversationsByUserAndProject?.all === 'function'
+            ? statements.getLocalConversationsByUserAndProject.all(userId, projectId)
+            : db
+                .prepare('SELECT * FROM conversations WHERE user_id = ? AND project_id = ? ORDER BY updated_at DESC')
+                .all(userId, projectId)
+          : typeof statements.getLocalConversations?.all === 'function'
+            ? statements.getLocalConversations.all(userId)
+            : db.prepare('SELECT * FROM conversations WHERE user_id = ? ORDER BY updated_at DESC').all(userId)
 
       res.json(conversations)
     } catch (error) {
@@ -266,6 +270,33 @@ export function registerAppAutomationRoutes(app: Express, deps: AppAutomationRou
     } catch (error) {
       console.error('[HeadlessServer] Error searching app conversations:', error)
       res.status(500).json({ error: 'Failed to search conversations' })
+    }
+  })
+
+  app.get('/api/app/conversations/latest', (req, res) => {
+    try {
+      const userId = (req.query.userId as string) || (req.query.user_id as string) || ''
+      if (!userId) {
+        res.status(400).json({ error: 'userId required' })
+        return
+      }
+
+      const latestConversation = db
+        .prepare(
+          `
+          SELECT *
+          FROM conversations
+          WHERE user_id = ?
+          ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, id DESC
+          LIMIT 1
+        `
+        )
+        .get(userId)
+
+      res.json(latestConversation || null)
+    } catch (error) {
+      console.error('[HeadlessServer] Error fetching latest app conversation:', error)
+      res.status(500).json({ error: 'Failed to fetch latest conversation' })
     }
   })
 
@@ -557,6 +588,10 @@ export function registerAppAutomationRoutes(app: Express, deps: AppAutomationRou
       }
 
       db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?').run(now, conversationId)
+      if (conversation?.project_id) {
+        db.prepare('UPDATE projects SET updated_at = ? WHERE id = ?').run(now, conversation.project_id)
+      }
+
       res.json({ messages: createdMessages })
     } catch (error) {
       console.error('[HeadlessServer] Error bulk inserting app messages:', error)

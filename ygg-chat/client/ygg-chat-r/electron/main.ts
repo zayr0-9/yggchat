@@ -22,6 +22,7 @@ let savedBounds: Electron.Rectangle | null = null
 let localServerStarted = false
 let localServerPort: number | null = null
 let localServerUrl: string | null = null
+let localServerLanUrl: string | null = null
 let localServerError: string | null = null
 
 const LOCAL_SERVER_PREFERRED_PORT = 3002
@@ -36,7 +37,38 @@ const LOCAL_SERVER_HOST =
 const LOCAL_SERVER_ADVERTISE_HOST =
   process.env.YGG_LOCAL_SERVER_ADVERTISE_HOST?.trim() ||
   (LOCAL_SERVER_HOST === '0.0.0.0' ? '127.0.0.1' : LOCAL_SERVER_HOST)
+const LOCAL_SERVER_LAN_ADVERTISE_HOST = process.env.YGG_LOCAL_SERVER_LAN_ADVERTISE_HOST?.trim() || ''
 const LOCAL_SERVER_ALLOW_EPHEMERAL_PORT = true
+
+function isPrivateIpv4(address: string): boolean {
+  if (address.startsWith('10.')) return true
+  if (address.startsWith('192.168.')) return true
+  if (!address.startsWith('172.')) return false
+  const secondOctet = Number(address.split('.')[1])
+  return Number.isInteger(secondOctet) && secondOctet >= 16 && secondOctet <= 31
+}
+
+function detectPreferredLanIpv4(): string | null {
+  if (LOCAL_SERVER_LAN_ADVERTISE_HOST) {
+    return LOCAL_SERVER_LAN_ADVERTISE_HOST
+  }
+
+  const interfaces = os.networkInterfaces()
+  const candidates: string[] = []
+
+  for (const entries of Object.values(interfaces)) {
+    if (!entries) continue
+    for (const entry of entries) {
+      if (!entry || entry.family !== 'IPv4' || entry.internal) continue
+      candidates.push(entry.address)
+    }
+  }
+
+  if (candidates.length === 0) return null
+
+  const privateCandidate = candidates.find(isPrivateIpv4)
+  return privateCandidate || candidates[0] || null
+}
 const activeReadStreams = new Map<
   string,
   {
@@ -629,9 +661,11 @@ app.whenReady().then(async () => {
       localServerStarted = true
       localServerPort = localServerInfo.port
       localServerUrl = `http://${LOCAL_SERVER_ADVERTISE_HOST}:${localServerInfo.port}`
+      const detectedLanHost = LOCAL_SERVER_ALLOW_REMOTE ? detectPreferredLanIpv4() : null
+      localServerLanUrl = detectedLanHost ? `http://${detectedLanHost}:${localServerInfo.port}` : null
       localServerError = null
       console.log(
-        `[Electron] Local sync server started on ${localServerInfo.url} (renderer endpoint: ${localServerUrl})`
+        `[Electron] Local sync server started on ${localServerInfo.url} (renderer endpoint: ${localServerUrl}, lan endpoint: ${localServerLanUrl || 'n/a'})`
       )
     } catch (localServerStartError) {
       console.warn('[Electron] Failed to start local sync server:', localServerStartError)
@@ -639,6 +673,7 @@ app.whenReady().then(async () => {
       localServerStarted = false
       localServerPort = null
       localServerUrl = null
+      localServerLanUrl = null
       localServerError =
         localServerStartError instanceof Error
           ? localServerStartError.message
@@ -668,6 +703,7 @@ app.on('window-all-closed', () => {
     localServerStarted = false
     localServerPort = null
     localServerUrl = null
+    localServerLanUrl = null
     localServerError = null
   }
 
@@ -690,6 +726,7 @@ app.on('before-quit', () => {
     localServerStarted = false
     localServerPort = null
     localServerUrl = null
+    localServerLanUrl = null
     localServerError = null
   }
 
@@ -1510,6 +1547,7 @@ ipcMain.handle('sync:status', async () => {
     localServerRunning: localServerStarted,
     localServerPort,
     localServerUrl,
+    localServerLanUrl,
     localServerError,
   }
 })

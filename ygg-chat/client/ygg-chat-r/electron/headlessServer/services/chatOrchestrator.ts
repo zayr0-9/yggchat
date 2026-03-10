@@ -1,6 +1,7 @@
 import type { HeadlessMessageRequest, HeadlessStreamEvent } from '../contracts/headlessApi.js'
 import { ConversationRepo } from '../persistence/conversationRepo.js'
 import { MessageRepo } from '../persistence/messageRepo.js'
+import { ProjectRepo } from '../persistence/projectRepo.js'
 import type { ProviderTokenStore } from '../providers/tokenStore.js'
 import { BranchOrchestrator, type ResolvedExecution } from './branchOrchestrator.js'
 import { ProviderRouter } from './providerRouter.js'
@@ -24,6 +25,7 @@ export interface HeadlessChatOrchestrator {
 export class ChatOrchestrator implements HeadlessChatOrchestrator {
   private readonly conversationRepo: ConversationRepo
   private readonly messageRepo: MessageRepo
+  private readonly projectRepo: ProjectRepo
   private readonly providerRouter: ProviderRouter
   private readonly branchOrchestrator: BranchOrchestrator
   private readonly toolLoopService: ToolLoopService
@@ -32,6 +34,7 @@ export class ChatOrchestrator implements HeadlessChatOrchestrator {
   constructor(deps: ChatOrchestratorDeps) {
     this.conversationRepo = new ConversationRepo({ db: deps.db, statements: deps.statements })
     this.messageRepo = new MessageRepo({ db: deps.db, statements: deps.statements })
+    this.projectRepo = new ProjectRepo({ db: deps.db })
     this.providerRouter = deps.providerRouter ?? new ProviderRouter({ tokenStore: deps.tokenStore })
     this.branchOrchestrator = deps.branchOrchestrator ?? new BranchOrchestrator()
     this.toolLoopService =
@@ -76,6 +79,12 @@ export class ChatOrchestrator implements HeadlessChatOrchestrator {
     const conversation = this.conversationRepo.getById(request.conversationId)
     if (!conversation) {
       throw new Error(`Conversation not found: ${request.conversationId}`)
+    }
+
+    const now = new Date().toISOString()
+    this.conversationRepo.touch(request.conversationId, now)
+    if (conversation.project_id) {
+      this.projectRepo.touch(conversation.project_id, now)
     }
 
     const resolved = this.resolveExecution(request)

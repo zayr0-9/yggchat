@@ -54,6 +54,7 @@ interface ElectronAPI {
       localServerRunning: boolean
       localServerPort: number | null
       localServerUrl: string | null
+      localServerLanUrl?: string | null
       localServerError?: string | null
     }>
   }
@@ -92,5 +93,3 @@ interface ElectronAPI {
 interface Window {
   electronAPI?: ElectronAPI
 }
-
-declare module 'openwakeword-wasm-browser'

@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
 import * as path from 'path'
-import { getWSLCommandArgs, shouldUseWSL, toWslPath } from '../utils/wslBridge.js'
+import { detectPathType, getWSLCommandArgs, shouldUseWSL, toWslPath } from '../utils/wslBridge.js'
 
 const DEFAULT_MAX_OUTPUT_CHARS = (() => {
   const envValue = Number(process.env.RIPGREP_MAX_OUTPUT_CHARS ?? process.env.RIPGREP_OUTPUT_LIMIT)
@@ -40,23 +40,61 @@ export interface RipgrepResult {
   command?: string
 }
 
-/**
- * Resolve the search path for ripgrep
- * On Windows: convert to WSL path and run through WSL
- * On macOS/Linux: use the path directly (native execution)
- */
-function resolveSearchPath(inputPath: string): { forRg: string; useWSL: boolean } {
-  const pathCandidate = (inputPath?.trim() || '.').trim()
-  const useWSL = shouldUseWSL()
+let windowsNativeRgPathPromise: Promise<string | null> | null = null
 
-  if (useWSL) {
-    // On Windows: convert all paths to WSL format
-    return { forRg: toWslPath(pathCandidate), useWSL: true }
+async function detectWindowsNativeRgPath(): Promise<string | null> {
+  if (process.platform !== 'win32') {
+    return null
   }
 
-  // On macOS/Linux: use path directly
-  const resolved = path.isAbsolute(pathCandidate) ? pathCandidate : path.resolve(pathCandidate)
-  return { forRg: resolved, useWSL: false }
+  if (!windowsNativeRgPathPromise) {
+    windowsNativeRgPathPromise = new Promise(resolve => {
+      const child = spawn('where.exe', ['rg.exe'], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+
+      let stdout = ''
+
+      child.stdout.on('data', data => {
+        stdout += data.toString('utf8')
+      })
+
+      child.on('error', () => {
+        resolve(null)
+      })
+
+      child.on('close', code => {
+        if (code !== 0) {
+          resolve(null)
+          return
+        }
+
+        const firstPath = stdout
+          .split(/\r?\n/)
+          .map(line => line.trim())
+          .find(Boolean)
+
+        resolve(firstPath || null)
+      })
+    })
+  }
+
+  return windowsNativeRgPathPromise
+}
+
+/**
+ * Resolve the search path for ripgrep.
+ * - WSL mode: convert to Linux path for `wsl.exe -e rg`.
+ * - Native mode: resolve to native absolute path.
+ */
+function resolveSearchPath(inputPath: string, useWSL: boolean): string {
+  const pathCandidate = (inputPath?.trim() || '.').trim()
+
+  if (useWSL) {
+    return toWslPath(pathCandidate)
+  }
+
+  return path.isAbsolute(pathCandidate) ? pathCandidate : path.resolve(pathCandidate)
 }
 
 export async function ripgrepSearch(
@@ -82,8 +120,17 @@ export async function ripgrepSearch(
       ? Math.floor(userMaxOutputChars)
       : DEFAULT_MAX_OUTPUT_CHARS
 
-  // Resolve the search path - this determines if we use WSL and what path to pass to rg
-  const { forRg: resolvedPath, useWSL } = resolveSearchPath(searchPath)
+  const normalizedSearchPath = (searchPath?.trim() || '.').trim()
+  const pathType = detectPathType(normalizedSearchPath)
+  const windowsNativeRgPath = await detectWindowsNativeRgPath()
+
+  const canUseNativeWindowsRg =
+    process.platform === 'win32' &&
+    Boolean(windowsNativeRgPath) &&
+    (pathType === 'relative' || pathType === 'windows')
+
+  const useWSL = shouldUseWSL() && !canUseNativeWindowsRg
+  const resolvedPath = resolveSearchPath(normalizedSearchPath, useWSL)
 
   // Build rg command arguments
   const args: string[] = []
@@ -146,6 +193,10 @@ export async function ripgrepSearch(
     const wsl = await getWSLCommandArgs('rg', args)
     cmd = wsl[0]
     cmdArgs = wsl[1]
+  } else if (canUseNativeWindowsRg && windowsNativeRgPath) {
+    // Prefer native Windows rg when available (faster than WSL /mnt bridge)
+    cmd = windowsNativeRgPath
+    cmdArgs = args
   }
 
   return new Promise(resolve => {

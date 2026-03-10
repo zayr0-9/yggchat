@@ -7,6 +7,8 @@ const STORAGE_KEY = 'ygg_provider_settings'
 export const PROVIDER_SETTINGS_CHANGE_EVENT = 'ygg-provider-settings-change'
 export const MIN_OPENROUTER_TEMPERATURE = 0
 export const MAX_OPENROUTER_TEMPERATURE = 2
+export const DEFAULT_COMPACTION_SYSTEM_PROMPT =
+  'You compact chat history. Return concise markdown that preserves goals, hard requirements, key facts, decisions, pending tasks, and unresolved questions. Do not include tool protocol chatter.'
 
 export interface ProviderSettings {
   /** Whether the provider selector is visible in the chat UI */
@@ -19,6 +21,8 @@ export interface ProviderSettings {
   compactionProvider: string | null
   /** Preferred model for automatic branch compaction. Null = use provider default/current model. */
   compactionModel: string | null
+  /** System prompt used by auto-compaction summarization. */
+  compactionSystemPrompt: string
 }
 
 const DEFAULT_SETTINGS: ProviderSettings = {
@@ -27,6 +31,7 @@ const DEFAULT_SETTINGS: ProviderSettings = {
   openRouterTemperature: null,
   compactionProvider: null,
   compactionModel: null,
+  compactionSystemPrompt: DEFAULT_COMPACTION_SYSTEM_PROMPT,
 }
 
 const COMMUNITY_ALLOWED_PROVIDERS = new Set(['LM Studio', 'OpenAI (ChatGPT)'])
@@ -37,6 +42,12 @@ function normalizeOpenRouterTemperature(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   const clamped = Math.max(MIN_OPENROUTER_TEMPERATURE, Math.min(MAX_OPENROUTER_TEMPERATURE, value))
   return Math.round(clamped * 100) / 100
+}
+
+function normalizeCompactionSystemPrompt(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_COMPACTION_SYSTEM_PROMPT
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : DEFAULT_COMPACTION_SYSTEM_PROMPT
 }
 
 /**
@@ -59,6 +70,7 @@ export function loadProviderSettings(): ProviderSettings {
       openRouterTemperature: normalizeOpenRouterTemperature(parsed.openRouterTemperature),
       compactionProvider: parsed.compactionProvider ?? DEFAULT_SETTINGS.compactionProvider,
       compactionModel: parsed.compactionModel ?? DEFAULT_SETTINGS.compactionModel,
+      compactionSystemPrompt: normalizeCompactionSystemPrompt(parsed.compactionSystemPrompt),
     }
   } catch {
     return {
@@ -75,6 +87,7 @@ export function saveProviderSettings(settings: ProviderSettings): void {
   const normalized: ProviderSettings = {
     ...settings,
     openRouterTemperature: normalizeOpenRouterTemperature(settings.openRouterTemperature),
+    compactionSystemPrompt: normalizeCompactionSystemPrompt(settings.compactionSystemPrompt),
   }
 
   try {

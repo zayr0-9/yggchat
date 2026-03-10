@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { Button } from './ui'
 import type { MobileConversation, MobileProject } from '../types'
 
 interface ProjectConversationTreeProps {
@@ -52,9 +53,9 @@ const ProjectGroup: React.FC<{
       {expanded ? (
         <div className='mobile-project-body'>
           <div className='mobile-project-actions'>
-            <button type='button' onClick={() => onCreateConversation(projectId)} disabled={disabled}>
+            <Button onClick={() => onCreateConversation(projectId)} disabled={disabled} size='sm' variant='outline'>
               New conversation
-            </button>
+            </Button>
           </div>
 
           {loading ? <div className='mobile-tree-muted'>Loading conversations…</div> : null}
@@ -65,13 +66,15 @@ const ProjectGroup: React.FC<{
 
           {!loading
             ? conversations.map(conversation => (
-                <button
+                <Button
                   key={conversation.id}
                   className={`mobile-conversation-row ${activeConversationId === conversation.id ? 'active' : ''}`}
                   onClick={() => onSelectConversation(conversation.id)}
+                  variant='ghost'
+                  size='sm'
                 >
                   {conversation.title || 'Untitled Conversation'}
-                </button>
+                </Button>
               ))
             : null}
         </div>
@@ -94,8 +97,6 @@ export const ProjectConversationTree: React.FC<ProjectConversationTreeProps> = (
   onClose,
   disabled = false,
 }) => {
-  const hasNoProjectGroup = true
-
   useEffect(() => {
     if (!open) return
 
@@ -128,18 +129,18 @@ export const ProjectConversationTree: React.FC<ProjectConversationTreeProps> = (
       <section className='mobile-project-modal open' role='dialog' aria-modal='true' aria-label='Projects'>
         <header className='mobile-project-modal-header'>
           <strong>Projects & Conversations</strong>
-          <button type='button' onClick={onClose}>
+          <Button onClick={onClose} variant='outline' size='sm'>
             Close
-          </button>
+          </Button>
         </header>
 
         <div className='mobile-project-modal-body'>
           <div className='mobile-project-tree'>
             <div className='mobile-project-tree-header'>
               <span className='mobile-tree-muted'>Manage projects and pick a conversation</span>
-              <button type='button' onClick={onCreateProject} disabled={disabled}>
+              <Button onClick={onCreateProject} disabled={disabled} size='sm'>
                 New project
-              </button>
+              </Button>
             </div>
 
             {projects.map(project => {
@@ -161,20 +162,6 @@ export const ProjectConversationTree: React.FC<ProjectConversationTreeProps> = (
               )
             })}
 
-            {hasNoProjectGroup ? (
-              <ProjectGroup
-                title='No Project'
-                projectId={null}
-                conversations={conversationsByProjectKey[keyForProject(null)] || []}
-                expanded={expandedProjectKeys.includes(keyForProject(null))}
-                loading={loadingProjectKeys.includes(keyForProject(null))}
-                activeConversationId={activeConversationId}
-                onToggleProject={onToggleProject}
-                onSelectConversation={onSelectConversation}
-                onCreateConversation={onCreateConversation}
-                disabled={disabled}
-              />
-            ) : null}
           </div>
         </div>
       </section>

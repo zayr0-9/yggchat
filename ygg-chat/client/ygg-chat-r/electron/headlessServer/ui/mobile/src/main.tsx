@@ -4,13 +4,8 @@ import { App } from './App'
 
 const applyThemePreference = () => {
   const root = document.documentElement
-  const storedTheme = window.localStorage.getItem('theme')
 
-  if (storedTheme === 'light' || storedTheme === 'dark') {
-    root.setAttribute('data-theme', storedTheme)
-    return
-  }
-
+  // Let CSS media queries control dark mode via prefers-color-scheme.
   root.removeAttribute('data-theme')
 }
 

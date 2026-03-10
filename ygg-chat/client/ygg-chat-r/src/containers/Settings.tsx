@@ -53,6 +53,13 @@ import {
   type StartupLandingPreference,
 } from '../helpers/startupPreferences'
 import {
+  buildRemoteMobileUrl,
+  loadRemoteServerSettings,
+  normalizeRemoteBaseUrl,
+  REMOTE_SERVER_SETTINGS_CHANGE_EVENT,
+  saveRemoteServerSettings,
+} from '../helpers/remoteServerSettingsStorage'
+import {
   loadToolExecutionSettings,
   MAX_BASH_TIMEOUT_MS,
   MIN_BASH_TIMEOUT_MS,
@@ -81,7 +88,7 @@ import { isCommunityMode, LOCAL_AUTH_USER_ID } from '../config/runtimeMode'
 import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useModels } from '../hooks/useQueries'
-import { API_BASE, localApi } from '../utils/api'
+import { API_BASE, getLocalServerLanOrigin, getLocalServerOrigin, localApi } from '../utils/api'
 
 const MAX_UPLOAD_SIZE_BYTES = 8 * 1024 * 1024 // 8MB
 const LOCAL_FONT_ACCEPT = '.woff2,.ttf,.otf'
@@ -163,6 +170,8 @@ const Settings: React.FC = () => {
   const [googleDisconnecting, setGoogleDisconnecting] = useState(false)
   const [googleDriveStatus, setGoogleDriveStatus] = useState<GoogleDriveStatus | null>(null)
   const [statusMessage, setStatusMessage] = useState<StatusMessage | null>(null)
+  const [remoteBaseUrlInput, setRemoteBaseUrlInput] = useState<string>(() => loadRemoteServerSettings().remoteBaseUrl ?? '')
+  const [detectedLocalServerOrigin, setDetectedLocalServerOrigin] = useState<string>('')
   const [localUsers, setLocalUsers] = useState<LocalUserSummary[]>([])
   const [localUsersLoading, setLocalUsersLoading] = useState(false)
   const [migratingOwnership, setMigratingOwnership] = useState(false)
@@ -175,6 +184,10 @@ const Settings: React.FC = () => {
     return typeof configured === 'number' ? String(configured) : ''
   })
   const [openRouterTemperatureTouched, setOpenRouterTemperatureTouched] = useState(false)
+  const [compactionSystemPromptInput, setCompactionSystemPromptInput] = useState<string>(
+    () => loadProviderSettings().compactionSystemPrompt
+  )
+  const [compactionSystemPromptTouched, setCompactionSystemPromptTouched] = useState(false)
   const [toolExecutionSettings, setToolExecutionSettings] = useState<ToolExecutionSettings>(() =>
     loadToolExecutionSettings()
   )
@@ -208,6 +221,12 @@ const Settings: React.FC = () => {
   const { data: openRouterModelsData } = useModels('OpenRouter')
   const compactionProviderForModels = providerSettings.compactionProvider || providers.currentProvider || 'OpenRouter'
   const { data: compactionModelsData } = useModels(compactionProviderForModels)
+  const normalizedRemoteBaseUrlInput = normalizeRemoteBaseUrl(remoteBaseUrlInput)
+  const effectiveRemoteMobileUrl =
+    buildRemoteMobileUrl(normalizedRemoteBaseUrlInput) || buildRemoteMobileUrl(detectedLocalServerOrigin)
+  const remoteQrCodeImageUrl = effectiveRemoteMobileUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(effectiveRemoteMobileUrl)}`
+    : null
 
   // Fetch Google Drive connection status
   const fetchGoogleDriveStatus = async () => {
@@ -232,6 +251,40 @@ const Settings: React.FC = () => {
   useEffect(() => {
     fetchGoogleDriveStatus()
   }, [accessToken])
+
+  useEffect(() => {
+    if (import.meta.env.VITE_ENVIRONMENT !== 'electron') return
+
+    let active = true
+
+    Promise.all([getLocalServerLanOrigin(), getLocalServerOrigin()])
+      .then(([lanOrigin, fallbackOrigin]) => {
+        if (!active) return
+
+        const preferredOrigin = lanOrigin || fallbackOrigin
+        setDetectedLocalServerOrigin(preferredOrigin)
+
+        const saved = loadRemoteServerSettings()
+        if (!saved.remoteBaseUrl && lanOrigin) {
+          const autoSaved = saveRemoteServerSettings({ remoteBaseUrl: lanOrigin })
+          setRemoteBaseUrlInput(autoSaved.remoteBaseUrl ?? '')
+        }
+      })
+      .catch(error => {
+        console.error('Failed to resolve local server origin for remote access settings:', error)
+      })
+
+    const handleRemoteSettingsChanged = () => {
+      const saved = loadRemoteServerSettings()
+      setRemoteBaseUrlInput(saved.remoteBaseUrl ?? '')
+    }
+
+    window.addEventListener(REMOTE_SERVER_SETTINGS_CHANGE_EVENT, handleRemoteSettingsChanged as EventListener)
+    return () => {
+      active = false
+      window.removeEventListener(REMOTE_SERVER_SETTINGS_CHANGE_EVENT, handleRemoteSettingsChanged as EventListener)
+    }
+  }, [])
 
   useEffect(() => {
     const handleBackgroundChange = () => {
@@ -260,6 +313,11 @@ const Settings: React.FC = () => {
     const configured = providerSettings.openRouterTemperature
     setOpenRouterTemperatureInput(typeof configured === 'number' ? String(configured) : '')
   }, [providerSettings.openRouterTemperature, openRouterTemperatureTouched])
+
+  useEffect(() => {
+    if (compactionSystemPromptTouched) return
+    setCompactionSystemPromptInput(providerSettings.compactionSystemPrompt)
+  }, [providerSettings.compactionSystemPrompt, compactionSystemPromptTouched])
 
   useEffect(() => {
     const handleToolExecutionSettingsChange = (e: CustomEvent<ToolExecutionSettings>) => {
@@ -369,12 +427,95 @@ const Settings: React.FC = () => {
     })
   }
 
+  const handleCompactionSystemPromptInputChange = (value: string) => {
+    setCompactionSystemPromptInput(value)
+    setCompactionSystemPromptTouched(true)
+  }
+
+  const commitCompactionSystemPromptChange = (value: string) => {
+    const normalized = value.trim()
+    const fallback = loadProviderSettings().compactionSystemPrompt
+    const nextPrompt = normalized || fallback
+
+    const updated = {
+      ...providerSettings,
+      compactionSystemPrompt: nextPrompt,
+    }
+    saveProviderSettings(updated)
+    setProviderSettings(updated)
+    setCompactionSystemPromptTouched(false)
+    setCompactionSystemPromptInput(nextPrompt)
+    showStatus({ type: 'success', text: 'Compaction system prompt updated.' })
+  }
+
   const handleOpenAIChatGPTSignOut = () => {
     clearOpenAITokens()
     if (providers.currentProvider === 'OpenAI (ChatGPT)') {
       dispatch(chatSliceActions.providerSelected('OpenRouter'))
     }
     showStatus({ type: 'success', text: 'Signed out of OpenAI ChatGPT. You can sign in again from Chat.' })
+  }
+
+  const handleSaveRemoteBaseUrl = () => {
+    const trimmed = remoteBaseUrlInput.trim()
+    if (!trimmed) {
+      const saved = saveRemoteServerSettings({ remoteBaseUrl: null })
+      setRemoteBaseUrlInput(saved.remoteBaseUrl ?? '')
+      showStatus({
+        type: 'info',
+        text: 'Remote server URL cleared. The app will fall back to local server origin (usually 127.0.0.1).',
+      })
+      return
+    }
+
+    const normalized = normalizeRemoteBaseUrl(trimmed)
+    if (!normalized) {
+      showStatus({
+        type: 'error',
+        text: 'Remote server URL must start with http:// or https:// (example: http://192.168.0.119:3002).',
+      })
+      return
+    }
+
+    const saved = saveRemoteServerSettings({ remoteBaseUrl: normalized })
+    setRemoteBaseUrlInput(saved.remoteBaseUrl ?? '')
+    showStatus({ type: 'success', text: `Remote server URL saved: ${saved.remoteBaseUrl}` })
+  }
+
+  const handleOpenRemoteMobileUi = async () => {
+    if (!effectiveRemoteMobileUrl) {
+      showStatus({ type: 'error', text: 'No remote mobile URL available.' })
+      return
+    }
+
+    try {
+      if (window.electronAPI?.auth?.openExternal) {
+        const result = await window.electronAPI.auth.openExternal(effectiveRemoteMobileUrl)
+        if (!result?.success) {
+          window.open(effectiveRemoteMobileUrl, '_blank', 'noopener,noreferrer')
+        }
+      } else {
+        window.open(effectiveRemoteMobileUrl, '_blank', 'noopener,noreferrer')
+      }
+    } catch (error) {
+      console.error('Failed to open remote mobile UI:', error)
+      showStatus({ type: 'error', text: 'Failed to open remote mobile URL in browser.' })
+    }
+  }
+
+  const handleCopyRemoteMobileUi = async () => {
+    if (!effectiveRemoteMobileUrl) {
+      showStatus({ type: 'error', text: 'No remote mobile URL to copy.' })
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(effectiveRemoteMobileUrl)
+      showStatus({ type: 'success', text: 'Remote mobile URL copied to clipboard.' })
+    } catch (error) {
+      console.error('Failed to copy remote mobile URL:', error)
+      showStatus({ type: 'error', text: 'Failed to copy remote mobile URL. Copy it manually from the field.' })
+    }
   }
 
   const handleOpenRouterTemperatureInputChange = (value: string) => {
@@ -1389,6 +1530,84 @@ const Settings: React.FC = () => {
           </div>
         </section>
 
+        {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
+          <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+            <div className='flex flex-col gap-1'>
+              <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Remote Mobile Access</h2>
+              <p className='text-sm text-stone-500 dark:text-stone-200'>
+                Configure a LAN URL for your phone/tablet (same Wi-Fi), then open or scan the QR code.
+              </p>
+            </div>
+
+            <div className='mt-4 grid gap-5 lg:grid-cols-[minmax(0,1fr)_240px]'>
+              <div className='flex flex-col gap-3'>
+                <div className='flex flex-col gap-2'>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Remote Server Base URL</p>
+                  <input
+                    type='url'
+                    value={remoteBaseUrlInput}
+                    placeholder='http://192.168.0.119:3002'
+                    onChange={event => setRemoteBaseUrlInput(event.target.value)}
+                    className='w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+                  />
+                  <p className='text-xs text-stone-500 dark:text-stone-400'>
+                    Leave blank to use detected local origin: {detectedLocalServerOrigin || 'resolving...'}
+                  </p>
+                </div>
+
+                <div className='flex flex-wrap items-center gap-2'>
+                  <Button variant='primary' size='small' onClick={handleSaveRemoteBaseUrl}>
+                    Save Remote URL
+                  </Button>
+                  <Button
+                    variant='outline2'
+                    size='small'
+                    onClick={() => {
+                      setRemoteBaseUrlInput('')
+                      saveRemoteServerSettings({ remoteBaseUrl: null })
+                      showStatus({
+                        type: 'info',
+                        text: 'Remote server URL cleared. Using detected local origin as fallback.',
+                      })
+                    }}
+                  >
+                    Clear
+                  </Button>
+                  <Button variant='outline2' size='small' onClick={handleOpenRemoteMobileUi} disabled={!effectiveRemoteMobileUrl}>
+                    Open Mobile UI
+                  </Button>
+                  <Button variant='outline2' size='small' onClick={handleCopyRemoteMobileUi} disabled={!effectiveRemoteMobileUrl}>
+                    Copy URL
+                  </Button>
+                </div>
+
+                <div className='rounded-lg border border-stone-200 bg-stone-50/70 px-3 py-2 text-xs text-stone-600 dark:border-stone-700 dark:bg-stone-800/40 dark:text-stone-300 break-all'>
+                  <p className='font-medium mb-1 text-stone-700 dark:text-stone-200'>Effective mobile URL</p>
+                  <p>{effectiveRemoteMobileUrl || 'Unavailable'}</p>
+                </div>
+              </div>
+
+              <div className='flex flex-col items-start gap-2'>
+                <p className='text-sm font-medium text-stone-900 dark:text-stone-100'>Scan QR (phone)</p>
+                {remoteQrCodeImageUrl ? (
+                  <img
+                    src={remoteQrCodeImageUrl}
+                    alt='QR code for remote mobile URL'
+                    className='h-[220px] w-[220px] rounded-lg border border-stone-200 bg-white p-2 dark:border-stone-700'
+                  />
+                ) : (
+                  <div className='flex h-[220px] w-[220px] items-center justify-center rounded-lg border border-dashed border-stone-300 text-xs text-stone-500 dark:border-stone-600 dark:text-stone-400'>
+                    Enter or detect a URL to render QR
+                  </div>
+                )}
+                <p className='text-[11px] text-stone-500 dark:text-stone-400'>
+                  QR image is rendered via api.qrserver.com.
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Provider Settings Section */}
         {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
           <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
@@ -1477,6 +1696,21 @@ const Settings: React.FC = () => {
                   placeholder='Use provider default/current model'
                   className='max-w-xl'
                 />
+                <div className='flex flex-col gap-2 pt-2'>
+                  <div>
+                    <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Compaction System Prompt</p>
+                    <p className='text-sm text-stone-500 dark:text-stone-400'>
+                      Used when generating auto-compaction summaries before continued conversation.
+                    </p>
+                  </div>
+                  <textarea
+                    value={compactionSystemPromptInput}
+                    onChange={e => handleCompactionSystemPromptInputChange(e.target.value)}
+                    onBlur={e => commitCompactionSystemPromptChange(e.target.value)}
+                    rows={6}
+                    className='w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-100'
+                  />
+                </div>
               </div>
 
               <div className='flex flex-col gap-2 pt-2 border-t border-stone-200 dark:border-stone-700'>

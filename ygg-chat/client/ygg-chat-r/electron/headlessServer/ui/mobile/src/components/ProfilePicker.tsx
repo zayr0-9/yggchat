@@ -1,4 +1,6 @@
 import React from 'react'
+import { cn } from '../lib/utils'
+import { Select } from './ui'
 import type { LocalUserProfile } from '../types'
 
 interface ProfilePickerProps {
@@ -6,14 +8,25 @@ interface ProfilePickerProps {
   selectedUserId: string | null
   onSelect: (userId: string) => void
   disabled?: boolean
+  compact?: boolean
+  labelText?: string
+  className?: string
 }
 
-export const ProfilePicker: React.FC<ProfilePickerProps> = ({ users, selectedUserId, onSelect, disabled = false }) => {
+export const ProfilePicker: React.FC<ProfilePickerProps> = ({
+  users,
+  selectedUserId,
+  onSelect,
+  disabled = false,
+  compact = false,
+  labelText = 'Profile',
+  className,
+}) => {
   return (
-    <div className='mobile-profile-picker'>
-      <label>
-        Profile
-        <select
+    <div className={cn('mobile-profile-picker', compact && 'mobile-profile-picker--compact', className)}>
+      <label className='mobile-profile-picker-label'>
+        <span>{labelText}</span>
+        <Select
           value={selectedUserId || ''}
           onChange={event => onSelect(event.target.value)}
           disabled={disabled || users.length === 0}
@@ -24,7 +37,7 @@ export const ProfilePicker: React.FC<ProfilePickerProps> = ({ users, selectedUse
               {user.username || user.id} · {user.conversation_count ?? 0} conv
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     </div>
   )

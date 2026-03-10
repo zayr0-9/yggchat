@@ -14,7 +14,6 @@ import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { ThemeManager } from '../ThemeManager/ThemeManager'
 import { SendButtonAnimationSettings } from './SendButtonAnimationSettings'
 import { ToolsSettings } from './ToolsSettings'
-import { VoiceSettingsSection } from './VoiceSettingsSection'
 
 type SettingsPaneProps = {
   open: boolean
@@ -1087,9 +1086,6 @@ ${block}`
                 </button>
               </div>
             </div>
-
-            {/* Voice Settings Section */}
-            <VoiceSettingsSection />
 
             {/* Send Button Animation Section */}
             <div className='space-y-2'>

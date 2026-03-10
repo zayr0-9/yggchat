@@ -41,7 +41,7 @@ import { openStreamingWithPreFirstByteRetry } from './streamResilience'
 import { persistToolResultsWithFallback } from './toolResultPersistence'
 // OpenAI OAuth is handled internally by OpenAIChatGPT module
 import { getDefaultMaxTurns, getSubagentEnabledTools, isOrchestratorEnabled } from '../../helpers/subagentToolSettings'
-import { loadProviderSettings } from '../../helpers/providerSettingsStorage'
+import { DEFAULT_COMPACTION_SYSTEM_PROMPT, loadProviderSettings } from '../../helpers/providerSettingsStorage'
 import { getDefaultBashTimeoutMs } from '../../helpers/toolExecutionSettings'
 import { updateToolEnabledState } from '../../helpers/toolSettingsStorage'
 import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
@@ -520,6 +520,42 @@ const syncConversationTitleAcrossCaches = (
   queryClient.setQueryData<ConversationInfiniteData>(['conversations', 'infinite'], old =>
     updateConversationTitleInInfinite(old, conversationId, title)
   )
+}
+
+const AUTO_CONVERSATION_TITLE_MAX_CHARS = 50
+
+const buildAutoConversationTitle = (content: string | null | undefined): string | null => {
+  const normalized = typeof content === 'string' ? content.trim().replace(/\s+/g, ' ') : ''
+  if (!normalized) return null
+  if (normalized.length <= AUTO_CONVERSATION_TITLE_MAX_CHARS) return normalized
+  return `${normalized.slice(0, AUTO_CONVERSATION_TITLE_MAX_CHARS)}...`
+}
+
+const maybePersistAutoConversationTitle = async ({
+  dispatch,
+  conversationId,
+  storageMode,
+  parentId,
+  content,
+  contextLabel,
+}: {
+  dispatch: any
+  conversationId: ConversationId
+  storageMode?: 'cloud' | 'local'
+  parentId: MessageId | null | undefined
+  content: string | null | undefined
+  contextLabel: string
+}): Promise<void> => {
+  if (parentId != null) return
+
+  const title = buildAutoConversationTitle(content)
+  if (!title) return
+
+  try {
+    await (dispatch as any)(updateConversationTitle({ id: conversationId, title, storageMode })).unwrap()
+  } catch (error) {
+    console.error(`[${contextLabel}] Failed to auto-update conversation title:`, error)
+  }
 }
 
 // Utility function for API calls
@@ -2008,8 +2044,9 @@ export const compactBranch = createAsyncThunk<
         return { message: null }
       }
 
+      const providerSettings = loadProviderSettings()
       const compactionSystemPrompt =
-        'You compact chat history. Return concise markdown that preserves goals, hard requirements, key facts, decisions, pending tasks, and unresolved questions. Do not include tool protocol chatter.'
+        providerSettings.compactionSystemPrompt?.trim() || DEFAULT_COMPACTION_SYSTEM_PROMPT
       const compactionUserPrompt = [
         'Compact this branch context for continued conversation.',
         'Output sections:',
@@ -2263,8 +2300,6 @@ export const sendMessage = createAsyncThunk<
           parent = latestCompactionMessage.id
         }
       }
-      const isFirstMessage = (currentMessages?.length || 0) === 0
-
       // Read selected model from React Query cache
       // Use original provider case for cache lookup (React Query keys are case-sensitive)
       const provider = state.chat.providerState.currentProvider
@@ -2446,6 +2481,14 @@ const executionMode = 'client'
           // Track for return payload
           userMessage = newUserMessage
           currentTurnHistory.push(newUserMessage)
+          await maybePersistAutoConversationTitle({
+            dispatch,
+            conversationId,
+            storageMode,
+            parentId: newUserMessage.parent_id,
+            content: newUserMessage.content_plain_text || input.content,
+            contextLabel: shouldUseLmStudio ? 'sendMessage/lmstudio' : 'sendMessage/openai-chatgpt',
+          })
 
           // CRITICAL: Update parent to user message ID so assistant reply is parented correctly
           parent = newUserMessage.id
@@ -3383,8 +3426,6 @@ const executionMode = 'client'
         if (!reader) throw new Error('No stream reader available')
 
         const decoder = new TextDecoder()
-        // Guard to ensure we only try to update the title once per send
-        let titleUpdated = false
         // Buffer for incomplete lines across chunks
         let buffer = ''
 
@@ -3470,16 +3511,14 @@ const executionMode = 'client'
                     // Sync artifacts to React Query cache so images appear immediately
                     updateMessageArtifactsInCache(extra.queryClient, conversationId, chunk.message.id, artifactDataUrls)
                   }
-                  // Auto-update conversation title with first 50 characters of the first user message
-                  if (isFirstMessage && !titleUpdated) {
-                    const contentForTitle = (chunk.message?.content || '').trim().replace(/\s+/g, ' ')
-                    const baseTitle = contentForTitle.slice(0, 50)
-                    const title = baseTitle ? `${baseTitle}...` : ''
-                    if (title) {
-                      ;(dispatch as any)(updateConversationTitle({ id: conversationId, title, storageMode }))
-                      titleUpdated = true
-                    }
-                  }
+                  await maybePersistAutoConversationTitle({
+                    dispatch,
+                    conversationId,
+                    storageMode,
+                    parentId: chunk.message.parent_id ?? parent ?? null,
+                    content: chunk.message?.content_plain_text || chunk.message?.content || input.content,
+                    contextLabel: 'sendMessage',
+                  })
                 }
 
                 // Handle tool results (accumulated server-side into content_blocks)
@@ -4307,6 +4346,14 @@ const executionMode = 'client' // Prefer client execution for tools
 
             userMessage = newUserMessage
             currentTurnHistory.push(newUserMessage)
+            await maybePersistAutoConversationTitle({
+              dispatch,
+              conversationId,
+              storageMode,
+              parentId: newUserMessage.parent_id,
+              content: newContent,
+              contextLabel: 'editMessageWithBranching',
+            })
             activeParentId = newUserMessage.id
           }
 
@@ -4549,6 +4596,14 @@ const executionMode = 'client' // Prefer client execution for tools
 
             userMessage = newUserMessage
             currentTurnHistory.push(newUserMessage)
+            await maybePersistAutoConversationTitle({
+              dispatch,
+              conversationId,
+              storageMode,
+              parentId: newUserMessage.parent_id,
+              content: newContent,
+              contextLabel: 'editMessageWithBranching',
+            })
             activeParentId = newUserMessage.id
           }
 
@@ -4893,6 +4948,14 @@ const executionMode = 'client' // Prefer client execution for tools
 
                   // Add to local history for next turn
                   currentTurnHistory.push(chunk.message)
+                  await maybePersistAutoConversationTitle({
+                    dispatch,
+                    conversationId,
+                    storageMode,
+                    parentId: chunk.message.parent_id ?? activeParentId ?? null,
+                    content: chunk.message?.content_plain_text || chunk.message?.content || newContent,
+                    contextLabel: 'editMessageWithBranching',
+                  })
 
                   // Live-update: ensure the new branched user message shows all intended artifacts immediately
                   // Use the combined list (existing - deleted + drafts) we computed prior to the request
@@ -5391,6 +5454,14 @@ const executionMode = 'client'
 
             userMessage = newUserMessage
             currentTurnHistory.push(newUserMessage)
+            await maybePersistAutoConversationTitle({
+              dispatch,
+              conversationId,
+              storageMode,
+              parentId: newUserMessage.parent_id,
+              content: content,
+              contextLabel: 'sendMessageToBranch',
+            })
             currentParentId = newUserMessage.id
           }
 
@@ -5619,6 +5690,14 @@ const executionMode = 'client'
 
             userMessage = newUserMessage
             currentTurnHistory.push(newUserMessage)
+            await maybePersistAutoConversationTitle({
+              dispatch,
+              conversationId,
+              storageMode,
+              parentId: newUserMessage.parent_id,
+              content: content,
+              contextLabel: 'sendMessageToBranch',
+            })
             currentParentId = newUserMessage.id
           }
 
@@ -5902,6 +5981,15 @@ const executionMode = 'client'
                       })
                       .catch(err => console.error('[sendMessageToBranch] Failed to save local attachments:', err))
                   }
+
+                  await maybePersistAutoConversationTitle({
+                    dispatch,
+                    conversationId,
+                    storageMode,
+                    parentId: chunk.message.parent_id ?? currentParentId ?? null,
+                    content: chunk.message?.content_plain_text || chunk.message?.content || content,
+                    contextLabel: 'sendMessageToBranch',
+                  })
                 }
 
                 // Handle tool results (accumulated server-side into content_blocks)
@@ -7375,6 +7463,14 @@ export const sendHermesMessage = createAsyncThunk<
                     targetParentId: normalizedUserMessage.id,
                   })
                 )
+
+                await maybePersistAutoConversationTitle({
+                  dispatch,
+                  conversationId,
+                  parentId: normalizedUserMessage.parent_id,
+                  content: normalizedUserMessage.content_plain_text || normalizedUserMessage.content || message,
+                  contextLabel: 'sendHermesMessage',
+                })
               } else if (chunk.type === 'chunk') {
                 const normalizedPart = chunk.part || 'text'
                 const normalizedDelta = chunk.delta || chunk.content || ''
@@ -7550,7 +7646,7 @@ export const sendCCMessage = createAsyncThunk<
       forkSession,
       streamId: providedStreamId,
     },
-    { dispatch, extra, rejectWithValue, signal }
+    { dispatch, extra, rejectWithValue, signal, getState }
   ) => {
     // Generate or use provided stream ID
     const streamId = providedStreamId ?? generateStreamId('primary')
@@ -7603,6 +7699,8 @@ export const sendCCMessage = createAsyncThunk<
       let userMessageId: MessageId | undefined
       let buffer = ''
       let shouldInvalidateMessages = false
+      const currentPath = getState().chat.conversation.currentPath
+      const inferredParentId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null
 
       try {
         while (true) {
@@ -7621,7 +7719,55 @@ export const sendCCMessage = createAsyncThunk<
               const chunk = JSON.parse(line.slice(6))
 
               // Handle CC-specific event types
-              if (chunk.type === 'chunk') {
+              if (chunk.type === 'user_message' && chunk.message) {
+                const normalizedUserMessage: Message = {
+                  id: String(chunk.message.id) as MessageId,
+                  conversation_id: conversationId,
+                  role: 'user',
+                  content:
+                    typeof chunk.message.content === 'string' && chunk.message.content.length > 0
+                      ? chunk.message.content
+                      : message,
+                  content_plain_text:
+                    typeof chunk.message.content_plain_text === 'string' && chunk.message.content_plain_text.length > 0
+                      ? chunk.message.content_plain_text
+                      : typeof chunk.message.content === 'string' && chunk.message.content.length > 0
+                        ? chunk.message.content
+                        : message,
+                  parent_id: inferredParentId,
+                  children_ids: Array.isArray(chunk.message.children_ids) ? chunk.message.children_ids : [],
+                  created_at:
+                    typeof chunk.message.created_at === 'string' && chunk.message.created_at.length > 0
+                      ? chunk.message.created_at
+                      : new Date().toISOString(),
+                  model_name:
+                    typeof chunk.message.model_name === 'string' && chunk.message.model_name.length > 0
+                      ? chunk.message.model_name
+                      : 'user-input',
+                  partial: typeof chunk.message.partial === 'boolean' ? chunk.message.partial : false,
+                  pastedContext: Array.isArray(chunk.message.pastedContext) ? chunk.message.pastedContext : [],
+                  artifacts: Array.isArray(chunk.message.artifacts) ? chunk.message.artifacts : [],
+                }
+
+                userMessageId = normalizedUserMessage.id
+                dispatch(chatSliceActions.messageAdded(normalizedUserMessage))
+                dispatch(chatSliceActions.messageBranchCreated({ newMessage: normalizedUserMessage }))
+                updateMessageCache(extra.queryClient, conversationId, normalizedUserMessage)
+                dispatch(
+                  chatSliceActions.streamLineageUpdated({
+                    streamId,
+                    targetParentId: normalizedUserMessage.id,
+                  })
+                )
+
+                await maybePersistAutoConversationTitle({
+                  dispatch,
+                  conversationId,
+                  parentId: normalizedUserMessage.parent_id,
+                  content: normalizedUserMessage.content_plain_text || normalizedUserMessage.content || message,
+                  contextLabel: 'sendCCMessage',
+                })
+              } else if (chunk.type === 'chunk') {
                 // Real-time streaming chunk (delta) - display incrementally
                 // This comes from the onStreamingChunk callback for live streaming
                 dispatch(
@@ -7825,7 +7971,55 @@ export const sendCCBranch = createAsyncThunk<
               const chunk = JSON.parse(line.slice(6))
 
               // Handle CC-specific event types
-              if (chunk.type === 'chunk') {
+              if (chunk.type === 'user_message' && chunk.message) {
+                const normalizedUserMessage: Message = {
+                  id: String(chunk.message.id) as MessageId,
+                  conversation_id: conversationId,
+                  role: 'user',
+                  content:
+                    typeof chunk.message.content === 'string' && chunk.message.content.length > 0
+                      ? chunk.message.content
+                      : message,
+                  content_plain_text:
+                    typeof chunk.message.content_plain_text === 'string' && chunk.message.content_plain_text.length > 0
+                      ? chunk.message.content_plain_text
+                      : typeof chunk.message.content === 'string' && chunk.message.content.length > 0
+                        ? chunk.message.content
+                        : message,
+                  parent_id: parentId,
+                  children_ids: Array.isArray(chunk.message.children_ids) ? chunk.message.children_ids : [],
+                  created_at:
+                    typeof chunk.message.created_at === 'string' && chunk.message.created_at.length > 0
+                      ? chunk.message.created_at
+                      : new Date().toISOString(),
+                  model_name:
+                    typeof chunk.message.model_name === 'string' && chunk.message.model_name.length > 0
+                      ? chunk.message.model_name
+                      : 'user-input',
+                  partial: typeof chunk.message.partial === 'boolean' ? chunk.message.partial : false,
+                  pastedContext: Array.isArray(chunk.message.pastedContext) ? chunk.message.pastedContext : [],
+                  artifacts: Array.isArray(chunk.message.artifacts) ? chunk.message.artifacts : [],
+                }
+
+                userMessageId = normalizedUserMessage.id
+                dispatch(chatSliceActions.messageAdded(normalizedUserMessage))
+                dispatch(chatSliceActions.messageBranchCreated({ newMessage: normalizedUserMessage }))
+                updateMessageCache(extra.queryClient, conversationId, normalizedUserMessage)
+                dispatch(
+                  chatSliceActions.streamLineageUpdated({
+                    streamId,
+                    targetParentId: normalizedUserMessage.id,
+                  })
+                )
+
+                await maybePersistAutoConversationTitle({
+                  dispatch,
+                  conversationId,
+                  parentId: normalizedUserMessage.parent_id,
+                  content: normalizedUserMessage.content_plain_text || normalizedUserMessage.content || message,
+                  contextLabel: 'sendCCBranch',
+                })
+              } else if (chunk.type === 'chunk') {
                 // Real-time streaming chunk (delta) - display incrementally
                 dispatch(
                   chatSliceActions.streamChunkReceived({
