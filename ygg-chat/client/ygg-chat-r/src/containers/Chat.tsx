@@ -772,7 +772,7 @@ function Chat() {
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
   const isBranchEditing = useAppSelector(state => state.chat.composition.editingBranch)
 
-  const streamingRoot = useAppSelector(state => state.chat.streaming)
+  // const streamingRoot = useAppSelector(state => state.chat.streaming)
   // const [streamDebugPanelOpen, setStreamDebugPanelOpen] = useState(true)
 
   // const selectedPathStringSet = useMemo(() => new Set(selectedPath.map(id => String(id))), [selectedPath])
