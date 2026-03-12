@@ -39,7 +39,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isCompact: () => ipcRenderer.invoke('window:isCompact'),
   },
   theme: {
-    update: (isDark: boolean) => ipcRenderer.invoke('theme:update', isDark),
+    update: (themePreference: boolean | 'light' | 'dark' | 'system') =>
+      ipcRenderer.invoke('theme:update', themePreference),
   },
   sync: {
     status: () => ipcRenderer.invoke('sync:status'),

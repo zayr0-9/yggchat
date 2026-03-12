@@ -195,7 +195,10 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
       properties: {
         path: { type: 'string', description: 'File path to create (absolute or relative).' },
         content: { type: 'string', description: 'Initial content to write to the file; defaults to empty.' },
-        directory: { type: 'string', description: 'Optional base directory; resolved when path is relative.' },
+        cwd: {
+          type: 'string',
+          description: 'Optional working directory to resolve relative paths from. Must stay within workspace scope when a workspace root is set.',
+        },
         createParentDirs: {
           type: 'boolean',
           description: 'If true, create parent directories as needed (default true).',

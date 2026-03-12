@@ -53,6 +53,7 @@ import {
   setMcpTools,
   updateToolEnabled as updateToolEnabledInDefinitions,
 } from './toolDefinitions'
+import { runChatHook, type ChatHookLineage, type ChatHookTurnContext } from './chatHookClient'
 
 // TODO: Import when conversations feature is available
 // import { conversationActions } from '../conversations'
@@ -802,6 +803,247 @@ const resolveOpenRouterTemperature = (providerSlug: string): number | undefined 
   if (providerSlug !== 'openrouter') return undefined
   const configured = loadProviderSettings().openRouterTemperature
   return typeof configured === 'number' ? configured : undefined
+}
+
+const appendHookAdditionalContext = (target: string[], value: string | null | undefined) => {
+  if (typeof value !== 'string') return
+  const trimmed = value.trim()
+  if (!trimmed) return
+  target.push(trimmed)
+}
+
+const buildSystemPromptWithHookContext = (
+  baseSystemPrompt: string | null | undefined,
+  pendingHookContextForNextTurn: string[]
+): string => {
+  const segments = [typeof baseSystemPrompt === 'string' ? baseSystemPrompt.trim() : ''].filter(Boolean)
+  const hookContextBlocks = pendingHookContextForNextTurn
+    .map(context => context.trim())
+    .filter(Boolean)
+    .map(context => `[Hook context]\n${context}`)
+
+  if (hookContextBlocks.length > 0) {
+    segments.push(hookContextBlocks.join('\n\n'))
+  }
+
+  return segments.join('\n\n')
+}
+
+const getAssistantMessageTextForHook = (message: any): string => {
+  if (!message) return ''
+  if (typeof message.content_plain_text === 'string' && message.content_plain_text.trim()) {
+    return message.content_plain_text
+  }
+  if (typeof message.content === 'string' && message.content.trim()) {
+    return message.content
+  }
+  return ''
+}
+
+type HookMessageLike = Pick<Message, 'id' | 'parent_id'> & { conversation_id?: ConversationId | string | null }
+
+const getHookMessagesForConversation = (params: {
+  state?: RootState | null
+  queryClient?: QueryClient | null
+  conversationId?: ConversationId | string | null
+}): HookMessageLike[] => {
+  const conversationId = params.conversationId != null ? String(params.conversationId) : null
+  if (!conversationId) return []
+
+  const cachedMessages = params.queryClient?.getQueryData<{ messages: Message[]; tree: any }>([
+    'conversations',
+    conversationId,
+    'messages',
+  ])?.messages
+  if (Array.isArray(cachedMessages) && cachedMessages.length > 0) {
+    return cachedMessages
+  }
+
+  const stateMessages = params.state?.chat.conversation.messages
+  if (!Array.isArray(stateMessages) || stateMessages.length === 0) return []
+  return stateMessages.filter(message => String(message.conversation_id) === conversationId)
+}
+
+const buildHookLineage = (params: {
+  messages: HookMessageLike[]
+  messageId?: MessageId | string | null
+  parentId?: MessageId | string | null
+}): ChatHookLineage => {
+  const messageId = params.messageId != null ? String(params.messageId) : null
+  const explicitParentId = params.parentId != null ? String(params.parentId) : null
+  const messageById = new Map(params.messages.map(message => [String(message.id), message]))
+
+  const ancestorIds: string[] = []
+  const visited = new Set<string>()
+
+  let cursorId: string | null = null
+  let isPersistedMessage = false
+
+  if (messageId && messageById.has(messageId)) {
+    cursorId = messageId
+    isPersistedMessage = true
+  } else if (explicitParentId) {
+    cursorId = explicitParentId
+  }
+
+  while (cursorId && !visited.has(cursorId)) {
+    visited.add(cursorId)
+    const message = messageById.get(cursorId)
+    if (!message) break
+    ancestorIds.push(String(message.id))
+    cursorId = message.parent_id != null ? String(message.parent_id) : null
+  }
+
+  ancestorIds.reverse()
+
+  const rootMessageId = ancestorIds.length > 0 ? ancestorIds[0] : null
+  const isRoot = isPersistedMessage ? ancestorIds.length === 1 : explicitParentId == null
+  const depth = isPersistedMessage ? Math.max(ancestorIds.length - 1, 0) : ancestorIds.length
+
+  return {
+    rootMessageId,
+    ancestorIds,
+    depth,
+    isRoot,
+  }
+}
+
+const buildHookMetadata = (params: {
+  conversationId?: ConversationId | string | null
+  messageId?: MessageId | string | null
+  parentId?: MessageId | string | null
+  state?: RootState | null
+  queryClient?: QueryClient | null
+  turn?: ChatHookTurnContext | null
+}) => {
+  const conversationId = params.conversationId != null ? String(params.conversationId) : null
+  const messageId = params.messageId != null ? String(params.messageId) : null
+  let parentId = params.parentId != null ? String(params.parentId) : null
+  const messages = getHookMessagesForConversation({
+    state: params.state,
+    queryClient: params.queryClient ?? null,
+    conversationId,
+  })
+
+  if (messageId && parentId == null) {
+    const currentMessage = messages.find(message => String(message.id) === messageId)
+    if (currentMessage?.parent_id != null) {
+      parentId = String(currentMessage.parent_id)
+    }
+  }
+
+  return {
+    conversationId,
+    messageId,
+    parentId,
+    lineage: buildHookLineage({ messages, messageId, parentId }),
+    lookup: {
+      localApiBase: getCachedLocalApiBase(),
+    },
+    turn: params.turn ?? undefined,
+  }
+}
+
+const maybeApplyUserPromptSubmitHook = async (params: {
+  conversationId: ConversationId
+  streamId: string
+  cwd: string | null
+  provider: string
+  model: string | null | undefined
+  operation: 'send' | 'branch' | 'edit-branch'
+  prompt: string
+  pendingHookContextForNextTurn: string[]
+  parentId?: MessageId | null
+  state?: RootState | null
+  queryClient?: QueryClient | null
+}): Promise<string> => {
+  const hookMetadata = buildHookMetadata({
+    conversationId: params.conversationId,
+    parentId: params.parentId ?? null,
+    state: params.state ?? null,
+    queryClient: params.queryClient ?? null,
+  })
+
+  const hookResult = await runChatHook({
+    event: 'UserPromptSubmit',
+    conversationId: hookMetadata.conversationId,
+    streamId: params.streamId,
+    cwd: params.cwd,
+    provider: params.provider,
+    model: params.model ?? null,
+    operation: params.operation,
+    prompt: params.prompt,
+    messageId: hookMetadata.messageId,
+    parentId: hookMetadata.parentId,
+    lineage: hookMetadata.lineage,
+    lookup: hookMetadata.lookup,
+  })
+
+  appendHookAdditionalContext(params.pendingHookContextForNextTurn, hookResult.additionalContext)
+
+  if (hookResult.blocked) {
+    throw new Error(hookResult.reason || 'Blocked by hook')
+  }
+
+  return typeof hookResult.updatedPrompt === 'string' ? hookResult.updatedPrompt : params.prompt
+}
+
+const shouldContinueFromStopHook = async (params: {
+  conversationId: ConversationId
+  streamId: string
+  cwd: string | null
+  provider: string
+  model: string | null | undefined
+  operation: 'send' | 'branch' | 'edit-branch'
+  pendingHookContextForNextTurn: string[]
+  lastAssistantMessage: any
+  state?: RootState | null
+  queryClient?: QueryClient | null
+}): Promise<boolean> => {
+  const lastAssistantMessage = params.lastAssistantMessage
+  if (!lastAssistantMessage) return false
+
+  const lastAssistantMessageId = lastAssistantMessage?.id != null ? String(lastAssistantMessage.id) : null
+  const lastUserMessageId = lastAssistantMessage?.parent_id != null ? String(lastAssistantMessage.parent_id) : null
+  const hookMetadata = buildHookMetadata({
+    conversationId: params.conversationId,
+    messageId: lastAssistantMessageId,
+    parentId: lastUserMessageId,
+    state: params.state ?? null,
+    queryClient: params.queryClient ?? null,
+    turn: {
+      lastUserMessageId,
+      lastAssistantMessageId,
+    },
+  })
+
+  const hookResult = await runChatHook({
+    event: 'Stop',
+    conversationId: hookMetadata.conversationId,
+    streamId: params.streamId,
+    cwd: params.cwd,
+    provider: params.provider,
+    model: params.model ?? null,
+    operation: params.operation,
+    lastAssistantMessage: getAssistantMessageTextForHook(lastAssistantMessage),
+    messageId: hookMetadata.messageId,
+    parentId: hookMetadata.parentId,
+    lineage: hookMetadata.lineage,
+    lookup: hookMetadata.lookup,
+    turn: hookMetadata.turn,
+  })
+
+  appendHookAdditionalContext(params.pendingHookContextForNextTurn, hookResult.additionalContext)
+
+  if (hookResult.blocked) {
+    appendHookAdditionalContext(
+      params.pendingHookContextForNextTurn,
+      hookResult.reason || 'Hook requested continued execution.'
+    )
+    return true
+  }
+
+  return false
 }
 
 
@@ -1868,14 +2110,22 @@ const executeToolWithPermissionCheck = async (
     priority?: 'low' | 'normal' | 'high' | 'critical'
     timeoutMs?: number
     accessToken?: string | null
+    queryClient?: QueryClient | null
+    enableHooks?: boolean
+    provider?: string | null
+    model?: string | null
+    operation?: 'send' | 'branch' | 'edit-branch'
+    onHookAdditionalContext?: (value: string) => void
   }
 ) => {
   const readLiveState = () => getState() as RootState
+  let effectiveToolCall = toolCall
 
-  // Always resolve operation mode at execution time so Chat/Agent toggles apply mid-stream.
-  const runToolWithLiveOperationMode = async () => {
-    const liveOperationMode = readLiveState().chat.operationMode ?? operationMode
-    return await executeLocalTool(toolCall, rootPath, liveOperationMode, extendedContext)
+  const emitHookAdditionalContext = (value: string | null | undefined) => {
+    if (typeof value !== 'string' || !context?.onHookAdditionalContext) return
+    const trimmed = value.trim()
+    if (!trimmed) return
+    context.onHookAdditionalContext(trimmed)
   }
 
   // Extend context with dispatch/getState for subagent execution
@@ -1885,32 +2135,129 @@ const executeToolWithPermissionCheck = async (
     getState,
   }
 
-  if (shouldBypassToolPermission(toolCall)) {
-    return await runToolWithLiveOperationMode()
+  // Always resolve operation mode at execution time so Chat/Agent toggles apply mid-stream.
+  const runToolWithLiveOperationMode = async () => {
+    const liveOperationMode = readLiveState().chat.operationMode ?? operationMode
+    return await executeLocalTool(effectiveToolCall, rootPath, liveOperationMode, extendedContext)
   }
 
-  const autoApprove = readLiveState().chat.toolAutoApprove
+  try {
+    if (context?.enableHooks) {
+      const hookMetadata = buildHookMetadata({
+        conversationId: context.conversationId ?? null,
+        messageId: context.messageId ?? null,
+        state: readLiveState(),
+        queryClient: context.queryClient ?? null,
+      })
 
-  if (autoApprove) {
-    // Auto-approve enabled: execute immediately without showing dialog
-    return await runToolWithLiveOperationMode()
+      const preToolHook = await runChatHook({
+        event: 'PreToolUse',
+        conversationId: hookMetadata.conversationId,
+        streamId: context.streamId ?? null,
+        cwd: rootPath,
+        provider: context.provider ?? null,
+        model: context.model ?? null,
+        operation: context.operation ?? null,
+        toolCall,
+        messageId: hookMetadata.messageId,
+        parentId: hookMetadata.parentId,
+        lineage: hookMetadata.lineage,
+        lookup: hookMetadata.lookup,
+      })
+
+      emitHookAdditionalContext(preToolHook.additionalContext)
+
+      if (preToolHook.updatedInput) {
+        effectiveToolCall = {
+          ...toolCall,
+          arguments: preToolHook.updatedInput,
+        }
+      }
+
+      if (preToolHook.permissionDecision === 'deny') {
+        throw new Error(preToolHook.permissionDecisionReason || 'Tool blocked by hook')
+      }
+    }
+
+    let result: any
+    if (shouldBypassToolPermission(effectiveToolCall)) {
+      result = await runToolWithLiveOperationMode()
+    } else {
+      const autoApprove = readLiveState().chat.toolAutoApprove
+
+      if (autoApprove) {
+        result = await runToolWithLiveOperationMode()
+      } else {
+        dispatch(chatSliceActions.toolPermissionRequested({ toolCall: effectiveToolCall }))
+
+        const allowed = await new Promise<boolean>(resolve => {
+          pendingPermissionResolve = resolve
+        })
+
+        if (!allowed) {
+          throw new Error('Tool execution denied by user')
+        }
+
+        result = await runToolWithLiveOperationMode()
+      }
+    }
+
+    if (context?.enableHooks) {
+      const hookMetadata = buildHookMetadata({
+        conversationId: context.conversationId ?? null,
+        messageId: context.messageId ?? null,
+        state: readLiveState(),
+        queryClient: context.queryClient ?? null,
+      })
+      const serializedResult = typeof result === 'string' ? result : JSON.stringify(result)
+      const postToolHook = await runChatHook({
+        event: 'PostToolUse',
+        conversationId: hookMetadata.conversationId,
+        streamId: context.streamId ?? null,
+        cwd: rootPath,
+        provider: context.provider ?? null,
+        model: context.model ?? null,
+        operation: context.operation ?? null,
+        toolCall: effectiveToolCall,
+        toolResult: serializedResult,
+        messageId: hookMetadata.messageId,
+        parentId: hookMetadata.parentId,
+        lineage: hookMetadata.lineage,
+        lookup: hookMetadata.lookup,
+      })
+      emitHookAdditionalContext(postToolHook.additionalContext)
+    }
+
+    return result
+  } catch (error) {
+    if (context?.enableHooks) {
+      const hookMetadata = buildHookMetadata({
+        conversationId: context.conversationId ?? null,
+        messageId: context.messageId ?? null,
+        state: readLiveState(),
+        queryClient: context.queryClient ?? null,
+      })
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const postToolFailureHook = await runChatHook({
+        event: 'PostToolUseFailure',
+        conversationId: hookMetadata.conversationId,
+        streamId: context.streamId ?? null,
+        cwd: rootPath,
+        provider: context.provider ?? null,
+        model: context.model ?? null,
+        operation: context.operation ?? null,
+        toolCall: effectiveToolCall,
+        error: errorMessage,
+        messageId: hookMetadata.messageId,
+        parentId: hookMetadata.parentId,
+        lineage: hookMetadata.lineage,
+        lookup: hookMetadata.lookup,
+      })
+      emitHookAdditionalContext(postToolFailureHook.additionalContext)
+    }
+
+    throw error
   }
-
-  // Auto-approve disabled: show dialog and wait for user response
-  dispatch(chatSliceActions.toolPermissionRequested({ toolCall }))
-
-  // Wait for user response
-  const allowed = await new Promise<boolean>(resolve => {
-    pendingPermissionResolve = resolve
-  })
-
-  // Execute or bail based on user decision
-  if (allowed) {
-    return await runToolWithLiveOperationMode()
-  }
-
-  // User explicitly denied the tool execution — surface as an error to halt generation
-  throw new Error('Tool execution denied by user')
 }
 
 const openConversationStreamWithRetry = async (
@@ -2272,6 +2619,7 @@ export const sendMessage = createAsyncThunk<
       chatSliceActions.sendingStarted({
         streamId,
         streamType: 'primary',
+        conversationId,
         lineage: {
           rootMessageId: parent,
         },
@@ -2362,6 +2710,7 @@ const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
 const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
 // Append custom tools explanation to system prompt
 systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
+const baseSystemPrompt = systemPrompt
 
 // Determine execution mode
 const isElectronMode =
@@ -2370,7 +2719,20 @@ const isElectronMode =
 // This allows the client to intercept tool calls and execute them via the discovered local server endpoint.
 const executionMode = 'client'
       let currentTurnHistory = [...currentPathMessages]
-      let currentTurnContent = input.content.trim()
+      const pendingHookContextForNextTurn: string[] = []
+      let currentTurnContent = await maybeApplyUserPromptSubmitHook({
+        conversationId,
+        streamId,
+        cwd: effectiveToolRootPath,
+        provider: serverProvider,
+        model: modelName,
+        operation: 'send',
+        prompt: input.content.trim(),
+        pendingHookContextForNextTurn,
+        parentId: parent ?? null,
+        state,
+        queryClient: extra.queryClient,
+      })
       let continueTurn = true
       let turnCount = 0
       const MAX_TURNS = 100
@@ -2381,6 +2743,8 @@ const executionMode = 'client'
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false // Default to stop unless tool calls occur
+        const systemPrompt = buildSystemPromptWithHookContext(baseSystemPrompt, pendingHookContextForNextTurn)
+        pendingHookContextForNextTurn.length = 0
 
         // Check if streaming was aborted by user (check this specific stream)
         const streamingActive = getState().chat.streaming.byId[streamId]?.active ?? false
@@ -2615,7 +2979,18 @@ const executionMode = 'client'
                     toolCall,
                     rootPath,
                     operationMode,
-                    { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
+                    {
+                      conversationId,
+                      messageId: lastMsg.id,
+                      streamId,
+                      accessToken: auth.accessToken,
+                      queryClient: extra.queryClient,
+                      enableHooks: true,
+                      provider: serverProvider,
+                      model: modelName,
+                      operation: 'send',
+                      onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
+                    }
                   )
                   content = typeof result === 'string' ? result : JSON.stringify(result)
                   successfulTool = true
@@ -2673,6 +3048,27 @@ const executionMode = 'client'
               continueTurn = successfulTool
             } else {
               continueTurn = false
+            }
+
+            if (!continueTurn) {
+              const shouldContinueAfterStop = await shouldContinueFromStopHook({
+                conversationId,
+                streamId,
+                cwd: effectiveToolRootPath,
+                provider: serverProvider,
+                model: modelName,
+                operation: 'send',
+                pendingHookContextForNextTurn,
+                lastAssistantMessage: lastMsg,
+                state: getState(),
+                queryClient: extra.queryClient,
+              })
+
+              if (shouldContinueAfterStop) {
+                currentTurnContent = ''
+                parent = lastMsg.id
+                continueTurn = true
+              }
             }
 
             if (!continueTurn) break
@@ -2800,7 +3196,18 @@ const executionMode = 'client'
                     toolCall,
                     rootPath,
                     operationMode,
-                    { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
+                    {
+                      conversationId,
+                      messageId: lastMsg.id,
+                      streamId,
+                      accessToken: auth.accessToken,
+                      queryClient: extra.queryClient,
+                      enableHooks: true,
+                      provider: serverProvider,
+                      model: modelName,
+                      operation: 'send',
+                      onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
+                    }
                   )
                   content = typeof result === 'string' ? result : JSON.stringify(result)
                   successfulTool = true
@@ -2857,6 +3264,27 @@ const executionMode = 'client'
               continueTurn = successfulTool
             } else {
               continueTurn = false
+            }
+
+            if (!continueTurn) {
+              const shouldContinueAfterStop = await shouldContinueFromStopHook({
+                conversationId,
+                streamId,
+                cwd: effectiveToolRootPath,
+                provider: serverProvider,
+                model: modelName,
+                operation: 'send',
+                pendingHookContextForNextTurn,
+                lastAssistantMessage: lastMsg,
+                state: getState(),
+                queryClient: extra.queryClient,
+              })
+
+              if (shouldContinueAfterStop) {
+                currentTurnContent = ''
+                parent = lastMsg.id
+                continueTurn = true
+              }
             }
 
             if (!continueTurn) break
@@ -3057,7 +3485,18 @@ const executionMode = 'client'
                     toolCall,
                     rootPath,
                     operationMode,
-                    { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
+                    {
+                      conversationId,
+                      messageId: lastMsg.id,
+                      streamId,
+                      accessToken: auth.accessToken,
+                      queryClient: extra.queryClient,
+                      enableHooks: true,
+                      provider: serverProvider,
+                      model: modelName,
+                      operation: 'send',
+                      onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
+                    }
                   )
                   content = typeof result === 'string' ? result : JSON.stringify(result)
                   successfulTool = true
@@ -3124,6 +3563,27 @@ const executionMode = 'client'
               continueTurn = successfulTool
             } else {
               continueTurn = false
+            }
+
+            if (!continueTurn) {
+              const shouldContinueAfterStop = await shouldContinueFromStopHook({
+                conversationId,
+                streamId,
+                cwd: effectiveToolRootPath,
+                provider: serverProvider,
+                model: modelName,
+                operation: 'send',
+                pendingHookContextForNextTurn,
+                lastAssistantMessage: lastMsg,
+                state: getState(),
+                queryClient: extra.queryClient,
+              })
+
+              if (shouldContinueAfterStop) {
+                currentTurnContent = ''
+                parent = lastMsg.id
+                continueTurn = true
+              }
             }
 
             if (!continueTurn) break
@@ -3249,7 +3709,18 @@ const executionMode = 'client'
                     toolCall,
                     rootPath,
                     operationMode,
-                    { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
+                    {
+                      conversationId,
+                      messageId: lastMsg.id,
+                      streamId,
+                      accessToken: auth.accessToken,
+                      queryClient: extra.queryClient,
+                      enableHooks: true,
+                      provider: serverProvider,
+                      model: modelName,
+                      operation: 'send',
+                      onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
+                    }
                   )
                   content = typeof result === 'string' ? result : JSON.stringify(result)
                   successfulTool = true
@@ -3316,6 +3787,27 @@ const executionMode = 'client'
               continueTurn = successfulTool
             } else {
               continueTurn = false
+            }
+
+            if (!continueTurn) {
+              const shouldContinueAfterStop = await shouldContinueFromStopHook({
+                conversationId,
+                streamId,
+                cwd: effectiveToolRootPath,
+                provider: serverProvider,
+                model: modelName,
+                operation: 'send',
+                pendingHookContextForNextTurn,
+                lastAssistantMessage: lastMsg,
+                state: getState(),
+                queryClient: extra.queryClient,
+              })
+
+              if (shouldContinueAfterStop) {
+                currentTurnContent = ''
+                parent = lastMsg.id
+                continueTurn = true
+              }
             }
 
             if (!continueTurn) break
@@ -3713,6 +4205,12 @@ const executionMode = 'client'
                     messageId: messageId ?? turnAssistantMessageId ?? undefined,
                     streamId,
                     accessToken: auth.accessToken,
+                    queryClient: extra.queryClient,
+                    enableHooks: true,
+                    provider: serverProvider,
+                    model: modelName,
+                    operation: 'send',
+                    onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
                   }
                 )
 
@@ -3810,6 +4308,32 @@ const executionMode = 'client'
         } else {
           // No tool calls or server handled it -> finish
           continueTurn = false
+        }
+
+        if (!continueTurn && isStreamActive) {
+          const shouldContinueAfterStop = await shouldContinueFromStopHook({
+            conversationId,
+            streamId,
+            cwd: effectiveToolRootPath,
+            provider: serverProvider,
+            model: modelName,
+            operation: 'send',
+            pendingHookContextForNextTurn,
+            lastAssistantMessage:
+              currentTurnHistory[currentTurnHistory.length - 1] ??
+              (messageId ? { id: messageId, content: assistantMessageContent } : null),
+            state: getState(),
+            queryClient: extra.queryClient,
+          })
+
+          if (shouldContinueAfterStop) {
+            currentTurnContent = ''
+            parent = messageId ?? parent
+            continueTurn = true
+            assistantMessageContent = ''
+            assistantThinking = ''
+            assistantToolCalls = []
+          }
         }
       } // end while loop
 
@@ -4024,6 +4548,7 @@ export const editMessageWithBranching = createAsyncThunk<
       chatSliceActions.sendingStarted({
         streamId,
         streamType: 'branch',
+        conversationId,
         lineage: {
           originMessageId: originalMessageId,
           rootMessageId: parentMessageId, // Parent where new branch attaches
@@ -4278,13 +4803,27 @@ const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
 const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
 // Append custom tools explanation to system prompt
 systemPrompt = systemPrompt + '\n\n' + sysPromptConfig.customToolsPrompt
+const baseSystemPrompt = systemPrompt
 
 // Determine execution mode
 const isElectronMode =
   import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
 const executionMode = 'client' // Prefer client execution for tools
       let currentTurnHistory = [...branchHistoryForSend]
-      let currentTurnContent = newContent
+      const pendingHookContextForNextTurn: string[] = []
+      let currentTurnContent = await maybeApplyUserPromptSubmitHook({
+        conversationId,
+        streamId,
+        cwd: effectiveToolRootPath,
+        provider: serverProvider,
+        model: modelName,
+        operation: 'edit-branch',
+        prompt: newContent,
+        pendingHookContextForNextTurn,
+        parentId: activeParentId ?? null,
+        state,
+        queryClient: extra.queryClient,
+      })
       let continueTurn = true
       let turnCount = 0
       const MAX_TURNS = 100
@@ -4298,6 +4837,8 @@ const executionMode = 'client' // Prefer client execution for tools
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false
+        const systemPrompt = buildSystemPromptWithHookContext(baseSystemPrompt, pendingHookContextForNextTurn)
+        pendingHookContextForNextTurn.length = 0
         let streamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
         let firstRead: ReadableStreamReadResult<Uint8Array> | null = null
 
@@ -4452,7 +4993,18 @@ const executionMode = 'client' // Prefer client execution for tools
                   toolCall,
                   rootPath,
                   operationMode,
-                  { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
+                  {
+                    conversationId,
+                    messageId: lastMsg.id,
+                    streamId,
+                    accessToken: auth.accessToken,
+                    queryClient: extra.queryClient,
+                    enableHooks: true,
+                    provider: serverProvider,
+                    model: modelName,
+                    operation: 'edit-branch',
+                    onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
+                  }
                 )
                 content = typeof result === 'string' ? result : JSON.stringify(result)
                 successfulTool = true
@@ -4510,6 +5062,27 @@ const executionMode = 'client' // Prefer client execution for tools
             continueTurn = successfulTool
           } else {
             continueTurn = false
+          }
+
+          if (!continueTurn) {
+            const shouldContinueAfterStop = await shouldContinueFromStopHook({
+              conversationId,
+              streamId,
+              cwd: effectiveToolRootPath,
+              provider: serverProvider,
+              model: modelName,
+              operation: 'edit-branch',
+              pendingHookContextForNextTurn,
+              lastAssistantMessage: lastMsg,
+              state: getState(),
+              queryClient: extra.queryClient,
+            })
+
+            if (shouldContinueAfterStop) {
+              currentTurnContent = ''
+              activeParentId = lastMsg.id
+              continueTurn = true
+            }
           }
 
           if (!continueTurn) break
@@ -4716,7 +5289,18 @@ const executionMode = 'client' // Prefer client execution for tools
                   toolCall,
                   rootPath,
                   operationMode,
-                  { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
+                  {
+                    conversationId,
+                    messageId: lastMsg.id,
+                    streamId,
+                    accessToken: auth.accessToken,
+                    queryClient: extra.queryClient,
+                    enableHooks: true,
+                    provider: serverProvider,
+                    model: modelName,
+                    operation: 'edit-branch',
+                    onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
+                  }
                 )
                 content = typeof result === 'string' ? result : JSON.stringify(result)
                 successfulTool = true
@@ -4773,6 +5357,27 @@ const executionMode = 'client' // Prefer client execution for tools
             continueTurn = successfulTool
           } else {
             continueTurn = false
+          }
+
+          if (!continueTurn) {
+            const shouldContinueAfterStop = await shouldContinueFromStopHook({
+              conversationId,
+              streamId,
+              cwd: effectiveToolRootPath,
+              provider: serverProvider,
+              model: modelName,
+              operation: 'edit-branch',
+              pendingHookContextForNextTurn,
+              lastAssistantMessage: lastMsg,
+              state: getState(),
+              queryClient: extra.queryClient,
+            })
+
+            if (shouldContinueAfterStop) {
+              currentTurnContent = ''
+              activeParentId = lastMsg.id
+              continueTurn = true
+            }
           }
 
           if (!continueTurn) break
@@ -5170,6 +5775,12 @@ const executionMode = 'client' // Prefer client execution for tools
                     messageId: messageId ?? turnAssistantMessageId ?? undefined,
                     streamId,
                     accessToken: auth.accessToken,
+                    queryClient: extra.queryClient,
+                    enableHooks: true,
+                    provider: serverProvider,
+                    model: modelName,
+                    operation: 'edit-branch',
+                    onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
                   }
                 )
 
@@ -5252,6 +5863,32 @@ const executionMode = 'client' // Prefer client execution for tools
         } else {
           continueTurn = false
         }
+
+        if (!continueTurn) {
+          const shouldContinueAfterStop = await shouldContinueFromStopHook({
+            conversationId,
+            streamId,
+            cwd: effectiveToolRootPath,
+            provider: serverProvider,
+            model: modelName,
+            operation: 'edit-branch',
+            pendingHookContextForNextTurn,
+            lastAssistantMessage:
+              currentTurnHistory[currentTurnHistory.length - 1] ??
+              (messageId ? { id: messageId, content: assistantMessageContent } : null),
+            state: getState(),
+            queryClient: extra.queryClient,
+          })
+
+          if (shouldContinueAfterStop) {
+            currentTurnContent = ''
+            activeParentId = messageId ?? activeParentId
+            continueTurn = true
+            assistantMessageContent = ''
+            assistantThinking = ''
+            assistantToolCalls = []
+          }
+        }
       } // end while loop
 
       if (messageId) {
@@ -5304,6 +5941,7 @@ export const sendMessageToBranch = createAsyncThunk<
       chatSliceActions.sendingStarted({
         streamId,
         streamType: 'branch',
+        conversationId,
         lineage: {
           rootMessageId: parentId,
         },
@@ -5362,13 +6000,27 @@ const payloadCwd = typeof cwd === 'string' ? cwd.trim() : (cwd ?? null)
 const effectiveToolRootPath = payloadCwd || conversationMeta?.cwd || state.ideContext.workspace?.rootPath || null
 // Append custom tools explanation to system prompt
 effectiveSystemPrompt = (effectiveSystemPrompt || '') + '\n\n' + sysPromptConfig.customToolsPrompt
+const baseSystemPrompt = effectiveSystemPrompt
 
 // Determine execution mode
 const isElectronMode =
   import.meta.env.VITE_ENVIRONMENT === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
 const executionMode = 'client'
 
-      let currentTurnContent = content
+      const pendingHookContextForNextTurn: string[] = []
+      let currentTurnContent = await maybeApplyUserPromptSubmitHook({
+        conversationId,
+        streamId,
+        cwd: effectiveToolRootPath,
+        provider: serverProvider,
+        model: modelName,
+        operation: 'branch',
+        prompt: content,
+        pendingHookContextForNextTurn,
+        parentId: parentId ?? null,
+        state,
+        queryClient: extra.queryClient,
+      })
       let currentParentId = parentId
       let continueTurn = true
       let turnCount = 0
@@ -5408,6 +6060,8 @@ const executionMode = 'client'
       while (continueTurn && turnCount < MAX_TURNS) {
         turnCount++
         continueTurn = false
+        const effectiveSystemPrompt = buildSystemPromptWithHookContext(baseSystemPrompt, pendingHookContextForNextTurn)
+        pendingHookContextForNextTurn.length = 0
         let streamReader: ReadableStreamDefaultReader<Uint8Array> | null = null
         let firstRead: ReadableStreamReadResult<Uint8Array> | null = null
 
@@ -5558,7 +6212,18 @@ const executionMode = 'client'
                   toolCall,
                   rootPath,
                   operationMode,
-                  { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
+                  {
+                    conversationId,
+                    messageId: lastMsg.id,
+                    streamId,
+                    accessToken: auth.accessToken,
+                    queryClient: extra.queryClient,
+                    enableHooks: true,
+                    provider: serverProvider,
+                    model: modelName,
+                    operation: 'branch',
+                    onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
+                  }
                 )
                 content = typeof result === 'string' ? result : JSON.stringify(result)
                 successfulTool = true
@@ -5616,6 +6281,27 @@ const executionMode = 'client'
             continueTurn = successfulTool
           } else {
             continueTurn = false
+          }
+
+          if (!continueTurn) {
+            const shouldContinueAfterStop = await shouldContinueFromStopHook({
+              conversationId,
+              streamId,
+              cwd: effectiveToolRootPath,
+              provider: serverProvider,
+              model: modelName,
+              operation: 'branch',
+              pendingHookContextForNextTurn,
+              lastAssistantMessage: lastMsg,
+              state: getState(),
+              queryClient: extra.queryClient,
+            })
+
+            if (shouldContinueAfterStop) {
+              currentTurnContent = ''
+              currentParentId = lastMsg.id
+              continueTurn = true
+            }
           }
 
           if (!continueTurn) break
@@ -5802,7 +6488,18 @@ const executionMode = 'client'
                   toolCall,
                   rootPath,
                   operationMode,
-                  { conversationId, messageId: lastMsg.id, streamId, accessToken: auth.accessToken }
+                  {
+                    conversationId,
+                    messageId: lastMsg.id,
+                    streamId,
+                    accessToken: auth.accessToken,
+                    queryClient: extra.queryClient,
+                    enableHooks: true,
+                    provider: serverProvider,
+                    model: modelName,
+                    operation: 'branch',
+                    onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
+                  }
                 )
                 content = typeof result === 'string' ? result : JSON.stringify(result)
                 successfulTool = true
@@ -5859,6 +6556,27 @@ const executionMode = 'client'
             continueTurn = successfulTool
           } else {
             continueTurn = false
+          }
+
+          if (!continueTurn) {
+            const shouldContinueAfterStop = await shouldContinueFromStopHook({
+              conversationId,
+              streamId,
+              cwd: effectiveToolRootPath,
+              provider: serverProvider,
+              model: modelName,
+              operation: 'branch',
+              pendingHookContextForNextTurn,
+              lastAssistantMessage: lastMsg,
+              state: getState(),
+              queryClient: extra.queryClient,
+            })
+
+            if (shouldContinueAfterStop) {
+              currentTurnContent = ''
+              currentParentId = lastMsg.id
+              continueTurn = true
+            }
           }
 
           if (!continueTurn) break
@@ -6177,6 +6895,12 @@ const executionMode = 'client'
                     messageId: messageId ?? turnAssistantMessageId ?? undefined,
                     streamId,
                     accessToken: auth.accessToken,
+                    queryClient: extra.queryClient,
+                    enableHooks: true,
+                    provider: serverProvider,
+                    model: modelName,
+                    operation: 'branch',
+                    onHookAdditionalContext: value => appendHookAdditionalContext(pendingHookContextForNextTurn, value),
                   }
                 )
 
@@ -6270,6 +6994,32 @@ const executionMode = 'client'
           }
         } else {
           continueTurn = false
+        }
+
+        if (!continueTurn) {
+          const shouldContinueAfterStop = await shouldContinueFromStopHook({
+            conversationId,
+            streamId,
+            cwd: effectiveToolRootPath,
+            provider: serverProvider,
+            model: modelName,
+            operation: 'branch',
+            pendingHookContextForNextTurn,
+            lastAssistantMessage:
+              currentTurnHistory[currentTurnHistory.length - 1] ??
+              (messageId ? { id: messageId, content: assistantMessageContent } : null),
+            state: getState(),
+            queryClient: extra.queryClient,
+          })
+
+          if (shouldContinueAfterStop) {
+            currentTurnContent = ''
+            currentParentId = messageId ?? currentParentId
+            continueTurn = true
+            assistantMessageContent = ''
+            assistantThinking = ''
+            assistantToolCalls = []
+          }
         }
       } // end while loop
 
@@ -7294,6 +8044,7 @@ export const sendHermesMessage = createAsyncThunk<
       chatSliceActions.sendingStarted({
         streamId,
         streamType: 'primary',
+        conversationId,
       })
     )
 
@@ -7655,6 +8406,7 @@ export const sendCCMessage = createAsyncThunk<
       chatSliceActions.sendingStarted({
         streamId,
         streamType: 'primary',
+        conversationId,
       })
     )
 
@@ -7901,6 +8653,7 @@ export const sendCCBranch = createAsyncThunk<
       chatSliceActions.sendingStarted({
         streamId,
         streamType: 'branch',
+        conversationId,
         lineage: {
           rootMessageId: parentId,
         },

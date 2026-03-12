@@ -216,6 +216,14 @@ pre > code {
   background: transparent;
 }
 
+/* Keep code blocks reliably selectable even when syntax highlighting adds nested spans */
+.prose pre,
+.prose pre code,
+.prose pre code * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* Dark-mode highlight.js token overrides (approx. Atom One Dark) */
 /* These only apply when the root has `.dark` class, enabling manual dark toggle compatibility */
 .dark .hljs {

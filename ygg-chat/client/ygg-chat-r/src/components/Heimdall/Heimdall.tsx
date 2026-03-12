@@ -29,14 +29,14 @@ import stripMarkdownToText from '../../utils/markdownStripper'
 // import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { environment, localApi } from '../../utils/api'
 import { DeleteConfirmModal } from '../DeleteConfirmModal/DeleteConfirmModal'
+import { TextArea } from '../TextArea/TextArea'
+import { TextField } from '../TextField/TextField'
 import {
   getThemeModeColor,
   resolveHeimdallNodeThemeKey,
   useCustomChatTheme,
   useHtmlDarkMode,
 } from '../ThemeManager/themeConfig'
-import { TextArea } from '../TextArea/TextArea'
-import { TextField } from '../TextField/TextField'
 
 // Type definitions
 interface ChatNode {
@@ -167,6 +167,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     x: number
     y: number
   } | null>(null)
+  const notePreviewCloseTimeoutRef = useRef<number | null>(null)
   // Store message content in ref to avoid stale closures in debounced update
   const noteMessageContentRef = useRef<string>('')
   // Track dark mode for shadows
@@ -436,9 +437,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       }
 
       try {
-        const result = await localApi.get<{ messages: Message[] }>(
-          `/app/conversations/${conversationId}/messages/tree`
-        )
+        const result = await localApi.get<{ messages: Message[] }>(`/app/conversations/${conversationId}/messages/tree`)
         if (cancelled) return
         const map = buildSubagentMap(Array.isArray(result?.messages) ? result.messages : [])
         setSubagentModalData({
@@ -475,6 +474,11 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     const width = Math.max(64, Math.round(label.length * 6.5 + 16))
     return { label, width, height: 20 }
   }
+
+  const NOTE_PREVIEW_WIDTH = 320
+  const NOTE_PREVIEW_MAX_HEIGHT = 280
+  const NOTE_PREVIEW_HOVER_PADDING = 18
+  const NOTE_PREVIEW_CLOSE_DELAY_MS = 180
 
   const getNoteBadgeMetrics = (noteText?: string) => {
     const normalized = (noteText || '').replace(/\s+/g, ' ').trim()
@@ -650,9 +654,25 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     [noteMessageId, debouncedUpdateNote]
   )
 
+  const clearNotePreviewCloseTimeout = useCallback(() => {
+    if (notePreviewCloseTimeoutRef.current !== null) {
+      window.clearTimeout(notePreviewCloseTimeoutRef.current)
+      notePreviewCloseTimeoutRef.current = null
+    }
+  }, [])
+
+  const scheduleCloseHoveredNote = useCallback(() => {
+    clearNotePreviewCloseTimeout()
+    notePreviewCloseTimeoutRef.current = window.setTimeout(() => {
+      setHoveredNote(null)
+      notePreviewCloseTimeoutRef.current = null
+    }, NOTE_PREVIEW_CLOSE_DELAY_MS)
+  }, [clearNotePreviewCloseTimeout])
+
   const handleNoteBadgeClick = useCallback(
     (event: React.MouseEvent<SVGGElement>, nodeId: string) => {
       event.stopPropagation()
+      clearNotePreviewCloseTimeout()
       setHoveredNote(null)
       const containerRect = containerRef.current?.getBoundingClientRect()
       if (!containerRect) return
@@ -662,11 +682,12 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         y: event.clientY - containerRect.top,
       })
     },
-    [handleOpenNoteDialog]
+    [handleOpenNoteDialog, clearNotePreviewCloseTimeout]
   )
 
   const handleNoteBadgeHover = useCallback(
     (event: React.MouseEvent<SVGGElement>, node: ChatNode, note: string) => {
+      clearNotePreviewCloseTimeout()
       const containerRect = containerRef.current?.getBoundingClientRect()
       if (!containerRect) return
       setHoveredNote({
@@ -676,11 +697,27 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         y: event.clientY - containerRect.top,
       })
     },
-    []
+    [clearNotePreviewCloseTimeout]
   )
 
   const handleNoteBadgeLeave = useCallback(() => {
-    setHoveredNote(null)
+    scheduleCloseHoveredNote()
+  }, [scheduleCloseHoveredNote])
+
+  const handleNotePreviewEnter = useCallback(() => {
+    clearNotePreviewCloseTimeout()
+  }, [clearNotePreviewCloseTimeout])
+
+  const handleNotePreviewLeave = useCallback(() => {
+    scheduleCloseHoveredNote()
+  }, [scheduleCloseHoveredNote])
+
+  useEffect(() => {
+    return () => {
+      if (notePreviewCloseTimeoutRef.current !== null) {
+        window.clearTimeout(notePreviewCloseTimeoutRef.current)
+      }
+    }
   }, [])
 
   const flushPendingInteractionFrame = useCallback(() => {
@@ -2410,7 +2447,9 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 x2={parentPos.x}
                 y2={branchY}
                 className={
-                  isParentOnPath ? 'stroke-indigo-400 dark:stroke-neutral-200' : 'stroke-neutral-400 dark:stroke-gray-500'
+                  isParentOnPath
+                    ? 'stroke-indigo-400 dark:stroke-neutral-200'
+                    : 'stroke-neutral-400 dark:stroke-gray-500'
                 }
                 strokeWidth='2'
               />
@@ -2917,7 +2956,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   return (
     <div
       ref={containerRef}
-      className='group w-full h-screen border-l dark:border-neutral-800 border-neutral-200 bg-neutral-50 relative overflow-hidden dark:bg-yBlack-900 shadow-[inset_8px_0_17px_-8px_rgba(0,0,0,0.1)] dark:shadow-[inset_4px_0_6px_-2px_rgba(0,0,0,0.45)]'
+      className='group w-full h-full rounded-xl dark:border-neutral-800 border-neutral-200 bg-neutral-50 relative overflow-hidden dark:bg-yBlack-900'
       onContextMenu={e => {
         if (isContextMenuExemptTarget(e.target)) {
           return
@@ -2943,11 +2982,50 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         </div>
       )}
       {!error && !loading && !lastDataRef.current && (
-        <div className='absolute inset-0 z-10 flex items-center justify-center bg-slate-50 text-stone-800 dark:text-stone-200 dark:bg-neutral-900'>
-          <div className='text-white text-center max-w-md'>
-            {/* <div className='text-gray-500 text-6xl mb-4'>💬</div> */}
-            <p className='text-lg mb-2'>Loading / Tree will appear here</p>
-            {/* <p className='text-sm text-gray-400'>Select a conversation to view its message tree</p> */}
+        <div className='absolute inset-0 z-10 flex items-center justify-center bg-slate-50 text-stone-800 dark:bg-neutral-900 dark:text-stone-200'>
+          <div className='mx-auto flex max-w-sm flex-col items-center px-6 text-center'>
+            <div className='mb-5 rounded-[28px] border border-stone-200/80 bg-white/75 p-5 shadow-[0_16px_40px_-24px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/70'>
+              <svg
+                aria-hidden='true'
+                viewBox='0 0 180 128'
+                className='h-28 w-40 text-stone-700 dark:text-stone-200'
+                fill='none'
+                xmlns='http://www.w3.org/2000/svg'
+              >
+                <circle cx='40' cy='28' r='11' fill='currentColor' opacity='0.08' />
+                <circle cx='146' cy='96' r='13' fill='currentColor' opacity='0.08' />
+                <path
+                  d='M90 28V44M90 44C90 44 69 44 60 53C51 62 51 75 51 75M90 44C90 44 111 44 120 53C129 62 129 75 129 75M51 75C51 75 51 86 43 93C35 100 24 100 24 100M51 75C51 75 51 86 59 93C67 100 78 100 78 100M129 75C129 75 129 86 121 93C113 100 102 100 102 100M129 75C129 75 129 86 137 93C145 100 156 100 156 100'
+                  stroke='currentColor'
+                  strokeWidth='4'
+                  strokeLinecap='round'
+                  strokeLinejoin='round'
+                  opacity='0.18'
+                />
+                <circle cx='90' cy='24' r='16' fill='currentColor' opacity='0.12' />
+                <path d='M82 24H98' stroke='currentColor' strokeWidth='5' strokeLinecap='round' opacity='0.6' />
+                <circle cx='51' cy='75' r='13' fill='currentColor' opacity='0.12' />
+                <path d='M45 75H57' stroke='currentColor' strokeWidth='4.5' strokeLinecap='round' opacity='0.55' />
+                <circle cx='129' cy='75' r='13' fill='currentColor' opacity='0.12' />
+                <path d='M123 75H135' stroke='currentColor' strokeWidth='4.5' strokeLinecap='round' opacity='0.55' />
+                <circle cx='24' cy='100' r='10' fill='currentColor' opacity='0.16' />
+                <circle cx='78' cy='100' r='10' fill='currentColor' opacity='0.16' />
+                <circle cx='102' cy='100' r='10' fill='currentColor' opacity='0.16' />
+                <circle cx='156' cy='100' r='10' fill='currentColor' opacity='0.16' />
+                <path
+                  d='M141 27L145 35L153 39L145 43L141 51L137 43L129 39L137 35L141 27Z'
+                  fill='currentColor'
+                  opacity='0.24'
+                />
+              </svg>
+            </div>
+            <p className='mb-2 text-lg font-medium text-stone-900 dark:text-stone-100'>
+              Conversation tree will appear here
+            </p>
+            <p className='text-sm leading-6 text-stone-600 dark:text-stone-400'>
+              Start chatting with the agent and Heimdall will build a visual overview of the conversation as your
+              messages and branches grow.
+            </p>
           </div>
         </div>
       )}
@@ -3000,7 +3078,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         <button
           type='button'
           onClick={() => setSearchOpen(true)}
-          className='flex items-center gap-2 px-3 py-2 rounded-lg border-2 border-stone-300 dark:border-stone-700  text-stone-800 dark:text-stone-200 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition'
+          className='flex items-center gap-2 px-3 py-2 rounded-xl text-stone-800 dark:text-stone-200 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.2)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] hover:bg-neutral-100 dark:hover:bg-neutral-800 active:scale-95 transition'
         >
           <i className='bx bx-search text-lg' />
           <span className='text-sm font-medium'>Search Messages</span>
@@ -3071,11 +3149,11 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       </svg>
       {searchOpen && (
         <div
-          className='absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-[2px]'
+          className='absolute inset-0 z-30 flex items-center justify-center  bg-black/20 backdrop-blur-[2px] '
           onClick={handleSearchClose}
         >
           <div
-            className='bg-neutral-50 dark:bg-zinc-900 border border-stone-200 dark:border-neutral-700 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] w-[95%] sm:w-[90%] max-w-6xl'
+            className='bg-transparent mica border border-stone-200 dark:border-neutral-700 rounded-2xl shadow-2xl flex flex-col max-h-[85vh] w-[95%] sm:w-[90%] max-w-6xl'
             onClick={e => e.stopPropagation()}
             data-heimdall-wheel-exempt='true'
           >
@@ -3280,7 +3358,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         onCancel={closeDeleteNodesModal}
         onConfirm={confirmDeleteNodesModal}
       />
-      {selectedNode && !hoveredNote &&
+      {selectedNode &&
+        !hoveredNote &&
         (() => {
           const nodeIdParsed = parseId(selectedNode.id)
           const msg =
@@ -3453,22 +3532,49 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         })()}
       {hoveredNote && (
         <div
-          className='absolute bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl z-30 border border-stone-200 dark:border-neutral-700'
+          className='absolute z-30'
+          data-heimdall-wheel-exempt='true'
+          onMouseEnter={handleNotePreviewEnter}
+          onMouseLeave={handleNotePreviewLeave}
           style={{
-            left: Math.max(10, Math.min(hoveredNote.x + 10, dimensions.width - 340)),
-            top: Math.max(10, Math.min(hoveredNote.y + 10, dimensions.height - 300)),
-            width: '320px',
-            maxHeight: '280px',
-            overflow: 'auto',
+            left: Math.max(
+              10,
+              Math.min(
+                hoveredNote.x + 10 - NOTE_PREVIEW_HOVER_PADDING,
+                dimensions.width - (NOTE_PREVIEW_WIDTH + NOTE_PREVIEW_HOVER_PADDING * 2) - 10
+              )
+            ),
+            top: Math.max(
+              10,
+              Math.min(
+                hoveredNote.y + 10 - NOTE_PREVIEW_HOVER_PADDING,
+                dimensions.height - (NOTE_PREVIEW_MAX_HEIGHT + NOTE_PREVIEW_HOVER_PADDING * 2) - 10
+              )
+            ),
+            padding: `${NOTE_PREVIEW_HOVER_PADDING}px`,
           }}
         >
-          <div className='text-sm font-medium mb-2 text-amber-700 dark:text-amber-300'>
-            {hoveredNote.sender === 'user' ? 'User Note' : hoveredNote.sender === 'ex_agent' ? 'Agent Note' : 'Assistant Note'}
-          </div>
-          <div className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-y-auto thin-scrollbar'>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
-              {hoveredNote.note}
-            </ReactMarkdown>
+          <div
+            className='bg-neutral-50 dark:bg-neutral-800 text-stone-800 dark:text-stone-200 p-4 rounded-lg shadow-xl border border-stone-200 dark:border-neutral-700'
+            data-heimdall-wheel-exempt='true'
+            style={{
+              width: `${NOTE_PREVIEW_WIDTH}px`,
+              maxHeight: `${NOTE_PREVIEW_MAX_HEIGHT}px`,
+              overflow: 'auto',
+            }}
+          >
+            <div className='text-sm font-medium mb-2 text-amber-700 dark:text-amber-300'>
+              {hoveredNote.sender === 'user'
+                ? 'User Note'
+                : hoveredNote.sender === 'ex_agent'
+                  ? 'Agent Note'
+                  : 'Assistant Note'}
+            </div>
+            <div className='prose prose-sm dark:prose-invert max-w-none text-sm break-words overflow-y-auto thin-scrollbar'>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}>
+                {hoveredNote.note}
+              </ReactMarkdown>
+            </div>
           </div>
         </div>
       )}
@@ -3668,8 +3774,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           onMouseDown={e => e.stopPropagation()}
           data-heimdall-wheel-exempt='true'
         >
-          <div className='px-4 py-2'>
-            <div className='flex justify-between items-center mb-4 mt-1 mx-1'>
+          <div className='px-2 py-2'>
+            <div className='flex justify-between items-center mb-1 mx-1'>
               <h3 className='text-sm font-medium text-stone-800 dark:text-stone-200'>
                 {(() => {
                   const message = getCurrentMessage(noteMessageId)
@@ -3685,15 +3791,15 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 ✕
               </button>
             </div>
-            <div className='mb-1'>
+            <div className=''>
               <TextArea
                 placeholder='Enter your note...'
                 value={noteText}
                 onChange={handleNoteTextChange}
                 minRows={3}
-                maxRows={8}
+                maxRows={16}
                 autoFocus
-                className='w-full thin-scrollbar shadow-[0_0px_12px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_0px_18px_3px_rgba(0,0,0,0.5)] rounded-2xl'
+                className='w-full thin-scrollbar rounded-2xl'
                 width='w-full'
               />
             </div>

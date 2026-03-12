@@ -26,6 +26,7 @@ import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
 import { McpAppIframe } from '../McpAppIframe/McpAppIframe'
+import { TextArea } from '../TextArea/TextArea'
 import {
   type CustomChatTheme,
   getCustomChatThemeEnabled,
@@ -33,7 +34,6 @@ import {
   getThemeModeColor,
   resolveRoleThemeKey,
 } from '../ThemeManager/themeConfig'
-import { TextArea } from '../TextArea/TextArea'
 
 type MessageRole = 'user' | 'assistant' | 'system' | 'ex_agent' | 'tool'
 // Updated to use valid Tailwind classes
@@ -916,6 +916,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     const [explainInputValue, setExplainInputValue] = useState('')
     const explainInputPosition = useRef<{ x: number; y: number } | null>(null)
     const explainInputRef = useRef<HTMLDivElement | null>(null)
+    const [explainInputFixedPosition, setExplainInputFixedPosition] = useState<{ x: number; y: number } | null>(null)
     const [mcpLoadState, setMcpLoadState] = useState<Record<string, boolean>>({})
     const [mcpReloadTokens, setMcpReloadTokens] = useState<Record<string, number>>({})
     // Get message data from Redux store
@@ -1145,6 +1146,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         onExplainFromSelection(id, branchContent)
         // Reset state
         setShowExplainInput(false)
+        setExplainInputFixedPosition(null)
         setExplainInputValue('')
         setSelectedText('')
       }
@@ -1152,6 +1154,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
     const handleCancelExplainInput = () => {
       setShowExplainInput(false)
+      setExplainInputFixedPosition(null)
       setExplainInputValue('')
       setSelectedText('')
     }
@@ -1175,6 +1178,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         explainInputPosition.current = { ...contextMenuPosition }
       }
       setExplainInputValue('')
+      setExplainInputFixedPosition(null)
       setShowExplainInput(true)
     }
 
@@ -1184,7 +1188,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }
 
     // Get adjusted position for explain input to avoid viewport overflow
-    const getAdjustedExplainInputPosition = () => {
+    const getAdjustedExplainInputPosition = useCallback(() => {
       if (!explainInputPosition.current || !explainInputRef.current) return explainInputPosition.current
 
       const inputRect = explainInputRef.current.getBoundingClientRect()
@@ -1224,7 +1228,29 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
 
       return { x: Math.max(10, x), y: Math.max(10, y) }
-    }
+    }, [isMobile])
+
+    useEffect(() => {
+      if (!showExplainInput) {
+        setExplainInputFixedPosition(null)
+        return
+      }
+
+      const updatePosition = () => {
+        const adjusted = getAdjustedExplainInputPosition()
+        if (adjusted) {
+          setExplainInputFixedPosition(adjusted)
+        }
+      }
+
+      const frame = window.requestAnimationFrame(updatePosition)
+      window.addEventListener('resize', updatePosition)
+
+      return () => {
+        window.cancelAnimationFrame(frame)
+        window.removeEventListener('resize', updatePosition)
+      }
+    }, [showExplainInput, getAdjustedExplainInputPosition])
 
     const getEstimatedMoreMenuSize = useCallback(() => {
       if (typeof window === 'undefined') {
@@ -1502,7 +1528,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         case 'assistant':
           return {
             container: useColored
-              ? 'bg-gray-850 border-l-0 border-l-transparent bg-neutral-50 dark:bg-neutral-900'
+              ? 'border-l-0 border-l-transparent bg-transparent dark:bg-transparent'
               : transparentContainer,
             role: 'text-lime-800 dark:text-yBrown-50',
             roleStyle: undefined,
@@ -1512,7 +1538,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         case 'system':
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-0 border-l-transparent bg-purple-50 dark:bg-neutral-800'
+              ? 'border-l-0 border-l-transparent bg-transparent dark:bg-transparent'
               : transparentContainer,
             role: 'text-purple-400',
             roleStyle: undefined,
@@ -1522,7 +1548,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         case 'ex_agent':
           return {
             container: useColored
-              ? 'bg-gray-800 border-2 border-transparent bg-emerald-50 bg-neutral-50 dark:bg-neutral-800'
+              ? 'border-2 border-transparent bg-transparent dark:bg-transparent'
               : transparentContainer,
             role: 'text-orange-700 dark:text-orange-400',
             roleStyle: undefined,
@@ -1532,7 +1558,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         default:
           return {
             container: useColored
-              ? 'bg-gray-800 border-l-4 border-l-transparent bg-gray-50 dark:bg-neutral-800'
+              ? 'border-l-4 border-l-transparent bg-transparent dark:bg-transparent'
               : transparentContainer,
             role: 'text-gray-400',
             roleStyle: undefined,
@@ -1552,38 +1578,51 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     //   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     // }
 
-    // Custom renderer for block code (<pre>) to add a copy button while preserving valid HTML structure
-    const PreRenderer: React.FC<any> = ({ children, ...props }) => {
+    // Custom renderer for block code (<pre>) with a stable copy action and no overlay on top of selectable text
+    const PreRenderer: React.FC<any> = ({ children, className, ...props }) => {
       const [copied, setCopied] = useState(false)
       const preRef = useRef<HTMLPreElement | null>(null)
 
       const handleCopyCode = async () => {
         try {
           const plain = preRef.current?.innerText ?? ''
-          await navigator.clipboard.writeText(plain)
+          if (!plain) return
+
+          const ok = await copyRichText(plain)
+          if (!ok) {
+            throw new Error('Clipboard write failed')
+          }
+
           setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
+          window.setTimeout(() => setCopied(false), 1500)
         } catch (err) {
           console.error('Failed to copy code block:', err)
         }
       }
 
       return (
-        <div className='relative group/code my-3 not-prose'>
-          {
+        <div className='my-3 not-prose overflow-hidden rounded-2xl bg-gray-100 dark:bg-neutral-900 dark:border dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)] dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)]'>
+          <div className='flex items-center justify-end px-2 py-2 border-b border-black/5 dark:border-white/5'>
             <Button
               type='button'
-              onClick={handleCopyCode}
-              className='absolute top-2 right-2 z-10 opacity-0 group-hover/code:opacity-100 transition-opacity duration-150 text-slate-900 dark:text-white dark:hover:bg-neutral-700'
+              onMouseDown={event => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onClick={event => {
+                event.stopPropagation()
+                void handleCopyCode()
+              }}
+              className='shrink-0 text-slate-900 dark:text-white dark:hover:bg-neutral-700'
               size='smaller'
               variant='outline2'
             >
               {copied ? 'Copied' : 'Copy'}
             </Button>
-          }
+          </div>
           <pre
             ref={preRef}
-            className={`not-prose thin-scrollbar pb-10 overflow-auto rounded-2xl ring-0 outline-none bg-gray-100 text-[0.8em] text-gray-900 dark:bg-neutral-900 dark:text-neutral-100 p-3 dark:border-1 dark:border-neutral-700 shadow-[0px_0px_6px_0px_rgba(0,0,0,0.15)]  dark:shadow-[0px_0px_16px_2px_rgba(0,0,0,0.45)] [will-change:contents] [transform:translateZ(0)]`}
+            className={`not-prose thin-scrollbar m-0 overflow-auto bg-transparent p-3 text-[0.8em] text-gray-900 ring-0 outline-none select-text dark:text-neutral-100 ${className ?? ''}`}
             {...props}
           >
             {children}
@@ -1878,13 +1917,13 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       if (isHtmlRenderer && typeof extractedHtml === 'string') {
         const htmlPreviewKey = `${id}-html-renderer-${group.id}`
         return (
-          <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+          <div key={toggleKey} className='relative pl-6 pb-4 ml-2 '>
             {/* Green pip indicator */}
             <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
 
             {/* Tool header */}
             <div className='flex items-center gap-2 mb-2'>
-              <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
+              <span className='rounded-[10px] font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
                 {group.name || 'html_renderer'}
               </span>
               {renderHtmlViewerButton(htmlPreviewKey)}
@@ -1922,10 +1961,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             reloadToken: mcpReloadTokens[reloadKey] || 0,
           }
           return (
-            <div
-              key={toggleKey}
-              className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
-            >
+            <div key={toggleKey} className='relative pl-6 pb-4 ml-2 '>
               <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]' />
               <div className='flex items-center gap-2 mb-2 flex-wrap'>
                 <span className='font-mono text-xs bg-neutral-100  px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
@@ -1987,7 +2023,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         const editResult = group.results.length > 0 ? group.results[0].content : {}
         const isEditFileSuccess = formatToolResultSummary(editResult) === 'success'
         return (
-          <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+          <div key={toggleKey} className='relative pl-6 pb-4 ml-2 '>
             {/* Status pip indicator - align with EditFileDiffView success logic */}
             <div
               className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
@@ -1998,7 +2034,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             />
             {/* Tool header */}
             <div className='flex items-center gap-2 mb-3'>
-              <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
+              <span className='rounded-[10px] font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
                 {group.name || 'edit_file'}
               </span>
             </div>
@@ -2019,7 +2055,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       }
 
       return (
-        <div key={toggleKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+        <div key={toggleKey} className='relative pl-6 pb-4 ml-2 '>
           {/* Status pip indicator - green for success/executing, red for error */}
           <div
             className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
@@ -2035,7 +2071,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
               onClick={() => handleExpandToggle(toggleKey, group)}
               className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
             >
-              <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
+              <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
                 {group.name || 'tool'}
               </span>
               {/* Status indicator when collapsed */}
@@ -2188,7 +2224,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         kind: 'process',
         processType: 'reasoning',
         node: (
-          <div key={key} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+          <div key={key} className='relative pl-6 pb-4 ml-2 '>
             <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' />
 
             <button
@@ -2291,7 +2327,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
           if (reasoningCount > 0) summaryParts.push(`${reasoningCount} reasoning`)
 
           rendered.push(
-            <div key={groupKey} className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'>
+            <div key={groupKey} className='relative pl-6 pb-4 ml-2 '>
               <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.35)]' />
               <button
                 onClick={() => toggleBlock('groupRuns', groupKey)}
@@ -2451,10 +2487,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             kind: 'process',
             processType: 'tool',
             node: (
-              <div
-                key={`tool-${toolCall.id}-${idx}`}
-                className='relative pl-6 pb-4 ml-2 border-l border-neutral-300 dark:border-neutral-700'
-              >
+              <div key={`tool-${toolCall.id}-${idx}`} className='relative pl-6 pb-4 ml-2 '>
                 <div
                   className={`absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full ${
                     isEditFileToolCall
@@ -2469,7 +2502,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                   onClick={() => toggleBlock('toolCalls', toggleKey)}
                   className='flex items-center gap-2 group/tool hover:opacity-80 transition-opacity cursor-pointer outline-none'
                 >
-                  <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
+                  <span className='font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded-xl border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 group-hover/tool:border-neutral-400 dark:group-hover/tool:border-neutral-600 transition-colors'>
                     {toolCall.name || 'tool'}
                   </span>
                   {!isExpanded && pathParam && (
@@ -2781,7 +2814,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
 
             {/* Reasoning / thinking block */}
             {typeof thinking === 'string' && thinking.trim().length > 0 && (
-              <div className='relative pl-6 pb-4 ml-2 mb-2 border-l border-neutral-300 dark:border-neutral-700'>
+              <div className='relative pl-6 pb-4 ml-2 mb-2 '>
                 {/* Blue pip indicator for reasoning */}
                 <div className='absolute -left-[5px] top-1 w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.3)]' />
 
@@ -2994,7 +3027,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
         )}
 
         {role === 'user' && (
-          <div className='h-px w-full bg-gradient-to-r from-transparent via-orange-500/30 to-transparent mb-8'></div>
+          <div className='h-px w-full bg-gradient-to-r from-transparent via-neutral-500/30 to-transparent mb-8'></div>
         )}
 
         {/* Edit instructions */}
@@ -3021,7 +3054,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 5 }}
                 transition={{ duration: 0.15 }}
-                className='fixed z-[40]'
+                className='fixed z-[400]'
                 style={{
                   left: `${contextMenuPosition.x}px`,
                   top: `${contextMenuPosition.y}px`,
@@ -3141,14 +3174,14 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className='fixed z-[40] w-[320px] sm:w-[400px] rounded-lg bg-white dark:bg-yBlack-900 border border-neutral-200 dark:border-neutral-700 shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] p-3 [will-change:contents] [transform:translateZ(0)]'
+                className='fixed px-2 py-2 z-[100] w-[320px] sm:w-[400px] rounded-[14px] acrylic shadow-[0_4px_12px_rgba(0,0,0,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)]  [will-change:contents] [transform:translateZ(0)]'
                 style={{
-                  left: `${getAdjustedExplainInputPosition()?.x || explainInputPosition.current.x}px`,
-                  top: `${getAdjustedExplainInputPosition()?.y || explainInputPosition.current.y}px`,
+                  left: `${explainInputFixedPosition?.x ?? explainInputPosition.current?.x ?? 0}px`,
+                  top: `${explainInputFixedPosition?.y ?? explainInputPosition.current?.y ?? 0}px`,
                 }}
               >
                 {/* Display selected text */}
-                <div className='mb-2 p-2 rounded-md bg-neutral-50 dark:bg-yBlack-800 border border-neutral-200 dark:border-neutral-700 max-h-[100px] overflow-y-auto'>
+                <div className='mb-2 p-2 rounded-[12px] bg-neutral-50 dark:bg-yBlack-800 border border-neutral-200 dark:border-neutral-700 max-h-[100px] overflow-y-auto'>
                   <div className='text-xs text-gray-600 dark:text-gray-400 italic line-clamp-4'>"{selectedText}"</div>
                 </div>
                 <TextArea
@@ -3171,16 +3204,16 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 <div className='mt-2 flex justify-end gap-2'>
                   <button
                     onClick={handleCancelExplainInput}
-                    className='px-3 py-1.5 text-sm rounded-md text-gray-700 dark:text-gray-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors'
+                    className='w-7 h-7 flex items-center justify-center rounded-full text-sm bg-neutral-200 hover:bg-rose-400 dark:bg-neutral-600/80 disabled:bg-neutral-300 disabled:cursor-not-allowed dark:disabled:bg-neutral-700 dark:hover:bg-rose-600/80 dark:text-white text-black hover:text-neutral-50 transition-colors'
                   >
-                    Cancel
+                    <i className='bx bx-x text-base' aria-hidden='true'></i>
                   </button>
                   <button
                     onClick={handleSendExplainInput}
                     disabled={!explainInputValue.trim()}
-                    className='px-3 py-1.5 text-sm rounded-md bg-blue-500 hover:bg-blue-600 disabled:bg-neutral-300 disabled:cursor-not-allowed dark:disabled:bg-neutral-700 text-white transition-colors'
+                    className='w-7 h-7 flex items-center justify-center rounded-full bg-neutral-200 dark:bg-neutral-600 hover:bg-blue-500 dark:hover:bg-green-700 disabled:bg-neutral-300 disabled:cursor-not-allowed dark:disabled:bg-neutral-800 dark:text-white text-black hover:text-neutral-50 transition-colors'
                   >
-                    Send
+                    <i className='bx bx-check  text-[18px] leading-none' aria-hidden='true'></i>
                   </button>
                 </div>
               </motion.div>

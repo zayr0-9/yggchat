@@ -4,6 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import type { BaseModel, Project } from '../../../../shared/types'
 import { ConversationId, ProjectId, ProjectWithLatestConversation } from '../../../../shared/types'
+import type { LocalFileEntry, LocalFileListingResponse, LocalFileSearchResponse } from '../../shared/localFileBrowser'
+import type {
+  LocalGitActionResponse,
+  LocalGitBranch,
+  LocalGitCommit,
+  LocalGitDiffResponse,
+  LocalGitOverviewResponse,
+  LocalGitRepoSummary,
+  LocalGitStatusFile,
+} from '../../shared/localGit'
 import type { Message, Model } from '../features/chats/chatTypes'
 import { fetchLmStudioModels } from '../features/chats/LMStudio'
 import { getOpenAIChatGPTModels } from '../features/chats/openaiOAuth'
@@ -161,7 +171,9 @@ export function useConversations(enabled: boolean = true) {
       // In Electron community mode, use local conversations only
       if (isElectronCommunityMode()) {
         const localConversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`)
-        return [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        return [...localConversations].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )
       }
 
       // In Electron mode, fetch both cloud and local conversations
@@ -243,7 +255,9 @@ export function useConversationsInfinite(enabled: boolean = true) {
       if (isElectronCommunityMode()) {
         const localConversations = await localApi.get<Conversation[]>(`/app/conversations?userId=${userId}`)
         if (!pageParam) {
-          const sorted = [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          const sorted = [...localConversations].sort(
+            (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          )
           return {
             conversations: sorted.slice(0, PAGE_SIZE),
             nextCursor: null,
@@ -334,7 +348,9 @@ export function useConversationsByProject(projectId: ProjectId | null) {
         const localConversations = await localApi.get<Conversation[]>(
           `/app/conversations?userId=${userId}&projectId=${projectId}`
         )
-        return [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        return [...localConversations].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )
       }
 
       // In Electron mode, fetch both cloud and local conversations
@@ -344,12 +360,10 @@ export function useConversationsByProject(projectId: ProjectId | null) {
             console.error('Failed to fetch cloud project conversations:', err)
             return []
           }),
-          localApi
-            .get<Conversation[]>(`/app/conversations?userId=${userId}&projectId=${projectId}`)
-            .catch(err => {
-              console.error('Failed to fetch local project conversations:', err)
-              return []
-            }),
+          localApi.get<Conversation[]>(`/app/conversations?userId=${userId}&projectId=${projectId}`).catch(err => {
+            console.error('Failed to fetch local project conversations:', err)
+            return []
+          }),
         ])
 
         // Merge and sort by updated_at
@@ -405,7 +419,9 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
         )
 
         if (!pageParam) {
-          const merged = [...localConversations].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          const merged = [...localConversations].sort(
+            (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          )
           return {
             conversations: merged.slice(0, PAGE_SIZE),
             nextCursor: null,
@@ -432,12 +448,10 @@ export function useConversationsByProjectInfinite(projectId: ProjectId | null) {
               console.error('Failed to fetch cloud project conversations:', err)
               return { conversations: [], nextCursor: null, hasMore: false }
             }),
-          localApi
-            .get<Conversation[]>(`/app/conversations?userId=${userId}&projectId=${projectId}`)
-            .catch(err => {
-              console.error('Failed to fetch local project conversations:', err)
-              return []
-            }),
+          localApi.get<Conversation[]>(`/app/conversations?userId=${userId}&projectId=${projectId}`).catch(err => {
+            console.error('Failed to fetch local project conversations:', err)
+            return []
+          }),
         ])
 
         if (!pageParam) {
@@ -2039,21 +2053,11 @@ export const getHtmlToolsFromCache = (queryClient: QueryClient | null, userId: s
 }
 
 /**
- * File entry from directory listing
+ * Shared local file browser types
  */
-export interface DirectoryFileEntry {
-  name: string
-  isDirectory: boolean
-  path: string
-}
-
-/**
- * Directory listing response
- */
-export interface DirectoryListingResponse {
-  path: string
-  files: DirectoryFileEntry[]
-}
+export type DirectoryFileEntry = LocalFileEntry
+export type DirectoryListingResponse = LocalFileListingResponse
+export type DirectoryFileSearchResponse = LocalFileSearchResponse
 
 /**
  * Global Agent hooks - re-export from dedicated files
@@ -2065,7 +2069,11 @@ export {
   useRemoveGlobalAgentQueuedTask,
   useGlobalAgentStreamBuffer,
 } from './useGlobalAgentMessages'
-export type { GlobalAgentMessagesData, GlobalAgentQueuedTask, GlobalAgentQueuedTasksData } from './useGlobalAgentMessages'
+export type {
+  GlobalAgentMessagesData,
+  GlobalAgentQueuedTask,
+  GlobalAgentQueuedTasksData,
+} from './useGlobalAgentMessages'
 
 /**
  * Fetch files from a directory path
@@ -2092,5 +2100,189 @@ export function useDirectoryFiles(directoryPath: string | null | undefined) {
     refetchOnMount: false,
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
+  })
+}
+
+/**
+ * Search files and directories recursively from a root path
+ * Cache key: ['directory-files-search', path, query, followGitignore, limit]
+ *
+ * Only available in electron/local mode for security
+ * Returns both file and directory matches, including relative paths
+ */
+export function useDirectoryFileSearch(
+  directoryPath: string | null | undefined,
+  query: string | null | undefined,
+  followGitignore = true,
+  limit = 200
+) {
+  const normalizedQuery = String(query || '').trim()
+
+  return useQuery({
+    queryKey: ['directory-files-search', directoryPath, normalizedQuery, followGitignore, limit],
+    queryFn: async () => {
+      if (!directoryPath) throw new Error('Directory path is required')
+      if (!normalizedQuery) throw new Error('Search query is required')
+
+      const params = new URLSearchParams({
+        path: directoryPath,
+        query: normalizedQuery,
+        followGitignore: followGitignore ? '1' : '0',
+      })
+
+      if (Number.isFinite(limit)) {
+        params.set('limit', String(Math.max(1, Math.floor(limit))))
+      }
+
+      return localApi.get<DirectoryFileSearchResponse>(`/local/files/search?${params}`)
+    },
+    enabled: !!directoryPath && directoryPath.trim().length > 0 && normalizedQuery.length > 0 && environment !== 'web',
+    staleTime: 30 * 1000,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+/**
+ * Shared local git types
+ */
+export type GitRepoSummary = LocalGitRepoSummary
+export type GitStatusFile = LocalGitStatusFile
+export type GitCommit = LocalGitCommit
+export type GitBranch = LocalGitBranch
+export type GitOverviewResponse = LocalGitOverviewResponse
+export type GitDiffResponse = LocalGitDiffResponse
+
+const gitOverviewQueryKey = (directoryPath: string | null | undefined) => ['local-git', 'overview', directoryPath]
+const gitDiffQueryKey = (
+  directoryPath: string | null | undefined,
+  relativePath: string | null | undefined,
+  staged: boolean
+) => ['local-git', 'diff', directoryPath, relativePath, staged]
+
+export function useGitOverview(directoryPath: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: gitOverviewQueryKey(directoryPath),
+    queryFn: async () => {
+      if (!directoryPath) throw new Error('Directory path is required')
+      const params = new URLSearchParams({ path: directoryPath })
+      return localApi.get<LocalGitOverviewResponse>(`/local/git/overview?${params}`)
+    },
+    enabled: enabled && !!directoryPath && directoryPath.trim().length > 0 && environment === 'electron',
+    staleTime: 10 * 1000,
+    refetchOnMount: 'always',
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+export function useGitDiff(
+  directoryPath: string | null | undefined,
+  relativePath: string | null | undefined,
+  staged: boolean,
+  enabled = true
+) {
+  const normalizedRelativePath = String(relativePath || '').trim()
+
+  return useQuery({
+    queryKey: gitDiffQueryKey(directoryPath, normalizedRelativePath, staged),
+    queryFn: async () => {
+      if (!directoryPath) throw new Error('Directory path is required')
+      if (!normalizedRelativePath) throw new Error('Relative path is required')
+
+      const params = new URLSearchParams({
+        path: directoryPath,
+        file: normalizedRelativePath,
+        staged: staged ? '1' : '0',
+      })
+      return localApi.get<LocalGitDiffResponse>(`/local/git/diff?${params}`)
+    },
+    enabled:
+      enabled &&
+      !!directoryPath &&
+      directoryPath.trim().length > 0 &&
+      normalizedRelativePath.length > 0 &&
+      environment === 'electron',
+    staleTime: 5 * 1000,
+    refetchOnMount: 'always',
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+function invalidateGitQueries(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ['local-git'] })
+}
+
+export function useGitStageFiles() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: { path: string; files?: string[] }) => {
+      if (!payload?.path) throw new Error('Repository path is required')
+      return localApi.post<LocalGitActionResponse>('/local/git/stage', payload)
+    },
+    onSuccess: () => {
+      invalidateGitQueries(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['directory-files'] })
+      queryClient.invalidateQueries({ queryKey: ['directory-files-search'] })
+    },
+  })
+}
+
+export function useGitUnstageFiles() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: { path: string; files: string[] }) => {
+      if (!payload?.path) throw new Error('Repository path is required')
+      if (!payload?.files?.length) throw new Error('At least one file is required')
+      return localApi.post<LocalGitActionResponse>('/local/git/unstage', payload)
+    },
+    onSuccess: () => {
+      invalidateGitQueries(queryClient)
+    },
+  })
+}
+
+export function useGitCheckoutBranch() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: { path: string; branch: string }) => {
+      if (!payload?.path) throw new Error('Repository path is required')
+      if (!payload?.branch?.trim()) throw new Error('Branch name is required')
+      return localApi.post<LocalGitActionResponse>('/local/git/checkout', {
+        path: payload.path,
+        branch: payload.branch.trim(),
+      })
+    },
+    onSuccess: () => {
+      invalidateGitQueries(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['directory-files'] })
+      queryClient.invalidateQueries({ queryKey: ['directory-files-search'] })
+    },
+  })
+}
+
+export function useGitCreateBranch() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (payload: { path: string; branch: string; checkout?: boolean }) => {
+      if (!payload?.path) throw new Error('Repository path is required')
+      if (!payload?.branch?.trim()) throw new Error('Branch name is required')
+      return localApi.post<LocalGitActionResponse>('/local/git/branch', {
+        path: payload.path,
+        branch: payload.branch.trim(),
+        checkout: payload.checkout !== false,
+      })
+    },
+    onSuccess: () => {
+      invalidateGitQueries(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['directory-files'] })
+      queryClient.invalidateQueries({ queryKey: ['directory-files-search'] })
+    },
   })
 }

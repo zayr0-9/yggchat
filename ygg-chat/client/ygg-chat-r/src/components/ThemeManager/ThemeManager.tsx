@@ -246,8 +246,28 @@ export const ThemeManager: React.FC = () => {
     [updateTheme]
   )
 
+  const handleCombinedChatSurfaceChange = useCallback(
+    (mode: 'light' | 'dark', nextValue: string) => {
+      updateTheme(current => ({
+        ...current,
+        colors: {
+          ...current.colors,
+          chatPanelBg: {
+            ...current.colors.chatPanelBg,
+            [mode]: nextValue,
+          },
+          chatMessageListBg: {
+            ...current.colors.chatMessageListBg,
+            [mode]: nextValue,
+          },
+        },
+      }))
+    },
+    [updateTheme]
+  )
+
   const handleChatSurfaceChange = useCallback(
-    (key: 'chatPanelBg' | 'chatMessageListBg' | 'heimdallPanelBg', mode: 'light' | 'dark', nextValue: string) => {
+    (key: 'heimdallPanelBg', mode: 'light' | 'dark', nextValue: string) => {
       updateTheme(current => ({
         ...current,
         colors: {
@@ -386,14 +406,9 @@ export const ThemeManager: React.FC = () => {
           <div className='space-y-3'>
             <h4 className='text-sm font-semibold text-stone-700 dark:text-stone-200'>Chat surfaces</h4>
             <PairEditor
-              label='Chat panel background'
+              label='Chat panel + message list background'
               value={theme.colors.chatPanelBg}
-              onChange={(mode, value) => handleChatSurfaceChange('chatPanelBg', mode, value)}
-            />
-            <PairEditor
-              label='Message list background'
-              value={theme.colors.chatMessageListBg}
-              onChange={(mode, value) => handleChatSurfaceChange('chatMessageListBg', mode, value)}
+              onChange={handleCombinedChatSurfaceChange}
             />
             <PairEditor
               label='Heimdall background'

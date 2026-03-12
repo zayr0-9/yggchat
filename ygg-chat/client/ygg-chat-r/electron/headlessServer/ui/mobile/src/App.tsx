@@ -16,6 +16,8 @@ import type {
   MobileMessage,
   MobileMessageTreeNode,
   MobileProject,
+  MobileProviderModelInfo,
+  MobileProviderName,
   ToolCallLike,
   ToolResultLike,
 } from './types'
@@ -39,7 +41,9 @@ const createStreamingState = (): StreamingState => ({
 const projectKey = (projectId: string | null | undefined) => projectId || '__none__'
 
 const MOBILE_LAST_USER_STORAGE_KEY = 'mobile:lastUserId'
+const MOBILE_LAST_PROVIDER_STORAGE_KEY = 'mobile:lastProvider'
 const mobileLastConversationStorageKey = (userId: string) => `mobile:lastConversationId:${userId}`
+const DEFAULT_PROVIDER: MobileProviderName = 'openaichatgpt'
 
 const readStorageValue = (key: string): string | null => {
   if (typeof window === 'undefined') return null
@@ -68,6 +72,16 @@ const normalizeCwd = (value: string | null | undefined): string | null => {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
+}
+
+const normalizeProviderName = (value: string | null | undefined): MobileProviderName => {
+  if (value === 'openrouter' || value === 'lmstudio' || value === 'openaichatgpt') return value
+  return DEFAULT_PROVIDER
+}
+
+const getDefaultModelForProvider = (provider: MobileProviderName, providers: MobileProviderModelInfo[]): string => {
+  const match = providers.find(item => item.name === provider)
+  return match?.models?.[0] || ''
 }
 
 const makeStreamingMessage = (state: StreamingState | null): MobileMessage | null => {
@@ -277,6 +291,10 @@ const filterEmptyAssistantNodes = (tree: MobileMessageTreeNode | null): MobileMe
 }
 
 export const App: React.FC = () => {
+  const [selectedProvider, setSelectedProvider] = useState<MobileProviderName>(() =>
+    normalizeProviderName(readStorageValue(MOBILE_LAST_PROVIDER_STORAGE_KEY))
+  )
+  const [providerModels, setProviderModels] = useState<MobileProviderModelInfo[]>([])
   const [modelName, setModelName] = useState('gpt-5.3-codex')
   const [statusText, setStatusText] = useState('Loading…')
 
@@ -300,12 +318,15 @@ export const App: React.FC = () => {
   const [hideEmptyAssistantMessages, setHideEmptyAssistantMessages] = useState(true)
 
   const [draft, setDraft] = useState('')
+  const [conversationSystemPromptInput, setConversationSystemPromptInput] = useState('')
+  const [conversationContextInput, setConversationContextInput] = useState('')
   const [conversationCwdInput, setConversationCwdInput] = useState('')
-  const [savingConversationCwd, setSavingConversationCwd] = useState(false)
+  const [savingConversationSettings, setSavingConversationSettings] = useState(false)
   const [branchSourceMessage, setBranchSourceMessage] = useState<MobileMessage | null>(null)
   const [sending, setSending] = useState(false)
   const [streamingState, setStreamingState] = useState<StreamingState | null>(null)
   const [openAiConnected, setOpenAiConnected] = useState(false)
+  const [openRouterConnected, setOpenRouterConnected] = useState(false)
   const [openAiBusy, setOpenAiBusy] = useState(false)
   const [pendingOpenAiState, setPendingOpenAiState] = useState<string | null>(null)
 
@@ -348,6 +369,11 @@ export const App: React.FC = () => {
     return next
   }, [projects])
 
+  const activeProject = useMemo(() => {
+    const projectId = activeConversation?.project_id || null
+    return projectId ? projectById.get(projectId) || null : null
+  }, [activeConversation?.project_id, projectById])
+
   const activeProjectCwd = useMemo(() => {
     const conversationCwd = normalizeCwd(activeConversation?.cwd)
     if (conversationCwd) return conversationCwd
@@ -359,10 +385,29 @@ export const App: React.FC = () => {
     return null
   }, [activeConversation, projectById])
 
+  const availableModelOptions = useMemo(() => {
+    const models = providerModels.find(provider => provider.name === selectedProvider)?.models || []
+    return models.length > 0 ? models : [modelName]
+  }, [providerModels, selectedProvider, modelName])
+
+  const selectedProviderRequiresAuth = selectedProvider === 'openaichatgpt' || selectedProvider === 'openrouter'
+  const selectedProviderAuthenticated =
+    selectedProvider === 'openaichatgpt' ? openAiConnected : selectedProvider === 'openrouter' ? openRouterConnected : true
+
   useEffect(() => {
+    setConversationSystemPromptInput(activeProject?.system_prompt || activeConversation?.system_prompt || '')
+    setConversationContextInput(activeProject?.context || activeConversation?.conversation_context || '')
+
     const currentConversationCwd = normalizeCwd(activeConversation?.cwd)
     setConversationCwdInput(currentConversationCwd || '')
-  }, [activeConversationId, activeConversation?.cwd])
+  }, [
+    activeConversationId,
+    activeConversation?.conversation_context,
+    activeConversation?.cwd,
+    activeConversation?.system_prompt,
+    activeProject?.context,
+    activeProject?.system_prompt,
+  ])
 
   const loadUsers = async () => {
     const listed = await mobileApi.listUsers()
@@ -496,6 +541,15 @@ export const App: React.FC = () => {
       setOpenAiConnected(Boolean(status.hasToken))
     } catch {
       setOpenAiConnected(false)
+    }
+  }
+
+  const refreshOpenRouterStatus = async (userId: string) => {
+    try {
+      const status = await mobileApi.getOpenRouterTokenStatus(userId)
+      setOpenRouterConnected(Boolean(status.hasToken))
+    } catch {
+      setOpenRouterConnected(false)
     }
   }
 
@@ -657,34 +711,72 @@ export const App: React.FC = () => {
     }
   }
 
-  const handleSaveConversationCwd = async () => {
+  const handleSaveConversationSettings = async () => {
     if (!activeConversationId) {
       setStatusText('Select or create a conversation first')
       return
     }
 
-    if (savingConversationCwd) return
+    if (savingConversationSettings) return
 
     const normalizedCwd = normalizeCwd(conversationCwdInput)
+    const normalizedSystemPrompt = conversationSystemPromptInput.trim() || null
+    const normalizedConversationContext = conversationContextInput.trim() || null
 
-    setSavingConversationCwd(true)
+    setSavingConversationSettings(true)
     try {
-      const updated = await mobileApi.updateConversation(activeConversationId, { cwd: normalizedCwd })
+      const updatedConversation = await mobileApi.updateConversation(activeConversationId, { cwd: normalizedCwd })
 
       setConversationsByProjectKey(previous => {
         const next: Record<string, MobileConversation[]> = {}
         Object.entries(previous).forEach(([key, bucket]) => {
-          next[key] = bucket.map(conversation => (conversation.id === updated.id ? { ...conversation, ...updated } : conversation))
+          next[key] = bucket.map(conversation =>
+            conversation.id === updatedConversation.id ? { ...conversation, ...updatedConversation } : conversation
+          )
         })
         return next
       })
 
-      setConversationCwdInput(normalizeCwd(updated.cwd) || '')
-      setStatusText(normalizedCwd ? `Saved conversation cwd: ${normalizedCwd}` : 'Cleared conversation cwd')
+      if (activeProject?.id) {
+        const updatedProject = await mobileApi.updateProject(activeProject.id, {
+          system_prompt: normalizedSystemPrompt,
+          context: normalizedConversationContext,
+        })
+
+        setProjects(previous =>
+          previous.map(project => (project.id === updatedProject.id ? { ...project, ...updatedProject } : project))
+        )
+
+        setConversationSystemPromptInput(updatedProject.system_prompt || '')
+        setConversationContextInput(updatedProject.context || '')
+      } else {
+        const updatedConversationWithPrompt = await mobileApi.updateConversation(activeConversationId, {
+          system_prompt: normalizedSystemPrompt,
+          conversation_context: normalizedConversationContext,
+        })
+
+        setConversationsByProjectKey(previous => {
+          const next: Record<string, MobileConversation[]> = {}
+          Object.entries(previous).forEach(([key, bucket]) => {
+            next[key] = bucket.map(conversation =>
+              conversation.id === updatedConversationWithPrompt.id
+                ? { ...conversation, ...updatedConversationWithPrompt }
+                : conversation
+            )
+          })
+          return next
+        })
+
+        setConversationSystemPromptInput(updatedConversationWithPrompt.system_prompt || '')
+        setConversationContextInput(updatedConversationWithPrompt.conversation_context || '')
+      }
+
+      setConversationCwdInput(normalizeCwd(updatedConversation.cwd) || '')
+      setStatusText(activeProject?.id ? 'Saved project prompt/context and conversation cwd' : 'Saved conversation settings')
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : String(error))
     } finally {
-      setSavingConversationCwd(false)
+      setSavingConversationSettings(false)
     }
   }
 
@@ -758,6 +850,17 @@ export const App: React.FC = () => {
   }, [selectedUserId])
 
   useEffect(() => {
+    writeStorageValue(MOBILE_LAST_PROVIDER_STORAGE_KEY, selectedProvider)
+  }, [selectedProvider])
+
+  useEffect(() => {
+    const models = providerModels.find(provider => provider.name === selectedProvider)?.models || []
+    if (models.length === 0) return
+    if (models.includes(modelName)) return
+    setModelName(models[0])
+  }, [providerModels, selectedProvider, modelName])
+
+  useEffect(() => {
     if (!selectedUserId) return
     writeStorageValue(mobileLastConversationStorageKey(selectedUserId), activeConversationId)
   }, [selectedUserId, activeConversationId])
@@ -770,6 +873,16 @@ export const App: React.FC = () => {
         setStatusText('Checking capabilities…')
         await mobileApi.getCapabilities()
         if (cancelled) return
+
+        const listedProviderModels = await mobileApi.getProviderModels()
+        if (cancelled) return
+        setProviderModels(listedProviderModels)
+        const preferredProvider = normalizeProviderName(readStorageValue(MOBILE_LAST_PROVIDER_STORAGE_KEY))
+        const preferredModel = getDefaultModelForProvider(preferredProvider, listedProviderModels)
+        if (preferredModel) {
+          setSelectedProvider(preferredProvider)
+          setModelName(current => (listedProviderModels.some(provider => provider.name === preferredProvider && provider.models.includes(current)) ? current : preferredModel))
+        }
 
         setStatusText('Loading user profiles…')
         await loadUsers()
@@ -811,7 +924,11 @@ export const App: React.FC = () => {
       setIsPathPickerOpen(false)
       setBranchSourceMessage(null)
       setOpenAiConnected(false)
+      setOpenRouterConnected(false)
       setPendingOpenAiState(null)
+      setConversationSystemPromptInput('')
+      setConversationContextInput('')
+      setConversationCwdInput('')
       return
     }
 
@@ -825,6 +942,13 @@ export const App: React.FC = () => {
 
         await refreshOpenAiStatus(selectedUserId)
         if (cancelled) return
+
+        await refreshOpenRouterStatus(selectedUserId)
+        if (cancelled) return
+
+        const listedProviderModels = await mobileApi.getProviderModels(selectedUserId)
+        if (cancelled) return
+        setProviderModels(listedProviderModels)
 
         await loadInferenceTools()
         if (cancelled) return
@@ -1030,8 +1154,12 @@ export const App: React.FC = () => {
       setStatusText('Select or create a conversation first')
       return
     }
-    if (!openAiConnected) {
+    if (selectedProvider === 'openaichatgpt' && !openAiConnected) {
       setStatusText('OpenAI not connected. Use Sign in OpenAI first.')
+      return
+    }
+    if (selectedProvider === 'openrouter' && !openRouterConnected) {
+      setStatusText('OpenRouter not connected.')
       return
     }
 
@@ -1065,6 +1193,7 @@ export const App: React.FC = () => {
       await mobileApi.streamMessage({
         conversationId: activeConversationId,
         userId: selectedUserId,
+        provider: selectedProvider,
         modelName,
         content,
         parentId,
@@ -1097,14 +1226,19 @@ export const App: React.FC = () => {
   return (
     <main className='mobile-app-shell'>
       <MobileHeader
+        providerName={selectedProvider}
+        providerOptions={providerModels.length > 0 ? providerModels.map(provider => provider.name) : ['openaichatgpt', 'openrouter', 'lmstudio']}
         modelName={modelName}
+        modelOptions={availableModelOptions}
         statusText={statusText}
         users={users}
         selectedUserId={selectedUserId}
+        onProviderChange={setSelectedProvider}
         onModelChange={setModelName}
         onUserSelect={setSelectedUserId}
         selectorsDisabled={sending}
         openAiAuthenticated={openAiConnected}
+        openRouterAuthenticated={openRouterConnected}
         openAiBusy={openAiBusy}
         hasPendingOpenAiFlow={Boolean(pendingOpenAiState)}
         onOpenAiLoginStart={handleOpenAiLoginStart}
@@ -1116,10 +1250,14 @@ export const App: React.FC = () => {
         onRefreshCustomTools={loadCustomTools}
         onToggleCustomTool={handleToggleCustomTool}
         activeConversationId={activeConversationId}
+        conversationSystemPromptInput={conversationSystemPromptInput}
+        conversationContextInput={conversationContextInput}
         conversationCwdInput={conversationCwdInput}
+        onConversationSystemPromptInputChange={setConversationSystemPromptInput}
+        onConversationContextInputChange={setConversationContextInput}
         onConversationCwdInputChange={setConversationCwdInput}
-        onSaveConversationCwd={handleSaveConversationCwd}
-        savingConversationCwd={savingConversationCwd}
+        onSaveConversationSettings={handleSaveConversationSettings}
+        savingConversationSettings={savingConversationSettings}
         onOpenProjectConversationPicker={() => setIsProjectsModalOpen(true)}
         canOpenProjectConversationPicker={!sending && Boolean(selectedUserId)}
         onOpenBranchTree={() => setIsTreeDrawerOpen(true)}
@@ -1171,7 +1309,7 @@ export const App: React.FC = () => {
             : undefined
         }
         onCancelBranch={branchSourceMessage ? handleCancelBranch : undefined}
-        disabled={!activeConversationId || !selectedUserId || !openAiConnected}
+        disabled={!activeConversationId || !selectedUserId || (selectedProviderRequiresAuth && !selectedProviderAuthenticated)}
       />
 
       <FilePathPickerModal

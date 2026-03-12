@@ -1,4 +1,10 @@
-import type { HeadlessProvider, ProviderGenerateInput, ProviderGenerateOutput, ProviderToolCall } from './openRouterProvider.js'
+import type {
+  HeadlessProvider,
+  ProviderGenerateInput,
+  ProviderGenerateOutput,
+  ProviderStreamEventHandler,
+  ProviderToolCall,
+} from './openRouterProvider.js'
 import { buildToolNameMap, sanitizeToolResultContentForModel } from './toolResultSanitizer.js'
 
 interface LmStudioMessage {
@@ -185,7 +191,7 @@ function parseResponseToolCalls(message: any): ProviderToolCall[] {
 export class LmStudioProvider implements HeadlessProvider {
   readonly name = 'lmstudio'
 
-  async generate(input: ProviderGenerateInput): Promise<ProviderGenerateOutput> {
+  async generate(input: ProviderGenerateInput, _emit?: ProviderStreamEventHandler): Promise<ProviderGenerateOutput> {
     const baseUrl = process.env.LMSTUDIO_BASE_URL || 'http://127.0.0.1:1234/v1'
     const model = input.modelName || process.env.LMSTUDIO_MODEL || 'local-model'
     const messages = transformHistoryToMessages(input.history || [], input.userContent, input.systemPrompt)

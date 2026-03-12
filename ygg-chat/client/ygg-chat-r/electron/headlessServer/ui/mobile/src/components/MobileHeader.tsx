@@ -1,19 +1,24 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { LocalUserProfile, MobileCustomTool } from '../types'
+import type { LocalUserProfile, MobileCustomTool, MobileProviderName } from '../types'
 import { ProfilePicker } from './ProfilePicker'
 import { ToolTogglePanel } from './ToolTogglePanel'
-import { Badge, Button, Input, Select } from './ui'
+import { Badge, Button, Input, Select, Textarea } from './ui'
 
 interface MobileHeaderProps {
+  providerName: MobileProviderName
+  providerOptions: MobileProviderName[]
   modelName: string
+  modelOptions: string[]
   statusText: string
   users: LocalUserProfile[]
   selectedUserId: string | null
+  onProviderChange: (value: MobileProviderName) => void
   onModelChange: (value: string) => void
   onUserSelect: (userId: string) => void
   selectorsDisabled?: boolean
   openAiAuthenticated: boolean
+  openRouterAuthenticated: boolean
   openAiBusy: boolean
   hasPendingOpenAiFlow: boolean
   onOpenAiLoginStart: () => void
@@ -25,10 +30,14 @@ interface MobileHeaderProps {
   onRefreshCustomTools: () => void
   onToggleCustomTool: (toolName: string, enabled: boolean) => void
   activeConversationId: string | null
+  conversationSystemPromptInput: string
+  conversationContextInput: string
   conversationCwdInput: string
+  onConversationSystemPromptInputChange: (value: string) => void
+  onConversationContextInputChange: (value: string) => void
   onConversationCwdInputChange: (value: string) => void
-  onSaveConversationCwd: () => void
-  savingConversationCwd: boolean
+  onSaveConversationSettings: () => void
+  savingConversationSettings: boolean
   onOpenProjectConversationPicker: () => void
   canOpenProjectConversationPicker: boolean
   onOpenBranchTree: () => void
@@ -37,17 +46,26 @@ interface MobileHeaderProps {
   canOpenPathPicker: boolean
 }
 
-const MODEL_OPTIONS = ['gpt-5.4', 'gpt-5.1-codex-mini', 'gpt-5.1-codex', 'gpt-5.2-codex', 'gpt-5.3-codex', 'gpt-5.1', 'gpt-5.2', 'gpt-4o']
+const PROVIDER_LABELS: Record<MobileProviderName, string> = {
+  openaichatgpt: 'OpenAI ChatGPT',
+  openrouter: 'OpenRouter',
+  lmstudio: 'LM Studio',
+}
 
 export const MobileHeader: React.FC<MobileHeaderProps> = ({
+  providerName,
+  providerOptions,
   modelName,
+  modelOptions,
   statusText,
   users,
   selectedUserId,
+  onProviderChange,
   onModelChange,
   onUserSelect,
   selectorsDisabled = false,
   openAiAuthenticated,
+  openRouterAuthenticated,
   openAiBusy,
   hasPendingOpenAiFlow,
   onOpenAiLoginStart,
@@ -59,10 +77,14 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   onRefreshCustomTools,
   onToggleCustomTool,
   activeConversationId,
+  conversationSystemPromptInput,
+  conversationContextInput,
   conversationCwdInput,
+  onConversationSystemPromptInputChange,
+  onConversationContextInputChange,
   onConversationCwdInputChange,
-  onSaveConversationCwd,
-  savingConversationCwd,
+  onSaveConversationSettings,
+  savingConversationSettings,
   onOpenProjectConversationPicker,
   canOpenProjectConversationPicker,
   onOpenBranchTree,
@@ -71,9 +93,42 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   canOpenPathPicker,
 }) => {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [modelSearch, setModelSearch] = useState('')
+  const [conversationSettingsExpanded, setConversationSettingsExpanded] = useState(false)
+
+  const filteredModelOptions = useMemo(() => {
+    const query = modelSearch.trim().toLowerCase()
+    if (!query) return modelOptions
+
+    const matches = modelOptions.filter(model => model.toLowerCase().includes(query))
+    if (matches.includes(modelName) || !modelName) return matches
+    return [modelName, ...matches]
+  }, [modelOptions, modelName, modelSearch])
+
+  const authStatus = useMemo(() => {
+    if (providerName === 'openaichatgpt') {
+      return {
+        label: `OpenAI ${openAiAuthenticated ? 'connected' : 'not connected'}`,
+        className: openAiAuthenticated ? 'connected' : 'disconnected',
+      }
+    }
+    if (providerName === 'openrouter') {
+      return {
+        label: `OpenRouter ${openRouterAuthenticated ? 'connected' : 'not connected'}`,
+        className: openRouterAuthenticated ? 'connected' : 'disconnected',
+      }
+    }
+    return {
+      label: 'LM Studio local provider',
+      className: 'connected',
+    }
+  }, [providerName, openAiAuthenticated, openRouterAuthenticated])
 
   useEffect(() => {
-    if (!settingsOpen) return
+    if (!settingsOpen) {
+      setModelSearch('')
+      return
+    }
 
     const previousBodyOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -89,6 +144,10 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
       window.removeEventListener('keydown', handleEscape)
     }
   }, [settingsOpen])
+
+  useEffect(() => {
+    setModelSearch('')
+  }, [providerName])
 
   const settingsPortal =
     settingsOpen && typeof document !== 'undefined'
@@ -115,13 +174,38 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
               <div className='mobile-settings-portal-body'>
                 <div className='mobile-settings-select-grid'>
                   <label className='mobile-settings-field'>
+                    <span>Provider</span>
+                    <Select
+                      value={providerName}
+                      onChange={event => onProviderChange(event.target.value as MobileProviderName)}
+                      disabled={selectorsDisabled}
+                    >
+                      {providerOptions.map(provider => (
+                        <option key={provider} value={provider}>
+                          {PROVIDER_LABELS[provider]}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+
+                  <label className='mobile-settings-field'>
                     <span>Model</span>
+                    <Input
+                      type='text'
+                      value={modelSearch}
+                      onChange={event => setModelSearch(event.target.value)}
+                      placeholder='Search models…'
+                      disabled={selectorsDisabled || modelOptions.length <= 1}
+                    />
+                    <span className='mobile-settings-field-hint'>
+                      {filteredModelOptions.length} of {modelOptions.length} models
+                    </span>
                     <Select
                       value={modelName}
                       onChange={event => onModelChange(event.target.value)}
                       disabled={selectorsDisabled}
                     >
-                      {MODEL_OPTIONS.map(model => (
+                      {filteredModelOptions.map(model => (
                         <option key={model} value={model}>
                           {model}
                         </option>
@@ -139,55 +223,104 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
                 </div>
 
                 <div className='mobile-settings-auth-row'>
-                  <Badge className={`mobile-auth-pill ${openAiAuthenticated ? 'connected' : 'disconnected'}`} variant='outline'>
-                    OpenAI {openAiAuthenticated ? 'connected' : 'not connected'}
+                  <Badge className={`mobile-auth-pill ${authStatus.className}`} variant='outline'>
+                    {authStatus.label}
                   </Badge>
 
-                  {!openAiAuthenticated ? (
-                    <>
-                      <Button onClick={onOpenAiLoginStart} disabled={openAiBusy} variant='secondary' size='sm'>
-                        Sign in OpenAI
+                  {providerName === 'openaichatgpt' ? (
+                    !openAiAuthenticated ? (
+                      <>
+                        <Button onClick={onOpenAiLoginStart} disabled={openAiBusy} variant='secondary' size='sm'>
+                          Sign in OpenAI
+                        </Button>
+                        <Button
+                          onClick={onOpenAiLoginComplete}
+                          disabled={openAiBusy || !hasPendingOpenAiFlow}
+                          variant='outline'
+                          size='sm'
+                        >
+                          Complete sign-in
+                        </Button>
+                      </>
+                    ) : (
+                      <Button onClick={onOpenAiLogout} disabled={openAiBusy} variant='outline' size='sm'>
+                        Sign out OpenAI
                       </Button>
-                      <Button
-                        onClick={onOpenAiLoginComplete}
-                        disabled={openAiBusy || !hasPendingOpenAiFlow}
-                        variant='outline'
-                        size='sm'
-                      >
-                        Complete sign-in
-                      </Button>
-                    </>
+                    )
+                  ) : providerName === 'openrouter' ? (
+                    <span className='mobile-conversation-cwd-hint'>OpenRouter uses your stored app token.</span>
                   ) : (
-                    <Button onClick={onOpenAiLogout} disabled={openAiBusy} variant='outline' size='sm'>
-                      Sign out OpenAI
-                    </Button>
+                    <span className='mobile-conversation-cwd-hint'>LM Studio uses your local runtime. No remote auth needed.</span>
                   )}
                 </div>
 
-                <div className='mobile-conversation-cwd mobile-conversation-cwd--in-settings'>
-                  <label htmlFor='conversation-cwd-input'>Conversation working directory (cwd)</label>
-                  <div className='mobile-conversation-cwd-row'>
-                    <Input
-                      id='conversation-cwd-input'
-                      type='text'
-                      value={conversationCwdInput}
-                      onChange={event => onConversationCwdInputChange(event.target.value)}
-                      placeholder='e.g. D:\\projects\\my-repo'
-                      disabled={!activeConversationId || selectorsDisabled || savingConversationCwd}
-                    />
-                    <Button
-                      onClick={onSaveConversationCwd}
-                      disabled={!activeConversationId || selectorsDisabled || savingConversationCwd}
-                      variant='outline'
-                      size='sm'
-                    >
-                      {savingConversationCwd ? 'Saving…' : 'Save cwd'}
-                    </Button>
-                  </div>
-                  <span className='mobile-conversation-cwd-hint'>
-                    Used as tool execution root for this conversation. Leave empty to fall back to project cwd.
-                  </span>
-                </div>
+                <section className='mobile-settings-collapsible'>
+                  <button
+                    type='button'
+                    className='mobile-settings-collapsible-toggle'
+                    onClick={() => setConversationSettingsExpanded(previous => !previous)}
+                    aria-expanded={conversationSettingsExpanded}
+                  >
+                    <span>
+                      <strong>Prompt, context, and cwd</strong>
+                      <small>Project prompt/context plus conversation cwd</small>
+                    </span>
+                    <span aria-hidden='true'>{conversationSettingsExpanded ? '▾' : '▸'}</span>
+                  </button>
+
+                  {conversationSettingsExpanded ? (
+                    <div className='mobile-settings-collapsible-body'>
+                      <label className='mobile-settings-field' htmlFor='conversation-system-prompt-input'>
+                        <span>System prompt</span>
+                        <Textarea
+                          id='conversation-system-prompt-input'
+                          value={conversationSystemPromptInput}
+                          onChange={event => onConversationSystemPromptInputChange(event.target.value)}
+                          placeholder='Optional system prompt for this conversation'
+                          rows={4}
+                          disabled={!activeConversationId || selectorsDisabled || savingConversationSettings}
+                        />
+                      </label>
+
+                      <label className='mobile-settings-field' htmlFor='conversation-context-input'>
+                        <span>Context</span>
+                        <Textarea
+                          id='conversation-context-input'
+                          value={conversationContextInput}
+                          onChange={event => onConversationContextInputChange(event.target.value)}
+                          placeholder='Optional conversation context or notes'
+                          rows={5}
+                          disabled={!activeConversationId || selectorsDisabled || savingConversationSettings}
+                        />
+                      </label>
+
+                      <div className='mobile-conversation-cwd mobile-conversation-cwd--in-settings'>
+                        <label htmlFor='conversation-cwd-input'>Conversation working directory (cwd)</label>
+                        <div className='mobile-conversation-cwd-row'>
+                          <Input
+                            id='conversation-cwd-input'
+                            type='text'
+                            value={conversationCwdInput}
+                            onChange={event => onConversationCwdInputChange(event.target.value)}
+                            placeholder='e.g. D:\\projects\\my-repo'
+                            disabled={!activeConversationId || selectorsDisabled || savingConversationSettings}
+                          />
+                          <Button
+                            onClick={onSaveConversationSettings}
+                            disabled={!activeConversationId || selectorsDisabled || savingConversationSettings}
+                            variant='outline'
+                            size='sm'
+                          >
+                            {savingConversationSettings ? 'Saving…' : 'Save'}
+                          </Button>
+                        </div>
+                        <span className='mobile-conversation-cwd-hint'>
+                          Used as tool execution root for this conversation. Leave empty to fall back to project cwd.
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
 
                 <div className='mobile-settings-tools-wrap'>
                   <ToolTogglePanel
@@ -258,7 +391,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 
         <div className='mobile-header-summary mobile-header-summary--compact'>
           <div className='mobile-header-summary-item'>
-            <span>Model</span>
+            <span>{PROVIDER_LABELS[providerName]}</span>
             <strong>{modelName}</strong>
             <Button
               variant='ghost'

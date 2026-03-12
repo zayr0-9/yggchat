@@ -143,61 +143,58 @@ const SearchList: React.FC<SearchListProps> = ({
 
   const borderVariantClass = variantBorderClass[dropdownVariant]
 
-  const dropdownContent = isOpen
-    ? loading
-      ? (
-          <div
-            className='fixed bg-indigo-50 dark:bg-yBlack-900 p-4 md:p-3 lg:p-2.5 xl:p-2 text-sm md:text-xs lg:text-xs xl:text-[10px]'
-            style={{
-              zIndex: dropdownZIndex,
-              top: `${dropdownPosition.top}px`,
-              left: `${dropdownPosition.left}px`,
-              width: `${dropdownPosition.width}px`,
+  const dropdownContent = isOpen ? (
+    loading ? (
+      <div
+        className='fixed p-4 md:p-3 lg:p-2.5 xl:p-2 text-sm md:text-xs lg:text-xs xl:text-[10px]'
+        style={{
+          zIndex: dropdownZIndex,
+          top: `${dropdownPosition.top}px`,
+          left: `${dropdownPosition.left}px`,
+          width: `${dropdownPosition.width}px`,
+        }}
+      >
+        Searching...
+      </div>
+    ) : results.length > 0 ? (
+      <ul
+        ref={dropdownRef}
+        className={`fixed overflow-y-auto bg-neutral-100/80 dark:bg-yBlack-900/30 ${borderVariantClass} rounded backdrop-blur-sm shadow-lg dark:bg-transparent thin-scrollbar`}
+        style={{
+          zIndex: dropdownZIndex,
+          colorScheme: 'dark',
+          top: `${dropdownPosition.top}px`,
+          left: `${dropdownPosition.left}px`,
+          width: `${dropdownPosition.width}px`,
+          maxHeight: `${dropdownPosition.maxHeight}px`,
+        }}
+      >
+        {results.map(res => (
+          <li
+            key={`${res.conversationId}-${res.messageId}`}
+            className='p-3 hover:bg-neutral-100 rounded-lg dark:hover:bg-yBlack-700 cursor-pointer text-sm dark:text-neutral-200'
+            title={res.conversationTitle}
+            onClick={() => {
+              onResultClick(res.conversationId, res.messageId)
+              setIsOpen(false)
             }}
           >
-            Searching...
-          </div>
-        )
-      : results.length > 0
-        ? (
-            <ul
-              ref={dropdownRef}
-              className={`fixed overflow-y-auto bg-slate-50 border border-indigo-100 ${borderVariantClass} rounded shadow-lg dark:bg-neutral-700 thin-scrollbar`}
-              style={{
-                zIndex: dropdownZIndex,
-                colorScheme: 'dark',
-                top: `${dropdownPosition.top}px`,
-                left: `${dropdownPosition.left}px`,
-                width: `${dropdownPosition.width}px`,
-                maxHeight: `${dropdownPosition.maxHeight}px`,
-              }}
-            >
-              {results.map(res => (
-                <li
-                  key={`${res.conversationId}-${res.messageId}`}
-                  className='p-3 hover:bg-indigo-100 dark:bg-yBlack-900 dark:hover:bg-yBlack-700 cursor-pointer text-sm dark:text-neutral-200'
-                  onClick={() => {
-                    onResultClick(res.conversationId, res.messageId)
-                    setIsOpen(false)
-                  }}
-                >
-                  <div className='flex justify-between items-baseline'>
-                    <div className='font-semibold text-base text-indigo-600 dark:text-yBrown-50'>
-                      {res.conversationTitle || `Conv ${res.conversationId}`}
-                    </div>
-                    <div className='text-xs text-neutral-500 dark:text-neutral-400 ml-2'>
-                      {new Date(res.createdAt).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className='mt-1 pl-2 text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words max-h-48 overflow-hidden'>
-                    {res.content}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )
-        : null
-    : null
+            <div className='flex justify-between items-baseline'>
+              <div className='font-semibold text-sm text-stone-600 dark:text-yBrown-50'>
+                {res.conversationTitle || `Conv ${res.conversationId}`}
+              </div>
+              <div className='text-xs text-neutral-500 dark:text-neutral-400 ml-2'>
+                {new Date(res.createdAt).toLocaleString()}
+              </div>
+            </div>
+            <div className='mt-1 text-[12px] text-neutral-800 dark:text-neutral-200 whitespace-pre-wrap break-words max-h-48 overflow-hidden'>
+              {res.content}
+            </div>
+          </li>
+        ))}
+      </ul>
+    ) : null
+  ) : null
 
   return (
     <div

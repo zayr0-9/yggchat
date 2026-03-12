@@ -97,7 +97,7 @@ var require_react_production = __commonJS({
     function noop() {
     }
     var ReactSharedInternals = { H: null, A: null, T: null, S: null };
-    var hasOwnProperty2 = Object.prototype.hasOwnProperty;
+    var hasOwnProperty3 = Object.prototype.hasOwnProperty;
     function ReactElement(type, key, props) {
       var refProp = props.ref;
       return {
@@ -121,8 +121,8 @@ var require_react_production = __commonJS({
       });
     }
     var userProvidedKeyEscapeRegex = /\/+/g;
-    function getElementKey(element3, index2) {
-      return "object" === typeof element3 && null !== element3 && null != element3.key ? escape("" + element3.key) : index2.toString(36);
+    function getElementKey(element3, index3) {
+      return "object" === typeof element3 && null !== element3 && null != element3.key ? escape("" + element3.key) : index3.toString(36);
     }
     function resolveThenable(thenable) {
       switch (thenable.status) {
@@ -317,15 +317,15 @@ var require_react_production = __commonJS({
     exports.cacheSignal = function() {
       return null;
     };
-    exports.cloneElement = function(element3, config, children) {
+    exports.cloneElement = function(element3, config3, children) {
       if (null === element3 || void 0 === element3)
         throw Error(
           "The argument must be a React element, but you passed " + element3 + "."
         );
       var props = assign({}, element3.props), key = element3.key;
-      if (null != config)
-        for (propName in void 0 !== config.key && (key = "" + config.key), config)
-          !hasOwnProperty2.call(config, propName) || "key" === propName || "__self" === propName || "__source" === propName || "ref" === propName && void 0 === config.ref || (props[propName] = config[propName]);
+      if (null != config3)
+        for (propName in void 0 !== config3.key && (key = "" + config3.key), config3)
+          !hasOwnProperty3.call(config3, propName) || "key" === propName || "__self" === propName || "__source" === propName || "ref" === propName && void 0 === config3.ref || (props[propName] = config3[propName]);
       var propName = arguments.length - 2;
       if (1 === propName) props.children = children;
       else if (1 < propName) {
@@ -351,11 +351,11 @@ var require_react_production = __commonJS({
       };
       return defaultValue;
     };
-    exports.createElement = function(type, config, children) {
+    exports.createElement = function(type, config3, children) {
       var propName, props = {}, key = null;
-      if (null != config)
-        for (propName in void 0 !== config.key && (key = "" + config.key), config)
-          hasOwnProperty2.call(config, propName) && "key" !== propName && "__self" !== propName && "__source" !== propName && (props[propName] = config[propName]);
+      if (null != config3)
+        for (propName in void 0 !== config3.key && (key = "" + config3.key), config3)
+          hasOwnProperty3.call(config3, propName) && "key" !== propName && "__self" !== propName && "__source" !== propName && (props[propName] = config3[propName]);
       var childrenLength = arguments.length - 2;
       if (1 === childrenLength) props.children = children;
       else if (1 < childrenLength) {
@@ -422,8 +422,8 @@ var require_react_production = __commonJS({
     exports.useDeferredValue = function(value, initialValue) {
       return ReactSharedInternals.H.useDeferredValue(value, initialValue);
     };
-    exports.useEffect = function(create2, deps) {
-      return ReactSharedInternals.H.useEffect(create2, deps);
+    exports.useEffect = function(create3, deps) {
+      return ReactSharedInternals.H.useEffect(create3, deps);
     };
     exports.useEffectEvent = function(callback) {
       return ReactSharedInternals.H.useEffectEvent(callback);
@@ -431,23 +431,23 @@ var require_react_production = __commonJS({
     exports.useId = function() {
       return ReactSharedInternals.H.useId();
     };
-    exports.useImperativeHandle = function(ref, create2, deps) {
-      return ReactSharedInternals.H.useImperativeHandle(ref, create2, deps);
+    exports.useImperativeHandle = function(ref, create3, deps) {
+      return ReactSharedInternals.H.useImperativeHandle(ref, create3, deps);
     };
-    exports.useInsertionEffect = function(create2, deps) {
-      return ReactSharedInternals.H.useInsertionEffect(create2, deps);
+    exports.useInsertionEffect = function(create3, deps) {
+      return ReactSharedInternals.H.useInsertionEffect(create3, deps);
     };
-    exports.useLayoutEffect = function(create2, deps) {
-      return ReactSharedInternals.H.useLayoutEffect(create2, deps);
+    exports.useLayoutEffect = function(create3, deps) {
+      return ReactSharedInternals.H.useLayoutEffect(create3, deps);
     };
-    exports.useMemo = function(create2, deps) {
-      return ReactSharedInternals.H.useMemo(create2, deps);
+    exports.useMemo = function(create3, deps) {
+      return ReactSharedInternals.H.useMemo(create3, deps);
     };
     exports.useOptimistic = function(passthrough, reducer) {
       return ReactSharedInternals.H.useOptimistic(passthrough, reducer);
     };
-    exports.useReducer = function(reducer, initialArg, init) {
-      return ReactSharedInternals.H.useReducer(reducer, initialArg, init);
+    exports.useReducer = function(reducer, initialArg, init2) {
+      return ReactSharedInternals.H.useReducer(reducer, initialArg, init2);
     };
     exports.useRef = function(initialValue) {
       return ReactSharedInternals.H.useRef(initialValue);
@@ -486,12 +486,12 @@ var require_scheduler_production = __commonJS({
   "../../node_modules/scheduler/cjs/scheduler.production.js"(exports) {
     "use strict";
     function push2(heap, node2) {
-      var index2 = heap.length;
+      var index3 = heap.length;
       heap.push(node2);
-      a: for (; 0 < index2; ) {
-        var parentIndex = index2 - 1 >>> 1, parent = heap[parentIndex];
+      a: for (; 0 < index3; ) {
+        var parentIndex = index3 - 1 >>> 1, parent = heap[parentIndex];
         if (0 < compare(parent, node2))
-          heap[parentIndex] = node2, heap[index2] = parent, index2 = parentIndex;
+          heap[parentIndex] = node2, heap[index3] = parent, index3 = parentIndex;
         else break a;
       }
     }
@@ -503,12 +503,12 @@ var require_scheduler_production = __commonJS({
       var first = heap[0], last = heap.pop();
       if (last !== first) {
         heap[0] = last;
-        a: for (var index2 = 0, length = heap.length, halfLength = length >>> 1; index2 < halfLength; ) {
-          var leftIndex = 2 * (index2 + 1) - 1, left = heap[leftIndex], rightIndex = leftIndex + 1, right = heap[rightIndex];
+        a: for (var index3 = 0, length = heap.length, halfLength = length >>> 1; index3 < halfLength; ) {
+          var leftIndex = 2 * (index3 + 1) - 1, left = heap[leftIndex], rightIndex = leftIndex + 1, right = heap[rightIndex];
           if (0 > compare(left, last))
-            rightIndex < length && 0 > compare(right, left) ? (heap[index2] = right, heap[rightIndex] = last, index2 = rightIndex) : (heap[index2] = left, heap[leftIndex] = last, index2 = leftIndex);
+            rightIndex < length && 0 > compare(right, left) ? (heap[index3] = right, heap[rightIndex] = last, index3 = rightIndex) : (heap[index3] = left, heap[leftIndex] = last, index3 = leftIndex);
           else if (rightIndex < length && 0 > compare(right, last))
-            heap[index2] = right, heap[rightIndex] = last, index2 = rightIndex;
+            heap[index3] = right, heap[rightIndex] = last, index3 = rightIndex;
           else break a;
         }
       }
@@ -770,7 +770,7 @@ var require_scheduler = __commonJS({
 var require_react_dom_production = __commonJS({
   "../../node_modules/react-dom/cjs/react-dom.production.js"(exports) {
     "use strict";
-    var React22 = require_react();
+    var React23 = require_react();
     function formatProdErrorMessage(code4) {
       var url = "https://react.dev/errors/" + code4;
       if (1 < arguments.length) {
@@ -810,7 +810,7 @@ var require_react_dom_production = __commonJS({
         implementation
       };
     }
-    var ReactSharedInternals = React22.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+    var ReactSharedInternals = React23.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
     function getCrossOriginStringAs(as, input) {
       if ("font" === as) return "";
       if ("string" === typeof input)
@@ -946,7 +946,7 @@ var require_react_dom_client_production = __commonJS({
   "../../node_modules/react-dom/cjs/react-dom-client.production.js"(exports) {
     "use strict";
     var Scheduler = require_scheduler();
-    var React22 = require_react();
+    var React23 = require_react();
     var ReactDOM = require_react_dom();
     function formatProdErrorMessage(code4) {
       var url = "https://react.dev/errors/" + code4;
@@ -1137,7 +1137,7 @@ var require_react_dom_client_production = __commonJS({
       return null;
     }
     var isArrayImpl = Array.isArray;
-    var ReactSharedInternals = React22.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
+    var ReactSharedInternals = React23.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
     var ReactDOMSharedInternals = ReactDOM.__DOM_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE;
     var sharedNotPendingObject = {
       pending: false,
@@ -1146,16 +1146,16 @@ var require_react_dom_client_production = __commonJS({
       action: null
     };
     var valueStack = [];
-    var index2 = -1;
+    var index3 = -1;
     function createCursor(defaultValue) {
       return { current: defaultValue };
     }
     function pop(cursor) {
-      0 > index2 || (cursor.current = valueStack[index2], valueStack[index2] = null, index2--);
+      0 > index3 || (cursor.current = valueStack[index3], valueStack[index3] = null, index3--);
     }
     function push2(cursor, value) {
-      index2++;
-      valueStack[index2] = cursor.current;
+      index3++;
+      valueStack[index3] = cursor.current;
       cursor.current = value;
     }
     var contextStackCursor = createCursor(null);
@@ -1344,7 +1344,7 @@ var require_react_dom_client_production = __commonJS({
         return "\nError generating stack: " + x.message + "\n" + x.stack;
       }
     }
-    var hasOwnProperty2 = Object.prototype.hasOwnProperty;
+    var hasOwnProperty3 = Object.prototype.hasOwnProperty;
     var scheduleCallback$3 = Scheduler.unstable_scheduleCallback;
     var cancelCallback$1 = Scheduler.unstable_cancelCallback;
     var shouldYield = Scheduler.unstable_shouldYield;
@@ -1675,9 +1675,9 @@ var require_react_dom_client_production = __commonJS({
     var illegalAttributeNameCache = {};
     var validatedAttributeNameCache = {};
     function isAttributeNameSafe(attributeName) {
-      if (hasOwnProperty2.call(validatedAttributeNameCache, attributeName))
+      if (hasOwnProperty3.call(validatedAttributeNameCache, attributeName))
         return true;
-      if (hasOwnProperty2.call(illegalAttributeNameCache, attributeName)) return false;
+      if (hasOwnProperty3.call(illegalAttributeNameCache, attributeName)) return false;
       if (VALID_ATTRIBUTE_NAME_REGEX.test(attributeName))
         return validatedAttributeNameCache[attributeName] = true;
       illegalAttributeNameCache[attributeName] = true;
@@ -2577,7 +2577,7 @@ var require_react_dom_client_production = __commonJS({
       if (keysA.length !== keysB.length) return false;
       for (keysB = 0; keysB < keysA.length; keysB++) {
         var currentKey = keysA[keysB];
-        if (!hasOwnProperty2.call(objB, currentKey) || !objectIs(objA[currentKey], objB[currentKey]))
+        if (!hasOwnProperty3.call(objB, currentKey) || !objectIs(objA[currentKey], objB[currentKey]))
           return false;
       }
       return true;
@@ -2939,7 +2939,7 @@ var require_react_dom_client_production = __commonJS({
       treeForkProvider = workInProgress2;
       treeForkCount = totalChildren;
     }
-    function pushTreeId(workInProgress2, totalChildren, index3) {
+    function pushTreeId(workInProgress2, totalChildren, index4) {
       idStack[idStackIndex++] = treeContextId;
       idStack[idStackIndex++] = treeContextOverflow;
       idStack[idStackIndex++] = treeContextProvider;
@@ -2948,17 +2948,17 @@ var require_react_dom_client_production = __commonJS({
       workInProgress2 = treeContextOverflow;
       var baseLength = 32 - clz32(baseIdWithLeadingBit) - 1;
       baseIdWithLeadingBit &= ~(1 << baseLength);
-      index3 += 1;
+      index4 += 1;
       var length = 32 - clz32(totalChildren) + baseLength;
       if (30 < length) {
         var numberOfOverflowBits = baseLength - baseLength % 5;
         length = (baseIdWithLeadingBit & (1 << numberOfOverflowBits) - 1).toString(32);
         baseIdWithLeadingBit >>= numberOfOverflowBits;
         baseLength -= numberOfOverflowBits;
-        treeContextId = 1 << 32 - clz32(totalChildren) + baseLength | index3 << baseLength | baseIdWithLeadingBit;
+        treeContextId = 1 << 32 - clz32(totalChildren) + baseLength | index4 << baseLength | baseIdWithLeadingBit;
         treeContextOverflow = length + workInProgress2;
       } else
-        treeContextId = 1 << length | index3 << baseLength | baseIdWithLeadingBit, treeContextOverflow = workInProgress2;
+        treeContextId = 1 << length | index4 << baseLength | baseIdWithLeadingBit, treeContextOverflow = workInProgress2;
     }
     function pushMaterializedTreeId(workInProgress2) {
       null !== workInProgress2.return && (pushTreeFork(workInProgress2, 1), pushTreeId(workInProgress2, 1, 0));
@@ -3360,9 +3360,9 @@ var require_react_dom_client_production = __commonJS({
       thenable = thenable.status;
       return "fulfilled" === thenable || "rejected" === thenable;
     }
-    function trackUsedThenable(thenableState2, thenable, index3) {
-      index3 = thenableState2[index3];
-      void 0 === index3 ? thenableState2.push(thenable) : index3 !== thenable && (thenable.then(noop$1, noop$1), thenable = index3);
+    function trackUsedThenable(thenableState2, thenable, index4) {
+      index4 = thenableState2[index4];
+      void 0 === index4 ? thenableState2.push(thenable) : index4 !== thenable && (thenable.then(noop$1, noop$1), thenable = index4);
       switch (thenable.status) {
         case "fulfilled":
           return thenable.value;
@@ -3405,8 +3405,8 @@ var require_react_dom_client_production = __commonJS({
     }
     function resolveLazy(lazyType) {
       try {
-        var init = lazyType._init;
-        return init(lazyType._payload);
+        var init2 = lazyType._init;
+        return init2(lazyType._payload);
       } catch (x) {
         if (null !== x && "object" === typeof x && "function" === typeof x.then)
           throw suspendedThenable = x, SuspenseException;
@@ -3427,10 +3427,10 @@ var require_react_dom_client_production = __commonJS({
     var thenableState$1 = null;
     var thenableIndexCounter$1 = 0;
     function unwrapThenable(thenable) {
-      var index3 = thenableIndexCounter$1;
+      var index4 = thenableIndexCounter$1;
       thenableIndexCounter$1 += 1;
       null === thenableState$1 && (thenableState$1 = []);
-      return trackUsedThenable(thenableState$1, thenable, index3);
+      return trackUsedThenable(thenableState$1, thenable, index4);
     }
     function coerceRef(workInProgress2, element3) {
       element3 = element3.props.ref;
@@ -4278,12 +4278,12 @@ var require_react_dom_client_production = __commonJS({
       return { lastEffect: null, events: null, stores: null, memoCache: null };
     }
     function useThenable(thenable) {
-      var index3 = thenableIndexCounter;
+      var index4 = thenableIndexCounter;
       thenableIndexCounter += 1;
       null === thenableState && (thenableState = []);
-      thenable = trackUsedThenable(thenableState, thenable, index3);
-      index3 = currentlyRenderingFiber;
-      null === (null === workInProgressHook ? index3.memoizedState : workInProgressHook.next) && (index3 = index3.alternate, ReactSharedInternals.H = null === index3 || null === index3.memoizedState ? HooksDispatcherOnMount : HooksDispatcherOnUpdate);
+      thenable = trackUsedThenable(thenableState, thenable, index4);
+      index4 = currentlyRenderingFiber;
+      null === (null === workInProgressHook ? index4.memoizedState : workInProgressHook.next) && (index4 = index4.alternate, ReactSharedInternals.H = null === index4 || null === index4.memoizedState ? HooksDispatcherOnMount : HooksDispatcherOnUpdate);
       return thenable;
     }
     function use(usable) {
@@ -4509,7 +4509,7 @@ var require_react_dom_client_production = __commonJS({
         "function" === typeof reducer ? reducer : basicStateReducer
       );
     }
-    function dispatchActionState(fiber, actionQueue, setPendingState, setState, payload) {
+    function dispatchActionState(fiber, actionQueue, setPendingState, setState2, payload) {
       if (isRenderPhaseUpdate(fiber)) throw Error(formatProdErrorMessage(485));
       fiber = actionQueue.action;
       if (null !== fiber) {
@@ -4527,7 +4527,7 @@ var require_react_dom_client_production = __commonJS({
           }
         };
         null !== ReactSharedInternals.T ? setPendingState(true) : actionNode.isTransition = false;
-        setState(actionNode);
+        setState2(actionNode);
         setPendingState = actionQueue.pending;
         null === setPendingState ? (actionNode.next = actionQueue.pending = actionNode, runActionStateAction(actionQueue, actionNode)) : (actionNode.next = setPendingState.next, actionQueue.pending = setPendingState.next = actionNode);
       }
@@ -4715,43 +4715,43 @@ var require_react_dom_client_production = __commonJS({
       currentStateHook.memoizedState = action;
       return [stateHook, dispatch, false];
     }
-    function pushSimpleEffect(tag, inst, create2, deps) {
-      tag = { tag, create: create2, deps, inst, next: null };
+    function pushSimpleEffect(tag, inst, create3, deps) {
+      tag = { tag, create: create3, deps, inst, next: null };
       inst = currentlyRenderingFiber.updateQueue;
       null === inst && (inst = createFunctionComponentUpdateQueue(), currentlyRenderingFiber.updateQueue = inst);
-      create2 = inst.lastEffect;
-      null === create2 ? inst.lastEffect = tag.next = tag : (deps = create2.next, create2.next = tag, tag.next = deps, inst.lastEffect = tag);
+      create3 = inst.lastEffect;
+      null === create3 ? inst.lastEffect = tag.next = tag : (deps = create3.next, create3.next = tag, tag.next = deps, inst.lastEffect = tag);
       return tag;
     }
     function updateRef() {
       return updateWorkInProgressHook().memoizedState;
     }
-    function mountEffectImpl(fiberFlags, hookFlags, create2, deps) {
+    function mountEffectImpl(fiberFlags, hookFlags, create3, deps) {
       var hook = mountWorkInProgressHook();
       currentlyRenderingFiber.flags |= fiberFlags;
       hook.memoizedState = pushSimpleEffect(
         1 | hookFlags,
         { destroy: void 0 },
-        create2,
+        create3,
         void 0 === deps ? null : deps
       );
     }
-    function updateEffectImpl(fiberFlags, hookFlags, create2, deps) {
+    function updateEffectImpl(fiberFlags, hookFlags, create3, deps) {
       var hook = updateWorkInProgressHook();
       deps = void 0 === deps ? null : deps;
       var inst = hook.memoizedState.inst;
-      null !== currentHook && null !== deps && areHookInputsEqual(deps, currentHook.memoizedState.deps) ? hook.memoizedState = pushSimpleEffect(hookFlags, inst, create2, deps) : (currentlyRenderingFiber.flags |= fiberFlags, hook.memoizedState = pushSimpleEffect(
+      null !== currentHook && null !== deps && areHookInputsEqual(deps, currentHook.memoizedState.deps) ? hook.memoizedState = pushSimpleEffect(hookFlags, inst, create3, deps) : (currentlyRenderingFiber.flags |= fiberFlags, hook.memoizedState = pushSimpleEffect(
         1 | hookFlags,
         inst,
-        create2,
+        create3,
         deps
       ));
     }
-    function mountEffect(create2, deps) {
-      mountEffectImpl(8390656, 8, create2, deps);
+    function mountEffect(create3, deps) {
+      mountEffectImpl(8390656, 8, create3, deps);
     }
-    function updateEffect(create2, deps) {
-      updateEffectImpl(2048, 8, create2, deps);
+    function updateEffect(create3, deps) {
+      updateEffectImpl(2048, 8, create3, deps);
     }
     function useEffectEventImpl(payload) {
       currentlyRenderingFiber.flags |= 4;
@@ -4771,28 +4771,28 @@ var require_react_dom_client_production = __commonJS({
         return ref.impl.apply(void 0, arguments);
       };
     }
-    function updateInsertionEffect(create2, deps) {
-      return updateEffectImpl(4, 2, create2, deps);
+    function updateInsertionEffect(create3, deps) {
+      return updateEffectImpl(4, 2, create3, deps);
     }
-    function updateLayoutEffect(create2, deps) {
-      return updateEffectImpl(4, 4, create2, deps);
+    function updateLayoutEffect(create3, deps) {
+      return updateEffectImpl(4, 4, create3, deps);
     }
-    function imperativeHandleEffect(create2, ref) {
+    function imperativeHandleEffect(create3, ref) {
       if ("function" === typeof ref) {
-        create2 = create2();
-        var refCleanup = ref(create2);
+        create3 = create3();
+        var refCleanup = ref(create3);
         return function() {
           "function" === typeof refCleanup ? refCleanup() : ref(null);
         };
       }
       if (null !== ref && void 0 !== ref)
-        return create2 = create2(), ref.current = create2, function() {
+        return create3 = create3(), ref.current = create3, function() {
           ref.current = null;
         };
     }
-    function updateImperativeHandle(ref, create2, deps) {
+    function updateImperativeHandle(ref, create3, deps) {
       deps = null !== deps && void 0 !== deps ? deps.concat([ref]) : null;
-      updateEffectImpl(4, 4, imperativeHandleEffect.bind(null, create2, ref), deps);
+      updateEffectImpl(4, 4, imperativeHandleEffect.bind(null, create3, ref), deps);
     }
     function mountDebugValue() {
     }
@@ -5091,20 +5091,20 @@ var require_react_dom_client_production = __commonJS({
       },
       useContext: readContext,
       useEffect: mountEffect,
-      useImperativeHandle: function(ref, create2, deps) {
+      useImperativeHandle: function(ref, create3, deps) {
         deps = null !== deps && void 0 !== deps ? deps.concat([ref]) : null;
         mountEffectImpl(
           4194308,
           4,
-          imperativeHandleEffect.bind(null, create2, ref),
+          imperativeHandleEffect.bind(null, create3, ref),
           deps
         );
       },
-      useLayoutEffect: function(create2, deps) {
-        return mountEffectImpl(4194308, 4, create2, deps);
+      useLayoutEffect: function(create3, deps) {
+        return mountEffectImpl(4194308, 4, create3, deps);
       },
-      useInsertionEffect: function(create2, deps) {
-        mountEffectImpl(4, 2, create2, deps);
+      useInsertionEffect: function(create3, deps) {
+        mountEffectImpl(4, 2, create3, deps);
       },
       useMemo: function(nextCreate, deps) {
         var hook = mountWorkInProgressHook();
@@ -5121,14 +5121,14 @@ var require_react_dom_client_production = __commonJS({
         hook.memoizedState = [nextValue, deps];
         return nextValue;
       },
-      useReducer: function(reducer, initialArg, init) {
+      useReducer: function(reducer, initialArg, init2) {
         var hook = mountWorkInProgressHook();
-        if (void 0 !== init) {
-          var initialState = init(initialArg);
+        if (void 0 !== init2) {
+          var initialState = init2(initialArg);
           if (shouldDoubleInvokeUserFnsInHooksDEV) {
             setIsStrictModeForDevtools(true);
             try {
-              init(initialArg);
+              init2(initialArg);
             } finally {
               setIsStrictModeForDevtools(false);
             }
@@ -7132,8 +7132,8 @@ var require_react_dom_client_production = __commonJS({
           do {
             if ((updateQueue.tag & flags) === flags) {
               lastEffect = void 0;
-              var create2 = updateQueue.create, inst = updateQueue.inst;
-              lastEffect = create2();
+              var create3 = updateQueue.create, inst = updateQueue.inst;
+              lastEffect = create3();
               inst.destroy = lastEffect;
             }
             updateQueue = updateQueue.next;
@@ -12583,7 +12583,7 @@ var require_react_dom_client_production = __commonJS({
         0 === i && attemptExplicitHydrationTarget(target);
       }
     };
-    var isomorphicReactPackageVersion$jscomp$inline_1840 = React22.version;
+    var isomorphicReactPackageVersion$jscomp$inline_1840 = React23.version;
     if ("19.2.4" !== isomorphicReactPackageVersion$jscomp$inline_1840)
       throw Error(
         formatProdErrorMessage(
@@ -12726,7 +12726,7 @@ var require_cjs = __commonJS({
     var EMPTY_STRING = "";
     var TYPE_COMMENT = "comment";
     var TYPE_DECLARATION = "declaration";
-    function index2(style, options) {
+    function index3(style, options) {
       if (typeof style !== "string") {
         throw new TypeError("First argument must be a string");
       }
@@ -12768,8 +12768,8 @@ var require_cjs = __commonJS({
           throw err;
         }
       }
-      function match(re2) {
-        var m = re2.exec(style);
+      function match(re3) {
+        var m = re3.exec(style);
         if (!m) return;
         var str = m[0];
         updatePosition(str);
@@ -12843,7 +12843,7 @@ var require_cjs = __commonJS({
     function trim(str) {
       return str ? str.replace(TRIM_REGEX, EMPTY_STRING) : EMPTY_STRING;
     }
-    module.exports = index2;
+    module.exports = index3;
   }
 });
 
@@ -12952,21 +12952,21 @@ var require_react_jsx_runtime_production = __commonJS({
     "use strict";
     var REACT_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.transitional.element");
     var REACT_FRAGMENT_TYPE = /* @__PURE__ */ Symbol.for("react.fragment");
-    function jsxProd(type, config, maybeKey) {
+    function jsxProd(type, config3, maybeKey) {
       var key = null;
       void 0 !== maybeKey && (key = "" + maybeKey);
-      void 0 !== config.key && (key = "" + config.key);
-      if ("key" in config) {
+      void 0 !== config3.key && (key = "" + config3.key);
+      if ("key" in config3) {
         maybeKey = {};
-        for (var propName in config)
-          "key" !== propName && (maybeKey[propName] = config[propName]);
-      } else maybeKey = config;
-      config = maybeKey.ref;
+        for (var propName in config3)
+          "key" !== propName && (maybeKey[propName] = config3[propName]);
+      } else maybeKey = config3;
+      config3 = maybeKey.ref;
       return {
         $$typeof: REACT_ELEMENT_TYPE,
         type,
         key,
-        ref: void 0 !== config ? config : null,
+        ref: void 0 !== config3 ? config3 : null,
         props: maybeKey
       };
     }
@@ -13312,10 +13312,10 @@ var require_core = __commonJS({
     function escape(value) {
       return new RegExp(value.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&"), "m");
     }
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -13325,11 +13325,11 @@ var require_core = __commonJS({
       const joined = "(" + args.map((x) => source(x)).join("|") + ")";
       return joined;
     }
-    function countMatchGroups(re2) {
-      return new RegExp(re2.toString() + "|").exec("").length - 1;
+    function countMatchGroups(re3) {
+      return new RegExp(re3.toString() + "|").exec("").length - 1;
     }
-    function startsWith(re2, lexeme) {
-      const match = re2 && re2.exec(lexeme);
+    function startsWith(re3, lexeme) {
+      const match = re3 && re3.exec(lexeme);
       return match && match.index === 0;
     }
     var BACKREF_RE = /\[(?:[^\\\]]|\\.)*\]|\(\??|\\([1-9][0-9]*)|\\./;
@@ -13338,16 +13338,16 @@ var require_core = __commonJS({
       return regexps.map((regex) => {
         numCaptures += 1;
         const offset = numCaptures;
-        let re2 = source(regex);
+        let re3 = source(regex);
         let out = "";
-        while (re2.length > 0) {
-          const match = BACKREF_RE.exec(re2);
+        while (re3.length > 0) {
+          const match = BACKREF_RE.exec(re3);
           if (!match) {
-            out += re2;
+            out += re3;
             break;
           }
-          out += re2.substring(0, match.index);
-          re2 = re2.substring(match.index + match[0].length);
+          out += re3.substring(0, match.index);
+          re3 = re3.substring(match.index + match[0].length);
           if (match[0][0] === "\\" && match[1]) {
             out += "\\" + String(Number(match[1]) + offset);
           } else {
@@ -13358,7 +13358,7 @@ var require_core = __commonJS({
           }
         }
         return out;
-      }).map((re2) => `(${re2})`).join(separator);
+      }).map((re3) => `(${re3})`).join(separator);
     }
     var MATCH_NOTHING_RE = /\b\B/;
     var IDENT_RE = "[a-zA-Z]\\w*";
@@ -13626,11 +13626,11 @@ var require_core = __commonJS({
           this.position = 0;
         }
         // @ts-ignore
-        addRule(re2, opts) {
+        addRule(re3, opts) {
           opts.position = this.position++;
           this.matchIndexes[this.matchAt] = opts;
-          this.regexes.push([opts, re2]);
-          this.matchAt += countMatchGroups(re2) + 1;
+          this.regexes.push([opts, re3]);
+          this.matchAt += countMatchGroups(re3) + 1;
         }
         compile() {
           if (this.regexes.length === 0) {
@@ -13662,12 +13662,12 @@ var require_core = __commonJS({
           this.regexIndex = 0;
         }
         // @ts-ignore
-        getMatcher(index2) {
-          if (this.multiRegexes[index2]) return this.multiRegexes[index2];
+        getMatcher(index3) {
+          if (this.multiRegexes[index3]) return this.multiRegexes[index3];
           const matcher = new MultiRegex();
-          this.rules.slice(index2).forEach(([re2, opts]) => matcher.addRule(re2, opts));
+          this.rules.slice(index3).forEach(([re3, opts]) => matcher.addRule(re3, opts));
           matcher.compile();
-          this.multiRegexes[index2] = matcher;
+          this.multiRegexes[index3] = matcher;
           return matcher;
         }
         resumingScanAtSamePosition() {
@@ -13677,8 +13677,8 @@ var require_core = __commonJS({
           this.regexIndex = 0;
         }
         // @ts-ignore
-        addRule(re2, opts) {
-          this.rules.push([re2, opts]);
+        addRule(re3, opts) {
+          this.rules.push([re3, opts]);
           if (opts.type === "begin") this.count++;
         }
         /** @param {string} s */
@@ -14257,7 +14257,7 @@ var require_core = __commonJS({
         processContinuations();
         let modeBuffer = "";
         let relevance = 0;
-        let index2 = 0;
+        let index3 = 0;
         let iterations = 0;
         let resumeScanAtSamePosition = false;
         try {
@@ -14269,14 +14269,14 @@ var require_core = __commonJS({
             } else {
               top.matcher.considerAll();
             }
-            top.matcher.lastIndex = index2;
+            top.matcher.lastIndex = index3;
             const match = top.matcher.exec(codeToHighlight);
             if (!match) break;
-            const beforeMatch = codeToHighlight.substring(index2, match.index);
+            const beforeMatch = codeToHighlight.substring(index3, match.index);
             const processedCount = processLexeme(beforeMatch, match);
-            index2 = match.index + processedCount;
+            index3 = match.index + processedCount;
           }
-          processLexeme(codeToHighlight.substr(index2));
+          processLexeme(codeToHighlight.substr(index3));
           emitter.closeAllNodes();
           emitter.finalize();
           result = emitter.toHTML();
@@ -14296,7 +14296,7 @@ var require_core = __commonJS({
               illegal: true,
               illegalBy: {
                 msg: err.message,
-                context: codeToHighlight.slice(index2 - 100, index2 + 100),
+                context: codeToHighlight.slice(index3 - 100, index3 + 100),
                 mode: err.mode
               },
               sofar: result,
@@ -14700,16 +14700,16 @@ var require_fault = __commonJS({
   "node_modules/lowlight/node_modules/fault/index.js"(exports, module) {
     "use strict";
     var formatter = require_format();
-    var fault = create2(Error);
+    var fault = create3(Error);
     module.exports = fault;
-    fault.eval = create2(EvalError);
-    fault.range = create2(RangeError);
-    fault.reference = create2(ReferenceError);
-    fault.syntax = create2(SyntaxError);
-    fault.type = create2(TypeError);
-    fault.uri = create2(URIError);
-    fault.create = create2;
-    function create2(EConstructor) {
+    fault.eval = create3(EvalError);
+    fault.range = create3(RangeError);
+    fault.reference = create3(ReferenceError);
+    fault.syntax = create3(SyntaxError);
+    fault.type = create3(TypeError);
+    fault.uri = create3(URIError);
+    fault.create = create3;
+    function create3(EConstructor) {
       FormattedError.displayName = EConstructor.displayName || EConstructor.name;
       return FormattedError;
       function FormattedError(format) {
@@ -14776,7 +14776,7 @@ var require_core2 = __commonJS({
       var subset = settings.subset || high.listLanguages();
       var prefix = settings.prefix;
       var length = subset.length;
-      var index2 = -1;
+      var index3 = -1;
       var result;
       var secondBest;
       var current;
@@ -14789,8 +14789,8 @@ var require_core2 = __commonJS({
       }
       secondBest = { relevance: 0, language: null, value: [] };
       result = { relevance: 0, language: null, value: [] };
-      while (++index2 < length) {
-        name2 = subset[index2];
+      while (++index3 < length) {
+        name2 = subset[index3];
         if (!high.getLanguage(name2)) {
           continue;
         }
@@ -15030,10 +15030,10 @@ var require_c = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/abnf.js
 var require_abnf = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/abnf.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -15106,10 +15106,10 @@ var require_abnf = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/accesslog.js
 var require_accesslog = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/accesslog.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -15204,10 +15204,10 @@ var require_accesslog = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/actionscript.js
 var require_actionscript = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/actionscript.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -15641,10 +15641,10 @@ var require_apache = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/applescript.js
 var require_applescript = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/applescript.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -15933,16 +15933,16 @@ var require_arcade = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/arduino.js
 var require_arduino = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/arduino.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -16456,16 +16456,16 @@ var require_armasm = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/xml.js
 var require_xml = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/xml.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -16706,10 +16706,10 @@ var require_xml = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/asciidoc.js
 var require_asciidoc = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/asciidoc.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -16985,10 +16985,10 @@ var require_asciidoc = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/aspectj.js
 var require_aspectj = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/aspectj.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -17692,10 +17692,10 @@ var require_axapta = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/bash.js
 var require_bash = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/bash.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -17962,16 +17962,16 @@ var require_brainfuck = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/c-like.js
 var require_c_like = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/c-like.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -18388,13 +18388,13 @@ var require_c_like = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/c.js
 var require_c2 = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/c.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -19537,16 +19537,16 @@ var require_cos = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/cpp.js
 var require_cpp = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/cpp.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -21252,13 +21252,13 @@ var require_css = __commonJS({
       // reverse makes sure longer attributes `font-weight` are matched fully
       // instead of getting false positives on say `font`
     ].reverse();
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -21527,10 +21527,10 @@ var require_d = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/markdown.js
 var require_markdown = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/markdown.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -22983,13 +22983,13 @@ var require_elm = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/ruby.js
 var require_ruby = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/ruby.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -23348,10 +23348,10 @@ var require_erb = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/erlang-repl.js
 var require_erlang_repl = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/erlang-repl.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -23750,10 +23750,10 @@ var require_flix = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/fortran.js
 var require_fortran = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/fortran.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -23923,13 +23923,13 @@ var require_fsharp = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/gams.js
 var require_gams = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/gams.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function anyNumberOfTimes(re2) {
-      return concat("(", re2, ")*");
+    function anyNumberOfTimes(re3) {
+      return concat("(", re3, ")*");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -24606,13 +24606,13 @@ var require_gradle = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/groovy.js
 var require_groovy = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/groovy.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -24862,16 +24862,16 @@ var require_haml = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/handlebars.js
 var require_handlebars = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/handlebars.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function anyNumberOfTimes(re2) {
-      return concat("(", re2, ")*");
+    function anyNumberOfTimes(re3) {
+      return concat("(", re3, ")*");
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -25503,16 +25503,16 @@ var require_hsp = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/htmlbars.js
 var require_htmlbars = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/htmlbars.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function anyNumberOfTimes(re2) {
-      return concat("(", re2, ")*");
+    function anyNumberOfTimes(re3) {
+      return concat("(", re3, ")*");
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -25777,10 +25777,10 @@ var require_htmlbars = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/http.js
 var require_http = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/http.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -26019,13 +26019,13 @@ var require_inform7 = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/ini.js
 var require_ini = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/ini.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -26163,10 +26163,10 @@ var require_ini = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/irpf90.js
 var require_irpf90 = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/irpf90.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -26812,13 +26812,13 @@ var require_javascript = __commonJS({
       TYPES,
       ERROR_TYPES
     );
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -28153,10 +28153,10 @@ var require_lasso = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/latex.js
 var require_latex = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/latex.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function either(...args) {
       const joined = "(" + args.map((x) => source(x)).join("|") + ")";
@@ -29743,10 +29743,10 @@ var require_livescript = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/llvm.js
 var require_llvm = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/llvm.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -36696,13 +36696,13 @@ var require_mathematica = __commonJS({
       "$WolframID",
       "$WolframUUID"
     ];
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -37182,10 +37182,10 @@ var require_mizar = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/perl.js
 var require_perl = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/perl.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -40229,13 +40229,13 @@ var require_purebasic = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/python.js
 var require_python = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/python.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -40700,10 +40700,10 @@ var require_q = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/qml.js
 var require_qml = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/qml.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -40873,13 +40873,13 @@ var require_qml = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/r.js
 var require_r = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/r.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -43172,10 +43172,10 @@ var require_sql_more = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/sql.js
 var require_sql = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/sql.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -45131,13 +45131,13 @@ var require_subunit = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/swift.js
 var require_swift = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/swift.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -46196,13 +46196,13 @@ var require_tap = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/tcl.js
 var require_tcl = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/tcl.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function optional(re2) {
-      return concat("(", re2, ")?");
+    function optional(re3) {
+      return concat("(", re3, ")?");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -46608,13 +46608,13 @@ var require_typescript = __commonJS({
       TYPES,
       ERROR_TYPES
     );
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
-    function lookahead(re2) {
-      return concat("(?=", re2, ")");
+    function lookahead(re3) {
+      return concat("(?=", re3, ")");
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -47144,10 +47144,10 @@ var require_vala = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/vbnet.js
 var require_vbnet = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/vbnet.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -47304,10 +47304,10 @@ var require_vbnet = __commonJS({
 // node_modules/lowlight/node_modules/highlight.js/lib/languages/vbscript.js
 var require_vbscript = __commonJS({
   "node_modules/lowlight/node_modules/highlight.js/lib/languages/vbscript.js"(exports, module) {
-    function source(re2) {
-      if (!re2) return null;
-      if (typeof re2 === "string") return re2;
-      return re2.source;
+    function source(re3) {
+      if (!re3) return null;
+      if (typeof re3 === "string") return re3;
+      return re3.source;
     }
     function concat(...args) {
       const joined = args.map((x) => source(x)).join("");
@@ -48374,10 +48374,10 @@ var require_convert = __commonJS({
     }
     function convertAll(tests) {
       var length = tests.length;
-      var index2 = -1;
+      var index3 = -1;
       var results = [];
-      while (++index2 < length) {
-        results[index2] = convert2(tests[index2]);
+      while (++index3 < length) {
+        results[index3] = convert2(tests[index3]);
       }
       return results;
     }
@@ -48386,9 +48386,9 @@ var require_convert = __commonJS({
       var length = checks2.length;
       return matches;
       function matches() {
-        var index2 = -1;
-        while (++index2 < length) {
-          if (checks2[index2].apply(this, arguments)) {
+        var index3 = -1;
+        while (++index3 < length) {
+          if (checks2[index3].apply(this, arguments)) {
             return true;
           }
         }
@@ -48445,15 +48445,15 @@ var require_convert2 = __commonJS({
     }
     function anyFactory2(tests) {
       var checks2 = [];
-      var index2 = -1;
-      while (++index2 < tests.length) {
-        checks2[index2] = convert2(tests[index2]);
+      var index3 = -1;
+      while (++index3 < tests.length) {
+        checks2[index3] = convert2(tests[index3]);
       }
       return any;
       function any() {
-        var index3 = -1;
-        while (++index3 < checks2.length) {
-          if (checks2[index3].apply(this, arguments)) {
+        var index4 = -1;
+        while (++index4 < checks2.length) {
+          if (checks2[index4].apply(this, arguments)) {
             return true;
           }
         }
@@ -48478,7 +48478,7 @@ var require_unist_util_find_after = __commonJS({
     "use strict";
     var convert2 = require_convert2();
     module.exports = findAfter;
-    function findAfter(parent, index2, test) {
+    function findAfter(parent, index3, test) {
       var is2 = convert2(test);
       var children;
       var child;
@@ -48488,15 +48488,15 @@ var require_unist_util_find_after = __commonJS({
       }
       children = parent.children;
       length = children.length;
-      if (index2 && index2.type) {
-        index2 = children.indexOf(index2);
+      if (index3 && index3.type) {
+        index3 = children.indexOf(index3);
       }
-      if (isNaN(index2) || index2 < 0 || index2 === Infinity) {
+      if (isNaN(index3) || index3 < 0 || index3 === Infinity) {
         throw new Error("Expected positive finite index or child node");
       }
-      while (++index2 < length) {
-        child = children[index2];
-        if (is2(child, index2, parent)) {
+      while (++index3 < length) {
+        child = children[index3];
+        if (is2(child, index3, parent)) {
           return child;
         }
       }
@@ -48592,7 +48592,7 @@ var require_hast_util_to_text = __commonJS({
       var children = node2.children || [];
       var block = blockOrCaption(node2);
       var whiteSpace = inferWhiteSpace(node2, {});
-      var index2 = -1;
+      var index3 = -1;
       var results;
       var result;
       var value;
@@ -48605,19 +48605,19 @@ var require_hast_util_to_text = __commonJS({
         });
       }
       results = [];
-      while (++index2 < children.length) {
+      while (++index3 < children.length) {
         results = results.concat(
-          innerTextCollection(children[index2], index2, node2, {
+          innerTextCollection(children[index3], index3, node2, {
             whiteSpace,
-            breakBefore: index2 ? null : block,
-            breakAfter: index2 < children.length - 1 ? br(children[index2 + 1]) : block
+            breakBefore: index3 ? null : block,
+            breakAfter: index3 < children.length - 1 ? br(children[index3 + 1]) : block
           })
         );
       }
-      index2 = -1;
+      index3 = -1;
       result = [];
-      while (++index2 < results.length) {
-        value = results[index2];
+      while (++index3 < results.length) {
+        value = results[index3];
         if (typeof value === "number") {
           if (count !== void 0 && value > count) count = value;
         } else if (value) {
@@ -48628,9 +48628,9 @@ var require_hast_util_to_text = __commonJS({
       }
       return result.join("");
     }
-    function innerTextCollection(node2, index2, parent, options) {
+    function innerTextCollection(node2, index3, parent, options) {
       if (node2.type === "element") {
-        return collectElement(node2, index2, parent, options);
+        return collectElement(node2, index3, parent, options);
       }
       if (node2.type === "text") {
         return [
@@ -48639,10 +48639,10 @@ var require_hast_util_to_text = __commonJS({
       }
       return [];
     }
-    function collectElement(node2, _, parent, options) {
+    function collectElement(node2, _2, parent, options) {
       var whiteSpace = inferWhiteSpace(node2, options);
       var children = node2.children || [];
-      var index2 = -1;
+      var index3 = -1;
       var items = [];
       var prefix;
       var suffix;
@@ -48660,12 +48660,12 @@ var require_hast_util_to_text = __commonJS({
         prefix = 1;
         suffix = 1;
       }
-      while (++index2 < children.length) {
+      while (++index3 < children.length) {
         items = items.concat(
-          innerTextCollection(children[index2], index2, node2, {
+          innerTextCollection(children[index3], index3, node2, {
             whiteSpace,
-            breakBefore: index2 ? null : prefix,
-            breakAfter: index2 < children.length - 1 ? br(children[index2 + 1]) : suffix
+            breakBefore: index3 ? null : prefix,
+            breakAfter: index3 < children.length - 1 ? br(children[index3 + 1]) : suffix
           })
         );
       }
@@ -48681,7 +48681,7 @@ var require_hast_util_to_text = __commonJS({
       var lines = [];
       var result = [];
       var start2 = 0;
-      var index2 = -1;
+      var index3 = -1;
       var match;
       var end;
       var join2;
@@ -48703,13 +48703,13 @@ var require_hast_util_to_text = __commonJS({
         );
         start2 = end + 1;
       }
-      while (++index2 < lines.length) {
-        if (lines[index2].charCodeAt(lines[index2].length - 1) === 8203 || index2 < lines.length - 1 && lines[index2 + 1].charCodeAt(0) === 8203) {
-          result.push(lines[index2]);
+      while (++index3 < lines.length) {
+        if (lines[index3].charCodeAt(lines[index3].length - 1) === 8203 || index3 < lines.length - 1 && lines[index3 + 1].charCodeAt(0) === 8203) {
+          result.push(lines[index3]);
           join2 = "";
-        } else if (lines[index2]) {
+        } else if (lines[index3]) {
           if (join2) result.push(join2);
-          result.push(lines[index2]);
+          result.push(lines[index3]);
           join2 = " ";
         }
       }
@@ -48802,15 +48802,15 @@ var require_convert3 = __commonJS({
     }
     function anyFactory2(tests) {
       var checks2 = [];
-      var index2 = -1;
-      while (++index2 < tests.length) {
-        checks2[index2] = convert2(tests[index2]);
+      var index3 = -1;
+      while (++index3 < tests.length) {
+        checks2[index3] = convert2(tests[index3]);
       }
       return any;
       function any() {
-        var index3 = -1;
-        while (++index3 < checks2.length) {
-          if (checks2[index3].apply(this, arguments)) {
+        var index4 = -1;
+        while (++index4 < checks2.length) {
+          if (checks2[index4].apply(this, arguments)) {
             return true;
           }
         }
@@ -48863,7 +48863,7 @@ var require_unist_util_visit_parents = __commonJS({
       is2 = convert2(test);
       step = reverse ? -1 : 1;
       factory(tree, null, [])();
-      function factory(node2, index2, parents) {
+      function factory(node2, index3, parents) {
         var value = typeof node2 === "object" && node2 !== null ? node2 : {};
         var name2;
         if (typeof value.type === "string") {
@@ -48876,7 +48876,7 @@ var require_unist_util_visit_parents = __commonJS({
           var result = [];
           var subresult;
           var offset;
-          if (!test || is2(node2, index2, parents[parents.length - 1] || null)) {
+          if (!test || is2(node2, index3, parents[parents.length - 1] || null)) {
             result = toResult2(visitor(node2, parents));
             if (result[0] === EXIT2) {
               return result;
@@ -48929,8 +48929,8 @@ var require_unist_util_visit = __commonJS({
       visitParents2(tree, test, overload, reverse);
       function overload(node2, parents) {
         var parent = parents[parents.length - 1];
-        var index2 = parent ? parent.children.indexOf(node2) : null;
-        return visitor(node2, index2, parent);
+        var index3 = parent ? parent.children.indexOf(node2) : null;
+        return visitor(node2, index3, parent);
       }
     }
   }
@@ -48964,7 +48964,7 @@ var require_core3 = __commonJS({
         function transformer(tree) {
           visit2(tree, "element", visitor);
         }
-        function visitor(node2, index2, parent) {
+        function visitor(node2, index3, parent) {
           var props;
           var result;
           var lang;
@@ -49001,10 +49001,10 @@ var require_core3 = __commonJS({
     }
     function language(node2) {
       var className = node2.properties.className || [];
-      var index2 = -1;
+      var index3 = -1;
       var value;
-      while (++index2 < className.length) {
-        value = className[index2];
+      while (++index3 < className.length) {
+        value = className[index3];
         if (value === "no-highlight" || value === "nohighlight") {
           return false;
         }
@@ -49030,19 +49030,19 @@ var require_rehype_highlight = __commonJS({
 });
 
 // electron/headlessServer/ui/mobile/src/main.tsx
-var import_react22 = __toESM(require_react(), 1);
+var import_react35 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // electron/headlessServer/ui/mobile/src/App.tsx
-var import_react21 = __toESM(require_react(), 1);
+var import_react34 = __toESM(require_react(), 1);
 
 // electron/headlessServer/ui/mobile/src/api.ts
-var jsonFetch = async (url, init) => {
+var jsonFetch = async (url, init2) => {
   const response = await fetch(url, {
-    ...init,
+    ...init2,
     headers: {
       "content-type": "application/json",
-      ...init?.headers || {}
+      ...init2?.headers || {}
     }
   });
   let payload = {};
@@ -49069,6 +49069,41 @@ var parseSseChunk = (chunk, onEvent) => {
     }
   }
 };
+var readRuntimeAppSession = async () => {
+  try {
+    if (typeof window !== "undefined" && window.electronAPI?.storage?.get) {
+      const stored = await window.electronAPI.storage.get("auth_session");
+      const accessToken = stored?.accessToken || stored?.session?.access_token || null;
+      const userId = stored?.userId || stored?.user?.id || stored?.session?.user?.id || null;
+      if (accessToken) {
+        return {
+          accessToken: String(accessToken),
+          userId: userId ? String(userId) : null
+        };
+      }
+    }
+  } catch {
+  }
+  try {
+    if (typeof window !== "undefined") {
+      const raw = window.localStorage.getItem("supabase-auth-token");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const session = parsed?.currentSession || parsed?.session || parsed;
+        const accessToken = session?.access_token || null;
+        const userId = session?.user?.id || null;
+        if (accessToken) {
+          return {
+            accessToken: String(accessToken),
+            userId: userId ? String(userId) : null
+          };
+        }
+      }
+    }
+  } catch {
+  }
+  return { accessToken: null, userId: null };
+};
 var mobileApi = {
   async listUsers() {
     const payload = await jsonFetch("/api/local/users", { method: "GET" });
@@ -49085,6 +49120,12 @@ var mobileApi = {
         user_id: params.userId,
         name: params.name
       })
+    });
+  },
+  async updateProject(projectId, patch2) {
+    return jsonFetch(`/api/app/projects/${encodeURIComponent(projectId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch2)
     });
   },
   async listConversations(userId, projectId) {
@@ -49199,8 +49240,43 @@ var mobileApi = {
       respectingGitignore: Boolean(payload?.respectingGitignore)
     };
   },
+  async getLocalFileContent(filePath) {
+    const payload = await jsonFetch(
+      `/api/local/file-content?path=${encodeURIComponent(filePath)}`,
+      { method: "GET" }
+    );
+    return {
+      path: typeof payload?.path === "string" ? payload.path : filePath,
+      content: typeof payload?.content === "string" ? payload.content : "",
+      size: typeof payload?.size === "number" ? payload.size : 0
+    };
+  },
+  async saveLocalFileContent(filePath, content3) {
+    const payload = await jsonFetch("/api/local/file-content", {
+      method: "POST",
+      body: JSON.stringify({
+        path: filePath,
+        content: content3
+      })
+    });
+    return {
+      path: typeof payload?.path === "string" ? payload.path : filePath,
+      size: typeof payload?.size === "number" ? payload.size : content3.length,
+      saved: Boolean(payload?.saved)
+    };
+  },
   async getCapabilities() {
     return jsonFetch("/api/headless/capabilities", { method: "GET" });
+  },
+  async getProviderModels(userId) {
+    const query = typeof userId === "string" && userId.trim() ? `?userId=${encodeURIComponent(userId.trim())}` : "";
+    const payload = await jsonFetch(`/api/provider-auth/models${query}`, { method: "GET" });
+    return Array.isArray(payload?.providers) ? payload.providers.filter(
+      (provider) => Boolean(provider && (provider.name === "openaichatgpt" || provider.name === "openrouter" || provider.name === "lmstudio"))
+    ).map((provider) => ({
+      name: provider.name,
+      models: Array.isArray(provider.models) ? provider.models.map((model) => String(model)) : []
+    })) : [];
   },
   async listInferenceTools() {
     const payload = await jsonFetch("/api/headless/ephemeral/tools", { method: "GET" });
@@ -49225,17 +49301,37 @@ var mobileApi = {
       body: JSON.stringify({ enabled })
     });
   },
-  async getOpenAiTokenStatus(userId) {
+  async getProviderTokenStatus(provider, userId) {
     const payload = await jsonFetch(
-      `/api/provider-auth/openai/token?userId=${encodeURIComponent(userId)}`,
+      `/api/provider-auth/${provider}/token?userId=${encodeURIComponent(userId)}`,
       { method: "GET" }
     );
     return { hasToken: Boolean(payload?.hasToken) };
   },
-  async clearOpenAiToken(userId) {
-    await jsonFetch(`/api/provider-auth/openai/token?userId=${encodeURIComponent(userId)}`, {
+  async getOpenAiTokenStatus(userId) {
+    return this.getProviderTokenStatus("openai", userId);
+  },
+  async getOpenRouterTokenStatus(userId) {
+    return this.getProviderTokenStatus("openrouter", userId);
+  },
+  async getRuntimeAppAuth() {
+    const session = await readRuntimeAppSession();
+    return {
+      hasToken: Boolean(session.accessToken),
+      accessToken: session.accessToken,
+      userId: session.userId
+    };
+  },
+  async clearProviderToken(provider, userId) {
+    await jsonFetch(`/api/provider-auth/${provider}/token?userId=${encodeURIComponent(userId)}`, {
       method: "DELETE"
     });
+  },
+  async clearOpenAiToken(userId) {
+    await this.clearProviderToken("openai", userId);
+  },
+  async clearOpenRouterToken(userId) {
+    await this.clearProviderToken("openrouter", userId);
   },
   async startOpenAiOAuth() {
     const payload = await jsonFetch(
@@ -49284,6 +49380,15 @@ var mobileApi = {
       })
     });
   },
+  async storeOpenRouterToken(params) {
+    await jsonFetch("/api/provider-auth/openrouter/token", {
+      method: "POST",
+      body: JSON.stringify({
+        userId: params.userId,
+        accessToken: params.accessToken
+      })
+    });
+  },
   async deleteMessage(messageId) {
     await jsonFetch(`/api/app/messages/${encodeURIComponent(messageId)}`, {
       method: "DELETE"
@@ -49302,7 +49407,7 @@ var mobileApi = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         content: params.content,
-        provider: "openaichatgpt",
+        provider: params.provider,
         modelName: params.modelName,
         userId: params.userId,
         parentId: params.parentId ?? null,
@@ -49372,7 +49477,7 @@ var import_react7 = __toESM(require_react(), 1);
 // electron/headlessServer/ui/mobile/src/components/ui/badge.tsx
 var import_react = __toESM(require_react(), 1);
 
-// node_modules/clsx/dist/clsx.mjs
+// ../../node_modules/clsx/dist/clsx.mjs
 function r(e) {
   var t, f, n = "";
   if ("string" == typeof e || "number" == typeof e) n += e;
@@ -49482,9 +49587,786 @@ var Composer = ({
 };
 
 // electron/headlessServer/ui/mobile/src/components/FilePathPickerModal.tsx
-var import_react8 = __toESM(require_react(), 1);
+var import_react21 = __toESM(require_react(), 1);
+var import_react_dom2 = __toESM(require_react_dom(), 1);
+
+// electron/headlessServer/ui/mobile/src/components/MonacoFileEditorModal.tsx
+var import_react19 = __toESM(require_react(), 1);
 var import_react_dom = __toESM(require_react_dom(), 1);
+
+// ../../node_modules/@monaco-editor/loader/lib/es/_virtual/_rollupPluginBabelHelpers.js
+function _arrayLikeToArray(r2, a) {
+  (null == a || a > r2.length) && (a = r2.length);
+  for (var e = 0, n = Array(a); e < a; e++) n[e] = r2[e];
+  return n;
+}
+function _arrayWithHoles(r2) {
+  if (Array.isArray(r2)) return r2;
+}
+function _defineProperty(e, r2, t) {
+  return (r2 = _toPropertyKey(r2)) in e ? Object.defineProperty(e, r2, {
+    value: t,
+    enumerable: true,
+    configurable: true,
+    writable: true
+  }) : e[r2] = t, e;
+}
+function _iterableToArrayLimit(r2, l2) {
+  var t = null == r2 ? null : "undefined" != typeof Symbol && r2[Symbol.iterator] || r2["@@iterator"];
+  if (null != t) {
+    var e, n, i, u, a = [], f = true, o = false;
+    try {
+      if (i = (t = t.call(r2)).next, 0 === l2) ;
+      else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l2); f = true) ;
+    } catch (r3) {
+      o = true, n = r3;
+    } finally {
+      try {
+        if (!f && null != t.return && (u = t.return(), Object(u) !== u)) return;
+      } finally {
+        if (o) throw n;
+      }
+    }
+    return a;
+  }
+}
+function _nonIterableRest() {
+  throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+}
+function ownKeys(e, r2) {
+  var t = Object.keys(e);
+  if (Object.getOwnPropertySymbols) {
+    var o = Object.getOwnPropertySymbols(e);
+    r2 && (o = o.filter(function(r3) {
+      return Object.getOwnPropertyDescriptor(e, r3).enumerable;
+    })), t.push.apply(t, o);
+  }
+  return t;
+}
+function _objectSpread2(e) {
+  for (var r2 = 1; r2 < arguments.length; r2++) {
+    var t = null != arguments[r2] ? arguments[r2] : {};
+    r2 % 2 ? ownKeys(Object(t), true).forEach(function(r3) {
+      _defineProperty(e, r3, t[r3]);
+    }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function(r3) {
+      Object.defineProperty(e, r3, Object.getOwnPropertyDescriptor(t, r3));
+    });
+  }
+  return e;
+}
+function _objectWithoutProperties(e, t) {
+  if (null == e) return {};
+  var o, r2, i = _objectWithoutPropertiesLoose(e, t);
+  if (Object.getOwnPropertySymbols) {
+    var n = Object.getOwnPropertySymbols(e);
+    for (r2 = 0; r2 < n.length; r2++) o = n[r2], -1 === t.indexOf(o) && {}.propertyIsEnumerable.call(e, o) && (i[o] = e[o]);
+  }
+  return i;
+}
+function _objectWithoutPropertiesLoose(r2, e) {
+  if (null == r2) return {};
+  var t = {};
+  for (var n in r2) if ({}.hasOwnProperty.call(r2, n)) {
+    if (-1 !== e.indexOf(n)) continue;
+    t[n] = r2[n];
+  }
+  return t;
+}
+function _slicedToArray(r2, e) {
+  return _arrayWithHoles(r2) || _iterableToArrayLimit(r2, e) || _unsupportedIterableToArray(r2, e) || _nonIterableRest();
+}
+function _toPrimitive(t, r2) {
+  if ("object" != typeof t || !t) return t;
+  var e = t[Symbol.toPrimitive];
+  if (void 0 !== e) {
+    var i = e.call(t, r2);
+    if ("object" != typeof i) return i;
+    throw new TypeError("@@toPrimitive must return a primitive value.");
+  }
+  return ("string" === r2 ? String : Number)(t);
+}
+function _toPropertyKey(t) {
+  var i = _toPrimitive(t, "string");
+  return "symbol" == typeof i ? i : i + "";
+}
+function _unsupportedIterableToArray(r2, a) {
+  if (r2) {
+    if ("string" == typeof r2) return _arrayLikeToArray(r2, a);
+    var t = {}.toString.call(r2).slice(8, -1);
+    return "Object" === t && r2.constructor && (t = r2.constructor.name), "Map" === t || "Set" === t ? Array.from(r2) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r2, a) : void 0;
+  }
+}
+
+// ../../node_modules/state-local/lib/es/state-local.js
+function _defineProperty2(obj, key, value) {
+  if (key in obj) {
+    Object.defineProperty(obj, key, {
+      value,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    });
+  } else {
+    obj[key] = value;
+  }
+  return obj;
+}
+function ownKeys2(object, enumerableOnly) {
+  var keys2 = Object.keys(object);
+  if (Object.getOwnPropertySymbols) {
+    var symbols = Object.getOwnPropertySymbols(object);
+    if (enumerableOnly) symbols = symbols.filter(function(sym) {
+      return Object.getOwnPropertyDescriptor(object, sym).enumerable;
+    });
+    keys2.push.apply(keys2, symbols);
+  }
+  return keys2;
+}
+function _objectSpread22(target) {
+  for (var i = 1; i < arguments.length; i++) {
+    var source = arguments[i] != null ? arguments[i] : {};
+    if (i % 2) {
+      ownKeys2(Object(source), true).forEach(function(key) {
+        _defineProperty2(target, key, source[key]);
+      });
+    } else if (Object.getOwnPropertyDescriptors) {
+      Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
+    } else {
+      ownKeys2(Object(source)).forEach(function(key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+  }
+  return target;
+}
+function compose() {
+  for (var _len = arguments.length, fns = new Array(_len), _key = 0; _key < _len; _key++) {
+    fns[_key] = arguments[_key];
+  }
+  return function(x) {
+    return fns.reduceRight(function(y, f) {
+      return f(y);
+    }, x);
+  };
+}
+function curry(fn) {
+  return function curried() {
+    var _this = this;
+    for (var _len2 = arguments.length, args = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+      args[_key2] = arguments[_key2];
+    }
+    return args.length >= fn.length ? fn.apply(this, args) : function() {
+      for (var _len3 = arguments.length, nextArgs = new Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+        nextArgs[_key3] = arguments[_key3];
+      }
+      return curried.apply(_this, [].concat(args, nextArgs));
+    };
+  };
+}
+function isObject(value) {
+  return {}.toString.call(value).includes("Object");
+}
+function isEmpty(obj) {
+  return !Object.keys(obj).length;
+}
+function isFunction(value) {
+  return typeof value === "function";
+}
+function hasOwnProperty(object, property) {
+  return Object.prototype.hasOwnProperty.call(object, property);
+}
+function validateChanges(initial, changes) {
+  if (!isObject(changes)) errorHandler("changeType");
+  if (Object.keys(changes).some(function(field) {
+    return !hasOwnProperty(initial, field);
+  })) errorHandler("changeField");
+  return changes;
+}
+function validateSelector(selector) {
+  if (!isFunction(selector)) errorHandler("selectorType");
+}
+function validateHandler(handler) {
+  if (!(isFunction(handler) || isObject(handler))) errorHandler("handlerType");
+  if (isObject(handler) && Object.values(handler).some(function(_handler) {
+    return !isFunction(_handler);
+  })) errorHandler("handlersType");
+}
+function validateInitial(initial) {
+  if (!initial) errorHandler("initialIsRequired");
+  if (!isObject(initial)) errorHandler("initialType");
+  if (isEmpty(initial)) errorHandler("initialContent");
+}
+function throwError(errorMessages3, type) {
+  throw new Error(errorMessages3[type] || errorMessages3["default"]);
+}
+var errorMessages = {
+  initialIsRequired: "initial state is required",
+  initialType: "initial state should be an object",
+  initialContent: "initial state shouldn't be an empty object",
+  handlerType: "handler should be an object or a function",
+  handlersType: "all handlers should be a functions",
+  selectorType: "selector should be a function",
+  changeType: "provided value of changes should be an object",
+  changeField: 'it seams you want to change a field in the state which is not specified in the "initial" state',
+  "default": "an unknown error accured in `state-local` package"
+};
+var errorHandler = curry(throwError)(errorMessages);
+var validators = {
+  changes: validateChanges,
+  selector: validateSelector,
+  handler: validateHandler,
+  initial: validateInitial
+};
+function create(initial) {
+  var handler = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : {};
+  validators.initial(initial);
+  validators.handler(handler);
+  var state = {
+    current: initial
+  };
+  var didUpdate = curry(didStateUpdate)(state, handler);
+  var update = curry(updateState)(state);
+  var validate = curry(validators.changes)(initial);
+  var getChanges = curry(extractChanges)(state);
+  function getState2() {
+    var selector = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : function(state2) {
+      return state2;
+    };
+    validators.selector(selector);
+    return selector(state.current);
+  }
+  function setState2(causedChanges) {
+    compose(didUpdate, update, validate, getChanges)(causedChanges);
+  }
+  return [getState2, setState2];
+}
+function extractChanges(state, causedChanges) {
+  return isFunction(causedChanges) ? causedChanges(state.current) : causedChanges;
+}
+function updateState(state, changes) {
+  state.current = _objectSpread22(_objectSpread22({}, state.current), changes);
+  return changes;
+}
+function didStateUpdate(state, handler, changes) {
+  isFunction(handler) ? handler(state.current) : Object.keys(changes).forEach(function(field) {
+    var _handler$field;
+    return (_handler$field = handler[field]) === null || _handler$field === void 0 ? void 0 : _handler$field.call(handler, state.current[field]);
+  });
+  return changes;
+}
+var index = {
+  create
+};
+var state_local_default = index;
+
+// ../../node_modules/@monaco-editor/loader/lib/es/config/index.js
+var config = {
+  paths: {
+    vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs"
+  }
+};
+
+// ../../node_modules/@monaco-editor/loader/lib/es/utils/curry.js
+function curry2(fn) {
+  return function curried() {
+    var _this = this;
+    for (var _len = arguments.length, args = new Array(_len), _key = 0; _key < _len; _key++) {
+      args[_key] = arguments[_key];
+    }
+    return args.length >= fn.length ? fn.apply(this, args) : function() {
+      for (var _len2 = arguments.length, nextArgs = new Array(_len2), _key2 = 0; _key2 < _len2; _key2++) {
+        nextArgs[_key2] = arguments[_key2];
+      }
+      return curried.apply(_this, [].concat(args, nextArgs));
+    };
+  };
+}
+
+// ../../node_modules/@monaco-editor/loader/lib/es/utils/isObject.js
+function isObject2(value) {
+  return {}.toString.call(value).includes("Object");
+}
+
+// ../../node_modules/@monaco-editor/loader/lib/es/validators/index.js
+function validateConfig(config3) {
+  if (!config3) errorHandler2("configIsRequired");
+  if (!isObject2(config3)) errorHandler2("configType");
+  if (config3.urls) {
+    informAboutDeprecation();
+    return {
+      paths: {
+        vs: config3.urls.monacoBase
+      }
+    };
+  }
+  return config3;
+}
+function informAboutDeprecation() {
+  console.warn(errorMessages2.deprecation);
+}
+function throwError2(errorMessages3, type) {
+  throw new Error(errorMessages3[type] || errorMessages3["default"]);
+}
+var errorMessages2 = {
+  configIsRequired: "the configuration object is required",
+  configType: "the configuration object should be an object",
+  "default": "an unknown error accured in `@monaco-editor/loader` package",
+  deprecation: "Deprecation warning!\n    You are using deprecated way of configuration.\n\n    Instead of using\n      monaco.config({ urls: { monacoBase: '...' } })\n    use\n      monaco.config({ paths: { vs: '...' } })\n\n    For more please check the link https://github.com/suren-atoyan/monaco-loader#config\n  "
+};
+var errorHandler2 = curry2(throwError2)(errorMessages2);
+var validators2 = {
+  config: validateConfig
+};
+
+// ../../node_modules/@monaco-editor/loader/lib/es/utils/compose.js
+var compose2 = function compose3() {
+  for (var _len = arguments.length, fns = new Array(_len), _key = 0; _key < _len; _key++) {
+    fns[_key] = arguments[_key];
+  }
+  return function(x) {
+    return fns.reduceRight(function(y, f) {
+      return f(y);
+    }, x);
+  };
+};
+
+// ../../node_modules/@monaco-editor/loader/lib/es/utils/deepMerge.js
+function merge(target, source) {
+  Object.keys(source).forEach(function(key) {
+    if (source[key] instanceof Object) {
+      if (target[key]) {
+        Object.assign(source[key], merge(target[key], source[key]));
+      }
+    }
+  });
+  return _objectSpread2(_objectSpread2({}, target), source);
+}
+
+// ../../node_modules/@monaco-editor/loader/lib/es/utils/makeCancelable.js
+var CANCELATION_MESSAGE = {
+  type: "cancelation",
+  msg: "operation is manually canceled"
+};
+function makeCancelable(promise) {
+  var hasCanceled_ = false;
+  var wrappedPromise = new Promise(function(resolve, reject) {
+    promise.then(function(val) {
+      return hasCanceled_ ? reject(CANCELATION_MESSAGE) : resolve(val);
+    });
+    promise["catch"](reject);
+  });
+  return wrappedPromise.cancel = function() {
+    return hasCanceled_ = true;
+  }, wrappedPromise;
+}
+
+// ../../node_modules/@monaco-editor/loader/lib/es/loader/index.js
+var _excluded = ["monaco"];
+var _state$create = state_local_default.create({
+  config,
+  isInitialized: false,
+  resolve: null,
+  reject: null,
+  monaco: null
+});
+var _state$create2 = _slicedToArray(_state$create, 2);
+var getState = _state$create2[0];
+var setState = _state$create2[1];
+function config2(globalConfig) {
+  var _validators$config = validators2.config(globalConfig), monaco = _validators$config.monaco, config3 = _objectWithoutProperties(_validators$config, _excluded);
+  setState(function(state) {
+    return {
+      config: merge(state.config, config3),
+      monaco
+    };
+  });
+}
+function init() {
+  var state = getState(function(_ref) {
+    var monaco = _ref.monaco, isInitialized = _ref.isInitialized, resolve = _ref.resolve;
+    return {
+      monaco,
+      isInitialized,
+      resolve
+    };
+  });
+  if (!state.isInitialized) {
+    setState({
+      isInitialized: true
+    });
+    if (state.monaco) {
+      state.resolve(state.monaco);
+      return makeCancelable(wrapperPromise);
+    }
+    if (window.monaco && window.monaco.editor) {
+      storeMonacoInstance(window.monaco);
+      state.resolve(window.monaco);
+      return makeCancelable(wrapperPromise);
+    }
+    compose2(injectScripts, getMonacoLoaderScript)(configureLoader);
+  }
+  return makeCancelable(wrapperPromise);
+}
+function injectScripts(script) {
+  return document.body.appendChild(script);
+}
+function createScript(src) {
+  var script = document.createElement("script");
+  return src && (script.src = src), script;
+}
+function getMonacoLoaderScript(configureLoader2) {
+  var state = getState(function(_ref2) {
+    var config3 = _ref2.config, reject = _ref2.reject;
+    return {
+      config: config3,
+      reject
+    };
+  });
+  var loaderScript = createScript("".concat(state.config.paths.vs, "/loader.js"));
+  loaderScript.onload = function() {
+    return configureLoader2();
+  };
+  loaderScript.onerror = state.reject;
+  return loaderScript;
+}
+function configureLoader() {
+  var state = getState(function(_ref3) {
+    var config3 = _ref3.config, resolve = _ref3.resolve, reject = _ref3.reject;
+    return {
+      config: config3,
+      resolve,
+      reject
+    };
+  });
+  var require2 = window.require;
+  require2.config(state.config);
+  require2(["vs/editor/editor.main"], function(loaded) {
+    var monaco = loaded.m || loaded;
+    storeMonacoInstance(monaco);
+    state.resolve(monaco);
+  }, function(error) {
+    state.reject(error);
+  });
+}
+function storeMonacoInstance(monaco) {
+  if (!getState().monaco) {
+    setState({
+      monaco
+    });
+  }
+}
+function __getMonacoInstance() {
+  return getState(function(_ref4) {
+    var monaco = _ref4.monaco;
+    return monaco;
+  });
+}
+var wrapperPromise = new Promise(function(resolve, reject) {
+  return setState({
+    resolve,
+    reject
+  });
+});
+var loader = {
+  config: config2,
+  init,
+  __getMonacoInstance
+};
+
+// ../../node_modules/@monaco-editor/react/dist/index.mjs
+var import_react8 = __toESM(require_react(), 1);
+var import_react9 = __toESM(require_react(), 1);
+var import_react10 = __toESM(require_react(), 1);
+var import_react11 = __toESM(require_react(), 1);
+var import_react12 = __toESM(require_react(), 1);
+var import_react13 = __toESM(require_react(), 1);
+var import_react14 = __toESM(require_react(), 1);
+var import_react15 = __toESM(require_react(), 1);
+var import_react16 = __toESM(require_react(), 1);
+var import_react17 = __toESM(require_react(), 1);
+var import_react18 = __toESM(require_react(), 1);
+var le = { wrapper: { display: "flex", position: "relative", textAlign: "initial" }, fullWidth: { width: "100%" }, hide: { display: "none" } };
+var v = le;
+var ae = { container: { display: "flex", height: "100%", width: "100%", justifyContent: "center", alignItems: "center" } };
+var Y = ae;
+function Me({ children: e }) {
+  return import_react12.default.createElement("div", { style: Y.container }, e);
+}
+var Z = Me;
+var $ = Z;
+function Ee({ width: e, height: r2, isEditorReady: n, loading: t, _ref: a, className: m, wrapperProps: E }) {
+  return import_react11.default.createElement("section", { style: { ...v.wrapper, width: e, height: r2 }, ...E }, !n && import_react11.default.createElement($, null, t), import_react11.default.createElement("div", { ref: a, style: { ...v.fullWidth, ...!n && v.hide }, className: m }));
+}
+var ee = Ee;
+var H = (0, import_react10.memo)(ee);
+function Ce(e) {
+  (0, import_react13.useEffect)(e, []);
+}
+var k = Ce;
+function he(e, r2, n = true) {
+  let t = (0, import_react14.useRef)(true);
+  (0, import_react14.useEffect)(t.current || !n ? () => {
+    t.current = false;
+  } : e, r2);
+}
+var l = he;
+function D() {
+}
+function h(e, r2, n, t) {
+  return De(e, t) || be(e, r2, n, t);
+}
+function De(e, r2) {
+  return e.editor.getModel(te(e, r2));
+}
+function be(e, r2, n, t) {
+  return e.editor.createModel(r2, n, t ? te(e, t) : void 0);
+}
+function te(e, r2) {
+  return e.Uri.parse(r2);
+}
+function Oe({ original: e, modified: r2, language: n, originalLanguage: t, modifiedLanguage: a, originalModelPath: m, modifiedModelPath: E, keepCurrentOriginalModel: g = false, keepCurrentModifiedModel: N = false, theme: x = "light", loading: P = "Loading...", options: y = {}, height: V = "100%", width: z = "100%", className: F, wrapperProps: j = {}, beforeMount: A = D, onMount: q = D }) {
+  let [M, O] = (0, import_react9.useState)(false), [T, s] = (0, import_react9.useState)(true), u = (0, import_react9.useRef)(null), c = (0, import_react9.useRef)(null), w = (0, import_react9.useRef)(null), d = (0, import_react9.useRef)(q), o = (0, import_react9.useRef)(A), b = (0, import_react9.useRef)(false);
+  k(() => {
+    let i = loader.init();
+    return i.then((f) => (c.current = f) && s(false)).catch((f) => f?.type !== "cancelation" && console.error("Monaco initialization: error:", f)), () => u.current ? I() : i.cancel();
+  }), l(() => {
+    if (u.current && c.current) {
+      let i = u.current.getOriginalEditor(), f = h(c.current, e || "", t || n || "text", m || "");
+      f !== i.getModel() && i.setModel(f);
+    }
+  }, [m], M), l(() => {
+    if (u.current && c.current) {
+      let i = u.current.getModifiedEditor(), f = h(c.current, r2 || "", a || n || "text", E || "");
+      f !== i.getModel() && i.setModel(f);
+    }
+  }, [E], M), l(() => {
+    let i = u.current.getModifiedEditor();
+    i.getOption(c.current.editor.EditorOption.readOnly) ? i.setValue(r2 || "") : r2 !== i.getValue() && (i.executeEdits("", [{ range: i.getModel().getFullModelRange(), text: r2 || "", forceMoveMarkers: true }]), i.pushUndoStop());
+  }, [r2], M), l(() => {
+    u.current?.getModel()?.original.setValue(e || "");
+  }, [e], M), l(() => {
+    let { original: i, modified: f } = u.current.getModel();
+    c.current.editor.setModelLanguage(i, t || n || "text"), c.current.editor.setModelLanguage(f, a || n || "text");
+  }, [n, t, a], M), l(() => {
+    c.current?.editor.setTheme(x);
+  }, [x], M), l(() => {
+    u.current?.updateOptions(y);
+  }, [y], M);
+  let L = (0, import_react9.useCallback)(() => {
+    if (!c.current) return;
+    o.current(c.current);
+    let i = h(c.current, e || "", t || n || "text", m || ""), f = h(c.current, r2 || "", a || n || "text", E || "");
+    u.current?.setModel({ original: i, modified: f });
+  }, [n, r2, a, e, t, m, E]), U = (0, import_react9.useCallback)(() => {
+    !b.current && w.current && (u.current = c.current.editor.createDiffEditor(w.current, { automaticLayout: true, ...y }), L(), c.current?.editor.setTheme(x), O(true), b.current = true);
+  }, [y, x, L]);
+  (0, import_react9.useEffect)(() => {
+    M && d.current(u.current, c.current);
+  }, [M]), (0, import_react9.useEffect)(() => {
+    !T && !M && U();
+  }, [T, M, U]);
+  function I() {
+    let i = u.current?.getModel();
+    g || i?.original?.dispose(), N || i?.modified?.dispose(), u.current?.dispose();
+  }
+  return import_react9.default.createElement(H, { width: z, height: V, isEditorReady: M, loading: P, _ref: w, className: F, wrapperProps: j });
+}
+var ie = Oe;
+var we = (0, import_react8.memo)(ie);
+function He(e) {
+  let r2 = (0, import_react18.useRef)();
+  return (0, import_react18.useEffect)(() => {
+    r2.current = e;
+  }, [e]), r2.current;
+}
+var se = He;
+var _ = /* @__PURE__ */ new Map();
+function Ve({ defaultValue: e, defaultLanguage: r2, defaultPath: n, value: t, language: a, path: m, theme: E = "light", line: g, loading: N = "Loading...", options: x = {}, overrideServices: P = {}, saveViewState: y = true, keepCurrentModel: V = false, width: z = "100%", height: F = "100%", className: j, wrapperProps: A = {}, beforeMount: q = D, onMount: M = D, onChange: O, onValidate: T = D }) {
+  let [s, u] = (0, import_react17.useState)(false), [c, w] = (0, import_react17.useState)(true), d = (0, import_react17.useRef)(null), o = (0, import_react17.useRef)(null), b = (0, import_react17.useRef)(null), L = (0, import_react17.useRef)(M), U = (0, import_react17.useRef)(q), I = (0, import_react17.useRef)(), i = (0, import_react17.useRef)(t), f = se(m), Q = (0, import_react17.useRef)(false), B = (0, import_react17.useRef)(false);
+  k(() => {
+    let p = loader.init();
+    return p.then((R) => (d.current = R) && w(false)).catch((R) => R?.type !== "cancelation" && console.error("Monaco initialization: error:", R)), () => o.current ? pe() : p.cancel();
+  }), l(() => {
+    let p = h(d.current, e || t || "", r2 || a || "", m || n || "");
+    p !== o.current?.getModel() && (y && _.set(f, o.current?.saveViewState()), o.current?.setModel(p), y && o.current?.restoreViewState(_.get(m)));
+  }, [m], s), l(() => {
+    o.current?.updateOptions(x);
+  }, [x], s), l(() => {
+    !o.current || t === void 0 || (o.current.getOption(d.current.editor.EditorOption.readOnly) ? o.current.setValue(t) : t !== o.current.getValue() && (B.current = true, o.current.executeEdits("", [{ range: o.current.getModel().getFullModelRange(), text: t, forceMoveMarkers: true }]), o.current.pushUndoStop(), B.current = false));
+  }, [t], s), l(() => {
+    let p = o.current?.getModel();
+    p && a && d.current?.editor.setModelLanguage(p, a);
+  }, [a], s), l(() => {
+    g !== void 0 && o.current?.revealLine(g);
+  }, [g], s), l(() => {
+    d.current?.editor.setTheme(E);
+  }, [E], s);
+  let X = (0, import_react17.useCallback)(() => {
+    if (!(!b.current || !d.current) && !Q.current) {
+      U.current(d.current);
+      let p = m || n, R = h(d.current, t || e || "", r2 || a || "", p || "");
+      o.current = d.current?.editor.create(b.current, { model: R, automaticLayout: true, ...x }, P), y && o.current.restoreViewState(_.get(p)), d.current.editor.setTheme(E), g !== void 0 && o.current.revealLine(g), u(true), Q.current = true;
+    }
+  }, [e, r2, n, t, a, m, x, P, y, E, g]);
+  (0, import_react17.useEffect)(() => {
+    s && L.current(o.current, d.current);
+  }, [s]), (0, import_react17.useEffect)(() => {
+    !c && !s && X();
+  }, [c, s, X]), i.current = t, (0, import_react17.useEffect)(() => {
+    s && O && (I.current?.dispose(), I.current = o.current?.onDidChangeModelContent((p) => {
+      B.current || O(o.current.getValue(), p);
+    }));
+  }, [s, O]), (0, import_react17.useEffect)(() => {
+    if (s) {
+      let p = d.current.editor.onDidChangeMarkers((R) => {
+        let G = o.current.getModel()?.uri;
+        if (G && R.find((J) => J.path === G.path)) {
+          let J = d.current.editor.getModelMarkers({ resource: G });
+          T?.(J);
+        }
+      });
+      return () => {
+        p?.dispose();
+      };
+    }
+    return () => {
+    };
+  }, [s, T]);
+  function pe() {
+    I.current?.dispose(), V ? y && _.set(m, o.current.saveViewState()) : o.current.getModel()?.dispose(), o.current.dispose();
+  }
+  return import_react17.default.createElement(H, { width: z, height: F, isEditorReady: s, loading: N, _ref: b, className: j, wrapperProps: A });
+}
+var fe = Ve;
+var de = (0, import_react16.memo)(fe);
+var Ft = de;
+
+// electron/headlessServer/ui/mobile/src/components/MonacoFileEditorModal.tsx
+var extensionLanguageMap = {
+  js: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  jsx: "javascript",
+  ts: "typescript",
+  tsx: "typescript",
+  css: "css",
+  scss: "scss",
+  less: "less",
+  html: "html",
+  htm: "html",
+  json: "json",
+  md: "markdown",
+  py: "python",
+  sh: "shell",
+  bash: "shell",
+  yml: "yaml",
+  yaml: "yaml",
+  xml: "xml",
+  sql: "sql",
+  go: "go",
+  rs: "rust",
+  java: "java",
+  c: "c",
+  h: "cpp",
+  cpp: "cpp",
+  cc: "cpp",
+  hpp: "cpp",
+  txt: "plaintext"
+};
+var detectLanguage = (filePath) => {
+  if (!filePath) return "plaintext";
+  const dotIndex = filePath.lastIndexOf(".");
+  if (dotIndex === -1 || dotIndex === filePath.length - 1) return "plaintext";
+  const extension2 = filePath.slice(dotIndex + 1).toLowerCase();
+  return extensionLanguageMap[extension2] || "plaintext";
+};
+var MonacoFileEditorModal = ({
+  open,
+  filePath,
+  value,
+  loading,
+  error,
+  isDirty,
+  isSaving,
+  onChange,
+  onSave,
+  onClose
+}) => {
+  const [hasOpened, setHasOpened] = (0, import_react19.useState)(false);
+  const editorRef = (0, import_react19.useRef)(null);
+  (0, import_react19.useEffect)(() => {
+    if (open) setHasOpened(true);
+  }, [open]);
+  (0, import_react19.useEffect)(() => {
+    if (!open) return;
+    const runLayout = () => {
+      editorRef.current?.layout();
+    };
+    const rafId = window.requestAnimationFrame(() => {
+      runLayout();
+      window.setTimeout(runLayout, 60);
+    });
+    const onResize = () => runLayout();
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open]);
+  (0, import_react19.useEffect)(() => {
+    if (!open) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onEscape = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      window.removeEventListener("keydown", onEscape);
+    };
+  }, [open, onClose]);
+  const language = (0, import_react19.useMemo)(() => detectLanguage(filePath), [filePath]);
+  if (!hasOpened || typeof document === "undefined") return null;
+  return (0, import_react_dom.createPortal)(
+    /* @__PURE__ */ import_react19.default.createElement("div", { className: `mobile-monaco-modal-root${open ? "" : " is-hidden"}`, "aria-hidden": !open }, /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-monaco-modal", role: "dialog", "aria-modal": "true", "aria-label": "File editor" }, /* @__PURE__ */ import_react19.default.createElement("header", { className: "mobile-monaco-modal-header" }, /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-monaco-modal-meta" }, /* @__PURE__ */ import_react19.default.createElement("strong", null, filePath || "File editor"), /* @__PURE__ */ import_react19.default.createElement("small", null, language)), /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-monaco-modal-actions" }, /* @__PURE__ */ import_react19.default.createElement(Button, { variant: "secondary", size: "sm", onClick: onSave, disabled: !filePath || loading || isSaving || !isDirty }, isSaving ? "Saving\u2026" : "Save"), /* @__PURE__ */ import_react19.default.createElement(Button, { variant: "outline", size: "sm", onClick: onClose, "aria-label": "Close editor" }, "\u2715"))), error ? /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-monaco-modal-error" }, error) : null, /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-monaco-editor-host" }, /* @__PURE__ */ import_react19.default.createElement(
+      Ft,
+      {
+        theme: "vs-dark",
+        language,
+        value,
+        width: "100%",
+        height: "100%",
+        onMount: (editor) => {
+          editorRef.current = editor;
+          window.requestAnimationFrame(() => editor.layout());
+        },
+        onChange: (next) => onChange(next ?? ""),
+        options: {
+          automaticLayout: true,
+          minimap: { enabled: false },
+          fontSize: 13,
+          wordWrap: "on",
+          smoothScrolling: true,
+          scrollBeyondLastLine: false,
+          tabSize: 2
+        }
+      }
+    ), loading ? /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-monaco-loading" }, "Loading\u2026") : null))),
+    document.body
+  );
+};
+
+// electron/headlessServer/ui/mobile/src/components/FilePathPickerModal.tsx
 var FILE_PICKER_STATE_STORAGE_KEY = "mobile:file-picker-state:v1";
+var createEditorFileState = () => ({
+  content: "",
+  loading: false,
+  error: null,
+  dirty: false,
+  saving: false,
+  loaded: false
+});
 var normalizePath = (value) => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -49527,22 +50409,25 @@ var writePersistedState = (stateKey, state) => {
   writeStorageBucket(bucket);
 };
 var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
-  const normalizedRootPath = (0, import_react8.useMemo)(() => normalizePath(rootPath), [rootPath]);
-  const stateKey = (0, import_react8.useMemo)(() => getStateKey(normalizedRootPath), [normalizedRootPath]);
-  const [currentPath, setCurrentPath] = (0, import_react8.useState)(null);
-  const [pathHistory, setPathHistory] = (0, import_react8.useState)([]);
-  const [files, setFiles] = (0, import_react8.useState)([]);
-  const [loading, setLoading] = (0, import_react8.useState)(false);
-  const [error, setError] = (0, import_react8.useState)(null);
-  const [searchQuery, setSearchQuery] = (0, import_react8.useState)("");
-  const [followGitignore, setFollowGitignore] = (0, import_react8.useState)(true);
-  const [searchResults, setSearchResults] = (0, import_react8.useState)([]);
-  const [searching, setSearching] = (0, import_react8.useState)(false);
-  const [searchError, setSearchError] = (0, import_react8.useState)(null);
-  const [isRespectingGitignore, setIsRespectingGitignore] = (0, import_react8.useState)(true);
-  const [listScrollTop, setListScrollTop] = (0, import_react8.useState)(0);
-  const listRef = (0, import_react8.useRef)(null);
-  (0, import_react8.useEffect)(() => {
+  const normalizedRootPath = (0, import_react21.useMemo)(() => normalizePath(rootPath), [rootPath]);
+  const stateKey = (0, import_react21.useMemo)(() => getStateKey(normalizedRootPath), [normalizedRootPath]);
+  const [currentPath, setCurrentPath] = (0, import_react21.useState)(null);
+  const [pathHistory, setPathHistory] = (0, import_react21.useState)([]);
+  const [files, setFiles] = (0, import_react21.useState)([]);
+  const [loading, setLoading] = (0, import_react21.useState)(false);
+  const [error, setError] = (0, import_react21.useState)(null);
+  const [searchQuery, setSearchQuery] = (0, import_react21.useState)("");
+  const [followGitignore, setFollowGitignore] = (0, import_react21.useState)(true);
+  const [searchResults, setSearchResults] = (0, import_react21.useState)([]);
+  const [searching, setSearching] = (0, import_react21.useState)(false);
+  const [searchError, setSearchError] = (0, import_react21.useState)(null);
+  const [isRespectingGitignore, setIsRespectingGitignore] = (0, import_react21.useState)(true);
+  const [listScrollTop, setListScrollTop] = (0, import_react21.useState)(0);
+  const listRef = (0, import_react21.useRef)(null);
+  const [editorOpen, setEditorOpen] = (0, import_react21.useState)(false);
+  const [editorPath, setEditorPath] = (0, import_react21.useState)(null);
+  const [editorFiles, setEditorFiles] = (0, import_react21.useState)({});
+  (0, import_react21.useEffect)(() => {
     if (!open) return;
     const restored = readPersistedState(stateKey);
     if (restored) {
@@ -49562,7 +50447,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
     setSearchError(null);
     setIsRespectingGitignore(restored ? restored.followGitignore : true);
   }, [open, normalizedRootPath, stateKey]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react21.useEffect)(() => {
     if (!open) return;
     writePersistedState(stateKey, {
       currentPath,
@@ -49572,7 +50457,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
       scrollTop: listScrollTop
     });
   }, [open, stateKey, currentPath, pathHistory, searchQuery, followGitignore, listScrollTop]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react21.useEffect)(() => {
     if (!open || !currentPath) return;
     let cancelled = false;
     const run = async () => {
@@ -49598,7 +50483,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
   const searchBasePath = normalizedRootPath || currentPath;
   const activeSearchQuery = searchQuery.trim();
   const isSearchMode = activeSearchQuery.length > 0;
-  (0, import_react8.useEffect)(() => {
+  (0, import_react21.useEffect)(() => {
     if (!open) return;
     if (!activeSearchQuery) {
       setSearchResults([]);
@@ -49639,7 +50524,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
       window.clearTimeout(timeoutId);
     };
   }, [open, activeSearchQuery, searchBasePath, followGitignore]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react21.useEffect)(() => {
     if (!open) return;
     const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -49652,18 +50537,104 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
       window.removeEventListener("keydown", handleEscape);
     };
   }, [open, onClose]);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react21.useEffect)(() => {
     if (!open) return;
     const node2 = listRef.current;
     if (!node2) return;
     node2.scrollTop = listScrollTop;
   }, [open, listScrollTop, loading, searching, files, searchResults, isSearchMode]);
-  const canGoHome = (0, import_react8.useMemo)(() => Boolean(normalizedRootPath && currentPath && normalizedRootPath !== currentPath), [normalizedRootPath, currentPath]);
+  const canGoHome = (0, import_react21.useMemo)(() => Boolean(normalizedRootPath && currentPath && normalizedRootPath !== currentPath), [normalizedRootPath, currentPath]);
   const canGoBack = pathHistory.length > 0;
   const displayedFiles = isSearchMode ? searchResults : files;
+  const openEditorForFile = async (filePath) => {
+    setEditorPath(filePath);
+    setEditorOpen(true);
+    const current = editorFiles[filePath];
+    if (current?.loaded || current?.loading) return;
+    setEditorFiles((prev) => ({
+      ...prev,
+      [filePath]: {
+        ...prev[filePath] || createEditorFileState(),
+        loading: true,
+        error: null
+      }
+    }));
+    try {
+      const payload = await mobileApi.getLocalFileContent(filePath);
+      setEditorFiles((prev) => ({
+        ...prev,
+        [filePath]: {
+          ...prev[filePath] || createEditorFileState(),
+          content: payload.content,
+          loading: false,
+          error: null,
+          dirty: false,
+          saving: false,
+          loaded: true
+        }
+      }));
+    } catch (err) {
+      setEditorFiles((prev) => ({
+        ...prev,
+        [filePath]: {
+          ...prev[filePath] || createEditorFileState(),
+          loading: false,
+          error: err instanceof Error ? err.message : String(err),
+          loaded: true
+        }
+      }));
+    }
+  };
+  const activeEditorState = editorPath ? editorFiles[editorPath] || createEditorFileState() : createEditorFileState();
+  const handleEditorChange = (nextValue) => {
+    if (!editorPath) return;
+    setEditorFiles((prev) => ({
+      ...prev,
+      [editorPath]: {
+        ...prev[editorPath] || createEditorFileState(),
+        content: nextValue,
+        dirty: true
+      }
+    }));
+  };
+  const handleEditorSave = async () => {
+    if (!editorPath) return;
+    const fileState = editorFiles[editorPath] || createEditorFileState();
+    if (fileState.loading || fileState.saving || !fileState.dirty) return;
+    setEditorFiles((prev) => ({
+      ...prev,
+      [editorPath]: {
+        ...prev[editorPath] || createEditorFileState(),
+        saving: true,
+        error: null
+      }
+    }));
+    try {
+      await mobileApi.saveLocalFileContent(editorPath, fileState.content);
+      setEditorFiles((prev) => ({
+        ...prev,
+        [editorPath]: {
+          ...prev[editorPath] || createEditorFileState(),
+          saving: false,
+          dirty: false,
+          loaded: true,
+          error: null
+        }
+      }));
+    } catch (err) {
+      setEditorFiles((prev) => ({
+        ...prev,
+        [editorPath]: {
+          ...prev[editorPath] || createEditorFileState(),
+          saving: false,
+          error: err instanceof Error ? err.message : String(err)
+        }
+      }));
+    }
+  };
   if (!open || typeof document === "undefined") return null;
-  return (0, import_react_dom.createPortal)(
-    /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-portal-root" }, /* @__PURE__ */ import_react8.default.createElement(
+  return (0, import_react_dom2.createPortal)(
+    /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-portal-root" }, /* @__PURE__ */ import_react21.default.createElement(
       "button",
       {
         type: "button",
@@ -49671,7 +50642,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
         className: "mobile-file-picker-portal-backdrop",
         onClick: onClose
       }
-    ), /* @__PURE__ */ import_react8.default.createElement("section", { className: "mobile-file-picker-portal", role: "dialog", "aria-modal": "true", "aria-label": "Insert file path" }, /* @__PURE__ */ import_react8.default.createElement("header", { className: "mobile-file-picker-header" }, /* @__PURE__ */ import_react8.default.createElement("div", null, /* @__PURE__ */ import_react8.default.createElement("h2", null, "Insert path"), /* @__PURE__ */ import_react8.default.createElement("p", null, currentPath || "No working directory set")), /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-header-buttons" }, /* @__PURE__ */ import_react8.default.createElement(
+    ), /* @__PURE__ */ import_react21.default.createElement("section", { className: "mobile-file-picker-portal", role: "dialog", "aria-modal": "true", "aria-label": "Insert file path" }, /* @__PURE__ */ import_react21.default.createElement("header", { className: "mobile-file-picker-header" }, /* @__PURE__ */ import_react21.default.createElement("div", null, /* @__PURE__ */ import_react21.default.createElement("h2", null, "Insert path"), /* @__PURE__ */ import_react21.default.createElement("p", null, currentPath || "No working directory set")), /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-header-buttons" }, /* @__PURE__ */ import_react21.default.createElement(
       Button,
       {
         variant: "ghost",
@@ -49681,7 +50652,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
         title: "Toggle .gitignore-aware search"
       },
       followGitignore ? ".gitignore \u2713" : ".gitignore"
-    ), /* @__PURE__ */ import_react8.default.createElement(Button, { variant: "outline", size: "sm", onClick: onClose }, "Done"))), /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-actions" }, /* @__PURE__ */ import_react8.default.createElement(
+    ), /* @__PURE__ */ import_react21.default.createElement(Button, { variant: "outline", size: "sm", onClick: onClose }, "Done"))), /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-actions" }, /* @__PURE__ */ import_react21.default.createElement(
       Button,
       {
         variant: "outline",
@@ -49694,7 +50665,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
         disabled: !canGoHome
       },
       "Root"
-    ), /* @__PURE__ */ import_react8.default.createElement(
+    ), /* @__PURE__ */ import_react21.default.createElement(
       Button,
       {
         variant: "outline",
@@ -49709,7 +50680,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
         disabled: !canGoBack
       },
       "Back"
-    ), /* @__PURE__ */ import_react8.default.createElement(
+    ), /* @__PURE__ */ import_react21.default.createElement(
       Button,
       {
         variant: "secondary",
@@ -49720,7 +50691,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
         disabled: !currentPath
       },
       "+ Current dir"
-    )), /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-search" }, /* @__PURE__ */ import_react8.default.createElement(
+    )), /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-search" }, /* @__PURE__ */ import_react21.default.createElement(
       "input",
       {
         type: "search",
@@ -49730,7 +50701,7 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
         placeholder: "Search in cwd (recursive)\u2026",
         disabled: !searchBasePath
       }
-    ), /* @__PURE__ */ import_react8.default.createElement(
+    ), /* @__PURE__ */ import_react21.default.createElement(
       Button,
       {
         variant: "ghost",
@@ -49743,20 +50714,20 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
         disabled: searchQuery.length === 0
       },
       "Clear"
-    )), /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-search-hint" }, searchBasePath ? `Searching in: ${searchBasePath} ${followGitignore ? isRespectingGitignore ? "(respects .gitignore)" : "(git repo not detected; fallback search)" : "(ignoring .gitignore)"}` : "Set conversation/project cwd first"), /* @__PURE__ */ import_react8.default.createElement(
+    )), /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-search-hint" }, searchBasePath ? `Searching in: ${searchBasePath} ${followGitignore ? isRespectingGitignore ? "(respects .gitignore)" : "(git repo not detected; fallback search)" : "(ignoring .gitignore)"}` : "Set conversation/project cwd first"), /* @__PURE__ */ import_react21.default.createElement(
       "div",
       {
         ref: listRef,
         className: "mobile-file-picker-list",
         onScroll: (event) => setListScrollTop(event.currentTarget.scrollTop)
       },
-      !isSearchMode && loading ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-muted" }, "Loading files\u2026") : null,
-      !isSearchMode && error ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-error" }, error) : null,
-      !isSearchMode && !loading && !error && files.length === 0 ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-muted" }, "Empty directory") : null,
-      isSearchMode && searching ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-muted" }, "Searching subdirectories\u2026") : null,
-      isSearchMode && searchError ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-error" }, searchError) : null,
-      isSearchMode && !searching && !searchError && searchResults.length === 0 ? /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-muted" }, "No matches") : null,
-      displayedFiles.map((file) => /* @__PURE__ */ import_react8.default.createElement("div", { className: "mobile-file-picker-row", key: `${isSearchMode ? "search" : "list"}-${file.path}` }, /* @__PURE__ */ import_react8.default.createElement(
+      !isSearchMode && loading ? /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-muted" }, "Loading files\u2026") : null,
+      !isSearchMode && error ? /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-error" }, error) : null,
+      !isSearchMode && !loading && !error && files.length === 0 ? /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-muted" }, "Empty directory") : null,
+      isSearchMode && searching ? /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-muted" }, "Searching subdirectories\u2026") : null,
+      isSearchMode && searchError ? /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-error" }, searchError) : null,
+      isSearchMode && !searching && !searchError && searchResults.length === 0 ? /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-muted" }, "No matches") : null,
+      displayedFiles.map((file) => /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-row", key: `${isSearchMode ? "search" : "list"}-${file.path}` }, /* @__PURE__ */ import_react21.default.createElement(
         "button",
         {
           type: "button",
@@ -49778,9 +50749,22 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
           disabled: !file.isDirectory,
           title: file.path
         },
-        /* @__PURE__ */ import_react8.default.createElement("span", { className: "mobile-file-picker-item-icon" }, file.isDirectory ? "\u{1F4C1}" : "\u{1F4C4}"),
-        /* @__PURE__ */ import_react8.default.createElement("span", { className: "mobile-file-picker-item-labels" }, /* @__PURE__ */ import_react8.default.createElement("span", { className: "mobile-file-picker-item-name" }, file.name), isSearchMode && file.relativePath && file.relativePath !== file.name ? /* @__PURE__ */ import_react8.default.createElement("span", { className: "mobile-file-picker-item-subpath" }, file.relativePath) : null)
-      ), /* @__PURE__ */ import_react8.default.createElement(
+        /* @__PURE__ */ import_react21.default.createElement("span", { className: "mobile-file-picker-item-icon" }, file.isDirectory ? "\u{1F4C1}" : "\u{1F4C4}"),
+        /* @__PURE__ */ import_react21.default.createElement("span", { className: "mobile-file-picker-item-labels" }, /* @__PURE__ */ import_react21.default.createElement("span", { className: "mobile-file-picker-item-name" }, file.name), isSearchMode && file.relativePath && file.relativePath !== file.name ? /* @__PURE__ */ import_react21.default.createElement("span", { className: "mobile-file-picker-item-subpath" }, file.relativePath) : null)
+      ), /* @__PURE__ */ import_react21.default.createElement("div", { className: "mobile-file-picker-row-actions" }, !file.isDirectory ? /* @__PURE__ */ import_react21.default.createElement(
+        Button,
+        {
+          variant: "ghost",
+          size: "sm",
+          className: "mobile-file-picker-edit-btn",
+          onClick: () => {
+            void openEditorForFile(file.path);
+          },
+          title: "Edit file",
+          "aria-label": `Edit ${file.name}`
+        },
+        "\u270E"
+      ) : null, /* @__PURE__ */ import_react21.default.createElement(
         Button,
         {
           variant: "ghost",
@@ -49790,17 +50774,33 @@ var FilePathPickerModal = ({ open, rootPath, onClose, onInsertPath }) => {
           title: "Insert path"
         },
         "+"
-      )))
-    ))),
+      ))))
+    )), /* @__PURE__ */ import_react21.default.createElement(
+      MonacoFileEditorModal,
+      {
+        open: editorOpen,
+        filePath: editorPath,
+        value: activeEditorState.content,
+        loading: activeEditorState.loading,
+        error: activeEditorState.error,
+        isDirty: activeEditorState.dirty,
+        isSaving: activeEditorState.saving,
+        onChange: handleEditorChange,
+        onSave: () => {
+          void handleEditorSave();
+        },
+        onClose: () => setEditorOpen(false)
+      }
+    )),
     document.body
   );
 };
 
 // electron/headlessServer/ui/mobile/src/components/MessageList.tsx
-var import_react15 = __toESM(require_react(), 1);
+var import_react28 = __toESM(require_react(), 1);
 
 // electron/headlessServer/ui/mobile/src/components/MessageBubble.tsx
-var import_react14 = __toESM(require_react(), 1);
+var import_react27 = __toESM(require_react(), 1);
 
 // node_modules/devlop/lib/default.js
 function ok() {
@@ -49823,17 +50823,17 @@ var nameReJsx = /^[$_\p{ID_Start}][-$_\u{200C}\u{200D}\p{ID_Continue}]*$/u;
 var emptyOptions = {};
 function name(name2, options) {
   const settings = options || emptyOptions;
-  const re2 = settings.jsx ? nameReJsx : nameRe;
-  return re2.test(name2);
+  const re3 = settings.jsx ? nameReJsx : nameRe;
+  return re3.test(name2);
 }
 
 // node_modules/hast-util-whitespace/lib/index.js
-var re = /[ \t\n\f\r]/g;
+var re2 = /[ \t\n\f\r]/g;
 function whitespace(thing) {
   return typeof thing === "object" ? thing.type === "text" ? empty(thing.value) : false : empty(thing);
 }
 function empty(value) {
-  return value.replace(re, "") === "";
+  return value.replace(re2, "") === "";
 }
 
 // node_modules/property-information/lib/util/schema.js
@@ -49861,7 +50861,7 @@ Schema.prototype.property = {};
 Schema.prototype.space = void 0;
 
 // node_modules/property-information/lib/util/merge.js
-function merge(definitions, space2) {
+function merge2(definitions, space2) {
   const property = {};
   const normal = {};
   for (const definition3 of definitions) {
@@ -49947,13 +50947,13 @@ var DefinedInfo = class extends Info {
    *   Info.
    */
   constructor(property, attribute, mask, space2) {
-    let index2 = -1;
+    let index3 = -1;
     super(property, attribute);
     mark(this, "space", space2);
     if (typeof mask === "number") {
-      while (++index2 < checks.length) {
-        const check = checks[index2];
-        mark(this, checks[index2], (mask & types_exports[check]) === types_exports[check]);
+      while (++index3 < checks.length) {
+        const check = checks[index3];
+        mark(this, checks[index3], (mask & types_exports[check]) === types_exports[check]);
       }
     }
   }
@@ -49966,7 +50966,7 @@ function mark(values, key, value) {
 }
 
 // node_modules/property-information/lib/util/create.js
-function create(definition3) {
+function create2(definition3) {
   const properties = {};
   const normals = {};
   for (const [property, value] of Object.entries(definition3.properties)) {
@@ -49987,7 +50987,7 @@ function create(definition3) {
 }
 
 // node_modules/property-information/lib/aria.js
-var aria = create({
+var aria = create2({
   properties: {
     ariaActiveDescendant: null,
     ariaAtomic: booleanish,
@@ -50039,7 +51039,7 @@ var aria = create({
     ariaValueText: null,
     role: null
   },
-  transform(_, property) {
+  transform(_2, property) {
     return property === "role" ? property : "aria-" + property.slice(4).toLowerCase();
   }
 });
@@ -50055,7 +51055,7 @@ function caseInsensitiveTransform(attributes, property) {
 }
 
 // node_modules/property-information/lib/html.js
-var html = create({
+var html = create2({
   attributes: {
     acceptcharset: "accept-charset",
     classname: "class",
@@ -50419,7 +51419,7 @@ var html = create({
 });
 
 // node_modules/property-information/lib/svg.js
-var svg = create({
+var svg = create2({
   attributes: {
     accentHeight: "accent-height",
     alignmentBaseline: "alignment-baseline",
@@ -50981,7 +51981,7 @@ var svg = create({
 });
 
 // node_modules/property-information/lib/xlink.js
-var xlink = create({
+var xlink = create2({
   properties: {
     xLinkActuate: null,
     xLinkArcRole: null,
@@ -50992,13 +51992,13 @@ var xlink = create({
     xLinkType: null
   },
   space: "xlink",
-  transform(_, property) {
+  transform(_2, property) {
     return "xlink:" + property.slice(5).toLowerCase();
   }
 });
 
 // node_modules/property-information/lib/xmlns.js
-var xmlns = create({
+var xmlns = create2({
   attributes: { xmlnsxlink: "xmlns:xlink" },
   properties: { xmlnsXLink: null, xmlns: null },
   space: "xmlns",
@@ -51006,10 +52006,10 @@ var xmlns = create({
 });
 
 // node_modules/property-information/lib/xml.js
-var xml = create({
+var xml = create2({
   properties: { xmlBase: null, xmlLang: null, xmlSpace: null },
   space: "xml",
-  transform(_, property) {
+  transform(_2, property) {
     return "xml:" + property.slice(3).toLowerCase();
   }
 });
@@ -51072,8 +52072,8 @@ function camelcase($0) {
 }
 
 // node_modules/property-information/index.js
-var html2 = merge([aria, html, xlink, xmlns, xml], "html");
-var svg2 = merge([aria, svg, xlink, xmlns, xml], "svg");
+var html2 = merge2([aria, html, xlink, xmlns, xml], "html");
+var svg2 = merge2([aria, svg, xlink, xmlns, xml], "svg");
 
 // node_modules/space-separated-tokens/index.js
 function stringify2(values) {
@@ -51124,12 +52124,12 @@ function stringifyPosition(value) {
   return "";
 }
 function point2(point4) {
-  return index(point4 && point4.line) + ":" + index(point4 && point4.column);
+  return index2(point4 && point4.line) + ":" + index2(point4 && point4.column);
 }
 function position2(pos) {
   return point2(pos && pos.start) + "-" + point2(pos && pos.end);
 }
-function index(value) {
+function index2(value) {
   return value && typeof value === "number" ? value : 1;
 }
 
@@ -51221,12 +52221,12 @@ var VFileMessage = class extends Error {
       options.cause = causeOrReason;
     }
     if (!options.ruleId && !options.source && typeof origin === "string") {
-      const index2 = origin.indexOf(":");
-      if (index2 === -1) {
+      const index3 = origin.indexOf(":");
+      if (index3 === -1) {
         options.ruleId = origin;
       } else {
-        options.source = origin.slice(0, index2);
-        options.ruleId = origin.slice(index2 + 1);
+        options.source = origin.slice(0, index3);
+        options.ruleId = origin.slice(index3 + 1);
       }
     }
     if (!options.place && options.ancestors && options.ancestors) {
@@ -51281,14 +52281,14 @@ function toJsxRuntime(tree, options) {
     throw new TypeError("Expected `Fragment` in options");
   }
   const filePath = options.filePath || void 0;
-  let create2;
+  let create3;
   if (options.development) {
     if (typeof options.jsxDEV !== "function") {
       throw new TypeError(
         "Expected `jsxDEV` in options when `development: true`"
       );
     }
-    create2 = developmentCreate(filePath, options.jsxDEV);
+    create3 = developmentCreate(filePath, options.jsxDEV);
   } else {
     if (typeof options.jsx !== "function") {
       throw new TypeError("Expected `jsx` in production options");
@@ -51296,13 +52296,13 @@ function toJsxRuntime(tree, options) {
     if (typeof options.jsxs !== "function") {
       throw new TypeError("Expected `jsxs` in production options");
     }
-    create2 = productionCreate(filePath, options.jsx, options.jsxs);
+    create3 = productionCreate(filePath, options.jsx, options.jsxs);
   }
   const state = {
     Fragment: options.Fragment,
     ancestors: [],
     components: options.components || {},
-    create: create2,
+    create: create3,
     elementAttributeNameCase: options.elementAttributeNameCase || "react",
     evaluater: options.createEvaluater ? options.createEvaluater() : void 0,
     filePath,
@@ -51409,7 +52409,7 @@ function root(state, node2, key) {
   addChildren(props, createChildren(state, node2));
   return state.create(node2, state.Fragment, props, key);
 }
-function text(_, node2) {
+function text(_2, node2) {
   return node2.value;
 }
 function addNode(state, props, type, node2) {
@@ -51425,17 +52425,17 @@ function addChildren(props, children) {
     }
   }
 }
-function productionCreate(_, jsx2, jsxs2) {
-  return create2;
-  function create2(_2, type, props, key) {
+function productionCreate(_2, jsx2, jsxs2) {
+  return create3;
+  function create3(_3, type, props, key) {
     const isStaticChildren = Array.isArray(props.children);
     const fn = isStaticChildren ? jsxs2 : jsx2;
     return key ? fn(type, props, key) : fn(type, props);
   }
 }
 function developmentCreate(filePath, jsxDEV) {
-  return create2;
-  function create2(node2, type, props, key) {
+  return create3;
+  function create3(node2, type, props, key) {
     const isStaticChildren = Array.isArray(props.children);
     const point4 = pointStart(node2);
     return jsxDEV(
@@ -51520,10 +52520,10 @@ function createJsxElementProps(state, node2) {
 }
 function createChildren(state, node2) {
   const children = [];
-  let index2 = -1;
+  let index3 = -1;
   const countsByName = state.passKeys ? /* @__PURE__ */ new Map() : emptyMap;
-  while (++index2 < node2.children.length) {
-    const child = node2.children[index2];
+  while (++index3 < node2.children.length) {
+    const child = node2.children[index3];
     let key;
     if (state.passKeys) {
       const name2 = child.type === "element" ? child.tagName : child.type === "mdxJsxFlowElement" || child.type === "mdxJsxTextElement" ? child.name : void 0;
@@ -51586,15 +52586,15 @@ function findComponentFromName(state, name2, allowExpression) {
     result = { type: "Literal", value: name2 };
   } else if (name2.includes(".")) {
     const identifiers = name2.split(".");
-    let index2 = -1;
+    let index3 = -1;
     let node2;
-    while (++index2 < identifiers.length) {
-      const prop = name(identifiers[index2]) ? { type: "Identifier", name: identifiers[index2] } : { type: "Literal", value: identifiers[index2] };
+    while (++index3 < identifiers.length) {
+      const prop = name(identifiers[index3]) ? { type: "Identifier", name: identifiers[index3] } : { type: "Literal", value: identifiers[index3] };
       node2 = node2 ? {
         type: "MemberExpression",
         object: node2,
         property: prop,
-        computed: Boolean(index2 && prop.type === "Literal"),
+        computed: Boolean(index3 && prop.type === "Literal"),
         optional: false
       } : prop;
     }
@@ -51675,7 +52675,7 @@ var urlAttributes = {
 
 // node_modules/react-markdown/lib/index.js
 var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
-var import_react9 = __toESM(require_react(), 1);
+var import_react22 = __toESM(require_react(), 1);
 
 // node_modules/mdast-util-to-string/lib/index.js
 var emptyOptions2 = {};
@@ -51704,9 +52704,9 @@ function one2(value, includeImageAlt, includeHtml) {
 }
 function all(values, includeImageAlt, includeHtml) {
   const result = [];
-  let index2 = -1;
-  while (++index2 < values.length) {
-    result[index2] = one2(values[index2], includeImageAlt, includeHtml);
+  let index3 = -1;
+  while (++index3 < values.length) {
+    result[index3] = one2(values[index3], includeImageAlt, includeHtml);
   }
   return result.join("");
 }
@@ -51761,25 +52761,25 @@ function push(list4, items) {
 }
 
 // node_modules/micromark-util-combine-extensions/index.js
-var hasOwnProperty = {}.hasOwnProperty;
+var hasOwnProperty2 = {}.hasOwnProperty;
 function combineExtensions(extensions) {
   const all2 = {};
-  let index2 = -1;
-  while (++index2 < extensions.length) {
-    syntaxExtension(all2, extensions[index2]);
+  let index3 = -1;
+  while (++index3 < extensions.length) {
+    syntaxExtension(all2, extensions[index3]);
   }
   return all2;
 }
 function syntaxExtension(all2, extension2) {
   let hook;
   for (hook in extension2) {
-    const maybe = hasOwnProperty.call(all2, hook) ? all2[hook] : void 0;
+    const maybe = hasOwnProperty2.call(all2, hook) ? all2[hook] : void 0;
     const left = maybe || (all2[hook] = {});
     const right = extension2[hook];
     let code4;
     if (right) {
       for (code4 in right) {
-        if (!hasOwnProperty.call(left, code4)) left[code4] = [];
+        if (!hasOwnProperty2.call(left, code4)) left[code4] = [];
         const value = right[code4];
         constructs(
           // @ts-expect-error Looks like a list.
@@ -51791,11 +52791,11 @@ function syntaxExtension(all2, extension2) {
   }
 }
 function constructs(existing, list4) {
-  let index2 = -1;
+  let index3 = -1;
   const before = [];
-  while (++index2 < list4.length) {
+  while (++index3 < list4.length) {
     ;
-    (list4[index2].add === "after" ? existing : before).push(list4[index2]);
+    (list4[index3].add === "after" ? existing : before).push(list4[index3]);
   }
   splice(existing, 0, 0, before);
 }
@@ -51858,20 +52858,20 @@ function regexCheck(regex) {
 // node_modules/micromark-util-sanitize-uri/index.js
 function normalizeUri(value) {
   const result = [];
-  let index2 = -1;
+  let index3 = -1;
   let start2 = 0;
   let skip = 0;
-  while (++index2 < value.length) {
-    const code4 = value.charCodeAt(index2);
+  while (++index3 < value.length) {
+    const code4 = value.charCodeAt(index3);
     let replace2 = "";
-    if (code4 === 37 && asciiAlphanumeric(value.charCodeAt(index2 + 1)) && asciiAlphanumeric(value.charCodeAt(index2 + 2))) {
+    if (code4 === 37 && asciiAlphanumeric(value.charCodeAt(index3 + 1)) && asciiAlphanumeric(value.charCodeAt(index3 + 2))) {
       skip = 2;
     } else if (code4 < 128) {
       if (!/[!#$&-;=?-Z_a-z~]/.test(String.fromCharCode(code4))) {
         replace2 = String.fromCharCode(code4);
       }
     } else if (code4 > 55295 && code4 < 57344) {
-      const next = value.charCodeAt(index2 + 1);
+      const next = value.charCodeAt(index3 + 1);
       if (code4 < 56320 && next > 56319 && next < 57344) {
         replace2 = String.fromCharCode(code4, next);
         skip = 1;
@@ -51882,12 +52882,12 @@ function normalizeUri(value) {
       replace2 = String.fromCharCode(code4);
     }
     if (replace2) {
-      result.push(value.slice(start2, index2), encodeURIComponent(replace2));
-      start2 = index2 + skip + 1;
+      result.push(value.slice(start2, index3), encodeURIComponent(replace2));
+      start2 = index3 + skip + 1;
       replace2 = "";
     }
     if (skip) {
-      index2 += skip;
+      index3 += skip;
       skip = 0;
     }
   }
@@ -52006,15 +53006,15 @@ function initializeDocument(effects) {
         }
       }
       exitContainers(continued);
-      let index2 = indexBeforeExits;
-      while (index2 < self2.events.length) {
-        self2.events[index2][1].end = {
+      let index3 = indexBeforeExits;
+      while (index3 < self2.events.length) {
+        self2.events[index3][1].end = {
           ...point4
         };
-        index2++;
+        index3++;
       }
       splice(self2.events, indexBeforeFlow + 1, 0, self2.events.slice(indexBeforeExits));
-      self2.events.length = index2;
+      self2.events.length = index3;
       return checkNewContainers(code4);
     }
     return start2(code4);
@@ -52092,13 +53092,13 @@ function initializeDocument(effects) {
     childFlow.defineSkip(token.start);
     childFlow.write(stream);
     if (self2.parser.lazy[token.start.line]) {
-      let index2 = childFlow.events.length;
-      while (index2--) {
+      let index3 = childFlow.events.length;
+      while (index3--) {
         if (
           // The token starts before the line ending…
-          childFlow.events[index2][1].start.offset < lineStartOffset && // …and either is not ended yet…
-          (!childFlow.events[index2][1].end || // …or ends after it.
-          childFlow.events[index2][1].end.offset > lineStartOffset)
+          childFlow.events[index3][1].start.offset < lineStartOffset && // …and either is not ended yet…
+          (!childFlow.events[index3][1].end || // …or ends after it.
+          childFlow.events[index3][1].end.offset > lineStartOffset)
         ) {
           return;
         }
@@ -52117,21 +53117,21 @@ function initializeDocument(effects) {
         }
       }
       exitContainers(continued);
-      index2 = indexBeforeExits;
-      while (index2 < self2.events.length) {
-        self2.events[index2][1].end = {
+      index3 = indexBeforeExits;
+      while (index3 < self2.events.length) {
+        self2.events[index3][1].end = {
           ...point4
         };
-        index2++;
+        index3++;
       }
       splice(self2.events, indexBeforeFlow + 1, 0, self2.events.slice(indexBeforeExits));
-      self2.events.length = index2;
+      self2.events.length = index3;
     }
   }
   function exitContainers(size) {
-    let index2 = stack.length;
-    while (index2-- > size) {
-      const entry = stack[index2];
+    let index3 = stack.length;
+    while (index3-- > size) {
+      const entry = stack[index3];
       self2.containerState = entry[1];
       entry[0].exit.call(self2, effects);
     }
@@ -52161,9 +53161,9 @@ function classifyCharacter(code4) {
 // node_modules/micromark-util-resolve-all/index.js
 function resolveAll(constructs2, events, context) {
   const called = [];
-  let index2 = -1;
-  while (++index2 < constructs2.length) {
-    const resolve = constructs2[index2].resolveAll;
+  let index3 = -1;
+  while (++index3 < constructs2.length) {
+    const resolve = constructs2[index3].resolveAll;
     if (resolve && !called.includes(resolve)) {
       events = resolve(events, context);
       called.push(resolve);
@@ -52179,7 +53179,7 @@ var attention = {
   tokenize: tokenizeAttention
 };
 function resolveAllAttention(events, context) {
-  let index2 = -1;
+  let index3 = -1;
   let open;
   let group;
   let text7;
@@ -52188,21 +53188,21 @@ function resolveAllAttention(events, context) {
   let use;
   let nextEvents;
   let offset;
-  while (++index2 < events.length) {
-    if (events[index2][0] === "enter" && events[index2][1].type === "attentionSequence" && events[index2][1]._close) {
-      open = index2;
+  while (++index3 < events.length) {
+    if (events[index3][0] === "enter" && events[index3][1].type === "attentionSequence" && events[index3][1]._close) {
+      open = index3;
       while (open--) {
         if (events[open][0] === "exit" && events[open][1].type === "attentionSequence" && events[open][1]._open && // If the markers are the same:
-        context.sliceSerialize(events[open][1]).charCodeAt(0) === context.sliceSerialize(events[index2][1]).charCodeAt(0)) {
-          if ((events[open][1]._close || events[index2][1]._open) && (events[index2][1].end.offset - events[index2][1].start.offset) % 3 && !((events[open][1].end.offset - events[open][1].start.offset + events[index2][1].end.offset - events[index2][1].start.offset) % 3)) {
+        context.sliceSerialize(events[open][1]).charCodeAt(0) === context.sliceSerialize(events[index3][1]).charCodeAt(0)) {
+          if ((events[open][1]._close || events[index3][1]._open) && (events[index3][1].end.offset - events[index3][1].start.offset) % 3 && !((events[open][1].end.offset - events[open][1].start.offset + events[index3][1].end.offset - events[index3][1].start.offset) % 3)) {
             continue;
           }
-          use = events[open][1].end.offset - events[open][1].start.offset > 1 && events[index2][1].end.offset - events[index2][1].start.offset > 1 ? 2 : 1;
+          use = events[open][1].end.offset - events[open][1].start.offset > 1 && events[index3][1].end.offset - events[index3][1].start.offset > 1 ? 2 : 1;
           const start2 = {
             ...events[open][1].end
           };
           const end = {
-            ...events[index2][1].start
+            ...events[index3][1].start
           };
           movePoint(start2, -use);
           movePoint(end, use);
@@ -52216,7 +53216,7 @@ function resolveAllAttention(events, context) {
           closingSequence = {
             type: use > 1 ? "strongSequence" : "emphasisSequence",
             start: {
-              ...events[index2][1].start
+              ...events[index3][1].start
             },
             end
           };
@@ -52226,7 +53226,7 @@ function resolveAllAttention(events, context) {
               ...events[open][1].end
             },
             end: {
-              ...events[index2][1].start
+              ...events[index3][1].start
             }
           };
           group = {
@@ -52241,7 +53241,7 @@ function resolveAllAttention(events, context) {
           events[open][1].end = {
             ...openingSequence.start
           };
-          events[index2][1].start = {
+          events[index3][1].start = {
             ...closingSequence.end
           };
           nextEvents = [];
@@ -52249,25 +53249,25 @@ function resolveAllAttention(events, context) {
             nextEvents = push(nextEvents, [["enter", events[open][1], context], ["exit", events[open][1], context]]);
           }
           nextEvents = push(nextEvents, [["enter", group, context], ["enter", openingSequence, context], ["exit", openingSequence, context], ["enter", text7, context]]);
-          nextEvents = push(nextEvents, resolveAll(context.parser.constructs.insideSpan.null, events.slice(open + 1, index2), context));
+          nextEvents = push(nextEvents, resolveAll(context.parser.constructs.insideSpan.null, events.slice(open + 1, index3), context));
           nextEvents = push(nextEvents, [["exit", text7, context], ["enter", closingSequence, context], ["exit", closingSequence, context], ["exit", group, context]]);
-          if (events[index2][1].end.offset - events[index2][1].start.offset) {
+          if (events[index3][1].end.offset - events[index3][1].start.offset) {
             offset = 2;
-            nextEvents = push(nextEvents, [["enter", events[index2][1], context], ["exit", events[index2][1], context]]);
+            nextEvents = push(nextEvents, [["enter", events[index3][1], context], ["exit", events[index3][1], context]]);
           } else {
             offset = 0;
           }
-          splice(events, open - 1, index2 - open + 3, nextEvents);
-          index2 = open + nextEvents.length - offset - 2;
+          splice(events, open - 1, index3 - open + 3, nextEvents);
+          index3 = open + nextEvents.length - offset - 2;
           break;
         }
       }
     }
   }
-  index2 = -1;
-  while (++index2 < events.length) {
-    if (events[index2][1].type === "attentionSequence") {
-      events[index2][1].type = "data";
+  index3 = -1;
+  while (++index3 < events.length) {
+    if (events[index3][1].type === "attentionSequence") {
+      events[index3][1].type = "data";
     }
   }
   return events;
@@ -52825,12 +53825,12 @@ var codeText = {
 function resolveCodeText(events) {
   let tailExitIndex = events.length - 4;
   let headEnterIndex = 3;
-  let index2;
+  let index3;
   let enter;
   if ((events[headEnterIndex][1].type === "lineEnding" || events[headEnterIndex][1].type === "space") && (events[tailExitIndex][1].type === "lineEnding" || events[tailExitIndex][1].type === "space")) {
-    index2 = headEnterIndex;
-    while (++index2 < tailExitIndex) {
-      if (events[index2][1].type === "codeTextData") {
+    index3 = headEnterIndex;
+    while (++index3 < tailExitIndex) {
+      if (events[index3][1].type === "codeTextData") {
         events[headEnterIndex][1].type = "codeTextPadding";
         events[tailExitIndex][1].type = "codeTextPadding";
         headEnterIndex += 2;
@@ -52839,20 +53839,20 @@ function resolveCodeText(events) {
       }
     }
   }
-  index2 = headEnterIndex - 1;
+  index3 = headEnterIndex - 1;
   tailExitIndex++;
-  while (++index2 <= tailExitIndex) {
+  while (++index3 <= tailExitIndex) {
     if (enter === void 0) {
-      if (index2 !== tailExitIndex && events[index2][1].type !== "lineEnding") {
-        enter = index2;
+      if (index3 !== tailExitIndex && events[index3][1].type !== "lineEnding") {
+        enter = index3;
       }
-    } else if (index2 === tailExitIndex || events[index2][1].type === "lineEnding") {
+    } else if (index3 === tailExitIndex || events[index3][1].type === "lineEnding") {
       events[enter][1].type = "codeTextData";
-      if (index2 !== enter + 2) {
-        events[enter][1].end = events[index2 - 1][1].end;
-        events.splice(enter + 2, index2 - enter - 2);
-        tailExitIndex -= index2 - enter - 2;
-        index2 = enter + 2;
+      if (index3 !== enter + 2) {
+        events[enter][1].end = events[index3 - 1][1].end;
+        events.splice(enter + 2, index3 - enter - 2);
+        tailExitIndex -= index3 - enter - 2;
+        index3 = enter + 2;
       }
       enter = void 0;
     }
@@ -52951,12 +53951,12 @@ var SpliceBuffer = class {
    * @return {T}
    *   Item.
    */
-  get(index2) {
-    if (index2 < 0 || index2 >= this.left.length + this.right.length) {
-      throw new RangeError("Cannot access index `" + index2 + "` in a splice buffer of size `" + (this.left.length + this.right.length) + "`");
+  get(index3) {
+    if (index3 < 0 || index3 >= this.left.length + this.right.length) {
+      throw new RangeError("Cannot access index `" + index3 + "` in a splice buffer of size `" + (this.left.length + this.right.length) + "`");
     }
-    if (index2 < this.left.length) return this.left[index2];
-    return this.right[this.right.length - index2 + this.left.length - 1];
+    if (index3 < this.left.length) return this.left[index3];
+    return this.right[this.right.length - index3 + this.left.length - 1];
   }
   /**
    * The length of the splice buffer, one greater than the largest index in the
@@ -53126,7 +54126,7 @@ function chunkedPush(list4, right) {
 // node_modules/micromark-util-subtokenize/index.js
 function subtokenize(eventsArray) {
   const jumps = {};
-  let index2 = -1;
+  let index3 = -1;
   let event;
   let lineIndex;
   let otherIndex;
@@ -53135,12 +54135,12 @@ function subtokenize(eventsArray) {
   let subevents;
   let more;
   const events = new SpliceBuffer(eventsArray);
-  while (++index2 < events.length) {
-    while (index2 in jumps) {
-      index2 = jumps[index2];
+  while (++index3 < events.length) {
+    while (index3 in jumps) {
+      index3 = jumps[index3];
     }
-    event = events.get(index2);
-    if (index2 && event[1].type === "chunkFlow" && events.get(index2 - 1)[1].type === "listItemPrefix") {
+    event = events.get(index3);
+    if (index3 && event[1].type === "chunkFlow" && events.get(index3 - 1)[1].type === "listItemPrefix") {
       subevents = event[1]._tokenizer.events;
       otherIndex = 0;
       if (otherIndex < subevents.length && subevents[otherIndex][1].type === "lineEndingBlank") {
@@ -53160,12 +54160,12 @@ function subtokenize(eventsArray) {
     }
     if (event[0] === "enter") {
       if (event[1].contentType) {
-        Object.assign(jumps, subcontent(events, index2));
-        index2 = jumps[index2];
+        Object.assign(jumps, subcontent(events, index3));
+        index3 = jumps[index3];
         more = true;
       }
     } else if (event[1]._container) {
-      otherIndex = index2;
+      otherIndex = index3;
       lineIndex = void 0;
       while (otherIndex--) {
         otherEvent = events.get(otherIndex);
@@ -53186,9 +54186,9 @@ function subtokenize(eventsArray) {
         event[1].end = {
           ...events.get(lineIndex)[1].start
         };
-        parameters = events.slice(lineIndex, index2);
+        parameters = events.slice(lineIndex, index3);
         parameters.unshift(event);
-        events.splice(lineIndex, index2 - lineIndex + 1, parameters);
+        events.splice(lineIndex, index3 - lineIndex + 1, parameters);
       }
     }
   }
@@ -53212,7 +54212,7 @@ function subcontent(events, eventIndex) {
   const gaps = {};
   let stream;
   let previous3;
-  let index2 = -1;
+  let index3 = -1;
   let current = token;
   let adjust = 0;
   let start2 = 0;
@@ -53241,12 +54241,12 @@ function subcontent(events, eventIndex) {
     current = current.next;
   }
   current = token;
-  while (++index2 < childEvents.length) {
+  while (++index3 < childEvents.length) {
     if (
       // Find a void token that includes a break.
-      childEvents[index2][0] === "exit" && childEvents[index2 - 1][0] === "enter" && childEvents[index2][1].type === childEvents[index2 - 1][1].type && childEvents[index2][1].start.line !== childEvents[index2][1].end.line
+      childEvents[index3][0] === "exit" && childEvents[index3 - 1][0] === "enter" && childEvents[index3][1].type === childEvents[index3 - 1][1].type && childEvents[index3][1].start.line !== childEvents[index3][1].end.line
     ) {
-      start2 = index2 + 1;
+      start2 = index3 + 1;
       breaks.push(start2);
       current._tokenizer = void 0;
       current.previous = void 0;
@@ -53260,18 +54260,18 @@ function subcontent(events, eventIndex) {
   } else {
     breaks.pop();
   }
-  index2 = breaks.length;
-  while (index2--) {
-    const slice = childEvents.slice(breaks[index2], breaks[index2 + 1]);
+  index3 = breaks.length;
+  while (index3--) {
+    const slice = childEvents.slice(breaks[index3], breaks[index3 + 1]);
     const start3 = startPositions.pop();
     jumps.push([start3, start3 + slice.length - 1]);
     events.splice(start3, 2, slice);
   }
   jumps.reverse();
-  index2 = -1;
-  while (++index2 < jumps.length) {
-    gaps[adjust + jumps[index2][0]] = adjust + jumps[index2][1];
-    adjust += jumps[index2][1] - jumps[index2][0] - 1;
+  index3 = -1;
+  while (++index3 < jumps.length) {
+    gaps[adjust + jumps[index3][0]] = adjust + jumps[index3][1];
+    adjust += jumps[index3][1] - jumps[index3][0] - 1;
   }
   return gaps;
 }
@@ -53862,16 +54862,16 @@ var nonLazyContinuationStart = {
   tokenize: tokenizeNonLazyContinuationStart
 };
 function resolveToHtmlFlow(events) {
-  let index2 = events.length;
-  while (index2--) {
-    if (events[index2][0] === "enter" && events[index2][1].type === "htmlFlow") {
+  let index3 = events.length;
+  while (index3--) {
+    if (events[index3][0] === "enter" && events[index3][1].type === "htmlFlow") {
       break;
     }
   }
-  if (index2 > 1 && events[index2 - 2][1].type === "linePrefix") {
-    events[index2][1].start = events[index2 - 2][1].start;
-    events[index2 + 1][1].start = events[index2 - 2][1].start;
-    events.splice(index2 - 2, 2);
+  if (index3 > 1 && events[index3 - 2][1].type === "linePrefix") {
+    events[index3][1].start = events[index3 - 2][1].start;
+    events[index3 + 1][1].start = events[index3 - 2][1].start;
+    events.splice(index3 - 2, 2);
   }
   return events;
 }
@@ -53880,7 +54880,7 @@ function tokenizeHtmlFlow(effects, ok3, nok) {
   let marker;
   let closingTag;
   let buffer;
-  let index2;
+  let index3;
   let markerB;
   return start2;
   function start2(code4) {
@@ -53923,7 +54923,7 @@ function tokenizeHtmlFlow(effects, ok3, nok) {
     if (code4 === 91) {
       effects.consume(code4);
       marker = 5;
-      index2 = 0;
+      index3 = 0;
       return cdataOpenInside;
     }
     if (asciiAlpha(code4)) {
@@ -53942,9 +54942,9 @@ function tokenizeHtmlFlow(effects, ok3, nok) {
   }
   function cdataOpenInside(code4) {
     const value = "CDATA[";
-    if (code4 === value.charCodeAt(index2++)) {
+    if (code4 === value.charCodeAt(index3++)) {
       effects.consume(code4);
-      if (index2 === value.length) {
+      if (index3 === value.length) {
         return self2.interrupt ? ok3 : continuation;
       }
       return cdataOpenInside;
@@ -54233,7 +55233,7 @@ var htmlText = {
 function tokenizeHtmlText(effects, ok3, nok) {
   const self2 = this;
   let marker;
-  let index2;
+  let index3;
   let returnState;
   return start2;
   function start2(code4) {
@@ -54268,7 +55268,7 @@ function tokenizeHtmlText(effects, ok3, nok) {
     }
     if (code4 === 91) {
       effects.consume(code4);
-      index2 = 0;
+      index3 = 0;
       return cdataOpenInside;
     }
     if (asciiAlpha(code4)) {
@@ -54311,9 +55311,9 @@ function tokenizeHtmlText(effects, ok3, nok) {
   }
   function cdataOpenInside(code4) {
     const value = "CDATA[";
-    if (code4 === value.charCodeAt(index2++)) {
+    if (code4 === value.charCodeAt(index3++)) {
       effects.consume(code4);
-      return index2 === value.length ? cdata : cdataOpenInside;
+      return index3 === value.length ? cdata : cdataOpenInside;
     }
     return nok(code4);
   }
@@ -54548,15 +55548,15 @@ var referenceCollapsedConstruct = {
   tokenize: tokenizeReferenceCollapsed
 };
 function resolveAllLabelEnd(events) {
-  let index2 = -1;
+  let index3 = -1;
   const newEvents = [];
-  while (++index2 < events.length) {
-    const token = events[index2][1];
-    newEvents.push(events[index2]);
+  while (++index3 < events.length) {
+    const token = events[index3][1];
+    newEvents.push(events[index3]);
     if (token.type === "labelImage" || token.type === "labelLink" || token.type === "labelEnd") {
       const offset = token.type === "labelImage" ? 4 : 2;
       token.type = "data";
-      index2 += offset;
+      index3 += offset;
     }
   }
   if (events.length !== newEvents.length) {
@@ -54565,31 +55565,31 @@ function resolveAllLabelEnd(events) {
   return events;
 }
 function resolveToLabelEnd(events, context) {
-  let index2 = events.length;
+  let index3 = events.length;
   let offset = 0;
   let token;
   let open;
   let close;
   let media;
-  while (index2--) {
-    token = events[index2][1];
+  while (index3--) {
+    token = events[index3][1];
     if (open) {
       if (token.type === "link" || token.type === "labelLink" && token._inactive) {
         break;
       }
-      if (events[index2][0] === "enter" && token.type === "labelLink") {
+      if (events[index3][0] === "enter" && token.type === "labelLink") {
         token._inactive = true;
       }
     } else if (close) {
-      if (events[index2][0] === "enter" && (token.type === "labelImage" || token.type === "labelLink") && !token._balanced) {
-        open = index2;
+      if (events[index3][0] === "enter" && (token.type === "labelImage" || token.type === "labelLink") && !token._balanced) {
+        open = index3;
         if (token.type !== "labelLink") {
           offset = 2;
           break;
         }
       }
     } else if (token.type === "labelEnd") {
-      close = index2;
+      close = index3;
     }
   }
   const group = {
@@ -54631,12 +55631,12 @@ function resolveToLabelEnd(events, context) {
 }
 function tokenizeLabelEnd(effects, ok3, nok) {
   const self2 = this;
-  let index2 = self2.events.length;
+  let index3 = self2.events.length;
   let labelStart;
   let defined;
-  while (index2--) {
-    if ((self2.events[index2][1].type === "labelImage" || self2.events[index2][1].type === "labelLink") && !self2.events[index2][1]._balanced) {
-      labelStart = self2.events[index2][1];
+  while (index3--) {
+    if ((self2.events[index3][1].type === "labelImage" || self2.events[index3][1].type === "labelLink") && !self2.events[index3][1]._balanced) {
+      labelStart = self2.events[index3][1];
       break;
     }
   }
@@ -55001,25 +56001,25 @@ var setextUnderline = {
   tokenize: tokenizeSetextUnderline
 };
 function resolveToSetextUnderline(events, context) {
-  let index2 = events.length;
+  let index3 = events.length;
   let content3;
   let text7;
   let definition3;
-  while (index2--) {
-    if (events[index2][0] === "enter") {
-      if (events[index2][1].type === "content") {
-        content3 = index2;
+  while (index3--) {
+    if (events[index3][0] === "enter") {
+      if (events[index3][1].type === "content") {
+        content3 = index3;
         break;
       }
-      if (events[index2][1].type === "paragraph") {
-        text7 = index2;
+      if (events[index3][1].type === "paragraph") {
+        text7 = index3;
       }
     } else {
-      if (events[index2][1].type === "content") {
-        events.splice(index2, 1);
+      if (events[index3][1].type === "content") {
+        events.splice(index3, 1);
       }
-      if (!definition3 && events[index2][1].type === "definition") {
-        definition3 = index2;
+      if (!definition3 && events[index3][1].type === "definition") {
+        definition3 = index3;
       }
     }
   }
@@ -55050,11 +56050,11 @@ function tokenizeSetextUnderline(effects, ok3, nok) {
   let marker;
   return start2;
   function start2(code4) {
-    let index2 = self2.events.length;
+    let index3 = self2.events.length;
     let paragraph3;
-    while (index2--) {
-      if (self2.events[index2][1].type !== "lineEnding" && self2.events[index2][1].type !== "linePrefix" && self2.events[index2][1].type !== "content") {
-        paragraph3 = self2.events[index2][1].type === "paragraph";
+    while (index3--) {
+      if (self2.events[index3][1].type !== "lineEnding" && self2.events[index3][1].type !== "linePrefix" && self2.events[index3][1].type !== "content") {
+        paragraph3 = self2.events[index3][1].type === "paragraph";
         break;
       }
     }
@@ -55165,10 +56165,10 @@ function initializeFactory(field) {
         return true;
       }
       const list4 = constructs2[code4];
-      let index2 = -1;
+      let index3 = -1;
       if (list4) {
-        while (++index2 < list4.length) {
-          const item = list4[index2];
+        while (++index3 < list4.length) {
+          const item = list4[index3];
           if (!item.previous || item.previous.call(self2, self2.previous)) {
             return true;
           }
@@ -55181,19 +56181,19 @@ function initializeFactory(field) {
 function createResolver(extraResolver) {
   return resolveAllText;
   function resolveAllText(events, context) {
-    let index2 = -1;
+    let index3 = -1;
     let enter;
-    while (++index2 <= events.length) {
+    while (++index3 <= events.length) {
       if (enter === void 0) {
-        if (events[index2] && events[index2][1].type === "data") {
-          enter = index2;
-          index2++;
+        if (events[index3] && events[index3][1].type === "data") {
+          enter = index3;
+          index3++;
         }
-      } else if (!events[index2] || events[index2][1].type !== "data") {
-        if (index2 !== enter + 2) {
-          events[enter][1].end = events[index2 - 1][1].end;
-          events.splice(enter + 2, index2 - enter - 2);
-          index2 = enter + 2;
+      } else if (!events[index3] || events[index3][1].type !== "data") {
+        if (index3 !== enter + 2) {
+          events[enter][1].end = events[index3 - 1][1].end;
+          events.splice(enter + 2, index3 - enter - 2);
+          index3 = enter + 2;
         }
         enter = void 0;
       }
@@ -55207,12 +56207,12 @@ function resolveAllLineSuffixes(events, context) {
     if ((eventIndex === events.length || events[eventIndex][1].type === "lineEnding") && events[eventIndex - 1][1].type === "data") {
       const data = events[eventIndex - 1][1];
       const chunks = context.sliceStream(data);
-      let index2 = chunks.length;
+      let index3 = chunks.length;
       let bufferIndex = -1;
       let size = 0;
       let tabs;
-      while (index2--) {
-        const chunk = chunks[index2];
+      while (index3--) {
+        const chunk = chunks[index3];
         if (typeof chunk === "string") {
           bufferIndex = chunk.length;
           while (chunk.charCodeAt(bufferIndex - 1) === 32) {
@@ -55226,7 +56226,7 @@ function resolveAllLineSuffixes(events, context) {
           size++;
         } else if (chunk === -1) {
         } else {
-          index2++;
+          index3++;
           break;
         }
       }
@@ -55237,8 +56237,8 @@ function resolveAllLineSuffixes(events, context) {
         const token = {
           type: eventIndex === events.length || tabs || size < 2 ? "lineSuffix" : "hardBreakTrailing",
           start: {
-            _bufferIndex: index2 ? bufferIndex : data.start._bufferIndex + bufferIndex,
-            _index: data.start._index + index2,
+            _bufferIndex: index3 ? bufferIndex : data.start._bufferIndex + bufferIndex,
+            _index: data.start._index + index3,
             line: data.end.line,
             column: data.end.column - size,
             offset: data.end.offset - size
@@ -55480,7 +56480,7 @@ function createTokenizer(parser, initialize, from) {
   function onsuccessfulconstruct(construct, info) {
     addResult(construct, info.from);
   }
-  function onsuccessfulcheck(_, info) {
+  function onsuccessfulcheck(_2, info) {
     info.restore();
   }
   function constructFactory(onreturn, fields) {
@@ -55621,11 +56621,11 @@ function sliceChunks(chunks, token) {
   return view;
 }
 function serializeChunks(chunks, expandTabs) {
-  let index2 = -1;
+  let index3 = -1;
   const result = [];
   let atTab;
-  while (++index2 < chunks.length) {
-    const chunk = chunks[index2];
+  while (++index3 < chunks.length) {
+    const chunk = chunks[index3];
     let value;
     if (typeof chunk === "string") {
       value = chunk;
@@ -55670,16 +56670,16 @@ function parse(options) {
   );
   const parser = {
     constructs: constructs2,
-    content: create2(content),
+    content: create3(content),
     defined: [],
-    document: create2(document2),
-    flow: create2(flow),
+    document: create3(document2),
+    flow: create3(flow),
     lazy: {},
-    string: create2(string),
-    text: create2(text2)
+    string: create3(string),
+    text: create3(text2)
   };
   return parser;
-  function create2(initial) {
+  function create3(initial) {
     return creator;
     function creator(from) {
       return createTokenizer(parser, initial, from);
@@ -55801,7 +56801,7 @@ function fromMarkdown(value, encoding, options) {
   return compiler(options)(postprocess(parse(options).document().write(preprocess()(value, encoding, true))));
 }
 function compiler(options) {
-  const config = {
+  const config3 = {
     transforms: [],
     canContainEols: ["emphasis", "fragment", "heading", "paragraph", "strong"],
     enter: {
@@ -55899,7 +56899,7 @@ function compiler(options) {
       thematicBreak: closer()
     }
   };
-  configure(config, (options || {}).mdastExtensions || []);
+  configure(config3, (options || {}).mdastExtensions || []);
   const data = {};
   return compile;
   function compile(events) {
@@ -55910,7 +56910,7 @@ function compiler(options) {
     const context = {
       stack: [tree],
       tokenStack: [],
-      config,
+      config: config3,
       enter,
       exit: exit3,
       buffer,
@@ -55918,24 +56918,24 @@ function compiler(options) {
       data
     };
     const listStack = [];
-    let index2 = -1;
-    while (++index2 < events.length) {
-      if (events[index2][1].type === "listOrdered" || events[index2][1].type === "listUnordered") {
-        if (events[index2][0] === "enter") {
-          listStack.push(index2);
+    let index3 = -1;
+    while (++index3 < events.length) {
+      if (events[index3][1].type === "listOrdered" || events[index3][1].type === "listUnordered") {
+        if (events[index3][0] === "enter") {
+          listStack.push(index3);
         } else {
           const tail = listStack.pop();
-          index2 = prepareList(events, tail, index2);
+          index3 = prepareList(events, tail, index3);
         }
       }
     }
-    index2 = -1;
-    while (++index2 < events.length) {
-      const handler = config[events[index2][0]];
-      if (own2.call(handler, events[index2][1].type)) {
-        handler[events[index2][1].type].call(Object.assign({
-          sliceSerialize: events[index2][2].sliceSerialize
-        }, context), events[index2][1]);
+    index3 = -1;
+    while (++index3 < events.length) {
+      const handler = config3[events[index3][0]];
+      if (own2.call(handler, events[index3][1].type)) {
+        handler[events[index3][1].type].call(Object.assign({
+          sliceSerialize: events[index3][2].sliceSerialize
+        }, context), events[index3][1]);
       }
     }
     if (context.tokenStack.length > 0) {
@@ -55955,22 +56955,22 @@ function compiler(options) {
         offset: 0
       })
     };
-    index2 = -1;
-    while (++index2 < config.transforms.length) {
-      tree = config.transforms[index2](tree) || tree;
+    index3 = -1;
+    while (++index3 < config3.transforms.length) {
+      tree = config3.transforms[index3](tree) || tree;
     }
     return tree;
   }
   function prepareList(events, start2, length) {
-    let index2 = start2 - 1;
+    let index3 = start2 - 1;
     let containerBalance = -1;
     let listSpread = false;
     let listItem4;
     let lineIndex;
     let firstBlankLineIndex;
     let atMarker;
-    while (++index2 <= length) {
-      const event = events[index2];
+    while (++index3 <= length) {
+      const event = events[index3];
       switch (event[1].type) {
         case "listUnordered":
         case "listOrdered":
@@ -55986,7 +56986,7 @@ function compiler(options) {
         case "lineEndingBlank": {
           if (event[0] === "enter") {
             if (listItem4 && !atMarker && !containerBalance && !firstBlankLineIndex) {
-              firstBlankLineIndex = index2;
+              firstBlankLineIndex = index3;
             }
             atMarker = void 0;
           }
@@ -56005,7 +57005,7 @@ function compiler(options) {
       }
       if (!containerBalance && event[0] === "enter" && event[1].type === "listItemPrefix" || containerBalance === -1 && event[0] === "exit" && (event[1].type === "listUnordered" || event[1].type === "listOrdered")) {
         if (listItem4) {
-          let tailIndex = index2;
+          let tailIndex = index3;
           lineIndex = void 0;
           while (tailIndex--) {
             const tailEvent = events[tailIndex];
@@ -56026,8 +57026,8 @@ function compiler(options) {
             listItem4._spread = true;
           }
           listItem4.end = Object.assign({}, lineIndex ? events[lineIndex][1].start : event[1].end);
-          events.splice(lineIndex || index2, 0, ["exit", listItem4, event[2]]);
-          index2++;
+          events.splice(lineIndex || index3, 0, ["exit", listItem4, event[2]]);
+          index3++;
           length++;
         }
         if (event[1].type === "listItemPrefix") {
@@ -56039,8 +57039,8 @@ function compiler(options) {
             end: void 0
           };
           listItem4 = item;
-          events.splice(index2, 0, ["enter", item, event[2]]);
-          index2++;
+          events.splice(index3, 0, ["enter", item, event[2]]);
+          index3++;
           length++;
           firstBlankLineIndex = void 0;
           atMarker = true;
@@ -56050,10 +57050,10 @@ function compiler(options) {
     events[start2][1]._spread = listSpread;
     return length;
   }
-  function opener(create2, and) {
+  function opener(create3, and) {
     return open;
     function open(token) {
-      enter.call(this, create2(token), token);
+      enter.call(this, create3(token), token);
       if (and) and.call(this, token);
     }
   }
@@ -56063,12 +57063,12 @@ function compiler(options) {
       children: []
     });
   }
-  function enter(node2, token, errorHandler) {
+  function enter(node2, token, errorHandler3) {
     const parent = this.stack[this.stack.length - 1];
     const siblings = parent.children;
     siblings.push(node2);
     this.stack.push(node2);
-    this.tokenStack.push([token, errorHandler || void 0]);
+    this.tokenStack.push([token, errorHandler3 || void 0]);
     node2.position = {
       start: point3(token.start),
       // @ts-expect-error: `end` will be patched later.
@@ -56200,7 +57200,7 @@ function compiler(options) {
       this.data.atHardBreak = void 0;
       return;
     }
-    if (!this.data.setextHeadingSlurpLineEnding && config.canContainEols.includes(context.type)) {
+    if (!this.data.setextHeadingSlurpLineEnding && config3.canContainEols.includes(context.type)) {
       onenterdata.call(this, token);
       onexitdata.call(this, token);
     }
@@ -56442,9 +57442,9 @@ function point3(d) {
   };
 }
 function configure(combined, extensions) {
-  let index2 = -1;
-  while (++index2 < extensions.length) {
-    const value = extensions[index2];
+  let index3 = -1;
+  while (++index3 < extensions.length) {
+    const value = extensions[index3];
     if (Array.isArray(value)) {
       configure(combined, value);
     } else {
@@ -56589,7 +57589,7 @@ function footnoteReference(state, node2) {
   const clobberPrefix = typeof state.options.clobberPrefix === "string" ? state.options.clobberPrefix : "user-content-";
   const id = String(node2.identifier).toUpperCase();
   const safeId = normalizeUri(id.toLowerCase());
-  const index2 = state.footnoteOrder.indexOf(id);
+  const index3 = state.footnoteOrder.indexOf(id);
   let counter;
   let reuseCounter = state.footnoteCounts.get(id);
   if (reuseCounter === void 0) {
@@ -56597,7 +57597,7 @@ function footnoteReference(state, node2) {
     state.footnoteOrder.push(id);
     counter = state.footnoteOrder.length;
   } else {
-    counter = index2 + 1;
+    counter = index3 + 1;
   }
   reuseCounter += 1;
   state.footnoteCounts.set(id, reuseCounter);
@@ -56780,10 +57780,10 @@ function listItem(state, node2, parent) {
     });
     properties.className = ["task-list-item"];
   }
-  let index2 = -1;
-  while (++index2 < results.length) {
-    const child = results[index2];
-    if (loose || index2 !== 0 || child.type !== "element" || child.tagName !== "p") {
+  let index3 = -1;
+  while (++index3 < results.length) {
+    const child = results[index3];
+    if (loose || index3 !== 0 || child.type !== "element" || child.tagName !== "p") {
       children.push({ type: "text", value: "\n" });
     }
     if (child.type === "element" && child.tagName === "p" && !loose) {
@@ -56805,9 +57805,9 @@ function listLoose(node2) {
   if (node2.type === "list") {
     loose = node2.spread || false;
     const children = node2.children;
-    let index2 = -1;
-    while (!loose && ++index2 < children.length) {
-      loose = listItemLoose(children[index2]);
+    let index3 = -1;
+    while (!loose && ++index3 < children.length) {
+      loose = listItemLoose(children[index3]);
     }
   }
   return loose;
@@ -56821,12 +57821,12 @@ function listItemLoose(node2) {
 function list2(state, node2) {
   const properties = {};
   const results = state.all(node2);
-  let index2 = -1;
+  let index3 = -1;
   if (typeof node2.start === "number" && node2.start !== 1) {
     properties.start = node2.start;
   }
-  while (++index2 < results.length) {
-    const child = results[index2];
+  while (++index3 < results.length) {
+    const child = results[index3];
     if (child.type === "element" && child.tagName === "li" && child.properties && Array.isArray(child.properties.className) && child.properties.className.includes("task-list-item")) {
       properties.className = ["contains-task-list"];
       break;
@@ -57065,57 +58065,57 @@ var BIGINT = 8;
 
 // node_modules/@ungap/structured-clone/esm/deserialize.js
 var env = typeof self === "object" ? self : globalThis;
-var deserializer = ($, _) => {
-  const as = (out, index2) => {
-    $.set(index2, out);
+var deserializer = ($2, _2) => {
+  const as = (out, index3) => {
+    $2.set(index3, out);
     return out;
   };
-  const unpair = (index2) => {
-    if ($.has(index2))
-      return $.get(index2);
-    const [type, value] = _[index2];
+  const unpair = (index3) => {
+    if ($2.has(index3))
+      return $2.get(index3);
+    const [type, value] = _2[index3];
     switch (type) {
       case PRIMITIVE:
       case VOID:
-        return as(value, index2);
+        return as(value, index3);
       case ARRAY: {
-        const arr = as([], index2);
-        for (const index3 of value)
-          arr.push(unpair(index3));
+        const arr = as([], index3);
+        for (const index4 of value)
+          arr.push(unpair(index4));
         return arr;
       }
       case OBJECT: {
-        const object = as({}, index2);
-        for (const [key, index3] of value)
-          object[unpair(key)] = unpair(index3);
+        const object = as({}, index3);
+        for (const [key, index4] of value)
+          object[unpair(key)] = unpair(index4);
         return object;
       }
       case DATE:
-        return as(new Date(value), index2);
+        return as(new Date(value), index3);
       case REGEXP: {
         const { source, flags } = value;
-        return as(new RegExp(source, flags), index2);
+        return as(new RegExp(source, flags), index3);
       }
       case MAP: {
-        const map3 = as(/* @__PURE__ */ new Map(), index2);
-        for (const [key, index3] of value)
-          map3.set(unpair(key), unpair(index3));
+        const map3 = as(/* @__PURE__ */ new Map(), index3);
+        for (const [key, index4] of value)
+          map3.set(unpair(key), unpair(index4));
         return map3;
       }
       case SET: {
-        const set = as(/* @__PURE__ */ new Set(), index2);
-        for (const index3 of value)
-          set.add(unpair(index3));
+        const set = as(/* @__PURE__ */ new Set(), index3);
+        for (const index4 of value)
+          set.add(unpair(index4));
         return set;
       }
       case ERROR: {
         const { name: name2, message } = value;
-        return as(new env[name2](message), index2);
+        return as(new env[name2](message), index3);
       }
       case BIGINT:
-        return as(BigInt(value), index2);
+        return as(BigInt(value), index3);
       case "BigInt":
-        return as(Object(BigInt(value)), index2);
+        return as(Object(BigInt(value)), index3);
       case "ArrayBuffer":
         return as(new Uint8Array(value).buffer, value);
       case "DataView": {
@@ -57123,7 +58123,7 @@ var deserializer = ($, _) => {
         return as(new DataView(buffer), value);
       }
     }
-    return as(new env[type](value), index2);
+    return as(new env[type](value), index3);
   };
   return unpair;
 };
@@ -57161,15 +58161,15 @@ var typeOf = (value) => {
   return [OBJECT, asString];
 };
 var shouldSkip = ([TYPE, type]) => TYPE === PRIMITIVE && (type === "function" || type === "symbol");
-var serializer = (strict, json, $, _) => {
+var serializer = (strict, json, $2, _2) => {
   const as = (out, value) => {
-    const index2 = _.push(out) - 1;
-    $.set(value, index2);
-    return index2;
+    const index3 = _2.push(out) - 1;
+    $2.set(value, index3);
+    return index3;
   };
   const pair = (value) => {
-    if ($.has(value))
-      return $.get(value);
+    if ($2.has(value))
+      return $2.get(value);
     let [TYPE, type] = typeOf(value);
     switch (TYPE) {
       case PRIMITIVE: {
@@ -57201,10 +58201,10 @@ var serializer = (strict, json, $, _) => {
           return as([type, [...spread]], value);
         }
         const arr = [];
-        const index2 = as([TYPE, arr], value);
+        const index3 = as([TYPE, arr], value);
         for (const entry of value)
           arr.push(pair(entry));
-        return index2;
+        return index3;
       }
       case OBJECT: {
         if (type) {
@@ -57220,12 +58220,12 @@ var serializer = (strict, json, $, _) => {
         if (json && "toJSON" in value)
           return pair(value.toJSON());
         const entries = [];
-        const index2 = as([TYPE, entries], value);
+        const index3 = as([TYPE, entries], value);
         for (const key of keys(value)) {
           if (strict || !shouldSkip(typeOf(value[key])))
             entries.push([pair(key), pair(value[key])]);
         }
-        return index2;
+        return index3;
       }
       case DATE:
         return as([TYPE, value.toISOString()], value);
@@ -57235,21 +58235,21 @@ var serializer = (strict, json, $, _) => {
       }
       case MAP: {
         const entries = [];
-        const index2 = as([TYPE, entries], value);
+        const index3 = as([TYPE, entries], value);
         for (const [key, entry] of value) {
           if (strict || !(shouldSkip(typeOf(key)) || shouldSkip(typeOf(entry))))
             entries.push([pair(key), pair(entry)]);
         }
-        return index2;
+        return index3;
       }
       case SET: {
         const entries = [];
-        const index2 = as([TYPE, entries], value);
+        const index3 = as([TYPE, entries], value);
         for (const entry of value) {
           if (strict || !shouldSkip(typeOf(entry)))
             entries.push(pair(entry));
         }
-        return index2;
+        return index3;
       }
     }
     const { message } = value;
@@ -57258,8 +58258,8 @@ var serializer = (strict, json, $, _) => {
   return pair;
 };
 var serialize = (value, { json, lossy } = {}) => {
-  const _ = [];
-  return serializer(!(json || lossy), !!json, /* @__PURE__ */ new Map(), _)(value), _;
+  const _2 = [];
+  return serializer(!(json || lossy), !!json, /* @__PURE__ */ new Map(), _2)(value), _2;
 };
 
 // node_modules/@ungap/structured-clone/esm/index.js
@@ -57269,7 +58269,7 @@ var esm_default = typeof structuredClone === "function" ? (
 ) : (any, options) => deserialize(serialize(any, options));
 
 // node_modules/mdast-util-to-hast/lib/footer.js
-function defaultFootnoteBackContent(_, rereferenceIndex) {
+function defaultFootnoteBackContent(_2, rereferenceIndex) {
   const result = [{ type: "text", value: "\u21A9" }];
   if (rereferenceIndex > 1) {
     result.push({
@@ -57419,15 +58419,15 @@ var convert = (
 );
 function anyFactory(tests) {
   const checks2 = [];
-  let index2 = -1;
-  while (++index2 < tests.length) {
-    checks2[index2] = convert(tests[index2]);
+  let index3 = -1;
+  while (++index3 < tests.length) {
+    checks2[index3] = convert(tests[index3]);
   }
   return castFactory(any);
   function any(...parameters) {
-    let index3 = -1;
-    while (++index3 < checks2.length) {
-      if (checks2[index3].apply(this, parameters)) return true;
+    let index4 = -1;
+    while (++index4 < checks2.length) {
+      if (checks2[index4].apply(this, parameters)) return true;
     }
     return false;
   }
@@ -57459,12 +58459,12 @@ function typeFactory(check) {
 }
 function castFactory(testFunction) {
   return check;
-  function check(value, index2, parent) {
+  function check(value, index3, parent) {
     return Boolean(
       looksLikeANode(value) && testFunction.call(
         this,
         value,
-        typeof index2 === "number" ? index2 : void 0,
+        typeof index3 === "number" ? index3 : void 0,
         parent || void 0
       )
     );
@@ -57498,7 +58498,7 @@ function visitParents(tree, test, visitor, reverse) {
   const is2 = convert(check);
   const step = reverse ? -1 : 1;
   factory(tree, void 0, [])();
-  function factory(node2, index2, parents) {
+  function factory(node2, index3, parents) {
     const value = (
       /** @type {Record<string, unknown>} */
       node2 && typeof node2 === "object" ? node2 : {}
@@ -57521,7 +58521,7 @@ function visitParents(tree, test, visitor, reverse) {
       let subresult;
       let offset;
       let grandparents;
-      if (!test || is2(node2, index2, parents[parents.length - 1] || void 0)) {
+      if (!test || is2(node2, index3, parents[parents.length - 1] || void 0)) {
         result = toResult(visitor(node2, parents));
         if (result[0] === EXIT) {
           return result;
@@ -57576,8 +58576,8 @@ function visit(tree, testOrVisitor, visitorOrReverse, maybeReverse) {
   visitParents(tree, test, overload, reverse);
   function overload(node2, parents) {
     const parent = parents[parents.length - 1];
-    const index2 = parent ? parent.children.indexOf(node2) : void 0;
-    return visitor(node2, index2, parent);
+    const index3 = parent ? parent.children.indexOf(node2) : void 0;
+    return visitor(node2, index3, parent);
   }
 }
 
@@ -57635,11 +58635,11 @@ function createState(tree, options) {
     const values = [];
     if ("children" in parent) {
       const nodes = parent.children;
-      let index2 = -1;
-      while (++index2 < nodes.length) {
-        const result = state.one(nodes[index2], parent);
+      let index3 = -1;
+      while (++index3 < nodes.length) {
+        const result = state.one(nodes[index3], parent);
         if (result) {
-          if (index2 && nodes[index2 - 1].type === "break") {
+          if (index3 && nodes[index3 - 1].type === "break") {
             if (!Array.isArray(result) && result.type === "text") {
               result.value = trimMarkdownSpaceStart(result.value);
             }
@@ -57700,13 +58700,13 @@ function defaultUnknownHandler(state, node2) {
 }
 function wrap(nodes, loose) {
   const result = [];
-  let index2 = -1;
+  let index3 = -1;
   if (loose) {
     result.push({ type: "text", value: "\n" });
   }
-  while (++index2 < nodes.length) {
-    if (index2) result.push({ type: "text", value: "\n" });
-    result.push(nodes[index2]);
+  while (++index3 < nodes.length) {
+    if (index3) result.push({ type: "text", value: "\n" });
+    result.push(nodes[index3]);
   }
   if (loose && nodes.length > 0) {
     result.push({ type: "text", value: "\n" });
@@ -57714,13 +58714,13 @@ function wrap(nodes, loose) {
   return result;
 }
 function trimMarkdownSpaceStart(value) {
-  let index2 = 0;
-  let code4 = value.charCodeAt(index2);
+  let index3 = 0;
+  let code4 = value.charCodeAt(index3);
   while (code4 === 9 || code4 === 32) {
-    index2++;
-    code4 = value.charCodeAt(index2);
+    index3++;
+    code4 = value.charCodeAt(index3);
   }
-  return value.slice(index2);
+  return value.slice(index3);
 }
 
 // node_modules/mdast-util-to-hast/lib/index.js
@@ -57788,14 +58788,14 @@ function trough() {
     next(null, ...values);
     function next(error, ...output) {
       const fn = fns[++middlewareIndex];
-      let index2 = -1;
+      let index3 = -1;
       if (error) {
         callback(error);
         return;
       }
-      while (++index2 < values.length) {
-        if (output[index2] === null || output[index2] === void 0) {
-          output[index2] = values[index2];
+      while (++index3 < values.length) {
+        if (output[index3] === null || output[index3] === void 0) {
+          output[index3] = values[index3];
         }
       }
       values = output;
@@ -57867,18 +58867,18 @@ function basename(path2, extname2) {
   assertPath(path2);
   let start2 = 0;
   let end = -1;
-  let index2 = path2.length;
+  let index3 = path2.length;
   let seenNonSlash;
   if (extname2 === void 0 || extname2.length === 0 || extname2.length > path2.length) {
-    while (index2--) {
-      if (path2.codePointAt(index2) === 47) {
+    while (index3--) {
+      if (path2.codePointAt(index3) === 47) {
         if (seenNonSlash) {
-          start2 = index2 + 1;
+          start2 = index3 + 1;
           break;
         }
       } else if (end < 0) {
         seenNonSlash = true;
-        end = index2 + 1;
+        end = index3 + 1;
       }
     }
     return end < 0 ? "" : path2.slice(start2, end);
@@ -57888,21 +58888,21 @@ function basename(path2, extname2) {
   }
   let firstNonSlashEnd = -1;
   let extnameIndex = extname2.length - 1;
-  while (index2--) {
-    if (path2.codePointAt(index2) === 47) {
+  while (index3--) {
+    if (path2.codePointAt(index3) === 47) {
       if (seenNonSlash) {
-        start2 = index2 + 1;
+        start2 = index3 + 1;
         break;
       }
     } else {
       if (firstNonSlashEnd < 0) {
         seenNonSlash = true;
-        firstNonSlashEnd = index2 + 1;
+        firstNonSlashEnd = index3 + 1;
       }
       if (extnameIndex > -1) {
-        if (path2.codePointAt(index2) === extname2.codePointAt(extnameIndex--)) {
+        if (path2.codePointAt(index3) === extname2.codePointAt(extnameIndex--)) {
           if (extnameIndex < 0) {
-            end = index2;
+            end = index3;
           }
         } else {
           extnameIndex = -1;
@@ -57924,12 +58924,12 @@ function dirname(path2) {
     return ".";
   }
   let end = -1;
-  let index2 = path2.length;
+  let index3 = path2.length;
   let unmatchedSlash;
-  while (--index2) {
-    if (path2.codePointAt(index2) === 47) {
+  while (--index3) {
+    if (path2.codePointAt(index3) === 47) {
       if (unmatchedSlash) {
-        end = index2;
+        end = index3;
         break;
       }
     } else if (!unmatchedSlash) {
@@ -57940,28 +58940,28 @@ function dirname(path2) {
 }
 function extname(path2) {
   assertPath(path2);
-  let index2 = path2.length;
+  let index3 = path2.length;
   let end = -1;
   let startPart = 0;
   let startDot = -1;
   let preDotState = 0;
   let unmatchedSlash;
-  while (index2--) {
-    const code4 = path2.codePointAt(index2);
+  while (index3--) {
+    const code4 = path2.codePointAt(index3);
     if (code4 === 47) {
       if (unmatchedSlash) {
-        startPart = index2 + 1;
+        startPart = index3 + 1;
         break;
       }
       continue;
     }
     if (end < 0) {
       unmatchedSlash = true;
-      end = index2 + 1;
+      end = index3 + 1;
     }
     if (code4 === 46) {
       if (startDot < 0) {
-        startDot = index2;
+        startDot = index3;
       } else if (preDotState !== 1) {
         preDotState = 1;
       }
@@ -57977,12 +58977,12 @@ function extname(path2) {
   return path2.slice(startDot, end);
 }
 function join(...segments) {
-  let index2 = -1;
+  let index3 = -1;
   let joined;
-  while (++index2 < segments.length) {
-    assertPath(segments[index2]);
-    if (segments[index2]) {
-      joined = joined === void 0 ? segments[index2] : joined + "/" + segments[index2];
+  while (++index3 < segments.length) {
+    assertPath(segments[index3]);
+    if (segments[index3]) {
+      joined = joined === void 0 ? segments[index3] : joined + "/" + segments[index3];
     }
   }
   return joined === void 0 ? "." : normalize2(joined);
@@ -58004,20 +59004,20 @@ function normalizeString(path2, allowAboveRoot) {
   let lastSegmentLength = 0;
   let lastSlash = -1;
   let dots = 0;
-  let index2 = -1;
+  let index3 = -1;
   let code4;
   let lastSlashIndex;
-  while (++index2 <= path2.length) {
-    if (index2 < path2.length) {
-      code4 = path2.codePointAt(index2);
+  while (++index3 <= path2.length) {
+    if (index3 < path2.length) {
+      code4 = path2.codePointAt(index3);
     } else if (code4 === 47) {
       break;
     } else {
       code4 = 47;
     }
     if (code4 === 47) {
-      if (lastSlash === index2 - 1 || dots === 1) {
-      } else if (lastSlash !== index2 - 1 && dots === 2) {
+      if (lastSlash === index3 - 1 || dots === 1) {
+      } else if (lastSlash !== index3 - 1 && dots === 2) {
         if (result.length < 2 || lastSegmentLength !== 2 || result.codePointAt(result.length - 1) !== 46 || result.codePointAt(result.length - 2) !== 46) {
           if (result.length > 2) {
             lastSlashIndex = result.lastIndexOf("/");
@@ -58029,14 +59029,14 @@ function normalizeString(path2, allowAboveRoot) {
                 result = result.slice(0, lastSlashIndex);
                 lastSegmentLength = result.length - 1 - result.lastIndexOf("/");
               }
-              lastSlash = index2;
+              lastSlash = index3;
               dots = 0;
               continue;
             }
           } else if (result.length > 0) {
             result = "";
             lastSegmentLength = 0;
-            lastSlash = index2;
+            lastSlash = index3;
             dots = 0;
             continue;
           }
@@ -58047,13 +59047,13 @@ function normalizeString(path2, allowAboveRoot) {
         }
       } else {
         if (result.length > 0) {
-          result += "/" + path2.slice(lastSlash + 1, index2);
+          result += "/" + path2.slice(lastSlash + 1, index3);
         } else {
-          result = path2.slice(lastSlash + 1, index2);
+          result = path2.slice(lastSlash + 1, index3);
         }
-        lastSegmentLength = index2 - lastSlash - 1;
+        lastSegmentLength = index3 - lastSlash - 1;
       }
-      lastSlash = index2;
+      lastSlash = index3;
       dots = 0;
     } else if (code4 === 46 && dots > -1) {
       dots++;
@@ -58112,10 +59112,10 @@ function getPathFromURLPosix(url) {
     throw error;
   }
   const pathname = url.pathname;
-  let index2 = -1;
-  while (++index2 < pathname.length) {
-    if (pathname.codePointAt(index2) === 37 && pathname.codePointAt(index2 + 1) === 50) {
-      const third = pathname.codePointAt(index2 + 2);
+  let index3 = -1;
+  while (++index3 < pathname.length) {
+    if (pathname.codePointAt(index3) === 37 && pathname.codePointAt(index3 + 1) === 50) {
+      const third = pathname.codePointAt(index3 + 2);
       if (third === 70 || third === 102) {
         const error = new TypeError(
           "File URL path must not include encoded / characters"
@@ -58182,9 +59182,9 @@ var VFile = class {
     this.map;
     this.result;
     this.stored;
-    let index2 = -1;
-    while (++index2 < order.length) {
-      const field2 = order[index2];
+    let index3 = -1;
+    while (++index3 < order.length) {
+      const field2 = order[index3];
       if (field2 in options && options[field2] !== void 0 && options[field2] !== null) {
         this[field2] = field2 === "history" ? [...options[field2]] : options[field2];
       }
@@ -58647,9 +59647,9 @@ var Processor = class _Processor extends CallableInstance {
       /** @type {Processor<ParseTree, HeadTree, TailTree, CompileTree, CompileResult>} */
       new _Processor()
     );
-    let index2 = -1;
-    while (++index2 < this.attachers.length) {
-      const attacher = this.attachers[index2];
+    let index3 = -1;
+    while (++index3 < this.attachers.length) {
+      const attacher = this.attachers[index3];
       destination.use(...attacher);
     }
     destination.data((0, import_extend.default)(true, {}, this.namespace));
@@ -59169,11 +60169,11 @@ var Processor = class _Processor extends CallableInstance {
       }
     }
     function addList(plugins) {
-      let index2 = -1;
+      let index3 = -1;
       if (plugins === null || plugins === void 0) {
       } else if (Array.isArray(plugins)) {
-        while (++index2 < plugins.length) {
-          const thing = plugins[index2];
+        while (++index3 < plugins.length) {
+          const thing = plugins[index3];
           add(thing);
         }
       } else {
@@ -59181,11 +60181,11 @@ var Processor = class _Processor extends CallableInstance {
       }
     }
     function addPlugin(plugin, parameters2) {
-      let index2 = -1;
+      let index3 = -1;
       let entryIndex = -1;
-      while (++index2 < attachers.length) {
-        if (attachers[index2][0] === plugin) {
-          entryIndex = index2;
+      while (++index3 < attachers.length) {
+        if (attachers[index3][0] === plugin) {
+          entryIndex = index3;
           break;
         }
       }
@@ -59342,14 +60342,14 @@ function post(tree, options) {
     passKeys: true,
     passNode: true
   });
-  function transform(node2, index2, parent) {
-    if (node2.type === "raw" && parent && typeof index2 === "number") {
+  function transform(node2, index3, parent) {
+    if (node2.type === "raw" && parent && typeof index3 === "number") {
       if (skipHtml) {
-        parent.children.splice(index2, 1);
+        parent.children.splice(index3, 1);
       } else {
-        parent.children[index2] = { type: "text", value: node2.value };
+        parent.children[index3] = { type: "text", value: node2.value };
       }
-      return index2;
+      return index3;
     }
     if (node2.type === "element") {
       let key;
@@ -59365,16 +60365,16 @@ function post(tree, options) {
     }
     if (node2.type === "element") {
       let remove = allowedElements ? !allowedElements.includes(node2.tagName) : disallowedElements ? disallowedElements.includes(node2.tagName) : false;
-      if (!remove && allowElement && typeof index2 === "number") {
-        remove = !allowElement(node2, index2, parent);
+      if (!remove && allowElement && typeof index3 === "number") {
+        remove = !allowElement(node2, index3, parent);
       }
-      if (remove && parent && typeof index2 === "number") {
+      if (remove && parent && typeof index3 === "number") {
         if (unwrapDisallowed && node2.children) {
-          parent.children.splice(index2, 1, ...node2.children);
+          parent.children.splice(index3, 1, ...node2.children);
         } else {
-          parent.children.splice(index2, 1);
+          parent.children.splice(index3, 1);
         }
-        return index2;
+        return index3;
       }
     }
   }
@@ -59402,10 +60402,10 @@ function ccount(value, character) {
     throw new TypeError("Expected character");
   }
   let count = 0;
-  let index2 = source.indexOf(character);
-  while (index2 !== -1) {
+  let index3 = source.indexOf(character);
+  while (index3 !== -1) {
     count++;
-    index2 = source.indexOf(character, index2 + character.length);
+    index3 = source.indexOf(character, index3 + character.length);
   }
   return count;
 }
@@ -59428,10 +60428,10 @@ function findAndReplace(tree, list4, options) {
     visitParents(tree, "text", visitor);
   }
   function visitor(node2, parents) {
-    let index2 = -1;
+    let index3 = -1;
     let grandparent;
-    while (++index2 < parents.length) {
-      const parent = parents[index2];
+    while (++index3 < parents.length) {
+      const parent = parents[index3];
       const siblings = grandparent ? grandparent.children : void 0;
       if (ignored(
         parent,
@@ -59452,7 +60452,7 @@ function findAndReplace(tree, list4, options) {
     const replace2 = pairs[pairIndex][1];
     let start2 = 0;
     const siblings = parent.children;
-    const index2 = siblings.indexOf(node2);
+    const index3 = siblings.indexOf(node2);
     let change = false;
     let nodes = [];
     find2.lastIndex = 0;
@@ -59494,11 +60494,11 @@ function findAndReplace(tree, list4, options) {
       if (start2 < node2.value.length) {
         nodes.push({ type: "text", value: node2.value.slice(start2) });
       }
-      parent.children.splice(index2, 1, ...nodes);
+      parent.children.splice(index3, 1, ...nodes);
     } else {
       nodes = [node2];
     }
-    return index2 + nodes.length;
+    return index3 + nodes.length;
   }
 }
 function toPairs(tupleOrList) {
@@ -59507,9 +60507,9 @@ function toPairs(tupleOrList) {
     throw new TypeError("Expected find and replace tuple or list of tuples");
   }
   const list4 = !tupleOrList[0] || Array.isArray(tupleOrList[0]) ? tupleOrList : [tupleOrList];
-  let index2 = -1;
-  while (++index2 < list4.length) {
-    const tuple = list4[index2];
+  let index3 = -1;
+  while (++index3 < list4.length) {
+    const tuple = list4[index3];
     result.push([toExpression(tuple[0]), toFunction(tuple[1])]);
   }
   return result;
@@ -59601,7 +60601,7 @@ function transformGfmAutolinkLiterals(tree) {
     { ignore: ["link", "linkReference"] }
   );
 }
-function findUrl(_, protocol, domain2, path2, match) {
+function findUrl(_2, protocol, domain2, path2, match) {
   let prefix = "";
   if (!previous2(match)) {
     return false;
@@ -59627,7 +60627,7 @@ function findUrl(_, protocol, domain2, path2, match) {
   }
   return result;
 }
-function findEmail(_, atext, label, match) {
+function findEmail(_2, atext, label, match) {
   if (
     // Not an expected previous character.
     !previous2(match, true) || // Label ends in not allowed character.
@@ -59717,7 +60717,7 @@ function exitFootnoteDefinition(token) {
 function footnoteReferencePeek() {
   return "[";
 }
-function footnoteReference2(node2, _, state, info) {
+function footnoteReference2(node2, _2, state, info) {
   const tracker = state.createTracker(info);
   let value = tracker.move("[^");
   const exit3 = state.enter("footnoteReference");
@@ -59756,7 +60756,7 @@ function gfmFootnoteToMarkdown(options) {
     // This is on by default already.
     unsafe: [{ character: "[", inConstruct: ["label", "phrasing", "reference"] }]
   };
-  function footnoteDefinition(node2, _, state, info) {
+  function footnoteDefinition(node2, _2, state, info) {
     const tracker = state.createTracker(info);
     let value = tracker.move("[^");
     const exit3 = state.enter("footnoteDefinition");
@@ -59779,10 +60779,10 @@ function gfmFootnoteToMarkdown(options) {
     return value;
   }
 }
-function mapExceptFirst(line, index2, blank) {
-  return index2 === 0 ? line : mapAll(line, index2, blank);
+function mapExceptFirst(line, index3, blank) {
+  return index3 === 0 ? line : mapAll(line, index3, blank);
 }
-function mapAll(line, index2, blank) {
+function mapAll(line, index3, blank) {
   return (blank ? "" : "    ") + line;
 }
 
@@ -59821,7 +60821,7 @@ function enterStrikethrough(token) {
 function exitStrikethrough(token) {
   this.exit(token);
 }
-function handleDelete(node2, _, state, info) {
+function handleDelete(node2, _2, state, info) {
   const tracker = state.createTracker(info);
   const exit3 = state.enter("strikethrough");
   let value = tracker.move("~~");
@@ -59980,7 +60980,7 @@ function toAlignment(value) {
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/blockquote.js
-function blockquote2(node2, _, state, info) {
+function blockquote2(node2, _2, state, info) {
   const exit3 = state.enter("blockquote");
   const tracker = state.createTracker(info);
   tracker.move("> ");
@@ -59992,7 +60992,7 @@ function blockquote2(node2, _, state, info) {
   exit3();
   return value;
 }
-function map(line, _, blank) {
+function map(line, _2, blank) {
   return ">" + (blank ? "" : " ") + line;
 }
 
@@ -60007,9 +61007,9 @@ function listInScope(stack, list4, none) {
   if (!list4 || list4.length === 0) {
     return none;
   }
-  let index2 = -1;
-  while (++index2 < list4.length) {
-    if (stack.includes(list4[index2])) {
+  let index3 = -1;
+  while (++index3 < list4.length) {
+    if (stack.includes(list4[index3])) {
       return true;
     }
   }
@@ -60017,10 +61017,10 @@ function listInScope(stack, list4, none) {
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/break.js
-function hardBreak2(_, _1, state, info) {
-  let index2 = -1;
-  while (++index2 < state.unsafe.length) {
-    if (state.unsafe[index2].character === "\n" && patternInScope(state.stack, state.unsafe[index2])) {
+function hardBreak2(_2, _1, state, info) {
+  let index3 = -1;
+  while (++index3 < state.unsafe.length) {
+    if (state.unsafe[index3].character === "\n" && patternInScope(state.stack, state.unsafe[index3])) {
       return /[ \t]/.test(info.before) ? "" : " ";
     }
   }
@@ -60030,23 +61030,23 @@ function hardBreak2(_, _1, state, info) {
 // node_modules/longest-streak/index.js
 function longestStreak(value, substring) {
   const source = String(value);
-  let index2 = source.indexOf(substring);
-  let expected = index2;
+  let index3 = source.indexOf(substring);
+  let expected = index3;
   let count = 0;
   let max = 0;
   if (typeof substring !== "string") {
     throw new TypeError("Expected substring");
   }
-  while (index2 !== -1) {
-    if (index2 === expected) {
+  while (index3 !== -1) {
+    if (index3 === expected) {
       if (++count > max) {
         max = count;
       }
     } else {
       count = 1;
     }
-    expected = index2 + substring.length;
-    index2 = source.indexOf(substring, expected);
+    expected = index3 + substring.length;
+    index3 = source.indexOf(substring, expected);
   }
   return max;
 }
@@ -60073,7 +61073,7 @@ function checkFence(state) {
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/code.js
-function code2(node2, _, state, info) {
+function code2(node2, _2, state, info) {
   const marker = checkFence(state);
   const raw = node2.value || "";
   const suffix = marker === "`" ? "GraveAccent" : "Tilde";
@@ -60120,7 +61120,7 @@ function code2(node2, _, state, info) {
   exit3();
   return value;
 }
-function map2(line, _, blank) {
+function map2(line, _2, blank) {
   return (blank ? "" : "    ") + line;
 }
 
@@ -60136,7 +61136,7 @@ function checkQuote(state) {
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/definition.js
-function definition2(node2, _, state, info) {
+function definition2(node2, _2, state, info) {
   const quote = checkQuote(state);
   const suffix = quote === '"' ? "Quote" : "Apostrophe";
   const exit3 = state.enter("definition");
@@ -60251,7 +61251,7 @@ function encodeInfo(outside, inside, marker) {
 
 // node_modules/mdast-util-to-markdown/lib/handle/emphasis.js
 emphasis2.peek = emphasisPeek;
-function emphasis2(node2, _, state, info) {
+function emphasis2(node2, _2, state, info) {
   const marker = checkEmphasis(state);
   const exit3 = state.enter("emphasis");
   const tracker = state.createTracker(info);
@@ -60285,7 +61285,7 @@ function emphasis2(node2, _, state, info) {
   };
   return before + between + after;
 }
-function emphasisPeek(_, _1, state) {
+function emphasisPeek(_2, _1, state) {
   return state.options.emphasis || "*";
 }
 
@@ -60304,7 +61304,7 @@ function formatHeadingAsSetext(node2, state) {
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/heading.js
-function heading2(node2, _, state, info) {
+function heading2(node2, _2, state, info) {
   const rank = Math.max(Math.min(6, node2.depth || 1), 1);
   const tracker = state.createTracker(info);
   if (formatHeadingAsSetext(node2, state)) {
@@ -60356,7 +61356,7 @@ function htmlPeek() {
 
 // node_modules/mdast-util-to-markdown/lib/handle/image.js
 image2.peek = imagePeek;
-function image2(node2, _, state, info) {
+function image2(node2, _2, state, info) {
   const quote = checkQuote(state);
   const suffix = quote === '"' ? "Quote" : "Apostrophe";
   const exit3 = state.enter("image");
@@ -60413,7 +61413,7 @@ function imagePeek() {
 
 // node_modules/mdast-util-to-markdown/lib/handle/image-reference.js
 imageReference2.peek = imageReferencePeek;
-function imageReference2(node2, _, state, info) {
+function imageReference2(node2, _2, state, info) {
   const type = node2.referenceType;
   const exit3 = state.enter("imageReference");
   let subexit = state.enter("label");
@@ -60452,18 +61452,18 @@ function imageReferencePeek() {
 
 // node_modules/mdast-util-to-markdown/lib/handle/inline-code.js
 inlineCode2.peek = inlineCodePeek;
-function inlineCode2(node2, _, state) {
+function inlineCode2(node2, _2, state) {
   let value = node2.value || "";
   let sequence = "`";
-  let index2 = -1;
+  let index3 = -1;
   while (new RegExp("(^|[^`])" + sequence + "([^`]|$)").test(value)) {
     sequence += "`";
   }
   if (/[^ \r\n]/.test(value) && (/^[ \r\n]/.test(value) && /[ \r\n]$/.test(value) || /^`|`$/.test(value))) {
     value = " " + value + " ";
   }
-  while (++index2 < state.unsafe.length) {
-    const pattern = state.unsafe[index2];
+  while (++index3 < state.unsafe.length) {
+    const pattern = state.unsafe[index3];
     const expression = state.compilePattern(pattern);
     let match;
     if (!pattern.atBreak) continue;
@@ -60498,7 +61498,7 @@ function formatLinkAsAutolink(node2, state) {
 
 // node_modules/mdast-util-to-markdown/lib/handle/link.js
 link2.peek = linkPeek;
-function link2(node2, _, state, info) {
+function link2(node2, _2, state, info) {
   const quote = checkQuote(state);
   const suffix = quote === '"' ? "Quote" : "Apostrophe";
   const tracker = state.createTracker(info);
@@ -60572,13 +61572,13 @@ function link2(node2, _, state, info) {
   exit3();
   return value;
 }
-function linkPeek(node2, _, state) {
+function linkPeek(node2, _2, state) {
   return formatLinkAsAutolink(node2, state) ? "<" : "[";
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/link-reference.js
 linkReference2.peek = linkReferencePeek;
-function linkReference2(node2, _, state, info) {
+function linkReference2(node2, _2, state, info) {
   const type = node2.referenceType;
   const exit3 = state.enter("linkReference");
   let subexit = state.enter("label");
@@ -60687,9 +61687,9 @@ function list3(node2, parent, state, info) {
       useDifferentMarker = true;
     }
     if (checkRule(state) === bullet && firstListItem) {
-      let index2 = -1;
-      while (++index2 < node2.children.length) {
-        const item = node2.children[index2];
+      let index3 = -1;
+      while (++index3 < node2.children.length) {
+        const item = node2.children[index3];
         if (item && item.type === "listItem" && item.children && item.children[0] && item.children[0].type === "thematicBreak") {
           useDifferentMarker = true;
           break;
@@ -60740,8 +61740,8 @@ function listItem2(node2, parent, state, info) {
   );
   exit3();
   return value;
-  function map3(line, index2, blank) {
-    if (index2) {
+  function map3(line, index3, blank) {
+    if (index3) {
       return (blank ? "" : " ".repeat(size)) + line;
     }
     return (blank ? bullet : bullet + " ".repeat(size - bullet.length)) + line;
@@ -60749,7 +61749,7 @@ function listItem2(node2, parent, state, info) {
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/paragraph.js
-function paragraph2(node2, _, state, info) {
+function paragraph2(node2, _2, state, info) {
   const exit3 = state.enter("paragraph");
   const subexit = state.enter("phrasing");
   const value = state.containerPhrasing(node2, info);
@@ -60787,7 +61787,7 @@ var phrasing = (
 );
 
 // node_modules/mdast-util-to-markdown/lib/handle/root.js
-function root3(node2, _, state, info) {
+function root3(node2, _2, state, info) {
   const hasPhrasing = node2.children.some(function(d) {
     return phrasing(d);
   });
@@ -60808,7 +61808,7 @@ function checkStrong(state) {
 
 // node_modules/mdast-util-to-markdown/lib/handle/strong.js
 strong2.peek = strongPeek;
-function strong2(node2, _, state, info) {
+function strong2(node2, _2, state, info) {
   const marker = checkStrong(state);
   const exit3 = state.enter("strong");
   const tracker = state.createTracker(info);
@@ -60842,12 +61842,12 @@ function strong2(node2, _, state, info) {
   };
   return before + between + after;
 }
-function strongPeek(_, _1, state) {
+function strongPeek(_2, _1, state) {
   return state.options.strong || "*";
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/text.js
-function text5(node2, _, state, info) {
+function text5(node2, _2, state, info) {
   return state.safe(node2.value, info);
 }
 
@@ -60863,7 +61863,7 @@ function checkRuleRepetition(state) {
 }
 
 // node_modules/mdast-util-to-markdown/lib/handle/thematic-break.js
-function thematicBreak3(_, _1, state) {
+function thematicBreak3(_2, _1, state) {
   const value = (checkRule(state) + (state.options.ruleSpaces ? " " : "")).repeat(checkRuleRepetition(state));
   return state.options.ruleSpaces ? value.slice(0, -1) : value;
 }
@@ -60983,15 +61983,15 @@ function gfmTableToMarkdown(options) {
       tableRow: handleTableRow
     }
   };
-  function handleTable(node2, _, state, info) {
+  function handleTable(node2, _2, state, info) {
     return serializeData(handleTableAsData(node2, state, info), node2.align);
   }
-  function handleTableRow(node2, _, state, info) {
+  function handleTableRow(node2, _2, state, info) {
     const row = handleTableRowAsData(node2, state, info);
     const value = serializeData([row]);
     return value.slice(0, value.indexOf("\n"));
   }
-  function handleTableCell(node2, _, state, info) {
+  function handleTableCell(node2, _2, state, info) {
     const exit3 = state.enter("tableCell");
     const subexit = state.enter("phrasing");
     const value = state.containerPhrasing(node2, {
@@ -61016,22 +62016,22 @@ function gfmTableToMarkdown(options) {
   }
   function handleTableAsData(node2, state, info) {
     const children = node2.children;
-    let index2 = -1;
+    let index3 = -1;
     const result = [];
     const subexit = state.enter("table");
-    while (++index2 < children.length) {
-      result[index2] = handleTableRowAsData(children[index2], state, info);
+    while (++index3 < children.length) {
+      result[index3] = handleTableRowAsData(children[index3], state, info);
     }
     subexit();
     return result;
   }
   function handleTableRowAsData(node2, state, info) {
     const children = node2.children;
-    let index2 = -1;
+    let index3 = -1;
     const result = [];
     const subexit = state.enter("tableRow");
-    while (++index2 < children.length) {
-      result[index2] = handleTableCell(children[index2], node2, state, info);
+    while (++index3 < children.length) {
+      result[index3] = handleTableCell(children[index3], node2, state, info);
     }
     subexit();
     return result;
@@ -61074,10 +62074,10 @@ function exitParagraphWithTaskListItem(token) {
     const head = node2.children[0];
     if (head && head.type === "text") {
       const siblings = parent.children;
-      let index2 = -1;
+      let index3 = -1;
       let firstParaghraph;
-      while (++index2 < siblings.length) {
-        const sibling = siblings[index2];
+      while (++index3 < siblings.length) {
+        const sibling = siblings[index3];
         if (sibling.type === "paragraph") {
           firstParaghraph = sibling;
           break;
@@ -61463,10 +62463,10 @@ function gfmAtext(code4) {
   return code4 === 43 || code4 === 45 || code4 === 46 || code4 === 95 || asciiAlphanumeric(code4);
 }
 function previousUnbalanced(events) {
-  let index2 = events.length;
+  let index3 = events.length;
   let result = false;
-  while (index2--) {
-    const token = events[index2][1];
+  while (index3--) {
+    const token = events[index3][1];
     if ((token.type === "labelLink" || token.type === "labelImage") && !token._balanced) {
       result = true;
       break;
@@ -61515,11 +62515,11 @@ function gfmFootnote() {
 }
 function tokenizePotentialGfmFootnoteCall(effects, ok3, nok) {
   const self2 = this;
-  let index2 = self2.events.length;
+  let index3 = self2.events.length;
   const defined = self2.parser.gfmFootnotes || (self2.parser.gfmFootnotes = []);
   let labelStart;
-  while (index2--) {
-    const token = self2.events[index2][1];
+  while (index3--) {
+    const token = self2.events[index3][1];
     if (token.type === "labelImage") {
       labelStart = token;
       break;
@@ -61547,25 +62547,25 @@ function tokenizePotentialGfmFootnoteCall(effects, ok3, nok) {
   }
 }
 function resolveToPotentialGfmFootnoteCall(events, context) {
-  let index2 = events.length;
+  let index3 = events.length;
   let labelStart;
-  while (index2--) {
-    if (events[index2][1].type === "labelImage" && events[index2][0] === "enter") {
-      labelStart = events[index2][1];
+  while (index3--) {
+    if (events[index3][1].type === "labelImage" && events[index3][0] === "enter") {
+      labelStart = events[index3][1];
       break;
     }
   }
-  events[index2 + 1][1].type = "data";
-  events[index2 + 3][1].type = "gfmFootnoteCallLabelMarker";
+  events[index3 + 1][1].type = "data";
+  events[index3 + 3][1].type = "gfmFootnoteCallLabelMarker";
   const call = {
     type: "gfmFootnoteCall",
-    start: Object.assign({}, events[index2 + 3][1].start),
+    start: Object.assign({}, events[index3 + 3][1].start),
     end: Object.assign({}, events[events.length - 1][1].end)
   };
   const marker = {
     type: "gfmFootnoteCallMarker",
-    start: Object.assign({}, events[index2 + 3][1].end),
-    end: Object.assign({}, events[index2 + 3][1].end)
+    start: Object.assign({}, events[index3 + 3][1].end),
+    end: Object.assign({}, events[index3 + 3][1].end)
   };
   marker.end.column++;
   marker.end.offset++;
@@ -61583,12 +62583,12 @@ function resolveToPotentialGfmFootnoteCall(events, context) {
   };
   const replacement = [
     // Take the `labelImageMarker` (now `data`, the `!`)
-    events[index2 + 1],
-    events[index2 + 2],
+    events[index3 + 1],
+    events[index3 + 2],
     ["enter", call, context],
     // The `[`
-    events[index2 + 3],
-    events[index2 + 4],
+    events[index3 + 3],
+    events[index3 + 4],
     // The `^`.
     ["enter", marker, context],
     ["exit", marker, context],
@@ -61602,7 +62602,7 @@ function resolveToPotentialGfmFootnoteCall(events, context) {
     events[events.length - 1],
     ["exit", call, context]
   ];
-  events.splice(index2, events.length - index2 + 1, ...replacement);
+  events.splice(index3, events.length - index3 + 1, ...replacement);
   return events;
 }
 function tokenizeGfmFootnoteCall(effects, ok3, nok) {
@@ -61781,42 +62781,42 @@ function gfmStrikethrough(options) {
     }
   };
   function resolveAllStrikethrough(events, context) {
-    let index2 = -1;
-    while (++index2 < events.length) {
-      if (events[index2][0] === "enter" && events[index2][1].type === "strikethroughSequenceTemporary" && events[index2][1]._close) {
-        let open = index2;
+    let index3 = -1;
+    while (++index3 < events.length) {
+      if (events[index3][0] === "enter" && events[index3][1].type === "strikethroughSequenceTemporary" && events[index3][1]._close) {
+        let open = index3;
         while (open--) {
           if (events[open][0] === "exit" && events[open][1].type === "strikethroughSequenceTemporary" && events[open][1]._open && // If the sizes are the same:
-          events[index2][1].end.offset - events[index2][1].start.offset === events[open][1].end.offset - events[open][1].start.offset) {
-            events[index2][1].type = "strikethroughSequence";
+          events[index3][1].end.offset - events[index3][1].start.offset === events[open][1].end.offset - events[open][1].start.offset) {
+            events[index3][1].type = "strikethroughSequence";
             events[open][1].type = "strikethroughSequence";
             const strikethrough2 = {
               type: "strikethrough",
               start: Object.assign({}, events[open][1].start),
-              end: Object.assign({}, events[index2][1].end)
+              end: Object.assign({}, events[index3][1].end)
             };
             const text7 = {
               type: "strikethroughText",
               start: Object.assign({}, events[open][1].end),
-              end: Object.assign({}, events[index2][1].start)
+              end: Object.assign({}, events[index3][1].start)
             };
             const nextEvents = [["enter", strikethrough2, context], ["enter", events[open][1], context], ["exit", events[open][1], context], ["enter", text7, context]];
             const insideSpan2 = context.parser.constructs.insideSpan.null;
             if (insideSpan2) {
-              splice(nextEvents, nextEvents.length, 0, resolveAll(insideSpan2, events.slice(open + 1, index2), context));
+              splice(nextEvents, nextEvents.length, 0, resolveAll(insideSpan2, events.slice(open + 1, index3), context));
             }
-            splice(nextEvents, nextEvents.length, 0, [["exit", text7, context], ["enter", events[index2][1], context], ["exit", events[index2][1], context], ["exit", strikethrough2, context]]);
-            splice(events, open - 1, index2 - open + 3, nextEvents);
-            index2 = open + nextEvents.length - 2;
+            splice(nextEvents, nextEvents.length, 0, [["exit", text7, context], ["enter", events[index3][1], context], ["exit", events[index3][1], context], ["exit", strikethrough2, context]]);
+            splice(events, open - 1, index3 - open + 3, nextEvents);
+            index3 = open + nextEvents.length - 2;
             break;
           }
         }
       }
     }
-    index2 = -1;
-    while (++index2 < events.length) {
-      if (events[index2][1].type === "strikethroughSequenceTemporary") {
-        events[index2][1].type = "data";
+    index3 = -1;
+    while (++index3 < events.length) {
+      if (events[index3][1].type === "strikethroughSequenceTemporary") {
+        events[index3][1].type = "data";
       }
     }
     return events;
@@ -61867,8 +62867,8 @@ var EditMap = class {
    * @param {Array<Event>} add
    * @returns {undefined}
    */
-  add(index2, remove, add) {
-    addImplementation(this, index2, remove, add);
+  add(index3, remove, add) {
+    addImplementation(this, index3, remove, add);
   }
   // To do: add this when moving to `micromark`.
   // /**
@@ -61895,12 +62895,12 @@ var EditMap = class {
     if (this.map.length === 0) {
       return;
     }
-    let index2 = this.map.length;
+    let index3 = this.map.length;
     const vecs = [];
-    while (index2 > 0) {
-      index2 -= 1;
-      vecs.push(events.slice(this.map[index2][0] + this.map[index2][1]), this.map[index2][2]);
-      events.length = this.map[index2][0];
+    while (index3 > 0) {
+      index3 -= 1;
+      vecs.push(events.slice(this.map[index3][0] + this.map[index3][1]), this.map[index3][2]);
+      events.length = this.map[index3][0];
     }
     vecs.push(events.slice());
     events.length = 0;
@@ -61915,34 +62915,34 @@ var EditMap = class {
   }
 };
 function addImplementation(editMap, at, remove, add) {
-  let index2 = 0;
+  let index3 = 0;
   if (remove === 0 && add.length === 0) {
     return;
   }
-  while (index2 < editMap.map.length) {
-    if (editMap.map[index2][0] === at) {
-      editMap.map[index2][1] += remove;
-      editMap.map[index2][2].push(...add);
+  while (index3 < editMap.map.length) {
+    if (editMap.map[index3][0] === at) {
+      editMap.map[index3][1] += remove;
+      editMap.map[index3][2].push(...add);
       return;
     }
-    index2 += 1;
+    index3 += 1;
   }
   editMap.map.push([at, remove, add]);
 }
 
 // node_modules/micromark-extension-gfm-table/lib/infer.js
-function gfmTableAlign(events, index2) {
+function gfmTableAlign(events, index3) {
   let inDelimiterRow = false;
   const align = [];
-  while (index2 < events.length) {
-    const event = events[index2];
+  while (index3 < events.length) {
+    const event = events[index3];
     if (inDelimiterRow) {
       if (event[0] === "enter") {
         if (event[1].type === "tableContent") {
-          align.push(events[index2 + 1][1].type === "tableDelimiterMarker" ? "left" : "none");
+          align.push(events[index3 + 1][1].type === "tableDelimiterMarker" ? "left" : "none");
         }
       } else if (event[1].type === "tableContent") {
-        if (events[index2 - 1][1].type === "tableDelimiterMarker") {
+        if (events[index3 - 1][1].type === "tableDelimiterMarker") {
           const alignIndex = align.length - 1;
           align[alignIndex] = align[alignIndex] === "left" ? "center" : "right";
         }
@@ -61952,7 +62952,7 @@ function gfmTableAlign(events, index2) {
     } else if (event[0] === "enter" && event[1].type === "tableDelimiterRow") {
       inDelimiterRow = true;
     }
-    index2 += 1;
+    index3 += 1;
   }
   return align;
 }
@@ -61976,14 +62976,14 @@ function tokenizeTable(effects, ok3, nok) {
   let seen;
   return start2;
   function start2(code4) {
-    let index2 = self2.events.length - 1;
-    while (index2 > -1) {
-      const type = self2.events[index2][1].type;
+    let index3 = self2.events.length - 1;
+    while (index3 > -1) {
+      const type = self2.events[index3][1].type;
       if (type === "lineEnding" || // Note: markdown-rs uses `whitespace` instead of `linePrefix`
-      type === "linePrefix") index2--;
+      type === "linePrefix") index3--;
       else break;
     }
-    const tail = index2 > -1 ? self2.events[index2][1].type : null;
+    const tail = index3 > -1 ? self2.events[index3][1].type : null;
     const next = tail === "tableHead" || tail === "tableRow" ? bodyRowStart : headRowBefore;
     if (next === bodyRowStart && self2.parser.lazy[self2.now().line]) {
       return nok(code4);
@@ -62185,7 +63185,7 @@ function tokenizeTable(effects, ok3, nok) {
   }
 }
 function resolveTable(events, context) {
-  let index2 = -1;
+  let index3 = -1;
   let inFirstCellAwaitingPipe = true;
   let rowKind = 0;
   let lastCell = [0, 0, 0, 0];
@@ -62196,8 +63196,8 @@ function resolveTable(events, context) {
   let currentBody;
   let currentCell;
   const map3 = new EditMap();
-  while (++index2 < events.length) {
-    const event = events[index2];
+  while (++index3 < events.length) {
+    const event = events[index3];
     const token = event[1];
     if (event[0] === "enter") {
       if (token.type === "tableHead") {
@@ -62213,12 +63213,12 @@ function resolveTable(events, context) {
           // Note: correct end is set later.
           end: Object.assign({}, token.end)
         };
-        map3.add(index2, 0, [["enter", currentTable, context]]);
+        map3.add(index3, 0, [["enter", currentTable, context]]);
       } else if (token.type === "tableRow" || token.type === "tableDelimiterRow") {
         inFirstCellAwaitingPipe = true;
         currentCell = void 0;
         lastCell = [0, 0, 0, 0];
-        cell = [0, index2 + 1, 0, 0];
+        cell = [0, index3 + 1, 0, 0];
         if (afterHeadAwaitingFirstBodyRow) {
           afterHeadAwaitingFirstBodyRow = false;
           currentBody = {
@@ -62227,7 +63227,7 @@ function resolveTable(events, context) {
             // Note: correct end is set later.
             end: Object.assign({}, token.end)
           };
-          map3.add(index2, 0, [["enter", currentBody, context]]);
+          map3.add(index3, 0, [["enter", currentBody, context]]);
         }
         rowKind = token.type === "tableDelimiterRow" ? 2 : currentBody ? 3 : 1;
       } else if (rowKind && (token.type === "data" || token.type === "tableDelimiterMarker" || token.type === "tableDelimiterFiller")) {
@@ -62238,7 +63238,7 @@ function resolveTable(events, context) {
             currentCell = flushCell(map3, context, lastCell, rowKind, void 0, currentCell);
             lastCell = [0, 0, 0, 0];
           }
-          cell[2] = index2;
+          cell[2] = index3;
         }
       } else if (token.type === "tableCellDivider") {
         if (inFirstCellAwaitingPipe) {
@@ -62249,34 +63249,34 @@ function resolveTable(events, context) {
             currentCell = flushCell(map3, context, lastCell, rowKind, void 0, currentCell);
           }
           lastCell = cell;
-          cell = [lastCell[1], index2, 0, 0];
+          cell = [lastCell[1], index3, 0, 0];
         }
       }
     } else if (token.type === "tableHead") {
       afterHeadAwaitingFirstBodyRow = true;
-      lastTableEnd = index2;
+      lastTableEnd = index3;
     } else if (token.type === "tableRow" || token.type === "tableDelimiterRow") {
-      lastTableEnd = index2;
+      lastTableEnd = index3;
       if (lastCell[1] !== 0) {
         cell[0] = cell[1];
-        currentCell = flushCell(map3, context, lastCell, rowKind, index2, currentCell);
+        currentCell = flushCell(map3, context, lastCell, rowKind, index3, currentCell);
       } else if (cell[1] !== 0) {
-        currentCell = flushCell(map3, context, cell, rowKind, index2, currentCell);
+        currentCell = flushCell(map3, context, cell, rowKind, index3, currentCell);
       }
       rowKind = 0;
     } else if (rowKind && (token.type === "data" || token.type === "tableDelimiterMarker" || token.type === "tableDelimiterFiller")) {
-      cell[3] = index2;
+      cell[3] = index3;
     }
   }
   if (lastTableEnd !== 0) {
     flushTableEnd(map3, context, lastTableEnd, currentTable, currentBody);
   }
   map3.consume(context.events);
-  index2 = -1;
-  while (++index2 < context.events.length) {
-    const event = context.events[index2];
+  index3 = -1;
+  while (++index3 < context.events.length) {
+    const event = context.events[index3];
     if (event[0] === "enter" && event[1].type === "table") {
-      event[1]._align = gfmTableAlign(context.events, index2);
+      event[1]._align = gfmTableAlign(context.events, index3);
     }
   }
   return events;
@@ -62326,19 +63326,19 @@ function flushCell(map3, context, range, rowKind, rowEnd, previousCell) {
   }
   return previousCell;
 }
-function flushTableEnd(map3, context, index2, table2, tableBody) {
+function flushTableEnd(map3, context, index3, table2, tableBody) {
   const exits = [];
-  const related = getPoint(context.events, index2);
+  const related = getPoint(context.events, index3);
   if (tableBody) {
     tableBody.end = Object.assign({}, related);
     exits.push(["exit", tableBody, context]);
   }
   table2.end = Object.assign({}, related);
   exits.push(["exit", table2, context]);
-  map3.add(index2 + 1, 0, exits);
+  map3.add(index3 + 1, 0, exits);
 }
-function getPoint(events, index2) {
-  const event = events[index2];
+function getPoint(events, index3) {
+  const event = events[index3];
   const side = event[0] === "enter" ? "start" : "end";
   return event[1][side];
 }
@@ -62575,30 +63575,30 @@ var buildRenderItemsForMessage = (message) => {
       }
       return false;
     });
-    sorted.forEach((block, index2) => {
+    sorted.forEach((block, index3) => {
       if (!block || typeof block !== "object") return;
       if (block.type === "text" && typeof block.content === "string" && block.content.trim()) {
-        renderItems.push({ type: "text", key: `text-${index2}`, text: block.content });
+        renderItems.push({ type: "text", key: `text-${index3}`, text: block.content });
         return;
       }
       if (block.type === "thinking" && typeof block.content === "string" && block.content.trim()) {
-        pushUniqueReasoningItem(renderItems, seenReasoningTexts, `thinking-${index2}`, block.content);
+        pushUniqueReasoningItem(renderItems, seenReasoningTexts, `thinking-${index3}`, block.content);
         return;
       }
       if (block.type === "reasoning_details" && Array.isArray(block.reasoningDetails)) {
         const text7 = block.reasoningDetails.map((detail) => typeof detail?.text === "string" ? detail.text : "").filter(Boolean).join("\n");
         if (text7.trim()) {
-          pushUniqueReasoningItem(renderItems, seenReasoningTexts, `reasoning-details-${index2}`, text7);
+          pushUniqueReasoningItem(renderItems, seenReasoningTexts, `reasoning-details-${index3}`, text7);
         }
         return;
       }
       if (block.type === "tool_use") {
-        const id = String(block.id || `tool-${index2}`);
+        const id = String(block.id || `tool-${index3}`);
         ensureToolGroup(toolGroups, toolOrder, id, String(block.name || "tool"), block.input);
         return;
       }
       if (block.type === "tool_result") {
-        const id = String(block.tool_use_id || `tool-result-${index2}`);
+        const id = String(block.tool_use_id || `tool-result-${index3}`);
         const group = ensureToolGroup(toolGroups, toolOrder, id, "tool");
         group.results.push({
           tool_use_id: id,
@@ -62611,7 +63611,7 @@ var buildRenderItemsForMessage = (message) => {
         if (hasPrimaryReasoningBlock) return;
         const extracted = extractReasoningTextsFromResponsesOutputItems(block.items);
         extracted.forEach((text7, reasoningIndex) => {
-          pushUniqueReasoningItem(renderItems, seenReasoningTexts, `responses-reasoning-${index2}-${reasoningIndex}`, text7);
+          pushUniqueReasoningItem(renderItems, seenReasoningTexts, `responses-reasoning-${index3}-${reasoningIndex}`, text7);
         });
       }
     });
@@ -62632,10 +63632,10 @@ var buildRenderItemsForMessage = (message) => {
       }
     }
   }
-  toolOrder.forEach((id, index2) => {
+  toolOrder.forEach((id, index3) => {
     const group = toolGroups.get(id);
     if (!group) return;
-    renderItems.push({ type: "tool", key: `tool-group-${index2}-${id}`, group });
+    renderItems.push({ type: "tool", key: `tool-group-${index3}-${id}`, group });
   });
   return renderItems;
 };
@@ -62649,20 +63649,20 @@ var toReadableToolResult = (result) => {
 };
 
 // electron/headlessServer/ui/mobile/src/components/ReasoningCard.tsx
-var import_react10 = __toESM(require_react(), 1);
+var import_react23 = __toESM(require_react(), 1);
 var truncateWords = (input, maxWords = 20) => {
   const words = input.trim().split(/\s+/);
   if (words.length <= maxWords) return input;
   return `${words.slice(0, maxWords).join(" ")}\u2026`;
 };
 var ReasoningCard = ({ text: text7 }) => {
-  const [expanded, setExpanded] = (0, import_react10.useState)(false);
-  const summary = (0, import_react10.useMemo)(() => truncateWords(text7), [text7]);
-  return /* @__PURE__ */ import_react10.default.createElement("div", { className: "mobile-reasoning-card" }, /* @__PURE__ */ import_react10.default.createElement("div", { className: "mobile-reasoning-dot" }), /* @__PURE__ */ import_react10.default.createElement("button", { className: "mobile-reasoning-header", onClick: () => setExpanded((value) => !value) }, /* @__PURE__ */ import_react10.default.createElement("span", { className: "mobile-reasoning-label" }, "Reasoning"), !expanded ? /* @__PURE__ */ import_react10.default.createElement("span", { className: "mobile-reasoning-summary" }, summary) : null, /* @__PURE__ */ import_react10.default.createElement("span", { className: `tool-chevron ${expanded ? "open" : ""}` }, "\u203A")), /* @__PURE__ */ import_react10.default.createElement("div", { className: `tool-expand-container ${expanded ? "open" : ""}` }, /* @__PURE__ */ import_react10.default.createElement("div", { className: "tool-expand-content" }, /* @__PURE__ */ import_react10.default.createElement("pre", { className: "mobile-reasoning-content" }, text7))));
+  const [expanded, setExpanded] = (0, import_react23.useState)(false);
+  const summary = (0, import_react23.useMemo)(() => truncateWords(text7), [text7]);
+  return /* @__PURE__ */ import_react23.default.createElement("div", { className: "mobile-reasoning-card" }, /* @__PURE__ */ import_react23.default.createElement("div", { className: "mobile-reasoning-dot" }), /* @__PURE__ */ import_react23.default.createElement("button", { className: "mobile-reasoning-header", onClick: () => setExpanded((value) => !value) }, /* @__PURE__ */ import_react23.default.createElement("span", { className: "mobile-reasoning-label" }, "Reasoning"), !expanded ? /* @__PURE__ */ import_react23.default.createElement("span", { className: "mobile-reasoning-summary" }, summary) : null, /* @__PURE__ */ import_react23.default.createElement("span", { className: `tool-chevron ${expanded ? "open" : ""}` }, "\u203A")), /* @__PURE__ */ import_react23.default.createElement("div", { className: `tool-expand-container ${expanded ? "open" : ""}` }, /* @__PURE__ */ import_react23.default.createElement("div", { className: "tool-expand-content" }, /* @__PURE__ */ import_react23.default.createElement("pre", { className: "mobile-reasoning-content" }, text7))));
 };
 
 // electron/headlessServer/ui/mobile/src/components/ToolCallCard.tsx
-var import_react13 = __toESM(require_react(), 1);
+var import_react26 = __toESM(require_react(), 1);
 
 // node_modules/diff/libesm/diff/base.js
 var Diff = class {
@@ -62915,7 +63915,7 @@ function tokenize(value, options) {
 }
 
 // electron/headlessServer/ui/mobile/src/components/EditFileDiffView.tsx
-var import_react11 = __toESM(require_react(), 1);
+var import_react24 = __toESM(require_react(), 1);
 var import_rehype_highlight = __toESM(require_rehype_highlight(), 1);
 function getLanguageFromPath(filePath) {
   if (!filePath) return "plaintext";
@@ -62980,10 +63980,10 @@ function getFilename(path2) {
   return normalized.split("/").pop() || normalized;
 }
 var InlineDiffLine = ({ type, content: content3, oldLineNumber, newLineNumber }) => {
-  return /* @__PURE__ */ import_react11.default.createElement("div", { className: `m-edit-inline-row ${type}` }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-ln" }, oldLineNumber ?? ""), /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-ln" }, newLineNumber ?? ""), /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-sign" }, type === "added" ? "+" : type === "removed" ? "\u2212" : " "), /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-code" }, content3 || " "));
+  return /* @__PURE__ */ import_react24.default.createElement("div", { className: `m-edit-inline-row ${type}` }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-ln" }, oldLineNumber ?? ""), /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-ln" }, newLineNumber ?? ""), /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-sign" }, type === "added" ? "+" : type === "removed" ? "\u2212" : " "), /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-code" }, content3 || " "));
 };
 var InlineDiffView = ({ original, replacement, lineInfo }) => {
-  const diffLines2 = (0, import_react11.useMemo)(() => {
+  const diffLines2 = (0, import_react24.useMemo)(() => {
     const changes = diffLines(original || "", replacement || "");
     const lines = [];
     let oldLineNumber = lineInfo?.oldStartLine ?? 1;
@@ -63007,7 +64007,7 @@ var InlineDiffView = ({ original, replacement, lineInfo }) => {
     });
     return lines;
   }, [original, replacement, lineInfo]);
-  return /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-inline-wrap" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-inline-head" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-ln" }, "old"), /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-ln" }, "new"), /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-sign" }, "\xB1"), /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-code" }, "code")), diffLines2.map((line, idx) => /* @__PURE__ */ import_react11.default.createElement(
+  return /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-inline-wrap" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-inline-head" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-ln" }, "old"), /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-ln" }, "new"), /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-sign" }, "\xB1"), /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-code" }, "code")), diffLines2.map((line, idx) => /* @__PURE__ */ import_react24.default.createElement(
     InlineDiffLine,
     {
       key: idx,
@@ -63019,30 +64019,30 @@ var InlineDiffView = ({ original, replacement, lineInfo }) => {
   )));
 };
 var EditFileDiffView = ({ args, result, className = "" }) => {
-  const [viewMode, setViewMode] = (0, import_react11.useState)("inline");
-  const parsedResult = (0, import_react11.useMemo)(() => parseResult(result), [result]);
-  const language = (0, import_react11.useMemo)(() => getLanguageFromPath(args.path || ""), [args.path]);
-  const filename = (0, import_react11.useMemo)(() => getFilename(args.path || ""), [args.path]);
+  const [viewMode, setViewMode] = (0, import_react24.useState)("inline");
+  const parsedResult = (0, import_react24.useMemo)(() => parseResult(result), [result]);
+  const language = (0, import_react24.useMemo)(() => getLanguageFromPath(args.path || ""), [args.path]);
+  const filename = (0, import_react24.useMemo)(() => getFilename(args.path || ""), [args.path]);
   const isSuccess = parsedResult.success === true;
   const hasChanges = (parsedResult.replacements ?? 0) > 0;
   const isAppendOperation = (args.operation ?? "").toLowerCase() === "append";
   const lineInfo = parsedResult.lineInfo;
-  const originalMarkdown = (0, import_react11.useMemo)(() => {
+  const originalMarkdown = (0, import_react24.useMemo)(() => {
     return `\`\`\`${language}
 ${args.searchPattern || ""}
 \`\`\``;
   }, [args.searchPattern, language]);
-  const replacementMarkdown = (0, import_react11.useMemo)(() => {
+  const replacementMarkdown = (0, import_react24.useMemo)(() => {
     const text7 = isAppendOperation ? args.content || "" : args.replacement || "";
     return `\`\`\`${language}
 ${text7}
 \`\`\``;
   }, [args.replacement, args.content, language, isAppendOperation]);
-  return /* @__PURE__ */ import_react11.default.createElement("div", { className: `m-edit-root ${className}` }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-head" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-head-left" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-op" }, args.operation || "replace"), /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-file", title: args.path || "" }, filename)), /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-head-right" }, hasChanges ? /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-pill success" }, parsedResult.replacements) : null, lineInfo ? /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-pill info", title: "Real file line anchors (old/new)" }, "L", lineInfo.oldStartLine, " \u2192 L", lineInfo.newStartLine) : null, lineInfo?.scope === "first_of_many" ? /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-pill warn" }, "first hunk") : null, !isAppendOperation ? /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-toggle" }, /* @__PURE__ */ import_react11.default.createElement("button", { className: viewMode === "inline" ? "active" : "", onClick: () => setViewMode("inline") }, "inline"), /* @__PURE__ */ import_react11.default.createElement("button", { className: viewMode === "unified" ? "active" : "", onClick: () => setViewMode("unified") }, "unified"), /* @__PURE__ */ import_react11.default.createElement("button", { className: viewMode === "split" ? "active" : "", onClick: () => setViewMode("split") }, "split")) : null)), /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-body" }, isAppendOperation ? /* @__PURE__ */ import_react11.default.createElement(InlineDiffView, { original: "", replacement: args.content || "", lineInfo }) : viewMode === "inline" ? /* @__PURE__ */ import_react11.default.createElement(InlineDiffView, { original: args.searchPattern || "", replacement: args.replacement || "", lineInfo }) : viewMode === "unified" ? /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-unified" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane removed" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane-head" }, "\u2212"), /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane-body markdown-body" }, /* @__PURE__ */ import_react11.default.createElement(Markdown, { rehypePlugins: [[import_rehype_highlight.default, { ignoreMissing: true }]] }, originalMarkdown))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane added" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane-head" }, "+"), /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane-body markdown-body" }, /* @__PURE__ */ import_react11.default.createElement(Markdown, { rehypePlugins: [[import_rehype_highlight.default, { ignoreMissing: true }]] }, replacementMarkdown)))) : /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-split" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane removed" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane-head" }, "Original"), /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane-body markdown-body" }, /* @__PURE__ */ import_react11.default.createElement(Markdown, { rehypePlugins: [[import_rehype_highlight.default, { ignoreMissing: true }]] }, originalMarkdown))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane added" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane-head" }, "Replacement"), /* @__PURE__ */ import_react11.default.createElement("div", { className: "m-edit-pane-body markdown-body" }, /* @__PURE__ */ import_react11.default.createElement(Markdown, { rehypePlugins: [[import_rehype_highlight.default, { ignoreMissing: true }]] }, replacementMarkdown))))), parsedResult.message ? /* @__PURE__ */ import_react11.default.createElement("div", { className: `m-edit-msg ${isSuccess ? "success" : "error"}` }, /* @__PURE__ */ import_react11.default.createElement("span", null, parsedResult.message), parsedResult.matchStrategy && parsedResult.matchStrategy !== "exact" ? /* @__PURE__ */ import_react11.default.createElement("span", { className: "m-edit-pill warn" }, parsedResult.matchStrategy) : null) : null);
+  return /* @__PURE__ */ import_react24.default.createElement("div", { className: `m-edit-root ${className}` }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-head" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-head-left" }, /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-op" }, args.operation || "replace"), /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-file", title: args.path || "" }, filename)), /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-head-right" }, hasChanges ? /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-pill success" }, parsedResult.replacements) : null, lineInfo ? /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-pill info", title: "Real file line anchors (old/new)" }, "L", lineInfo.oldStartLine, " \u2192 L", lineInfo.newStartLine) : null, lineInfo?.scope === "first_of_many" ? /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-pill warn" }, "first hunk") : null, !isAppendOperation ? /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-toggle" }, /* @__PURE__ */ import_react24.default.createElement("button", { className: viewMode === "inline" ? "active" : "", onClick: () => setViewMode("inline") }, "inline"), /* @__PURE__ */ import_react24.default.createElement("button", { className: viewMode === "unified" ? "active" : "", onClick: () => setViewMode("unified") }, "unified"), /* @__PURE__ */ import_react24.default.createElement("button", { className: viewMode === "split" ? "active" : "", onClick: () => setViewMode("split") }, "split")) : null)), /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-body" }, isAppendOperation ? /* @__PURE__ */ import_react24.default.createElement(InlineDiffView, { original: "", replacement: args.content || "", lineInfo }) : viewMode === "inline" ? /* @__PURE__ */ import_react24.default.createElement(InlineDiffView, { original: args.searchPattern || "", replacement: args.replacement || "", lineInfo }) : viewMode === "unified" ? /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-unified" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane removed" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane-head" }, "\u2212"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane-body markdown-body" }, /* @__PURE__ */ import_react24.default.createElement(Markdown, { rehypePlugins: [[import_rehype_highlight.default, { ignoreMissing: true }]] }, originalMarkdown))), /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane added" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane-head" }, "+"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane-body markdown-body" }, /* @__PURE__ */ import_react24.default.createElement(Markdown, { rehypePlugins: [[import_rehype_highlight.default, { ignoreMissing: true }]] }, replacementMarkdown)))) : /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-split" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane removed" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane-head" }, "Original"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane-body markdown-body" }, /* @__PURE__ */ import_react24.default.createElement(Markdown, { rehypePlugins: [[import_rehype_highlight.default, { ignoreMissing: true }]] }, originalMarkdown))), /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane added" }, /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane-head" }, "Replacement"), /* @__PURE__ */ import_react24.default.createElement("div", { className: "m-edit-pane-body markdown-body" }, /* @__PURE__ */ import_react24.default.createElement(Markdown, { rehypePlugins: [[import_rehype_highlight.default, { ignoreMissing: true }]] }, replacementMarkdown))))), parsedResult.message ? /* @__PURE__ */ import_react24.default.createElement("div", { className: `m-edit-msg ${isSuccess ? "success" : "error"}` }, /* @__PURE__ */ import_react24.default.createElement("span", null, parsedResult.message), parsedResult.matchStrategy && parsedResult.matchStrategy !== "exact" ? /* @__PURE__ */ import_react24.default.createElement("span", { className: "m-edit-pill warn" }, parsedResult.matchStrategy) : null) : null);
 };
 
 // electron/headlessServer/ui/mobile/src/components/CustomToolIframe.tsx
-var import_react12 = __toESM(require_react(), 1);
+var import_react25 = __toESM(require_react(), 1);
 
 // electron/headlessServer/ui/mobile/src/customToolIframeBridge.ts
 var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -63238,8 +64238,8 @@ var CustomToolIframe = ({
   userId = null,
   rootPath = null
 }) => {
-  const iframeRef = (0, import_react12.useRef)(null);
-  (0, import_react12.useEffect)(() => {
+  const iframeRef = (0, import_react25.useRef)(null);
+  (0, import_react25.useEffect)(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
     const cleanup = attachCustomToolIframeBridge(iframe, {
@@ -63249,7 +64249,7 @@ var CustomToolIframe = ({
     });
     return () => cleanup();
   }, [rootPath, toolName, userId]);
-  return /* @__PURE__ */ import_react12.default.createElement("div", { className: "mobile-custom-tool-iframe-wrap" }, /* @__PURE__ */ import_react12.default.createElement(
+  return /* @__PURE__ */ import_react25.default.createElement("div", { className: "mobile-custom-tool-iframe-wrap" }, /* @__PURE__ */ import_react25.default.createElement(
     "iframe",
     {
       ref: iframeRef,
@@ -63315,10 +64315,10 @@ var humanizeToolName = (name2) => {
   if (!normalized) return "Custom Tool";
   return normalized.split(" ").map((token) => token.charAt(0).toUpperCase() + token.slice(1).toLowerCase()).join(" ");
 };
-var renderToolResult = (result, index2, groupId, options) => {
+var renderToolResult = (result, index3, groupId, options) => {
   const htmlPayload = extractHtmlFromToolResult(result.content);
   if (htmlPayload?.html) {
-    return /* @__PURE__ */ import_react13.default.createElement("div", { key: `${groupId}-result-${index2}`, className: `mobile-tool-result ${result.is_error ? "error" : "success"}` }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "mobile-tool-app-header" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "mobile-tool-app-label" }, "HTML App Result"), /* @__PURE__ */ import_react13.default.createElement("div", { className: "mobile-tool-app-actions" }, /* @__PURE__ */ import_react13.default.createElement("button", { type: "button", className: "mobile-tool-app-toggle", onClick: options.onToggleIframe }, options.isIframeOpen ? "Hide app" : "Open app"), /* @__PURE__ */ import_react13.default.createElement(
+    return /* @__PURE__ */ import_react26.default.createElement("div", { key: `${groupId}-result-${index3}`, className: `mobile-tool-result ${result.is_error ? "error" : "success"}` }, /* @__PURE__ */ import_react26.default.createElement("div", { className: "mobile-tool-app-header" }, /* @__PURE__ */ import_react26.default.createElement("span", { className: "mobile-tool-app-label" }, "HTML App Result"), /* @__PURE__ */ import_react26.default.createElement("div", { className: "mobile-tool-app-actions" }, /* @__PURE__ */ import_react26.default.createElement("button", { type: "button", className: "mobile-tool-app-toggle", onClick: options.onToggleIframe }, options.isIframeOpen ? "Hide app" : "Open app"), /* @__PURE__ */ import_react26.default.createElement(
       "button",
       {
         type: "button",
@@ -63327,7 +64327,7 @@ var renderToolResult = (result, index2, groupId, options) => {
         onClick: options.onToggleFullscreen
       },
       options.isFullscreen ? "Exit fullscreen" : "Fullscreen"
-    ))), options.isIframeOpen ? /* @__PURE__ */ import_react13.default.createElement("div", { className: `mobile-custom-tool-iframe-shell ${options.isFullscreen ? "fullscreen" : ""}` }, options.isFullscreen ? /* @__PURE__ */ import_react13.default.createElement("div", { className: "mobile-custom-tool-fullscreen-bar" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "mobile-custom-tool-fullscreen-title" }, humanizeToolName(htmlPayload.toolName ?? options.fallbackToolName ?? null)), /* @__PURE__ */ import_react13.default.createElement(
+    ))), options.isIframeOpen ? /* @__PURE__ */ import_react26.default.createElement("div", { className: `mobile-custom-tool-iframe-shell ${options.isFullscreen ? "fullscreen" : ""}` }, options.isFullscreen ? /* @__PURE__ */ import_react26.default.createElement("div", { className: "mobile-custom-tool-fullscreen-bar" }, /* @__PURE__ */ import_react26.default.createElement("span", { className: "mobile-custom-tool-fullscreen-title" }, humanizeToolName(htmlPayload.toolName ?? options.fallbackToolName ?? null)), /* @__PURE__ */ import_react26.default.createElement(
       "button",
       {
         type: "button",
@@ -63335,7 +64335,7 @@ var renderToolResult = (result, index2, groupId, options) => {
         onClick: options.onToggleFullscreen
       },
       "Close"
-    )) : null, /* @__PURE__ */ import_react13.default.createElement(
+    )) : null, /* @__PURE__ */ import_react26.default.createElement(
       CustomToolIframe,
       {
         html: htmlPayload.html,
@@ -63345,7 +64345,7 @@ var renderToolResult = (result, index2, groupId, options) => {
       }
     )) : null);
   }
-  return /* @__PURE__ */ import_react13.default.createElement("div", { key: `${groupId}-result-${index2}`, className: `mobile-tool-result ${result.is_error ? "error" : "success"}` }, /* @__PURE__ */ import_react13.default.createElement("pre", null, toReadableToolResult(result)), /* @__PURE__ */ import_react13.default.createElement("span", { className: "mobile-tool-status" }, result.is_error ? "failed" : "completed"));
+  return /* @__PURE__ */ import_react26.default.createElement("div", { key: `${groupId}-result-${index3}`, className: `mobile-tool-result ${result.is_error ? "error" : "success"}` }, /* @__PURE__ */ import_react26.default.createElement("pre", null, toReadableToolResult(result)), /* @__PURE__ */ import_react26.default.createElement("span", { className: "mobile-tool-status" }, result.is_error ? "failed" : "completed"));
 };
 var ToolCallCard = ({
   group,
@@ -63353,31 +64353,31 @@ var ToolCallCard = ({
   currentUserId = null,
   rootPath = null
 }) => {
-  const normalizedToolName = (0, import_react13.useMemo)(() => normalizeToolName(group.name), [group.name]);
-  const isEditFile = (0, import_react13.useMemo)(() => isEditFileTool(group.name), [group.name]);
+  const normalizedToolName = (0, import_react26.useMemo)(() => normalizeToolName(group.name), [group.name]);
+  const isEditFile = (0, import_react26.useMemo)(() => isEditFileTool(group.name), [group.name]);
   const isHtmlRendererTool = normalizedToolName === "html_renderer";
-  const editArgs = (0, import_react13.useMemo)(() => getEditFileArgs(group.args), [group.args]);
-  const editResult = (0, import_react13.useMemo)(() => parseResultObject(group.results[0]?.content), [group.results]);
+  const editArgs = (0, import_react26.useMemo)(() => getEditFileArgs(group.args), [group.args]);
+  const editResult = (0, import_react26.useMemo)(() => parseResultObject(group.results[0]?.content), [group.results]);
   const hasEditFileView = isEditFile && Boolean(editArgs);
-  const hasHtmlResult = (0, import_react13.useMemo)(() => group.results.some((result) => Boolean(extractHtmlFromToolResult(result.content)?.html)), [group.results]);
-  const rendererHtmlFromArgs = (0, import_react13.useMemo)(() => {
+  const hasHtmlResult = (0, import_react26.useMemo)(() => group.results.some((result) => Boolean(extractHtmlFromToolResult(result.content)?.html)), [group.results]);
+  const rendererHtmlFromArgs = (0, import_react26.useMemo)(() => {
     if (!isHtmlRendererTool || !group.args) return "";
     const htmlValue = group.args.html;
     return typeof htmlValue === "string" ? htmlValue.trim() : "";
   }, [group.args, isHtmlRendererTool]);
-  const displayArgs = (0, import_react13.useMemo)(() => {
+  const displayArgs = (0, import_react26.useMemo)(() => {
     if (!group.args) return void 0;
     if (!isHtmlRendererTool) return group.args;
     const { html: _html, ...rest } = group.args;
     return Object.keys(rest).length > 0 ? rest : void 0;
   }, [group.args, isHtmlRendererTool]);
-  const [expanded, setExpanded] = (0, import_react13.useState)(defaultExpanded || hasEditFileView || hasHtmlResult || Boolean(rendererHtmlFromArgs));
-  const [openIframeByResultIndex, setOpenIframeByResultIndex] = (0, import_react13.useState)({});
-  const [fullscreenIframeByResultIndex, setFullscreenIframeByResultIndex] = (0, import_react13.useState)({});
-  (0, import_react13.useEffect)(() => {
+  const [expanded, setExpanded] = (0, import_react26.useState)(defaultExpanded || hasEditFileView || hasHtmlResult || Boolean(rendererHtmlFromArgs));
+  const [openIframeByResultIndex, setOpenIframeByResultIndex] = (0, import_react26.useState)({});
+  const [fullscreenIframeByResultIndex, setFullscreenIframeByResultIndex] = (0, import_react26.useState)({});
+  (0, import_react26.useEffect)(() => {
     if (hasEditFileView || hasHtmlResult || Boolean(rendererHtmlFromArgs)) setExpanded(true);
   }, [hasEditFileView, hasHtmlResult, rendererHtmlFromArgs]);
-  (0, import_react13.useEffect)(() => {
+  (0, import_react26.useEffect)(() => {
     if (!hasHtmlResult) {
       setOpenIframeByResultIndex({});
       return;
@@ -63385,24 +64385,24 @@ var ToolCallCard = ({
     setOpenIframeByResultIndex((previous3) => {
       const next = { ...previous3 };
       let changed = false;
-      group.results.forEach((result, index2) => {
+      group.results.forEach((result, index3) => {
         const hasHtml = Boolean(extractHtmlFromToolResult(result.content)?.html);
         if (!hasHtml) {
-          if (index2 in next) {
-            delete next[index2];
+          if (index3 in next) {
+            delete next[index3];
             changed = true;
           }
           return;
         }
-        if (!(index2 in next)) {
-          next[index2] = true;
+        if (!(index3 in next)) {
+          next[index3] = true;
           changed = true;
         }
       });
       return changed ? next : previous3;
     });
   }, [group.results, hasHtmlResult]);
-  (0, import_react13.useEffect)(() => {
+  (0, import_react26.useEffect)(() => {
     if (!hasHtmlResult) {
       setFullscreenIframeByResultIndex({});
       return;
@@ -63410,12 +64410,12 @@ var ToolCallCard = ({
     setFullscreenIframeByResultIndex((previous3) => {
       const next = { ...previous3 };
       let changed = false;
-      group.results.forEach((result, index2) => {
+      group.results.forEach((result, index3) => {
         const hasHtml = Boolean(extractHtmlFromToolResult(result.content)?.html);
-        const isOpen = openIframeByResultIndex[index2] !== false;
+        const isOpen = openIframeByResultIndex[index3] !== false;
         if (!hasHtml || !isOpen) {
-          if (next[index2]) {
-            delete next[index2];
+          if (next[index3]) {
+            delete next[index3];
             changed = true;
           }
         }
@@ -63423,7 +64423,7 @@ var ToolCallCard = ({
       return changed ? next : previous3;
     });
   }, [group.results, hasHtmlResult, openIframeByResultIndex]);
-  (0, import_react13.useEffect)(() => {
+  (0, import_react26.useEffect)(() => {
     const hasFullscreen = Object.values(fullscreenIframeByResultIndex).some(Boolean);
     if (!hasFullscreen) return;
     const originalOverflow = document.body.style.overflow;
@@ -63432,9 +64432,9 @@ var ToolCallCard = ({
       document.body.style.overflow = originalOverflow;
     };
   }, [fullscreenIframeByResultIndex]);
-  const pathHint = (0, import_react13.useMemo)(() => findPathHint(displayArgs), [displayArgs]);
+  const pathHint = (0, import_react26.useMemo)(() => findPathHint(displayArgs), [displayArgs]);
   const hasError = group.results.some((result) => Boolean(result.is_error)) || editResult?.success === false;
-  return /* @__PURE__ */ import_react13.default.createElement("div", { className: "mobile-tool-card" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: `mobile-tool-dot ${hasError ? "error" : "success"}` }), /* @__PURE__ */ import_react13.default.createElement("button", { className: "mobile-tool-header", onClick: () => setExpanded((value) => !value) }, /* @__PURE__ */ import_react13.default.createElement(Badge, { className: "mobile-tool-chip", variant: "outline" }, group.name || "tool"), !expanded && pathHint ? /* @__PURE__ */ import_react13.default.createElement("span", { className: "mobile-tool-path" }, pathHint) : null, /* @__PURE__ */ import_react13.default.createElement("span", { className: `tool-chevron ${expanded ? "open" : ""}` }, "\u203A")), /* @__PURE__ */ import_react13.default.createElement("div", { className: `tool-expand-container ${expanded ? "open" : ""}` }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "tool-expand-content" }, hasEditFileView && editArgs ? /* @__PURE__ */ import_react13.default.createElement(EditFileDiffView, { args: editArgs, result: group.results[0]?.content ?? {}, className: "mobile-editfile-view" }) : /* @__PURE__ */ import_react13.default.createElement(import_react13.default.Fragment, null, displayArgs && Object.keys(displayArgs).length > 0 ? /* @__PURE__ */ import_react13.default.createElement("div", { className: "mobile-tool-block" }, Object.entries(displayArgs).map(([key, value]) => /* @__PURE__ */ import_react13.default.createElement("div", { key, className: "mobile-tool-kv" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "mobile-tool-k" }, key, ":"), " ", /* @__PURE__ */ import_react13.default.createElement("span", { className: "mobile-tool-v" }, typeof value === "object" ? JSON.stringify(value) : String(value))))) : null, isHtmlRendererTool && rendererHtmlFromArgs ? /* @__PURE__ */ import_react13.default.createElement("div", { className: "mobile-tool-result success" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "mobile-tool-app-header" }, /* @__PURE__ */ import_react13.default.createElement("span", { className: "mobile-tool-app-label" }, "Rendered HTML")), /* @__PURE__ */ import_react13.default.createElement(
+  return /* @__PURE__ */ import_react26.default.createElement("div", { className: "mobile-tool-card" }, /* @__PURE__ */ import_react26.default.createElement("div", { className: `mobile-tool-dot ${hasError ? "error" : "success"}` }), /* @__PURE__ */ import_react26.default.createElement("button", { className: "mobile-tool-header", onClick: () => setExpanded((value) => !value) }, /* @__PURE__ */ import_react26.default.createElement(Badge, { className: "mobile-tool-chip", variant: "outline" }, group.name || "tool"), !expanded && pathHint ? /* @__PURE__ */ import_react26.default.createElement("span", { className: "mobile-tool-path" }, pathHint) : null, /* @__PURE__ */ import_react26.default.createElement("span", { className: `tool-chevron ${expanded ? "open" : ""}` }, "\u203A")), /* @__PURE__ */ import_react26.default.createElement("div", { className: `tool-expand-container ${expanded ? "open" : ""}` }, /* @__PURE__ */ import_react26.default.createElement("div", { className: "tool-expand-content" }, hasEditFileView && editArgs ? /* @__PURE__ */ import_react26.default.createElement(EditFileDiffView, { args: editArgs, result: group.results[0]?.content ?? {}, className: "mobile-editfile-view" }) : /* @__PURE__ */ import_react26.default.createElement(import_react26.default.Fragment, null, displayArgs && Object.keys(displayArgs).length > 0 ? /* @__PURE__ */ import_react26.default.createElement("div", { className: "mobile-tool-block" }, Object.entries(displayArgs).map(([key, value]) => /* @__PURE__ */ import_react26.default.createElement("div", { key, className: "mobile-tool-kv" }, /* @__PURE__ */ import_react26.default.createElement("span", { className: "mobile-tool-k" }, key, ":"), " ", /* @__PURE__ */ import_react26.default.createElement("span", { className: "mobile-tool-v" }, typeof value === "object" ? JSON.stringify(value) : String(value))))) : null, isHtmlRendererTool && rendererHtmlFromArgs ? /* @__PURE__ */ import_react26.default.createElement("div", { className: "mobile-tool-result success" }, /* @__PURE__ */ import_react26.default.createElement("div", { className: "mobile-tool-app-header" }, /* @__PURE__ */ import_react26.default.createElement("span", { className: "mobile-tool-app-label" }, "Rendered HTML")), /* @__PURE__ */ import_react26.default.createElement(
     CustomToolIframe,
     {
       html: rendererHtmlFromArgs,
@@ -63443,32 +64443,32 @@ var ToolCallCard = ({
       rootPath: rootPath ?? null
     }
   )) : group.results.map(
-    (result, index2) => renderToolResult(result, index2, group.id, {
+    (result, index3) => renderToolResult(result, index3, group.id, {
       currentUserId,
       rootPath,
       fallbackToolName: group.name,
-      isIframeOpen: openIframeByResultIndex[index2] !== false,
-      isFullscreen: fullscreenIframeByResultIndex[index2] === true,
+      isIframeOpen: openIframeByResultIndex[index3] !== false,
+      isFullscreen: fullscreenIframeByResultIndex[index3] === true,
       onToggleIframe: () => {
         setOpenIframeByResultIndex((previous3) => {
-          const nextOpen = previous3[index2] === false;
+          const nextOpen = previous3[index3] === false;
           if (!nextOpen) {
             setFullscreenIframeByResultIndex((fullscreenPrev) => {
-              if (!fullscreenPrev[index2]) return fullscreenPrev;
+              if (!fullscreenPrev[index3]) return fullscreenPrev;
               const nextFullscreen = { ...fullscreenPrev };
-              delete nextFullscreen[index2];
+              delete nextFullscreen[index3];
               return nextFullscreen;
             });
           }
           return {
             ...previous3,
-            [index2]: nextOpen
+            [index3]: nextOpen
           };
         });
       },
       onToggleFullscreen: () => setFullscreenIframeByResultIndex((previous3) => ({
         ...previous3,
-        [index2]: previous3[index2] !== true
+        [index3]: previous3[index3] !== true
       }))
     })
   )))));
@@ -63492,15 +64492,15 @@ var MessageBubble = ({
   onBranchUserMessage,
   onDeleteUserMessage
 }) => {
-  const renderItems = (0, import_react14.useMemo)(() => buildRenderItemsForMessage(message), [message]);
-  return /* @__PURE__ */ import_react14.default.createElement("article", { className: `mobile-message ${message.role}${isBranchTarget ? " branch-target" : ""}` }, /* @__PURE__ */ import_react14.default.createElement("header", { className: "mobile-message-header" }, /* @__PURE__ */ import_react14.default.createElement("span", { className: "mobile-message-role" }, roleLabel(message.role)), isStreaming ? /* @__PURE__ */ import_react14.default.createElement(Badge, { className: "mobile-streaming-badge" }, "streaming") : null), /* @__PURE__ */ import_react14.default.createElement("div", { className: "mobile-message-body" }, renderItems.length === 0 ? /* @__PURE__ */ import_react14.default.createElement("div", { className: "mobile-empty-text" }, "(no content)") : null, renderItems.map((item) => {
+  const renderItems = (0, import_react27.useMemo)(() => buildRenderItemsForMessage(message), [message]);
+  return /* @__PURE__ */ import_react27.default.createElement("article", { className: `mobile-message ${message.role}${isBranchTarget ? " branch-target" : ""}` }, /* @__PURE__ */ import_react27.default.createElement("header", { className: "mobile-message-header" }, /* @__PURE__ */ import_react27.default.createElement("span", { className: "mobile-message-role" }, roleLabel(message.role)), isStreaming ? /* @__PURE__ */ import_react27.default.createElement(Badge, { className: "mobile-streaming-badge" }, "streaming") : null), /* @__PURE__ */ import_react27.default.createElement("div", { className: "mobile-message-body" }, renderItems.length === 0 ? /* @__PURE__ */ import_react27.default.createElement("div", { className: "mobile-empty-text" }, "(no content)") : null, renderItems.map((item) => {
     if (item.type === "text") {
-      return /* @__PURE__ */ import_react14.default.createElement("div", { key: item.key, className: "mobile-message-text markdown-body" }, /* @__PURE__ */ import_react14.default.createElement(Markdown, { remarkPlugins: [remarkGfm] }, item.text));
+      return /* @__PURE__ */ import_react27.default.createElement("div", { key: item.key, className: "mobile-message-text markdown-body" }, /* @__PURE__ */ import_react27.default.createElement(Markdown, { remarkPlugins: [remarkGfm] }, item.text));
     }
     if (item.type === "reasoning") {
-      return /* @__PURE__ */ import_react14.default.createElement(ReasoningCard, { key: item.key, text: item.text });
+      return /* @__PURE__ */ import_react27.default.createElement(ReasoningCard, { key: item.key, text: item.text });
     }
-    return /* @__PURE__ */ import_react14.default.createElement(
+    return /* @__PURE__ */ import_react27.default.createElement(
       ToolCallCard,
       {
         key: item.key,
@@ -63510,7 +64510,7 @@ var MessageBubble = ({
         rootPath
       }
     );
-  })), showUserActions && message.role === "user" && !isStreaming ? /* @__PURE__ */ import_react14.default.createElement("footer", { className: "mobile-message-actions" }, /* @__PURE__ */ import_react14.default.createElement(Button, { onClick: () => onBranchUserMessage?.(message), disabled: userActionsDisabled, variant: "outline", size: "sm" }, "Branch"), /* @__PURE__ */ import_react14.default.createElement(
+  })), showUserActions && message.role === "user" && !isStreaming ? /* @__PURE__ */ import_react27.default.createElement("footer", { className: "mobile-message-actions" }, /* @__PURE__ */ import_react27.default.createElement(Button, { onClick: () => onBranchUserMessage?.(message), disabled: userActionsDisabled, variant: "outline", size: "sm" }, "Branch"), /* @__PURE__ */ import_react27.default.createElement(
     Button,
     {
       onClick: () => onDeleteUserMessage?.(message),
@@ -63535,14 +64535,14 @@ var MessageList = ({
   onBranchUserMessage,
   onDeleteUserMessage
 }) => {
-  const containerRef = (0, import_react15.useRef)(null);
-  const messageRefs = (0, import_react15.useRef)(/* @__PURE__ */ new Map());
-  (0, import_react15.useEffect)(() => {
+  const containerRef = (0, import_react28.useRef)(null);
+  const messageRefs = (0, import_react28.useRef)(/* @__PURE__ */ new Map());
+  (0, import_react28.useEffect)(() => {
     if (!containerRef.current) return;
     if (scrollToMessageId) return;
     containerRef.current.scrollTop = containerRef.current.scrollHeight;
   }, [messages, streamingMessage, scrollToMessageId]);
-  (0, import_react15.useEffect)(() => {
+  (0, import_react28.useEffect)(() => {
     if (!scrollToMessageId) return;
     let rafId = null;
     const scrollToTarget = () => {
@@ -63558,9 +64558,9 @@ var MessageList = ({
       }
     };
   }, [scrollToMessageId, onScrollToMessageHandled, messages]);
-  return /* @__PURE__ */ import_react15.default.createElement("div", { ref: containerRef, className: "mobile-message-list" }, messages.map((message) => {
+  return /* @__PURE__ */ import_react28.default.createElement("div", { ref: containerRef, className: "mobile-message-list" }, messages.map((message) => {
     const messageId = String(message.id);
-    return /* @__PURE__ */ import_react15.default.createElement(
+    return /* @__PURE__ */ import_react28.default.createElement(
       "div",
       {
         key: message.id,
@@ -63573,7 +64573,7 @@ var MessageList = ({
           }
         }
       },
-      /* @__PURE__ */ import_react15.default.createElement(
+      /* @__PURE__ */ import_react28.default.createElement(
         MessageBubble,
         {
           message,
@@ -63587,11 +64587,11 @@ var MessageList = ({
         }
       )
     );
-  }), streamingMessage ? /* @__PURE__ */ import_react15.default.createElement(MessageBubble, { message: streamingMessage, isStreaming: true, currentUserId, rootPath }) : null);
+  }), streamingMessage ? /* @__PURE__ */ import_react28.default.createElement(MessageBubble, { message: streamingMessage, isStreaming: true, currentUserId, rootPath }) : null);
 };
 
 // electron/headlessServer/ui/mobile/src/components/MessageTreeDrawer.tsx
-var import_react16 = __toESM(require_react(), 1);
+var import_react29 = __toESM(require_react(), 1);
 var NODE_WIDTH = 180;
 var NODE_HEIGHT = 58;
 var H_SPACING = 220;
@@ -63693,47 +64693,47 @@ var MessageTreeDrawer = ({
   onSelectMessage,
   onClose
 }) => {
-  const layout = (0, import_react16.useMemo)(() => buildTreeLayout(tree), [tree]);
-  const activePathSet = (0, import_react16.useMemo)(() => new Set(activePathIds.map((id) => String(id))), [activePathIds]);
-  const nodeById = (0, import_react16.useMemo)(() => new Map(layout.nodes.map((node2) => [node2.id, node2])), [layout.nodes]);
-  const canvasRef = (0, import_react16.useRef)(null);
-  const [viewport, setViewport] = (0, import_react16.useState)({ width: 0, height: 0 });
-  const [zoom, setZoom] = (0, import_react16.useState)(1);
-  const [pan, setPan] = (0, import_react16.useState)({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = (0, import_react16.useState)(false);
-  const zoomRef = (0, import_react16.useRef)(zoom);
-  const panRef = (0, import_react16.useRef)(pan);
-  const hasAutoFittedRef = (0, import_react16.useRef)(false);
-  const lastTreeSignatureRef = (0, import_react16.useRef)("");
-  const pointerMapRef = (0, import_react16.useRef)(/* @__PURE__ */ new Map());
-  const pinchStateRef = (0, import_react16.useRef)(null);
-  const dragStateRef = (0, import_react16.useRef)(null);
-  const movedDuringInteractionRef = (0, import_react16.useRef)(false);
-  const suppressNextClickRef = (0, import_react16.useRef)(false);
-  (0, import_react16.useEffect)(() => {
+  const layout = (0, import_react29.useMemo)(() => buildTreeLayout(tree), [tree]);
+  const activePathSet = (0, import_react29.useMemo)(() => new Set(activePathIds.map((id) => String(id))), [activePathIds]);
+  const nodeById = (0, import_react29.useMemo)(() => new Map(layout.nodes.map((node2) => [node2.id, node2])), [layout.nodes]);
+  const canvasRef = (0, import_react29.useRef)(null);
+  const [viewport, setViewport] = (0, import_react29.useState)({ width: 0, height: 0 });
+  const [zoom, setZoom] = (0, import_react29.useState)(1);
+  const [pan, setPan] = (0, import_react29.useState)({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = (0, import_react29.useState)(false);
+  const zoomRef = (0, import_react29.useRef)(zoom);
+  const panRef = (0, import_react29.useRef)(pan);
+  const hasAutoFittedRef = (0, import_react29.useRef)(false);
+  const lastTreeSignatureRef = (0, import_react29.useRef)("");
+  const pointerMapRef = (0, import_react29.useRef)(/* @__PURE__ */ new Map());
+  const pinchStateRef = (0, import_react29.useRef)(null);
+  const dragStateRef = (0, import_react29.useRef)(null);
+  const movedDuringInteractionRef = (0, import_react29.useRef)(false);
+  const suppressNextClickRef = (0, import_react29.useRef)(false);
+  (0, import_react29.useEffect)(() => {
     zoomRef.current = zoom;
   }, [zoom]);
-  (0, import_react16.useEffect)(() => {
+  (0, import_react29.useEffect)(() => {
     panRef.current = pan;
   }, [pan]);
-  const treeSignature = (0, import_react16.useMemo)(() => layout.nodes.map((node2) => node2.id).join("|"), [layout.nodes]);
-  (0, import_react16.useEffect)(() => {
+  const treeSignature = (0, import_react29.useMemo)(() => layout.nodes.map((node2) => node2.id).join("|"), [layout.nodes]);
+  (0, import_react29.useEffect)(() => {
     if (treeSignature === lastTreeSignatureRef.current) return;
     lastTreeSignatureRef.current = treeSignature;
     hasAutoFittedRef.current = false;
   }, [treeSignature]);
-  const updateViewport = (0, import_react16.useCallback)(() => {
+  const updateViewport = (0, import_react29.useCallback)(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     setViewport({ width: canvas.clientWidth, height: canvas.clientHeight });
   }, []);
-  (0, import_react16.useEffect)(() => {
+  (0, import_react29.useEffect)(() => {
     if (!open) return;
     updateViewport();
     window.addEventListener("resize", updateViewport);
     return () => window.removeEventListener("resize", updateViewport);
   }, [open, updateViewport]);
-  const zoomAtClientPoint = (0, import_react16.useCallback)((clientX, clientY, desiredZoom) => {
+  const zoomAtClientPoint = (0, import_react29.useCallback)((clientX, clientY, desiredZoom) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -63753,7 +64753,7 @@ var MessageTreeDrawer = ({
     setZoom(clampedZoom);
     setPan(nextPan);
   }, []);
-  const fitToView = (0, import_react16.useCallback)(() => {
+  const fitToView = (0, import_react29.useCallback)(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const width = canvas.clientWidth || 1;
@@ -63770,7 +64770,7 @@ var MessageTreeDrawer = ({
     setZoom(nextZoom);
     setPan(nextPan);
   }, [layout.height, layout.width]);
-  (0, import_react16.useEffect)(() => {
+  (0, import_react29.useEffect)(() => {
     if (!open) return;
     const id = window.requestAnimationFrame(() => {
       updateViewport();
@@ -63782,7 +64782,7 @@ var MessageTreeDrawer = ({
       window.cancelAnimationFrame(id);
     };
   }, [open, fitToView, updateViewport]);
-  const startPinchIfNeeded = (0, import_react16.useCallback)(() => {
+  const startPinchIfNeeded = (0, import_react29.useCallback)(() => {
     const touchPointers = Array.from(pointerMapRef.current.values()).filter((pointer) => pointer.pointerType === "touch");
     if (touchPointers.length < 2) return;
     const [first, second] = touchPointers;
@@ -63863,7 +64863,7 @@ var MessageTreeDrawer = ({
     panRef.current = nextPan;
     setPan(nextPan);
   };
-  const clearPointer = (0, import_react16.useCallback)((pointerId) => {
+  const clearPointer = (0, import_react29.useCallback)((pointerId) => {
     pointerMapRef.current.delete(pointerId);
     const touchPointers = Array.from(pointerMapRef.current.values()).filter((pointer) => pointer.pointerType === "touch");
     if (touchPointers.length < 2) {
@@ -63912,14 +64912,14 @@ var MessageTreeDrawer = ({
     onSelectMessage(messageId);
     onClose();
   };
-  return /* @__PURE__ */ import_react16.default.createElement(import_react16.default.Fragment, null, /* @__PURE__ */ import_react16.default.createElement(
+  return /* @__PURE__ */ import_react29.default.createElement(import_react29.default.Fragment, null, /* @__PURE__ */ import_react29.default.createElement(
     "div",
     {
       className: `mobile-tree-drawer-backdrop${open ? " open" : ""}`,
       onClick: onClose,
       "aria-hidden": !open
     }
-  ), /* @__PURE__ */ import_react16.default.createElement("section", { className: `mobile-tree-drawer${open ? " open" : ""}`, "aria-hidden": !open }, /* @__PURE__ */ import_react16.default.createElement("header", { className: "mobile-tree-drawer-header" }, /* @__PURE__ */ import_react16.default.createElement("div", { className: "mobile-tree-drawer-grabber" }), /* @__PURE__ */ import_react16.default.createElement("div", { className: "mobile-tree-drawer-title-row" }, /* @__PURE__ */ import_react16.default.createElement("strong", null, "Chat Tree"), /* @__PURE__ */ import_react16.default.createElement(Button, { onClick: onClose, variant: "outline", size: "sm" }, "Close"))), /* @__PURE__ */ import_react16.default.createElement("div", { className: "mobile-tree-drawer-body" }, !layout.nodes.length ? /* @__PURE__ */ import_react16.default.createElement("div", { className: "mobile-tree-empty" }, "No tree nodes yet.") : null, layout.nodes.length ? /* @__PURE__ */ import_react16.default.createElement(import_react16.default.Fragment, null, /* @__PURE__ */ import_react16.default.createElement("div", { className: "mobile-tree-canvas-toolbar" }, /* @__PURE__ */ import_react16.default.createElement(Button, { onClick: () => handleZoomStep(1.2), variant: "outline", size: "sm" }, "+"), /* @__PURE__ */ import_react16.default.createElement(Button, { onClick: () => handleZoomStep(1 / 1.2), variant: "outline", size: "sm" }, "\u2212"), /* @__PURE__ */ import_react16.default.createElement(Button, { onClick: fitToView, variant: "outline", size: "sm" }, "Fit"), /* @__PURE__ */ import_react16.default.createElement(Button, { onClick: onToggleHideEmptyAssistantMessages, variant: "outline", size: "sm" }, hideEmptyAssistantMessages ? "Show Empty AI" : "Hide Empty AI"), /* @__PURE__ */ import_react16.default.createElement("span", null, "Zoom ", Math.round(zoom * 100), "%")), /* @__PURE__ */ import_react16.default.createElement(
+  ), /* @__PURE__ */ import_react29.default.createElement("section", { className: `mobile-tree-drawer${open ? " open" : ""}`, "aria-hidden": !open }, /* @__PURE__ */ import_react29.default.createElement("header", { className: "mobile-tree-drawer-header" }, /* @__PURE__ */ import_react29.default.createElement("div", { className: "mobile-tree-drawer-grabber" }), /* @__PURE__ */ import_react29.default.createElement("div", { className: "mobile-tree-drawer-title-row" }, /* @__PURE__ */ import_react29.default.createElement("strong", null, "Chat Tree"), /* @__PURE__ */ import_react29.default.createElement(Button, { onClick: onClose, variant: "outline", size: "sm" }, "Close"))), /* @__PURE__ */ import_react29.default.createElement("div", { className: "mobile-tree-drawer-body" }, !layout.nodes.length ? /* @__PURE__ */ import_react29.default.createElement("div", { className: "mobile-tree-empty" }, "No tree nodes yet.") : null, layout.nodes.length ? /* @__PURE__ */ import_react29.default.createElement(import_react29.default.Fragment, null, /* @__PURE__ */ import_react29.default.createElement("div", { className: "mobile-tree-canvas-toolbar" }, /* @__PURE__ */ import_react29.default.createElement(Button, { onClick: () => handleZoomStep(1.2), variant: "outline", size: "sm" }, "+"), /* @__PURE__ */ import_react29.default.createElement(Button, { onClick: () => handleZoomStep(1 / 1.2), variant: "outline", size: "sm" }, "\u2212"), /* @__PURE__ */ import_react29.default.createElement(Button, { onClick: fitToView, variant: "outline", size: "sm" }, "Fit"), /* @__PURE__ */ import_react29.default.createElement(Button, { onClick: onToggleHideEmptyAssistantMessages, variant: "outline", size: "sm" }, hideEmptyAssistantMessages ? "Show Empty AI" : "Hide Empty AI"), /* @__PURE__ */ import_react29.default.createElement("span", null, "Zoom ", Math.round(zoom * 100), "%")), /* @__PURE__ */ import_react29.default.createElement(
     "div",
     {
       ref: canvasRef,
@@ -63930,7 +64930,7 @@ var MessageTreeDrawer = ({
       onPointerCancel: handlePointerCancel,
       onWheel: handleWheel
     },
-    /* @__PURE__ */ import_react16.default.createElement("svg", { width: Math.max(1, viewport.width), height: Math.max(1, viewport.height) }, /* @__PURE__ */ import_react16.default.createElement("g", { transform: `translate(${pan.x} ${pan.y}) scale(${zoom})` }, /* @__PURE__ */ import_react16.default.createElement("g", { strokeLinecap: "round", strokeLinejoin: "round", fill: "none" }, layout.edges.map((edge) => {
+    /* @__PURE__ */ import_react29.default.createElement("svg", { width: Math.max(1, viewport.width), height: Math.max(1, viewport.height) }, /* @__PURE__ */ import_react29.default.createElement("g", { transform: `translate(${pan.x} ${pan.y}) scale(${zoom})` }, /* @__PURE__ */ import_react29.default.createElement("g", { strokeLinecap: "round", strokeLinejoin: "round", fill: "none" }, layout.edges.map((edge) => {
       const from = nodeById.get(edge.fromId);
       const to = nodeById.get(edge.toId);
       if (!from || !to) return null;
@@ -63941,7 +64941,7 @@ var MessageTreeDrawer = ({
       const toY = to.y;
       const midY = fromY + (toY - fromY) * 0.45;
       const path2 = `M ${fromX} ${fromY} L ${fromX} ${midY} L ${toX} ${midY} L ${toX} ${toY}`;
-      return /* @__PURE__ */ import_react16.default.createElement(
+      return /* @__PURE__ */ import_react29.default.createElement(
         "path",
         {
           key: `${edge.fromId}-${edge.toId}`,
@@ -63953,7 +64953,7 @@ var MessageTreeDrawer = ({
       const isActiveTip = activeTipId === node2.id;
       const isOnActivePath = activePathSet.has(node2.id);
       const [line1, line2] = getPreviewLines(node2.message);
-      return /* @__PURE__ */ import_react16.default.createElement(
+      return /* @__PURE__ */ import_react29.default.createElement(
         "g",
         {
           key: node2.id,
@@ -63961,7 +64961,7 @@ var MessageTreeDrawer = ({
           className: "mobile-tree-node-visual",
           onClick: () => handleNodeClick(node2.id)
         },
-        /* @__PURE__ */ import_react16.default.createElement(
+        /* @__PURE__ */ import_react29.default.createElement(
           "rect",
           {
             width: NODE_WIDTH,
@@ -63970,21 +64970,21 @@ var MessageTreeDrawer = ({
             className: `mobile-tree-node-rect${isActiveTip ? " active-tip" : isOnActivePath ? " active-path" : ""}`
           }
         ),
-        /* @__PURE__ */ import_react16.default.createElement("text", { x: "10", y: "16", className: "mobile-tree-node-role-text" }, roleLabel2(node2.sender)),
-        /* @__PURE__ */ import_react16.default.createElement("text", { x: "10", y: "34", className: "mobile-tree-node-message-text" }, line1),
-        /* @__PURE__ */ import_react16.default.createElement("text", { x: "10", y: "49", className: "mobile-tree-node-message-text" }, line2),
-        node2.childCount > 1 ? /* @__PURE__ */ import_react16.default.createElement("text", { x: NODE_WIDTH - 10, y: "16", textAnchor: "end", className: "mobile-tree-node-branch-count-text" }, "\xD7", node2.childCount) : null
+        /* @__PURE__ */ import_react29.default.createElement("text", { x: "10", y: "16", className: "mobile-tree-node-role-text" }, roleLabel2(node2.sender)),
+        /* @__PURE__ */ import_react29.default.createElement("text", { x: "10", y: "34", className: "mobile-tree-node-message-text" }, line1),
+        /* @__PURE__ */ import_react29.default.createElement("text", { x: "10", y: "49", className: "mobile-tree-node-message-text" }, line2),
+        node2.childCount > 1 ? /* @__PURE__ */ import_react29.default.createElement("text", { x: NODE_WIDTH - 10, y: "16", textAnchor: "end", className: "mobile-tree-node-branch-count-text" }, "\xD7", node2.childCount) : null
       );
     })))
   )) : null)));
 };
 
 // electron/headlessServer/ui/mobile/src/components/MobileHeader.tsx
-var import_react19 = __toESM(require_react(), 1);
-var import_react_dom2 = __toESM(require_react_dom(), 1);
+var import_react32 = __toESM(require_react(), 1);
+var import_react_dom3 = __toESM(require_react_dom(), 1);
 
 // electron/headlessServer/ui/mobile/src/components/ProfilePicker.tsx
-var import_react17 = __toESM(require_react(), 1);
+var import_react30 = __toESM(require_react(), 1);
 var ProfilePicker = ({
   users,
   selectedUserId,
@@ -63994,20 +64994,20 @@ var ProfilePicker = ({
   labelText = "Profile",
   className
 }) => {
-  return /* @__PURE__ */ import_react17.default.createElement("div", { className: cn("mobile-profile-picker", compact && "mobile-profile-picker--compact", className) }, /* @__PURE__ */ import_react17.default.createElement("label", { className: "mobile-profile-picker-label" }, /* @__PURE__ */ import_react17.default.createElement("span", null, labelText), /* @__PURE__ */ import_react17.default.createElement(
+  return /* @__PURE__ */ import_react30.default.createElement("div", { className: cn("mobile-profile-picker", compact && "mobile-profile-picker--compact", className) }, /* @__PURE__ */ import_react30.default.createElement("label", { className: "mobile-profile-picker-label" }, /* @__PURE__ */ import_react30.default.createElement("span", null, labelText), /* @__PURE__ */ import_react30.default.createElement(
     Select,
     {
       value: selectedUserId || "",
       onChange: (event) => onSelect(event.target.value),
       disabled: disabled || users.length === 0
     },
-    users.length === 0 ? /* @__PURE__ */ import_react17.default.createElement("option", { value: "" }, "No local users found") : null,
-    users.map((user) => /* @__PURE__ */ import_react17.default.createElement("option", { key: user.id, value: user.id }, user.username || user.id, " \xB7 ", user.conversation_count ?? 0, " conv"))
+    users.length === 0 ? /* @__PURE__ */ import_react30.default.createElement("option", { value: "" }, "No local users found") : null,
+    users.map((user) => /* @__PURE__ */ import_react30.default.createElement("option", { key: user.id, value: user.id }, user.username || user.id, " \xB7 ", user.conversation_count ?? 0, " conv"))
   )));
 };
 
 // electron/headlessServer/ui/mobile/src/components/ToolTogglePanel.tsx
-var import_react18 = __toESM(require_react(), 1);
+var import_react31 = __toESM(require_react(), 1);
 var ToolTogglePanel = ({
   tools,
   busyToolNames,
@@ -64017,18 +65017,18 @@ var ToolTogglePanel = ({
   onToggleTool
 }) => {
   const busy = new Set(busyToolNames);
-  const [isOpen, setIsOpen] = (0, import_react18.useState)(false);
-  return /* @__PURE__ */ import_react18.default.createElement("section", { className: "mobile-tool-panel" }, /* @__PURE__ */ import_react18.default.createElement(
+  const [isOpen, setIsOpen] = (0, import_react31.useState)(false);
+  return /* @__PURE__ */ import_react31.default.createElement("section", { className: "mobile-tool-panel" }, /* @__PURE__ */ import_react31.default.createElement(
     "details",
     {
       className: "mobile-tool-panel-details",
       open: isOpen,
       onToggle: (event) => setIsOpen(event.currentTarget.open)
     },
-    /* @__PURE__ */ import_react18.default.createElement("summary", { className: "mobile-tool-panel-header" }, /* @__PURE__ */ import_react18.default.createElement("h2", null, "Custom tools"), /* @__PURE__ */ import_react18.default.createElement("span", { className: "mobile-tool-panel-chevron", "aria-hidden": "true" }, isOpen ? "\u25BE" : "\u25B8")),
-    /* @__PURE__ */ import_react18.default.createElement("div", { className: "mobile-tool-panel-body" }, /* @__PURE__ */ import_react18.default.createElement("div", { className: "mobile-tool-panel-actions" }, /* @__PURE__ */ import_react18.default.createElement(Button, { onClick: onRefresh, disabled: disabled || loading, variant: "outline", size: "sm" }, loading ? "Refreshing\u2026" : "Refresh")), tools.length === 0 ? /* @__PURE__ */ import_react18.default.createElement("p", { className: "mobile-tree-muted" }, "No custom tools found.") : /* @__PURE__ */ import_react18.default.createElement("div", { className: "mobile-tool-toggle-list" }, tools.map((tool) => {
+    /* @__PURE__ */ import_react31.default.createElement("summary", { className: "mobile-tool-panel-header" }, /* @__PURE__ */ import_react31.default.createElement("h2", null, "Custom tools"), /* @__PURE__ */ import_react31.default.createElement("span", { className: "mobile-tool-panel-chevron", "aria-hidden": "true" }, isOpen ? "\u25BE" : "\u25B8")),
+    /* @__PURE__ */ import_react31.default.createElement("div", { className: "mobile-tool-panel-body" }, /* @__PURE__ */ import_react31.default.createElement("div", { className: "mobile-tool-panel-actions" }, /* @__PURE__ */ import_react31.default.createElement(Button, { onClick: onRefresh, disabled: disabled || loading, variant: "outline", size: "sm" }, loading ? "Refreshing\u2026" : "Refresh")), tools.length === 0 ? /* @__PURE__ */ import_react31.default.createElement("p", { className: "mobile-tree-muted" }, "No custom tools found.") : /* @__PURE__ */ import_react31.default.createElement("div", { className: "mobile-tool-toggle-list" }, tools.map((tool) => {
       const toggling = busy.has(tool.name);
-      return /* @__PURE__ */ import_react18.default.createElement("div", { key: tool.name, className: "mobile-tool-toggle-row" }, /* @__PURE__ */ import_react18.default.createElement("div", null, /* @__PURE__ */ import_react18.default.createElement("strong", null, tool.name), /* @__PURE__ */ import_react18.default.createElement("div", { className: "mobile-tool-toggle-meta" }, /* @__PURE__ */ import_react18.default.createElement(Badge, { variant: tool.enabled ? "success" : "outline" }, tool.enabled ? "Enabled" : "Disabled"), /* @__PURE__ */ import_react18.default.createElement(Badge, { variant: tool.loaded ? "default" : "outline" }, tool.loaded ? "Loaded" : "Not loaded")), tool.description ? /* @__PURE__ */ import_react18.default.createElement("p", null, tool.description) : null), /* @__PURE__ */ import_react18.default.createElement(
+      return /* @__PURE__ */ import_react31.default.createElement("div", { key: tool.name, className: "mobile-tool-toggle-row" }, /* @__PURE__ */ import_react31.default.createElement("div", null, /* @__PURE__ */ import_react31.default.createElement("strong", null, tool.name), /* @__PURE__ */ import_react31.default.createElement("div", { className: "mobile-tool-toggle-meta" }, /* @__PURE__ */ import_react31.default.createElement(Badge, { variant: tool.enabled ? "success" : "outline" }, tool.enabled ? "Enabled" : "Disabled"), /* @__PURE__ */ import_react31.default.createElement(Badge, { variant: tool.loaded ? "default" : "outline" }, tool.loaded ? "Loaded" : "Not loaded")), tool.description ? /* @__PURE__ */ import_react31.default.createElement("p", null, tool.description) : null), /* @__PURE__ */ import_react31.default.createElement(
         Button,
         {
           onClick: () => onToggleTool(tool.name, !tool.enabled),
@@ -64043,16 +65043,25 @@ var ToolTogglePanel = ({
 };
 
 // electron/headlessServer/ui/mobile/src/components/MobileHeader.tsx
-var MODEL_OPTIONS = ["gpt-5.4", "gpt-5.1-codex-mini", "gpt-5.1-codex", "gpt-5.2-codex", "gpt-5.3-codex", "gpt-5.1", "gpt-5.2", "gpt-4o"];
+var PROVIDER_LABELS = {
+  openaichatgpt: "OpenAI ChatGPT",
+  openrouter: "OpenRouter",
+  lmstudio: "LM Studio"
+};
 var MobileHeader = ({
+  providerName,
+  providerOptions,
   modelName,
+  modelOptions,
   statusText,
   users,
   selectedUserId,
+  onProviderChange,
   onModelChange,
   onUserSelect,
   selectorsDisabled = false,
   openAiAuthenticated,
+  openRouterAuthenticated,
   openAiBusy,
   hasPendingOpenAiFlow,
   onOpenAiLoginStart,
@@ -64064,10 +65073,14 @@ var MobileHeader = ({
   onRefreshCustomTools,
   onToggleCustomTool,
   activeConversationId,
+  conversationSystemPromptInput,
+  conversationContextInput,
   conversationCwdInput,
+  onConversationSystemPromptInputChange,
+  onConversationContextInputChange,
   onConversationCwdInputChange,
-  onSaveConversationCwd,
-  savingConversationCwd,
+  onSaveConversationSettings,
+  savingConversationSettings,
   onOpenProjectConversationPicker,
   canOpenProjectConversationPicker,
   onOpenBranchTree,
@@ -64075,9 +65088,39 @@ var MobileHeader = ({
   onOpenPathPicker,
   canOpenPathPicker
 }) => {
-  const [settingsOpen, setSettingsOpen] = (0, import_react19.useState)(false);
-  (0, import_react19.useEffect)(() => {
-    if (!settingsOpen) return;
+  const [settingsOpen, setSettingsOpen] = (0, import_react32.useState)(false);
+  const [modelSearch, setModelSearch] = (0, import_react32.useState)("");
+  const [conversationSettingsExpanded, setConversationSettingsExpanded] = (0, import_react32.useState)(false);
+  const filteredModelOptions = (0, import_react32.useMemo)(() => {
+    const query = modelSearch.trim().toLowerCase();
+    if (!query) return modelOptions;
+    const matches = modelOptions.filter((model) => model.toLowerCase().includes(query));
+    if (matches.includes(modelName) || !modelName) return matches;
+    return [modelName, ...matches];
+  }, [modelOptions, modelName, modelSearch]);
+  const authStatus = (0, import_react32.useMemo)(() => {
+    if (providerName === "openaichatgpt") {
+      return {
+        label: `OpenAI ${openAiAuthenticated ? "connected" : "not connected"}`,
+        className: openAiAuthenticated ? "connected" : "disconnected"
+      };
+    }
+    if (providerName === "openrouter") {
+      return {
+        label: `OpenRouter ${openRouterAuthenticated ? "connected" : "not connected"}`,
+        className: openRouterAuthenticated ? "connected" : "disconnected"
+      };
+    }
+    return {
+      label: "LM Studio local provider",
+      className: "connected"
+    };
+  }, [providerName, openAiAuthenticated, openRouterAuthenticated]);
+  (0, import_react32.useEffect)(() => {
+    if (!settingsOpen) {
+      setModelSearch("");
+      return;
+    }
     const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleEscape = (event) => {
@@ -64089,8 +65132,11 @@ var MobileHeader = ({
       window.removeEventListener("keydown", handleEscape);
     };
   }, [settingsOpen]);
-  const settingsPortal = settingsOpen && typeof document !== "undefined" ? (0, import_react_dom2.createPortal)(
-    /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-settings-portal-root" }, /* @__PURE__ */ import_react19.default.createElement(
+  (0, import_react32.useEffect)(() => {
+    setModelSearch("");
+  }, [providerName]);
+  const settingsPortal = settingsOpen && typeof document !== "undefined" ? (0, import_react_dom3.createPortal)(
+    /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-settings-portal-root" }, /* @__PURE__ */ import_react32.default.createElement(
       "button",
       {
         type: "button",
@@ -64098,15 +65144,32 @@ var MobileHeader = ({
         className: "mobile-settings-portal-backdrop",
         onClick: () => setSettingsOpen(false)
       }
-    ), /* @__PURE__ */ import_react19.default.createElement("section", { className: "mobile-settings-portal", role: "dialog", "aria-modal": "true", "aria-label": "Chat settings" }, /* @__PURE__ */ import_react19.default.createElement("header", { className: "mobile-settings-portal-header" }, /* @__PURE__ */ import_react19.default.createElement("div", null, /* @__PURE__ */ import_react19.default.createElement("h2", null, "Chat settings"), /* @__PURE__ */ import_react19.default.createElement("p", null, "Pick model + profile, then continue chatting.")), /* @__PURE__ */ import_react19.default.createElement(Button, { variant: "outline", size: "sm", onClick: () => setSettingsOpen(false) }, "Done")), /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-settings-portal-body" }, /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-settings-select-grid" }, /* @__PURE__ */ import_react19.default.createElement("label", { className: "mobile-settings-field" }, /* @__PURE__ */ import_react19.default.createElement("span", null, "Model"), /* @__PURE__ */ import_react19.default.createElement(
+    ), /* @__PURE__ */ import_react32.default.createElement("section", { className: "mobile-settings-portal", role: "dialog", "aria-modal": "true", "aria-label": "Chat settings" }, /* @__PURE__ */ import_react32.default.createElement("header", { className: "mobile-settings-portal-header" }, /* @__PURE__ */ import_react32.default.createElement("div", null, /* @__PURE__ */ import_react32.default.createElement("h2", null, "Chat settings"), /* @__PURE__ */ import_react32.default.createElement("p", null, "Pick model + profile, then continue chatting.")), /* @__PURE__ */ import_react32.default.createElement(Button, { variant: "outline", size: "sm", onClick: () => setSettingsOpen(false) }, "Done")), /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-settings-portal-body" }, /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-settings-select-grid" }, /* @__PURE__ */ import_react32.default.createElement("label", { className: "mobile-settings-field" }, /* @__PURE__ */ import_react32.default.createElement("span", null, "Provider"), /* @__PURE__ */ import_react32.default.createElement(
+      Select,
+      {
+        value: providerName,
+        onChange: (event) => onProviderChange(event.target.value),
+        disabled: selectorsDisabled
+      },
+      providerOptions.map((provider) => /* @__PURE__ */ import_react32.default.createElement("option", { key: provider, value: provider }, PROVIDER_LABELS[provider]))
+    )), /* @__PURE__ */ import_react32.default.createElement("label", { className: "mobile-settings-field" }, /* @__PURE__ */ import_react32.default.createElement("span", null, "Model"), /* @__PURE__ */ import_react32.default.createElement(
+      Input,
+      {
+        type: "text",
+        value: modelSearch,
+        onChange: (event) => setModelSearch(event.target.value),
+        placeholder: "Search models\u2026",
+        disabled: selectorsDisabled || modelOptions.length <= 1
+      }
+    ), /* @__PURE__ */ import_react32.default.createElement("span", { className: "mobile-settings-field-hint" }, filteredModelOptions.length, " of ", modelOptions.length, " models"), /* @__PURE__ */ import_react32.default.createElement(
       Select,
       {
         value: modelName,
         onChange: (event) => onModelChange(event.target.value),
         disabled: selectorsDisabled
       },
-      MODEL_OPTIONS.map((model) => /* @__PURE__ */ import_react19.default.createElement("option", { key: model, value: model }, model))
-    )), /* @__PURE__ */ import_react19.default.createElement(
+      filteredModelOptions.map((model) => /* @__PURE__ */ import_react32.default.createElement("option", { key: model, value: model }, model))
+    )), /* @__PURE__ */ import_react32.default.createElement(
       ProfilePicker,
       {
         users,
@@ -64115,7 +65178,7 @@ var MobileHeader = ({
         disabled: selectorsDisabled,
         compact: true
       }
-    )), /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-settings-auth-row" }, /* @__PURE__ */ import_react19.default.createElement(Badge, { className: `mobile-auth-pill ${openAiAuthenticated ? "connected" : "disconnected"}`, variant: "outline" }, "OpenAI ", openAiAuthenticated ? "connected" : "not connected"), !openAiAuthenticated ? /* @__PURE__ */ import_react19.default.createElement(import_react19.default.Fragment, null, /* @__PURE__ */ import_react19.default.createElement(Button, { onClick: onOpenAiLoginStart, disabled: openAiBusy, variant: "secondary", size: "sm" }, "Sign in OpenAI"), /* @__PURE__ */ import_react19.default.createElement(
+    )), /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-settings-auth-row" }, /* @__PURE__ */ import_react32.default.createElement(Badge, { className: `mobile-auth-pill ${authStatus.className}`, variant: "outline" }, authStatus.label), providerName === "openaichatgpt" ? !openAiAuthenticated ? /* @__PURE__ */ import_react32.default.createElement(import_react32.default.Fragment, null, /* @__PURE__ */ import_react32.default.createElement(Button, { onClick: onOpenAiLoginStart, disabled: openAiBusy, variant: "secondary", size: "sm" }, "Sign in OpenAI"), /* @__PURE__ */ import_react32.default.createElement(
       Button,
       {
         onClick: onOpenAiLoginComplete,
@@ -64124,7 +65187,37 @@ var MobileHeader = ({
         size: "sm"
       },
       "Complete sign-in"
-    )) : /* @__PURE__ */ import_react19.default.createElement(Button, { onClick: onOpenAiLogout, disabled: openAiBusy, variant: "outline", size: "sm" }, "Sign out OpenAI")), /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-conversation-cwd mobile-conversation-cwd--in-settings" }, /* @__PURE__ */ import_react19.default.createElement("label", { htmlFor: "conversation-cwd-input" }, "Conversation working directory (cwd)"), /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-conversation-cwd-row" }, /* @__PURE__ */ import_react19.default.createElement(
+    )) : /* @__PURE__ */ import_react32.default.createElement(Button, { onClick: onOpenAiLogout, disabled: openAiBusy, variant: "outline", size: "sm" }, "Sign out OpenAI") : providerName === "openrouter" ? /* @__PURE__ */ import_react32.default.createElement("span", { className: "mobile-conversation-cwd-hint" }, "OpenRouter uses your stored app token.") : /* @__PURE__ */ import_react32.default.createElement("span", { className: "mobile-conversation-cwd-hint" }, "LM Studio uses your local runtime. No remote auth needed.")), /* @__PURE__ */ import_react32.default.createElement("section", { className: "mobile-settings-collapsible" }, /* @__PURE__ */ import_react32.default.createElement(
+      "button",
+      {
+        type: "button",
+        className: "mobile-settings-collapsible-toggle",
+        onClick: () => setConversationSettingsExpanded((previous3) => !previous3),
+        "aria-expanded": conversationSettingsExpanded
+      },
+      /* @__PURE__ */ import_react32.default.createElement("span", null, /* @__PURE__ */ import_react32.default.createElement("strong", null, "Prompt, context, and cwd"), /* @__PURE__ */ import_react32.default.createElement("small", null, "Project prompt/context plus conversation cwd")),
+      /* @__PURE__ */ import_react32.default.createElement("span", { "aria-hidden": "true" }, conversationSettingsExpanded ? "\u25BE" : "\u25B8")
+    ), conversationSettingsExpanded ? /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-settings-collapsible-body" }, /* @__PURE__ */ import_react32.default.createElement("label", { className: "mobile-settings-field", htmlFor: "conversation-system-prompt-input" }, /* @__PURE__ */ import_react32.default.createElement("span", null, "System prompt"), /* @__PURE__ */ import_react32.default.createElement(
+      Textarea,
+      {
+        id: "conversation-system-prompt-input",
+        value: conversationSystemPromptInput,
+        onChange: (event) => onConversationSystemPromptInputChange(event.target.value),
+        placeholder: "Optional system prompt for this conversation",
+        rows: 4,
+        disabled: !activeConversationId || selectorsDisabled || savingConversationSettings
+      }
+    )), /* @__PURE__ */ import_react32.default.createElement("label", { className: "mobile-settings-field", htmlFor: "conversation-context-input" }, /* @__PURE__ */ import_react32.default.createElement("span", null, "Context"), /* @__PURE__ */ import_react32.default.createElement(
+      Textarea,
+      {
+        id: "conversation-context-input",
+        value: conversationContextInput,
+        onChange: (event) => onConversationContextInputChange(event.target.value),
+        placeholder: "Optional conversation context or notes",
+        rows: 5,
+        disabled: !activeConversationId || selectorsDisabled || savingConversationSettings
+      }
+    )), /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-conversation-cwd mobile-conversation-cwd--in-settings" }, /* @__PURE__ */ import_react32.default.createElement("label", { htmlFor: "conversation-cwd-input" }, "Conversation working directory (cwd)"), /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-conversation-cwd-row" }, /* @__PURE__ */ import_react32.default.createElement(
       Input,
       {
         id: "conversation-cwd-input",
@@ -64132,18 +65225,18 @@ var MobileHeader = ({
         value: conversationCwdInput,
         onChange: (event) => onConversationCwdInputChange(event.target.value),
         placeholder: "e.g. D:\\\\projects\\\\my-repo",
-        disabled: !activeConversationId || selectorsDisabled || savingConversationCwd
+        disabled: !activeConversationId || selectorsDisabled || savingConversationSettings
       }
-    ), /* @__PURE__ */ import_react19.default.createElement(
+    ), /* @__PURE__ */ import_react32.default.createElement(
       Button,
       {
-        onClick: onSaveConversationCwd,
-        disabled: !activeConversationId || selectorsDisabled || savingConversationCwd,
+        onClick: onSaveConversationSettings,
+        disabled: !activeConversationId || selectorsDisabled || savingConversationSettings,
         variant: "outline",
         size: "sm"
       },
-      savingConversationCwd ? "Saving\u2026" : "Save cwd"
-    )), /* @__PURE__ */ import_react19.default.createElement("span", { className: "mobile-conversation-cwd-hint" }, "Used as tool execution root for this conversation. Leave empty to fall back to project cwd.")), /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-settings-tools-wrap" }, /* @__PURE__ */ import_react19.default.createElement(
+      savingConversationSettings ? "Saving\u2026" : "Save"
+    )), /* @__PURE__ */ import_react32.default.createElement("span", { className: "mobile-conversation-cwd-hint" }, "Used as tool execution root for this conversation. Leave empty to fall back to project cwd."))) : null), /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-settings-tools-wrap" }, /* @__PURE__ */ import_react32.default.createElement(
       ToolTogglePanel,
       {
         tools: customTools,
@@ -64156,7 +65249,7 @@ var MobileHeader = ({
     ))))),
     document.body
   ) : null;
-  return /* @__PURE__ */ import_react19.default.createElement(import_react19.default.Fragment, null, /* @__PURE__ */ import_react19.default.createElement("header", { className: "mobile-header" }, /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-header-top" }, /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-header-brand" }, /* @__PURE__ */ import_react19.default.createElement("h1", null, "Yggdrasil"), /* @__PURE__ */ import_react19.default.createElement("p", { className: "mobile-status" }, /* @__PURE__ */ import_react19.default.createElement("span", { className: "mobile-status-dot", "aria-hidden": "true" }), statusText)), /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-header-actions" }, /* @__PURE__ */ import_react19.default.createElement(
+  return /* @__PURE__ */ import_react32.default.createElement(import_react32.default.Fragment, null, /* @__PURE__ */ import_react32.default.createElement("header", { className: "mobile-header" }, /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-header-top" }, /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-header-brand" }, /* @__PURE__ */ import_react32.default.createElement("h1", null, "Yggdrasil"), /* @__PURE__ */ import_react32.default.createElement("p", { className: "mobile-status" }, /* @__PURE__ */ import_react32.default.createElement("span", { className: "mobile-status-dot", "aria-hidden": "true" }), statusText)), /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-header-actions" }, /* @__PURE__ */ import_react32.default.createElement(
     Button,
     {
       variant: "ghost",
@@ -64168,7 +65261,7 @@ var MobileHeader = ({
       title: "Open branch tree"
     },
     "\u2387"
-  ), /* @__PURE__ */ import_react19.default.createElement(
+  ), /* @__PURE__ */ import_react32.default.createElement(
     Button,
     {
       variant: "ghost",
@@ -64180,7 +65273,7 @@ var MobileHeader = ({
       title: "Switch project or conversation"
     },
     "\u2630"
-  ), /* @__PURE__ */ import_react19.default.createElement(
+  ), /* @__PURE__ */ import_react32.default.createElement(
     Button,
     {
       variant: "ghost",
@@ -64193,7 +65286,7 @@ var MobileHeader = ({
       title: "Open chat settings"
     },
     "\u2699"
-  ))), /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-header-summary mobile-header-summary--compact" }, /* @__PURE__ */ import_react19.default.createElement("div", { className: "mobile-header-summary-item" }, /* @__PURE__ */ import_react19.default.createElement("span", null, "Model"), /* @__PURE__ */ import_react19.default.createElement("strong", null, modelName), /* @__PURE__ */ import_react19.default.createElement(
+  ))), /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-header-summary mobile-header-summary--compact" }, /* @__PURE__ */ import_react32.default.createElement("div", { className: "mobile-header-summary-item" }, /* @__PURE__ */ import_react32.default.createElement("span", null, PROVIDER_LABELS[providerName]), /* @__PURE__ */ import_react32.default.createElement("strong", null, modelName), /* @__PURE__ */ import_react32.default.createElement(
     Button,
     {
       variant: "ghost",
@@ -64209,8 +65302,8 @@ var MobileHeader = ({
 };
 
 // electron/headlessServer/ui/mobile/src/components/ProjectConversationTree.tsx
-var import_react20 = __toESM(require_react(), 1);
-var import_react_dom3 = __toESM(require_react_dom(), 1);
+var import_react33 = __toESM(require_react(), 1);
+var import_react_dom4 = __toESM(require_react_dom(), 1);
 var keyForProject = (projectId) => projectId || "__none__";
 var ProjectGroup = ({
   title,
@@ -64224,7 +65317,7 @@ var ProjectGroup = ({
   onCreateConversation,
   disabled
 }) => {
-  return /* @__PURE__ */ import_react20.default.createElement("section", { className: "mobile-project-group" }, /* @__PURE__ */ import_react20.default.createElement("button", { className: "mobile-project-header", onClick: () => onToggleProject(projectId) }, /* @__PURE__ */ import_react20.default.createElement("span", null, title), /* @__PURE__ */ import_react20.default.createElement("span", { className: "mobile-project-meta" }, expanded ? "\u2212" : "+")), expanded ? /* @__PURE__ */ import_react20.default.createElement("div", { className: "mobile-project-body" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "mobile-project-actions" }, /* @__PURE__ */ import_react20.default.createElement(Button, { onClick: () => onCreateConversation(projectId), disabled, size: "sm", variant: "outline" }, "New conversation")), loading ? /* @__PURE__ */ import_react20.default.createElement("div", { className: "mobile-tree-muted" }, "Loading conversations\u2026") : null, !loading && conversations.length === 0 ? /* @__PURE__ */ import_react20.default.createElement("div", { className: "mobile-tree-muted" }, "No conversations") : null, !loading ? conversations.map((conversation) => /* @__PURE__ */ import_react20.default.createElement(
+  return /* @__PURE__ */ import_react33.default.createElement("section", { className: "mobile-project-group" }, /* @__PURE__ */ import_react33.default.createElement("button", { className: "mobile-project-header", onClick: () => onToggleProject(projectId) }, /* @__PURE__ */ import_react33.default.createElement("span", null, title), /* @__PURE__ */ import_react33.default.createElement("span", { className: "mobile-project-meta" }, expanded ? "\u2212" : "+")), expanded ? /* @__PURE__ */ import_react33.default.createElement("div", { className: "mobile-project-body" }, /* @__PURE__ */ import_react33.default.createElement("div", { className: "mobile-project-actions" }, /* @__PURE__ */ import_react33.default.createElement(Button, { onClick: () => onCreateConversation(projectId), disabled, size: "sm", variant: "outline" }, "New conversation")), loading ? /* @__PURE__ */ import_react33.default.createElement("div", { className: "mobile-tree-muted" }, "Loading conversations\u2026") : null, !loading && conversations.length === 0 ? /* @__PURE__ */ import_react33.default.createElement("div", { className: "mobile-tree-muted" }, "No conversations") : null, !loading ? conversations.map((conversation) => /* @__PURE__ */ import_react33.default.createElement(
     Button,
     {
       key: conversation.id,
@@ -64250,7 +65343,7 @@ var ProjectConversationTree = ({
   onClose,
   disabled = false
 }) => {
-  (0, import_react20.useEffect)(() => {
+  (0, import_react33.useEffect)(() => {
     if (!open) return;
     const previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -64264,7 +65357,7 @@ var ProjectConversationTree = ({
     };
   }, [open, onClose]);
   if (!open) return null;
-  const modal = /* @__PURE__ */ import_react20.default.createElement(import_react20.default.Fragment, null, /* @__PURE__ */ import_react20.default.createElement(
+  const modal = /* @__PURE__ */ import_react33.default.createElement(import_react33.default.Fragment, null, /* @__PURE__ */ import_react33.default.createElement(
     "button",
     {
       type: "button",
@@ -64272,9 +65365,9 @@ var ProjectConversationTree = ({
       className: "mobile-project-modal-backdrop open",
       onClick: onClose
     }
-  ), /* @__PURE__ */ import_react20.default.createElement("section", { className: "mobile-project-modal open", role: "dialog", "aria-modal": "true", "aria-label": "Projects" }, /* @__PURE__ */ import_react20.default.createElement("header", { className: "mobile-project-modal-header" }, /* @__PURE__ */ import_react20.default.createElement("strong", null, "Projects & Conversations"), /* @__PURE__ */ import_react20.default.createElement(Button, { onClick: onClose, variant: "outline", size: "sm" }, "Close")), /* @__PURE__ */ import_react20.default.createElement("div", { className: "mobile-project-modal-body" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "mobile-project-tree" }, /* @__PURE__ */ import_react20.default.createElement("div", { className: "mobile-project-tree-header" }, /* @__PURE__ */ import_react20.default.createElement("span", { className: "mobile-tree-muted" }, "Manage projects and pick a conversation"), /* @__PURE__ */ import_react20.default.createElement(Button, { onClick: onCreateProject, disabled, size: "sm" }, "New project")), projects.map((project) => {
+  ), /* @__PURE__ */ import_react33.default.createElement("section", { className: "mobile-project-modal open", role: "dialog", "aria-modal": "true", "aria-label": "Projects" }, /* @__PURE__ */ import_react33.default.createElement("header", { className: "mobile-project-modal-header" }, /* @__PURE__ */ import_react33.default.createElement("strong", null, "Projects & Conversations"), /* @__PURE__ */ import_react33.default.createElement(Button, { onClick: onClose, variant: "outline", size: "sm" }, "Close")), /* @__PURE__ */ import_react33.default.createElement("div", { className: "mobile-project-modal-body" }, /* @__PURE__ */ import_react33.default.createElement("div", { className: "mobile-project-tree" }, /* @__PURE__ */ import_react33.default.createElement("div", { className: "mobile-project-tree-header" }, /* @__PURE__ */ import_react33.default.createElement("span", { className: "mobile-tree-muted" }, "Manage projects and pick a conversation"), /* @__PURE__ */ import_react33.default.createElement(Button, { onClick: onCreateProject, disabled, size: "sm" }, "New project")), projects.map((project) => {
     const projectKey2 = keyForProject(project.id);
-    return /* @__PURE__ */ import_react20.default.createElement(
+    return /* @__PURE__ */ import_react33.default.createElement(
       ProjectGroup,
       {
         key: project.id,
@@ -64291,7 +65384,7 @@ var ProjectConversationTree = ({
       }
     );
   })))));
-  return (0, import_react_dom3.createPortal)(modal, document.body);
+  return (0, import_react_dom4.createPortal)(modal, document.body);
 };
 
 // electron/headlessServer/ui/mobile/src/App.tsx
@@ -64304,7 +65397,9 @@ var createStreamingState = () => ({
 });
 var projectKey = (projectId) => projectId || "__none__";
 var MOBILE_LAST_USER_STORAGE_KEY = "mobile:lastUserId";
+var MOBILE_LAST_PROVIDER_STORAGE_KEY = "mobile:lastProvider";
 var mobileLastConversationStorageKey = (userId) => `mobile:lastConversationId:${userId}`;
+var DEFAULT_PROVIDER = "openaichatgpt";
 var readStorageValue = (key) => {
   if (typeof window === "undefined") return null;
   try {
@@ -64330,24 +65425,32 @@ var normalizeCwd = (value) => {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 };
+var normalizeProviderName = (value) => {
+  if (value === "openrouter" || value === "lmstudio" || value === "openaichatgpt") return value;
+  return DEFAULT_PROVIDER;
+};
+var getDefaultModelForProvider = (provider, providers) => {
+  const match = providers.find((item) => item.name === provider);
+  return match?.models?.[0] || "";
+};
 var makeStreamingMessage = (state) => {
   if (!state) return null;
   const hasContent = state.text.trim().length > 0 || state.reasoning.trim().length > 0 || state.toolOrder.length > 0 || state.toolResults.length > 0;
   if (!hasContent) return null;
-  let index2 = 0;
+  let index3 = 0;
   const contentBlocks = [];
   if (state.reasoning.trim()) {
-    contentBlocks.push({ type: "thinking", index: index2++, content: state.reasoning });
+    contentBlocks.push({ type: "thinking", index: index3++, content: state.reasoning });
   }
   if (state.text.trim()) {
-    contentBlocks.push({ type: "text", index: index2++, content: state.text });
+    contentBlocks.push({ type: "text", index: index3++, content: state.text });
   }
   state.toolOrder.forEach((toolId) => {
     const toolCall = state.toolCallsById[toolId];
     if (!toolCall) return;
     contentBlocks.push({
       type: "tool_use",
-      index: index2++,
+      index: index3++,
       id: toolId,
       name: toolCall.name || "tool",
       input: toolCall.arguments || {}
@@ -64355,7 +65458,7 @@ var makeStreamingMessage = (state) => {
     state.toolResults.filter((result) => result.tool_use_id === toolId).forEach((result) => {
       contentBlocks.push({
         type: "tool_result",
-        index: index2++,
+        index: index3++,
         tool_use_id: toolId,
         content: result.content,
         is_error: Boolean(result.is_error)
@@ -64479,49 +65582,56 @@ var filterEmptyAssistantNodes = (tree) => {
   };
 };
 var App = () => {
-  const [modelName, setModelName] = (0, import_react21.useState)("gpt-5.3-codex");
-  const [statusText, setStatusText] = (0, import_react21.useState)("Loading\u2026");
-  const [users, setUsers] = (0, import_react21.useState)([]);
-  const [selectedUserId, setSelectedUserId] = (0, import_react21.useState)(() => readStorageValue(MOBILE_LAST_USER_STORAGE_KEY));
-  const [projects, setProjects] = (0, import_react21.useState)([]);
-  const [expandedProjectKeys, setExpandedProjectKeys] = (0, import_react21.useState)([]);
-  const [loadingProjectKeys, setLoadingProjectKeys] = (0, import_react21.useState)([]);
-  const [conversationsByProjectKey, setConversationsByProjectKey] = (0, import_react21.useState)({});
-  const [activeConversationId, setActiveConversationId] = (0, import_react21.useState)(null);
-  const [allMessages, setAllMessages] = (0, import_react21.useState)([]);
-  const [messages, setMessages] = (0, import_react21.useState)([]);
-  const [messageTree, setMessageTree] = (0, import_react21.useState)(null);
-  const [currentPathMessageIds, setCurrentPathMessageIds] = (0, import_react21.useState)([]);
-  const [scrollToMessageId, setScrollToMessageId] = (0, import_react21.useState)(null);
-  const [isTreeDrawerOpen, setIsTreeDrawerOpen] = (0, import_react21.useState)(false);
-  const [isProjectsModalOpen, setIsProjectsModalOpen] = (0, import_react21.useState)(false);
-  const [isPathPickerOpen, setIsPathPickerOpen] = (0, import_react21.useState)(false);
-  const [hideEmptyAssistantMessages, setHideEmptyAssistantMessages] = (0, import_react21.useState)(true);
-  const [draft, setDraft] = (0, import_react21.useState)("");
-  const [conversationCwdInput, setConversationCwdInput] = (0, import_react21.useState)("");
-  const [savingConversationCwd, setSavingConversationCwd] = (0, import_react21.useState)(false);
-  const [branchSourceMessage, setBranchSourceMessage] = (0, import_react21.useState)(null);
-  const [sending, setSending] = (0, import_react21.useState)(false);
-  const [streamingState, setStreamingState] = (0, import_react21.useState)(null);
-  const [openAiConnected, setOpenAiConnected] = (0, import_react21.useState)(false);
-  const [openAiBusy, setOpenAiBusy] = (0, import_react21.useState)(false);
-  const [pendingOpenAiState, setPendingOpenAiState] = (0, import_react21.useState)(null);
-  const [customTools, setCustomTools] = (0, import_react21.useState)([]);
-  const [customToolsLoading, setCustomToolsLoading] = (0, import_react21.useState)(false);
-  const [customToolBusyNames, setCustomToolBusyNames] = (0, import_react21.useState)([]);
-  const [inferenceTools, setInferenceTools] = (0, import_react21.useState)([]);
-  const lastStreamCompleteMessageIdRef = (0, import_react21.useRef)(null);
-  const currentPathIdsRef = (0, import_react21.useRef)([]);
-  const streamingMessage = (0, import_react21.useMemo)(() => makeStreamingMessage(streamingState), [streamingState]);
-  const displayedMessages = (0, import_react21.useMemo)(() => {
+  const [selectedProvider, setSelectedProvider] = (0, import_react34.useState)(
+    () => normalizeProviderName(readStorageValue(MOBILE_LAST_PROVIDER_STORAGE_KEY))
+  );
+  const [providerModels, setProviderModels] = (0, import_react34.useState)([]);
+  const [modelName, setModelName] = (0, import_react34.useState)("gpt-5.3-codex");
+  const [statusText, setStatusText] = (0, import_react34.useState)("Loading\u2026");
+  const [users, setUsers] = (0, import_react34.useState)([]);
+  const [selectedUserId, setSelectedUserId] = (0, import_react34.useState)(() => readStorageValue(MOBILE_LAST_USER_STORAGE_KEY));
+  const [projects, setProjects] = (0, import_react34.useState)([]);
+  const [expandedProjectKeys, setExpandedProjectKeys] = (0, import_react34.useState)([]);
+  const [loadingProjectKeys, setLoadingProjectKeys] = (0, import_react34.useState)([]);
+  const [conversationsByProjectKey, setConversationsByProjectKey] = (0, import_react34.useState)({});
+  const [activeConversationId, setActiveConversationId] = (0, import_react34.useState)(null);
+  const [allMessages, setAllMessages] = (0, import_react34.useState)([]);
+  const [messages, setMessages] = (0, import_react34.useState)([]);
+  const [messageTree, setMessageTree] = (0, import_react34.useState)(null);
+  const [currentPathMessageIds, setCurrentPathMessageIds] = (0, import_react34.useState)([]);
+  const [scrollToMessageId, setScrollToMessageId] = (0, import_react34.useState)(null);
+  const [isTreeDrawerOpen, setIsTreeDrawerOpen] = (0, import_react34.useState)(false);
+  const [isProjectsModalOpen, setIsProjectsModalOpen] = (0, import_react34.useState)(false);
+  const [isPathPickerOpen, setIsPathPickerOpen] = (0, import_react34.useState)(false);
+  const [hideEmptyAssistantMessages, setHideEmptyAssistantMessages] = (0, import_react34.useState)(true);
+  const [draft, setDraft] = (0, import_react34.useState)("");
+  const [conversationSystemPromptInput, setConversationSystemPromptInput] = (0, import_react34.useState)("");
+  const [conversationContextInput, setConversationContextInput] = (0, import_react34.useState)("");
+  const [conversationCwdInput, setConversationCwdInput] = (0, import_react34.useState)("");
+  const [savingConversationSettings, setSavingConversationSettings] = (0, import_react34.useState)(false);
+  const [branchSourceMessage, setBranchSourceMessage] = (0, import_react34.useState)(null);
+  const [sending, setSending] = (0, import_react34.useState)(false);
+  const [streamingState, setStreamingState] = (0, import_react34.useState)(null);
+  const [openAiConnected, setOpenAiConnected] = (0, import_react34.useState)(false);
+  const [openRouterConnected, setOpenRouterConnected] = (0, import_react34.useState)(false);
+  const [openAiBusy, setOpenAiBusy] = (0, import_react34.useState)(false);
+  const [pendingOpenAiState, setPendingOpenAiState] = (0, import_react34.useState)(null);
+  const [customTools, setCustomTools] = (0, import_react34.useState)([]);
+  const [customToolsLoading, setCustomToolsLoading] = (0, import_react34.useState)(false);
+  const [customToolBusyNames, setCustomToolBusyNames] = (0, import_react34.useState)([]);
+  const [inferenceTools, setInferenceTools] = (0, import_react34.useState)([]);
+  const lastStreamCompleteMessageIdRef = (0, import_react34.useRef)(null);
+  const currentPathIdsRef = (0, import_react34.useRef)([]);
+  const streamingMessage = (0, import_react34.useMemo)(() => makeStreamingMessage(streamingState), [streamingState]);
+  const displayedMessages = (0, import_react34.useMemo)(() => {
     if (!hideEmptyAssistantMessages) return messages;
     return messages.filter((message) => !(message.role === "assistant" && buildRenderItemsForMessage(message).length === 0));
   }, [messages, hideEmptyAssistantMessages]);
-  const treeForDrawer = (0, import_react21.useMemo)(() => {
+  const treeForDrawer = (0, import_react34.useMemo)(() => {
     if (!hideEmptyAssistantMessages) return messageTree;
     return filterEmptyAssistantNodes(messageTree);
   }, [messageTree, hideEmptyAssistantMessages]);
-  const activeConversation = (0, import_react21.useMemo)(() => {
+  const activeConversation = (0, import_react34.useMemo)(() => {
     if (!activeConversationId) return null;
     for (const bucket of Object.values(conversationsByProjectKey)) {
       const found = bucket.find((conversation) => conversation.id === activeConversationId);
@@ -64529,14 +65639,18 @@ var App = () => {
     }
     return null;
   }, [activeConversationId, conversationsByProjectKey]);
-  const projectById = (0, import_react21.useMemo)(() => {
+  const projectById = (0, import_react34.useMemo)(() => {
     const next = /* @__PURE__ */ new Map();
     projects.forEach((project) => {
       next.set(project.id, project);
     });
     return next;
   }, [projects]);
-  const activeProjectCwd = (0, import_react21.useMemo)(() => {
+  const activeProject = (0, import_react34.useMemo)(() => {
+    const projectId = activeConversation?.project_id || null;
+    return projectId ? projectById.get(projectId) || null : null;
+  }, [activeConversation?.project_id, projectById]);
+  const activeProjectCwd = (0, import_react34.useMemo)(() => {
     const conversationCwd = normalizeCwd(activeConversation?.cwd);
     if (conversationCwd) return conversationCwd;
     const projectId = activeConversation?.project_id || null;
@@ -64544,10 +65658,25 @@ var App = () => {
     if (projectCwd) return projectCwd;
     return null;
   }, [activeConversation, projectById]);
-  (0, import_react21.useEffect)(() => {
+  const availableModelOptions = (0, import_react34.useMemo)(() => {
+    const models = providerModels.find((provider) => provider.name === selectedProvider)?.models || [];
+    return models.length > 0 ? models : [modelName];
+  }, [providerModels, selectedProvider, modelName]);
+  const selectedProviderRequiresAuth = selectedProvider === "openaichatgpt" || selectedProvider === "openrouter";
+  const selectedProviderAuthenticated = selectedProvider === "openaichatgpt" ? openAiConnected : selectedProvider === "openrouter" ? openRouterConnected : true;
+  (0, import_react34.useEffect)(() => {
+    setConversationSystemPromptInput(activeProject?.system_prompt || activeConversation?.system_prompt || "");
+    setConversationContextInput(activeProject?.context || activeConversation?.conversation_context || "");
     const currentConversationCwd = normalizeCwd(activeConversation?.cwd);
     setConversationCwdInput(currentConversationCwd || "");
-  }, [activeConversationId, activeConversation?.cwd]);
+  }, [
+    activeConversationId,
+    activeConversation?.conversation_context,
+    activeConversation?.cwd,
+    activeConversation?.system_prompt,
+    activeProject?.context,
+    activeProject?.system_prompt
+  ]);
   const loadUsers = async () => {
     const listed = await mobileApi.listUsers();
     setUsers(listed);
@@ -64595,7 +65724,7 @@ var App = () => {
       (previous3) => willExpand ? [...previous3, key] : previous3.filter((value) => value !== key)
     );
   };
-  const selectPathFromMessageId = (0, import_react21.useCallback)((sourceMessages, targetMessageId) => {
+  const selectPathFromMessageId = (0, import_react34.useCallback)((sourceMessages, targetMessageId) => {
     if (!sourceMessages.length) {
       setCurrentPathMessageIds([]);
       setMessages([]);
@@ -64610,14 +65739,14 @@ var App = () => {
     setCurrentPathMessageIds(pathIds);
     setMessages(mapPathToMessages(sourceMessages, pathIds));
   }, []);
-  const selectLatestBranch = (0, import_react21.useCallback)(
+  const selectLatestBranch = (0, import_react34.useCallback)(
     (sourceMessages) => {
       const latestLeafId = resolveLatestLeafMessageId(sourceMessages);
       selectPathFromMessageId(sourceMessages, latestLeafId);
     },
     [selectPathFromMessageId]
   );
-  const loadConversationTree = (0, import_react21.useCallback)(
+  const loadConversationTree = (0, import_react34.useCallback)(
     async (conversationId, options) => {
       const payload = await mobileApi.getConversationMessageTree(conversationId);
       const listed = Array.isArray(payload.messages) ? payload.messages : [];
@@ -64651,6 +65780,14 @@ var App = () => {
       setOpenAiConnected(Boolean(status.hasToken));
     } catch {
       setOpenAiConnected(false);
+    }
+  };
+  const refreshOpenRouterStatus = async (userId) => {
+    try {
+      const status = await mobileApi.getOpenRouterTokenStatus(userId);
+      setOpenRouterConnected(Boolean(status.hasToken));
+    } catch {
+      setOpenRouterConnected(false);
     }
   };
   const loadCustomTools = async () => {
@@ -64790,29 +65927,60 @@ var App = () => {
       setStatusText(error instanceof Error ? error.message : String(error));
     }
   };
-  const handleSaveConversationCwd = async () => {
+  const handleSaveConversationSettings = async () => {
     if (!activeConversationId) {
       setStatusText("Select or create a conversation first");
       return;
     }
-    if (savingConversationCwd) return;
+    if (savingConversationSettings) return;
     const normalizedCwd = normalizeCwd(conversationCwdInput);
-    setSavingConversationCwd(true);
+    const normalizedSystemPrompt = conversationSystemPromptInput.trim() || null;
+    const normalizedConversationContext = conversationContextInput.trim() || null;
+    setSavingConversationSettings(true);
     try {
-      const updated = await mobileApi.updateConversation(activeConversationId, { cwd: normalizedCwd });
+      const updatedConversation = await mobileApi.updateConversation(activeConversationId, { cwd: normalizedCwd });
       setConversationsByProjectKey((previous3) => {
         const next = {};
         Object.entries(previous3).forEach(([key, bucket]) => {
-          next[key] = bucket.map((conversation) => conversation.id === updated.id ? { ...conversation, ...updated } : conversation);
+          next[key] = bucket.map(
+            (conversation) => conversation.id === updatedConversation.id ? { ...conversation, ...updatedConversation } : conversation
+          );
         });
         return next;
       });
-      setConversationCwdInput(normalizeCwd(updated.cwd) || "");
-      setStatusText(normalizedCwd ? `Saved conversation cwd: ${normalizedCwd}` : "Cleared conversation cwd");
+      if (activeProject?.id) {
+        const updatedProject = await mobileApi.updateProject(activeProject.id, {
+          system_prompt: normalizedSystemPrompt,
+          context: normalizedConversationContext
+        });
+        setProjects(
+          (previous3) => previous3.map((project) => project.id === updatedProject.id ? { ...project, ...updatedProject } : project)
+        );
+        setConversationSystemPromptInput(updatedProject.system_prompt || "");
+        setConversationContextInput(updatedProject.context || "");
+      } else {
+        const updatedConversationWithPrompt = await mobileApi.updateConversation(activeConversationId, {
+          system_prompt: normalizedSystemPrompt,
+          conversation_context: normalizedConversationContext
+        });
+        setConversationsByProjectKey((previous3) => {
+          const next = {};
+          Object.entries(previous3).forEach(([key, bucket]) => {
+            next[key] = bucket.map(
+              (conversation) => conversation.id === updatedConversationWithPrompt.id ? { ...conversation, ...updatedConversationWithPrompt } : conversation
+            );
+          });
+          return next;
+        });
+        setConversationSystemPromptInput(updatedConversationWithPrompt.system_prompt || "");
+        setConversationContextInput(updatedConversationWithPrompt.conversation_context || "");
+      }
+      setConversationCwdInput(normalizeCwd(updatedConversation.cwd) || "");
+      setStatusText(activeProject?.id ? "Saved project prompt/context and conversation cwd" : "Saved conversation settings");
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : String(error));
     } finally {
-      setSavingConversationCwd(false);
+      setSavingConversationSettings(false);
     }
   };
   const handleBranchUserMessage = (message) => {
@@ -64867,23 +66035,41 @@ ${nextPath}`;
     });
     setStatusText(`Inserted path: ${nextPath}`);
   };
-  (0, import_react21.useEffect)(() => {
+  (0, import_react34.useEffect)(() => {
     currentPathIdsRef.current = currentPathMessageIds;
   }, [currentPathMessageIds]);
-  (0, import_react21.useEffect)(() => {
+  (0, import_react34.useEffect)(() => {
     writeStorageValue(MOBILE_LAST_USER_STORAGE_KEY, selectedUserId);
   }, [selectedUserId]);
-  (0, import_react21.useEffect)(() => {
+  (0, import_react34.useEffect)(() => {
+    writeStorageValue(MOBILE_LAST_PROVIDER_STORAGE_KEY, selectedProvider);
+  }, [selectedProvider]);
+  (0, import_react34.useEffect)(() => {
+    const models = providerModels.find((provider) => provider.name === selectedProvider)?.models || [];
+    if (models.length === 0) return;
+    if (models.includes(modelName)) return;
+    setModelName(models[0]);
+  }, [providerModels, selectedProvider, modelName]);
+  (0, import_react34.useEffect)(() => {
     if (!selectedUserId) return;
     writeStorageValue(mobileLastConversationStorageKey(selectedUserId), activeConversationId);
   }, [selectedUserId, activeConversationId]);
-  (0, import_react21.useEffect)(() => {
+  (0, import_react34.useEffect)(() => {
     let cancelled = false;
     const run = async () => {
       try {
         setStatusText("Checking capabilities\u2026");
         await mobileApi.getCapabilities();
         if (cancelled) return;
+        const listedProviderModels = await mobileApi.getProviderModels();
+        if (cancelled) return;
+        setProviderModels(listedProviderModels);
+        const preferredProvider = normalizeProviderName(readStorageValue(MOBILE_LAST_PROVIDER_STORAGE_KEY));
+        const preferredModel = getDefaultModelForProvider(preferredProvider, listedProviderModels);
+        if (preferredModel) {
+          setSelectedProvider(preferredProvider);
+          setModelName((current) => listedProviderModels.some((provider) => provider.name === preferredProvider && provider.models.includes(current)) ? current : preferredModel);
+        }
         setStatusText("Loading user profiles\u2026");
         await loadUsers();
         if (cancelled) return;
@@ -64902,7 +66088,7 @@ ${nextPath}`;
       cancelled = true;
     };
   }, []);
-  (0, import_react21.useEffect)(() => {
+  (0, import_react34.useEffect)(() => {
     if (!selectedUserId) {
       setProjects([]);
       setInferenceTools([]);
@@ -64918,7 +66104,11 @@ ${nextPath}`;
       setIsPathPickerOpen(false);
       setBranchSourceMessage(null);
       setOpenAiConnected(false);
+      setOpenRouterConnected(false);
       setPendingOpenAiState(null);
+      setConversationSystemPromptInput("");
+      setConversationContextInput("");
+      setConversationCwdInput("");
       return;
     }
     let cancelled = false;
@@ -64929,6 +66119,11 @@ ${nextPath}`;
         if (cancelled) return;
         await refreshOpenAiStatus(selectedUserId);
         if (cancelled) return;
+        await refreshOpenRouterStatus(selectedUserId);
+        if (cancelled) return;
+        const listedProviderModels = await mobileApi.getProviderModels(selectedUserId);
+        if (cancelled) return;
+        setProviderModels(listedProviderModels);
         await loadInferenceTools();
         if (cancelled) return;
         setConversationsByProjectKey({});
@@ -64986,7 +66181,7 @@ ${nextPath}`;
       cancelled = true;
     };
   }, [selectedUserId]);
-  (0, import_react21.useEffect)(() => {
+  (0, import_react34.useEffect)(() => {
     if (activeConversationId) return;
     setAllMessages([]);
     setMessages([]);
@@ -64995,7 +66190,7 @@ ${nextPath}`;
     setScrollToMessageId(null);
     setBranchSourceMessage(null);
   }, [activeConversationId]);
-  (0, import_react21.useEffect)(() => {
+  (0, import_react34.useEffect)(() => {
     if (!activeConversationId) return;
     setIsTreeDrawerOpen(false);
     setIsPathPickerOpen(false);
@@ -65099,8 +66294,12 @@ ${nextPath}`;
       setStatusText("Select or create a conversation first");
       return;
     }
-    if (!openAiConnected) {
+    if (selectedProvider === "openaichatgpt" && !openAiConnected) {
       setStatusText("OpenAI not connected. Use Sign in OpenAI first.");
+      return;
+    }
+    if (selectedProvider === "openrouter" && !openRouterConnected) {
+      setStatusText("OpenRouter not connected.");
       return;
     }
     const content3 = draft.trim();
@@ -65126,6 +66325,7 @@ ${nextPath}`;
       await mobileApi.streamMessage({
         conversationId: activeConversationId,
         userId: selectedUserId,
+        provider: selectedProvider,
         modelName,
         content: content3,
         parentId,
@@ -65152,17 +66352,22 @@ ${nextPath}`;
     }
   };
   const activeBranchTipId = currentPathMessageIds[currentPathMessageIds.length - 1] || null;
-  return /* @__PURE__ */ import_react21.default.createElement("main", { className: "mobile-app-shell" }, /* @__PURE__ */ import_react21.default.createElement(
+  return /* @__PURE__ */ import_react34.default.createElement("main", { className: "mobile-app-shell" }, /* @__PURE__ */ import_react34.default.createElement(
     MobileHeader,
     {
+      providerName: selectedProvider,
+      providerOptions: providerModels.length > 0 ? providerModels.map((provider) => provider.name) : ["openaichatgpt", "openrouter", "lmstudio"],
       modelName,
+      modelOptions: availableModelOptions,
       statusText,
       users,
       selectedUserId,
+      onProviderChange: setSelectedProvider,
       onModelChange: setModelName,
       onUserSelect: setSelectedUserId,
       selectorsDisabled: sending,
       openAiAuthenticated: openAiConnected,
+      openRouterAuthenticated: openRouterConnected,
       openAiBusy,
       hasPendingOpenAiFlow: Boolean(pendingOpenAiState),
       onOpenAiLoginStart: handleOpenAiLoginStart,
@@ -65174,10 +66379,14 @@ ${nextPath}`;
       onRefreshCustomTools: loadCustomTools,
       onToggleCustomTool: handleToggleCustomTool,
       activeConversationId,
+      conversationSystemPromptInput,
+      conversationContextInput,
       conversationCwdInput,
+      onConversationSystemPromptInputChange: setConversationSystemPromptInput,
+      onConversationContextInputChange: setConversationContextInput,
       onConversationCwdInputChange: setConversationCwdInput,
-      onSaveConversationCwd: handleSaveConversationCwd,
-      savingConversationCwd,
+      onSaveConversationSettings: handleSaveConversationSettings,
+      savingConversationSettings,
       onOpenProjectConversationPicker: () => setIsProjectsModalOpen(true),
       canOpenProjectConversationPicker: !sending && Boolean(selectedUserId),
       onOpenBranchTree: () => setIsTreeDrawerOpen(true),
@@ -65185,7 +66394,7 @@ ${nextPath}`;
       onOpenPathPicker: () => setIsPathPickerOpen(true),
       canOpenPathPicker: Boolean(activeProjectCwd) && !sending && Boolean(activeConversationId)
     }
-  ), /* @__PURE__ */ import_react21.default.createElement(
+  ), /* @__PURE__ */ import_react34.default.createElement(
     ProjectConversationTree,
     {
       open: isProjectsModalOpen,
@@ -65204,7 +66413,7 @@ ${nextPath}`;
       onClose: () => setIsProjectsModalOpen(false),
       disabled: sending || !selectedUserId
     }
-  ), /* @__PURE__ */ import_react21.default.createElement(
+  ), /* @__PURE__ */ import_react34.default.createElement(
     MessageList,
     {
       messages: displayedMessages,
@@ -65218,7 +66427,7 @@ ${nextPath}`;
       onBranchUserMessage: handleBranchUserMessage,
       onDeleteUserMessage: handleDeleteUserMessage
     }
-  ), /* @__PURE__ */ import_react21.default.createElement(
+  ), /* @__PURE__ */ import_react34.default.createElement(
     Composer,
     {
       value: draft,
@@ -65228,9 +66437,9 @@ ${nextPath}`;
       isBranching: Boolean(branchSourceMessage),
       branchLabel: branchSourceMessage ? `Branching from message ${branchSourceMessage.id.slice(0, 8)}\u2026 (new parent = previous message)` : void 0,
       onCancelBranch: branchSourceMessage ? handleCancelBranch : void 0,
-      disabled: !activeConversationId || !selectedUserId || !openAiConnected
+      disabled: !activeConversationId || !selectedUserId || selectedProviderRequiresAuth && !selectedProviderAuthenticated
     }
-  ), /* @__PURE__ */ import_react21.default.createElement(
+  ), /* @__PURE__ */ import_react34.default.createElement(
     FilePathPickerModal,
     {
       open: isPathPickerOpen,
@@ -65238,7 +66447,7 @@ ${nextPath}`;
       onClose: () => setIsPathPickerOpen(false),
       onInsertPath: handleInsertPathIntoDraft
     }
-  ), /* @__PURE__ */ import_react21.default.createElement(
+  ), /* @__PURE__ */ import_react34.default.createElement(
     MessageTreeDrawer,
     {
       open: isTreeDrawerOpen,
@@ -65264,7 +66473,7 @@ if (!rootElement) {
   throw new Error("Missing #root element for mobile app");
 }
 (0, import_client.createRoot)(rootElement).render(
-  /* @__PURE__ */ import_react22.default.createElement(import_react22.default.StrictMode, null, /* @__PURE__ */ import_react22.default.createElement(App, null))
+  /* @__PURE__ */ import_react35.default.createElement(import_react35.default.StrictMode, null, /* @__PURE__ */ import_react35.default.createElement(App, null))
 );
 /*! Bundled license information:
 

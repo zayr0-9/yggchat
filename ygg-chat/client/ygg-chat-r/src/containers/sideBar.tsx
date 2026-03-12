@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { AnimatePresence, motion } from 'framer-motion'
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -14,6 +15,7 @@ import {
 } from '../features/conversations'
 import { deleteProject } from '../features/projects'
 import { type ConversationTab } from '../helpers/sidebarPreferences'
+import EditProject from './EditProject'
 // import { searchActions, selectSearchLoading, selectSearchQuery, selectSearchResults } from '../features/search'
 import { useAppDispatch } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
@@ -24,6 +26,7 @@ import {
   useProjects,
   useSearchConversations,
 } from '../hooks/useQueries'
+import { localApi } from '../utils/api'
 
 type SidebarProject = Project & {
   latest_conversation_updated_at?: string | null
@@ -70,10 +73,14 @@ interface ProjectAccordionItemProps {
   isExpanded: boolean
   isCollapsed: boolean
   activeConversationId: ConversationId | null
+  favoriteConversationIds: Set<ConversationId>
+  isElectronMode: boolean
   onToggle: (projectId: string) => void
   onSelectConversation: (conversation: Conversation) => void
   onCreateConversation: (project: SidebarProject) => void
+  onEditProject: (project: SidebarProject) => void
   onDeleteProject: (project: SidebarProject) => void
+  onToggleFavorite: (conversation: Conversation) => void
   onDeleteConversation: (conversation: Conversation) => void
   enableConversationHoverPreview?: boolean
   onConversationHoverStart?: (conversation: Conversation) => void
@@ -83,7 +90,10 @@ interface ProjectAccordionItemProps {
 interface ProjectConversationsPanelProps {
   projectId: Project['id']
   activeConversationId: ConversationId | null
+  favoriteConversationIds: Set<ConversationId>
+  isElectronMode: boolean
   onSelectConversation: (conversation: Conversation) => void
+  onToggleFavorite: (conversation: Conversation) => void
   onDeleteConversation: (conversation: Conversation) => void
   enableConversationHoverPreview?: boolean
   onConversationHoverStart?: (conversation: Conversation) => void
@@ -94,7 +104,10 @@ const ProjectConversationsPanel: React.FC<ProjectConversationsPanelProps> = memo
   ({
     projectId,
     activeConversationId,
+    favoriteConversationIds,
+    isElectronMode,
     onSelectConversation,
+    onToggleFavorite,
     onDeleteConversation,
     enableConversationHoverPreview = false,
     onConversationHoverStart,
@@ -127,6 +140,7 @@ const ProjectConversationsPanel: React.FC<ProjectConversationsPanelProps> = memo
           !projectConversationsError &&
           sortedConversations.map(conversation => {
             const isActive = String(activeConversationId) === String(conversation.id)
+            const isFavorite = favoriteConversationIds.has(conversation.id)
             const conversationUpdatedDate = formatDate(conversation.updated_at)
 
             return (
@@ -161,6 +175,22 @@ const ProjectConversationsPanel: React.FC<ProjectConversationsPanelProps> = memo
                     )}
                   </div>
                 </button>
+                {isElectronMode && (
+                  <Button
+                    variant='outline2'
+                    size='smaller'
+                    rounded='full'
+                    className='mt-0.5 px-1 py-1 shrink-0'
+                    onClick={() => onToggleFavorite(conversation)}
+                    title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                    aria-label={`${isFavorite ? 'Remove' : 'Add'} ${conversation.title || conversation.id} ${isFavorite ? 'from' : 'to'} favorites`}
+                  >
+                    <i
+                      className={`bx ${isFavorite ? 'bxs-star' : 'bx-star'} text-[16px] pointer-events-none group-hover/conv:opacity-100 opacity-0 group-hover/conv:pointer-events-auto group-focus-within/conv:opacity-100 group-focus-within/conv:pointer-events-auto  ${isFavorite ? 'text-yellow-500' : ''}`}
+                      aria-hidden='true'
+                    ></i>
+                  </Button>
+                )}
                 <Button
                   variant='outline2'
                   size='smaller'
@@ -188,10 +218,14 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = memo(
     isExpanded,
     isCollapsed,
     activeConversationId,
+    favoriteConversationIds,
+    isElectronMode,
     onToggle,
     onSelectConversation,
     onCreateConversation,
+    onEditProject,
     onDeleteProject,
+    onToggleFavorite,
     onDeleteConversation,
     enableConversationHoverPreview = false,
     onConversationHoverStart,
@@ -278,6 +312,17 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = memo(
                   variant='outline2'
                   size='smaller'
                   rounded='full'
+                  className='mt-0.5 px-2 py-1 shrink-0 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-opacity duration-150'
+                  onClick={() => onEditProject(project)}
+                  title='Edit project'
+                  aria-label={`Edit project ${project.name}`}
+                >
+                  <i className='bx bx-edit text-lg' aria-hidden='true'></i>
+                </Button>
+                <Button
+                  variant='outline2'
+                  size='smaller'
+                  rounded='full'
                   className='mt-0.5 px-2 py-1 text-red-500 dark:text-red-400 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto transition-opacity duration-150'
                   onClick={() => onDeleteProject(project)}
                   title='Delete project'
@@ -292,7 +337,10 @@ const ProjectAccordionItem: React.FC<ProjectAccordionItemProps> = memo(
               <ProjectConversationsPanel
                 projectId={project.id}
                 activeConversationId={activeConversationId}
+                favoriteConversationIds={favoriteConversationIds}
+                isElectronMode={isElectronMode}
                 onSelectConversation={onSelectConversation}
+                onToggleFavorite={onToggleFavorite}
                 onDeleteConversation={onDeleteConversation}
                 enableConversationHoverPreview={enableConversationHoverPreview}
                 onConversationHoverStart={onConversationHoverStart}
@@ -333,8 +381,13 @@ const SideBar: React.FC<SideBarProps> = ({
   const navigate = useNavigate()
   const location = useLocation()
   const isWeb = import.meta.env.VITE_ENVIRONMENT === 'web'
+  const isElectronMode =
+    import.meta.env.VITE_ENVIRONMENT === 'electron' ||
+    (typeof process !== 'undefined' && process.env?.VITE_ENVIRONMENT === 'electron')
 
   const [conversationTab, setConversationTab] = useState<ConversationTab>('recent')
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false)
+  const [editingProject, setEditingProject] = useState<SidebarProject | null>(null)
   // NOTE: 'recent' tab is repurposed as the Projects tab across the app.
   const isProjectsTab = conversationTab !== 'favorites'
 
@@ -373,7 +426,17 @@ const SideBar: React.FC<SideBarProps> = ({
     data: favoriteConversations = [],
     isLoading: favoritesLoading,
     error: favoritesError,
-  } = useFavoritedConversations(limit)
+  } = useFavoritedConversations(null)
+
+  const displayedFavoriteConversations = useMemo(() => {
+    if (typeof limit !== 'number' || !Number.isFinite(limit)) return favoriteConversations
+    return favoriteConversations.slice(0, limit)
+  }, [favoriteConversations, limit])
+
+  const favoriteConversationIds = useMemo(
+    () => new Set(favoriteConversations.map(conversation => conversation.id)),
+    [favoriteConversations]
+  )
 
   const loading = isProjectsTab ? projectsLoading : favoritesLoading
   const error = isProjectsTab
@@ -752,6 +815,33 @@ const SideBar: React.FC<SideBarProps> = ({
     [activeConversationId, dispatch, navigate, queryClient]
   )
 
+  const handleToggleFavorite = useCallback(
+    async (conversation: Conversation) => {
+      if (!isElectronMode) return
+
+      const nextFavorite = favoriteConversationIds.has(conversation.id) ? 0 : 1
+      const updatedConversation = { ...conversation, favorite: nextFavorite }
+
+      queryClient.setQueriesData<Conversation[]>({ queryKey: ['conversations', 'favorites'] }, previous => {
+        if (nextFavorite === 1) {
+          const existingItems = previous || []
+          return [updatedConversation, ...existingItems.filter(item => String(item.id) !== String(conversation.id))]
+        }
+
+        return previous ? previous.filter(item => String(item.id) !== String(conversation.id)) : previous
+      })
+
+      try {
+        await localApi.patch(`/app/conversations/${conversation.id}/favorite`, { favorite: nextFavorite })
+        queryClient.invalidateQueries({ queryKey: ['conversations', 'favorites'] })
+      } catch (error) {
+        queryClient.invalidateQueries({ queryKey: ['conversations', 'favorites'] })
+        console.error('Failed to update conversation favorite from sidebar:', error)
+      }
+    },
+    [favoriteConversationIds, isElectronMode, queryClient]
+  )
+
   const handleCreateConversationForProject = useCallback(
     async (project: SidebarProject) => {
       try {
@@ -851,6 +941,16 @@ const SideBar: React.FC<SideBarProps> = ({
     [closeExpandPortal, dispatch, navigate, queryClient, userId]
   )
 
+  const handleOpenEditProject = useCallback((project: SidebarProject) => {
+    setEditingProject(project)
+    setShowEditProjectModal(true)
+  }, [])
+
+  const handleCloseEditProjectModal = useCallback(() => {
+    setShowEditProjectModal(false)
+    setEditingProject(null)
+  }, [])
+
   const sidebarActions = useMemo(
     () => [
       {
@@ -891,36 +991,38 @@ const SideBar: React.FC<SideBarProps> = ({
 
   const renderSidebarBody = (renderCollapsed: boolean, enableMiniHoverPreview: boolean = false) => {
     const actionIconShellClass = renderCollapsed
-      ? 'acrylic-light flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-transparent text-neutral-700 dark:bg-transparent dark:text-neutral-300 dark:outline dark:outline-1 dark:outline-neutral-400/15'
+      ? 'acrylic-light flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-transparent text-neutral-700 dark:bg-transparent dark:text-neutral-300 dark:outline dark:outline-1 dark:outline-neutral-400/15'
       : 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-neutral-200/80 bg-neutral-50 text-neutral-700 dark:border-neutral-700/70 dark:bg-neutral-900 dark:text-neutral-300'
 
     return (
       <>
         {!renderCollapsed && (
           <div className='px-2 pb-2'>
-            <div className='flex items-center gap-1 rounded-md bg-neutral-200/60 dark:bg-neutral-800/60 p-1'>
-              <button
-                type='button'
-                onClick={() => setConversationTab('recent')}
-                className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                  conversationTab === 'recent'
-                    ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100'
-                    : 'text-neutral-600 hover:bg-white/70 dark:text-neutral-300 dark:hover:bg-neutral-700/60'
-                }`}
-              >
-                Projects
-              </button>
-              <button
-                type='button'
-                onClick={() => setConversationTab('favorites')}
-                className={`flex-1 rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                  conversationTab === 'favorites'
-                    ? 'bg-white text-neutral-900 shadow-sm dark:bg-neutral-700 dark:text-neutral-100'
-                    : 'text-neutral-600 hover:bg-white/70 dark:text-neutral-300 dark:hover:bg-neutral-700/60'
-                }`}
-              >
-                Favorites
-              </button>
+            <div className='rounded-xl border border-white/10 dark:bg-neutral-900/70 bg-neutral-100/85 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm dark:bg-neutral-950/70'>
+              <div className='grid grid-cols-2 gap-1'>
+                <button
+                  type='button'
+                  onClick={() => setConversationTab('recent')}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 ${
+                    conversationTab === 'recent'
+                      ? 'bg-neutral-100/85 dark:bg-neutral-700/85  text-neutral-900 dark:text-neutral-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_14px_rgba(0,0,0,0.05)]'
+                      : 'text-neutral-400 hover:bg-neutral-100/85 dark:hover:bg-neutral-800/70 hover:text-neutral-900 dark:hover:text-neutral-200'
+                  }`}
+                >
+                  Projects
+                </button>
+                <button
+                  type='button'
+                  onClick={() => setConversationTab('favorites')}
+                  className={`rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 ${
+                    conversationTab === 'favorites'
+                      ? 'bg-neutral-100/85 dark:bg-neutral-700/85 text-neutral-900 dark:text-neutral-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_14px_rgba(0,0,0,0.05)]'
+                      : 'text-neutral-400 hover:bg-neutral-100/85 dark:hover:bg-neutral-800/70 hover:text-neutral-900 dark:hover:text-neutral-200'
+                  }`}
+                >
+                  Favorites
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -970,10 +1072,14 @@ const SideBar: React.FC<SideBarProps> = ({
                     isExpanded={expandedProjectIdSet.has(String(project.id))}
                     isCollapsed={renderCollapsed}
                     activeConversationId={activeConversationId}
+                    favoriteConversationIds={favoriteConversationIds}
+                    isElectronMode={isElectronMode}
                     onToggle={handleToggleProjectExpansion}
                     onSelectConversation={handleProjectConversationSelect}
                     onCreateConversation={handleCreateConversationForProject}
+                    onEditProject={handleOpenEditProject}
                     onDeleteProject={handleDeleteSidebarProject}
+                    onToggleFavorite={handleToggleFavorite}
                     onDeleteConversation={handleDeleteSidebarConversation}
                     enableConversationHoverPreview={enableMiniHoverPreview}
                     onConversationHoverStart={handleConversationHoverStart}
@@ -986,58 +1092,44 @@ const SideBar: React.FC<SideBarProps> = ({
             </>
           ) : (
             <>
-              {favoriteConversations.map(conv => {
-                const isActive = activeConversationId === conv.id
-                const projectName = conv.project_id ? projectNameById.get(String(conv.project_id)) : undefined
-                const conversationUpdatedDate = formatDate(conv.updated_at)
+              {!renderCollapsed &&
+                displayedFavoriteConversations.map(conv => {
+                  const isActive = activeConversationId === conv.id
+                  const projectName = conv.project_id ? projectNameById.get(String(conv.project_id)) : undefined
+                  const conversationUpdatedDate = formatDate(conv.updated_at)
 
-                return (
-                  <div
-                    key={conv.id}
-                    className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'
-                    style={CONVERSATION_ROW_VISIBILITY_STYLE}
-                    onMouseEnter={() => {
-                      if (!enableMiniHoverPreview) return
-                      handleConversationHoverStart(conv)
-                    }}
-                    onMouseLeave={() => {
-                      if (!enableMiniHoverPreview) return
-                      handleConversationHoverEnd()
-                    }}
-                  >
+                  return (
                     <div
-                      role='button'
-                      tabIndex={0}
-                      onClick={() => handleSelect(conv.id)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          handleSelect(conv.id)
-                        }
+                      key={conv.id}
+                      className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'
+                      style={CONVERSATION_ROW_VISIBILITY_STYLE}
+                      onMouseEnter={() => {
+                        if (!enableMiniHoverPreview) return
+                        handleConversationHoverStart(conv)
                       }}
-                      className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer ${
-                        renderCollapsed
-                          ? 'py-2 flex items-center hover:scale-90 justify-center'
-                          : 'hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
-                      } ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
-                      title={renderCollapsed ? conv.title || `Conversation ${conv.id}` : undefined}
+                      onMouseLeave={() => {
+                        if (!enableMiniHoverPreview) return
+                        handleConversationHoverEnd()
+                      }}
                     >
-                      {renderCollapsed ? (
-                        <Button
-                          variant='outline2'
-                          size='circle'
-                          rounded='full'
-                          className='h-10 w-10 text-md font-semibold text-lg md:text-base lg:text-sm xl:text-sm 2xl:text-lg'
-                        >
-                          {conv.title ? conv.title.charAt(0).toUpperCase() : '#'}
-                        </Button>
-                      ) : (
+                      <div
+                        role='button'
+                        tabIndex={0}
+                        onClick={() => handleSelect(conv.id)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            handleSelect(conv.id)
+                          }
+                        }}
+                        className={`w-full text-left rounded-lg transition-all duration-200 cursor-pointer hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10 ${isActive ? 'bg-indigo-100 dark:bg-indigo-900/40 border-l-4 border-indigo-500' : ''}`}
+                      >
                         <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
-                          <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
+                          <span className='text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
                             {conv.title || `Conversation ${conv.id}`}
                           </span>
                           {projectName && (
-                            <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
+                            <span className='text-[12px] text-neutral-600 dark:text-stone-300 truncate'>
                               Project: {projectName}
                             </span>
                           )}
@@ -1047,21 +1139,11 @@ const SideBar: React.FC<SideBarProps> = ({
                             </span>
                           )}
                         </div>
-                      )}
-                    </div>
-
-                    {renderCollapsed && (
-                      <div className='absolute left-full ml-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50'>
-                        <div className='bg-neutral-900 dark:bg-neutral-700 text-white dark:text-neutral-100 px-3 py-2 rounded-lg shadow-lg text-sm whitespace-nowrap max-w-xs'>
-                          <div className='font-medium'>{conv.title || `Conversation ${conv.id}`}</div>
-                          {projectName && <div className='text-xs opacity-80 mt-1'>Project: {projectName}</div>}
-                        </div>
                       </div>
-                    )}
-                  </div>
-                )
-              })}
-              {favoriteConversations.length === 0 && !loading && !error && (
+                    </div>
+                  )
+                })}
+              {displayedFavoriteConversations.length === 0 && !loading && !error && (
                 <div
                   className={`text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1 ${renderCollapsed ? 'hidden' : ''}`}
                 >
@@ -1072,59 +1154,61 @@ const SideBar: React.FC<SideBarProps> = ({
           )}
         </div>
 
-        <div className='border-t border-neutral-200/70 px-1 py-2 dark:border-neutral-800/70'>
-          {sidebarActions.map(action => (
-            <button
-              key={action.key}
-              type='button'
-              onClick={action.onClick}
-              title={action.title}
-              aria-label={action.ariaLabel}
-              className={`group flex w-full items-center rounded-3xl py-1.5 transition-colors ${
-                renderCollapsed ? 'justify-center px-0' : 'justify-start gap-2 px-2'
-              }`}
-            >
-              <span className={actionIconShellClass}>
-                <i
-                  className={`bx ${action.iconClass} block text-[22px] leading-none transition-transform duration-100 ${
-                    action.key === 'theme' ? 'group-active:scale-90' : 'group-hover:scale-108 group-active:scale-95'
-                  }`}
-                  aria-hidden='true'
-                ></i>
-              </span>
-
-              {!renderCollapsed && (
-                <span className='truncate text-xs md:text-xs lg:text-[12px] xl:text-[14px] 2xl:text-[14px] 3xl:text-[18px] 4xl:text-[20px] dark:text-stone-300'>
-                  {action.label}
+        {renderCollapsed && (
+          <div className=' px-1 py-2'>
+            {sidebarActions.map(action => (
+              <button
+                key={action.key}
+                type='button'
+                onClick={action.onClick}
+                title={action.title}
+                aria-label={action.ariaLabel}
+                className='group flex w-full items-center justify-center rounded-3xl px-0 py-1.5 transition-colors'
+              >
+                <span className={actionIconShellClass}>
+                  <i
+                    className={`bx ${action.iconClass} block text-[22px] leading-none transition-transform duration-100 ${
+                      action.key === 'theme' ? 'group-active:scale-90' : 'group-hover:scale-108 group-active:scale-95'
+                    }`}
+                    aria-hidden='true'
+                  ></i>
                 </span>
-              )}
-            </button>
-          ))}
-        </div>
+              </button>
+            ))}
+          </div>
+        )}
       </>
     )
   }
 
   const handleToggleSidebar = useCallback(() => {
     if (isCollapsed) {
+      if (isExpandPortalOpen) {
+        closeExpandPortal(false)
+        return
+      }
+
       openExpandPortal()
       return
     }
 
     setIsCollapsed(true)
-  }, [isCollapsed, openExpandPortal])
-
-  const handleDockSidebar = useCallback(() => {
-    setIsCollapsed(false)
-    setIsExpandPortalOpen(false)
-    setHoveredPreviewConversation(null)
-    clearHoverPreviewCloseTimeout()
-  }, [clearHoverPreviewCloseTimeout])
+  }, [closeExpandPortal, isCollapsed, isExpandPortalOpen, openExpandPortal])
 
   const showExpandedPortal = isCollapsed && isExpandPortalOpen
   const hoveredPreviewConversationId = hoveredPreviewConversation?.id ?? null
   const shouldShowConversationPreviewPortal =
     showExpandedPortal && hoveredPreviewConversation?.storage_mode === 'local' && !!hoveredPreviewConversationId
+  const sidebarToggleAriaLabel = isCollapsed
+    ? showExpandedPortal
+      ? 'Close sidebar panel'
+      : 'Open sidebar panel'
+    : 'Collapse sidebar'
+  const sidebarToggleIconClass = isCollapsed
+    ? showExpandedPortal
+      ? 'bx-chevron-left'
+      : 'bx-chevron-right'
+    : 'bx-chevron-left'
 
   const {
     data: topLevelUserPreviewMessages = [],
@@ -1136,7 +1220,7 @@ const SideBar: React.FC<SideBarProps> = ({
     <>
       <aside
         ref={sidebarRef}
-        className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} flex flex-col flex-shrink-0 overflow-hidden border-r border-neutral-200/70 bg-neutral-100/95 shadow-sm transition-[width] duration-200 ease-out dark:border-neutral-800/80 dark:bg-transparent ${isCollapsed ? 'w-15' : 'w-64 md:w-64 lg:w-70 xl:w-80'} ${className}`}
+        className={`acrylic-subtle-2 relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} flex flex-col flex-shrink-0 overflow-hidden bg-transparent shadow-sm transition-[width] duration-200 ease-out dark:bg-transparent ${isCollapsed ? 'w-12' : 'w-64 md:w-64 lg:w-70 xl:w-80'} ${className}`}
         aria-label={isProjectsTab ? 'Projects and conversations' : 'Favorite conversations'}
       >
         <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
@@ -1147,137 +1231,163 @@ const SideBar: React.FC<SideBarProps> = ({
           )}
           <Button
             ref={expandButtonRef}
-            variant='outline2'
+            variant='acrylic'
             size='circle'
             rounded='full'
             onClick={handleToggleSidebar}
-            className={`${isCollapsed ? 'mx-auto' : 'mr-2'} transition-transform duration-200 hover:scale-103 p-3`}
-            aria-label={isCollapsed ? 'Open sidebar panel' : 'Collapse sidebar'}
+            className={`${isCollapsed ? 'mx-auto' : 'mr-2'} transition-transform duration-200 hover:scale-103 p-2`}
+            aria-label={sidebarToggleAriaLabel}
             aria-haspopup={isCollapsed ? 'dialog' : undefined}
             aria-expanded={isCollapsed ? showExpandedPortal : undefined}
           >
-            <i className={`bx ${isCollapsed ? 'bx-chevron-right' : 'bx-chevron-left'} text-lg`} aria-hidden='true'></i>
+            <i className={`bx ${sidebarToggleIconClass} text-lg`} aria-hidden='true'></i>
           </Button>
         </div>
 
         {renderSidebarBody(isCollapsed)}
       </aside>
 
-      {showExpandedPortal &&
-        typeof document !== 'undefined' &&
+      {typeof document !== 'undefined' &&
         createPortal(
-          <div className='fixed inset-x-0 bottom-0 z-[1200]' style={{ top: 'var(--titlebar-height, 0px)' }}>
-            <button
-              type='button'
-              className='absolute inset-0 bg-neutral-950/45'
-              aria-label='Close sidebar panel'
-              onClick={() => closeExpandPortal()}
-            />
-
-            <section
-              role='dialog'
-              aria-modal='true'
-              aria-label='Sidebar panel'
-              className='absolute top-3 bottom-3 rounded-xl border border-neutral-200/90 bg-neutral-50 shadow-2xl dark:border-neutral-700/80 dark:bg-neutral-900'
-              style={{ left: `${portalLeftOffset}px`, width: `${expandPortalWidth}px` }}
-            >
-              <div className='h-full min-h-0 flex flex-col'>
-                <div className='flex items-center justify-between px-3 py-2 border-b border-neutral-200/80 dark:border-neutral-800/80'>
-                  <h2 className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>Sidebar</h2>
-                  <div className='flex items-center gap-1'>
-                    <Button
-                      variant='outline2'
-                      size='circle'
-                      rounded='full'
-                      className='p-2'
-                      onClick={handleDockSidebar}
-                      title='Keep sidebar expanded'
-                      aria-label='Keep sidebar expanded'
-                    >
-                      <i className='bx bx-pin text-base' aria-hidden='true'></i>
-                    </Button>
-                    <Button
-                      variant='outline2'
-                      size='circle'
-                      rounded='full'
-                      className='p-2'
-                      onClick={() => closeExpandPortal()}
-                      aria-label='Close sidebar panel'
-                    >
-                      <i className='bx bx-x text-lg' aria-hidden='true'></i>
-                    </Button>
-                  </div>
-                </div>
-
-                {renderSidebarBody(false, true)}
-              </div>
-            </section>
-
-            {shouldShowConversationPreviewPortal && (
-              <section
-                role='dialog'
-                aria-modal='false'
-                aria-label='Top level user messages preview'
-                className='absolute top-3 bottom-3 rounded-xl border border-neutral-200/90 bg-white/95 shadow-2xl backdrop-blur-sm dark:border-neutral-700/80 dark:bg-neutral-900/95'
-                style={{ left: `${previewPortalLeftOffset}px`, width: `${previewPortalWidth}px` }}
-                onMouseEnter={() => {
-                  clearHoverPreviewCloseTimeout()
-                }}
-                onMouseLeave={() => {
-                  scheduleHoverPreviewClose()
-                }}
+          <AnimatePresence>
+            {showExpandedPortal && (
+              <motion.div
+                className='fixed inset-x-0 bottom-0 z-[1200]'
+                style={{ top: 'var(--titlebar-height, 0px)' }}
+                initial={false}
               >
-                <div className='h-full min-h-0 flex flex-col'>
-                  <div className='px-3 py-2 border-b border-neutral-200/80 dark:border-neutral-800/80'>
-                    <h3 className='text-sm font-semibold text-neutral-800 dark:text-neutral-100 truncate'>
-                      {hoveredPreviewConversation?.title || 'Untitled conversation'}
-                    </h3>
-                    <p className='text-[11px] text-neutral-500 dark:text-neutral-400'>Top-level user messages</p>
-                  </div>
+                <motion.button
+                  type='button'
+                  className='absolute inset-0 ml-12 rounded-2xl bg-neutral-900/10 dark:bg-neutral-950/45'
+                  aria-label='Close sidebar panel'
+                  onClick={() => closeExpandPortal()}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.16, ease: 'easeOut' }}
+                />
 
-                  <div className='flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-2'>
-                    {topLevelUserPreviewLoading && (
-                      <div className='text-xs text-neutral-500 dark:text-neutral-400'>
-                        Loading top-level messages...
-                      </div>
-                    )}
-
-                    {!topLevelUserPreviewLoading && topLevelUserPreviewError && (
-                      <div className='text-xs text-red-500 dark:text-red-400'>
-                        {String(topLevelUserPreviewError) || 'Failed to load messages'}
-                      </div>
-                    )}
-
-                    {!topLevelUserPreviewLoading &&
-                      !topLevelUserPreviewError &&
-                      topLevelUserPreviewMessages.length === 0 && (
-                        <div className='text-xs text-neutral-500 dark:text-neutral-400'>No top-level user messages</div>
-                      )}
-
-                    {!topLevelUserPreviewLoading &&
-                      !topLevelUserPreviewError &&
-                      topLevelUserPreviewMessages.map(message => (
-                        <article
-                          key={message.id}
-                          className='rounded-lg border border-neutral-200/80 bg-neutral-50 px-3 py-2 dark:border-neutral-700/70 dark:bg-neutral-900/80'
+                <motion.section
+                  role='dialog'
+                  aria-modal='true'
+                  aria-label='Sidebar panel'
+                  className='absolute top-3 bottom-3 overflow-hidden rounded-xl border border-neutral-200/90 bg-neutral-50 shadow-2xl dark:border-neutral-700/80 dark:bg-transparent'
+                  style={{
+                    left: `${portalLeftOffset}px`,
+                    width: `${expandPortalWidth}px`,
+                    transformOrigin: 'left center',
+                  }}
+                  initial={{ opacity: 0, x: -16, scale: 0.985 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: -10, scale: 0.985 }}
+                  transition={{ duration: 0.22, ease: 'easeOut' }}
+                >
+                  <div className='acrylic-subtle-no-hover h-full min-h-0 flex flex-col overflow-hidden rounded-xl'>
+                    <div className='flex items-center justify-between px-3 py-2 border-b border-neutral-200/80 dark:border-neutral-800/80'>
+                      <h2 className='text-sm font-semibold text-neutral-800 dark:text-neutral-100'>Sidebar</h2>
+                      <div className='flex items-center gap-1'>
+                        <Button
+                          variant='outline2'
+                          size='circle'
+                          rounded='full'
+                          className='p-2'
+                          onClick={() => closeExpandPortal()}
+                          aria-label='Close sidebar panel'
                         >
-                          {message.note && (
-                            <p className='mb-1 text-[11px] font-medium whitespace-pre-wrap break-words text-blue-600 dark:text-orange-400'>
-                              {message.note}
-                            </p>
-                          )}
-                          <p className='text-xs text-neutral-800 dark:text-neutral-100 whitespace-pre-wrap break-words'>
-                            {message.plain_text_content || message.content}
-                          </p>
-                        </article>
-                      ))}
+                          <i className='bx bx-x text-lg' aria-hidden='true'></i>
+                        </Button>
+                      </div>
+                    </div>
+
+                    {renderSidebarBody(false, true)}
                   </div>
-                </div>
-              </section>
+                </motion.section>
+
+                <AnimatePresence>
+                  {shouldShowConversationPreviewPortal && (
+                    <motion.section
+                      role='dialog'
+                      aria-modal='false'
+                      aria-label='Top level user messages preview'
+                      className='absolute top-3 bottom-3 rounded-xl border border-neutral-200/90 bg-neutral-50 shadow-2xl backdrop-blur-sm dark:border-neutral-700/80 dark:bg-neutral-800'
+                      style={{
+                        left: `${previewPortalLeftOffset}px`,
+                        width: `${previewPortalWidth}px`,
+                        transformOrigin: 'left center',
+                      }}
+                      onMouseEnter={() => {
+                        clearHoverPreviewCloseTimeout()
+                      }}
+                      onMouseLeave={() => {
+                        scheduleHoverPreviewClose()
+                      }}
+                      initial={{ opacity: 0, x: -12, scale: 0.985 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      exit={{ opacity: 0, x: -8, scale: 0.985 }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                    >
+                      <div className='h-full min-h-0 flex flex-col'>
+                        <div className='px-3 py-2 border-b border-neutral-200/80 dark:border-neutral-800/80'>
+                          <h3 className='text-sm font-semibold text-neutral-800 dark:text-neutral-100 truncate'>
+                            {hoveredPreviewConversation?.title || 'Untitled conversation'}
+                          </h3>
+                          <p className='text-[11px] text-neutral-500 dark:text-neutral-400'>Top-level user messages</p>
+                        </div>
+
+                        <div className='flex-1 min-h-0 overflow-y-auto thin-scrollbar p-3 space-y-2'>
+                          {topLevelUserPreviewLoading && (
+                            <div className='text-xs text-neutral-500 dark:text-neutral-400'>
+                              Loading top-level messages...
+                            </div>
+                          )}
+
+                          {!topLevelUserPreviewLoading && topLevelUserPreviewError && (
+                            <div className='text-xs text-red-500 dark:text-red-400'>
+                              {String(topLevelUserPreviewError) || 'Failed to load messages'}
+                            </div>
+                          )}
+
+                          {!topLevelUserPreviewLoading &&
+                            !topLevelUserPreviewError &&
+                            topLevelUserPreviewMessages.length === 0 && (
+                              <div className='text-xs text-neutral-500 dark:text-neutral-400'>
+                                No top-level user messages
+                              </div>
+                            )}
+
+                          {!topLevelUserPreviewLoading &&
+                            !topLevelUserPreviewError &&
+                            topLevelUserPreviewMessages.map(message => (
+                              <article
+                                key={message.id}
+                                className='rounded-lg border border-neutral-200/80 bg-neutral-50 px-3 py-2 dark:border-neutral-700/70 dark:bg-neutral-900/80'
+                              >
+                                {message.note && (
+                                  <p className='mb-1 text-[11px] font-medium whitespace-pre-wrap break-words text-blue-600 dark:text-orange-400'>
+                                    {message.note}
+                                  </p>
+                                )}
+                                <p className='text-xs text-neutral-800 dark:text-neutral-100 whitespace-pre-wrap break-words'>
+                                  {message.plain_text_content || message.content}
+                                </p>
+                              </article>
+                            ))}
+                        </div>
+                      </div>
+                    </motion.section>
+                  )}
+                </AnimatePresence>
+              </motion.div>
             )}
-          </div>,
+          </AnimatePresence>,
           document.body
         )}
+
+      <EditProject
+        isOpen={showEditProjectModal}
+        onClose={handleCloseEditProjectModal}
+        editingProject={editingProject}
+      />
     </>
   )
 }

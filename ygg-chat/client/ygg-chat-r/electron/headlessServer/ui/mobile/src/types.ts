@@ -1,3 +1,5 @@
+import type { LocalFileEntry, LocalFileListingResponse, LocalFileSearchResponse } from '../../../../../shared/localFileBrowser'
+
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
 export interface LocalUserProfile {
@@ -13,6 +15,8 @@ export interface MobileProject {
   user_id: string
   name: string
   cwd?: string | null
+  context?: string | null
+  system_prompt?: string | null
   updated_at?: string
   created_at?: string
 }
@@ -23,6 +27,8 @@ export interface MobileConversation {
   project_id?: string | null
   cwd?: string | null
   title: string
+  system_prompt?: string | null
+  conversation_context?: string | null
   updated_at?: string
   created_at?: string
 }
@@ -108,9 +114,13 @@ export interface MobileInferenceTool {
   inputSchema?: Record<string, unknown>
 }
 
-export interface MobileLocalFileEntry {
-  name: string
-  isDirectory: boolean
-  path: string
-  relativePath?: string
+export type MobileLocalFileEntry = LocalFileEntry
+export type MobileLocalFileListingResponse = LocalFileListingResponse
+export type MobileLocalFileSearchResponse = LocalFileSearchResponse
+
+export type MobileProviderName = 'openaichatgpt' | 'openrouter' | 'lmstudio'
+
+export interface MobileProviderModelInfo {
+  name: MobileProviderName
+  models: string[]
 }

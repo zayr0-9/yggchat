@@ -1,4 +1,5 @@
 import { isCommunityMode } from '../../config/runtimeMode'
+import { clearHeadlessOpenRouterToken, syncHeadlessOpenRouterToken } from './headlessProviderTokenSync'
 import { supabase } from '../supabase'
 import type { AuthChangeCallback, AuthProvider, AuthState, Credentials, User } from './types'
 
@@ -32,6 +33,25 @@ export class ElectronAuthProvider implements AuthProvider {
   private syncCacheToWindow() {
     if (typeof window !== 'undefined') {
       ; (window as any)._cachedElectronSession = this.authState
+    }
+  }
+
+  private async syncHeadlessTokenStore(): Promise<void> {
+    try {
+      await syncHeadlessOpenRouterToken({
+        userId: this.authState.userId,
+        accessToken: this.authState.accessToken,
+      })
+    } catch (error) {
+      console.warn('[ElectronAuth] Failed to sync app token to headless token store:', error)
+    }
+  }
+
+  private async clearHeadlessTokenStore(userId: string | null | undefined = this.authState.userId): Promise<void> {
+    try {
+      await clearHeadlessOpenRouterToken(userId)
+    } catch (error) {
+      console.warn('[ElectronAuth] Failed to clear headless token store:', error)
     }
   }
 
@@ -82,6 +102,7 @@ export class ElectronAuthProvider implements AuthProvider {
               //  console.log('[ElectronAuth] Token refreshed during initialization')
             } catch (refreshError) {
               console.error('[ElectronAuth] Failed to refresh token on init:', refreshError)
+              const staleUserId = this.authState.userId
               // Don't call logout() here - it triggers Supabase signOut which causes flicker
               // Instead, just clear the local state and storage directly
               this.authState = {
@@ -92,6 +113,7 @@ export class ElectronAuthProvider implements AuthProvider {
                 userId: null,
               }
               this.syncCacheToWindow()
+              await this.clearHeadlessTokenStore(staleUserId)
               // Clear the stored session
               if (this.electronAPI?.storage) {
                 await this.electronAPI.storage.set('auth_session', null)
@@ -108,6 +130,7 @@ export class ElectronAuthProvider implements AuthProvider {
               access_token: this.authState.session.access_token,
               refresh_token: this.authState.session.refresh_token || '',
             })
+            await this.syncHeadlessTokenStore()
           }
         } else {
           console.log('[ElectronAuth] No saved session found - user must log in')
@@ -135,6 +158,7 @@ export class ElectronAuthProvider implements AuthProvider {
 
     if (isLocalMode) {
       // console.log('[ElectronAuth] Local mode login - using default user')
+      const previousUserId = this.authState.userId
 
       // Use default local user for local mode
       this.authState = {
@@ -160,6 +184,8 @@ export class ElectronAuthProvider implements AuthProvider {
           console.warn('[ElectronAuth] Failed to save session:', error)
         }
       }
+
+      await this.clearHeadlessTokenStore(previousUserId)
 
       // Notify listeners
       this.notifyListeners(this.authState.user)
@@ -212,6 +238,7 @@ export class ElectronAuthProvider implements AuthProvider {
 
         // Save to Electron storage
         await this.electronAPI.storage.set('auth_session', this.authState)
+        await this.syncHeadlessTokenStore()
 
         // Sync to Supabase client
         if (supabase && !isLocalMode) {
@@ -234,6 +261,7 @@ export class ElectronAuthProvider implements AuthProvider {
 
   async logout(): Promise<void> {
     // console.log('[ElectronAuth] Logout called')
+    const previousUserId = this.authState.userId
 
     if (this.electronAPI) {
       try {
@@ -266,6 +294,7 @@ export class ElectronAuthProvider implements AuthProvider {
       userId: null,
     }
     this.syncCacheToWindow()
+    await this.clearHeadlessTokenStore(previousUserId)
 
     // Notify listeners (triggers redirect to login)
     this.notifyListeners(null)
@@ -318,6 +347,7 @@ export class ElectronAuthProvider implements AuthProvider {
         if (this.electronAPI) {
           await this.electronAPI.storage.set('auth_session', this.authState)
         }
+        await this.syncHeadlessTokenStore()
 
         return this.authState
       }
@@ -375,6 +405,7 @@ export class ElectronAuthProvider implements AuthProvider {
               await this.refreshToken()
             } catch (e) {
               console.error('Failed to refresh reloaded token:', e)
+              const staleUserId = this.authState.userId
               // Don't call logout() - it triggers Supabase signOut causing flicker
               // Just clear state directly
               this.authState = {
@@ -385,6 +416,7 @@ export class ElectronAuthProvider implements AuthProvider {
                 userId: null,
               }
               this.syncCacheToWindow()
+              await this.clearHeadlessTokenStore(staleUserId)
               await this.electronAPI.storage.set('auth_session', null)
               this.notifyListeners(null)
               return
@@ -397,6 +429,7 @@ export class ElectronAuthProvider implements AuthProvider {
               access_token: this.authState.session.access_token,
               refresh_token: this.authState.session.refresh_token || '',
             })
+            await this.syncHeadlessTokenStore()
           }
         }
 

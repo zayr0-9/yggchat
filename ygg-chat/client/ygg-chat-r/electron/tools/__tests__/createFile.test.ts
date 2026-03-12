@@ -32,6 +32,20 @@ describe('createTextFile workspace enforcement', () => {
     expect(await harness.readFile('nested/inside.txt')).toBe('hello')
   })
 
+  it('resolves relative paths from cwd like read_file/edit_file', async () => {
+    const harness = await createToolFsHarness()
+
+    const result = await createTextFile('deep/path/from-cwd.txt', 'cwd-relative', {
+      cwd: harness.workspaceDir,
+      createParentDirs: true,
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.created).toBe(true)
+    expect(await harness.fileExists('deep/path/from-cwd.txt')).toBe(true)
+    expect(await harness.readFile('deep/path/from-cwd.txt')).toBe('cwd-relative')
+  })
+
   if (process.platform === 'win32') {
     it('allows creation under drive-root workspace (regression)', async () => {
       const harness = await createToolFsHarness()

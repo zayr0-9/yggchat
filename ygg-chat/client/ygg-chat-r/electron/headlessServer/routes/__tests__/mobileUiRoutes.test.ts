@@ -52,6 +52,6 @@ describe('registerMobileUiRoutes', () => {
     const script = await res.text()
 
     expect(script).toContain('createRoot')
-    expect(script).toContain('YGG Mobile LAN Chat')
+    expect(script).toContain('mobile-app-shell')
   })
 })

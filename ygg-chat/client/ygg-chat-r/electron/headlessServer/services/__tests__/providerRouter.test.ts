@@ -21,8 +21,11 @@ describe('provider routing', () => {
         modelName: 'openrouter/auto',
         history: [],
         userContent: 'hi',
+        railwayTurn: {
+          conversationId: 'c1',
+        },
       })
-    ).rejects.toThrow('OpenRouter API key missing')
+    ).rejects.toThrow('Yggdrasil app auth token missing')
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,

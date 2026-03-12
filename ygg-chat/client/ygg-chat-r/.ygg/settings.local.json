@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .ygg/hooks/root_note_stop.py",
+            "timeoutMs": 60000
+          }
+        ]
+      }
+    ]
+  }
+}

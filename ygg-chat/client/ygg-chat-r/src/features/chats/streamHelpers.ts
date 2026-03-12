@@ -16,6 +16,7 @@ export const createEmptyStreamState = (
   error: null,
   finished: false,
   streamingMessageId: null,
+  conversationId: null,
   lineage,
   createdAt: new Date().toISOString(),
   streamType,

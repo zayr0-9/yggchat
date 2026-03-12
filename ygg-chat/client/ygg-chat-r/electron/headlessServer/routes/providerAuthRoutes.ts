@@ -6,6 +6,56 @@ interface RegisterProviderAuthRoutesDeps {
   tokenStore: ProviderTokenStore
 }
 
+const DEFAULT_REMOTE_API_BASE = 'https://webdrasil-production.up.railway.app/api'
+const DEFAULT_OPENROUTER_MODELS = [
+  'openai/gpt-4o-mini',
+  'openai/gpt-4.1-mini',
+  'anthropic/claude-3.7-sonnet',
+  'google/gemini-2.5-flash',
+]
+
+function getRemoteApiBase(): string {
+  const raw = process.env.YGG_API_URL || process.env.VITE_API_URL || DEFAULT_REMOTE_API_BASE
+  return String(raw).replace(/\/+$/, '')
+}
+
+function normalizeAuthorizationToken(token: string | null | undefined): string {
+  return String(token || '').replace(/^Bearer\s+/i, '').trim()
+}
+
+function extractModelNames(payload: any): string[] {
+  const models = Array.isArray(payload?.models) ? payload.models : []
+  const names = models
+    .map((model: any) => {
+      if (typeof model === 'string') return model.trim()
+      if (model && typeof model.name === 'string') return model.name.trim()
+      if (model && typeof model.id === 'string') return model.id.trim()
+      return ''
+    })
+    .filter((modelName: string): modelName is string => Boolean(modelName))
+
+  return Array.from(new Set(names))
+}
+
+async function fetchOpenRouterModelsFromRemote(accessToken: string): Promise<string[]> {
+  const normalizedToken = normalizeAuthorizationToken(accessToken)
+  if (!normalizedToken) return []
+
+  const response = await fetch(`${getRemoteApiBase()}/models/openrouter`, {
+    headers: {
+      Authorization: `Bearer ${normalizedToken}`,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Remote OpenRouter models fetch failed: HTTP ${response.status}`)
+  }
+
+  const payload = await response.json().catch(() => ({}))
+  return extractModelNames(payload)
+}
+
 function decodeJwtPayload(token: string): any | null {
   try {
     const parts = token.split('.')
@@ -107,7 +157,7 @@ export function registerProviderAuthRoutes(app: Express, deps: RegisterProviderA
       }
 
       const tokenRecord = tokenStore.get(providerKey, userId)
-      res.json({ success: true, hasToken: Boolean(tokenRecord), token: tokenRecord ?? null })
+      res.json({ success: true, hasToken: Boolean(tokenRecord) })
     })
 
     app.delete(`/api/provider-auth/${providerSlug}/token`, (req, res) => {
@@ -125,7 +175,26 @@ export function registerProviderAuthRoutes(app: Express, deps: RegisterProviderA
   registerTokenRoutes('openai', 'openaichatgpt', { deriveAccountId: true })
   registerTokenRoutes('openrouter', 'openrouter')
 
-  app.get('/api/provider-auth/models', (_req, res) => {
+  app.get('/api/provider-auth/models', async (req, res) => {
+    const userId = String(req.query.userId ?? req.query.user_id ?? '').trim()
+    let openRouterModels = [...DEFAULT_OPENROUTER_MODELS]
+
+    if (userId) {
+      const tokenRecord = tokenStore.get('openrouter', userId)
+      const storedAccessToken = normalizeAuthorizationToken(tokenRecord?.accessToken)
+
+      if (storedAccessToken) {
+        try {
+          const remoteModels = await fetchOpenRouterModelsFromRemote(storedAccessToken)
+          if (remoteModels.length > 0) {
+            openRouterModels = remoteModels
+          }
+        } catch (error) {
+          console.warn('[providerAuthRoutes] Falling back to default OpenRouter models:', error)
+        }
+      }
+    }
+
     res.json({
       success: true,
       providers: [
@@ -145,12 +214,7 @@ export function registerProviderAuthRoutes(app: Express, deps: RegisterProviderA
         },
         {
           name: 'openrouter',
-          models: [
-            'openai/gpt-4o-mini',
-            'openai/gpt-4.1-mini',
-            'anthropic/claude-3.7-sonnet',
-            'google/gemini-2.5-flash',
-          ],
+          models: openRouterModels,
         },
         {
           name: 'lmstudio',

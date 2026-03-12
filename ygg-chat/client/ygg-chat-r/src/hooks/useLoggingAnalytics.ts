@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { useAuth } from './useAuth'
+import { isCloudSession } from '../config/runtimeMode'
 import { api, environment, localApi } from '../utils/api'
 
 export interface LoggingFilters {
@@ -100,6 +101,26 @@ export interface LoggingDashboardResponse {
       total: number
       topFailing: Array<{ toolName: string; failures: number }>
       averageDurationMs: number | null
+      byTool: Array<{
+        toolName: string
+        requested: number
+        total: number
+        completed: number
+        failed: number
+        cancelled: number
+        pending: number
+        running: number
+        averageDurationMs: number | null
+        failureRatePct: number
+      }>
+      daily: Array<{
+        date: string
+        requested: number
+        total: number
+        completed: number
+        failed: number
+        cancelled: number
+      }>
     }
   }
   payments: {
@@ -137,14 +158,15 @@ const buildQueryString = (filters: LoggingFilters): string => {
   return params.toString()
 }
 
-export const useCloudLoggingAnalytics = (filters: LoggingFilters) => {
-  const { accessToken } = useAuth()
+export const useCloudLoggingAnalytics = (filters: LoggingFilters, enabled: boolean = true) => {
+  const { accessToken, userId } = useAuth()
   const queryString = useMemo(() => buildQueryString(filters), [filters])
+  const cloudSession = isCloudSession({ accessToken, userId })
 
   return useQuery({
     queryKey: ['logging-analytics', 'cloud', queryString],
     queryFn: () => api.get<LoggingDashboardResponse>(`/analytics/dashboard?${queryString}`, accessToken),
-    enabled: !!accessToken,
+    enabled: enabled && cloudSession,
     staleTime: 30 * 1000,
     refetchOnMount: false,
     refetchOnReconnect: false,

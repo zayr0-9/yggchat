@@ -12,6 +12,7 @@ import { registerProviderAuthRoutes } from './routes/providerAuthRoutes.js'
 import { registerMobileUiRoutes } from './routes/mobileUiRoutes.js'
 import { registerCustomToolsRoutes } from './routes/customToolsRoutes.js'
 import { registerCustomToolRpcRoutes } from './routes/customToolRpcRoutes.js'
+import { registerEphemeralGenerateRoutes } from './routes/ephemeralGenerateRoutes.js'
 import { registerTestHarnessRoutes } from './routes/testHarnessRoutes.js'
 import { ChatOrchestrator } from './services/chatOrchestrator.js'
 import type { ToolExecutor } from './services/toolLoopService.js'
@@ -170,8 +171,8 @@ export function registerHeadlessServerRoutes(app: Express, deps: HeadlessServerR
   registerCustomToolsRoutes(app)
   registerCustomToolRpcRoutes(app)
   registerCapabilityRoutes(app, { getDefaultTools: resolveDefaultInferenceTools })
+  registerEphemeralGenerateRoutes(app, { tokenStore })
   registerTestHarnessRoutes(app, {
-    tokenStore,
     getDefaultTools: resolveDefaultInferenceTools,
   })
   registerChatRoutes(app, {

@@ -169,6 +169,8 @@ export interface StreamState {
   error: string | null
   finished: boolean
   streamingMessageId: MessageId | null
+  // Conversation this stream belongs to (used to avoid cross-conversation UI bleed)
+  conversationId: ConversationId | null
   // Lineage metadata for subagent/parallel stream support
   lineage: StreamLineage
   // Stream metadata
@@ -197,6 +199,7 @@ export interface StreamingRootState {
 export interface SendingStartedPayload {
   streamId: string
   streamType?: StreamType
+  conversationId?: ConversationId | null
   lineage?: StreamLineage
 }
 

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { mobileApi } from '../api'
 import type { MobileLocalFileEntry } from '../types'
 import { Button } from './ui'
+import { MonacoFileEditorModal } from './MonacoFileEditorModal'
 
 interface FilePathPickerModalProps {
   open: boolean
@@ -19,7 +20,25 @@ type PersistedFilePickerState = {
   followGitignore: boolean
 }
 
+type EditorFileState = {
+  content: string
+  loading: boolean
+  error: string | null
+  dirty: boolean
+  saving: boolean
+  loaded: boolean
+}
+
 const FILE_PICKER_STATE_STORAGE_KEY = 'mobile:file-picker-state:v1'
+
+const createEditorFileState = (): EditorFileState => ({
+  content: '',
+  loading: false,
+  error: null,
+  dirty: false,
+  saving: false,
+  loaded: false,
+})
 
 const normalizePath = (value: string | null | undefined): string | null => {
   if (typeof value !== 'string') return null
@@ -89,6 +108,10 @@ export const FilePathPickerModal: React.FC<FilePathPickerModalProps> = ({ open, 
 
   const [listScrollTop, setListScrollTop] = useState(0)
   const listRef = useRef<HTMLDivElement | null>(null)
+
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editorPath, setEditorPath] = useState<string | null>(null)
+  const [editorFiles, setEditorFiles] = useState<Record<string, EditorFileState>>({})
 
   useEffect(() => {
     if (!open) return
@@ -232,6 +255,101 @@ export const FilePathPickerModal: React.FC<FilePathPickerModalProps> = ({ open, 
   const canGoHome = useMemo(() => Boolean(normalizedRootPath && currentPath && normalizedRootPath !== currentPath), [normalizedRootPath, currentPath])
   const canGoBack = pathHistory.length > 0
   const displayedFiles = isSearchMode ? searchResults : files
+
+  const openEditorForFile = async (filePath: string) => {
+    setEditorPath(filePath)
+    setEditorOpen(true)
+
+    const current = editorFiles[filePath]
+    if (current?.loaded || current?.loading) return
+
+    setEditorFiles(prev => ({
+      ...prev,
+      [filePath]: {
+        ...(prev[filePath] || createEditorFileState()),
+        loading: true,
+        error: null,
+      },
+    }))
+
+    try {
+      const payload = await mobileApi.getLocalFileContent(filePath)
+      setEditorFiles(prev => ({
+        ...prev,
+        [filePath]: {
+          ...(prev[filePath] || createEditorFileState()),
+          content: payload.content,
+          loading: false,
+          error: null,
+          dirty: false,
+          saving: false,
+          loaded: true,
+        },
+      }))
+    } catch (err) {
+      setEditorFiles(prev => ({
+        ...prev,
+        [filePath]: {
+          ...(prev[filePath] || createEditorFileState()),
+          loading: false,
+          error: err instanceof Error ? err.message : String(err),
+          loaded: true,
+        },
+      }))
+    }
+  }
+
+  const activeEditorState = editorPath ? editorFiles[editorPath] || createEditorFileState() : createEditorFileState()
+
+  const handleEditorChange = (nextValue: string) => {
+    if (!editorPath) return
+    setEditorFiles(prev => ({
+      ...prev,
+      [editorPath]: {
+        ...(prev[editorPath] || createEditorFileState()),
+        content: nextValue,
+        dirty: true,
+      },
+    }))
+  }
+
+  const handleEditorSave = async () => {
+    if (!editorPath) return
+    const fileState = editorFiles[editorPath] || createEditorFileState()
+    if (fileState.loading || fileState.saving || !fileState.dirty) return
+
+    setEditorFiles(prev => ({
+      ...prev,
+      [editorPath]: {
+        ...(prev[editorPath] || createEditorFileState()),
+        saving: true,
+        error: null,
+      },
+    }))
+
+    try {
+      await mobileApi.saveLocalFileContent(editorPath, fileState.content)
+      setEditorFiles(prev => ({
+        ...prev,
+        [editorPath]: {
+          ...(prev[editorPath] || createEditorFileState()),
+          saving: false,
+          dirty: false,
+          loaded: true,
+          error: null,
+        },
+      }))
+    } catch (err) {
+      setEditorFiles(prev => ({
+        ...prev,
+        [editorPath]: {
+          ...(prev[editorPath] || createEditorFileState()),
+          saving: false,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      }))
+    }
+  }
 
   if (!open || typeof document === 'undefined') return null
 
@@ -382,19 +500,51 @@ export const FilePathPickerModal: React.FC<FilePathPickerModalProps> = ({ open, 
                 </span>
               </button>
 
-              <Button
-                variant='ghost'
-                size='sm'
-                className='mobile-file-picker-insert-btn'
-                onClick={() => onInsertPath(file.path)}
-                title='Insert path'
-              >
-                +
-              </Button>
+              <div className='mobile-file-picker-row-actions'>
+                {!file.isDirectory ? (
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='mobile-file-picker-edit-btn'
+                    onClick={() => {
+                      void openEditorForFile(file.path)
+                    }}
+                    title='Edit file'
+                    aria-label={`Edit ${file.name}`}
+                  >
+                    ✎
+                  </Button>
+                ) : null}
+
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='mobile-file-picker-insert-btn'
+                  onClick={() => onInsertPath(file.path)}
+                  title='Insert path'
+                >
+                  +
+                </Button>
+              </div>
             </div>
           ))}
         </div>
       </section>
+
+      <MonacoFileEditorModal
+        open={editorOpen}
+        filePath={editorPath}
+        value={activeEditorState.content}
+        loading={activeEditorState.loading}
+        error={activeEditorState.error}
+        isDirty={activeEditorState.dirty}
+        isSaving={activeEditorState.saving}
+        onChange={handleEditorChange}
+        onSave={() => {
+          void handleEditorSave()
+        }}
+        onClose={() => setEditorOpen(false)}
+      />
     </div>,
     document.body
   )

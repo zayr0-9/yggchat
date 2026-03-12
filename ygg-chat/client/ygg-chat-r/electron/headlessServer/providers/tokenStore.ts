@@ -11,6 +11,7 @@ export interface ProviderTokenRecord {
 
 interface DbStatements {
   getToken: Database.Statement
+  getLatestToken: Database.Statement
   upsertToken: Database.Statement
   deleteToken: Database.Statement
 }
@@ -57,6 +58,19 @@ export class ProviderTokenStore {
         FROM provider_tokens
         WHERE provider = ? AND user_id = ?
       `),
+      getLatestToken: db.prepare(`
+        SELECT
+          provider,
+          user_id,
+          access_token,
+          refresh_token,
+          expires_at,
+          account_id
+        FROM provider_tokens
+        WHERE provider = ?
+        ORDER BY datetime(updated_at) DESC, datetime(created_at) DESC
+        LIMIT 1
+      `),
       upsertToken: db.prepare(`
         INSERT INTO provider_tokens (provider, user_id, access_token, refresh_token, expires_at, account_id, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -100,6 +114,37 @@ export class ProviderTokenStore {
     }
 
     return this.memoryTokens.get(this.key(provider, userId)) ?? null
+  }
+
+  getLatest(provider: string): ProviderTokenRecord | null {
+    if (this.db && this.statements) {
+      const row = this.statements.getLatestToken.get(provider) as
+        | {
+            provider: string
+            user_id: string
+            access_token: string
+            refresh_token?: string | null
+            expires_at?: string | null
+            account_id?: string | null
+          }
+        | undefined
+
+      if (!row) return null
+      return {
+        provider: row.provider,
+        userId: row.user_id,
+        accessToken: row.access_token,
+        refreshToken: row.refresh_token ?? null,
+        expiresAt: row.expires_at ?? null,
+        accountId: row.account_id ?? null,
+      }
+    }
+
+    const latest = Array.from(this.memoryTokens.values())
+      .filter(record => record.provider === provider)
+      .at(-1)
+
+    return latest ?? null
   }
 
   upsert(record: ProviderTokenRecord): void {

@@ -2,8 +2,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import React, { useEffect, useState } from 'react'
 import { Project, ProjectWithLatestConversation, StorageMode } from '../../../../shared/types'
 import { Button, TextField } from '../components'
-import { isCommunityMode } from '../config/runtimeMode'
 import { InputTextArea } from '../components/InputTextArea/InputTextArea'
+import { isCommunityMode } from '../config/runtimeMode'
 import { createProject, CreateProjectPayload, updateProject, UpdateProjectPayload } from '../features/projects'
 import { useAppDispatch } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
@@ -65,7 +65,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
       setNewProjectName(editingProject.name)
       setNewProjectContext(editingProject.context || '')
       setNewProjectSystemPrompt(editingProject.system_prompt || '')
-      setStorageMode(isCommunityMode ? 'local' : (editingProject.storage_mode || 'cloud'))
+      setStorageMode(isCommunityMode ? 'local' : editingProject.storage_mode || 'cloud')
       setSelectedPromptId(null)
     } else if (isOpen) {
       // Only reset form when opening modal for creating new project
@@ -165,7 +165,7 @@ const EditProject: React.FC<EditProjectProps> = ({ isOpen, onClose, editingProje
   if (!isOpen) return null
 
   return (
-    <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50 p-4 text-lg'>
+    <div className='fixed inset-0 bg-neutral-400/40 dark:bg-black/30 bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-5000 p-4 text-lg'>
       <div className='bg-neutral-100 mica-medium text-neutral-900 dark:bg-yBlack-900 rounded-3xl border border-gray-200 dark:border-zinc-700 w-full thin-scrollbar max-w-5xl h-full max-h-[83vh] overflow-y-auto thin-scrollbar'>
         <div className='py-6 px-4 sm:px-10 md:px-12 lg:px-12 xl:px-16 2xl:px-15 2xl:py-10 3xl:px-24 4xl:px-24'>
           <div className='flex items-center justify-between space-y-6'>

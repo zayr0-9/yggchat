@@ -55,6 +55,11 @@ const dispatchBackgroundChange = () => {
 const normalizeColorString = (value: string): string | null => {
   const trimmed = value.trim()
   if (!trimmed) return null
+
+  if (trimmed.toLowerCase() === 'transparent') {
+    return 'transparent'
+  }
+
   const normalizedWithHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`
   if (!HEX_COLOR_REGEX.test(normalizedWithHash)) return null
   const hex = normalizedWithHash.slice(1)

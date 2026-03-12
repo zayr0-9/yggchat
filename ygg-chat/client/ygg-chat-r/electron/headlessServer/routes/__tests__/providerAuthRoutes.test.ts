@@ -21,6 +21,7 @@ describe('registerProviderAuthRoutes', () => {
   let appServer: Server
   let baseUrl = ''
   let tokenStore: ProviderTokenStore
+  const originalFetch = global.fetch
 
   beforeEach(() => {
     tokenStore = new ProviderTokenStore()
@@ -35,6 +36,8 @@ describe('registerProviderAuthRoutes', () => {
   })
 
   afterEach(async () => {
+    global.fetch = originalFetch
+
     await new Promise<void>((resolve, reject) => {
       appServer.close(error => {
         if (error) reject(error)
@@ -57,8 +60,9 @@ describe('registerProviderAuthRoutes', () => {
     const tokenPayload = (await getToken.json()) as any
     expect(tokenPayload.success).toBe(true)
     expect(tokenPayload.hasToken).toBe(true)
-    expect(tokenPayload.token.accountId).toBe('acct-1')
+    expect(tokenPayload.token).toBeUndefined()
 
+    expect(tokenStore.get('openaichatgpt', 'u1')?.accountId).toBe('acct-1')
     expect(tokenStore.get('openaichatgpt', 'u1')?.accessToken).toBe('token.without.jwt.claim')
 
     const delToken = await deleteRequest(baseUrl, '/api/provider-auth/openai/token?userId=u1')
@@ -78,11 +82,55 @@ describe('registerProviderAuthRoutes', () => {
     const tokenPayload = (await getToken.json()) as any
     expect(tokenPayload.success).toBe(true)
     expect(tokenPayload.hasToken).toBe(true)
-    expect(tokenPayload.token.accessToken).toBe('or-key')
+    expect(tokenPayload.token).toBeUndefined()
+    expect(tokenStore.get('openrouter', 'u2')?.accessToken).toBe('or-key')
 
     const delToken = await deleteRequest(baseUrl, '/api/provider-auth/openrouter/token?userId=u2')
     expect(delToken.status).toBe(200)
     expect(tokenStore.get('openrouter', 'u2')).toBeNull()
+  })
+
+  it('fetches live openrouter model listing from remote when token is stored', async () => {
+    tokenStore.upsert({
+      provider: 'openrouter',
+      userId: 'u-live',
+      accessToken: 'Bearer live-token',
+    })
+
+    global.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === 'https://webdrasil-production.up.railway.app/api/models/openrouter') {
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer live-token',
+        })
+        return new Response(
+          JSON.stringify({
+            models: [
+              'openai/gpt-5-mini',
+              { name: 'anthropic/claude-3.7-sonnet' },
+              { id: 'google/gemini-2.5-pro' },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }
+        )
+      }
+      return originalFetch(input, init)
+    }) as typeof fetch
+
+    const res = await fetch(`${baseUrl}/api/provider-auth/models?userId=u-live`)
+    expect(res.status).toBe(200)
+    const payload = (await res.json()) as any
+
+    expect(payload.success).toBe(true)
+    const openrouterProvider = payload.providers.find((provider: any) => provider.name === 'openrouter')
+    expect(openrouterProvider?.models).toEqual([
+      'openai/gpt-5-mini',
+      'anthropic/claude-3.7-sonnet',
+      'google/gemini-2.5-pro',
+    ])
   })
 
   it('returns provider model listing', async () => {

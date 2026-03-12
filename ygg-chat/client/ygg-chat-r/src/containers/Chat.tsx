@@ -27,8 +27,14 @@ import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIfra
 import {
   getStoredSendButtonAnimation,
   getStoredSendButtonColor,
+  getStoredStreamingAnimation,
+  getStoredStreamingDarkColor,
+  getStoredStreamingLightColor,
+  getStoredStreamingSpeed,
   SendButtonAnimationType,
   SendButtonLoadingAnimation,
+  StreamingAnimationType,
+  StreamingLoadingAnimation,
 } from '../components/SettingsPane/SendButtonAnimationSettings'
 import { getThemeModeColor, useCustomChatTheme, useHtmlDarkMode } from '../components/ThemeManager/themeConfig'
 import { isCommunityMode } from '../config/runtimeMode'
@@ -250,6 +256,54 @@ const VIRTUAL_ROW_BASE_STYLE: React.CSSProperties = {
   left: 0,
   width: '100%',
 }
+
+// const formatStreamDebugId = (value: unknown): string => {
+//   if (value == null || value === '') return '—'
+//   const stringValue = String(value)
+//   return stringValue.length > 18 ? `${stringValue.slice(0, 8)}…${stringValue.slice(-6)}` : stringValue
+// }
+
+const EmptyChatState = () => (
+  <div className='flex min-h-[420px] flex-1 items-center justify-center px-6 py-12 sm:px-10'>
+    <div className='mx-auto flex max-w-sm flex-col items-center text-center'>
+      <div className='mb-5 rounded-[28px] border border-stone-200/80 bg-white/75 p-5 shadow-[0_16px_40px_-24px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/70'>
+        <svg
+          aria-hidden='true'
+          viewBox='0 0 180 128'
+          className='h-28 w-40 text-stone-700 dark:text-stone-200'
+          fill='none'
+          xmlns='http://www.w3.org/2000/svg'
+        >
+          <circle cx='148' cy='26' r='10' fill='currentColor' opacity='0.12' />
+          <circle cx='38' cy='98' r='14' fill='currentColor' opacity='0.08' />
+          <path
+            d='M35 38C35 28.6112 42.6112 21 52 21H99C108.389 21 116 28.6112 116 38V57C116 66.3888 108.389 74 99 74H72.5L55 89V74H52C42.6112 74 35 66.3888 35 57V38Z'
+            fill='currentColor'
+            opacity='0.12'
+          />
+          <path d='M69 52H96' stroke='currentColor' strokeWidth='6' strokeLinecap='round' opacity='0.55' />
+          <path d='M55 52H58' stroke='currentColor' strokeWidth='6' strokeLinecap='round' opacity='0.55' />
+          <path
+            d='M92 88C92 79.1634 99.1634 72 108 72H128C136.837 72 144 79.1634 144 88V101C144 109.837 136.837 117 128 117H113L98 127V117H108C99.1634 117 92 109.837 92 101V88Z'
+            fill='currentColor'
+            opacity='0.18'
+          />
+          <path d='M108 94H128' stroke='currentColor' strokeWidth='5' strokeLinecap='round' opacity='0.7' />
+          <path d='M108 104H122' stroke='currentColor' strokeWidth='5' strokeLinecap='round' opacity='0.4' />
+          <path
+            d='M126 33L130 41L138 45L130 49L126 57L122 49L114 45L122 41L126 33Z'
+            fill='currentColor'
+            opacity='0.3'
+          />
+        </svg>
+      </div>
+      <h3 className='text-lg font-semibold tracking-tight text-stone-900 dark:text-stone-100'>Start building</h3>
+      <p className='mt-2 max-w-xs text-sm leading-6 text-stone-600 dark:text-stone-400'>
+        Ask a question, drop in some context, or sketch an idea to make it real.
+      </p>
+    </div>
+  </div>
+)
 
 type VirtualizedRowContainerProps = {
   id: string
@@ -702,6 +756,7 @@ function Chat() {
     }),
     [currentViewStream]
   )
+
   const conversationMessages = useAppSelector(selectConversationMessages)
   const displayMessages = useAppSelector(selectDisplayMessages)
   const currentConversationId = useAppSelector(selectCurrentConversationId)
@@ -716,6 +771,66 @@ function Chat() {
   const multiReplyCount = useAppSelector(selectMultiReplyCount)
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
   const isBranchEditing = useAppSelector(state => state.chat.composition.editingBranch)
+
+  const streamingRoot = useAppSelector(state => state.chat.streaming)
+  // const [streamDebugPanelOpen, setStreamDebugPanelOpen] = useState(true)
+
+  // const selectedPathStringSet = useMemo(() => new Set(selectedPath.map(id => String(id))), [selectedPath])
+
+  // const selectedPathDebugLabel = useMemo(
+  //   () => (selectedPath.length ? selectedPath.map(formatStreamDebugId).join(' → ') : '—'),
+  //   [selectedPath]
+  // )
+
+  // const streamDebugRows = useMemo(() => {
+  //   return Object.entries(streamingRoot.byId)
+  //     .map(([id, stream]) => {
+  //       const lastEvent = stream.events[stream.events.length - 1]
+  //       const rootMessageId = stream.lineage.rootMessageId == null ? null : String(stream.lineage.rootMessageId)
+
+  //       const lastEventLabel = (() => {
+  //         if (!lastEvent) return '—'
+  //         if (lastEvent.type === 'tool_call') return `tool:${lastEvent.toolCall?.name ?? 'call'}`
+  //         if (lastEvent.type === 'tool_result') return 'tool_result'
+  //         if (lastEvent.type === 'image') return 'image'
+  //         if (lastEvent.type === 'reasoning') return 'reasoning'
+  //         return 'text'
+  //       })()
+
+  //       return {
+  //         id,
+  //         active: stream.active,
+  //         finished: stream.finished,
+  //         error: stream.error,
+  //         streamType: stream.streamType,
+  //         conversationId: stream.conversationId == null ? null : String(stream.conversationId),
+  //         isPrimary: streamingRoot.primaryStreamId === id,
+  //         isCurrentView: currentViewStream?.id === id,
+  //         rootInSelectedPath: rootMessageId != null && selectedPathStringSet.has(rootMessageId),
+  //         rootMessageId,
+  //         originMessageId: stream.lineage.originMessageId == null ? null : String(stream.lineage.originMessageId),
+  //         parentStreamId: stream.lineage.parentStreamId ?? null,
+  //         messageId: stream.messageId == null ? null : String(stream.messageId),
+  //         streamingMessageId: stream.streamingMessageId == null ? null : String(stream.streamingMessageId),
+  //         bufferLength: stream.buffer.length,
+  //         thinkingLength: stream.thinkingBuffer.length,
+  //         eventCount: stream.events.length,
+  //         toolCallCount: stream.toolCalls.length,
+  //         createdAt: stream.createdAt,
+  //         lastEventLabel,
+  //       }
+  //     })
+  //     .sort((a, b) => {
+  //       if (a.isCurrentView !== b.isCurrentView) return a.isCurrentView ? -1 : 1
+  //       if (a.active !== b.active) return a.active ? -1 : 1
+  //       return b.createdAt.localeCompare(a.createdAt)
+  //     })
+  // }, [streamingRoot.byId, streamingRoot.primaryStreamId, currentViewStream?.id, selectedPathStringSet])
+
+  // const matchingSelectedPathStreamCount = useMemo(
+  //   () => streamDebugRows.filter(stream => stream.rootInSelectedPath).length,
+  //   [streamDebugRows]
+  // )
 
   // const ideContext = useAppSelector(selectIdeContext)
   const workspace = useAppSelector(selectWorkspace)
@@ -1104,7 +1219,6 @@ function Chat() {
     operationMode === 'plan'
       ? 'outline-1 outline-blue-200/70 dark:outline-neutral-700/50'
       : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
-
 
   const handleCloseExpandedPreview = useCallback(() => {
     if (!expandedFilePath) return
@@ -1660,12 +1774,13 @@ function Chat() {
   // Determine if optimistic/streaming messages should be shown (all modes for instant feedback)
   const showOptimisticMessage = !!optimisticMessage
   const showOptimisticBranchMessage = !!optimisticBranchMessage
-  const showStreamingMessage =
-    streamState.active &&
-    (Boolean(streamState.buffer) ||
-      Boolean(streamState.thinkingBuffer) ||
-      streamState.toolCalls.length > 0 ||
-      streamState.events.length > 0)
+  const showGenerationLoadingAnimation = sendingState.compacting || sendingState.streaming || sendingState.sending
+  const hasStreamingMessageContent =
+    Boolean(streamState.buffer) ||
+    Boolean(streamState.thinkingBuffer) ||
+    streamState.toolCalls.length > 0 ||
+    streamState.events.length > 0
+  const showStreamingMessage = showGenerationLoadingAnimation || hasStreamingMessageContent
 
   const virtualRows = useMemo<VirtualRenderRow[]>(() => {
     const rows: VirtualRenderRow[] = messageRenderRows.map((row, index) => ({
@@ -1958,19 +2073,22 @@ function Chat() {
     [dispatch]
   )
 
-  const setHermesModeEnabled = useCallback((enabled: boolean) => {
-    if (!hermesModeAvailable) {
-      setHermesMode(false)
-      return
-    }
+  const setHermesModeEnabled = useCallback(
+    (enabled: boolean) => {
+      if (!hermesModeAvailable) {
+        setHermesMode(false)
+        return
+      }
 
-    setHermesMode(enabled)
-    try {
-      window.localStorage.setItem('chat:agentMode', enabled ? 'hermes' : 'default')
-    } catch {
-      // noop
-    }
-  }, [hermesModeAvailable])
+      setHermesMode(enabled)
+      try {
+        window.localStorage.setItem('chat:agentMode', enabled ? 'hermes' : 'default')
+      } catch {
+        // noop
+      }
+    },
+    [hermesModeAvailable]
+  )
 
   // Fetch conversations for the current project using React Query
   // Use projectId from URL first (ensures correct cache is active on page refresh)
@@ -2319,12 +2437,12 @@ function Chat() {
 
   const { theme: customTheme, enabled: customThemeEnabled } = useCustomChatTheme()
   const isDarkMode = useHtmlDarkMode()
-  const chatPanelBackgroundColor = customThemeEnabled
+  const chatSurfaceBackgroundColor = customThemeEnabled
     ? getThemeModeColor(customTheme.colors.chatPanelBg, isDarkMode)
-    : undefined
-  const chatMessageListBackgroundColor = customThemeEnabled
-    ? getThemeModeColor(customTheme.colors.chatMessageListBg, isDarkMode)
-    : undefined
+    : isDarkMode
+      ? 'oklch(20.5% 0 0)'
+      : 'oklch(98.5% 0 0)'
+  //dedfault set in theme config
 
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
   const [expandedProcessMessageRuns, setExpandedProcessMessageRuns] = useState<Set<string>>(() => new Set())
@@ -2413,17 +2531,40 @@ function Chat() {
     }
   }, [])
 
-  // Send button animation type and color (synced from SettingsPane via custom event + localStorage)
+  // Send button animation settings (synced from SettingsPane via custom event + localStorage)
   const [sendButtonAnimation, setSendButtonAnimation] = useState<SendButtonAnimationType>(getStoredSendButtonAnimation)
   const [sendButtonColor, setSendButtonColor] = useState<string>(getStoredSendButtonColor)
+
+  // Streaming animation settings (shown below the live assistant message while content is streaming)
+  const [streamingAnimation, setStreamingAnimation] = useState<StreamingAnimationType>(getStoredStreamingAnimation)
+  const [streamingAnimationLightColor, setStreamingAnimationLightColor] = useState<string>(getStoredStreamingLightColor)
+  const [streamingAnimationDarkColor, setStreamingAnimationDarkColor] = useState<string>(getStoredStreamingDarkColor)
+  const [streamingAnimationSpeed, setStreamingAnimationSpeed] = useState<number>(getStoredStreamingSpeed)
+
   useEffect(() => {
-    const handleAnimationEvent = (e: Event) => {
+    const handleSendButtonAnimationEvent = (e: Event) => {
       const detail = (e as CustomEvent<SendButtonAnimationType>).detail
       if (detail) setSendButtonAnimation(detail)
     }
-    const handleColorEvent = (e: Event) => {
+    const handleSendButtonColorEvent = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail
       if (detail) setSendButtonColor(detail)
+    }
+    const handleStreamingAnimationEvent = (e: Event) => {
+      const detail = (e as CustomEvent<StreamingAnimationType>).detail
+      if (detail) setStreamingAnimation(detail)
+    }
+    const handleStreamingLightColorEvent = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail) setStreamingAnimationLightColor(detail)
+    }
+    const handleStreamingDarkColorEvent = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail) setStreamingAnimationDarkColor(detail)
+    }
+    const handleStreamingSpeedEvent = (e: Event) => {
+      const detail = (e as CustomEvent<number>).detail
+      if (Number.isFinite(detail)) setStreamingAnimationSpeed(detail)
     }
     const handleStorageEvent = (e: StorageEvent) => {
       if (e.key === 'chat:sendButtonAnimation' && e.newValue) {
@@ -2432,13 +2573,44 @@ function Chat() {
       if (e.key === 'chat:sendButtonColor' && e.newValue) {
         setSendButtonColor(e.newValue)
       }
+      if (e.key === 'chat:streamingAnimation' && e.newValue) {
+        setStreamingAnimation(e.newValue as StreamingAnimationType)
+      }
+      if (e.key === 'chat:streamingAnimationColor' && e.newValue) {
+        setStreamingAnimationLightColor(e.newValue)
+        setStreamingAnimationDarkColor(e.newValue)
+      }
+      if (e.key === 'chat:streamingAnimationLightColor' && e.newValue) {
+        setStreamingAnimationLightColor(e.newValue)
+      }
+      if (e.key === 'chat:streamingAnimationDarkColor' && e.newValue) {
+        setStreamingAnimationDarkColor(e.newValue)
+      }
+      if (e.key === 'chat:streamingAnimationSpeed' && e.newValue) {
+        const nextSpeed = Number.parseFloat(e.newValue)
+        if (Number.isFinite(nextSpeed)) {
+          setStreamingAnimationSpeed(nextSpeed)
+        }
+      }
     }
-    window.addEventListener('sendButtonAnimationChange', handleAnimationEvent)
-    window.addEventListener('sendButtonColorChange', handleColorEvent)
+
+    window.addEventListener('sendButtonAnimationChange', handleSendButtonAnimationEvent)
+    window.addEventListener('sendButtonColorChange', handleSendButtonColorEvent)
+    window.addEventListener('streamingAnimationChange', handleStreamingAnimationEvent)
+    window.addEventListener('streamingAnimationColorChange', handleStreamingLightColorEvent)
+    window.addEventListener('streamingAnimationLightColorChange', handleStreamingLightColorEvent)
+    window.addEventListener('streamingAnimationDarkColorChange', handleStreamingDarkColorEvent)
+    window.addEventListener('streamingAnimationSpeedChange', handleStreamingSpeedEvent)
     window.addEventListener('storage', handleStorageEvent)
+
     return () => {
-      window.removeEventListener('sendButtonAnimationChange', handleAnimationEvent)
-      window.removeEventListener('sendButtonColorChange', handleColorEvent)
+      window.removeEventListener('sendButtonAnimationChange', handleSendButtonAnimationEvent)
+      window.removeEventListener('sendButtonColorChange', handleSendButtonColorEvent)
+      window.removeEventListener('streamingAnimationChange', handleStreamingAnimationEvent)
+      window.removeEventListener('streamingAnimationColorChange', handleStreamingLightColorEvent)
+      window.removeEventListener('streamingAnimationLightColorChange', handleStreamingLightColorEvent)
+      window.removeEventListener('streamingAnimationDarkColorChange', handleStreamingDarkColorEvent)
+      window.removeEventListener('streamingAnimationSpeedChange', handleStreamingSpeedEvent)
       window.removeEventListener('storage', handleStorageEvent)
     }
   }, [])
@@ -3556,38 +3728,10 @@ function Chat() {
                 compactionSourceMessages.length >= 2 &&
                 !autoCompactionInFlightRef.current
 
-              console.log('[AutoCompaction][send] precheck', {
-                conversationId: currentConversationId,
-                selectedParent,
-                effectiveParentBeforeCompaction: effectiveParent,
-                latestCompactionId: latestCompaction.message?.id ?? null,
-                hasLatestCompaction: Boolean(latestCompaction.message),
-                sourceMessagesCount: compactionSourceMessages.length,
-                totalContextTokens,
-                totalBudget,
-                totalContextProgress,
-                totalContextLimit,
-                modelContextProgress,
-                hasLastMessage: Boolean(lastMessage),
-                lastMessageId: lastMessage?.id ?? null,
-                lastMessageRole: lastMessage?.role ?? null,
-                lastMessageNote: lastMessage?.note ?? null,
-                inFlight: autoCompactionInFlightRef.current,
-                shouldAutoCompact,
-              })
-
               if (shouldAutoCompact && lastMessage) {
                 autoCompactionInFlightRef.current = true
 
                 try {
-                  console.log('[AutoCompaction][send] dispatch compactBranch', {
-                    conversationId: currentConversationId,
-                    parentMessageId: lastMessage.id,
-                    providerName: providerSettings.compactionProvider || providers.currentProvider,
-                    modelName: providerSettings.compactionModel || selectedModel?.name || null,
-                    sourceMessagesCount: compactionSourceMessages.length,
-                  })
-
                   const compactionResult = await dispatch(
                     compactBranch({
                       conversationId: currentConversationId,
@@ -3636,11 +3780,6 @@ function Chat() {
                   },
                 })
               }
-
-              console.log('[AutoCompaction][send] sendWithParent', {
-                effectiveParent,
-                contentLength: contentWithIdeContext.length,
-              })
               sendWithParent(effectiveParent)
             })()
           }
@@ -4658,20 +4797,18 @@ function Chat() {
       exit={{ opacity: 0, x: -10 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       ref={containerRef}
-      className='flex h-full overflow-hidden bg-neutral-50 dark:bg-transparent'
+      className='flex h-full overflow-hidden bg-transparent dark:bg-transparent'
     >
       <div
-        className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} rounded-xl min-w-0 sm:min-w-[240px] md:min-w-[280px] h-full bg-neutral-50 dark:bg-neutral-900 overflow-hidden`}
+        className={`relative flex flex-col ${heimdallVisible && !isMobile ? 'flex-none' : 'flex-1'} rounded-xl mb-2 min-w-0 bg-transparent sm:min-w-[240px] md:min-w-[280px]  overflow-hidden`}
         style={{
           width: isMobile ? '100%' : heimdallVisible ? `${leftWidthPct}%` : 'auto',
-          backgroundColor: chatPanelBackgroundColor,
+          backgroundColor: chatSurfaceBackgroundColor,
         }}
       >
-        {/* Messages Display */}
-
         <div
           className={`relative mx-4 flex flex-col thin-scrollbar rounded-lg bg-transparent dark:bg-transparent flex-1 min-h-0 min-w-0 overflow-hidden transition-[padding-bottom] duration-200 ${!heimdallVisible ? 'px-0 sm:px-0 md:pr-12 ' : ''}`}
-          style={{ paddingBottom: `0px` }}
+          style={{ paddingBottom: `0px`, backgroundColor: chatSurfaceBackgroundColor }}
         >
           {/* Conversation Title Editor */}
           {currentConversationId && (
@@ -4822,19 +4959,19 @@ function Chat() {
               </div>
             </div>
           )}
-
+          {/* Messages Display */}
           <div
             ref={messagesContainerRef}
-            className={`flex flex-col ${currentConversationId && isTitleBarVisible ? 'pt-25' : 'pt-6'} transition-[padding-top] duration-300 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y bg-transparent dark:bg-transparent`}
+            className={`flex flex-col ${currentConversationId && isTitleBarVisible ? 'pt-25' : 'pt-6'} transition-[padding-top] duration-300 dark:border-neutral-700 border-stone-200 rounded-lg overflow-y-auto overflow-x-hidden thin-scrollbar overscroll-y-contain touch-pan-y`}
             style={{
               ['overflowAnchor' as any]: 'none',
               willChange: 'scroll-position',
-              backgroundColor: chatMessageListBackgroundColor,
+              backgroundColor: chatSurfaceBackgroundColor,
             }}
           >
             <React.Profiler id='chat-virtual-list' onRender={handleVirtualListProfilerRender}>
               {virtualRows.length === 0 ? (
-                <p className='text-stone-800 dark:text-stone-200'>No messages yet...</p>
+                <EmptyChatState />
               ) : (
                 (() => {
                   const totalSize = virtualizer.getTotalSize()
@@ -4922,23 +5059,34 @@ function Chat() {
                               index={virtualRow.index}
                               start={virtualRow.start}
                             >
-                              <ChatMessage
-                                id='streaming'
-                                role='assistant'
-                                content={streamState.buffer}
-                                thinking={streamState.thinkingBuffer}
-                                toolCalls={streamState.toolCalls}
-                                streamEvents={streamState.events}
-                                width='w-full'
-                                fontSizeOffset={fontSizeOffset}
-                                groupToolReasoningRuns={groupToolReasoningRuns}
-                                customTheme={customTheme}
-                                customThemeEnabled={customThemeEnabled}
-                                isDarkMode={isDarkMode}
-                                modelName={selectedModel?.name || undefined}
-                                className=''
-                                onOpenToolHtmlModal={openToolHtmlModal}
-                              />
+                              {hasStreamingMessageContent && (
+                                <ChatMessage
+                                  id='streaming'
+                                  role='assistant'
+                                  content={streamState.buffer}
+                                  thinking={streamState.thinkingBuffer}
+                                  toolCalls={streamState.toolCalls}
+                                  streamEvents={streamState.events}
+                                  width='w-full'
+                                  fontSizeOffset={fontSizeOffset}
+                                  groupToolReasoningRuns={groupToolReasoningRuns}
+                                  customTheme={customTheme}
+                                  customThemeEnabled={customThemeEnabled}
+                                  isDarkMode={isDarkMode}
+                                  modelName={selectedModel?.name || undefined}
+                                  className=''
+                                  onOpenToolHtmlModal={openToolHtmlModal}
+                                />
+                              )}
+                              {showGenerationLoadingAnimation && (
+                                <div className={`${hasStreamingMessageContent ? 'mt-2' : 'mt-1'} pl-2`}>
+                                  <StreamingLoadingAnimation
+                                    animationType={streamingAnimation}
+                                    color={isDarkMode ? streamingAnimationDarkColor : streamingAnimationLightColor}
+                                    speed={streamingAnimationSpeed}
+                                  />
+                                </div>
+                              )}
                             </VirtualizedRowContainer>
                           )
                         }
@@ -5164,7 +5312,7 @@ function Chat() {
         {/* Input area: controls row + textarea (absolutely positioned overlay) */}
         <div
           ref={inputAreaRef}
-          className={`absolute ${isBranchEditing ? 'z-0' : 'z-10'} bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-0 md:px-4 lg:px-4 2xl:px-4  ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
+          className={`absolute ${isBranchEditing ? 'z-100' : 'z-10'} bottom-0 left-0 right-0 mx-auto mb-2 px-2 sm:px-0 md:px-4 lg:px-4 2xl:px-4  ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
           style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
           {/* Controls row (above) */}
@@ -5852,7 +6000,7 @@ function Chat() {
                 </button>
                 {!currentConversationId ? (
                   <span className='text-xs text-neutral-400 dark:text-neutral-500 px-2'>Creating...</span>
-                ) : sendingState.compacting || sendingState.streaming || sendingState.sending ? (
+                ) : showGenerationLoadingAnimation ? (
                   <button
                     onClick={handleStopGeneration}
                     disabled={!streamState.active}
@@ -5914,7 +6062,7 @@ function Chat() {
       {/* SEPARATOR - Hidden on mobile */}
       {heimdallVisible && !isMobile && (
         <div
-          className='w-2 z-10 dark:bg-neutral-900 bg-neutral-50 hover:dark:bg-neutral-800 hover:bg-neutral-200 cursor-col-resize select-none'
+          className='w-2 z-10 dark:bg-transparent bg-transparent hover:dark:bg-neutral-800 hover:bg-neutral-200 cursor-col-resize select-none'
           style={{ border: 'none', outline: 'none', margin: 0, padding: 0 }}
           role='separator'
           aria-orientation='vertical'
@@ -5938,7 +6086,7 @@ function Chat() {
 
       {/* Desktop: side-by-side layout */}
       {heimdallVisible && !isMobile && (
-        <div className='flex-1 min-w-0'>
+        <div className='flex-1 min-w-0 mb-2'>
           <Heimdall
             key={currentConversationId ?? 'none'}
             chatData={heimdallData}
@@ -6232,6 +6380,116 @@ function Chat() {
           </div>
         </div>
       )}
+      {/* <div className='pointer-events-none fixed bottom-4 right-4 z-[1400] flex max-w-[360px] flex-col items-end gap-2'>
+        <button
+          type='button'
+          onClick={() => setStreamDebugPanelOpen(prev => !prev)}
+          className='pointer-events-auto rounded-full border border-black/10 bg-white/90 px-3 py-1.5 text-[11px] font-semibold text-neutral-700 shadow-lg backdrop-blur transition hover:scale-[1.02] dark:border-white/10 dark:bg-neutral-900/90 dark:text-neutral-200'
+          title='Toggle stream debug panel'
+        >
+          {streamDebugPanelOpen ? 'Hide stream debug' : `Stream debug (${streamingRoot.activeIds.length} active)`}
+        </button>
+
+        {streamDebugPanelOpen && (
+          <div className='pointer-events-auto w-[340px] max-h-[46vh] overflow-hidden rounded-xl border border-black/10 bg-white/90 p-3 text-[11px] shadow-2xl backdrop-blur dark:border-white/10 dark:bg-neutral-950/90 dark:text-neutral-100'>
+            <div className='flex items-center justify-between gap-2'>
+              <div className='text-[12px] font-semibold tracking-tight'>Stream / branch debug</div>
+              <div className='rounded-full bg-black/5 px-2 py-0.5 font-mono text-[10px] dark:bg-white/10'>
+                {streamingRoot.activeIds.length} active
+              </div>
+            </div>
+
+            <div className='mt-2 grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[10px] leading-4'>
+              <div>conv: {formatStreamDebugId(currentConversationId)}</div>
+              <div>path tip: {formatStreamDebugId(selectedPath[selectedPath.length - 1])}</div>
+              <div>global sending: {String(sendingState.sending)}</div>
+              <div>global streaming: {String(sendingState.streaming)}</div>
+              <div>compacting: {String(sendingState.compacting)}</div>
+              <div>matches path: {matchingSelectedPathStreamCount}</div>
+              <div>view stream: {formatStreamDebugId(currentViewStream?.id)}</div>
+              <div>primary: {formatStreamDebugId(streamingRoot.primaryStreamId)}</div>
+              <div>view active: {String(streamState.active)}</div>
+              <div>view events: {streamState.events.length}</div>
+              <div>view buf: {streamState.buffer.length}</div>
+              <div>view think: {streamState.thinkingBuffer.length}</div>
+            </div>
+
+            <div className='mt-2 rounded-lg bg-black/5 p-2 font-mono text-[10px] leading-4 break-all dark:bg-white/5'>
+              <div className='mb-1 text-[9px] uppercase tracking-wider text-neutral-500 dark:text-neutral-400'>
+                selectedPath
+              </div>
+              <div>{selectedPathDebugLabel}</div>
+            </div>
+
+            <div className='mt-3 max-h-[28vh] space-y-2 overflow-y-auto pr-1'>
+              {streamDebugRows.length === 0 ? (
+                <div className='rounded-lg border border-dashed border-black/10 px-3 py-2 text-[10px] text-neutral-500 dark:border-white/10 dark:text-neutral-400'>
+                  No streams in Redux.
+                </div>
+              ) : (
+                streamDebugRows.map(stream => (
+                  <div
+                    key={stream.id}
+                    className={`rounded-lg border p-2 font-mono text-[10px] leading-4 ${
+                      stream.isCurrentView
+                        ? 'border-blue-500/50 bg-blue-500/10'
+                        : stream.active
+                          ? 'border-emerald-500/30 bg-emerald-500/5'
+                          : 'border-black/10 bg-black/5 dark:border-white/10 dark:bg-white/5'
+                    }`}
+                  >
+                    <div className='flex flex-wrap items-center gap-1.5'>
+                      <span className='font-semibold'>{formatStreamDebugId(stream.id)}</span>
+                      <span className='rounded bg-black/10 px-1.5 py-0.5 dark:bg-white/10'>{stream.streamType}</span>
+                      {stream.active && (
+                        <span className='rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-700 dark:text-emerald-300'>
+                          active
+                        </span>
+                      )}
+                      {stream.finished && <span className='rounded bg-neutral-500/20 px-1.5 py-0.5'>finished</span>}
+                      {stream.isPrimary && (
+                        <span className='rounded bg-violet-500/20 px-1.5 py-0.5 text-violet-700 dark:text-violet-300'>
+                          primary
+                        </span>
+                      )}
+                      {stream.isCurrentView && (
+                        <span className='rounded bg-blue-500/20 px-1.5 py-0.5 text-blue-700 dark:text-blue-300'>
+                          currentView
+                        </span>
+                      )}
+                      {stream.rootInSelectedPath && (
+                        <span className='rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-700 dark:text-amber-300'>
+                          root∈path
+                        </span>
+                      )}
+                    </div>
+
+                    <div className='mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5'>
+                      <div>conv: {formatStreamDebugId(stream.conversationId)}</div>
+                      <div>root: {formatStreamDebugId(stream.rootMessageId)}</div>
+                      <div>origin: {formatStreamDebugId(stream.originMessageId)}</div>
+                      <div>parentStream: {formatStreamDebugId(stream.parentStreamId)}</div>
+                      <div>msg: {formatStreamDebugId(stream.messageId)}</div>
+                      <div>streamMsg: {formatStreamDebugId(stream.streamingMessageId)}</div>
+                      <div>last: {stream.lastEventLabel}</div>
+                      <div>buf: {stream.bufferLength}</div>
+                      <div>think: {stream.thinkingLength}</div>
+                      <div>events: {stream.eventCount}</div>
+                      <div>tools: {stream.toolCallCount}</div>
+                    </div>
+
+                    {stream.error && (
+                      <div className='mt-1 rounded bg-red-500/10 px-1.5 py-1 text-red-700 dark:text-red-300'>
+                        err: {stream.error}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div> */}
     </motion.div>
   )
 }

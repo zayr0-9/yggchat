@@ -12,9 +12,19 @@ export interface HeadlessMessageRequest {
   accessToken?: string | null
   accountId?: string | null
   systemPrompt?: string | null
+  conversationContext?: string | null
+  projectContext?: string | null
+  think?: boolean
+  temperature?: number
   storageMode?: 'local' | 'cloud'
   selectedFiles?: any[]
   attachmentsBase64?: any[] | null
+  retrigger?: boolean
+  executionMode?: 'server' | 'client'
+  isBranch?: boolean
+  isElectron?: boolean
+  imageConfig?: any
+  reasoningConfig?: any
   tools?: Array<{ name: string; description?: string; inputSchema?: Record<string, any> }>
   rootPath?: string | null
   operationMode?: 'plan' | 'execute'

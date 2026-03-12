@@ -4,10 +4,13 @@ import type {
   MobileConversation,
   MobileCustomTool,
   MobileInferenceTool,
-  MobileLocalFileEntry,
+  MobileLocalFileListingResponse,
+  MobileLocalFileSearchResponse,
   MobileMessage,
   MobileMessageTreePayload,
   MobileProject,
+  MobileProviderModelInfo,
+  MobileProviderName,
 } from './types'
 
 const jsonFetch = async <T>(url: string, init?: RequestInit): Promise<T> => {
@@ -50,6 +53,46 @@ const parseSseChunk = (chunk: string, onEvent: (event: HeadlessSseEvent) => void
   }
 }
 
+const readRuntimeAppSession = async (): Promise<{ accessToken: string | null; userId: string | null }> => {
+  try {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.storage?.get) {
+      const stored = await (window as any).electronAPI.storage.get('auth_session')
+      const accessToken = stored?.accessToken || stored?.session?.access_token || null
+      const userId = stored?.userId || stored?.user?.id || stored?.session?.user?.id || null
+      if (accessToken) {
+        return {
+          accessToken: String(accessToken),
+          userId: userId ? String(userId) : null,
+        }
+      }
+    }
+  } catch {
+    // fall through to localStorage fallback
+  }
+
+  try {
+    if (typeof window !== 'undefined') {
+      const raw = window.localStorage.getItem('supabase-auth-token')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        const session = parsed?.currentSession || parsed?.session || parsed
+        const accessToken = session?.access_token || null
+        const userId = session?.user?.id || null
+        if (accessToken) {
+          return {
+            accessToken: String(accessToken),
+            userId: userId ? String(userId) : null,
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore localStorage parse failures
+  }
+
+  return { accessToken: null, userId: null }
+}
+
 export const mobileApi = {
   async listUsers(): Promise<LocalUserProfile[]> {
     const payload = await jsonFetch<LocalUserProfile[]>('/api/local/users', { method: 'GET' })
@@ -68,6 +111,20 @@ export const mobileApi = {
         user_id: params.userId,
         name: params.name,
       }),
+    })
+  },
+
+  async updateProject(
+    projectId: string,
+    patch: {
+      name?: string
+      context?: string | null
+      system_prompt?: string | null
+    }
+  ): Promise<MobileProject> {
+    return jsonFetch<MobileProject>(`/api/app/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
     })
   },
 
@@ -103,7 +160,15 @@ export const mobileApi = {
     })
   },
 
-  async updateConversation(conversationId: string, patch: { cwd?: string | null; title?: string }): Promise<MobileConversation> {
+  async updateConversation(
+    conversationId: string,
+    patch: {
+      cwd?: string | null
+      title?: string
+      system_prompt?: string | null
+      conversation_context?: string | null
+    }
+  ): Promise<MobileConversation> {
     return jsonFetch<MobileConversation>(`/api/app/conversations/${encodeURIComponent(conversationId)}`, {
       method: 'PATCH',
       body: JSON.stringify(patch),
@@ -157,8 +222,8 @@ export const mobileApi = {
     }
   },
 
-  async listLocalFiles(directoryPath: string): Promise<{ path: string; files: MobileLocalFileEntry[] }> {
-    const payload = await jsonFetch<{ path?: string; files?: MobileLocalFileEntry[] }>(
+  async listLocalFiles(directoryPath: string): Promise<MobileLocalFileListingResponse> {
+    const payload = await jsonFetch<Partial<MobileLocalFileListingResponse>>(
       `/api/local/files?path=${encodeURIComponent(directoryPath)}`,
       { method: 'GET' }
     )
@@ -174,7 +239,7 @@ export const mobileApi = {
     query: string
     limit?: number
     followGitignore?: boolean
-  }): Promise<{ path: string; query: string; files: MobileLocalFileEntry[]; truncated: boolean; respectingGitignore: boolean }> {
+  }): Promise<MobileLocalFileSearchResponse> {
     const query = String(params.query || '').trim()
     if (!query) {
       return {
@@ -197,13 +262,7 @@ export const mobileApi = {
 
     searchParams.set('followGitignore', params.followGitignore === false ? '0' : '1')
 
-    const payload = await jsonFetch<{
-      path?: string
-      query?: string
-      files?: MobileLocalFileEntry[]
-      truncated?: boolean
-      respectingGitignore?: boolean
-    }>(
+    const payload = await jsonFetch<Partial<MobileLocalFileSearchResponse>>(
       `/api/local/files/search?${searchParams.toString()}`,
       { method: 'GET' }
     )
@@ -217,8 +276,57 @@ export const mobileApi = {
     }
   },
 
+  async getLocalFileContent(filePath: string): Promise<{ path: string; content: string; size: number }> {
+    const payload = await jsonFetch<{ path?: string; content?: string; size?: number }>(
+      `/api/local/file-content?path=${encodeURIComponent(filePath)}`,
+      { method: 'GET' }
+    )
+
+    return {
+      path: typeof payload?.path === 'string' ? payload.path : filePath,
+      content: typeof payload?.content === 'string' ? payload.content : '',
+      size: typeof payload?.size === 'number' ? payload.size : 0,
+    }
+  },
+
+  async saveLocalFileContent(filePath: string, content: string): Promise<{ path: string; size: number; saved: boolean }> {
+    const payload = await jsonFetch<{ path?: string; size?: number; saved?: boolean }>('/api/local/file-content', {
+      method: 'POST',
+      body: JSON.stringify({
+        path: filePath,
+        content,
+      }),
+    })
+
+    return {
+      path: typeof payload?.path === 'string' ? payload.path : filePath,
+      size: typeof payload?.size === 'number' ? payload.size : content.length,
+      saved: Boolean(payload?.saved),
+    }
+  },
+
   async getCapabilities(): Promise<any> {
     return jsonFetch('/api/headless/capabilities', { method: 'GET' })
+  },
+
+  async getProviderModels(userId?: string | null): Promise<MobileProviderModelInfo[]> {
+    const query = typeof userId === 'string' && userId.trim() ? `?userId=${encodeURIComponent(userId.trim())}` : ''
+    const payload = await jsonFetch<{
+      success?: boolean
+      providers?: Array<{ name?: string; models?: string[] }>
+    }>(`/api/provider-auth/models${query}`, { method: 'GET' })
+
+    return Array.isArray(payload?.providers)
+      ? payload.providers
+          .filter(
+            (provider): provider is { name: MobileProviderName; models?: string[] } =>
+              Boolean(provider && (provider.name === 'openaichatgpt' || provider.name === 'openrouter' || provider.name === 'lmstudio'))
+          )
+          .map(provider => ({
+            name: provider.name,
+            models: Array.isArray(provider.models) ? provider.models.map(model => String(model)) : [],
+          }))
+      : []
   },
 
   async listInferenceTools(): Promise<MobileInferenceTool[]> {
@@ -253,18 +361,43 @@ export const mobileApi = {
     })
   },
 
-  async getOpenAiTokenStatus(userId: string): Promise<{ hasToken: boolean }> {
+  async getProviderTokenStatus(provider: 'openai' | 'openrouter', userId: string): Promise<{ hasToken: boolean }> {
     const payload = await jsonFetch<{ success: boolean; hasToken?: boolean }>(
-      `/api/provider-auth/openai/token?userId=${encodeURIComponent(userId)}`,
+      `/api/provider-auth/${provider}/token?userId=${encodeURIComponent(userId)}`,
       { method: 'GET' }
     )
     return { hasToken: Boolean(payload?.hasToken) }
   },
 
-  async clearOpenAiToken(userId: string): Promise<void> {
-    await jsonFetch(`/api/provider-auth/openai/token?userId=${encodeURIComponent(userId)}`, {
+  async getOpenAiTokenStatus(userId: string): Promise<{ hasToken: boolean }> {
+    return this.getProviderTokenStatus('openai', userId)
+  },
+
+  async getOpenRouterTokenStatus(userId: string): Promise<{ hasToken: boolean }> {
+    return this.getProviderTokenStatus('openrouter', userId)
+  },
+
+  async getRuntimeAppAuth(): Promise<{ hasToken: boolean; accessToken: string | null; userId: string | null }> {
+    const session = await readRuntimeAppSession()
+    return {
+      hasToken: Boolean(session.accessToken),
+      accessToken: session.accessToken,
+      userId: session.userId,
+    }
+  },
+
+  async clearProviderToken(provider: 'openai' | 'openrouter', userId: string): Promise<void> {
+    await jsonFetch(`/api/provider-auth/${provider}/token?userId=${encodeURIComponent(userId)}`, {
       method: 'DELETE',
     })
+  },
+
+  async clearOpenAiToken(userId: string): Promise<void> {
+    await this.clearProviderToken('openai', userId)
+  },
+
+  async clearOpenRouterToken(userId: string): Promise<void> {
+    await this.clearProviderToken('openrouter', userId)
   },
 
   async startOpenAiOAuth(): Promise<{ authUrl: string; state: string }> {
@@ -342,6 +475,19 @@ export const mobileApi = {
     })
   },
 
+  async storeOpenRouterToken(params: {
+    userId: string
+    accessToken: string
+  }): Promise<void> {
+    await jsonFetch('/api/provider-auth/openrouter/token', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: params.userId,
+        accessToken: params.accessToken,
+      }),
+    })
+  },
+
   async deleteMessage(messageId: string): Promise<void> {
     await jsonFetch(`/api/app/messages/${encodeURIComponent(messageId)}`, {
       method: 'DELETE',
@@ -351,6 +497,7 @@ export const mobileApi = {
   async streamMessage(params: {
     conversationId: string
     userId: string
+    provider: MobileProviderName
     modelName: string
     content: string
     parentId?: string | null
@@ -378,7 +525,7 @@ export const mobileApi = {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         content: params.content,
-        provider: 'openaichatgpt',
+        provider: params.provider,
         modelName: params.modelName,
         userId: params.userId,
         parentId: params.parentId ?? null,

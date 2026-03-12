@@ -193,3 +193,395 @@
   from { height: 4px; }
   to { height: 16px; }
 }
+
+/* Streaming Animations */
+.streaming-anim {
+  --stream-anim-color: #ef4444;
+  --stream-duration: 1.4s;
+  --stream-cell-size: 10px;
+  --stream-gap: 5px;
+  --stream-width: 112px;
+  --stream-height: 36px;
+  width: var(--stream-width);
+  height: var(--stream-height);
+  display: grid;
+  position: relative;
+  color: var(--stream-anim-color);
+  transform-style: preserve-3d;
+}
+
+.streaming-anim.preview {
+  margin: 0 auto;
+}
+
+.streaming-anim.live {
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--stream-anim-color) 28%, transparent));
+}
+
+.streaming-anim .stream-cell,
+.streaming-anim .stream-bit {
+  display: block;
+  background: currentColor;
+  will-change: transform, opacity;
+}
+
+.streaming-data-wave,
+.streaming-digital-breath,
+.streaming-neural-fragments,
+.streaming-prism-bloom,
+.streaming-shard-sweep {
+  grid-template-columns: repeat(var(--stream-columns, 12), var(--stream-cell-size));
+  grid-template-rows: var(--stream-cell-size);
+  gap: var(--stream-gap);
+  align-content: center;
+  justify-content: center;
+}
+
+.streaming-data-wave .stream-cell {
+  width: var(--stream-cell-size);
+  height: var(--stream-cell-size);
+  border-radius: 2px;
+  background: currentColor;
+  animation: stream-data-wave calc(var(--stream-duration) * 1.05) infinite cubic-bezier(0.45, 0.05, 0.55, 0.95);
+  box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+@keyframes stream-data-wave {
+  0%, 100% {
+    transform: translateY(0) scale(0.72) rotate(0deg);
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateY(-2px) scale(1.05) rotate(14deg);
+    opacity: 0.95;
+  }
+  55% {
+    transform: translateY(1px) scale(1.28) rotate(-10deg);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(0) scale(0.84) rotate(6deg);
+    opacity: 0.5;
+  }
+}
+
+.streaming-digital-breath .stream-cell {
+  width: var(--stream-cell-size);
+  height: var(--stream-cell-size);
+  border-radius: 3px;
+  background: transparent;
+  border: 1.5px solid currentColor;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, currentColor 25%, transparent),
+    0 0 10px color-mix(in srgb, currentColor 16%, transparent);
+  animation: stream-digital-breath calc(var(--stream-duration) * 1.35) infinite ease-in-out;
+}
+
+@keyframes stream-digital-breath {
+  0%, 100% {
+    transform: scale(0.72) rotate(0deg);
+    opacity: 0.28;
+  }
+  50% {
+    transform: scale(1.2) rotate(90deg);
+    opacity: 1;
+  }
+}
+
+.streaming-neural-fragments {
+  perspective: 500px;
+}
+
+.streaming-neural-fragments .stream-cell {
+  width: calc(var(--stream-cell-size) * 0.82);
+  height: calc(var(--stream-cell-size) * 0.82);
+  justify-self: center;
+  align-self: center;
+  border-radius: 2px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, currentColor 92%, white 8%), color-mix(in srgb, currentColor 65%, transparent));
+  box-shadow:
+    0 0 10px color-mix(in srgb, currentColor 30%, transparent),
+    0 0 1px 1px color-mix(in srgb, currentColor 18%, transparent);
+  animation: stream-neural-fragments calc(var(--stream-duration) * 1.15) infinite ease-in-out;
+}
+
+@keyframes stream-neural-fragments {
+  0%, 100% {
+    transform: translateZ(0) translateY(0) rotateX(0deg) rotateY(0deg) scale(0.72);
+    opacity: 0.2;
+  }
+  25% {
+    transform: translateZ(8px) translateY(-2px) rotateX(40deg) rotateY(-35deg) scale(1.05);
+    opacity: 0.92;
+  }
+  55% {
+    transform: translateZ(14px) translateY(1px) rotateX(-24deg) rotateY(58deg) scale(1.22);
+    opacity: 1;
+  }
+  85% {
+    transform: translateZ(3px) translateY(0) rotateX(16deg) rotateY(-18deg) scale(0.82);
+    opacity: 0.42;
+  }
+}
+
+.streaming-prism-bloom .stream-cell {
+  width: calc(var(--stream-cell-size) * 1.1);
+  height: calc(var(--stream-cell-size) * 0.56);
+  justify-self: center;
+  align-self: center;
+  clip-path: polygon(0% 50%, 18% 0%, 100% 0%, 82% 100%, 0% 100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 96%, white 10%) 28%, currentColor 68%, transparent);
+  box-shadow:
+    0 0 12px color-mix(in srgb, currentColor 24%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, white 28%, transparent);
+  transform-origin: center;
+  animation: stream-prism-bloom calc(var(--stream-duration) * 1.15) infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.streaming-prism-bloom .stream-cell:nth-child(4n) {
+  border-radius: 999px;
+  clip-path: none;
+  height: calc(var(--stream-cell-size) * 0.48);
+}
+
+@keyframes stream-prism-bloom {
+  0%, 100% {
+    transform: scaleX(0.4) scaleY(0.7) translateX(-3px);
+    opacity: 0.15;
+  }
+  35% {
+    transform: scaleX(1) scaleY(1) translateX(0);
+    opacity: 0.95;
+  }
+  65% {
+    transform: scaleX(1.22) scaleY(0.92) translateX(2px);
+    opacity: 0.6;
+  }
+}
+
+.streaming-orbit-rings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.streaming-orbit-rings .stream-core,
+.streaming-orbit-rings .stream-ring,
+.streaming-orbit-rings .stream-satellite {
+  position: absolute;
+  display: block;
+}
+
+.streaming-orbit-rings .stream-core {
+  width: calc(var(--stream-cell-size) * 0.9);
+  height: calc(var(--stream-cell-size) * 0.9);
+  border-radius: 999px;
+  background: radial-gradient(circle at 35% 35%, color-mix(in srgb, white 32%, currentColor 68%), currentColor 70%, transparent 100%);
+  box-shadow: 0 0 14px color-mix(in srgb, currentColor 35%, transparent);
+  animation: stream-orbit-core calc(var(--stream-duration) * 1.1) infinite ease-in-out;
+}
+
+.streaming-orbit-rings .stream-ring {
+  border: 1px solid color-mix(in srgb, currentColor 55%, transparent);
+  border-radius: 999px;
+  box-shadow: inset 0 0 8px color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.streaming-orbit-rings .ring-a {
+  width: calc(var(--stream-cell-size) * 2.1);
+  height: calc(var(--stream-cell-size) * 2.1);
+  animation: stream-orbit-ring-a calc(var(--stream-duration) * 1.3) infinite linear;
+}
+
+.streaming-orbit-rings .ring-b {
+  width: calc(var(--stream-cell-size) * 4.4);
+  height: calc(var(--stream-cell-size) * 1.8);
+  animation: stream-orbit-ring-b calc(var(--stream-duration) * 1.55) infinite linear reverse;
+}
+
+.streaming-orbit-rings .ring-c {
+  width: calc(var(--stream-cell-size) * 6.2);
+  height: calc(var(--stream-cell-size) * 2.4);
+  animation: stream-orbit-ring-c calc(var(--stream-duration) * 1.85) infinite linear;
+}
+
+.streaming-orbit-rings .stream-satellite {
+  width: calc(var(--stream-cell-size) * 0.55);
+  height: calc(var(--stream-cell-size) * 0.55);
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 10px color-mix(in srgb, currentColor 28%, transparent);
+}
+
+.streaming-orbit-rings .sat-1 { animation: stream-orbit-sat-1 calc(var(--stream-duration) * 1.35) infinite linear; }
+.streaming-orbit-rings .sat-2 { animation: stream-orbit-sat-2 calc(var(--stream-duration) * 1.2) infinite linear; }
+.streaming-orbit-rings .sat-3 { animation: stream-orbit-sat-3 calc(var(--stream-duration) * 1.6) infinite linear reverse; }
+.streaming-orbit-rings .sat-4 { animation: stream-orbit-sat-4 calc(var(--stream-duration) * 1.45) infinite linear reverse; }
+
+@keyframes stream-orbit-core {
+  0%, 100% { transform: scale(0.8); opacity: 0.75; }
+  50% { transform: scale(1.15); opacity: 1; }
+}
+
+@keyframes stream-orbit-ring-a { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes stream-orbit-ring-b { from { transform: rotate(18deg) rotateX(65deg); } to { transform: rotate(378deg) rotateX(65deg); } }
+@keyframes stream-orbit-ring-c { from { transform: rotate(-10deg) rotateY(72deg); } to { transform: rotate(350deg) rotateY(72deg); } }
+
+@keyframes stream-orbit-sat-1 {
+  from { transform: rotate(0deg) translateX(calc(var(--stream-cell-size) * 1.05)) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(calc(var(--stream-cell-size) * 1.05)) rotate(-360deg); }
+}
+@keyframes stream-orbit-sat-2 {
+  from { transform: rotate(90deg) translateX(calc(var(--stream-cell-size) * 2.25)) rotate(-90deg); }
+  to { transform: rotate(450deg) translateX(calc(var(--stream-cell-size) * 2.25)) rotate(-450deg); }
+}
+@keyframes stream-orbit-sat-3 {
+  from { transform: rotate(180deg) translateX(calc(var(--stream-cell-size) * 3.2)) rotate(-180deg); }
+  to { transform: rotate(540deg) translateX(calc(var(--stream-cell-size) * 3.2)) rotate(-540deg); }
+}
+@keyframes stream-orbit-sat-4 {
+  from { transform: rotate(270deg) translateX(calc(var(--stream-cell-size) * 2.65)) rotate(-270deg); }
+  to { transform: rotate(630deg) translateX(calc(var(--stream-cell-size) * 2.65)) rotate(-630deg); }
+}
+
+.streaming-shard-sweep .stream-cell {
+  width: calc(var(--stream-cell-size) * 1.18);
+  height: calc(var(--stream-cell-size) * 0.34);
+  justify-self: center;
+  align-self: center;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, currentColor 95%, white 12%), currentColor 72%, transparent);
+  transform-origin: left center;
+  box-shadow: 0 0 10px color-mix(in srgb, currentColor 22%, transparent);
+  --stream-rotate: 10deg;
+  animation: stream-shard-sweep calc(var(--stream-duration) * 0.95) infinite ease-in-out;
+}
+
+.streaming-shard-sweep .stream-cell:nth-child(2n) {
+  --stream-rotate: -10deg;
+}
+
+.streaming-shard-sweep .stream-cell:nth-child(4n) {
+  width: calc(var(--stream-cell-size) * 0.82);
+}
+
+@keyframes stream-shard-sweep {
+  0%, 100% {
+    opacity: 0.12;
+    transform: rotate(var(--stream-rotate)) scaleX(0.3) translateX(-4px);
+  }
+  50% {
+    opacity: 1;
+    transform: rotate(var(--stream-rotate)) scaleX(1.3) translateX(3px);
+  }
+}
+
+.streaming-binary-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--stream-gap) * 0.9);
+}
+
+.streaming-binary-flow .stream-col {
+  width: var(--stream-cell-size);
+  height: calc(var(--stream-cell-size) * 1.25);
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.streaming-binary-flow .stream-bit {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: var(--stream-cell-size);
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, currentColor 100%, white 8%), currentColor);
+}
+
+.streaming-binary-flow .stream-bit.top {
+  top: 0;
+  animation: stream-binary-flow-top calc(var(--stream-duration) * 0.95) infinite ease-in-out;
+}
+
+.streaming-binary-flow .stream-bit.bottom {
+  top: calc(var(--stream-cell-size) * 0.25);
+  animation: stream-binary-flow-bottom calc(var(--stream-duration) * 0.95) infinite ease-in-out;
+  opacity: 0.55;
+}
+
+@keyframes stream-binary-flow-top {
+  0%, 100% {
+    transform: translateY(0) scaleX(0.88);
+    opacity: 0.28;
+  }
+  50% {
+    transform: translateY(calc(var(--stream-cell-size) * 0.25)) scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes stream-binary-flow-bottom {
+  0%, 100% {
+    transform: translateY(0) scaleX(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateY(calc(-1 * var(--stream-cell-size) * 0.25)) scaleX(0.88);
+    opacity: 0.3;
+  }
+}
+
+/* Explicit delays for robust browser support */
+.streaming-data-wave .stream-cell:nth-child(1),
+.streaming-digital-breath .stream-cell:nth-child(1),
+.streaming-neural-fragments .stream-cell:nth-child(1) { animation-delay: 0s; }
+.streaming-data-wave .stream-cell:nth-child(2),
+.streaming-digital-breath .stream-cell:nth-child(2),
+.streaming-neural-fragments .stream-cell:nth-child(2) { animation-delay: 0.05s; }
+.streaming-data-wave .stream-cell:nth-child(3),
+.streaming-digital-breath .stream-cell:nth-child(3),
+.streaming-neural-fragments .stream-cell:nth-child(3) { animation-delay: 0.1s; }
+.streaming-data-wave .stream-cell:nth-child(4),
+.streaming-digital-breath .stream-cell:nth-child(4),
+.streaming-neural-fragments .stream-cell:nth-child(4) { animation-delay: 0.15s; }
+.streaming-data-wave .stream-cell:nth-child(5),
+.streaming-digital-breath .stream-cell:nth-child(5),
+.streaming-neural-fragments .stream-cell:nth-child(5) { animation-delay: 0.2s; }
+.streaming-data-wave .stream-cell:nth-child(6),
+.streaming-digital-breath .stream-cell:nth-child(6),
+.streaming-neural-fragments .stream-cell:nth-child(6) { animation-delay: 0.25s; }
+.streaming-data-wave .stream-cell:nth-child(7),
+.streaming-digital-breath .stream-cell:nth-child(7),
+.streaming-neural-fragments .stream-cell:nth-child(7) { animation-delay: 0.3s; }
+.streaming-data-wave .stream-cell:nth-child(8),
+.streaming-digital-breath .stream-cell:nth-child(8),
+.streaming-neural-fragments .stream-cell:nth-child(8) { animation-delay: 0.35s; }
+.streaming-data-wave .stream-cell:nth-child(9),
+.streaming-digital-breath .stream-cell:nth-child(9),
+.streaming-neural-fragments .stream-cell:nth-child(9) { animation-delay: 0.08s; }
+.streaming-data-wave .stream-cell:nth-child(10),
+.streaming-digital-breath .stream-cell:nth-child(10),
+.streaming-neural-fragments .stream-cell:nth-child(10) { animation-delay: 0.13s; }
+.streaming-data-wave .stream-cell:nth-child(11),
+.streaming-digital-breath .stream-cell:nth-child(11),
+.streaming-neural-fragments .stream-cell:nth-child(11) { animation-delay: 0.18s; }
+.streaming-data-wave .stream-cell:nth-child(12),
+.streaming-digital-breath .stream-cell:nth-child(12),
+.streaming-neural-fragments .stream-cell:nth-child(12) { animation-delay: 0.23s; }
+.streaming-data-wave .stream-cell:nth-child(13),
+.streaming-digital-breath .stream-cell:nth-child(13),
+.streaming-neural-fragments .stream-cell:nth-child(13) { animation-delay: 0.28s; }
+.streaming-data-wave .stream-cell:nth-child(14),
+.streaming-digital-breath .stream-cell:nth-child(14),
+.streaming-neural-fragments .stream-cell:nth-child(14) { animation-delay: 0.33s; }
+.streaming-data-wave .stream-cell:nth-child(15),
+.streaming-digital-breath .stream-cell:nth-child(15),
+.streaming-neural-fragments .stream-cell:nth-child(15) { animation-delay: 0.38s; }
+.streaming-data-wave .stream-cell:nth-child(16),
+.streaming-digital-breath .stream-cell:nth-child(16),
+.streaming-neural-fragments .stream-cell:nth-child(16) { animation-delay: 0.43s; }

@@ -1,5 +1,5 @@
 {
-  "electronVersion": "34.0.0",
+  "electronVersion": "38.8.4",
   "appId": "com.yggdrasil.chat",
   "icon": "public/img/taskbar-logo.png",
   "productName": "Yggdrasil",
@@ -25,6 +25,10 @@
     {
       "from": "custom-tools/CUSTOM_TOOLS_GUIIDE.md",
       "to": "custom-tools/CUSTOM_TOOLS_GUIIDE.md"
+    },
+    {
+      "from": ".ygg",
+      "to": ".ygg"
     }
   ],
   "win": {

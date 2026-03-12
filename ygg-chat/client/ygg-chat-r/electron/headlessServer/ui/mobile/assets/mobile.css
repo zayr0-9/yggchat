@@ -458,11 +458,15 @@ body {
   left: 12px;
   right: 12px;
   top: max(14px, env(safe-area-inset-top, 14px));
+  bottom: max(14px, env(safe-area-inset-bottom, 14px));
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 28px);
   border-radius: 20px;
   border: 1px solid var(--border);
   background: var(--panel-elevated);
   box-shadow: 0 26px 64px -24px rgba(15, 23, 42, 0.45);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .mobile-settings-portal-header {
@@ -472,6 +476,7 @@ body {
   gap: 12px;
   padding: 16px 16px 13px;
   border-bottom: 1px solid var(--border-subtle);
+  flex: 0 0 auto;
 }
 
 .mobile-settings-portal-header h2 {
@@ -490,6 +495,9 @@ body {
   padding: 12px 16px 16px;
   display: grid;
   gap: 12px;
+  overflow-y: auto;
+  min-height: 0;
+  overscroll-behavior: contain;
 }
 
 .mobile-settings-select-grid {
@@ -517,6 +525,11 @@ body {
   min-height: 40px;
 }
 
+.mobile-settings-field-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .mobile-settings-auth-row {
   border-top: 1px solid var(--border-subtle);
   padding-top: 12px;
@@ -527,8 +540,56 @@ body {
 }
 
 .mobile-conversation-cwd--in-settings,
-.mobile-settings-tools-wrap {
+.mobile-settings-tools-wrap,
+.mobile-settings-collapsible {
   margin-top: 2px;
+}
+
+.mobile-settings-collapsible {
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  overflow: hidden;
+}
+
+.mobile-settings-collapsible-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mobile-settings-collapsible-toggle span {
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-settings-collapsible-toggle strong {
+  font-size: 13px;
+}
+
+.mobile-settings-collapsible-toggle small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mobile-settings-collapsible-body {
+  padding: 0 14px 14px;
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.mobile-settings-collapsible-body .ui-textarea {
+  min-height: 88px;
+  resize: vertical;
 }
 
 .mobile-conversation-cwd--in-settings {
@@ -1941,6 +2002,8 @@ body {
   padding: 10px 12px 12px;
   display: grid;
   gap: 6px;
+  align-content: start;
+  grid-auto-rows: max-content;
 }
 
 .mobile-file-picker-row {
@@ -1951,6 +2014,7 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: 11px;
   padding: 7px 8px;
+  min-height: 46px;
   background: var(--panel-2);
 }
 
@@ -1995,13 +2059,20 @@ body {
   white-space: nowrap;
 }
 
+.mobile-file-picker-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mobile-file-picker-edit-btn,
 .mobile-file-picker-insert-btn {
   width: 26px;
   min-width: 26px;
   height: 26px;
   border-radius: 999px;
   padding: 0;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1;
 }
 
@@ -2044,6 +2115,113 @@ body {
   }
 }
 
+.mobile-monaco-modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--overlay) 90%, transparent);
+}
+
+.mobile-monaco-modal-root.is-hidden {
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.mobile-monaco-modal {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-monaco-modal-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: max(10px, env(safe-area-inset-top, 0px)) 10px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--panel-elevated);
+}
+
+.mobile-monaco-modal-meta {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-monaco-modal-meta strong,
+.mobile-monaco-modal-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-monaco-modal-meta strong {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.mobile-monaco-modal-meta small {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mobile-monaco-modal-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.mobile-monaco-modal-error {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--tool-error);
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--tool-error) 9%, var(--panel));
+}
+
+.mobile-monaco-editor-host {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  width: 100%;
+  overflow: hidden;
+}
+
+.mobile-monaco-editor-host > div {
+  height: 100% !important;
+  width: 100% !important;
+}
+
+.mobile-monaco-loading {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 4;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: color-mix(in srgb, var(--panel) 86%, #111827);
+  color: var(--text);
+  border: 1px solid var(--border-subtle);
+}
 
 /* EditFileDiffView (mobile) */
 .mobile-editfile-view {

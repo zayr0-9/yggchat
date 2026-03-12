@@ -219,7 +219,7 @@ const Homepage: React.FC = () => {
   }
 
   return (
-    <div className=' h-full flex'>
+    <div className=' h-full flex backdrop-blur-lg'>
       {/* Dark Overlay */}
       {/* bg-neutral-200/15 dark:bg-black/30 */}
       <div className='absolute inset-0 w-full h-full  z-0' />
@@ -256,7 +256,7 @@ const Homepage: React.FC = () => {
 
               <Button
                 variant='acrylic'
-                size='medium'
+                size='circle'
                 onClick={handleLogout}
                 rounded='full'
                 title='Logout'

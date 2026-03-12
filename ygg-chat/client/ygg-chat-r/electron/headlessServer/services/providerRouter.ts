@@ -1,6 +1,12 @@
 import { LmStudioProvider } from '../providers/lmStudioProvider.js'
 import { OpenAiChatgptProvider } from '../providers/openaiChatgptProvider.js'
-import { OpenRouterProvider, type HeadlessProvider, type ProviderGenerateInput, type ProviderGenerateOutput } from '../providers/openRouterProvider.js'
+import {
+  OpenRouterProvider,
+  type HeadlessProvider,
+  type ProviderGenerateInput,
+  type ProviderGenerateOutput,
+  type ProviderStreamEventHandler,
+} from '../providers/openRouterProvider.js'
 import type { ProviderTokenStore } from '../providers/tokenStore.js'
 
 export type ProviderRoute = 'openrouter' | 'openaichatgpt' | 'lmstudio'
@@ -25,15 +31,19 @@ export class ProviderRouter {
 
   constructor(deps: ProviderRouterDeps = {}) {
     this.providers = {
-      openrouter: new OpenRouterProvider(),
+      openrouter: new OpenRouterProvider({ tokenStore: deps.tokenStore }),
       openaichatgpt: new OpenAiChatgptProvider({ tokenStore: deps.tokenStore }),
       lmstudio: new LmStudioProvider(),
     }
   }
 
-  async generate(providerName: string, input: ProviderGenerateInput): Promise<ProviderGenerateOutput> {
+  async generate(
+    providerName: string,
+    input: ProviderGenerateInput,
+    emit?: ProviderStreamEventHandler
+  ): Promise<ProviderGenerateOutput> {
     const route = normalizeProviderRoute(providerName)
     const provider = this.providers[route]
-    return provider.generate(input)
+    return provider.generate(input, emit)
   }
 }

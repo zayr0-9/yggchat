@@ -33,7 +33,7 @@ export function registerCapabilityRoutes(app: Express, deps: RegisterCapabilityR
     },
     providers: [
       { name: 'openaichatgpt', auth: 'oauth_or_token' },
-      { name: 'openrouter', auth: 'api_key' },
+      { name: 'openrouter', auth: 'app_bearer' },
       { name: 'lmstudio', auth: 'local_or_bearer' },
     ],
     tools: deps.getDefaultTools().map(tool => ({ name: tool.name, description: tool.description || '' })),

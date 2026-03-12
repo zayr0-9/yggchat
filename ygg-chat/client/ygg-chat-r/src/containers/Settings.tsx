@@ -73,6 +73,7 @@ import {
   BackgroundMode,
   clearCustomVideoLibrary,
   CustomVideoEntry,
+  DEFAULT_BACKGROUND_COLORS,
   loadActiveCustomVideoId,
   loadBackgroundColors,
   loadBackgroundMode,
@@ -2497,6 +2498,8 @@ const Settings: React.FC = () => {
                   ? 'Used when the interface is in light theme.'
                   : 'Used when the interface is in dark theme.'
               const colorValue = backgroundColors[mode]
+              const isTransparentColor = colorValue.trim().toLowerCase() === 'transparent'
+              const colorPickerValue = isTransparentColor ? DEFAULT_BACKGROUND_COLORS[mode] : colorValue
               return (
                 <div
                   key={mode}
@@ -2509,18 +2512,33 @@ const Settings: React.FC = () => {
                     </div>
                     <span
                       className='h-10 w-10 rounded-full border border-stone-200 dark:border-stone-600'
-                      style={{ backgroundColor: colorValue }}
+                      style={{
+                        backgroundColor: colorValue,
+                        backgroundImage: isTransparentColor
+                          ? 'linear-gradient(45deg, rgba(120,120,120,0.18) 25%, transparent 25%, transparent 75%, rgba(120,120,120,0.18) 75%, rgba(120,120,120,0.18)), linear-gradient(45deg, rgba(120,120,120,0.18) 25%, transparent 25%, transparent 75%, rgba(120,120,120,0.18) 75%, rgba(120,120,120,0.18))'
+                          : 'none',
+                        backgroundPosition: isTransparentColor ? '0 0, 6px 6px' : undefined,
+                        backgroundSize: isTransparentColor ? '12px 12px' : undefined,
+                      }}
                       aria-hidden='true'
                     ></span>
                   </div>
-                  <div className='mt-4 flex items-center gap-3'>
+                  <div className='mt-4 flex flex-wrap items-center gap-3'>
                     <input
                       type='color'
-                      value={colorValue}
+                      value={colorPickerValue}
                       onChange={event => handleBackgroundColorChange(mode, event.target.value)}
                       aria-label={`${label} picker`}
                       className='h-10 w-10 rounded-full border border-stone-200 bg-white p-0 dark:border-stone-600'
                     />
+                    <Button
+                      variant={isTransparentColor ? 'primary' : 'outline2'}
+                      size='small'
+                      onClick={() => handleBackgroundColorChange(mode, 'transparent')}
+                      className='group'
+                    >
+                      <p className='transition-transform duration-100 group-active:scale-95'>Transparent</p>
+                    </Button>
                     <p className='text-xs font-mono text-stone-500 dark:text-stone-300'>{colorValue}</p>
                   </div>
                 </div>
@@ -2528,7 +2546,7 @@ const Settings: React.FC = () => {
             })}
           </div>
           <p className='mt-4 text-xs text-stone-500 dark:text-stone-400'>
-            Solid colors automatically switch with the theme. When you’re ready for motion, switch back to video wallpapers.
+            Solid colors automatically switch with the theme, and you can set either theme to transparent. When you’re ready for motion, switch back to video wallpapers.
           </p>
         </section>
 

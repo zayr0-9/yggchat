@@ -5,6 +5,7 @@ import { isCloudSession, isElectronMode as isElectronRuntime, LOCAL_AUTH_USER_ID
 import { loadStartupLandingPreference } from '../helpers/startupPreferences'
 import { useAuth } from '../hooks/useAuth'
 import { useRecentConversations } from '../hooks/useQueries'
+import { syncHeadlessOpenRouterToken } from '../lib/auth/headlessProviderTokenSync'
 import { supabase } from '../lib/supabase'
 import { dualSync } from '../lib/sync/dualSyncManager'
 import { localApi } from '../utils/api'
@@ -60,6 +61,40 @@ const Login: React.FC = () => {
     } catch (mergeError) {
       console.error('[Login] Failed to merge local user data into cloud account:', mergeError)
     }
+  }
+
+  const persistElectronCloudSession = async (
+    session: { access_token: string; [key: string]: any },
+    authUser: { id: string; email?: string | null },
+    username: string
+  ) => {
+    if (!window.electronAPI?.storage) return
+
+    const userId = authUser.id
+    const authStateForStorage = {
+      user: {
+        id: userId,
+        email: authUser.email || 'unknown',
+        username,
+      },
+      session,
+      loading: false,
+      accessToken: session.access_token,
+      userId,
+    }
+
+    await window.electronAPI.storage.set('auth_session', authStateForStorage)
+
+    try {
+      await syncHeadlessOpenRouterToken({
+        userId,
+        accessToken: session.access_token,
+      })
+    } catch (syncError) {
+      console.error('[Login] Failed to sync app token to headless token store:', syncError)
+    }
+
+    await reloadSession()
   }
 
   useEffect(() => {
@@ -201,24 +236,8 @@ const Login: React.FC = () => {
           // Save OAuth session to Electron storage so ElectronAuthProvider can use it
           if (window.electronAPI?.storage) {
             try {
-              const authStateForStorage = {
-                user: {
-                  id: userId,
-                  email: data.session.user.email || 'unknown',
-                  username,
-                },
-                // Persist full session (access + refresh tokens + expiry)
-                session: data.session,
-                loading: false,
-                accessToken: data.session.access_token,
-                userId,
-              }
-
-              await window.electronAPI.storage.set('auth_session', authStateForStorage)
+              await persistElectronCloudSession(data.session, data.session.user, username)
               // console.log('[Login] OAuth session saved to Electron storage')
-
-              // Reload the session in AuthContext to update user state
-              await reloadSession()
               // console.log('[Login] Auth session reloaded in context')
             } catch (storageError) {
               console.error('[Login] Failed to save OAuth session to storage:', storageError)
@@ -402,21 +421,7 @@ const Login: React.FC = () => {
 
         // Save to Electron storage
         if (window.electronAPI?.storage) {
-          const authStateForStorage = {
-            user: {
-              id: userId,
-              email: data.session.user.email || 'unknown',
-              username,
-            },
-            // Persist full session (access + refresh tokens + expiry)
-            session: data.session,
-            loading: false,
-            accessToken: data.session.access_token,
-            userId,
-          }
-
-          await window.electronAPI.storage.set('auth_session', authStateForStorage)
-          await reloadSession()
+          await persistElectronCloudSession(data.session, data.session.user, username)
         }
       }
 

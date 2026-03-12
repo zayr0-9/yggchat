@@ -22,3 +22,5 @@ export { ToolPermissionDialog } from './ToolPermissionDialog/ToolPermissionDialo
 export { UpdateModal } from './UpdateModal/UpdateModal'
 // export { ChatInputWithSend } from './components/ChatInputWithSend/ChatInputWithSend'
 // export { MessageList } from './components/MessageList/MessageList'
+export { MonacoFileEditorPane } from './MonacoFileEditorPane/MonacoFileEditorPane'
+export { MonacoGitDiffPane } from './MonacoGitDiffPane/MonacoGitDiffPane'

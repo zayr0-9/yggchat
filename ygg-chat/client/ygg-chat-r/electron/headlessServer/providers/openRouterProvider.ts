@@ -1,9 +1,30 @@
+import type { HeadlessStreamEvent } from '../contracts/headlessApi.js'
 import { buildToolNameMap, sanitizeToolResultContentForModel } from './toolResultSanitizer.js'
+import { openStreamingWithPreFirstByteRetry } from './streamResilience.js'
+import type { ProviderTokenStore } from './tokenStore.js'
 
 export interface ProviderToolDefinition {
   name: string
   description?: string
   inputSchema?: Record<string, any>
+}
+
+export interface ProviderRailwayTurnInput {
+  conversationId: string
+  parentId?: string | null
+  operation?: 'send' | 'repeat' | 'branch' | 'edit-branch'
+  conversationContext?: string | null
+  projectContext?: string | null
+  think?: boolean
+  temperature?: number
+  attachmentsBase64?: Array<{ dataUrl: string; name?: string; type?: string; size?: number }> | null
+  retrigger?: boolean
+  executionMode?: 'server' | 'client'
+  isBranch?: boolean
+  storageMode?: 'local' | 'cloud'
+  isElectron?: boolean
+  imageConfig?: any
+  reasoningConfig?: any
 }
 
 export interface ProviderGenerateInput {
@@ -15,6 +36,7 @@ export interface ProviderGenerateInput {
   accessToken?: string | null
   accountId?: string | null
   tools?: ProviderToolDefinition[]
+  railwayTurn?: ProviderRailwayTurnInput | null
 }
 
 export interface ProviderToolCall {
@@ -33,42 +55,48 @@ export interface ProviderGenerateOutput {
   raw?: any
 }
 
+export type ProviderStreamEventHandler = (event: HeadlessStreamEvent) => void
+
 export interface HeadlessProvider {
   name: string
-  generate(input: ProviderGenerateInput): Promise<ProviderGenerateOutput>
+  generate(input: ProviderGenerateInput, emit?: ProviderStreamEventHandler): Promise<ProviderGenerateOutput>
 }
 
-interface OpenRouterChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string
-  tool_calls?: Array<{
-    id: string
-    type: 'function'
-    function: { name: string; arguments: string }
-  }>
-  tool_call_id?: string
+interface OpenRouterProviderDeps {
+  tokenStore?: ProviderTokenStore
+  remoteApiBase?: string
 }
 
-function parseJson(value: any, fallback: any): any {
+function parseJson<T>(value: any, fallback: T): T {
   if (value == null) return fallback
   if (typeof value === 'string') {
     try {
-      return JSON.parse(value)
+      return JSON.parse(value) as T
     } catch {
       return fallback
     }
   }
-  return value
+  return value as T
 }
 
 function parseContentBlocks(value: any): any[] {
-  const parsed = parseJson(value, [])
+  const parsed = parseJson<any[]>(value, [])
   return Array.isArray(parsed) ? parsed : []
 }
 
 function parseToolCalls(value: any): any[] {
-  const parsed = parseJson(value, [])
+  const parsed = parseJson<any[]>(value, [])
   return Array.isArray(parsed) ? parsed : []
+}
+
+function parseArtifacts(value: any): any[] {
+  const parsed = parseJson<any[]>(value, [])
+  return Array.isArray(parsed) ? parsed : []
+}
+
+function parseChildrenIds(value: any): string[] {
+  const parsed = parseJson<any[]>(value, [])
+  return Array.isArray(parsed) ? parsed.map(item => String(item)) : []
 }
 
 function asText(value: any): string {
@@ -88,236 +116,409 @@ function asText(value: any): string {
   return String(value)
 }
 
-function toOpenRouterToolSchema(tools?: ProviderToolDefinition[]): any[] | undefined {
+function sanitizeContentBlocksForModel(blocks: any, toolCalls?: any): any[] {
+  const parsed = parseContentBlocks(blocks)
+  if (parsed.length === 0) return parsed
+
+  const toolNameById = new Map<string, string>()
+  for (const tc of parseToolCalls(toolCalls)) {
+    const id = typeof tc?.id === 'string' ? tc.id : ''
+    const name = typeof tc?.name === 'string' ? tc.name : typeof tc?.function?.name === 'string' ? tc.function.name : ''
+    if (id && name) {
+      toolNameById.set(id, name)
+    }
+  }
+
+  return parsed.map(block => {
+    if (block?.type !== 'tool_result') return block
+    const toolName = typeof block.tool_use_id === 'string' ? toolNameById.get(block.tool_use_id) : null
+    const sanitizedContent = sanitizeToolResultContentForModel(block.content, toolName ?? null)
+    if (sanitizedContent === block.content) return block
+    return { ...block, content: sanitizedContent }
+  })
+}
+
+function normalizeHistoryMessage(message: any, toolNameById: Map<string, string>): any {
+  const contentBlocks = sanitizeContentBlocksForModel(message?.content_blocks, message?.tool_calls)
+  const toolCalls = parseToolCalls(message?.tool_calls)
+  const artifacts = parseArtifacts(message?.artifacts)
+
+  const normalized: any = {
+    id: message?.id ? String(message.id) : undefined,
+    conversation_id:
+      message?.conversation_id != null ? String(message.conversation_id) : message?.conversationId != null ? String(message.conversationId) : undefined,
+    parent_id:
+      message?.parent_id != null ? String(message.parent_id) : message?.parentId != null ? String(message.parentId) : null,
+    children_ids: parseChildrenIds(message?.children_ids ?? message?.childrenIds),
+    role: typeof message?.role === 'string' ? message.role : 'assistant',
+    content: asText(message?.content),
+    content_plain_text:
+      typeof message?.content_plain_text === 'string'
+        ? message.content_plain_text
+        : typeof message?.plain_text_content === 'string'
+          ? message.plain_text_content
+          : asText(message?.content),
+    thinking_block: typeof message?.thinking_block === 'string' ? message.thinking_block : '',
+    tool_calls: toolCalls,
+    tool_call_id:
+      message?.tool_call_id != null ? String(message.tool_call_id) : message?.toolCallId != null ? String(message.toolCallId) : null,
+    content_blocks: contentBlocks,
+    created_at: typeof message?.created_at === 'string' ? message.created_at : new Date().toISOString(),
+    model_name:
+      typeof message?.model_name === 'string'
+        ? message.model_name
+        : typeof message?.modelName === 'string'
+          ? message.modelName
+          : '',
+    partial: Boolean(message?.partial),
+    artifacts,
+  }
+
+  const messageReasoningDetails = message?.reasoningDetails ?? message?.reasoning_details
+  if (Array.isArray(messageReasoningDetails) && messageReasoningDetails.length > 0) {
+    normalized.reasoningDetails = messageReasoningDetails
+  }
+
+  if (normalized.role === 'tool' && normalized.tool_call_id) {
+    const sanitizedContent = sanitizeToolResultContentForModel(normalized.content, toolNameById.get(normalized.tool_call_id) || null)
+    normalized.content = typeof sanitizedContent === 'string' ? sanitizedContent : JSON.stringify(sanitizedContent ?? null)
+    normalized.content_plain_text = normalized.content
+  }
+
+  return normalized
+}
+
+function normalizeHistory(history: any[]): any[] {
+  const toolNameById = buildToolNameMap(history || [])
+  return (history || []).filter(Boolean).map(message => normalizeHistoryMessage(message, toolNameById))
+}
+
+function toServerToolFormat(tools?: ProviderToolDefinition[]): any[] | undefined {
   if (!Array.isArray(tools) || tools.length === 0) return undefined
 
   const mapped = tools
     .filter(tool => tool?.name)
     .map(tool => ({
-      type: 'function',
-      function: {
-        name: tool.name,
-        description: tool.description || '',
-        parameters: tool.inputSchema || { type: 'object', properties: {} },
-      },
+      name: tool.name,
+      enabled: true,
+      description: tool.description || '',
+      inputSchema: tool.inputSchema || { type: 'object', properties: {} },
     }))
 
-  return mapped.length ? mapped : undefined
+  return mapped.length > 0 ? mapped : undefined
 }
 
-function appendToolOutputsFromBlocks(
-  messages: OpenRouterChatMessage[],
-  assistantMsg: any,
-  fallbackToolNameById: Map<string, string>
-): void {
-  const toolCalls = parseToolCalls(assistantMsg?.tool_calls)
-  const callNames = new Map<string, string>()
-
-  for (const call of toolCalls) {
-    const id = typeof call?.id === 'string' ? call.id : ''
-    if (!id) continue
-    const name = typeof call?.name === 'string' ? call.name : typeof call?.function?.name === 'string' ? call.function.name : ''
-    if (!name) continue
-    callNames.set(id, name)
-  }
-
-  const blocks = parseContentBlocks(assistantMsg?.content_blocks)
-  for (const block of blocks) {
-    if (block?.type !== 'tool_result') continue
-    const callId = typeof block?.tool_use_id === 'string' ? block.tool_use_id : ''
-    if (!callId) continue
-
-    const toolName = callNames.get(callId) || fallbackToolNameById.get(callId) || null
-    const sanitized = sanitizeToolResultContentForModel(block?.content, toolName)
-    const output = typeof sanitized === 'string' ? sanitized : JSON.stringify(sanitized ?? null)
-
-    messages.push({
-      role: 'tool',
-      tool_call_id: callId,
-      content: output,
-    })
-  }
+function extractReasoningFromBlocks(blocks: any[]): string {
+  return blocks
+    .filter(block => block?.type === 'thinking' && typeof block?.content === 'string')
+    .map(block => block.content)
+    .join('')
 }
 
-function transformHistoryToMessages(history: any[], userContent: string, systemPrompt?: string | null): OpenRouterChatMessage[] {
-  const messages: OpenRouterChatMessage[] = []
-  const toolNameById = buildToolNameMap(history)
+function extractTextFromBlocks(blocks: any[]): string {
+  return blocks
+    .filter(block => block?.type === 'text' && typeof block?.content === 'string')
+    .map(block => block.content)
+    .join('')
+}
 
-  if (systemPrompt && systemPrompt.trim()) {
-    messages.push({ role: 'system', content: systemPrompt.trim() })
-  }
-
-  for (const msg of history || []) {
-    if (!msg) continue
-    const role = msg.role
-
-    if (role === 'system') continue
-
-    if (role === 'user') {
-      const content = asText(msg.content).trim()
-      if (content) {
-        messages.push({ role: 'user', content })
-      }
-      continue
-    }
-
-    if (role === 'assistant') {
-      const content = asText(msg.content)
-      const toolCalls = parseToolCalls(msg.tool_calls)
-        .map((call: any) => {
-          const id = typeof call?.id === 'string' ? call.id : ''
-          const name = typeof call?.name === 'string' ? call.name : typeof call?.function?.name === 'string' ? call.function.name : ''
-          const argsRaw = call?.arguments ?? call?.function?.arguments ?? '{}'
-          const args = typeof argsRaw === 'string' ? argsRaw : JSON.stringify(argsRaw || {})
-          if (!id || !name) return null
-          return {
-            id,
-            type: 'function' as const,
-            function: { name, arguments: args },
-          }
-        })
-        .filter((call): call is NonNullable<typeof call> => Boolean(call))
-
-      messages.push({
-        role: 'assistant',
-        content: content || '',
-        tool_calls: toolCalls.length ? toolCalls : undefined,
-      })
-
-      appendToolOutputsFromBlocks(messages, msg, toolNameById)
-      continue
-    }
-
-    if (role === 'tool' && msg.tool_call_id) {
-      const toolCallId = String(msg.tool_call_id)
-      const sanitized = sanitizeToolResultContentForModel(msg.content, toolNameById.get(toolCallId) || null)
-      messages.push({
-        role: 'tool',
-        tool_call_id: toolCallId,
-        content: typeof sanitized === 'string' ? sanitized : JSON.stringify(sanitized ?? null),
-      })
-    }
-  }
-
-  const trimmedUserContent = userContent.trim()
-  const hasAnyUser = messages.some(message => message.role === 'user')
-  if (trimmedUserContent && !hasAnyUser) {
-    messages.push({ role: 'user', content: trimmedUserContent })
-  }
-
-  return messages
+function extractToolCallsFromBlocks(blocks: any[]): ProviderToolCall[] {
+  return blocks
+    .filter(block => block?.type === 'tool_use' && typeof block?.id === 'string' && typeof block?.name === 'string')
+    .map(block => ({
+      id: block.id,
+      name: block.name,
+      arguments: block.input ?? {},
+      status: 'pending' as const,
+    }))
 }
 
 function parseResponseToolCalls(message: any): ProviderToolCall[] {
-  const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
+  const toolCalls = parseToolCalls(message?.tool_calls)
+  const normalized: ProviderToolCall[] = []
 
-  return toolCalls
-    .map((call: any) => {
-      const id = typeof call?.id === 'string' ? call.id : ''
-      const name = typeof call?.function?.name === 'string' ? call.function.name : ''
-      const argsRaw = call?.function?.arguments
-      if (!id || !name) return null
+  for (const call of toolCalls) {
+    const id = typeof call?.id === 'string' ? call.id : ''
+    const name = typeof call?.name === 'string' ? call.name : typeof call?.function?.name === 'string' ? call.function.name : ''
+    const argsRaw = call?.arguments ?? call?.function?.arguments
+    if (!id || !name) continue
 
-      let args: any = argsRaw ?? {}
-      if (typeof argsRaw === 'string') {
-        try {
-          args = JSON.parse(argsRaw)
-        } catch {
-          args = argsRaw
-        }
+    let args: any = argsRaw ?? {}
+    if (typeof argsRaw === 'string') {
+      try {
+        args = JSON.parse(argsRaw)
+      } catch {
+        args = argsRaw
       }
+    }
 
-      return {
-        id,
-        name,
-        arguments: args,
-        status: 'pending' as const,
-      }
+    normalized.push({
+      id,
+      name,
+      arguments: args,
+      status: 'pending',
     })
-    .filter((call: ProviderToolCall | null): call is ProviderToolCall => Boolean(call))
+  }
+
+  return normalized
 }
 
-function extractReasoning(message: any): string {
-  if (typeof message?.reasoning === 'string') return message.reasoning
-  if (typeof message?.reasoning_text === 'string') return message.reasoning_text
-  if (Array.isArray(message?.reasoning)) {
-    return message.reasoning
-      .map((part: any) => (typeof part === 'string' ? part : typeof part?.text === 'string' ? part.text : ''))
-      .filter(Boolean)
-      .join('\n')
+function buildOutputFromMessage(message: any, fallback?: { content?: string; reasoning?: string; contentBlocks?: any[]; toolCalls?: ProviderToolCall[] }): ProviderGenerateOutput {
+  const contentBlocks = parseContentBlocks(message?.content_blocks)
+  const content = asText(message?.content) || extractTextFromBlocks(contentBlocks) || fallback?.content || ''
+  const reasoning = extractReasoningFromBlocks(contentBlocks) || (typeof message?.thinking_block === 'string' ? message.thinking_block : '') || fallback?.reasoning || ''
+  const toolCalls = parseResponseToolCalls(message)
+  const effectiveToolCalls = toolCalls.length > 0 ? toolCalls : (contentBlocks.length > 0 ? extractToolCallsFromBlocks(contentBlocks) : fallback?.toolCalls || [])
+  const effectiveContentBlocks = contentBlocks.length > 0 ? contentBlocks : (fallback?.contentBlocks || [])
+
+  return {
+    content,
+    reasoning: reasoning || undefined,
+    toolCalls: effectiveToolCalls,
+    contentBlocks: effectiveContentBlocks,
+    raw: message,
   }
-  return ''
+}
+
+function getRemoteApiBase(explicit?: string): string {
+  const raw = explicit || process.env.YGG_API_URL || process.env.VITE_API_URL || 'https://webdrasil-production.up.railway.app/api'
+  return raw.replace(/\/+$/, '')
+}
+
+function normalizeAuthorizationToken(token: string | null | undefined): string {
+  return String(token || '').replace(/^Bearer\s+/i, '').trim()
+}
+
+function createAbortError(): Error {
+  if (typeof DOMException !== 'undefined') {
+    return new DOMException('The operation was aborted.', 'AbortError')
+  }
+  const error = new Error('The operation was aborted.')
+  ;(error as any).name = 'AbortError'
+  return error
 }
 
 export class OpenRouterProvider implements HeadlessProvider {
   readonly name = 'openrouter'
+  private readonly tokenStore?: ProviderTokenStore
+  private readonly remoteApiBase?: string
 
-  async generate(input: ProviderGenerateInput): Promise<ProviderGenerateOutput> {
-    const apiKey = input.accessToken || process.env.OPENROUTER_API_KEY || ''
-    if (!apiKey) {
-      throw new Error('OpenRouter API key missing. Provide accessToken or set OPENROUTER_API_KEY.')
+  constructor(deps: OpenRouterProviderDeps = {}) {
+    this.tokenStore = deps.tokenStore
+    this.remoteApiBase = deps.remoteApiBase
+  }
+
+  private resolveAuth(input: ProviderGenerateInput): string {
+    const directToken = normalizeAuthorizationToken(input.accessToken)
+    if (directToken) return directToken
+
+    if (this.tokenStore && input.userId) {
+      const stored = this.tokenStore.get('openrouter', input.userId)
+      const storedToken = normalizeAuthorizationToken(stored?.accessToken)
+      if (storedToken) return storedToken
     }
 
-    const model = input.modelName || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini'
-    const messages = transformHistoryToMessages(input.history || [], input.userContent, input.systemPrompt)
-    const tools = toOpenRouterToolSchema(input.tools)
+    const envToken = normalizeAuthorizationToken(
+      process.env.YGG_APP_ACCESS_TOKEN || process.env.YGG_ACCESS_TOKEN || process.env.SUPABASE_ACCESS_TOKEN || ''
+    )
+    if (envToken) return envToken
 
+    throw new Error('Yggdrasil app auth token missing for Railway-backed OpenRouter provider.')
+  }
+
+  async generate(input: ProviderGenerateInput, emit?: ProviderStreamEventHandler): Promise<ProviderGenerateOutput> {
+    const turn = input.railwayTurn
+    if (!turn?.conversationId) {
+      throw new Error('Railway chat context missing for OpenRouter provider (conversationId required).')
+    }
+
+    const accessToken = this.resolveAuth(input)
+    const history = normalizeHistory(input.history || [])
+    const tools = toServerToolFormat(input.tools)
+    const remoteApiBase = getRemoteApiBase(this.remoteApiBase)
+    const endpointPath = `/conversations/${encodeURIComponent(turn.conversationId)}/messages`
+    const endpoint = `${remoteApiBase}${endpointPath}`
+
+    const hasHistory = history.length > 0
     const body: Record<string, any> = {
-      model,
-      messages,
-      stream: false,
+      content: hasHistory ? '' : input.userContent,
+      messages: history,
+      modelName: input.modelName,
+      parentId: turn.parentId ?? null,
+      provider: 'openrouter',
+      systemPrompt: input.systemPrompt ?? null,
+      conversationContext: turn.conversationContext ?? null,
+      projectContext: turn.projectContext ?? null,
+      think: turn.think ?? false,
+      executionMode: turn.executionMode ?? 'client',
+      isBranch: turn.isBranch ?? false,
+      storageMode: turn.storageMode ?? 'local',
+      isElectron: turn.isElectron ?? true,
     }
 
+    if (typeof turn.temperature === 'number') {
+      body.temperature = turn.temperature
+    }
+    if (Array.isArray(turn.attachmentsBase64) && turn.attachmentsBase64.length > 0) {
+      body.attachmentsBase64 = turn.attachmentsBase64
+    }
+    if (typeof turn.retrigger === 'boolean') {
+      body.retrigger = turn.retrigger
+    }
+    if (turn.imageConfig !== undefined) {
+      body.imageConfig = turn.imageConfig
+    }
+    if (turn.reasoningConfig !== undefined) {
+      body.reasoningConfig = turn.reasoningConfig
+    }
     if (tools?.length) {
       body.tools = tools
-      body.tool_choice = 'auto'
     }
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-        'http-referer': 'https://yggdrasil.local',
-        'x-title': 'ygg-headless-server',
-      },
-      body: JSON.stringify(body),
+    const streamOpen = await openStreamingWithPreFirstByteRetry({
+      endpoint: endpointPath,
+      openAttempt: signal =>
+        fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            Accept: 'text/event-stream',
+          },
+          body: JSON.stringify(body),
+          signal,
+        }),
     })
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '')
-      throw new Error(`OpenRouter request failed (${response.status}): ${text}`)
+    if (!streamOpen.response.ok) {
+      const text = await streamOpen.response.text().catch(() => '')
+      throw new Error(`Railway OpenRouter request failed (${streamOpen.response.status}): ${text}`)
     }
 
-    const json = (await response.json()) as any
-    const message = json?.choices?.[0]?.message || {}
-
-    const content = asText(message?.content)
-    const reasoning = extractReasoning(message)
-    const toolCalls = parseResponseToolCalls(message)
-
-    const contentBlocks: any[] = []
-    if (reasoning) {
-      contentBlocks.push({ type: 'thinking', content: reasoning })
+    if (!streamOpen.reader) {
+      throw new Error('Railway OpenRouter request returned no readable stream body')
     }
-    if (content) {
-      contentBlocks.push({ type: 'text', content })
+
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let pendingRead = streamOpen.firstRead
+    let streamedText = ''
+    let streamedReasoning = ''
+    const streamedContentBlocks: any[] = []
+    const streamedToolCalls: ProviderToolCall[] = []
+    let completeMessage: any = null
+
+    while (true) {
+      const readResult = pendingRead ?? (await streamOpen.reader.read())
+      pendingRead = null
+
+      const { done, value } = readResult
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data:')) continue
+
+        const payload = trimmed.slice(5).trim()
+        if (!payload || payload === '[DONE]') continue
+
+        let parsed: any = null
+        try {
+          parsed = JSON.parse(payload)
+        } catch {
+          if (payload) {
+            streamedText += payload
+            streamedContentBlocks.push({ type: 'text', content: payload })
+            emit?.({ type: 'chunk', part: 'text', delta: payload })
+          }
+          continue
+        }
+
+        if (!parsed) continue
+        if (parsed.type === 'error') {
+          throw new Error(typeof parsed.error === 'string' ? parsed.error : 'Railway stream error')
+        }
+        if (parsed.type === 'aborted') {
+          throw createAbortError()
+        }
+        if (parsed.type === 'complete' && parsed.message) {
+          completeMessage = parsed.message
+          continue
+        }
+        if (parsed.type !== 'chunk') continue
+
+        const part = parsed.part
+        if (part === 'text' && typeof parsed.delta === 'string') {
+          streamedText += parsed.delta
+          streamedContentBlocks.push({ type: 'text', content: parsed.delta })
+          emit?.({ type: 'chunk', part: 'text', delta: parsed.delta })
+          continue
+        }
+        if (part === 'reasoning' && typeof parsed.delta === 'string') {
+          streamedReasoning += parsed.delta
+          streamedContentBlocks.push({ type: 'thinking', content: parsed.delta })
+          emit?.({ type: 'chunk', part: 'reasoning', delta: parsed.delta })
+          continue
+        }
+        if (part === 'tool_call' && parsed.toolCall) {
+          const toolCall = parsed.toolCall
+          if (typeof toolCall?.id === 'string' && typeof toolCall?.name === 'string') {
+            streamedToolCalls.push({
+              id: toolCall.id,
+              name: toolCall.name,
+              arguments: toolCall.arguments ?? {},
+              status: 'pending',
+            })
+            streamedContentBlocks.push({
+              type: 'tool_use',
+              id: toolCall.id,
+              name: toolCall.name,
+              input: toolCall.arguments ?? {},
+            })
+          }
+          continue
+        }
+        if (part === 'tool_result' && parsed.toolResult) {
+          streamedContentBlocks.push({
+            type: 'tool_result',
+            tool_use_id: parsed.toolResult.tool_use_id,
+            content: parsed.toolResult.content,
+            is_error: Boolean(parsed.toolResult.is_error),
+          })
+          continue
+        }
+        if (part === 'image' && parsed.url) {
+          streamedContentBlocks.push({
+            type: 'image',
+            url: parsed.url,
+            mimeType: parsed.mimeType || 'image/png',
+          })
+          continue
+        }
+      }
     }
-    for (const toolCall of toolCalls) {
-      contentBlocks.push({
-        type: 'tool_use',
-        id: toolCall.id,
-        name: toolCall.name,
-        input: toolCall.arguments,
+
+    if (completeMessage) {
+      return buildOutputFromMessage(completeMessage, {
+        content: streamedText,
+        reasoning: streamedReasoning,
+        contentBlocks: streamedContentBlocks,
+        toolCalls: streamedToolCalls,
       })
     }
 
     return {
-      content,
-      reasoning: reasoning || undefined,
-      toolCalls,
-      contentBlocks,
-      raw: json,
+      content: streamedText,
+      reasoning: streamedReasoning || undefined,
+      toolCalls: streamedToolCalls,
+      contentBlocks: streamedContentBlocks,
+      raw: {
+        streamed: true,
+      },
     }
   }
 }

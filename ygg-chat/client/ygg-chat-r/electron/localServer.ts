@@ -16,6 +16,7 @@ import { WebSocket, WebSocketServer } from 'ws'
 
 // Tool imports
 import { registerHeadlessServerRoutes } from './headlessServer/index.js'
+import { runHookRequest } from './hooks/hookRunner.js'
 import { registerLocalOperationsRoutes } from './localOperations.js'
 import { createToolsStatements, initializeToolsSchema, pruneOldTools, registerToolsRoutes } from './localToolsRoutes.js'
 import { mcpManager } from './mcp/mcpManager.js'
@@ -440,11 +441,10 @@ function initializeBuiltInToolRegistry() {
   })
 
   builtInTools.set('create_file', async (args, { rootPath, operationMode }) => {
-    const { path: filePath, content, directory, createParentDirs, overwrite, executable, cwd } = args
+    const { path: filePath, content, createParentDirs, overwrite, executable, cwd } = args
     if (!filePath) throw new Error('path is required')
     const effectiveCwd = resolveToolWorkspaceCwd(cwd, rootPath)
     return await createTextFile(filePath, content, {
-      directory,
       createParentDirs,
       overwrite,
       executable,
@@ -2555,7 +2555,7 @@ function setupServer() {
         name: 'GPT-5.2 Codex',
         displayName: 'GPT-5.2 Codex',
         description: 'Latest GPT-5.2 Codex model for coding tasks',
-        contextLength: 200000,
+        contextLength: 400000,
         maxCompletionTokens: 16384,
       },
       {
@@ -2563,7 +2563,7 @@ function setupServer() {
         name: 'GPT-5.2',
         displayName: 'GPT-5.2',
         description: 'GPT-5.2 general model',
-        contextLength: 200000,
+        contextLength: 400000,
         maxCompletionTokens: 16384,
       },
       {
@@ -3327,6 +3327,20 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Batch sync failed:', error)
       res.status(500).json({ error: 'Batch sync failed', results })
+    }
+  })
+
+  app.post('/api/hooks/run', async (req, res) => {
+    try {
+      const result = await runHookRequest(req.body || {})
+      res.json(result)
+    } catch (error) {
+      console.error('[LocalServer] Hook execution error:', error)
+      res.status(500).json({
+        matched: false,
+        hookCount: 0,
+        errors: [error instanceof Error ? error.message : String(error)],
+      })
     }
   })
 
@@ -4529,6 +4543,18 @@ function setupServer() {
         return acc
       }, {})
 
+      const requestedToolsDailyMap = filteredMessages.reduce<Record<string, Record<string, number>>>((acc, message) => {
+        const key = dayKey(message.created_at)
+        const toolNames = parseToolCalls(message.tool_calls)
+          .map(call => extractToolName(call))
+          .filter((name): name is string => Boolean(name))
+        if (!acc[key]) acc[key] = {}
+        for (const toolName of toolNames) {
+          acc[key][toolName] = (acc[key][toolName] || 0) + 1
+        }
+        return acc
+      }, {})
+
       const toolStatusCounts = scopedToolJobs.reduce<Record<string, number>>((acc, job) => {
         acc[job.status] = (acc[job.status] || 0) + 1
         return acc
@@ -4554,6 +4580,119 @@ function setupServer() {
           return completed - started
         })
         .filter((value): value is number => value !== null)
+
+      const toolJobStatsMap = new Map<
+        string,
+        {
+          toolName: string
+          requested: number
+          total: number
+          completed: number
+          failed: number
+          cancelled: number
+          pending: number
+          running: number
+          durations: number[]
+        }
+      >()
+
+      const ensureToolJobStat = (toolName: string) => {
+        const existing = toolJobStatsMap.get(toolName)
+        if (existing) return existing
+        const created = {
+          toolName,
+          requested: toolRequestedByName[toolName] || 0,
+          total: 0,
+          completed: 0,
+          failed: 0,
+          cancelled: 0,
+          pending: 0,
+          running: 0,
+          durations: [] as number[],
+        }
+        toolJobStatsMap.set(toolName, created)
+        return created
+      }
+
+      for (const toolName of Object.keys(toolRequestedByName)) {
+        ensureToolJobStat(toolName)
+      }
+
+      const toolJobsDailyMap = new Map<
+        string,
+        { date: string; requested: number; total: number; completed: number; failed: number; cancelled: number }
+      >()
+
+      for (const [date, requestedCounts] of Object.entries(requestedToolsDailyMap)) {
+        const requested = Object.values(requestedCounts).reduce((sum, count) => sum + count, 0)
+        toolJobsDailyMap.set(date, {
+          date,
+          requested,
+          total: 0,
+          completed: 0,
+          failed: 0,
+          cancelled: 0,
+        })
+      }
+
+      for (const job of scopedToolJobs) {
+        const stat = ensureToolJobStat(job.tool_name)
+        stat.total += 1
+        if (job.status === 'completed') stat.completed += 1
+        else if (job.status === 'failed') stat.failed += 1
+        else if (job.status === 'cancelled') stat.cancelled += 1
+        else if (job.status === 'pending') stat.pending += 1
+        else if (job.status === 'running') stat.running += 1
+
+        const started = parseTimestamp(job.started_at)
+        const completed = parseTimestamp(job.completed_at)
+        if (started !== null && completed !== null && completed >= started) {
+          stat.durations.push(completed - started)
+        }
+
+        const date = dayKey(job.created_at)
+        const daily = toolJobsDailyMap.get(date) || {
+          date,
+          requested: 0,
+          total: 0,
+          completed: 0,
+          failed: 0,
+          cancelled: 0,
+        }
+        daily.total += 1
+        if (job.status === 'completed') daily.completed += 1
+        else if (job.status === 'failed') daily.failed += 1
+        else if (job.status === 'cancelled') daily.cancelled += 1
+        toolJobsDailyMap.set(date, daily)
+      }
+
+      const toolJobsByTool = Array.from(toolJobStatsMap.values())
+        .map(stat => {
+          const terminalTotal = stat.completed + stat.failed + stat.cancelled
+          const averageDurationMs =
+            stat.durations.length > 0 ? round(stat.durations.reduce((sum, value) => sum + value, 0) / stat.durations.length, 2) : null
+          const failureRatePct = terminalTotal > 0 ? round((stat.failed / terminalTotal) * 100, 2) : 0
+
+          return {
+            toolName: stat.toolName,
+            requested: stat.requested,
+            total: stat.total,
+            completed: stat.completed,
+            failed: stat.failed,
+            cancelled: stat.cancelled,
+            pending: stat.pending,
+            running: stat.running,
+            averageDurationMs,
+            failureRatePct,
+          }
+        })
+        .sort((a, b) => {
+          if (b.total !== a.total) return b.total - a.total
+          if (b.requested !== a.requested) return b.requested - a.requested
+          return a.toolName.localeCompare(b.toolName)
+        })
+
+      const toolJobsDaily = Array.from(toolJobsDailyMap.values()).sort((a, b) => a.date.localeCompare(b.date))
 
       const availableModels = Array.from(
         new Set([
@@ -4683,6 +4822,8 @@ function setupServer() {
               durationValues.length > 0
                 ? round(durationValues.reduce((sum, duration) => sum + duration, 0) / durationValues.length, 2)
                 : null,
+            byTool: toolJobsByTool,
+            daily: toolJobsDaily,
           },
         },
         payments: {

@@ -31,15 +31,27 @@ interface ToolLoopServiceDeps {
 
 export interface ToolLoopRunInput {
   provider: string
+  operation?: 'send' | 'repeat' | 'branch' | 'edit-branch'
   modelName: string
   conversationId: string
   assistantParentId: string | null
   history: any[]
   userContent: string
   systemPrompt?: string | null
+  conversationContext?: string | null
+  projectContext?: string | null
+  think?: boolean
+  temperature?: number
   userId?: string | null
   accessToken?: string | null
   accountId?: string | null
+  attachmentsBase64?: any[] | null
+  retrigger?: boolean
+  executionMode?: 'server' | 'client'
+  isBranch?: boolean
+  isElectron?: boolean
+  imageConfig?: any
+  reasoningConfig?: any
   tools?: ProviderToolDefinition[]
   streamId?: string | null
   rootPath?: string | null
@@ -186,12 +198,47 @@ export class ToolLoopService {
         accessToken: input.accessToken ?? null,
         accountId: input.accountId ?? null,
         tools: input.tools,
+        railwayTurn:
+          input.provider === 'openrouter'
+            ? {
+                conversationId: input.conversationId,
+                parentId: currentParentId,
+                operation: input.operation,
+                conversationContext: input.conversationContext ?? null,
+                projectContext: input.projectContext ?? null,
+                think: input.think,
+                temperature: input.temperature,
+                attachmentsBase64: turn === 1 ? (input.attachmentsBase64 ?? null) : null,
+                retrigger: turn === 1 ? input.retrigger : false,
+                executionMode: input.executionMode,
+                isBranch: input.isBranch,
+                storageMode: 'local',
+                isElectron: input.isElectron ?? true,
+                imageConfig: input.imageConfig,
+                reasoningConfig: input.reasoningConfig,
+              }
+            : null,
       }
 
       let output: ProviderGenerateOutput
+      let streamedTextDuringTurn = false
+      let streamedReasoningDuringTurn = false
       try {
         output = await withTimeout(
-          this.providerRouter.generate(input.provider, providerInput),
+          this.providerRouter.generate(input.provider, providerInput, event => {
+            if (event?.type === 'chunk' && event.part === 'text' && typeof event.delta === 'string' && event.delta.length > 0) {
+              streamedTextDuringTurn = true
+            }
+            if (
+              event?.type === 'chunk' &&
+              event.part === 'reasoning' &&
+              typeof event.delta === 'string' &&
+              event.delta.length > 0
+            ) {
+              streamedReasoningDuringTurn = true
+            }
+            emit(event)
+          }),
           this.providerTurnTimeoutMs,
           `Provider turn ${turn}/${this.maxTurns}`
         )
@@ -201,10 +248,10 @@ export class ToolLoopService {
         throw error
       }
 
-      if (output.reasoning) {
+      if (output.reasoning && !streamedReasoningDuringTurn) {
         emit({ type: 'chunk', part: 'reasoning', delta: output.reasoning })
       }
-      if (output.content) {
+      if (output.content && !streamedTextDuringTurn) {
         emit({ type: 'chunk', part: 'text', delta: output.content })
       }
 

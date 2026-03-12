@@ -1,9 +1,8 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { isWSLPath, resolveToWindowsPath } from '../utils/wslBridge.js'
+import { isWSLPath, resolveToWindowsPath, toWslPath } from '../utils/wslBridge.js'
 
 export interface CreateFileOptions {
-  directory?: string
   createParentDirs?: boolean
   overwrite?: boolean
   executable?: boolean
@@ -16,6 +15,44 @@ export interface CreateFileResult {
   created: boolean
   sizeBytes: number
   message: string
+}
+
+function resolveWslLikeAbsolutePath(inputPath: string, cwd?: string): string {
+  const normalizedInput = toWslPath(inputPath)
+
+  if (normalizedInput.startsWith('/')) {
+    return path.posix.normalize(normalizedInput)
+  }
+
+  const normalizedBase = cwd ? toWslPath(cwd) : toWslPath(process.cwd())
+  const basePath = normalizedBase.startsWith('/') ? normalizedBase : path.posix.resolve('/', normalizedBase)
+
+  return path.posix.resolve(basePath, normalizedInput)
+}
+
+function assertWithinWorkspace(inputPath: string, resolvedPath: string, cwd: string, usePosix: boolean): void {
+  if (usePosix) {
+    const workspace = resolveWslLikeAbsolutePath(cwd)
+    const target = resolveWslLikeAbsolutePath(resolvedPath)
+    const rel = path.posix.relative(workspace, target)
+
+    if (rel.startsWith('..') || path.posix.isAbsolute(rel)) {
+      throw new Error(
+        `Access denied: Path '${inputPath}' resolves to '${resolvedPath}' which is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+      )
+    }
+    return
+  }
+
+  const workspace = path.resolve(cwd)
+  const target = path.resolve(resolvedPath)
+  const rel = path.relative(workspace, target)
+
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(
+      `Access denied: Path '${inputPath}' resolves to '${resolvedPath}' which is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`
+    )
+  }
 }
 
 /**
@@ -32,7 +69,7 @@ export async function createTextFile(
   content: string = '',
   options: CreateFileOptions = {}
 ): Promise<CreateFileResult> {
-  const { directory, createParentDirs = true, overwrite = false, executable = false, operationMode, cwd } = options
+  const { createParentDirs = true, overwrite = false, executable = false, operationMode, cwd } = options
 
   // Block file creation in plan mode
   if (operationMode === 'plan') {
@@ -46,82 +83,30 @@ export async function createTextFile(
   }
 
   try {
-    // Determine the target path
-    let targetPath: string
-    let isWSL = false
+    let targetPath = filePath
+    let pathType: 'windows' | 'wsl' | 'posix' = 'posix'
+    const willBeWsl = isWSLPath(filePath)
 
-    if (directory && isWSLPath(directory)) {
-      isWSL = true
-      // Join manually for WSL paths to avoid backslash issues
-      if (isWSLPath(filePath)) {
-        // Absolute WSL path
-        targetPath = filePath
-      } else {
-        // Assume relative path, simple join
-        targetPath = directory.replace(/\/$/, '') + '/' + filePath
-      }
-    } else if (isWSLPath(filePath)) {
-      isWSL = true
-      targetPath = filePath
+    if (willBeWsl) {
+      pathType = 'wsl'
+      targetPath = resolveWslLikeAbsolutePath(filePath, cwd)
     } else {
-      // Standard logic
-      if (!path.isAbsolute(filePath) && directory) {
-        targetPath = path.resolve(directory, filePath)
-      } else if (!path.isAbsolute(filePath)) {
-        const basePath = directory || cwd || process.cwd()
-        targetPath = path.resolve(basePath, filePath)
-      } else {
-        targetPath = filePath
+      const basePath = cwd || process.cwd()
+      targetPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath)
+      if (/^[a-zA-Z]:[\\/]/.test(targetPath)) {
+        pathType = 'windows'
       }
+    }
+
+    if (cwd) {
+      assertWithinWorkspace(filePath, targetPath, cwd, pathType === 'wsl')
     }
 
     let windowsPath = targetPath
-    if (isWSL) {
+    if (pathType === 'wsl') {
       windowsPath = await resolveToWindowsPath(targetPath)
     }
 
-    // Workspace validation BEFORE UNC conversion (compare Linux to Linux for WSL)
-    if (cwd) {
-      if (isWSL) {
-        // Both are Linux paths - compare directly using POSIX rules
-        const normalizedCwd = path.posix.resolve(cwd)
-        const normalizedTarget = path.posix.resolve(targetPath)
-        const relativeToWorkspace = path.posix.relative(normalizedCwd, normalizedTarget)
-        const outsideWorkspace =
-          relativeToWorkspace === '..' ||
-          relativeToWorkspace.startsWith(`..${path.posix.sep}`) ||
-          path.posix.isAbsolute(relativeToWorkspace)
-
-        if (outsideWorkspace) {
-          return {
-            success: false,
-            created: false,
-            sizeBytes: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`,
-          }
-        }
-      } else {
-        // Windows or native paths - use Node's path module
-        const normalizedCwd = path.resolve(cwd)
-        const normalizedTarget = path.resolve(targetPath)
-        const relativeToWorkspace = path.relative(normalizedCwd, normalizedTarget)
-        const outsideWorkspace =
-          relativeToWorkspace === '..' ||
-          relativeToWorkspace.startsWith(`..${path.sep}`) ||
-          path.isAbsolute(relativeToWorkspace)
-
-        if (outsideWorkspace) {
-          return {
-            success: false,
-            created: false,
-            sizeBytes: 0,
-            message: `Access denied: Path '${filePath}' is outside the workspace '${cwd}'. File operations are restricted to the workspace directory.`,
-          }
-        }
-      }
-    }
-
-    // Check if file already exists
     const fileExists = await fs.promises
       .access(windowsPath, fs.constants.F_OK)
       .then(() => true)
@@ -136,13 +121,11 @@ export async function createTextFile(
       }
     }
 
-    // Create parent directories if needed
-    const parentDir = isWSL ? targetPath.substring(0, targetPath.lastIndexOf('/')) : path.dirname(targetPath)
+    const parentDir = pathType === 'wsl' ? path.posix.dirname(targetPath) : path.dirname(targetPath)
     let dirsCreated = false
 
-    // We need the windows path for the parent dir too
     let windowsParentDir = parentDir
-    if (isWSL) {
+    if (pathType === 'wsl') {
       windowsParentDir = await resolveToWindowsPath(parentDir)
     }
 
@@ -159,7 +142,6 @@ export async function createTextFile(
         }
       }
     } else {
-      // Check if parent directory exists
       const dirExists = await fs.promises
         .access(windowsParentDir, fs.constants.F_OK)
         .then(() => true)
@@ -175,16 +157,12 @@ export async function createTextFile(
       }
     }
 
-    // Write the file
     await fs.promises.writeFile(windowsPath, content, 'utf8')
 
-    // Make executable if requested and supported by platform
-    // If WSL, we should try chmod even if process.platform is win32
-    if (executable && (process.platform !== 'win32' || isWSL)) {
+    if (executable && (process.platform !== 'win32' || pathType === 'wsl')) {
       try {
         await fs.promises.chmod(windowsPath, 0o755)
       } catch (chmodError: any) {
-        // Non-failure: try to continue even if chmod fails
         console.warn(`Warning: Could not make file executable: ${chmodError.message}`)
       }
     }

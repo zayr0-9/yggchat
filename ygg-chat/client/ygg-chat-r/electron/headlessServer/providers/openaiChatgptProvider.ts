@@ -12,6 +12,7 @@ import type {
   HeadlessProvider,
   ProviderGenerateInput,
   ProviderGenerateOutput,
+  ProviderStreamEventHandler,
   ProviderToolCall,
   ProviderToolDefinition,
 } from './openRouterProvider.js'
@@ -469,13 +470,14 @@ function extractToolCallsFromCompletedOutput(output: any[]): ProviderToolCall[] 
 async function readCodexSseOutput(params: {
   reader: ReadableStreamDefaultReader<Uint8Array>
   firstRead?: ReadableStreamReadResult<Uint8Array> | null
+  emit?: ProviderStreamEventHandler
 }): Promise<{
   text: string
   reasoning: string
   toolCalls: ProviderToolCall[]
   responseOutputItems: any[]
 }> {
-  const { reader, firstRead } = params
+  const { reader, firstRead, emit } = params
   const decoder = new TextDecoder()
   let buffer = ''
 
@@ -526,16 +528,19 @@ async function readCodexSseOutput(params: {
 
       if (parsed.type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
         streamedText += parsed.delta
+        emit?.({ type: 'chunk', part: 'text', delta: parsed.delta })
         continue
       }
 
       if (parsed.type === 'response.reasoning_text.delta' && typeof parsed.delta === 'string') {
         streamedReasoning += parsed.delta
+        emit?.({ type: 'chunk', part: 'reasoning', delta: parsed.delta })
         continue
       }
 
       if (parsed.type === 'response.reasoning_summary_text.delta' && typeof parsed.delta === 'string') {
         streamedReasoning += parsed.delta
+        emit?.({ type: 'chunk', part: 'reasoning', delta: parsed.delta })
         continue
       }
 
@@ -671,14 +676,16 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
       }
     }
 
-    if (this.tokenStore && input.userId) {
-      const record = this.tokenStore.get('openaichatgpt', input.userId)
+    if (this.tokenStore) {
+      const record = input.userId
+        ? this.tokenStore.get('openaichatgpt', input.userId)
+        : this.tokenStore.getLatest('openaichatgpt')
       if (record) {
         if (shouldRefresh(record.expiresAt ?? null) && record.refreshToken) {
           const refreshed = await refreshOpenAiAccessToken(record.refreshToken)
           this.tokenStore.upsert({
             provider: 'openaichatgpt',
-            userId: input.userId,
+            userId: record.userId,
             accessToken: refreshed.accessToken,
             refreshToken: refreshed.refreshToken,
             expiresAt: refreshed.expiresAtIso,
@@ -717,7 +724,7 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
     throw new Error('OpenAI ChatGPT auth missing. Provide token+account_id or store OAuth tokens via provider-auth route.')
   }
 
-  async generate(input: ProviderGenerateInput): Promise<ProviderGenerateOutput> {
+  async generate(input: ProviderGenerateInput, emit?: ProviderStreamEventHandler): Promise<ProviderGenerateOutput> {
     const auth = await this.resolveAuth(input)
 
     const requestTools = mapTools(input.tools || [])
@@ -767,6 +774,7 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
     const parsed = await readCodexSseOutput({
       reader: streamOpen.reader,
       firstRead: streamOpen.firstRead,
+      emit,
     })
     const contentBlocks: any[] = []
 

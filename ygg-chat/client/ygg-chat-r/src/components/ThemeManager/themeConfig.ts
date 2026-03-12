@@ -65,8 +65,8 @@ export const createDefaultCustomChatTheme = (): CustomChatTheme => ({
       dark: 'oklch(20.5% 0 0)',
     },
     chatMessageListBg: {
-      light: 'transparent',
-      dark: 'transparent',
+      light: 'oklch(98.5% 0 0)',
+      dark: 'oklch(20.5% 0 0)',
     },
     heimdallPanelBg: {
       light: '#fafafa',
@@ -79,22 +79,22 @@ export const createDefaultCustomChatTheme = (): CustomChatTheme => ({
         roleText: { light: '#3730a3', dark: '#f5f3ff' },
       },
       assistant: {
-        containerBg: { light: '#fafafa', dark: '#171717' },
+        containerBg: { light: 'transparent', dark: 'transparent' },
         border: { light: 'transparent', dark: 'transparent' },
         roleText: { light: '#3f6212', dark: '#fef3c7' },
       },
       system: {
-        containerBg: { light: '#faf5ff', dark: '#262626' },
+        containerBg: { light: 'transparent', dark: 'transparent' },
         border: { light: 'transparent', dark: 'transparent' },
         roleText: { light: '#c084fc', dark: '#c084fc' },
       },
       ex_agent: {
-        containerBg: { light: '#fafafa', dark: '#262626' },
+        containerBg: { light: 'transparent', dark: 'transparent' },
         border: { light: 'transparent', dark: 'transparent' },
         roleText: { light: '#c2410c', dark: '#fb923c' },
       },
       unknown: {
-        containerBg: { light: '#f9fafb', dark: '#262626' },
+        containerBg: { light: 'transparent', dark: 'transparent' },
         border: { light: 'transparent', dark: 'transparent' },
         roleText: { light: '#9ca3af', dark: '#9ca3af' },
       },

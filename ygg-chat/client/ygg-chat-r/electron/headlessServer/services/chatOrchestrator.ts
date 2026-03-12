@@ -113,18 +113,35 @@ export class ChatOrchestrator implements HeadlessChatOrchestrator {
     const resolvedTools =
       Array.isArray(request.tools) && request.tools.length > 0 ? request.tools : this.defaultToolsProvider()
 
+    const project = conversation?.project_id ? this.projectRepo.getById(conversation.project_id) : null
+    const systemPrompt = request.systemPrompt ?? conversation?.system_prompt ?? project?.system_prompt ?? null
+    const conversationContext = request.conversationContext ?? conversation?.conversation_context ?? null
+    const projectContext = request.projectContext ?? project?.context ?? null
+
     const toolLoopResult = await this.toolLoopService.run(
       {
         provider: request.provider,
+        operation: request.operation,
         modelName: request.modelName,
         conversationId: request.conversationId,
         assistantParentId: resolved.assistantParentId,
         history,
         userContent: resolved.userContentForInference,
-        systemPrompt: request.systemPrompt ?? null,
+        systemPrompt,
+        conversationContext,
+        projectContext,
+        think: request.think,
+        temperature: request.temperature,
         userId: request.userId ?? null,
         accessToken: request.accessToken ?? null,
         accountId: request.accountId ?? null,
+        attachmentsBase64: request.attachmentsBase64 ?? null,
+        retrigger: request.retrigger,
+        executionMode: request.executionMode ?? 'client',
+        isBranch: request.isBranch ?? (request.operation === 'branch' || request.operation === 'edit-branch'),
+        isElectron: request.isElectron ?? true,
+        imageConfig: request.imageConfig,
+        reasoningConfig: request.reasoningConfig,
         tools: resolvedTools,
         streamId: request.streamId ?? null,
         rootPath: request.rootPath ?? conversation?.cwd ?? null,

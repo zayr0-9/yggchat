@@ -10,8 +10,11 @@
 .acrylic-ultra-light-nolight,
 .acrylic-ultra-light-nb,
 .acrylic-ultra-light-nb-2,
+.acrylic-ultra-light-nb-3,
 .acrylic-ultra-light,
+.acrylic-subtle-2,
 .acrylic-subtle,
+.acrylic-subtle-no-hover,
 .acrylic-light,
 .acrylic-input-chat-light,
 .acrylic-light-dark,
@@ -33,6 +36,7 @@
 }
 
 .acrylic-subtle,
+.acrylic-subtle-no-hover,
 .acrylic-light,
 .acrylic-light-dark,
 .acrylic-ultra-light-nolight,
@@ -41,7 +45,7 @@
 .acrylic-extreme {
   box-shadow: 0 0 5.6px rgba(0, 0, 0, 0.29);
 }
-
+.acrylic-subtle-2,
 .acrylic-medium {
   position: relative;
   isolation: isolate;
@@ -54,6 +58,7 @@
 
 .acrylic-ultra-light,
 .acrylic-subtle,
+.acrylic-subtle-no-hover,
 .acrylic-light,
 .acrylic-input-chat-light,
 .acrylic-light-dark,
@@ -68,6 +73,7 @@
 .dark .acrylic-ultra-light-nb-2,
 .dark .acrylic-ultra-light,
 .dark .acrylic-subtle,
+.dark .acrylic-subtle-no-hover,
 .dark .acrylic-light,
 .dark .acrylic-input-chat-light,
 .dark .acrylic-light-dark,
@@ -89,7 +95,12 @@
 .acrylic-ultra-light-nb-2 {
   background-color: rgba(247, 247, 247, 0.15);
 }
-
+.acrylic-ultra-light-nb-3 {
+  background-color: rgba(245, 245, 245, 0.692);
+}
+.dark .acrylic-ultra-light-nb-3 {
+  background-color: rgba(24, 24, 24, 0.15);
+}
 .dark .acrylic-ultra-light-nb-2 {
   background-color: rgba(24, 24, 24, 0.15);
 }
@@ -110,8 +121,16 @@
   background-color: rgba(247, 247, 247, 0.438); /* 44% opacity */
 }
 
+.acrylic-subtle-no-hover {
+  background-color: rgba(252, 252, 252, 0.671);
+}
+
 .dark .acrylic-subtle {
   background-color: rgba(24, 24, 24, 0.027);
+}
+
+.dark .acrylic-subtle-no-hover {
+  background-color: rgba(24, 24, 24, 0.215);
 }
 
 /* Acrylic Light */
@@ -218,10 +237,12 @@
 /* Ensure content stays on top of the effect */
 .acrylic-ultra-light > *,
 .acrylic-subtle > *,
+.acrylic-subtle-no-hover > *,
 .acrylic-light > *,
 .acrylic-input-chat-light > *,
 .acrylic-light-dark > *,
 .acrylic > *,
+.acrylic-subtle-2 > *,
 .acrylic-medium > *,
 .acrylic-strong > *,
 .acrylic-extreme > * {
@@ -236,8 +257,13 @@
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
   }
+  .acrylic-subtle-2 {
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
 
-  .acrylic-subtle {
+  .acrylic-subtle,
+  .acrylic-subtle-no-hover {
     -webkit-backdrop-filter: blur(20px);
     backdrop-filter: blur(20px);
   }

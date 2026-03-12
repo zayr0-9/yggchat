@@ -648,7 +648,7 @@ export const CHATGPT_MODELS = [
     name: 'GPT-5.2 Codex',
     displayName: 'GPT-5.2 Codex',
     description: 'Latest GPT-5.2 Codex model for coding tasks',
-    contextLength: 200000,
+    contextLength: 400000,
     maxCompletionTokens: 16384,
   },
   {
@@ -656,7 +656,7 @@ export const CHATGPT_MODELS = [
     name: 'GPT-5.2',
     displayName: 'GPT-5.2',
     description: 'GPT-5.2 general model',
-    contextLength: 200000,
+    contextLength: 400000,
     maxCompletionTokens: 16384,
   },
   {

@@ -6,6 +6,7 @@ import os from 'os'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import './envLoader.js'
+import { ensureManagedHooksInitialized } from './hooks/hookStorage.js'
 import { startLocalServer, stopLocalServer } from './localServer.js'
 
 // Destructure autoUpdater from CommonJS module (ESM/CJS interop)
@@ -122,8 +123,10 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.yggdrasil.chat')
 }
 
-// Force dark mode for native UI elements (context menus, dialogs, etc.)
-nativeTheme.themeSource = 'dark'
+// Use system theme by default for native UI (context menus, dialogs, mica material).
+// Renderer can override this via ipc "theme:update".
+nativeTheme.themeSource = 'system'
+
 
 // Persistent storage for session data (initialized async)
 let store: any = null
@@ -287,8 +290,13 @@ function getIconPath(_isDark?: boolean) {
 //   if (mainWindow) applyTitleBarTheme(mainWindow)
 // })
 
+function isWindows11(): boolean {
+  return process.platform === 'win32' && Number(os.release().split('.')[2] ?? 0) >= 22000
+}
+
 function createWindow() {
   const iconPath = getIconPath(nativeTheme.shouldUseDarkColors)
+  const isWin11 = isWindows11()
 
   mainWindow = new BrowserWindow({
     title: 'Yggdrasil',
@@ -310,16 +318,23 @@ function createWindow() {
       ? {
           frame: false,
           titleBarOverlay: false,
+          backgroundMaterial: isWin11 ? 'acrylic' : 'none',
         }
       : process.platform === 'darwin'
         ? {
-            titleBarStyle: 'hidden', // Standard for macOS
+            titleBarStyle: 'hiddenInset',
+            vibrancy: 'under-window',
+            visualEffectState: 'active',
           }
         : {
             titleBarStyle: 'default', // Native title bar for Linux (safest)
           }),
     show: false, // Don't show until ready
   })
+
+  if (process.platform === 'win32' && isWin11) {
+    mainWindow.setBackgroundMaterial('acrylic')
+  }
 
   // applyTitleBarTheme(mainWindow)
 
@@ -636,6 +651,8 @@ function handleOAuthCallback(url: string) {
 app.whenReady().then(async () => {
   try {
     await initializeStore()
+    const managedHooksDirectory = await ensureManagedHooksInitialized()
+    console.log(`[Electron] Managed hooks directory ready at: ${managedHooksDirectory}`)
 
     if (isDebugMode) {
       const debugReasons: string[] = []
@@ -1575,10 +1592,17 @@ ipcMain.handle('window:close', async () => {
   }
 })
 
-// Theme synchronization - disabled (titlebar is now transparent)
-// Handler kept as no-op to prevent "No handler registered" errors
-ipcMain.handle('theme:update', async () => {
-  // No-op: theme sync disabled since titlebar is transparent
+// Theme synchronization for native UI + Windows material.
+ipcMain.handle('theme:update', async (_event, themePreference?: boolean | 'light' | 'dark' | 'system') => {
+  let resolvedThemeSource: 'light' | 'dark' | 'system' = 'system'
+
+  if (themePreference === 'light' || themePreference === 'dark' || themePreference === 'system') {
+    resolvedThemeSource = themePreference
+  } else if (typeof themePreference === 'boolean') {
+    resolvedThemeSource = themePreference ? 'dark' : 'light'
+  }
+
+  nativeTheme.themeSource = resolvedThemeSource
 })
 
 function configureAutoUpdater() {

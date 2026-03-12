@@ -158,51 +158,87 @@ export const selectStreamCountByType = createSelector([selectStreamingRoot], str
 })
 
 // Get the stream that should be displayed for the current view
-// This considers the current path and returns the most relevant active stream
+// This considers the current path and current conversation and returns the most relevant active stream
 export const selectCurrentViewStream = createSelector(
-  [selectStreamingRoot, (state: RootState) => state.chat.conversation.currentPath],
-  (streaming, currentPath) => {
-    // const lastMessageInPath = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null
-    const activeStreams = Object.entries(streaming.byId).filter(([, s]) => s.active)
+  [
+    selectStreamingRoot,
+    (state: RootState) => state.chat.conversation.currentPath,
+    (state: RootState) => state.chat.conversation.currentConversationId,
+  ],
+  (streaming, currentPath, currentConversationId) => {
+    const pathIds = new Set(currentPath.map(id => String(id)))
 
-    // Only log when there are active streams
-    if (activeStreams.length > 0) {
-      // console.log('[StreamSelector] lastInPath:', lastMessageInPath, 'activeStreams:', activeStreams.map(([id, s]) => ({
-      //   id: id.slice(-8),
-      //   root: s.lineage.rootMessageId?.slice(0, 8),
-      // })))
+    const activeStreams = Object.entries(streaming.byId).filter(([, stream]) => {
+      if (!stream.active) return false
+      if (currentConversationId == null) return true
+      return stream.conversationId != null && String(stream.conversationId) === String(currentConversationId)
+    })
+
+    if (activeStreams.length === 0) {
+      return null
     }
 
-    // First, try to find an active stream whose rootMessageId (target parent) matches the current path
-    // rootMessageId is the parent of the streaming message - updated when user message is created
-    for (const [id, stream] of Object.entries(streaming.byId)) {
-      if (!stream.active) continue
+    const scoreStreamForPath = (stream: (typeof activeStreams)[number][1]): number => {
+      let score = 0
 
-      const rootMsgId = stream.lineage.rootMessageId
+      const candidateIds = [
+        stream.messageId,
+        stream.streamingMessageId,
+        stream.lineage.rootMessageId,
+        stream.lineage.originMessageId,
+      ]
 
-      // Match ONLY if rootMessageId is in current path (streaming msg is on this branch)
-      if (rootMsgId && currentPath.includes(rootMsgId)) {
-        return { id, ...stream }
+      for (const candidateId of candidateIds) {
+        if (candidateId != null && pathIds.has(String(candidateId))) {
+          score += 100
+        }
+      }
+
+      if (stream.lineage.rootMessageId != null && pathIds.has(String(stream.lineage.rootMessageId))) {
+        score += 50
+      }
+      if (stream.lineage.originMessageId != null && pathIds.has(String(stream.lineage.originMessageId))) {
+        score += 25
+      }
+      if (streaming.primaryStreamId != null && streaming.primaryStreamId === activeStreams.find(([, s]) => s === stream)?.[0]) {
+        score += 5
+      }
+
+      return score
+    }
+
+    let bestMatch: { id: string; score: number; stream: (typeof activeStreams)[number][1] } | null = null
+
+    for (const [id, stream] of activeStreams) {
+      const score = scoreStreamForPath(stream)
+      if (score <= 0) continue
+      if (!bestMatch || score > bestMatch.score) {
+        bestMatch = { id, score, stream }
       }
     }
 
-    // If no branch-specific stream found, return primary stream if active
-    if (streaming.primaryStreamId) {
+    if (bestMatch) {
+      return { id: bestMatch.id, ...bestMatch.stream }
+    }
+
+    if (currentPath.length === 0 && streaming.primaryStreamId) {
       const primaryStream = streaming.byId[streaming.primaryStreamId]
-      if (primaryStream?.active) {
-        // console.log('[StreamSelector] fallback to primary')
+      if (
+        primaryStream?.active &&
+        (currentConversationId == null || String(primaryStream.conversationId) === String(currentConversationId))
+      ) {
         return { id: streaming.primaryStreamId, ...primaryStream }
       }
     }
 
-    // Return any active stream as fallback
-    for (const [id, stream] of Object.entries(streaming.byId)) {
-      if (stream.active) {
-        // console.log('[StreamSelector] fallback to any:', id.slice(-8))
-        return { id, ...stream }
-      }
+    // If exactly one active stream exists for this conversation, it is safe to show it.
+    if (activeStreams.length === 1) {
+      const [id, stream] = activeStreams[0]
+      return { id, ...stream }
     }
 
+    // Multiple active streams but none match the selected path strongly enough.
+    // Return null instead of showing the wrong stream from another branch.
     return null
   }
 )

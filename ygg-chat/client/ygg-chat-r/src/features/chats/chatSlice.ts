@@ -242,12 +242,14 @@ export const chatSlice = createSlice({
     sendingStarted: (state, action: PayloadAction<SendingStartedPayload | undefined>) => {
       const streamId = action.payload?.streamId ?? DEFAULT_STREAM_ID
       const streamType = action.payload?.streamType ?? 'primary'
+      const conversationId = action.payload?.conversationId ?? state.conversation.currentConversationId ?? null
       const lineage = action.payload?.lineage ?? {}
 
       // Create new stream state
       state.streaming.byId[streamId] = {
         ...createEmptyStreamState(streamType, lineage),
         active: true,
+        conversationId,
       }
 
       // Add to active list (dedupe)

@@ -47,7 +47,7 @@ interface ElectronAPI {
     isCompact: () => Promise<boolean>
   }
   theme: {
-    update: (isDark: boolean) => Promise<void>
+    update: (themePreference: boolean | 'light' | 'dark' | 'system') => Promise<void>
   }
   sync: {
     status: () => Promise<{

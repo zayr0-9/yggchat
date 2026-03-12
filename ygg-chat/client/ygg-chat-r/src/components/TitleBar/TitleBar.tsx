@@ -4,8 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import './TitleBar.css'
 
 import { chatSliceActions, selectCcCwd, selectCurrentConversationId } from '../../features/chats'
-import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { buildRemoteMobileUrl, loadRemoteServerSettings } from '../../helpers/remoteServerSettingsStorage'
+import { useAppDispatch, useAppSelector } from '../../hooks/redux'
 import { getLocalServerLanOrigin, getLocalServerOrigin } from '../../utils/api'
 
 export const TitleBar = () => {
@@ -125,121 +125,37 @@ export const TitleBar = () => {
   return (
     <div className={`titlebar ${isChatPage ? 'titlebar-chat' : ''}`}>
       <div className='titlebar-drag-region'>
-        <div
-          style={
-            { display: 'flex', alignItems: 'center', gap: '2px', WebkitAppRegion: 'no-drag' } as React.CSSProperties
-          }
-        >
-          <button
-            onClick={() => navigate(-1)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'inherit',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '4px',
-              borderRadius: '6px',
-              opacity: 0.8,
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={e => (
-              (e.currentTarget.style.opacity = '1'),
-              (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')
-            )}
-            onMouseLeave={e => (
-              (e.currentTarget.style.opacity = '0.8'),
-              (e.currentTarget.style.backgroundColor = 'transparent')
-            )}
-            title='Go Back'
-          >
-            <ChevronLeft size={16} strokeWidth={2} />
+        <div className='titlebar-nav-controls'>
+          <button className='titlebar-control-button titlebar-nav-button' onClick={() => navigate(-1)} title='Go Back'>
+            <span className='titlebar-control-icon-shell titlebar-nav-icon-shell acrylic-ultra-light-nb-3'>
+              <ChevronLeft size={32} strokeWidth={2} />
+            </span>
           </button>
           <button
+            className='titlebar-control-button titlebar-nav-button'
             onClick={() => navigate(1)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'inherit',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '4px',
-              borderRadius: '6px',
-              opacity: 0.8,
-              transition: 'all 0.2s ease',
-            }}
-            onMouseEnter={e => (
-              (e.currentTarget.style.opacity = '1'),
-              (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)')
-            )}
-            onMouseLeave={e => (
-              (e.currentTarget.style.opacity = '0.8'),
-              (e.currentTarget.style.backgroundColor = 'transparent')
-            )}
             title='Go Forward'
           >
-            <ChevronRight size={16} strokeWidth={2} />
+            <span className='titlebar-control-icon-shell titlebar-nav-icon-shell acrylic-ultra-light-nb-3'>
+              <ChevronRight size={16} strokeWidth={2} />
+            </span>
           </button>
         </div>
       </div>
       <div className='titlebar-controls'>
         <button
           type='button'
+          className='titlebar-pill titlebar-remote-pill acrylic-light'
           onClick={handleOpenRemoteServerUi}
-          style={{
-            marginRight: '6px',
-            marginTop: '4px',
-            marginBottom: '4px',
-            fontSize: '11px',
-            lineHeight: '1',
-            color: 'rgb(255, 255, 255)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: 'flex',
-            alignItems: 'center',
-            userSelect: 'none',
-            cursor: 'pointer',
-            backgroundColor: 'rgba(255, 255, 255, 0.34)',
-            borderRadius: '9999px',
-            padding: '1px 10px',
-            minHeight: '18px',
-            border: 'none',
-          }}
           title='Open remote server UI (/mobile) in default browser'
         >
-          <span style={{ fontWeight: 500 }}>remote server</span>
+          <span className='titlebar-pill-label'>remote</span>
         </button>
         <button
           type='button'
-          className='cwd-pill'
+          className='titlebar-pill cwd-pill acrylic-light'
           onClick={handlePickCwd}
           disabled={!canPickCwd}
-          style={{
-            marginRight: '2px',
-            marginTop: '4px',
-            marginBottom: '4px',
-            fontSize: '11px',
-            lineHeight: '1', // tighter text box
-            color: 'rgb(255, 255, 255)',
-            maxWidth: '300px',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: 'flex',
-            alignItems: 'center',
-            userSelect: 'none',
-            cursor: canPickCwd ? 'pointer' : 'default',
-            backgroundColor: 'rgba(255, 255, 255, 0.34)',
-            borderRadius: '9999px',
-            padding: '1px 12px', // was 0px 16px
-            minHeight: '18px', // optional: force slimmer height
-            border: 'none',
-          }}
           title={
             canPickCwd
               ? currentCwd
@@ -249,63 +165,71 @@ export const TitleBar = () => {
           }
         >
           {currentCwd ? (
-            <span className='cwd-pill-text cwd-pill-text-scroll' style={{ fontFamily: 'monospace' }}>
-              {currentCwd}
-            </span>
+            <span className='cwd-pill-text cwd-pill-text-scroll titlebar-pill-mono'>{currentCwd}</span>
           ) : (
-            <span className='cwd-pill-text' style={{ fontStyle: 'italic', opacity: 1 }}>
-              Select a work folder
-            </span>
+            <span className='cwd-pill-text titlebar-pill-empty'>Select a work folder</span>
           )}
         </button>
         <button
-          className='titlebar-button titlebar-compact'
+          className={`titlebar-control-button titlebar-compact ${isCompact ? 'titlebar-compact-active' : ''}`}
           onClick={handleToggleCompact}
           disabled={isCompactLoading}
           aria-label={isCompact ? 'Disable Floating Mode' : 'Enable Floating Mode'}
           title={isCompact ? 'Disable Floating Mode' : 'Enable Floating Mode'}
         >
-          {isCompactLoading ? (
-            <svg width='10' height='10' viewBox='0 0 10 10' className='animate-spin'>
-              <circle cx='5' cy='5' r='4' fill='none' stroke='currentColor' strokeWidth='1' strokeDasharray='12 6' />
-            </svg>
-          ) : isCompact ? (
-            <svg width='10' height='10' viewBox='0 0 10 10'>
-              <path fill='currentColor' d='M0 0v4h1V1h3V0H0zm6 0v1h3v3h1V0H6zM0 6v4h4V9H1V6H0zm9 0v3H6v1h4V6H9z' />
-            </svg>
-          ) : (
-            <svg width='10' height='10' viewBox='0 0 10 10'>
-              <path fill='currentColor' d='M3 0v1H1v2H0V0h3zm4 0h3v3H9V1H7V0zM0 7h1v2h2v1H0V7zm9 0h1v3H7V9h2V7z' />
-            </svg>
-          )}
+          <span className='titlebar-control-icon-shell acrylic-subtle'>
+            {isCompactLoading ? (
+              <svg width='10' height='10' viewBox='0 0 10 10' className='animate-spin'>
+                <circle cx='5' cy='5' r='4' fill='none' stroke='currentColor' strokeWidth='1' strokeDasharray='12 6' />
+              </svg>
+            ) : (
+              <svg width='10' height='10' viewBox='0 0 10 10' aria-hidden='true'>
+                <path
+                  fill='currentColor'
+                  d='M2.5 1A1.5 1.5 0 0 0 1 2.5v3A1.5 1.5 0 0 0 2.5 7H3V6h-.5a.5.5 0 0 1-.5-.5v-3a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V3h1v-.5A1.5 1.5 0 0 0 6.5 1h-4zm2 3A1.5 1.5 0 0 0 3 5.5v2A1.5 1.5 0 0 0 4.5 9h3A1.5 1.5 0 0 0 9 7.5v-2A1.5 1.5 0 0 0 7.5 4h-3zm0 1h3a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-2a.5.5 0 0 1 .5-.5z'
+                />
+              </svg>
+            )}
+          </span>
         </button>
         <button
-          className='titlebar-button titlebar-minimize'
+          className='titlebar-control-button titlebar-minimize'
           onClick={handleMinimize}
           aria-label='Minimize'
           title='Minimize'
         >
-          <svg width='10' height='1' viewBox='0 0 10 1'>
-            <rect fill='currentColor' width='10' height='1' />
-          </svg>
+          <span className='titlebar-control-icon-shell acrylic-subtle'>
+            <svg width='10' height='1' viewBox='0 0 10 1'>
+              <rect fill='currentColor' width='10' height='1' />
+            </svg>
+          </span>
         </button>
         <button
-          className='titlebar-button titlebar-maximize'
+          className='titlebar-control-button titlebar-maximize'
           onClick={handleMaximize}
           aria-label='Maximize'
           title='Maximize'
         >
-          <svg width='10' height='10' viewBox='0 0 10 10'>
-            <path fill='currentColor' d='M0 0v10h10V0H0zm1 1h8v8H1V1z' />
-          </svg>
+          <span className='titlebar-control-icon-shell acrylic-subtle'>
+            <svg width='10' height='10' viewBox='0 0 10 10'>
+              <path fill='currentColor' d='M0 0v10h10V0H0zm1 1h8v8H1V1z' />
+            </svg>
+          </span>
         </button>
-        <button className='titlebar-button titlebar-close' onClick={handleClose} aria-label='Close' title='Close'>
-          <svg width='10' height='10' viewBox='0 0 10 10'>
-            <path
-              fill='currentColor'
-              d='M1.207.293l-.914.914L4.086 5 .293 8.793l.914.914L5 5.914l3.793 3.793.914-.914L5.914 5l3.793-3.793-.914-.914L5 4.086 1.207.293z'
-            />
-          </svg>
+        <button
+          className='titlebar-control-button titlebar-close'
+          onClick={handleClose}
+          aria-label='Close'
+          title='Close'
+        >
+          <span className='titlebar-control-icon-shell acrylic-subtle'>
+            <svg width='10' height='10' viewBox='0 0 10 10'>
+              <path
+                fill='currentColor'
+                d='M1.207.293l-.914.914L4.086 5 .293 8.793l.914.914L5 5.914l3.793 3.793.914-.914L5.914 5l3.793-3.793-.914-.914L5 4.086 1.207.293z'
+              />
+            </svg>
+          </span>
         </button>
       </div>
     </div>
