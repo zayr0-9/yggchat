@@ -8,6 +8,13 @@ import remarkMath from 'remark-math'
 import changelogMarkdown from '../../CHANGELOG.md?raw'
 import { Button, Select } from '../components'
 import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
+import {
+  getThemeModeColor,
+  saveCustomChatTheme,
+  setCustomChatThemeEnabled,
+  useCustomChatTheme,
+  useHtmlDarkMode,
+} from '../components/ThemeManager/themeConfig'
 import { chatSliceActions, selectProviderState } from '../features/chats'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../features/chats/chatActions'
 import { clearTokens as clearOpenAITokens, isOpenAIAuthenticated } from '../features/chats/openaiOAuth'
@@ -147,6 +154,11 @@ const Settings: React.FC = () => {
   const providers = useAppSelector(selectProviderState)
   const htmlRegistry = useHtmlIframeRegistry()
   const htmlEntries = htmlRegistry?.entries.filter(entry => entry.kind === 'html') ?? []
+  const { theme: customTheme, enabled: customThemeEnabled } = useCustomChatTheme()
+  const isDarkMode = useHtmlDarkMode()
+  const settingsSolidColorSectionBackground = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.settingsSolidColorSectionBg, isDarkMode)
+    : undefined
 
   // Tools state
   const tools = getAllTools()
@@ -166,6 +178,9 @@ const Settings: React.FC = () => {
   const [activeVideoId, setActiveVideoId] = useState<string | null>(() => loadActiveCustomVideoId())
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>(() => loadBackgroundMode())
   const [backgroundColors, setBackgroundColors] = useState<BackgroundColorSettings>(() => loadBackgroundColors())
+  const effectiveBackgroundColors = customThemeEnabled
+    ? customTheme.colors.appBackgroundColor
+    : backgroundColors
   const [uploading, setUploading] = useState(false)
   const [googleConnecting, setGoogleConnecting] = useState(false)
   const [googleDisconnecting, setGoogleDisconnecting] = useState(false)
@@ -1186,6 +1201,22 @@ const Settings: React.FC = () => {
   }
 
   const handleBackgroundColorChange = (variant: 'light' | 'dark', value: string) => {
+    if (customThemeEnabled) {
+      const nextTheme = {
+        ...customTheme,
+        colors: {
+          ...customTheme.colors,
+          appBackgroundColor: {
+            ...customTheme.colors.appBackgroundColor,
+            [variant]: value,
+          },
+        },
+      }
+      saveCustomChatTheme(nextTheme)
+      setCustomChatThemeEnabled(true)
+      return
+    }
+
     const nextColors = { ...backgroundColors, [variant]: value }
     persistBackgroundColors(nextColors)
     setBackgroundColors(loadBackgroundColors())
@@ -2463,7 +2494,10 @@ const Settings: React.FC = () => {
           </div>
         </section>
 
-        <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:bg-zinc-900/60 dark:shadow-black/20'>
+        <section
+          className={`rounded-2xl border border-neutral-200 p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20 ${customThemeEnabled ? '' : 'mica dark:bg-zinc-900/60'}`}
+          style={{ backgroundColor: customThemeEnabled ? settingsSolidColorSectionBackground : undefined }}
+        >
           <div className='flex flex-col gap-1'>
             <div className='flex flex-wrap items-center justify-between gap-3'>
               <div>
@@ -2497,7 +2531,7 @@ const Settings: React.FC = () => {
                 mode === 'light'
                   ? 'Used when the interface is in light theme.'
                   : 'Used when the interface is in dark theme.'
-              const colorValue = backgroundColors[mode]
+              const colorValue = effectiveBackgroundColors[mode]
               const isTransparentColor = colorValue.trim().toLowerCase() === 'transparent'
               const colorPickerValue = isTransparentColor ? DEFAULT_BACKGROUND_COLORS[mode] : colorValue
               return (

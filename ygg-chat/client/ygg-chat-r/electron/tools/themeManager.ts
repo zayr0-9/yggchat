@@ -1,21 +1,29 @@
-import { useEffect, useState } from 'react'
+import { app } from 'electron'
+import fs from 'fs/promises'
+import path from 'path'
 
-export type ThemeMode = 'light' | 'dark'
-export type ChatThemeRoleKey = 'user' | 'assistant' | 'system' | 'ex_agent' | 'unknown'
-export type HeimdallNodeThemeKey = 'user' | 'assistant' | 'ex_agent'
+const YGG_DIR_NAME = '.ygg'
+const CUSTOM_THEMES_DIR_NAME = 'custom-themes'
+const THEME_FILE_EXTENSION = '.json'
+const MAX_LIST_RESULTS = 50
 
-export interface ThemeColorPair {
+export type ThemeManagerAction = 'template' | 'list' | 'read' | 'save' | 'delete'
+
+type ChatThemeRoleKey = 'user' | 'assistant' | 'system' | 'ex_agent' | 'unknown'
+type HeimdallNodeThemeKey = 'user' | 'assistant' | 'ex_agent'
+
+interface ThemeColorPair {
   light: string
   dark: string
 }
 
-export interface ChatMessageRoleTheme {
+interface ChatMessageRoleTheme {
   containerBg: ThemeColorPair
   border: ThemeColorPair
   roleText: ThemeColorPair
 }
 
-export interface HeimdallNodeTheme {
+interface HeimdallNodeTheme {
   fill: ThemeColorPair
   stroke: ThemeColorPair
   visibleStroke: ThemeColorPair
@@ -45,9 +53,34 @@ export interface CustomChatTheme {
   }
 }
 
-export const CHAT_CUSTOM_THEME_STORAGE_KEY = 'chat:customTheme'
-export const CHAT_CUSTOM_THEME_ENABLED_STORAGE_KEY = 'chat:customThemeEnabled'
-export const CHAT_CUSTOM_THEME_CHANGE_EVENT = 'chatCustomThemeChange'
+export interface ThemeManagerArgs {
+  action: ThemeManagerAction
+  name?: string
+  theme?: unknown
+}
+
+export interface ThemeManagerListItem {
+  id: string
+  fileName: string
+  name: string
+  modifiedAt: string
+}
+
+export interface ThemeManagerResult {
+  success: boolean
+  error?: string
+  directory?: string
+  action?: ThemeManagerAction
+  themes?: ThemeManagerListItem[]
+  totalCount?: number
+  exists?: boolean
+  id?: string
+  fileName?: string
+  modifiedAt?: string
+  deleted?: boolean
+  created?: boolean
+  theme?: CustomChatTheme
+}
 
 const MESSAGE_ROLE_KEYS: ChatThemeRoleKey[] = ['user', 'assistant', 'system', 'ex_agent', 'unknown']
 const HEIMDALL_NODE_KEYS: HeimdallNodeThemeKey[] = ['user', 'assistant', 'ex_agent']
@@ -253,147 +286,271 @@ export const sanitizeCustomTheme = (value: unknown): CustomChatTheme => {
   }
 }
 
-const emitCustomThemeChange = () => {
-  if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent(CHAT_CUSTOM_THEME_CHANGE_EVENT))
+function pathExists(targetPath: string): Promise<boolean> {
+  return fs
+    .access(targetPath)
+    .then(() => true)
+    .catch(() => false)
 }
 
-export const getStoredCustomChatTheme = (): CustomChatTheme => {
-  if (typeof window === 'undefined') {
-    return createDefaultCustomChatTheme()
-  }
+async function copyMissingTree(sourcePath: string, targetPath: string): Promise<void> {
+  const sourceStats = await fs.stat(sourcePath)
 
-  try {
-    const stored = window.localStorage.getItem(CHAT_CUSTOM_THEME_STORAGE_KEY)
-    if (!stored) {
-      return createDefaultCustomChatTheme()
+  if (sourceStats.isDirectory()) {
+    await fs.mkdir(targetPath, { recursive: true })
+    const entries = await fs.readdir(sourcePath, { withFileTypes: true })
+    for (const entry of entries) {
+      await copyMissingTree(path.join(sourcePath, entry.name), path.join(targetPath, entry.name))
     }
-
-    const parsed = JSON.parse(stored)
-    return sanitizeCustomTheme(parsed)
-  } catch {
-    return createDefaultCustomChatTheme()
+    return
   }
+
+  if (await pathExists(targetPath)) {
+    return
+  }
+
+  await fs.mkdir(path.dirname(targetPath), { recursive: true })
+  await fs.copyFile(sourcePath, targetPath)
 }
 
-export const saveCustomChatTheme = (theme: CustomChatTheme): void => {
-  if (typeof window === 'undefined') return
+function getManagedThemesDirectory(): string {
+  const envOverride = process.env.YGG_THEME_DIRECTORY?.trim()
+  if (envOverride) {
+    return path.resolve(envOverride)
+  }
 
   try {
-    window.localStorage.setItem(CHAT_CUSTOM_THEME_STORAGE_KEY, JSON.stringify(theme))
-    emitCustomThemeChange()
+    return path.join(app.getPath('userData'), YGG_DIR_NAME, CUSTOM_THEMES_DIR_NAME)
   } catch {
-    // Ignore localStorage write errors
+    return path.resolve(process.cwd(), YGG_DIR_NAME, CUSTOM_THEMES_DIR_NAME)
   }
 }
 
-export const getCustomChatThemeEnabled = (): boolean => {
-  if (typeof window === 'undefined') return false
+function getBundledThemesDirectory(): string {
+  const envOverride = process.env.YGG_THEME_TEMPLATE_DIRECTORY?.trim()
+  if (envOverride) {
+    return path.resolve(envOverride)
+  }
 
   try {
-    return window.localStorage.getItem(CHAT_CUSTOM_THEME_ENABLED_STORAGE_KEY) === 'true'
-  } catch {
-    return false
-  }
-}
-
-export const setCustomChatThemeEnabled = (enabled: boolean): void => {
-  if (typeof window === 'undefined') return
-
-  try {
-    window.localStorage.setItem(CHAT_CUSTOM_THEME_ENABLED_STORAGE_KEY, String(enabled))
-    emitCustomThemeChange()
-  } catch {
-    // Ignore localStorage write errors
-  }
-}
-
-export const resetCustomChatTheme = (): void => {
-  saveCustomChatTheme(createDefaultCustomChatTheme())
-}
-
-export const getThemeModeColor = (pair: ThemeColorPair, isDarkMode: boolean): string =>
-  isDarkMode ? pair.dark : pair.light
-
-export const resolveRoleThemeKey = (role: string): ChatThemeRoleKey => {
-  switch (role) {
-    case 'user':
-      return 'user'
-    case 'assistant':
-      return 'assistant'
-    case 'system':
-      return 'system'
-    case 'ex_agent':
-      return 'ex_agent'
-    default:
-      return 'unknown'
-  }
-}
-
-export const resolveHeimdallNodeThemeKey = (sender: string): HeimdallNodeThemeKey => {
-  switch (sender) {
-    case 'user':
-      return 'user'
-    case 'ex_agent':
-      return 'ex_agent'
-    default:
-      return 'assistant'
-  }
-}
-
-export const useHtmlDarkMode = (): boolean => {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    if (typeof document === 'undefined') return false
-    return document.documentElement.classList.contains('dark')
-  })
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return
-
-    const checkDarkMode = () => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'))
+    if (app.isPackaged) {
+      return path.join(process.resourcesPath, YGG_DIR_NAME, CUSTOM_THEMES_DIR_NAME)
     }
+    return path.join(app.getAppPath(), YGG_DIR_NAME, CUSTOM_THEMES_DIR_NAME)
+  } catch {
+    return path.resolve(process.cwd(), YGG_DIR_NAME, CUSTOM_THEMES_DIR_NAME)
+  }
+}
 
-    checkDarkMode()
+export async function ensureManagedThemesInitialized(): Promise<string> {
+  const managedThemesDir = getManagedThemesDirectory()
+  await fs.mkdir(managedThemesDir, { recursive: true })
 
-    const observer = new MutationObserver(checkDarkMode)
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
+  const bundledThemesDir = getBundledThemesDirectory()
+  const normalizedManaged = path.resolve(managedThemesDir)
+  const normalizedBundled = path.resolve(bundledThemesDir)
+
+  if (normalizedManaged === normalizedBundled) {
+    return managedThemesDir
+  }
+
+  if (!(await pathExists(bundledThemesDir))) {
+    return managedThemesDir
+  }
+
+  await copyMissingTree(bundledThemesDir, managedThemesDir)
+  return managedThemesDir
+}
+
+function normalizeThemeId(rawName: string): string {
+  const baseName = rawName.trim().replace(/\.json$/i, '')
+  const normalized = baseName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+
+  if (!normalized) {
+    throw new Error('Theme name must contain at least one letter or number')
+  }
+
+  return normalized
+}
+
+function getThemeFileName(id: string): string {
+  return `${id}${THEME_FILE_EXTENSION}`
+}
+
+async function listThemes(): Promise<ThemeManagerResult> {
+  const directory = await ensureManagedThemesInitialized()
+  const entries = await fs.readdir(directory)
+  const themeFiles = entries.filter(entry => entry.toLowerCase().endsWith(THEME_FILE_EXTENSION))
+
+  const themes = await Promise.all(
+    themeFiles.map(async fileName => {
+      const filePath = path.join(directory, fileName)
+      const stats = await fs.stat(filePath)
+      const rawContent = await fs.readFile(filePath, 'utf8')
+
+      let displayName = fileName.slice(0, -THEME_FILE_EXTENSION.length)
+      try {
+        const parsed = JSON.parse(rawContent)
+        const sanitizedTheme = sanitizeCustomTheme(parsed)
+        displayName = sanitizedTheme.name || displayName
+      } catch {
+        // Keep file-derived display name if the JSON cannot be parsed.
+      }
+
+      return {
+        id: fileName.slice(0, -THEME_FILE_EXTENSION.length),
+        fileName,
+        name: displayName,
+        modifiedAt: stats.mtime.toISOString(),
+        mtimeMs: stats.mtimeMs,
+      }
     })
+  )
 
-    return () => observer.disconnect()
-  }, [])
+  themes.sort((a, b) => b.mtimeMs - a.mtimeMs)
 
-  return isDarkMode
+  return {
+    success: true,
+    action: 'list',
+    directory,
+    themes: themes.slice(0, MAX_LIST_RESULTS).map(theme => ({
+      id: theme.id,
+      fileName: theme.fileName,
+      name: theme.name,
+      modifiedAt: theme.modifiedAt,
+    })),
+    totalCount: themes.length,
+  }
 }
 
-export const useCustomChatTheme = () => {
-  const [theme, setTheme] = useState<CustomChatTheme>(() => getStoredCustomChatTheme())
-  const [enabled, setEnabled] = useState<boolean>(() => getCustomChatThemeEnabled())
+async function readTheme(name: string): Promise<ThemeManagerResult> {
+  const directory = await ensureManagedThemesInitialized()
+  const id = normalizeThemeId(name)
+  const fileName = getThemeFileName(id)
+  const filePath = path.join(directory, fileName)
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const syncFromStorage = () => {
-      setTheme(getStoredCustomChatTheme())
-      setEnabled(getCustomChatThemeEnabled())
+  try {
+    const rawContent = await fs.readFile(filePath, 'utf8')
+    const parsed = JSON.parse(rawContent)
+    const theme = sanitizeCustomTheme(parsed)
+    const stats = await fs.stat(filePath)
+    return {
+      success: true,
+      action: 'read',
+      directory,
+      exists: true,
+      id,
+      fileName,
+      modifiedAt: stats.mtime.toISOString(),
+      theme,
     }
-
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === CHAT_CUSTOM_THEME_STORAGE_KEY || event.key === CHAT_CUSTOM_THEME_ENABLED_STORAGE_KEY) {
-        syncFromStorage()
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {
+        success: true,
+        action: 'read',
+        directory,
+        exists: false,
+        id,
+        fileName,
       }
     }
 
-    window.addEventListener(CHAT_CUSTOM_THEME_CHANGE_EVENT, syncFromStorage)
-    window.addEventListener('storage', handleStorage)
+    throw error
+  }
+}
 
-    return () => {
-      window.removeEventListener(CHAT_CUSTOM_THEME_CHANGE_EVENT, syncFromStorage)
-      window.removeEventListener('storage', handleStorage)
+async function saveTheme(name: string | undefined, themeValue: unknown): Promise<ThemeManagerResult> {
+  if (!themeValue) {
+    throw new Error('theme is required for save')
+  }
+
+  const sanitizedTheme = sanitizeCustomTheme(themeValue)
+  const id = normalizeThemeId(name || sanitizedTheme.name)
+  const fileName = getThemeFileName(id)
+  const directory = await ensureManagedThemesInitialized()
+  const filePath = path.join(directory, fileName)
+  const created = !(await pathExists(filePath))
+
+  const themeToSave: CustomChatTheme = {
+    ...sanitizedTheme,
+    name: sanitizedTheme.name || name || id,
+  }
+
+  await fs.writeFile(filePath, `${JSON.stringify(themeToSave, null, 2)}\n`, 'utf8')
+  const stats = await fs.stat(filePath)
+
+  return {
+    success: true,
+    action: 'save',
+    directory,
+    id,
+    fileName,
+    modifiedAt: stats.mtime.toISOString(),
+    created,
+    theme: themeToSave,
+  }
+}
+
+async function deleteTheme(name: string): Promise<ThemeManagerResult> {
+  const directory = await ensureManagedThemesInitialized()
+  const id = normalizeThemeId(name)
+  const fileName = getThemeFileName(id)
+  const filePath = path.join(directory, fileName)
+
+  try {
+    await fs.unlink(filePath)
+    return {
+      success: true,
+      action: 'delete',
+      directory,
+      id,
+      fileName,
+      deleted: true,
     }
-  }, [])
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {
+        success: true,
+        action: 'delete',
+        directory,
+        id,
+        fileName,
+        deleted: false,
+      }
+    }
 
-  return { theme, enabled }
+    throw error
+  }
+}
+
+export async function execute(args: ThemeManagerArgs): Promise<ThemeManagerResult> {
+  const { action, name, theme } = args
+
+  switch (action) {
+    case 'template': {
+      const directory = await ensureManagedThemesInitialized()
+      return {
+        success: true,
+        action: 'template',
+        directory,
+        theme: createDefaultCustomChatTheme(),
+      }
+    }
+    case 'list':
+      return await listThemes()
+    case 'read':
+      if (!name) throw new Error('name is required for read')
+      return await readTheme(name)
+    case 'save':
+      return await saveTheme(name, theme)
+    case 'delete':
+      if (!name) throw new Error('name is required for delete')
+      return await deleteTheme(name)
+    default:
+      throw new Error(`Unsupported theme_manager action: ${String(action)}`)
+  }
 }

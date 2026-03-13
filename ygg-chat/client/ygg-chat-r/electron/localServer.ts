@@ -13,6 +13,7 @@ import type { AddressInfo } from 'net'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 import { WebSocket, WebSocketServer } from 'ws'
+import { isManagedToolPath } from './utils/managedToolPaths.js'
 
 // Tool imports
 import { registerHeadlessServerRoutes } from './headlessServer/index.js'
@@ -43,6 +44,7 @@ import { readFileContinuation, readTextFile } from './tools/readFile.js'
 import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { UtilityToolRuntimeHost } from './tools/runtime/UtilityToolRuntimeHost.js'
+import { execute as executeThemeManager } from './tools/themeManager.js'
 import { createTodoList, editTodoList, listTodoLists, readTodoList } from './tools/todoMd.js'
 
 /**
@@ -87,6 +89,11 @@ function validateAndResolvePath(
     relativeToRoot === '..' || relativeToRoot.startsWith(`..${pathModule.sep}`) || pathModule.isAbsolute(relativeToRoot)
 
   if (outsideWorkspace) {
+    const rootIsManagedPath = isManagedToolPath(normalizedRoot, usePosix)
+    const targetIsManagedPath = isManagedToolPath(resolvedPath, usePosix)
+    if (!rootIsManagedPath && targetIsManagedPath) {
+      return resolvedPath
+    }
     throw new Error(`Path must be within workspace: ${rootPath}`)
   }
 
@@ -383,8 +390,8 @@ const UTILITY_RUNTIME_TOOL_WHITELIST = new Set<string>([
   'html_renderer',
 ])
 
-function shouldUseUtilityRuntimeForTool(_toolName: string): boolean {
-  return true
+function shouldUseUtilityRuntimeForTool(toolName: string): boolean {
+  return UTILITY_RUNTIME_TOOL_WHITELIST.has(toolName)
 }
 
 function shouldUseUtilityRuntimeForCustomTool(toolName: string): boolean {
@@ -601,6 +608,10 @@ function initializeBuiltInToolRegistry() {
       default:
         throw new Error(`Unsupported todo_list action: ${action}`)
     }
+  })
+
+  builtInTools.set('theme_manager', async args => {
+    return await executeThemeManager(args)
   })
 
   builtInTools.set('custom_tool_manager', async (args, options) => {

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url'
 import './envLoader.js'
 import { ensureManagedHooksInitialized } from './hooks/hookStorage.js'
 import { startLocalServer, stopLocalServer } from './localServer.js'
+import { ensureManagedThemesInitialized } from './tools/themeManager.js'
 
 // Destructure autoUpdater from CommonJS module (ESM/CJS interop)
 const { autoUpdater } = autoUpdaterPkg
@@ -651,8 +652,11 @@ function handleOAuthCallback(url: string) {
 app.whenReady().then(async () => {
   try {
     await initializeStore()
+    process.env.YGG_APP_USER_DATA = app.getPath('userData')
     const managedHooksDirectory = await ensureManagedHooksInitialized()
     console.log(`[Electron] Managed hooks directory ready at: ${managedHooksDirectory}`)
+    const managedThemesDirectory = await ensureManagedThemesInitialized()
+    console.log(`[Electron] Managed themes directory ready at: ${managedThemesDirectory}`)
 
     if (isDebugMode) {
       const debugReasons: string[] = []

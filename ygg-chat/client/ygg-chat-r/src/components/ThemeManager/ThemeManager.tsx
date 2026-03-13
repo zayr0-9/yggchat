@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import {
   type ChatThemeRoleKey,
   type CustomChatTheme,
   createDefaultCustomChatTheme,
   type HeimdallNodeThemeKey,
+  sanitizeCustomTheme,
   saveCustomChatTheme,
   setCustomChatThemeEnabled,
   useCustomChatTheme,
@@ -210,13 +211,14 @@ const PairEditor: React.FC<PairEditorProps> = ({ label, value, onChange }) => {
 
 export const ThemeManager: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [statusText, setStatusText] = useState<string>('')
+  const [status, setStatusState] = useState<{ text: string; tone: 'success' | 'error' } | null>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
   const { theme, enabled } = useCustomChatTheme()
 
-  const setStatus = useCallback((text: string) => {
-    setStatusText(text)
+  const setStatus = useCallback((text: string, tone: 'success' | 'error' = 'success') => {
+    setStatusState({ text, tone })
     window.setTimeout(() => {
-      setStatusText(prev => (prev === text ? '' : prev))
+      setStatusState(prev => (prev?.text === text ? null : prev))
     }, 2500)
   }, [])
 
@@ -267,7 +269,24 @@ export const ThemeManager: React.FC = () => {
   )
 
   const handleChatSurfaceChange = useCallback(
-    (key: 'heimdallPanelBg', mode: 'light' | 'dark', nextValue: string) => {
+    (
+      key:
+        | 'heimdallPanelBg'
+        | 'conversationToolbarBg'
+        | 'settingsSolidColorSectionBg'
+        | 'appBackgroundColor'
+        | 'settingsPaneBodyBg'
+        | 'chatInputAreaBorder'
+        | 'chatProgressBarFill'
+        | 'actionPopoverBorder'
+        | 'sendButtonAnimationColor'
+        | 'streamingAnimationColor'
+        | 'heimdallNotePillBg'
+        | 'heimdallNotePillText'
+        | 'heimdallNotePillBorder',
+      mode: 'light' | 'dark',
+      nextValue: string
+    ) => {
       updateTheme(current => ({
         ...current,
         colors: {
@@ -334,6 +353,71 @@ export const ThemeManager: React.FC = () => {
       }))
     },
     [updateTheme]
+  )
+
+  const applyImportedTheme = useCallback(
+    (rawTheme: string, sourceLabel: string) => {
+      try {
+        const parsed = JSON.parse(rawTheme)
+        const nextTheme = sanitizeCustomTheme(parsed)
+        saveCustomChatTheme(nextTheme)
+        setCustomChatThemeEnabled(true)
+        setStatus(`Theme loaded from ${sourceLabel}`)
+      } catch (error) {
+        setStatus(error instanceof Error ? `Failed to import theme: ${error.message}` : 'Failed to import theme', 'error')
+      }
+    },
+    [setStatus]
+  )
+
+  const handleImportFromDisk = useCallback(async () => {
+    try {
+      const electronApi = window.electronAPI
+      if (electronApi?.dialog?.openFile && electronApi?.fs?.readFile) {
+        const result = await electronApi.dialog.openFile({
+          title: 'Import Theme JSON',
+          filters: [{ name: 'JSON', extensions: ['json'] }],
+          properties: ['openFile'],
+        })
+
+        if (!result?.success || !result.filePath) {
+          return
+        }
+
+        const readResult = await electronApi.fs.readFile(result.filePath, 'utf8')
+        if (typeof readResult === 'string') {
+          applyImportedTheme(readResult, result.filePath)
+          return
+        }
+
+        if (!readResult?.success || typeof readResult.content !== 'string') {
+          throw new Error(readResult?.error || 'Unable to read selected theme file')
+        }
+
+        applyImportedTheme(readResult.content, result.filePath)
+        return
+      }
+
+      importInputRef.current?.click()
+    } catch (error) {
+      setStatus(error instanceof Error ? `Failed to open theme file: ${error.message}` : 'Failed to open theme file', 'error')
+    }
+  }, [applyImportedTheme, setStatus])
+
+  const handleImportInputChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ''
+      if (!file) return
+
+      try {
+        const rawTheme = await file.text()
+        applyImportedTheme(rawTheme, file.name)
+      } catch (error) {
+        setStatus(error instanceof Error ? `Failed to read theme file: ${error.message}` : 'Failed to read theme file', 'error')
+      }
+    },
+    [applyImportedTheme, setStatus]
   )
 
   const handleExport = useCallback(() => {
@@ -415,6 +499,51 @@ export const ThemeManager: React.FC = () => {
               value={theme.colors.heimdallPanelBg}
               onChange={(mode, value) => handleChatSurfaceChange('heimdallPanelBg', mode, value)}
             />
+            <PairEditor
+              label='Conversation toolbar bubble'
+              value={theme.colors.conversationToolbarBg}
+              onChange={(mode, value) => handleChatSurfaceChange('conversationToolbarBg', mode, value)}
+            />
+            <PairEditor
+              label='Settings solid-color section background'
+              value={theme.colors.settingsSolidColorSectionBg}
+              onChange={(mode, value) => handleChatSurfaceChange('settingsSolidColorSectionBg', mode, value)}
+            />
+            <PairEditor
+              label='App solid background colors (Settings > Solid Color Background)'
+              value={theme.colors.appBackgroundColor}
+              onChange={(mode, value) => handleChatSurfaceChange('appBackgroundColor', mode, value)}
+            />
+            <PairEditor
+              label='Settings pane full body background'
+              value={theme.colors.settingsPaneBodyBg}
+              onChange={(mode, value) => handleChatSurfaceChange('settingsPaneBodyBg', mode, value)}
+            />
+            <PairEditor
+              label='Chat input area border'
+              value={theme.colors.chatInputAreaBorder}
+              onChange={(mode, value) => handleChatSurfaceChange('chatInputAreaBorder', mode, value)}
+            />
+            <PairEditor
+              label='Chat progress bar fill'
+              value={theme.colors.chatProgressBarFill}
+              onChange={(mode, value) => handleChatSurfaceChange('chatProgressBarFill', mode, value)}
+            />
+            <PairEditor
+              label='Action popover border'
+              value={theme.colors.actionPopoverBorder}
+              onChange={(mode, value) => handleChatSurfaceChange('actionPopoverBorder', mode, value)}
+            />
+            <PairEditor
+              label='Send button loading animation color'
+              value={theme.colors.sendButtonAnimationColor}
+              onChange={(mode, value) => handleChatSurfaceChange('sendButtonAnimationColor', mode, value)}
+            />
+            <PairEditor
+              label='Streaming loading animation color'
+              value={theme.colors.streamingAnimationColor}
+              onChange={(mode, value) => handleChatSurfaceChange('streamingAnimationColor', mode, value)}
+            />
           </div>
 
           <div className='space-y-3'>
@@ -443,6 +572,21 @@ export const ThemeManager: React.FC = () => {
 
           <div className='space-y-3'>
             <h4 className='text-sm font-semibold text-stone-700 dark:text-stone-200'>Heimdall node colors</h4>
+            <PairEditor
+              label='Heimdall note pill background'
+              value={theme.colors.heimdallNotePillBg}
+              onChange={(mode, value) => handleChatSurfaceChange('heimdallNotePillBg', mode, value)}
+            />
+            <PairEditor
+              label='Heimdall note pill text'
+              value={theme.colors.heimdallNotePillText}
+              onChange={(mode, value) => handleChatSurfaceChange('heimdallNotePillText', mode, value)}
+            />
+            <PairEditor
+              label='Heimdall note pill border'
+              value={theme.colors.heimdallNotePillBorder}
+              onChange={(mode, value) => handleChatSurfaceChange('heimdallNotePillBorder', mode, value)}
+            />
             {NODE_KEYS.map(sender => (
               <div key={sender} className='rounded-lg border border-neutral-200 dark:border-neutral-700 p-3 space-y-3'>
                 <p className='text-sm font-medium text-stone-700 dark:text-stone-200'>{NODE_LABELS[sender]}</p>
@@ -466,6 +610,20 @@ export const ThemeManager: React.FC = () => {
           </div>
 
           <div className='flex flex-wrap items-center gap-2'>
+            <input
+              ref={importInputRef}
+              type='file'
+              accept='application/json,.json'
+              className='hidden'
+              onChange={handleImportInputChange}
+            />
+            <button
+              type='button'
+              onClick={handleImportFromDisk}
+              className='px-3 py-2 rounded-lg text-sm bg-emerald-500 text-white hover:bg-emerald-600 transition-colors'
+            >
+              Import Theme JSON
+            </button>
             <button
               type='button'
               onClick={handleExport}
@@ -480,7 +638,17 @@ export const ThemeManager: React.FC = () => {
             >
               Reset to defaults
             </button>
-            {statusText && <span className='text-xs text-emerald-600 dark:text-emerald-400'>{statusText}</span>}
+            {status && (
+              <span
+                className={`text-xs ${
+                  status.tone === 'error'
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
+                {status.text}
+              </span>
+            )}
           </div>
         </div>
       )}

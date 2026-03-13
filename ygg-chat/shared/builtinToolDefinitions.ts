@@ -52,6 +52,35 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
     },
   },
   {
+    name: 'theme_manager',
+    enabled: true,
+    description:
+      'Manage custom chat theme JSON files in the managed .ygg/custom-themes directory. Use "template" to get the full schema/default theme, "list" to inspect saved themes, "read" to load one by name, "save" to write a validated theme JSON file, or "delete" to remove a saved theme.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['template', 'list', 'read', 'save', 'delete'],
+          description:
+            'Action to perform: "template" returns the default theme JSON/schema, "list" shows saved themes, "read" loads one theme by name, "save" validates and writes a theme JSON file, and "delete" removes a saved theme.',
+        },
+        name: {
+          type: 'string',
+          description:
+            'Theme name or file slug. Required for "read" and "delete". Optional for "save"; if omitted, the tool uses theme.name.',
+        },
+        theme: {
+          type: 'object',
+          description:
+            'Full or partial theme JSON object for "save". Missing keys are filled from the default theme schema before writing.',
+          additionalProperties: true,
+        },
+      },
+      required: ['action'],
+    },
+  },
+  {
     name: 'read_file',
     enabled: true,
     description:

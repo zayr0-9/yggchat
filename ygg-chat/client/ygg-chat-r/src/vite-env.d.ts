@@ -66,7 +66,22 @@ interface ElectronAPI {
     getClientErrorLogPath: () => Promise<{ success: boolean; error?: string; filePath?: string }>
   }
   dialog: {
-    selectFolder: () => Promise<{ success: boolean; path?: string; error?: string }>
+    openFile: (options?: {
+      title?: string
+      defaultPath?: string
+      filters?: { name: string; extensions: string[] }[]
+      properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
+    }) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; filePaths?: string[]; error?: string }>
+    saveFile: (options?: {
+      title?: string
+      defaultPath?: string
+      filters?: { name: string; extensions: string[] }[]
+    }) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; error?: string }>
+    selectFolder: (options?: { title?: string; defaultPath?: string }) => Promise<{ success: boolean; path?: string; error?: string }>
+  }
+  fs: {
+    readFile: (filePath: string, encoding?: BufferEncoding) => Promise<{ success: boolean; content?: string; error?: string } | string>
+    writeFile: (filePath: string, content: string, encoding?: BufferEncoding) => Promise<{ success: boolean; error?: string }>
   }
   autoUpdater: {
     check: () => Promise<{ success: boolean; error?: string }>

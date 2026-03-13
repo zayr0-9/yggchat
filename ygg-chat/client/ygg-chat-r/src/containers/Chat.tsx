@@ -25,6 +25,12 @@ import {
 } from '../components'
 import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import {
+  ChatInputBorderAnimationType,
+  getStoredChatInputBorderAnimation,
+  getStoredChatInputBorderDarkColor,
+  getStoredChatInputBorderLightColor,
+} from '../components/SettingsPane/ChatInputBorderAnimationSettings'
+import {
   getStoredSendButtonAnimation,
   getStoredSendButtonColor,
   getStoredStreamingAnimation,
@@ -632,6 +638,7 @@ const ChatInputController = React.memo(
             onAddCurrentIdeContext={onAddCurrentIdeContext}
             onClearIdeContexts={onClearIdeContexts}
             selectedIdeContextItems={selectedIdeContextItems}
+            className='!border-0 !focus:border-0 !outline-none !shadow-none focus:!ring-0'
           />
         </div>
       )
@@ -1215,10 +1222,6 @@ function Chat() {
   //   })
   // }, [isElectronEnv, mentionableFilesForDebug, workspace?.name, workspace?.rootPath, ideContext.allFiles])
 
-  const inputAreaBorderClasses =
-    operationMode === 'plan'
-      ? 'outline-1 outline-blue-200/70 dark:outline-neutral-700/50'
-      : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
 
   const handleCloseExpandedPreview = useCallback(() => {
     if (!expandedFilePath) return
@@ -2442,7 +2445,47 @@ function Chat() {
     : isDarkMode
       ? 'oklch(20.5% 0 0)'
       : 'oklch(98.5% 0 0)'
-  //dedfault set in theme config
+  const conversationToolbarBackgroundColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.conversationToolbarBg, isDarkMode)
+    : isDarkMode
+      ? 'rgba(23, 23, 23, 0.8)'
+      : 'rgba(255, 255, 255, 0.8)'
+  const chatInputAreaBorderColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.chatInputAreaBorder, isDarkMode)
+    : undefined
+  const chatProgressBarFillColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.chatProgressBarFill, isDarkMode)
+    : undefined
+  const actionPopoverInputBorderColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.actionPopoverBorder, isDarkMode)
+    : undefined
+  const sendButtonAnimationThemeColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.sendButtonAnimationColor, isDarkMode)
+    : undefined
+  const streamingAnimationThemeColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.streamingAnimationColor, isDarkMode)
+    : undefined
+
+  const [chatInputBorderAnimation, setChatInputBorderAnimation] = useState<ChatInputBorderAnimationType>(
+    getStoredChatInputBorderAnimation
+  )
+  const [chatInputBorderLightColor, setChatInputBorderLightColor] = useState<string>(getStoredChatInputBorderLightColor)
+  const [chatInputBorderDarkColor, setChatInputBorderDarkColor] = useState<string>(getStoredChatInputBorderDarkColor)
+
+  const useCustomInputAreaBorderColor = customThemeEnabled && operationMode !== 'plan'
+  const chatInputBorderAnimationEnabled = operationMode !== 'plan' && chatInputBorderAnimation !== 'none'
+  const effectiveAnimatedInputBorderColor =
+    useCustomInputAreaBorderColor && chatInputAreaBorderColor ? chatInputAreaBorderColor : undefined
+  const effectiveChatInputBorderLightColor = effectiveAnimatedInputBorderColor ?? chatInputBorderLightColor
+  const effectiveChatInputBorderDarkColor = effectiveAnimatedInputBorderColor ?? chatInputBorderDarkColor
+
+  const inputAreaBorderClasses = chatInputBorderAnimationEnabled
+    ? `chat-input-border-anim chat-input-border-${chatInputBorderAnimation}`
+    : operationMode === 'plan'
+      ? 'outline-1 outline-blue-200/70 dark:outline-neutral-700/50'
+      : useCustomInputAreaBorderColor
+        ? 'outline-2 dark:outline-2'
+        : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
 
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
   const [expandedProcessMessageRuns, setExpandedProcessMessageRuns] = useState<Set<string>>(() => new Set())
@@ -2566,6 +2609,18 @@ function Chat() {
       const detail = (e as CustomEvent<number>).detail
       if (Number.isFinite(detail)) setStreamingAnimationSpeed(detail)
     }
+    const handleInputBorderAnimationEvent = (e: Event) => {
+      const detail = (e as CustomEvent<ChatInputBorderAnimationType>).detail
+      if (detail) setChatInputBorderAnimation(detail)
+    }
+    const handleInputBorderLightColorEvent = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail) setChatInputBorderLightColor(detail)
+    }
+    const handleInputBorderDarkColorEvent = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      if (detail) setChatInputBorderDarkColor(detail)
+    }
     const handleStorageEvent = (e: StorageEvent) => {
       if (e.key === 'chat:sendButtonAnimation' && e.newValue) {
         setSendButtonAnimation(e.newValue as SendButtonAnimationType)
@@ -2592,6 +2647,15 @@ function Chat() {
           setStreamingAnimationSpeed(nextSpeed)
         }
       }
+      if (e.key === 'chat:inputBorderAnimation' && e.newValue) {
+        setChatInputBorderAnimation(e.newValue as ChatInputBorderAnimationType)
+      }
+      if (e.key === 'chat:inputBorderLightColor' && e.newValue) {
+        setChatInputBorderLightColor(e.newValue)
+      }
+      if (e.key === 'chat:inputBorderDarkColor' && e.newValue) {
+        setChatInputBorderDarkColor(e.newValue)
+      }
     }
 
     window.addEventListener('sendButtonAnimationChange', handleSendButtonAnimationEvent)
@@ -2601,6 +2665,9 @@ function Chat() {
     window.addEventListener('streamingAnimationLightColorChange', handleStreamingLightColorEvent)
     window.addEventListener('streamingAnimationDarkColorChange', handleStreamingDarkColorEvent)
     window.addEventListener('streamingAnimationSpeedChange', handleStreamingSpeedEvent)
+    window.addEventListener('inputBorderAnimationChange', handleInputBorderAnimationEvent)
+    window.addEventListener('inputBorderLightColorChange', handleInputBorderLightColorEvent)
+    window.addEventListener('inputBorderDarkColorChange', handleInputBorderDarkColorEvent)
     window.addEventListener('storage', handleStorageEvent)
 
     return () => {
@@ -2611,6 +2678,9 @@ function Chat() {
       window.removeEventListener('streamingAnimationLightColorChange', handleStreamingLightColorEvent)
       window.removeEventListener('streamingAnimationDarkColorChange', handleStreamingDarkColorEvent)
       window.removeEventListener('streamingAnimationSpeedChange', handleStreamingSpeedEvent)
+      window.removeEventListener('inputBorderAnimationChange', handleInputBorderAnimationEvent)
+      window.removeEventListener('inputBorderLightColorChange', handleInputBorderLightColorEvent)
+      window.removeEventListener('inputBorderDarkColorChange', handleInputBorderDarkColorEvent)
       window.removeEventListener('storage', handleStorageEvent)
     }
   }, [])
@@ -4815,7 +4885,13 @@ function Chat() {
             <div
               className={`absolute mb-2 mt-4 top-0 left-0 px-2 z-10 mx-auto right-0 transition-all duration-300 ease-out ${isTitleBarVisible ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'} ${!heimdallVisible ? 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-3xl 2xl:max-w-4xl 3xl:max-w-6xl' : 'max-w-full sm:max-w-xl md:max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-4xl'}`}
             >
-              <div className='flex items-center bg-white/80 dark:bg-neutral-900/80 backdrop-blur-[12px] border border-black/[0.08] dark:border-white/[0.08] rounded-full py-1 px-1.5 gap-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]'>
+              <div
+                className='flex items-center backdrop-blur-[12px] border rounded-full py-1 px-1.5 gap-1 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.2)] dark:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)]'
+                style={{
+                  backgroundColor: conversationToolbarBackgroundColor,
+                  borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                }}
+              >
                 {/* Workspace Actions */}
                 <Button
                   variant='outline2'
@@ -5082,7 +5158,10 @@ function Chat() {
                                 <div className={`${hasStreamingMessageContent ? 'mt-2' : 'mt-1'} pl-2`}>
                                   <StreamingLoadingAnimation
                                     animationType={streamingAnimation}
-                                    color={isDarkMode ? streamingAnimationDarkColor : streamingAnimationLightColor}
+                                    color={
+                                      streamingAnimationThemeColor ||
+                                      (isDarkMode ? streamingAnimationDarkColor : streamingAnimationLightColor)
+                                    }
                                     speed={streamingAnimationSpeed}
                                   />
                                 </div>
@@ -5319,7 +5398,17 @@ function Chat() {
 
           {/* Textarea (bottom, grows upward because wrapper is bottom-pinned) */}
           <div
-            className={`slate-input-wrapper ${inputAreaBorderClasses}  bg-neutral-100/40 dark:bg-neutral-900/40 backdrop-blur-xl rounded-3xl px-2 py-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300  }`}
+            className={`slate-input-wrapper ${inputAreaBorderClasses} bg-neutral-100/40 dark:bg-neutral-900/40 backdrop-blur-xl rounded-3xl px-2 py-3 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.5)] transition-all duration-300`}
+            style={
+              chatInputBorderAnimationEnabled
+                ? ({
+                    '--chat-input-border-light': effectiveChatInputBorderLightColor,
+                    '--chat-input-border-dark': effectiveChatInputBorderDarkColor,
+                  } as React.CSSProperties)
+                : useCustomInputAreaBorderColor && chatInputAreaBorderColor
+                  ? { outlineColor: chatInputAreaBorderColor }
+                  : undefined
+            }
           >
             {toolCallPermissionRequest && (
               <ToolPermissionDialog
@@ -5570,13 +5659,20 @@ function Chat() {
                   <div className='flex-1 h-1 bg-neutral-300/50 dark:bg-neutral-700/50 rounded-full overflow-hidden relative'>
                     <div
                       className={`absolute inset-0 h-full rounded-full transition-all duration-300 ${
-                        totalContextProgress >= 95
-                          ? 'bg-red-500 dark:bg-red-400'
-                          : totalContextProgress >= 80
-                            ? 'bg-amber-500 dark:bg-amber-400'
-                            : 'bg-blue-500 dark:bg-blue-400'
+                        customThemeEnabled
+                          ? ''
+                          : totalContextProgress >= 95
+                            ? 'bg-red-500 dark:bg-red-400'
+                            : totalContextProgress >= 80
+                              ? 'bg-amber-500 dark:bg-amber-400'
+                              : 'bg-blue-500 dark:bg-blue-400'
                       }`}
-                      style={{ width: `${totalContextProgress}%` }}
+                      style={{
+                        width: `${totalContextProgress}%`,
+                        ...(customThemeEnabled && chatProgressBarFillColor
+                          ? { backgroundColor: chatProgressBarFillColor }
+                          : {}),
+                      }}
                     />
                   </div>
                   {/* Refresh credits button */}
@@ -5736,6 +5832,7 @@ function Chat() {
                                 onChange={e => setCcCwdFromUser(e.target.value)}
                                 placeholder='Working directory (optional)'
                                 className='flex-1 px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                style={actionPopoverInputBorderColor ? { borderColor: actionPopoverInputBorderColor } : undefined}
                                 title='Specify the working directory used by local agent backends'
                               />
                               <button
@@ -5747,6 +5844,7 @@ function Chat() {
                                   }
                                 }}
                                 className='px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
+                                style={actionPopoverInputBorderColor ? { borderColor: actionPopoverInputBorderColor } : undefined}
                                 title='Select Folder to let the AI work in'
                               >
                                 <svg
@@ -6013,7 +6111,10 @@ function Chat() {
                     }
                     className='cursor-pointer hover:scale-105 active:scale-95 transition-transform'
                   >
-                    <SendButtonLoadingAnimation animationType={sendButtonAnimation} bgColor={sendButtonColor} />
+                    <SendButtonLoadingAnimation
+                      animationType={sendButtonAnimation}
+                      bgColor={sendButtonAnimationThemeColor || sendButtonColor}
+                    />
                   </button>
                 ) : (
                   <button

@@ -12,12 +12,41 @@ import { localApi } from '../../utils/api'
 import { extractTextFromPdf } from '../../utils/pdfUtils'
 import { InputTextArea } from '../InputTextArea/InputTextArea'
 import { ThemeManager } from '../ThemeManager/ThemeManager'
+import {
+  getThemeModeColor,
+  type CustomChatTheme,
+  saveCustomChatTheme,
+  setCustomChatThemeEnabled,
+  useCustomChatTheme,
+  useHtmlDarkMode,
+} from '../ThemeManager/themeConfig'
+import { ChatInputBorderAnimationSettings } from './ChatInputBorderAnimationSettings'
 import { SendButtonAnimationSettings } from './SendButtonAnimationSettings'
 import { ToolsSettings } from './ToolsSettings'
 
 type SettingsPaneProps = {
   open: boolean
   onClose: () => void
+}
+
+type ThemeListItem = {
+  id: string
+  fileName: string
+  name: string
+  modifiedAt: string
+}
+
+type ThemeManagerListResult = {
+  success?: boolean
+  error?: string
+  themes?: ThemeListItem[]
+}
+
+type ThemeManagerReadResult = {
+  success?: boolean
+  error?: string
+  exists?: boolean
+  theme?: CustomChatTheme
 }
 
 const TEXT_FILE_EXTENSIONS = [
@@ -91,11 +120,23 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
   const selectedProject = useAppSelector(selectSelectedProject)
   const conversations = useAppSelector(state => state.conversations.items)
   const tools = useAppSelector(state => state.chat.tools ?? [])
+  const { theme: customTheme, enabled: customThemeEnabled } = useCustomChatTheme()
+  const isDarkMode = useHtmlDarkMode()
+  const settingsPaneBodyBackgroundColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.settingsPaneBodyBg, isDarkMode)
+    : undefined
 
   const [attachmentTarget, setAttachmentTarget] = useState<'system' | 'context'>('system')
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const [promptContextExpanded, setPromptContextExpanded] = useState(false)
   const [appStoreOpen, setAppStoreOpen] = useState(false)
+
+  // Saved custom themes state
+  const [savedThemes, setSavedThemes] = useState<ThemeListItem[]>([])
+  const [savedThemesLoading, setSavedThemesLoading] = useState(false)
+  const [savedThemesExpanded, setSavedThemesExpanded] = useState(false)
+  const [savedThemesError, setSavedThemesError] = useState('')
+  const [applyingThemeId, setApplyingThemeId] = useState<string | null>(null)
 
   // Skills section state
   const [skillsExpanded, setSkillsExpanded] = useState(false)
@@ -237,6 +278,62 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
     [dispatch]
   )
 
+  const fetchSavedThemes = useCallback(async () => {
+    setSavedThemesLoading(true)
+    setSavedThemesError('')
+
+    try {
+      const data = await localApi.post<{ result?: ThemeManagerListResult }>('/tools/execute', {
+        toolName: 'theme_manager',
+        args: {
+          action: 'list',
+        },
+      })
+
+      const result = data?.result
+      if (!result?.success) {
+        setSavedThemes([])
+        setSavedThemesError(result?.error || 'Failed to load saved themes')
+        return
+      }
+
+      setSavedThemes(result.themes || [])
+    } catch (error) {
+      setSavedThemes([])
+      setSavedThemesError(error instanceof Error ? error.message : 'Failed to load saved themes')
+    } finally {
+      setSavedThemesLoading(false)
+    }
+  }, [])
+
+  const handleApplySavedTheme = useCallback(async (themeId: string) => {
+    setApplyingThemeId(themeId)
+    setSavedThemesError('')
+
+    try {
+      const data = await localApi.post<{ result?: ThemeManagerReadResult }>('/tools/execute', {
+        toolName: 'theme_manager',
+        args: {
+          action: 'read',
+          name: themeId,
+        },
+      })
+
+      const result = data?.result
+      if (!result?.success || !result.exists || !result.theme) {
+        setSavedThemesError(result?.error || 'Theme file could not be read')
+        return
+      }
+
+      saveCustomChatTheme(result.theme)
+      setCustomChatThemeEnabled(true)
+    } catch (error) {
+      setSavedThemesError(error instanceof Error ? error.message : 'Failed to apply theme')
+    } finally {
+      setApplyingThemeId(null)
+    }
+  }, [])
+
   // Fetch installed skills
   const fetchInstalledSkills = useCallback(async () => {
     setSkillsLoading(true)
@@ -261,6 +358,13 @@ export const SettingsPane: React.FC<SettingsPaneProps> = ({ open, onClose }) => 
       fetchInstalledSkills()
     }
   }, [skillsExpanded, fetchInstalledSkills])
+
+  // Fetch saved themes when custom theme library section is opened
+  useEffect(() => {
+    if (open && savedThemesExpanded) {
+      fetchSavedThemes()
+    }
+  }, [open, savedThemesExpanded, fetchSavedThemes])
 
   // Handle skill installation from URL
   const handleInstallSkill = useCallback(async () => {
@@ -801,7 +905,10 @@ ${block}`
             tools.some(tool => tool.enabled) ? 'h-[80vh]' : 'h-[58vh]'
           }`}
           onClick={e => e.stopPropagation()}
-          style={{ scrollbarGutter: 'stable' }}
+          style={{
+            scrollbarGutter: 'stable',
+            backgroundColor: settingsPaneBodyBackgroundColor,
+          }}
         >
           <div className='flex justify-between items-center mb-3 py-4'>
             <h2 className='text-2xl font-semibold text-stone-800 dark:text-stone-200'>Chat Settings</h2>
@@ -1092,9 +1199,76 @@ ${block}`
               <SendButtonAnimationSettings />
             </div>
 
+            {/* Chat Input Border Animation Section */}
+            <div className='space-y-2'>
+              <ChatInputBorderAnimationSettings />
+            </div>
+
             {/* Custom Theme Section */}
             <div className='space-y-2'>
               <ThemeManager />
+
+              <div className='rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/30 p-3 space-y-2'>
+                <button
+                  type='button'
+                  onClick={() => setSavedThemesExpanded(prev => !prev)}
+                  className='w-full flex items-center justify-between text-left'
+                >
+                  <span className='text-sm font-medium text-stone-700 dark:text-stone-200'>Saved custom themes</span>
+                  <i
+                    className={`bx bx-chevron-down text-lg text-neutral-500 dark:text-neutral-400 transition-transform ${savedThemesExpanded ? 'rotate-180' : ''}`}
+                  />
+                </button>
+
+                {savedThemesExpanded && (
+                  <div className='space-y-2'>
+                    <div className='flex justify-end'>
+                      <button
+                        type='button'
+                        onClick={fetchSavedThemes}
+                        disabled={savedThemesLoading}
+                        className='px-2.5 py-1.5 rounded-md text-xs border border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 disabled:opacity-50'
+                      >
+                        {savedThemesLoading ? 'Refreshing…' : 'Refresh'}
+                      </button>
+                    </div>
+
+                    {savedThemesError && (
+                      <p className='text-xs text-rose-600 dark:text-rose-400'>{savedThemesError}</p>
+                    )}
+
+                    {!savedThemesLoading && savedThemes.length === 0 && !savedThemesError && (
+                      <p className='text-xs text-neutral-500 dark:text-neutral-400'>
+                        No saved theme JSON files found in .ygg/custom-themes.
+                      </p>
+                    )}
+
+                    <div className='max-h-52 overflow-y-auto space-y-2 pr-1'>
+                      {savedThemes.map(themeItem => (
+                        <div
+                          key={themeItem.id}
+                          className='flex items-center justify-between gap-2 rounded-md border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900/40 px-2.5 py-2'
+                        >
+                          <div className='min-w-0'>
+                            <p className='text-sm text-neutral-800 dark:text-neutral-100 truncate'>{themeItem.name}</p>
+                            <p className='text-[11px] text-neutral-500 dark:text-neutral-400 truncate'>
+                              {themeItem.fileName} · {new Date(themeItem.modifiedAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <button
+                            type='button'
+                            onClick={() => handleApplySavedTheme(themeItem.id)}
+                            disabled={applyingThemeId === themeItem.id}
+                            className='shrink-0 px-2.5 py-1.5 rounded-md text-xs bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50'
+                          >
+                            {applyingThemeId === themeItem.id ? 'Applying…' : 'Apply'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Tools Section */}

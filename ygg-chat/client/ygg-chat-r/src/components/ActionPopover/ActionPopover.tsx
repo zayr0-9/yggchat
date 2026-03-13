@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '../Button/button'
+import { getThemeModeColor, useCustomChatTheme, useHtmlDarkMode } from '../ThemeManager/themeConfig'
 
 interface ActionPopoverProps {
   children: React.ReactNode
@@ -19,6 +20,18 @@ export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive
   const btnRef = useRef<HTMLButtonElement | null>(null)
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const [popoverPosition, setPopoverPosition] = useState<PopoverPosition | null>(null)
+  const { theme: customTheme, enabled: customThemeEnabled } = useCustomChatTheme()
+  const isDarkMode = useHtmlDarkMode()
+  const actionPopoverBorderColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.actionPopoverBorder, isDarkMode)
+    : isDarkMode
+      ? 'rgba(194, 65, 12, 0.4)'
+      : '#dbeafe'
+  const activeButtonBorderColor = customThemeEnabled
+    ? actionPopoverBorderColor
+    : isDarkMode
+      ? 'rgba(194, 65, 12, 0.5)'
+      : '#93c5fd'
 
   // Close on outside click
   useEffect(() => {
@@ -164,16 +177,17 @@ export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive
         variant='outline2'
         size='large'
         onClick={handleToggle}
-        className={
-          isActive
-            ? 'text-blue-700 dark:text-orange-400 bg-blue-50 dark:bg-orange-900/20 border-blue-300 dark:border-orange-700/50'
-            : 'text-neutral-600 dark:text-neutral-200 border-neutral-200 dark:border-neutral-700/50'
-        }
+        className={isActive ? ' ' : ' '}
+        // style={isActive ? {  } : undefined}
         title='Toggle options'
         aria-haspopup='true'
         aria-expanded={open}
       >
-        <i className='bx bx-dots-horizontal-rounded text-[20px]' aria-hidden='true' />
+        <i
+          className='bx bx-dots-horizontal-rounded text-[20px]'
+          style={{ color: activeButtonBorderColor }}
+          aria-hidden='true'
+        />
       </Button>
 
       {open &&
@@ -181,10 +195,11 @@ export const ActionPopover: React.FC<ActionPopoverProps> = ({ children, isActive
         createPortal(
           <div
             ref={popoverRef}
-            className='fixed z-[1000] rounded-2xl p-1 overflow-visible border-2 border-blue-100 dark:border-orange-700/40 bg-white/90 dark:bg-neutral-900/60 backdrop-blur-md shadow-xl'
+            className='fixed z-[1000] rounded-2xl p-1 overflow-visible border-2 bg-white/90 dark:bg-neutral-900/60 backdrop-blur-md shadow-xl'
             style={{
               top: `${popoverPosition.top}px`,
               left: `${popoverPosition.left}px`,
+              borderColor: actionPopoverBorderColor,
               // Hide until measured to prevent visual jump
               visibility: popoverPosition.measured ? 'visible' : 'hidden',
               opacity: popoverPosition.measured ? 1 : 0,

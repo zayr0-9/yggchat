@@ -38,6 +38,7 @@ const HEADLESS_RUNTIME_BUILTIN_TOOL_NAMES = new Set([
   'browse_web',
   'bash',
   'html_renderer',
+  'theme_manager',
   'custom_tool_manager',
   'mcp_manager',
   'skill_manager',

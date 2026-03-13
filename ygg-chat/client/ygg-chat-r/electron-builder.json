@@ -27,8 +27,16 @@
       "to": "custom-tools/CUSTOM_TOOLS_GUIIDE.md"
     },
     {
-      "from": ".ygg",
-      "to": ".ygg"
+      "from": ".ygg/settings.local.json",
+      "to": ".ygg/settings.local.json"
+    },
+    {
+      "from": ".ygg/hooks",
+      "to": ".ygg/hooks"
+    },
+    {
+      "from": ".ygg/custom-themes",
+      "to": ".ygg/custom-themes"
     }
   ],
   "win": {

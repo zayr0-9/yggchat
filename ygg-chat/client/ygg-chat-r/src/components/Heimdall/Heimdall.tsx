@@ -2520,6 +2520,19 @@ export const Heimdall: React.FC<HeimdallProps> = ({
   const heimdallPanelBackgroundColor = customThemeEnabled
     ? getThemeModeColor(customTheme.colors.heimdallPanelBg, isDarkMode)
     : undefined
+  const heimdallNotePillBackgroundColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.heimdallNotePillBg, isDarkMode)
+    : isDarkMode
+      ? '#f59e0b'
+      : '#3b82f6'
+  const heimdallNotePillTextColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.heimdallNotePillText, isDarkMode)
+    : isDarkMode
+      ? '#0c0a09'
+      : '#ffffff'
+  const heimdallNotePillBorderColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.heimdallNotePillBorder, isDarkMode)
+    : 'rgba(0,0,0,0.18)'
 
   const renderNodes = (): JSX.Element[] => {
     return Object.values(visiblePositions).map(({ x, y, node }) => {
@@ -2725,15 +2738,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                     width={badge.width}
                     height={badge.height}
                     rx='9'
-                    className='fill-blue-500 dark:fill-amber-500'
-                    stroke='rgba(0,0,0,0.18)'
+                    style={{ fill: heimdallNotePillBackgroundColor }}
+                    stroke={heimdallNotePillBorderColor}
                     strokeWidth='1'
                   />
                   <text
                     x={badge.width / 2}
                     y={badge.height / 2 + 4}
                     textAnchor='middle'
-                    className='fill-white dark:fill-stone-950 text-[10px] font-semibold'
+                    className='text-[10px] font-semibold'
+                    style={{ fill: heimdallNotePillTextColor }}
                   >
                     {badge.label}
                   </text>
@@ -2870,15 +2884,16 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                     width={badge.width}
                     height={badge.height}
                     rx='9'
-                    className='fill-blue-500 dark:fill-amber-500'
-                    stroke='rgba(0,0,0,0.18)'
+                    style={{ fill: heimdallNotePillBackgroundColor }}
+                    stroke={heimdallNotePillBorderColor}
                     strokeWidth='1'
                   />
                   <text
                     x={badge.width / 2}
                     y={badge.height / 2 + 4}
                     textAnchor='middle'
-                    className='fill-white dark:fill-stone-950 text-[10px] font-semibold'
+                    className='text-[10px] font-semibold'
+                    style={{ fill: heimdallNotePillTextColor }}
                   >
                     {badge.label}
                   </text>

@@ -12,8 +12,10 @@ import {
   loadCustomVideoBlobUrl,
   VIDEO_BACKGROUND_CHANGE_EVENT,
 } from '../helpers/videoBackgroundStorage'
+import { getThemeModeColor, useCustomChatTheme } from './ThemeManager/themeConfig'
 
 const VideoBackground: React.FC = () => {
+  const { theme: customTheme, enabled: customThemeEnabled } = useCustomChatTheme()
   const [activeVideoId, setActiveVideoId] = useState<string | null>(() => loadActiveCustomVideoId())
   const [activeVideoMeta, setActiveVideoMeta] = useState<CustomVideoEntry | null>(() => loadActiveCustomVideo())
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null)
@@ -135,7 +137,11 @@ const VideoBackground: React.FC = () => {
   }
 
   const lightSource = sourceForMode(activeVideoUrl, activeVideoMeta, DEFAULT_LIGHT_VIDEO)
-  const colorBackgroundColor = isDarkTheme ? backgroundColors.dark : backgroundColors.light
+  const colorBackgroundColor = customThemeEnabled
+    ? getThemeModeColor(customTheme.colors.appBackgroundColor, isDarkTheme)
+    : isDarkTheme
+      ? backgroundColors.dark
+      : backgroundColors.light
 
   if (backgroundMode === 'color') {
     return (

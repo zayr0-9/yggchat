@@ -338,7 +338,7 @@ export const Select: React.FC<SelectProps> = ({
                     <div key={opt.value} className={`flex items-center gap-0 ${optDisabled ? 'opacity-50' : ''}`}>
                       <Button
                         variant='outline2'
-                        size='medium'
+                        size='small'
                         type='button'
                         role='option'
                         aria-selected={isSelected}
@@ -351,7 +351,7 @@ export const Select: React.FC<SelectProps> = ({
                           if (!optDisabled) handleSelect(opt.value)
                         }}
                         onClick={() => !optDisabled && handleSelect(opt.value)}
-                        className={`flex-1 hover:scale-103 transition-all line-clamp-3 justify-start text-left text-[13px] sm:text-[13px] md:text-[13px] lg:text-[14px] 2xl:text-[16px] 3xl:text-[18px] 4xl:text-[20px] ${isSelected ? 'font-medium' : ''} ${optDisabled ? 'cursor-not-allowed' : 'hover:bg-neutral-200'}`}
+                        className={`flex-1 hover:scale-103 transition-all line-clamp-3 justify-start text-left text-[13px] sm:text-[13px] md:text-[13px] lg:text-[14px] 2xl:text-[14px] 3xl:text-[14px] 4xl:text-[14px] ${isSelected ? 'font-medium' : ''} ${optDisabled ? 'cursor-not-allowed' : 'hover:bg-neutral-200'}`}
                         title={optDisabled ? 'Upgrade to access this model' : undefined}
                       >
                         {opt.label}

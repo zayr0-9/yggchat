@@ -11,6 +11,7 @@ import { readMultipleTextFiles } from './tools/readFiles.js'
 import { ripgrepSearch } from './tools/ripgrep.js'
 import { customToolRegistry } from './tools/customToolLoader.js'
 import type { ToolExecutionOptions, UtilityRuntimeRequest, UtilityRuntimeResponse } from './tools/runtime/protocol.js'
+import { isManagedToolPath } from './utils/managedToolPaths.js'
 
 type BuiltInToolHandler = (args: any, options: ToolExecutionOptions) => Promise<any>
 
@@ -61,6 +62,11 @@ function validateAndResolvePath(
     relativeToRoot === '..' || relativeToRoot.startsWith(`..${pathModule.sep}`) || pathModule.isAbsolute(relativeToRoot)
 
   if (outsideWorkspace) {
+    const rootIsManagedPath = isManagedToolPath(normalizedRoot, usePosix)
+    const targetIsManagedPath = isManagedToolPath(resolvedPath, usePosix)
+    if (!rootIsManagedPath && targetIsManagedPath) {
+      return resolvedPath
+    }
     throw new Error(`Path must be within workspace: ${rootPath}`)
   }
 
