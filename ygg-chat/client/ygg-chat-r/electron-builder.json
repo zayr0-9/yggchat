@@ -1,12 +1,12 @@
 {
   "electronVersion": "38.8.4",
-  "appId": "com.yggdrasil.chat",
+  "appId": "com.graviton.chat",
   "icon": "public/img/taskbar-logo.png",
-  "productName": "Yggdrasil",
+  "productName": "Graviton",
   "directories": {
     "output": "release"
   },
-  "artifactName": "Yggdrasil-${version}-${os}-${arch}.${ext}",
+  "artifactName": "Graviton-${version}-${os}-${arch}.${ext}",
   "files": [
     "dist-electron/**/*",
     "electron/main.mjs",

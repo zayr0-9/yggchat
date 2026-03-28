@@ -144,9 +144,17 @@ async function runLocalProviderGenerate(
   body: any
 ) {
   const parsed = buildEphemeralGenerateInput(body)
+  const hasUsableHistory = Array.isArray(parsed.history)
+    ? parsed.history.some(message => {
+        if (!message || typeof message !== 'object') return false
+        if (asText((message as any).content).trim()) return true
+        if (typeof (message as any).tool_call_id === 'string' && (message as any).tool_call_id.trim()) return true
+        return Array.isArray((message as any).tool_calls) && (message as any).tool_calls.length > 0
+      })
+    : false
 
-  if (!parsed.content.trim()) {
-    return { error: 'content is required', status: 400 as const }
+  if (!parsed.content.trim() && !hasUsableHistory) {
+    return { error: 'content or messages/history is required', status: 400 as const }
   }
 
   const generated = await provider.generate({
@@ -188,7 +196,7 @@ function resolveRemoteAppAccessToken(
   )
   if (envToken) return envToken
 
-  throw new Error('Yggdrasil app auth token missing for OpenRouter-backed ephemeral generation.')
+  throw new Error('Graviton app auth token missing for OpenRouter-backed ephemeral generation.')
 }
 
 function normalizeHistoryMessage(message: any): { role: string; content: string } | null {

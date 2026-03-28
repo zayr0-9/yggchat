@@ -39,6 +39,7 @@ import { editFile } from './tools/editFile.js'
 import { execute as executeFetchNotes } from './tools/fetchNotes.js'
 import { globSearch } from './tools/glob.js'
 import { executeHermesAgent, getHermesSession, setHermesSession } from './tools/hermesAgent.js'
+import { resolveHermesExecutionPlan } from './tools/hermesExecutionPlanner.js'
 import htmlRenderer from './tools/htmlRenderer.js'
 import { execute as executeMcpManagerTool } from './tools/mcpManagerTool.js'
 import { JobFilter, JobOptions, toolOrchestrator } from './tools/orchestrator/index.js'
@@ -119,6 +120,61 @@ const MAX_UPLOAD_ENTRIES = 5000
 const MAX_UPLOAD_UNPACKED_BYTES = 500 * 1024 * 1024
 const REMOTE_API_BASE = 'https://webdrasil-production.up.railway.app/api'
 const DEFAULT_PRESERVE_RESOURCE_DIRS = ['resources', 'resource']
+const HERMES_PERMISSION_RESPONSE_TIMEOUT_MS = 55_000
+
+type HermesPermissionDecision = 'allow_once' | 'allow_always' | 'deny'
+
+type PendingHermesPermissionRequest = {
+  conversationId: string
+  createdAt: number
+  resolve: (decision: HermesPermissionDecision) => void
+}
+
+const pendingHermesPermissionRequests = new Map<string, PendingHermesPermissionRequest>()
+
+function normalizeHermesPermissionToolCall(rawRequest: any): { id: string; name: string; arguments: Record<string, any> } {
+  const rawToolCall =
+    rawRequest?.toolCall && typeof rawRequest.toolCall === 'object'
+      ? rawRequest.toolCall
+      : rawRequest?.tool_call && typeof rawRequest.tool_call === 'object'
+        ? rawRequest.tool_call
+        : {}
+
+  const toolCallId =
+    typeof rawToolCall.id === 'string' && rawToolCall.id.trim().length > 0
+      ? rawToolCall.id
+      : typeof rawToolCall.toolCallId === 'string' && rawToolCall.toolCallId.trim().length > 0
+        ? rawToolCall.toolCallId
+        : typeof rawToolCall.tool_call_id === 'string' && rawToolCall.tool_call_id.trim().length > 0
+          ? rawToolCall.tool_call_id
+          : uuidv4()
+
+  const toolName =
+    typeof rawToolCall.title === 'string' && rawToolCall.title.trim().length > 0
+      ? rawToolCall.title
+      : typeof rawToolCall.name === 'string' && rawToolCall.name.trim().length > 0
+        ? rawToolCall.name
+        : typeof rawToolCall.kind === 'string' && rawToolCall.kind.trim().length > 0
+          ? rawToolCall.kind
+          : 'hermes_permission'
+
+  const toolArgs: Record<string, any> =
+    rawToolCall.rawInput && typeof rawToolCall.rawInput === 'object'
+      ? rawToolCall.rawInput
+      : rawToolCall.raw_input && typeof rawToolCall.raw_input === 'object'
+        ? rawToolCall.raw_input
+        : {}
+
+  if (typeof rawRequest?.description === 'string' && !('description' in toolArgs)) {
+    toolArgs.description = rawRequest.description
+  }
+
+  return {
+    id: toolCallId,
+    name: toolName,
+    arguments: toolArgs,
+  }
+}
 
 function buildRemoteApiUrl(pathname: string): string {
   if (pathname.startsWith('/')) {
@@ -6322,7 +6378,25 @@ function setupServer() {
     }
   })
 
-  // POST /api/agents/hermes-messages/:conversationId - Send message to Hermes bridge
+  // POST /api/agents/hermes-permission-response/:requestId - Resolve a pending Hermes ACP permission request
+  app.post('/api/agents/hermes-permission-response/:requestId', (req, res) => {
+    const { requestId } = req.params
+    const decisionRaw = typeof req.body?.decision === 'string' ? req.body.decision.trim().toLowerCase() : ''
+    const decision: HermesPermissionDecision =
+      decisionRaw === 'allow_always' ? 'allow_always' : decisionRaw === 'deny' ? 'deny' : 'allow_once'
+
+    const pending = pendingHermesPermissionRequests.get(requestId)
+    if (!pending) {
+      res.status(404).json({ error: 'Hermes permission request not found or already resolved' })
+      return
+    }
+
+    pendingHermesPermissionRequests.delete(requestId)
+    pending.resolve(decision)
+    res.json({ ok: true })
+  })
+
+  // POST /api/agents/hermes-messages/:conversationId - Send message to Hermes ACP backend
   app.post('/api/agents/hermes-messages/:conversationId', async (req, res) => {
     const { conversationId } = req.params
     const {
@@ -6360,6 +6434,8 @@ function setupServer() {
       'Access-Control-Allow-Origin': '*',
     })
 
+    const requestAbortController = new AbortController()
+
     try {
       const lastMessage = statements.getLastMessageByConversationId.get(conversationId) as any
       const parentId = requestedParentId !== undefined ? requestedParentId : lastMessage?.id || null
@@ -6390,28 +6466,38 @@ function setupServer() {
         `data: ${JSON.stringify({ type: 'user_message', message: { id: userMsgId, role: 'user', content: message } })}\n\n`
       )
 
-      let sessionId = providedSessionId || getHermesSession(conversationId, cwd)
+      const findSessionIdFromAncestorChain = (startMessageId: string | null | undefined): string | undefined => {
+        if (!startMessageId) return undefined
 
-      if (!sessionId && parentId) {
-        let current = statements.getMessageById.get(parentId) as any
-        while (current && !sessionId) {
+        let current = statements.getMessageById.get(startMessageId) as any
+        while (current) {
           if (
             typeof current.ex_agent_session_id === 'string' &&
             current.ex_agent_session_id.trim().length > 0 &&
             (current.role === 'assistant' || (current.role === 'ex_agent' && current.ex_agent_type === 'hermes_agent'))
           ) {
-            sessionId = current.ex_agent_session_id
-            break
+            return current.ex_agent_session_id
           }
           if (!current.parent_id) break
           current = statements.getMessageById.get(current.parent_id)
         }
+
+        return undefined
       }
 
-      const shouldResume = resume !== undefined ? resume : !!sessionId
+      const lineageSessionId = findSessionIdFromAncestorChain(parentId)
+      const executionPlan = resolveHermesExecutionPlan({
+        providedSessionId,
+        lineageSessionId,
+        conversationSessionId: getHermesSession(conversationId, cwd),
+        forkSession,
+        resume,
+      })
+      let sessionId = executionPlan.sourceSessionId
 
       let contentBlocks: any[] = []
       let textParts: string[] = []
+      let reasoningParts: string[] = []
       let currentSessionId: string | null = sessionId || null
       let hasPersistedFinalAssistant = false
       let sawHermesContentDelta = false
@@ -6434,6 +6520,10 @@ function setupServer() {
 
           if (chunk.type === 'content_delta' && typeof chunk.delta === 'string' && chunk.delta.length > 0) {
             sawHermesContentDelta = true
+          }
+
+          if (chunk.type === 'thinking_delta' && typeof chunk.delta === 'string' && chunk.delta.length > 0) {
+            reasoningParts.push(chunk.delta)
           }
 
           res.write(
@@ -6512,7 +6602,7 @@ function setupServer() {
         }
 
         if (response.messageType === 'error') {
-          const errorMessage = response.error?.message || event.message || 'Hermes bridge error'
+          const errorMessage = response.error?.message || event.message || 'Hermes ACP error'
           if (errorMessage) {
             contentBlocks.push({ type: 'text', text: `[Hermes Error] ${errorMessage}` })
             textParts.push(`[Hermes Error] ${errorMessage}`)
@@ -6532,6 +6622,11 @@ function setupServer() {
 
             const hermesMsgId = uuidv4()
             const textContent = textParts.join('\n\n').trim()
+            const thinkingContent = reasoningParts.join('').trim()
+
+            if (thinkingContent && !contentBlocks.some(block => block?.type === 'thinking')) {
+              contentBlocks = [{ type: 'thinking', thinking: thinkingContent }, ...contentBlocks]
+            }
 
             statements.upsertMessage.run(
               hermesMsgId,
@@ -6567,35 +6662,107 @@ function setupServer() {
 
           contentBlocks = []
           textParts = []
+          reasoningParts = []
         }
       }
 
-      await executeHermesAgent(
-        conversationId,
-        message,
-        cwd,
-        onResponse,
-        onStreamingChunk,
-        shouldResume ? sessionId : undefined,
-        forkSession,
-        model,
-        maxIterations
-      )
+      const onPermissionRequest = async (permissionRequest: any): Promise<HermesPermissionDecision> => {
+        if (requestAbortController.signal.aborted || res.writableEnded) {
+          return 'deny'
+        }
+
+        const requestId = uuidv4()
+        const toolCall = normalizeHermesPermissionToolCall(permissionRequest)
+
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'permission_request',
+            requestId,
+            sessionId: permissionRequest?.sessionId ?? null,
+            toolCall,
+            options: Array.isArray(permissionRequest?.options) ? permissionRequest.options : [],
+          })}\n\n`
+        )
+
+        return await new Promise<HermesPermissionDecision>(resolve => {
+          let settled = false
+          let timeoutHandle: ReturnType<typeof setTimeout> | null = null
+
+          const cleanup = () => {
+            if (timeoutHandle) {
+              clearTimeout(timeoutHandle)
+              timeoutHandle = null
+            }
+            requestAbortController.signal.removeEventListener('abort', onAbort)
+            pendingHermesPermissionRequests.delete(requestId)
+          }
+
+          const settle = (decision: HermesPermissionDecision) => {
+            if (settled) return
+            settled = true
+            cleanup()
+            resolve(decision)
+          }
+
+          const onAbort = () => settle('deny')
+
+          pendingHermesPermissionRequests.set(requestId, {
+            conversationId,
+            createdAt: Date.now(),
+            resolve: settle,
+          })
+
+          timeoutHandle = setTimeout(() => settle('deny'), HERMES_PERMISSION_RESPONSE_TIMEOUT_MS)
+          requestAbortController.signal.addEventListener('abort', onAbort, { once: true })
+        })
+      }
+
+      const abortHermesRequest = () => {
+        if (!requestAbortController.signal.aborted && !res.writableEnded) {
+          requestAbortController.abort()
+        }
+      }
+
+      req.once('aborted', abortHermesRequest)
+      res.once('close', abortHermesRequest)
+
+      try {
+        await executeHermesAgent(
+          conversationId,
+          message,
+          cwd,
+          onResponse,
+          onStreamingChunk,
+          sessionId,
+          forkSession,
+          model,
+          maxIterations,
+          requestAbortController.signal,
+          onPermissionRequest
+        )
+      } finally {
+        req.off('aborted', abortHermesRequest)
+        res.off('close', abortHermesRequest)
+      }
 
       if (cwd && conversation && conversation.cwd !== cwd) {
         statements.updateConversationCwd.run(cwd, conversationId)
       }
     } catch (error) {
-      console.error('[LocalServer] Hermes bridge error:', error)
-      res.write(
-        `data: ${JSON.stringify({
-          type: 'error',
-          error: error instanceof Error ? error.message : 'Unknown Hermes bridge error',
-        })}\n\n`
-      )
+      if (!requestAbortController.signal.aborted && !res.writableEnded) {
+        console.error('[LocalServer] Hermes ACP error:', error)
+        res.write(
+          `data: ${JSON.stringify({
+            type: 'error',
+            error: error instanceof Error ? error.message : 'Unknown Hermes ACP error',
+          })}\n\n`
+        )
+      }
     }
 
-    res.end()
+    if (!requestAbortController.signal.aborted && !res.writableEnded) {
+      res.end()
+    }
   })
 
   // GET /api/agents/cc-session/:conversationId - Get CC session info

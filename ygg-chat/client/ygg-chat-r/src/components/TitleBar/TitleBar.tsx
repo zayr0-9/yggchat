@@ -1,11 +1,13 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { matchPath, useLocation, useNavigate } from 'react-router-dom'
 import './TitleBar.css'
 
 import { chatSliceActions, selectCcCwd, selectCurrentConversationId } from '../../features/chats'
+import { selectSelectedProject } from '../../features/projects'
 import { buildRemoteMobileUrl, loadRemoteServerSettings } from '../../helpers/remoteServerSettingsStorage'
 import { useAppDispatch, useAppSelector } from '../../hooks/redux'
+import { useProjects } from '../../hooks/useQueries'
 import { getLocalServerLanOrigin, getLocalServerOrigin } from '../../utils/api'
 
 export const TitleBar = () => {
@@ -19,6 +21,28 @@ export const TitleBar = () => {
 
   const currentCwd = useAppSelector(selectCcCwd)
   const currentConversationId = useAppSelector(selectCurrentConversationId)
+  const selectedProject = useAppSelector(selectSelectedProject)
+  const currentConversation = useAppSelector(state => {
+    if (!currentConversationId) return null
+    return state.conversations.items.find(conversation => String(conversation.id) === String(currentConversationId)) ?? null
+  })
+  const { data: allProjects = [] } = useProjects()
+
+  const chatRouteMatch = matchPath('/chat/:projectId/:conversationId', location.pathname)
+  const projectIdFromRoute = chatRouteMatch?.params.projectId && chatRouteMatch.params.projectId !== 'unknown'
+    ? chatRouteMatch.params.projectId
+    : null
+
+  const currentProjectName = useMemo(() => {
+    const currentProjectId = currentConversation?.project_id || projectIdFromRoute || selectedProject?.id
+    if (!currentProjectId) return null
+
+    if (selectedProject && String(selectedProject.id) === String(currentProjectId)) {
+      return selectedProject.name
+    }
+
+    return allProjects.find(project => String(project.id) === String(currentProjectId))?.name ?? null
+  }, [allProjects, currentConversation?.project_id, projectIdFromRoute, selectedProject])
 
   useEffect(() => {
     const detectPlatform = async () => {
@@ -141,6 +165,11 @@ export const TitleBar = () => {
             </span>
           </button>
         </div>
+        {isChatPage && currentProjectName ? (
+          <div className='titlebar-project-name' title={currentProjectName}>
+            {currentProjectName}
+          </div>
+        ) : null}
       </div>
       <div className='titlebar-controls'>
         <button

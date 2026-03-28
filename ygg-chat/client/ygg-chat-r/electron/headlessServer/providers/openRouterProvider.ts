@@ -321,7 +321,7 @@ export class OpenRouterProvider implements HeadlessProvider {
     )
     if (envToken) return envToken
 
-    throw new Error('Yggdrasil app auth token missing for Railway-backed OpenRouter provider.')
+    throw new Error('Graviton app auth token missing for Railway-backed OpenRouter provider.')
   }
 
   async generate(input: ProviderGenerateInput, emit?: ProviderStreamEventHandler): Promise<ProviderGenerateOutput> {

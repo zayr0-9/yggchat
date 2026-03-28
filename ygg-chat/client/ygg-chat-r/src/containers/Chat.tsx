@@ -85,7 +85,6 @@ import {
   sendMessage,
   syncConversationToLocal,
   updateConversationTitle,
-  updateMessage,
 } from '../features/chats'
 import type { ContentBlock, ToolCall } from '../features/chats/chatTypes'
 import {
@@ -96,6 +95,7 @@ import {
   type OpenAIUsageSnapshot,
 } from '../features/chats/openaiOAuth'
 import { buildBranchPathForMessage } from '../features/chats/pathUtils'
+import { generateStreamId } from '../features/chats/streamHelpers'
 import {
   convContextSet,
   Conversation,
@@ -121,7 +121,13 @@ import {
   loadChatReasoningSettings,
   REASONING_EFFORT_OPTIONS,
 } from '../helpers/chatReasoningSettingsStorage'
-import { CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT, loadShowTokenUsageBar } from '../helpers/chatUiSettingsStorage'
+import {
+  CHAT_UI_AUTO_COMPACTION_ENABLED_CHANGE_EVENT,
+  CHAT_UI_AUTO_COMPACTION_ENABLED_KEY,
+  CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
+  loadAutoCompactionEnabled,
+  loadShowTokenUsageBar,
+} from '../helpers/chatUiSettingsStorage'
 import {
   loadProviderSettings,
   PROVIDER_SETTINGS_CHANGE_EVENT,
@@ -698,6 +704,7 @@ function Chat() {
   const inputControllerRef = useRef<ChatInputControllerHandle | null>(null)
   const [hasLocalInput, setHasLocalInput] = useState(false)
   const [addedIdeContexts, setAddedIdeContexts] = useState<AddedIdeContext[]>([])
+  const [pendingViewStreamId, setPendingViewStreamId] = useState<string | null>(null)
 
   const getLocalInput = useCallback(() => inputControllerRef.current?.getValue() ?? '', [])
   const updateLocalInput = useCallback((next: ChatInputUpdater) => {
@@ -729,7 +736,7 @@ function Chat() {
     </div>
   ) : null
 
-  // Hermes bridge mode toggle (desktop-only)
+  // Hermes ACP mode toggle (desktop-only)
   const [hermesMode, setHermesMode] = useState(() => {
     if (import.meta.env.VITE_ENVIRONMENT === 'web') return false
     try {
@@ -783,29 +790,61 @@ function Chat() {
   const operationMode = useAppSelector(selectOperationMode)
   // const canSendFromRedux = useAppSelector(selectCanSend)
   const sendingState = useAppSelector(selectSendingState)
+  const currentConversationId = useAppSelector(selectCurrentConversationId)
   const compactingConversationId = useAppSelector(state => state.chat.composition.compactingConversationId)
   // Current view stream - automatically selects the relevant stream based on currentPath
   const currentViewStream = useAppSelector(selectCurrentViewStream)
-  // Derived streamState object for compatibility (combines current view stream data)
+  const pendingViewStream = useAppSelector(state =>
+    pendingViewStreamId ? state.chat.streaming.byId[pendingViewStreamId] ?? null : null
+  )
+  const effectiveViewStream = useMemo(() => {
+    if (currentViewStream) return currentViewStream
+    if (!pendingViewStreamId || !pendingViewStream?.active) return null
+    if (
+      currentConversationId != null &&
+      pendingViewStream.conversationId != null &&
+      String(pendingViewStream.conversationId) !== String(currentConversationId)
+    ) {
+      return null
+    }
+    return { id: pendingViewStreamId, ...pendingViewStream }
+  }, [currentConversationId, currentViewStream, pendingViewStream, pendingViewStreamId])
+  // Derived streamState object for compatibility (combines current/effective view stream data)
   const streamState = useMemo(
     () => ({
-      id: currentViewStream?.id ?? null,
-      active: currentViewStream?.active ?? false,
-      buffer: currentViewStream?.buffer ?? '',
-      thinkingBuffer: currentViewStream?.thinkingBuffer ?? '',
-      toolCalls: currentViewStream?.toolCalls ?? [],
-      events: currentViewStream?.events ?? [],
-      messageId: currentViewStream?.messageId ?? null,
-      error: currentViewStream?.error ?? null,
-      finished: currentViewStream?.finished ?? false,
-      streamingMessageId: currentViewStream?.streamingMessageId ?? null,
+      id: effectiveViewStream?.id ?? null,
+      active: effectiveViewStream?.active ?? false,
+      buffer: effectiveViewStream?.buffer ?? '',
+      thinkingBuffer: effectiveViewStream?.thinkingBuffer ?? '',
+      toolCalls: effectiveViewStream?.toolCalls ?? [],
+      events: effectiveViewStream?.events ?? [],
+      messageId: effectiveViewStream?.messageId ?? null,
+      error: effectiveViewStream?.error ?? null,
+      finished: effectiveViewStream?.finished ?? false,
+      streamingMessageId: effectiveViewStream?.streamingMessageId ?? null,
     }),
-    [currentViewStream]
+    [effectiveViewStream]
   )
+
+  useEffect(() => {
+    if (!pendingViewStreamId) return
+
+    // Keep the pending stream fallback alive for the full lifetime of the stream.
+    // The branch-aware selector can briefly resolve the stream and then lose it again
+    // before the branch path fully stabilizes for top-level sends/branches.
+    // If we clear the fallback on the first selector match, the UI regresses back to
+    // the idle/send state until the first real message lands.
+    if (pendingViewStream && (!pendingViewStream.active || pendingViewStream.finished)) {
+      setPendingViewStreamId(null)
+    }
+  }, [pendingViewStream, pendingViewStreamId])
+
+  useEffect(() => {
+    setPendingViewStreamId(null)
+  }, [currentConversationId])
 
   const conversationMessages = useAppSelector(selectConversationMessages)
   const displayMessages = useAppSelector(selectDisplayMessages)
-  const currentConversationId = useAppSelector(selectCurrentConversationId)
   const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
   const showFreeTierModal = useAppSelector(state => state.chat.freeTier.showLimitModal)
@@ -1620,22 +1659,35 @@ function Chat() {
   // Track if we already applied the URL hash-based path to avoid overriding user branch switches
   const hashAppliedRef = useRef<MessageId | null>(null)
 
-  // Helper function to find the last Hermes session ID in a message path
-  // This is used for Hermes mode to resume sessions
-  const findLastHermesSession = useCallback(
-    (messageIds: MessageId[]): string | undefined => {
-      if (!messageIds || messageIds.length === 0) return undefined
+  const findNearestHermesSessionFromMessage = useCallback(
+    (startMessageId: MessageId | null | undefined): string | undefined => {
+      if (startMessageId == null) return undefined
 
-      // Iterate messageIds in reverse to find the last message carrying a Hermes session ID
-      for (let i = messageIds.length - 1; i >= 0; i--) {
-        const message = conversationMessages.find(m => m.id === messageIds[i])
+      let currentMessageId: MessageId | null = startMessageId
+
+      while (currentMessageId != null) {
+        const message = conversationMessages.find(m => String(m.id) === String(currentMessageId))
+
         if (typeof message?.ex_agent_session_id === 'string' && message.ex_agent_session_id.trim().length > 0) {
           return message.ex_agent_session_id
         }
+
+        currentMessageId = message?.parent_id ?? null
       }
+
       return undefined
     },
     [conversationMessages]
+  )
+
+  // Helper function to find the last Hermes session ID in a message path.
+  // This follows the selected lineage tip first and then walks upward through ancestors.
+  const findLastHermesSession = useCallback(
+    (messageIds: MessageId[]): string | undefined => {
+      if (!messageIds || messageIds.length === 0) return undefined
+      return findNearestHermesSessionFromMessage(messageIds[messageIds.length - 1])
+    },
+    [findNearestHermesSessionFromMessage]
   )
 
   // Lock page scroll while chat is mounted
@@ -2838,6 +2890,7 @@ function Chat() {
         : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
 
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
+  const [autoCompactionEnabled, setAutoCompactionEnabled] = useState<boolean>(() => loadAutoCompactionEnabled())
   const [expandedProcessMessageRuns, setExpandedProcessMessageRuns] = useState<Set<string>>(() => new Set())
   useEffect(() => {
     // Listen for custom event from SettingsPane (same window)
@@ -2903,9 +2956,20 @@ function Chat() {
       }
     }
 
+    const handleAutoCompactionEnabledEvent = (e: Event) => {
+      const detail = (e as CustomEvent<boolean>).detail
+      if (typeof detail === 'boolean') {
+        setAutoCompactionEnabled(detail)
+      }
+    }
+
     const handleStorageEvent = (e: StorageEvent) => {
       if (e.key === 'chat:showTokenUsageBar' && e.newValue !== null) {
         setShowTokenUsageBar(e.newValue === 'true')
+      }
+
+      if (e.key === CHAT_UI_AUTO_COMPACTION_ENABLED_KEY && e.newValue !== null) {
+        setAutoCompactionEnabled(e.newValue === 'true')
       }
     }
 
@@ -2913,12 +2977,20 @@ function Chat() {
       CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
       handleTokenUsageVisibilityEvent as EventListener
     )
+    window.addEventListener(
+      CHAT_UI_AUTO_COMPACTION_ENABLED_CHANGE_EVENT,
+      handleAutoCompactionEnabledEvent as EventListener
+    )
     window.addEventListener('storage', handleStorageEvent)
 
     return () => {
       window.removeEventListener(
         CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
         handleTokenUsageVisibilityEvent as EventListener
+      )
+      window.removeEventListener(
+        CHAT_UI_AUTO_COMPACTION_ENABLED_CHANGE_EVENT,
+        handleAutoCompactionEnabledEvent as EventListener
       )
       window.removeEventListener('storage', handleStorageEvent)
     }
@@ -3886,7 +3958,7 @@ function Chat() {
         const isRetrigger =
           !hasLocalInput && displayMessages.length > 0 && displayMessages[displayMessages.length - 1]?.role === 'user'
 
-        // Hermes mode routes messages to the local Hermes bridge endpoint.
+        // Hermes mode routes messages to the local Hermes ACP endpoint.
         if (hermesMode && hermesModeAvailable) {
           const parent: MessageId | null = selectedPath.length > 0 ? selectedPath[selectedPath.length - 1] : null
           const lastHermesSessionId = findLastHermesSession(selectedPath)
@@ -3901,6 +3973,9 @@ function Chat() {
 
             const contentToRetrigger = lastUserMessage.content
 
+            const streamId = generateStreamId('primary')
+            setPendingViewStreamId(streamId)
+
             dispatch(
               sendHermesMessage({
                 conversationId: currentConversationId,
@@ -3910,6 +3985,7 @@ function Chat() {
                 resume: true,
                 parentId: parent,
                 sessionId: lastHermesSessionId,
+                streamId,
               })
             )
               .unwrap()
@@ -3923,6 +3999,9 @@ function Chat() {
             dispatch(chatSliceActions.inputChanged({ content: contentWithIdeContext }))
             clearLocalInput()
 
+            const streamId = generateStreamId('primary')
+            setPendingViewStreamId(streamId)
+
             dispatch(
               sendHermesMessage({
                 conversationId: currentConversationId,
@@ -3932,6 +4011,7 @@ function Chat() {
                 resume: true,
                 parentId: parent,
                 sessionId: lastHermesSessionId,
+                streamId,
               })
             )
               .unwrap()
@@ -3962,6 +4042,9 @@ function Chat() {
             )
 
             // Dispatch sendMessage with retrigger flag
+            const streamId = generateStreamId('primary')
+            setPendingViewStreamId(streamId)
+
             dispatch(
               sendMessage({
                 conversationId: currentConversationId,
@@ -3973,6 +4056,7 @@ function Chat() {
                 imageConfig: isImageGenerationModel ? imageConfig : undefined,
                 reasoningConfig: think ? reasoningConfig : undefined,
                 cwd: ccCwd || undefined,
+                streamId,
               })
             )
               .unwrap()
@@ -4050,6 +4134,9 @@ function Chat() {
               clearLocalInput()
 
               // Dispatch a single sendMessage with repeatNum set to value.
+              const streamId = generateStreamId('primary')
+              setPendingViewStreamId(streamId)
+
               dispatch(
                 sendMessage({
                   conversationId: currentConversationId,
@@ -4060,6 +4147,7 @@ function Chat() {
                   imageConfig: isImageGenerationModel ? imageConfig : undefined,
                   reasoningConfig: think ? reasoningConfig : undefined,
                   cwd: ccCwd || undefined,
+                  streamId,
                 })
               )
                 .unwrap()
@@ -4139,6 +4227,7 @@ function Chat() {
 
               const lastMessage = displayMessages[displayMessages.length - 1]
               const shouldAutoCompact =
+                autoCompactionEnabled &&
                 totalContextLimit > 0 &&
                 (modelContextProgress >= 85 || totalContextProgress >= 85) &&
                 Boolean(lastMessage) &&
@@ -4189,6 +4278,7 @@ function Chat() {
               } else {
                 console.log('[AutoCompaction][send] skip compactBranch', {
                   reason: {
+                    disabledInSettings: !autoCompactionEnabled,
                     noContextLimit: totalContextLimit <= 0,
                     belowThreshold: modelContextProgress < 85 && totalContextProgress < 85,
                     missingLastMessage: !lastMessage,
@@ -4231,6 +4321,7 @@ function Chat() {
       selectedProject,
       currentConversation,
       currentUser,
+      autoCompactionEnabled,
       providerSettings.compactionProvider,
       providerSettings.compactionModel,
       providers.currentProvider,
@@ -4255,110 +4346,109 @@ function Chat() {
     )
   }, [streamState.id, streamState.streamingMessageId, dispatch])
 
-  const handleMessageEdit = useCallback(
-    (id: string, newContent: string, newContentBlocks?: any) => {
-      const parsedId = parseId(id)
-      // Only dispatch updateMessage thunk - it will dispatch messageUpdated internally on success
-      // This prevents double updates and race conditions
-      const updatePayload: any = { id: parsedId, content: newContent }
-      if (newContentBlocks) {
-        updatePayload.content_blocks = newContentBlocks
-      }
-      dispatch(updateMessage(updatePayload))
-      // console.log(parsedId)
-    },
-    [dispatch]
-  )
-
-  const handleMessageBranch = useCallback(
+  const submitMessageAsBranch = useCallback(
     (id: string, newContent: string, _newContentBlocks?: any) => {
-      if (currentConversationId) {
-        // Replace any @file mentions with actual file contents before branching
-        const processed = replaceFileMentionsWithPath(newContent)
-        const contentWithIdeContext = appendIdeContextToMessage(processed)
-        const parsedId = parseId(id)
-        const originalMessage = conversationMessages.find(m => m.id === parsedId)
-        const { content: contentWithCwdAnnouncement, pendingCwdValue } = withPendingCwdAnnouncement(
-          currentConversationId,
-          contentWithIdeContext
-        )
+      if (!currentConversationId) return
 
-        // Hermes mode uses the bridge session and explicit parent pointer for branch sends.
-        if (hermesMode && hermesModeAvailable && originalMessage) {
-          const lastHermesSessionId = findLastHermesSession(selectedPath)
+      // Replace any @file mentions with actual file contents before branching.
+      const processed = replaceFileMentionsWithPath(newContent)
+      const contentWithIdeContext = appendIdeContextToMessage(processed)
+      const parsedId = parseId(id)
+      const originalMessage = conversationMessages.find(m => m.id === parsedId)
+      const { content: contentWithCwdAnnouncement, pendingCwdValue } = withPendingCwdAnnouncement(
+        currentConversationId,
+        contentWithIdeContext
+      )
 
-          const branchParentId =
-            originalMessage.role === 'assistant' || originalMessage.role === 'ex_agent'
-              ? originalMessage.id
-              : (originalMessage.parent_id ?? null)
-
-          dispatch(
-            sendHermesMessage({
-              conversationId: currentConversationId,
-              message: contentWithIdeContext,
-              cwd: ccCwd || undefined,
-              model: selectedModel?.name,
-              resume: true,
-              parentId: branchParentId,
-              sessionId: lastHermesSessionId,
-              forkSession: true,
-            })
-          )
-            .unwrap()
-            .catch(error => {
-              console.error('Failed to send Hermes branch session:', error)
-            })
-        } else {
-          // Regular message branching logic (non-Hermes mode)
-          if (originalMessage) {
-            // Create optimistic branch message for instant UI feedback.
-            // Keep artifacts so pasted images do not flicker away during branch send.
-            const optimisticArtifacts = Array.isArray(originalMessage.artifacts) ? originalMessage.artifacts : []
-            const optimisticBranchMessage: Message = {
-              id: `branch-temp-${Date.now()}`,
-              conversation_id: currentConversationId,
-              role: 'user' as const,
-              content: contentWithCwdAnnouncement,
-              content_plain_text: contentWithCwdAnnouncement,
-              parent_id: originalMessage.parent_id,
-              children_ids: [],
-              created_at: new Date().toISOString(),
-              model_name: selectedModel?.name || '',
-              partial: false,
-              pastedContext: [],
-              artifacts: optimisticArtifacts,
-            }
-            dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
-          }
-
-          dispatch(
-            editMessageWithBranching({
-              conversationId: currentConversationId,
-              originalMessageId: parsedId,
-              newContent: contentWithCwdAnnouncement,
-              modelOverride: selectedModel?.name,
-              think: think,
-              cwd: ccCwd || undefined,
-            })
-          )
-            .unwrap()
-            .then(() => {
-              clearPendingCwdAnnouncement(currentConversationId, pendingCwdValue)
-              dispatch(chatSliceActions.messageArtifactsBackupCleared({ messageId: parsedId }))
-              // Invalidate React Query cache after successful branch to fetch new messages
-              // Note: messages query now includes tree data, so only one invalidation needed
-              queryClient.invalidateQueries({
-                queryKey: ['conversations', currentConversationId, 'messages'],
-                refetchType: 'active',
-              })
-            })
-            .catch(error => {
-              // Clear optimistic branch message on error
-              dispatch(chatSliceActions.optimisticBranchMessageCleared())
-              console.error('Failed to branch message:', error)
-            })
-        }
+      if (!originalMessage) {
+        console.error('Message not found for branch/edit:', id)
+        return
       }
+
+      const branchParentId =
+        originalMessage.role === 'assistant' || originalMessage.role === 'ex_agent'
+          ? originalMessage.id
+          : (originalMessage.parent_id ?? null)
+
+      if (hermesMode && hermesModeAvailable) {
+        const branchSourceSessionId = findNearestHermesSessionFromMessage(branchParentId)
+        const streamId = generateStreamId('branch')
+        setPendingViewStreamId(streamId)
+
+        dispatch(
+          sendHermesMessage({
+            conversationId: currentConversationId,
+            message: contentWithCwdAnnouncement,
+            cwd: ccCwd || undefined,
+            model: selectedModel?.name,
+            resume: branchSourceSessionId ? true : false,
+            parentId: branchParentId,
+            sessionId: branchSourceSessionId,
+            forkSession: Boolean(branchSourceSessionId),
+            streamId,
+          })
+        )
+          .unwrap()
+          .then(() => {
+            clearPendingCwdAnnouncement(currentConversationId, pendingCwdValue)
+            dispatch(chatSliceActions.messageArtifactsBackupCleared({ messageId: parsedId }))
+          })
+          .catch(error => {
+            console.error('Failed to send Hermes branch session:', error)
+          })
+
+        return
+      }
+
+      // Regular message branching logic (non-Hermes mode)
+      // Keep artifacts so pasted images do not flicker away during branch send.
+      const optimisticArtifacts = Array.isArray(originalMessage.artifacts) ? originalMessage.artifacts : []
+      const optimisticBranchMessage: Message = {
+        id: `branch-temp-${Date.now()}`,
+        conversation_id: currentConversationId,
+        role: 'user' as const,
+        content: contentWithCwdAnnouncement,
+        content_plain_text: contentWithCwdAnnouncement,
+        parent_id: originalMessage.parent_id,
+        children_ids: [],
+        created_at: new Date().toISOString(),
+        model_name: selectedModel?.name || '',
+        partial: false,
+        pastedContext: [],
+        artifacts: optimisticArtifacts,
+      }
+      dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
+
+      const streamId = generateStreamId('branch')
+      setPendingViewStreamId(streamId)
+
+      dispatch(
+        editMessageWithBranching({
+          conversationId: currentConversationId,
+          originalMessageId: parsedId,
+          newContent: contentWithCwdAnnouncement,
+          modelOverride: selectedModel?.name,
+          think: think,
+          cwd: ccCwd || undefined,
+          streamId,
+        })
+      )
+        .unwrap()
+        .then(() => {
+          clearPendingCwdAnnouncement(currentConversationId, pendingCwdValue)
+          dispatch(chatSliceActions.messageArtifactsBackupCleared({ messageId: parsedId }))
+          // Invalidate React Query cache after successful branch to fetch new messages.
+          // Note: messages query now includes tree data, so only one invalidation is needed.
+          queryClient.invalidateQueries({
+            queryKey: ['conversations', currentConversationId, 'messages'],
+            refetchType: 'active',
+          })
+        })
+        .catch(error => {
+          // Clear optimistic branch message on error
+          dispatch(chatSliceActions.optimisticBranchMessageCleared())
+          console.error('Failed to branch message:', error)
+        })
     },
     [
       currentConversationId,
@@ -4374,7 +4464,22 @@ function Chat() {
       queryClient,
       withPendingCwdAnnouncement,
       clearPendingCwdAnnouncement,
+      findNearestHermesSessionFromMessage,
     ]
+  )
+
+  const handleMessageEdit = useCallback(
+    (id: string, newContent: string, newContentBlocks?: any) => {
+      submitMessageAsBranch(id, newContent, newContentBlocks)
+    },
+    [submitMessageAsBranch]
+  )
+
+  const handleMessageBranch = useCallback(
+    (id: string, newContent: string, newContentBlocks?: any) => {
+      submitMessageAsBranch(id, newContent, newContentBlocks)
+    },
+    [submitMessageAsBranch]
   )
 
   const handleExplainFromSelection = useCallback(
@@ -4421,6 +4526,9 @@ function Chat() {
           dispatch(chatSliceActions.optimisticMessageSet(optimisticUserMessage))
 
           // Send as a regular message with the selected message as parent
+          const streamId = generateStreamId('primary')
+          setPendingViewStreamId(streamId)
+
           dispatch(
             sendMessage({
               conversationId: currentConversationId,
@@ -4431,6 +4539,7 @@ function Chat() {
               imageConfig: isImageGenerationModel ? imageConfig : undefined,
               reasoningConfig: think ? reasoningConfig : undefined,
               cwd: ccCwd || undefined,
+              streamId,
             })
           )
             .unwrap()
@@ -4467,6 +4576,9 @@ function Chat() {
           }
           dispatch(chatSliceActions.optimisticBranchMessageSet(optimisticBranchMessage))
 
+          const streamId = generateStreamId('branch')
+          setPendingViewStreamId(streamId)
+
           dispatch(
             editMessageWithBranching({
               conversationId: currentConversationId,
@@ -4475,6 +4587,7 @@ function Chat() {
               modelOverride: selectedModel?.name,
               think: think,
               cwd: ccCwd || undefined,
+              streamId,
             })
           )
             .unwrap()
@@ -4590,6 +4703,10 @@ function Chat() {
       React.startTransition(() => {
         batch(() => {
           if (!samePath) {
+            // User explicitly switched branches. Drop the local pending-stream fallback so
+            // another branch can be interacted with independently while a different
+            // branch keeps streaming in the background.
+            setPendingViewStreamId(null)
             dispatch(chatSliceActions.conversationPathSet(parsedPath))
           }
           if (!sameFocus) {
@@ -6191,7 +6308,7 @@ function Chat() {
                               value={hermesMode ? 'hermes' : 'default'}
                               options={[
                                 { value: 'default', label: 'Default model backend' },
-                                { value: 'hermes', label: 'Hermes bridge backend' },
+                                { value: 'hermes', label: 'Hermes ACP backend' },
                               ]}
                               onChange={value => setHermesModeEnabled(value === 'hermes')}
                               placeholder='Select backend'

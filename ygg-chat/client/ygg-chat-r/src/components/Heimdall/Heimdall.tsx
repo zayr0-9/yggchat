@@ -97,6 +97,50 @@ const getReadableTextColor = (hex: string) => {
   return luminance > 150 ? '#0f172a' : '#ffffff'
 }
 
+const interpolateHexColor = (from: string, to: string, progress: number) => {
+  const clamped = Math.max(0, Math.min(1, progress))
+  const fromR = parseInt(from.slice(1, 3), 16)
+  const fromG = parseInt(from.slice(3, 5), 16)
+  const fromB = parseInt(from.slice(5, 7), 16)
+  const toR = parseInt(to.slice(1, 3), 16)
+  const toG = parseInt(to.slice(3, 5), 16)
+  const toB = parseInt(to.slice(5, 7), 16)
+
+  const r = Math.round(fromR + (toR - fromR) * clamped)
+  const g = Math.round(fromG + (toG - fromG) * clamped)
+  const b = Math.round(fromB + (toB - fromB) * clamped)
+
+  return `#${[r, g, b]
+    .map(value => value.toString(16).padStart(2, '0'))
+    .join('')}`
+}
+
+const HEATMAP_COLOR_STOPS = [
+  { stop: 0, color: '#1d4ed8' },
+  { stop: 0.18, color: '#3b82f6' },
+  { stop: 0.34, color: '#06b6d4' },
+  { stop: 0.5, color: '#22c55e' },
+  { stop: 0.7, color: '#eab308' },
+  { stop: 0.85, color: '#f97316' },
+  { stop: 1, color: '#dc2626' },
+] as const
+
+const getHeatmapColor = (progress: number) => {
+  const clamped = Math.max(0, Math.min(1, progress))
+
+  for (let i = 0; i < HEATMAP_COLOR_STOPS.length - 1; i++) {
+    const current = HEATMAP_COLOR_STOPS[i]
+    const next = HEATMAP_COLOR_STOPS[i + 1]
+
+    if (clamped <= next.stop) {
+      const localProgress = (clamped - current.stop) / (next.stop - current.stop)
+      return interpolateHexColor(current.color, next.color, localProgress)
+    }
+  }
+
+  return HEATMAP_COLOR_STOPS[HEATMAP_COLOR_STOPS.length - 1].color
+}
+
 // interface TreeStats {
 //   totalNodes: number
 //   maxDepth: number
@@ -219,6 +263,23 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     setFilterEmptyMessages(prev => {
       const next = !prev
       localStorage.setItem('heimdall-filter-empty', JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  const [heatmapMode, setHeatmapMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('heimdall-heatmap-mode')
+      return saved !== null ? JSON.parse(saved) : false
+    } catch {
+      return false
+    }
+  })
+
+  const toggleHeatmapMode = useCallback(() => {
+    setHeatmapMode(prev => {
+      const next = !prev
+      localStorage.setItem('heimdall-heatmap-mode', JSON.stringify(next))
       return next
     })
   }, [])
@@ -2646,6 +2707,57 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     [customTheme, customThemeEnabled, isDarkMode]
   )
 
+  const heimdallNodeTimestamps = useMemo(() => {
+    const entries = Object.keys(positions)
+      .map(nodeId => {
+        const createdAt = messageById.get(String(nodeId))?.created_at
+        const timestamp = createdAt ? new Date(createdAt).getTime() : Number.NaN
+        return Number.isFinite(timestamp) ? [String(nodeId), timestamp] : null
+      })
+      .filter((entry): entry is [string, number] => entry !== null)
+
+    const sortedEntries = [...entries].sort((a, b) => {
+      if (a[1] !== b[1]) {
+        return a[1] - b[1]
+      }
+      return a[0].localeCompare(b[0])
+    })
+
+    const progressByNodeId = new Map<string, number>()
+    const denominator = Math.max(sortedEntries.length - 1, 1)
+
+    sortedEntries.forEach(([nodeId], index) => {
+      progressByNodeId.set(nodeId, sortedEntries.length <= 1 ? 1 : index / denominator)
+    })
+
+    return {
+      byNodeId: new Map(entries),
+      progressByNodeId,
+    }
+  }, [messageById, positions])
+
+  const getHeatmapNodeColors = useCallback(
+    (nodeId: string, isVisible: boolean) => {
+      if (!heatmapMode) {
+        return null
+      }
+
+      const progress = heimdallNodeTimestamps.progressByNodeId.get(String(nodeId))
+      if (progress == null) {
+        return null
+      }
+
+      const fill = getHeatmapColor(progress)
+
+      return {
+        fill,
+        stroke: isVisible ? (isDarkMode ? '#fb923c' : '#10b981') : 'rgba(15,23,42,0.45)',
+        text: getReadableTextColor(fill),
+      }
+    },
+    [heatmapMode, heimdallNodeTimestamps, isDarkMode]
+  )
+
   const heimdallPanelBackgroundColor = customThemeEnabled
     ? getThemeModeColor(customTheme.colors.heimdallPanelBg, isDarkMode)
     : undefined
@@ -2818,6 +2930,8 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         ((typeof nodeIdParsed === 'number' && !isNaN(nodeIdParsed)) || typeof nodeIdParsed === 'string') &&
         visibleMessageId === nodeIdParsed
       const themedNodeColors = getNodeThemeColors(node.sender, isVisible)
+      const heatmapNodeColors = getHeatmapNodeColors(String(node.id), isVisible)
+      const effectiveNodeColors = heatmapNodeColors ?? themedNodeColors
       const subagentNodes = subagentMapByParent[String(node.id)] || []
       const subagentCount = subagentNodes.length
       const showSubagentBadge = subagentCount > 0 && node.sender === 'user'
@@ -2865,7 +2979,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               className={`cursor-pointer hover:opacity-90 transition-colors duration-200 ${
                 compactMode && focusedNodeId === node.id ? 'animate-pulse' : ''
               } ${
-                customThemeEnabled
+                effectiveNodeColors
                   ? ''
                   : node.sender === 'user'
                     ? `fill-neutral-100 dark:fill-neutral-900 ${isVisible ? 'stroke-emerald-400 dark:stroke-orange-500' : 'stroke-neutral-300 dark:stroke-neutral-800'}`
@@ -2876,10 +2990,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               style={{
                 filter:
                   compactMode && focusedNodeId === node.id ? `drop-shadow(0 0 10px rgba(59, 130, 246, 0.5))` : 'none',
-                ...(themedNodeColors
+                ...(effectiveNodeColors
                   ? {
-                      fill: themedNodeColors.fill,
-                      stroke: themedNodeColors.stroke,
+                      fill: effectiveNodeColors.fill,
+                      stroke: effectiveNodeColors.stroke,
                     }
                   : {}),
               }}
@@ -2927,7 +3041,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               className={`${node.sender === 'user' ? 'stroke-neutral-200 dark:stroke-yPurple-400' : 'stroke-neutral-200 dark:stroke-yBrown-400'}`}
             /> */}
             <foreignObject width={nodeWidth} height={nodeHeight} style={{ pointerEvents: 'none', userSelect: 'none' }}>
-              <div className='relative p-3 text-stone-800 dark:text-stone-300 text-sm h-full flex items-center'>
+              <div
+                className='relative p-3 text-stone-800 dark:text-stone-300 text-sm h-full flex items-center'
+                style={heatmapNodeColors ? { color: heatmapNodeColors.text } : undefined}
+              >
                 {(() => {
                   const nodeIdParsed = parseId(node.id)
                   if (typeof nodeIdParsed === 'number' && isNaN(nodeIdParsed)) {
@@ -3114,7 +3231,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
               cy={y + circleRadius}
               r={circleRadius}
               className={`cursor-pointer transition-transform duration-150 ${
-                customThemeEnabled
+                effectiveNodeColors
                   ? ''
                   : `${isVisible ? ' fill-rose-300 dark:fill-yPurple-500' : 'fill-slate-100 stroke-neutral-200 dark:fill-neutral-800 dark:stroke-neutral-900'} ${
                       node.sender === 'user'
@@ -3128,10 +3245,10 @@ export const Heimdall: React.FC<HeimdallProps> = ({
                 transform: selectedNode?.id === node.id ? 'scale(1.1)' : 'scale(1)',
                 transformOrigin: `${x}px ${y + circleRadius}px`,
                 filter: `drop-shadow(0 4px 12px rgba(0,0,0,${isDarkMode ? '0.25' : '0.05'})) drop-shadow(0 6px 18px rgba(0,0,0,0.02))`,
-                ...(themedNodeColors
+                ...(effectiveNodeColors
                   ? {
-                      fill: themedNodeColors.fill,
-                      stroke: themedNodeColors.stroke,
+                      fill: effectiveNodeColors.fill,
+                      stroke: effectiveNodeColors.stroke,
                     }
                   : {}),
               }}
@@ -3299,6 +3416,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
       isDarkMode,
       customThemeEnabled,
       getNodeThemeColors,
+      getHeatmapNodeColors,
       handleNodeMouseEnter,
       handleNodeMouseLeave,
       handleSubagentBadgeClick,
@@ -3425,6 +3543,17 @@ export const Heimdall: React.FC<HeimdallProps> = ({
           title={filterEmptyMessages ? 'Show Empty Messages' : 'Hide Empty Messages'}
         >
           <i className='bx bx-filter text-xl' />
+        </button>
+        <button
+          onClick={toggleHeatmapMode}
+          className={`p-2 rounded-lg transition-colors active:scale-90 border-2 hover:scale-101 border-stone-300 dark:border-stone-700 shadow-[0_0px_8px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_-12px_28px_-6px_rgba(0,0,0,0.65)] ${
+            heatmapMode
+              ? 'bg-gradient-to-r from-blue-500 via-green-500 to-red-500 text-white'
+              : 'bg-neutral-50 text-stone-800 dark:text-stone-200 dark:bg-yBlack-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+          }`}
+          title={heatmapMode ? 'Disable Heatmap Mode' : 'Enable Heatmap Mode'}
+        >
+          <i className='bx bxs-hot text-xl' />
         </button>
         <button
           onClick={() => {

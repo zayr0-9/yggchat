@@ -1,81 +1,27 @@
 import { spawn } from 'child_process'
-import { existsSync } from 'fs'
-import path from 'path'
+import {
+  HermesAcpClient,
+  type HermesBridgeEvent,
+  type HermesPermissionRequest,
+  type HermesResponse,
+  type HermesStreamChunk,
+  type OnHermesPermissionRequest,
+  type OnHermesResponse,
+  type OnHermesStreamingChunk,
+  resolveAcpLauncher,
+} from './hermesAcpClient.js'
 
-export interface HermesBridgeEvent {
-  type: string
-  request_id?: string
-  session_id?: string
-  [key: string]: any
+export type {
+  HermesBridgeEvent,
+  HermesPermissionRequest,
+  HermesResponse,
+  HermesStreamChunk,
+  OnHermesPermissionRequest,
+  OnHermesResponse,
+  OnHermesStreamingChunk,
 }
-
-export interface HermesResponse {
-  messageType: 'session' | 'assistant_message' | 'tool_start' | 'tool_result' | 'final' | 'conversation_end' | 'error' | 'event'
-  timestamp: Date
-  sessionId?: string
-  event: HermesBridgeEvent
-  error?: {
-    code?: string
-    message: string
-  }
-}
-
-export interface HermesStreamChunk {
-  type: 'content_delta' | 'thinking_delta' | 'tool_start' | 'tool_end'
-  delta?: string
-  contentType: 'text' | 'thinking'
-  toolName?: string
-  toolId?: string
-}
-
-export type OnHermesResponse = (response: HermesResponse) => void | Promise<void>
-export type OnHermesStreamingChunk = (chunk: HermesStreamChunk) => void | Promise<void>
 
 const sessions = new Map<string, string>()
-
-type BridgeLauncher = {
-  command: string
-  args: string[]
-  spawnCwd: string
-}
-
-function resolveBridgeLauncher(bridgeArgs: string[]): BridgeLauncher {
-  const configuredRoot = process.env.HERMES_AGENT_ROOT?.trim()
-  const defaultRoot = process.platform === 'win32' ? 'D:\\hermes-agent' : '/opt/hermes-agent'
-  const hermesRoot = configuredRoot || defaultRoot
-  const spawnCwd = existsSync(hermesRoot) ? hermesRoot : process.cwd()
-
-  const configuredPython = process.env.HERMES_PYTHON?.trim()
-  const defaultPython =
-    process.platform === 'win32'
-      ? path.join(hermesRoot, 'venv', 'Scripts', 'python.exe')
-      : path.join(hermesRoot, 'venv', 'bin', 'python')
-  const pythonPath = configuredPython || defaultPython
-  const mainScript = path.join(hermesRoot, 'hermes_cli', 'main.py')
-
-  if (existsSync(pythonPath) && existsSync(mainScript)) {
-    return {
-      command: pythonPath,
-      args: [mainScript, 'bridge', ...bridgeArgs],
-      spawnCwd,
-    }
-  }
-
-  const configuredHermes = process.env.HERMES_BIN?.trim()
-  if (configuredHermes && existsSync(configuredHermes)) {
-    return {
-      command: configuredHermes,
-      args: ['bridge', ...bridgeArgs],
-      spawnCwd,
-    }
-  }
-
-  return {
-    command: 'hermes',
-    args: ['bridge', ...bridgeArgs],
-    spawnCwd,
-  }
-}
 
 function createSessionKey(conversationId: string, cwd: string): string {
   return `${conversationId}:${cwd}`
@@ -87,21 +33,6 @@ export function getHermesSession(conversationId: string, cwd: string): string | 
 
 export function setHermesSession(conversationId: string, cwd: string, sessionId: string): void {
   sessions.set(createSessionKey(conversationId, cwd), sessionId)
-}
-
-function toEventMessageType(eventType: string): HermesResponse['messageType'] {
-  if (eventType === 'session') return 'session'
-  if (eventType === 'assistant_message') return 'assistant_message'
-  if (eventType === 'tool_start') return 'tool_start'
-  if (eventType === 'tool_result') return 'tool_result'
-  if (eventType === 'final') return 'final'
-  if (eventType === 'conversation_end') return 'conversation_end'
-  if (eventType === 'error') return 'error'
-  return 'event'
-}
-
-function extractSessionId(event: HermesBridgeEvent): string | undefined {
-  return event.session_id || event.sessionId
 }
 
 function normalizeHermesModel(model?: string): string | undefined {
@@ -119,7 +50,11 @@ function normalizeHermesModel(model?: string): string | undefined {
   return aliases[raw.toLowerCase()] || raw
 }
 
-async function emitResponse(
+function extractSessionId(event: HermesBridgeEvent): string | undefined {
+  return event.session_id || event.sessionId
+}
+
+async function emitAndTrackSession(
   event: HermesBridgeEvent,
   conversationId: string,
   cwd: string,
@@ -132,7 +67,22 @@ async function emitResponse(
 
   if (onResponse) {
     await onResponse({
-      messageType: toEventMessageType(event.type),
+      messageType:
+        event.type === 'session'
+          ? 'session'
+          : event.type === 'assistant_message'
+            ? 'assistant_message'
+            : event.type === 'tool_start'
+              ? 'tool_start'
+              : event.type === 'tool_result'
+                ? 'tool_result'
+                : event.type === 'final'
+                  ? 'final'
+                  : event.type === 'conversation_end'
+                    ? 'conversation_end'
+                    : event.type === 'error'
+                      ? 'error'
+                      : 'event',
       timestamp: new Date(),
       sessionId,
       event,
@@ -140,7 +90,7 @@ async function emitResponse(
         event.type === 'error'
           ? {
               code: typeof event.code === 'string' ? event.code : undefined,
-              message: typeof event.message === 'string' ? event.message : 'Hermes bridge error',
+              message: typeof event.message === 'string' ? event.message : 'Hermes ACP error',
             }
           : undefined,
     })
@@ -156,176 +106,147 @@ export async function executeHermesAgent(
   onResponse?: OnHermesResponse,
   onStreamingChunk?: OnHermesStreamingChunk,
   sessionId?: string,
-  _forkSession?: boolean,
+  forkSession?: boolean,
   model?: string,
-  maxIterations?: number
+  _maxIterations?: number,
+  abortSignal?: AbortSignal,
+  onPermissionRequest?: OnHermesPermissionRequest
 ): Promise<string | null> {
-  const existingSessionId = sessionId || getHermesSession(conversationId, cwd)
+  const existingSessionId = sessionId || (!forkSession ? getHermesSession(conversationId, cwd) : undefined)
   const normalizedModel = normalizeHermesModel(model)
+  const launcher = resolveAcpLauncher()
 
-  return new Promise((resolve, reject) => {
-    // Enable native Hermes streaming by default for Yggdrasil integration.
-    // Request payload still carries explicit flags as an extra safeguard.
-    const bridgeArgs = ['--once', '--native-stream', '--assistant-delta', '--native-assistant-delta']
-    if (normalizedModel) bridgeArgs.push('--model', normalizedModel)
-    if (typeof maxIterations === 'number' && Number.isFinite(maxIterations) && maxIterations > 0) {
-      bridgeArgs.push('--max-iterations', String(Math.floor(maxIterations)))
-    }
-
-    const launcher = resolveBridgeLauncher(bridgeArgs)
-
-    const proc = spawn(launcher.command, launcher.args, {
-      cwd: launcher.spawnCwd,
-      shell: false,
-      env: { ...process.env },
-    })
-
-    let stdoutBuffer = ''
-    let stderrBuffer = ''
-    let latestSessionId: string | null = existingSessionId || null
-    let lineProcessingQueue: Promise<void> = Promise.resolve()
-
-    const handleLine = async (line: string) => {
-      if (!line.trim()) return
-
-      let event: HermesBridgeEvent
-      try {
-        event = JSON.parse(line)
-      } catch {
-        return
-      }
-
-      if (event.type === 'assistant_delta' && typeof event.delta === 'string') {
-        if (onStreamingChunk) {
-          await onStreamingChunk({
-            type: 'content_delta',
-            delta: event.delta,
-            contentType: 'text',
-          })
-        }
-      } else if (event.type === 'reasoning_delta' && typeof event.delta === 'string') {
-        if (onStreamingChunk) {
-          await onStreamingChunk({
-            type: 'thinking_delta',
-            delta: event.delta,
-            contentType: 'thinking',
-          })
-        }
-      } else if (event.type === 'tool_start') {
-        if (onStreamingChunk) {
-          await onStreamingChunk({
-            type: 'tool_start',
-            contentType: 'text',
-            toolName: typeof event.name === 'string' ? event.name : undefined,
-            toolId: typeof event.tool_call_id === 'string' ? event.tool_call_id : undefined,
-          })
-        }
-      } else if (event.type === 'tool_result') {
-        if (onStreamingChunk) {
-          await onStreamingChunk({
-            type: 'tool_end',
-            contentType: 'text',
-            toolName: typeof event.name === 'string' ? event.name : undefined,
-            toolId: typeof event.tool_call_id === 'string' ? event.tool_call_id : undefined,
-          })
-        }
-      }
-
-      const emittedSessionId = await emitResponse(event, conversationId, cwd, onResponse)
-      if (emittedSessionId) latestSessionId = emittedSessionId
-    }
-
-    const enqueueLine = (line: string) => {
-      lineProcessingQueue = lineProcessingQueue
-        .then(() => handleLine(line))
-        .catch(error => {
-          console.error('[HermesAgent] Failed to process bridge event line:', error)
-        })
-    }
-
-    proc.stdout.on('data', (data: Buffer) => {
-      stdoutBuffer += data.toString()
-      const lines = stdoutBuffer.split('\n')
-      stdoutBuffer = lines.pop() || ''
-
-      for (const line of lines) {
-        enqueueLine(line)
-      }
-    })
-
-    proc.stderr.on('data', (data: Buffer) => {
-      stderrBuffer += data.toString()
-    })
-
-    proc.on('error', async error => {
-      const spawnMessage = `Failed to spawn Hermes bridge via '${launcher.command}': ${error.message}`
-      if (onResponse) {
-        await onResponse({
-          messageType: 'error',
-          timestamp: new Date(),
-          sessionId: latestSessionId || undefined,
-          event: {
-            type: 'error',
-            message: spawnMessage,
-          },
-          error: {
-            code: 'HERMES_SPAWN_ERROR',
-            message: spawnMessage,
-          },
-        })
-      }
-      reject(new Error(spawnMessage))
-    })
-
-    proc.on('close', async code => {
-      if (stdoutBuffer.trim()) {
-        enqueueLine(stdoutBuffer)
-      }
-
-      await lineProcessingQueue
-
-      if (code !== 0) {
-        const launchHint = `command='${launcher.command} ${launcher.args.join(' ')}'`
-        const errorMessage = stderrBuffer.trim() || `Hermes bridge exited with code ${code} (${launchHint})`
-        if (onResponse) {
-          await onResponse({
-            messageType: 'error',
-            timestamp: new Date(),
-            sessionId: latestSessionId || undefined,
-            event: {
-              type: 'error',
-              message: errorMessage,
-              code,
-            },
-            error: {
-              code: 'HERMES_EXIT_ERROR',
-              message: errorMessage,
-            },
-          })
-        }
-        reject(new Error(errorMessage))
-        return
-      }
-
-      resolve(latestSessionId)
-    })
-
-    const requestPayload = {
-      type: 'run',
-      request_id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-      session_id: existingSessionId,
-      message: userMessage,
-      cwd,
-      max_iterations: maxIterations,
-      resume: !!existingSessionId,
-      model: normalizedModel,
-      // Explicitly request native streaming semantics from Hermes bridge.
-      assistant_delta: true,
-      native_assistant_delta: true,
-      native_stream: true,
-    }
-
-    proc.stdin.write(`${JSON.stringify(requestPayload)}\n`)
-    proc.stdin.end()
+  const proc = spawn(launcher.command, launcher.args, {
+    cwd: launcher.spawnCwd,
+    shell: false,
+    env: { ...process.env },
+    stdio: ['pipe', 'pipe', 'pipe'],
   })
+
+  const client = new HermesAcpClient(proc, {
+    cwd,
+    onResponse,
+    onStreamingChunk,
+    onPermissionRequest,
+    abortSignal,
+  })
+
+  let latestSessionId: string | null = existingSessionId || null
+
+  try {
+    const initializeResult = await client.initialize()
+    await client.maybeAuthenticate(initializeResult)
+
+    let activeSessionId = existingSessionId
+
+    if (activeSessionId && forkSession) {
+      activeSessionId = await client.forkSession(activeSessionId, cwd)
+      latestSessionId = activeSessionId
+      await emitAndTrackSession(
+        {
+          type: 'session',
+          session_id: activeSessionId,
+          source: 'fork',
+          parent_session_id: existingSessionId,
+        },
+        conversationId,
+        cwd,
+        onResponse
+      )
+    } else if (activeSessionId) {
+      await client.loadSession(activeSessionId, cwd)
+      latestSessionId = activeSessionId
+      await emitAndTrackSession(
+        {
+          type: 'session',
+          session_id: activeSessionId,
+          source: 'load',
+        },
+        conversationId,
+        cwd,
+        onResponse
+      )
+    } else {
+      activeSessionId = await client.newSession(cwd)
+      latestSessionId = activeSessionId
+      await emitAndTrackSession(
+        {
+          type: 'session',
+          session_id: activeSessionId,
+          source: 'new',
+        },
+        conversationId,
+        cwd,
+        onResponse
+      )
+    }
+
+    if (!activeSessionId) {
+      throw new Error('Hermes ACP session was not established')
+    }
+
+    if (normalizedModel) {
+      try {
+        await client.setSessionModel(activeSessionId, normalizedModel)
+      } catch (error) {
+        console.warn('[HermesAgent] Failed to set ACP session model:', error)
+      }
+    }
+
+    const promptResult = await client.prompt(activeSessionId, userMessage)
+    latestSessionId = activeSessionId
+    setHermesSession(conversationId, cwd, activeSessionId)
+
+    if (abortSignal?.aborted || promptResult.stopReason === 'cancelled') {
+      throw Object.assign(new Error('Hermes ACP prompt cancelled'), { name: 'AbortError' })
+    }
+
+    if (promptResult.finalText || promptResult.finalReasoning) {
+      await emitAndTrackSession(
+        {
+          type: 'final',
+          session_id: activeSessionId,
+          content: promptResult.finalText,
+          reasoning: promptResult.finalReasoning,
+          stop_reason: promptResult.stopReason,
+          usage: promptResult.usage,
+        },
+        conversationId,
+        cwd,
+        onResponse
+      )
+    }
+
+    await emitAndTrackSession(
+      {
+        type: 'conversation_end',
+        session_id: activeSessionId,
+        stop_reason: promptResult.stopReason,
+        usage: promptResult.usage,
+      },
+      conversationId,
+      cwd,
+      onResponse
+    )
+
+    return latestSessionId
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (!(error instanceof Error && error.name === 'AbortError')) {
+      await emitAndTrackSession(
+        {
+          type: 'error',
+          session_id: latestSessionId || undefined,
+          message: errorMessage,
+          code: 'HERMES_ACP_ERROR',
+        },
+        conversationId,
+        cwd,
+        onResponse
+      )
+    }
+    throw error
+  } finally {
+    client.close()
+  }
 }

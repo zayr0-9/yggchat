@@ -74,7 +74,7 @@ describe('registerEphemeralGenerateRoutes', () => {
     expect(res.status).toBe(500)
     const payload = (await res.json()) as any
     expect(payload.success).toBe(false)
-    expect(payload.error).toContain('Yggdrasil app auth token missing')
+    expect(payload.error).toContain('Graviton app auth token missing')
   })
 
   it('ephemeral chat infers openrouter from non-openai prefixed model names', async () => {
@@ -91,7 +91,7 @@ describe('registerEphemeralGenerateRoutes', () => {
     expect(res.status).toBe(500)
     const payload = (await res.json()) as any
     expect(payload.success).toBe(false)
-    expect(payload.error).toContain('Yggdrasil app auth token missing')
+    expect(payload.error).toContain('Graviton app auth token missing')
   })
 
   it('ephemeral openrouter requests can use preloaded token store auth without passing userId', async () => {

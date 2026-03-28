@@ -344,7 +344,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
       <header className='mobile-header'>
         <div className='mobile-header-top'>
           <div className='mobile-header-brand'>
-            <h1>Yggdrasil</h1>
+            <h1>Graviton</h1>
             <p className='mobile-status'>
               <span className='mobile-status-dot' aria-hidden='true' />
               {statusText}

@@ -12,6 +12,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+## [0.1.82] - 2026-03-25
+
+### Added
+
+- Added `/theme-demo on` and `/theme-demo off` slash commands to cycle through installed custom themes for demo recording.
+- Added branch-point prompt injection support so the current parent/ancestor id can be inserted before a user message is sent.
+- Added estimated token display in LoggingPage based on message character counts.
+
+### Changed
+
+- Expanded theming coverage across more UI surfaces, including composer toggles, auth, HTML tools, Heimdall modals, and context pills.
+- Updated Arctic Aurora to support the newly themeable UI elements.
+- Improved chat message rendering behavior and animations for newly arriving messages and branch activity indicators.
+- Simplified subagent/provider handling so ChatGPT/OpenAI can force the OpenAI provider and use the configured default agent model.
+- Logging analytics now aggregate character counts server-side and expose `estimatedTotalTokens`, with the daily chart respecting the selected date range.
+
+### Fixed
+
+
 ## [0.1.79] - 2026-02-23
 
 ### Added

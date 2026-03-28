@@ -33,7 +33,12 @@ import {
   REASONING_EFFORT_OPTIONS,
   saveChatReasoningSettings,
 } from '../helpers/chatReasoningSettingsStorage'
-import { loadShowTokenUsageBar, saveShowTokenUsageBar } from '../helpers/chatUiSettingsStorage'
+import {
+  loadAutoCompactionEnabled,
+  loadShowTokenUsageBar,
+  saveAutoCompactionEnabled,
+  saveShowTokenUsageBar,
+} from '../helpers/chatUiSettingsStorage'
 import {
   AppFontSettings,
   applyAppFontSettings,
@@ -226,6 +231,7 @@ const Settings: React.FC = () => {
     loadChatReasoningSettings()
   )
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
+  const [autoCompactionEnabled, setAutoCompactionEnabled] = useState<boolean>(() => loadAutoCompactionEnabled())
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     heartbeatTime: null,
     agentName: 'Global Agent',
@@ -935,6 +941,16 @@ const Settings: React.FC = () => {
     showStatus({
       type: 'success',
       text: nextValue ? 'Token usage bar enabled in Chat.' : 'Token usage bar hidden in Chat.',
+    })
+  }
+
+  const handleAutoCompactionToggle = () => {
+    const nextValue = !autoCompactionEnabled
+    saveAutoCompactionEnabled(nextValue)
+    setAutoCompactionEnabled(nextValue)
+    showStatus({
+      type: 'success',
+      text: nextValue ? 'Auto compaction enabled in Chat.' : 'Auto compaction disabled in Chat.',
     })
   }
 
@@ -1674,6 +1690,28 @@ const Settings: React.FC = () => {
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     showTokenUsageBar ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className='flex items-center justify-between pt-2 border-t border-stone-200 dark:border-stone-700'>
+              <div>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Auto Compaction</p>
+                <p className='text-sm text-stone-500 dark:text-stone-400'>
+                  Automatically compact the visible branch before send when context usage gets near the model or credit
+                  threshold.
+                </p>
+              </div>
+              <button
+                onClick={handleAutoCompactionToggle}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  autoCompactionEnabled ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    autoCompactionEnabled ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>

@@ -47,10 +47,11 @@ import {
   shouldUseGlobalAgentModelForSubagentDefault,
 } from '../../helpers/subagentToolSettings'
 import { loadAgentSettings } from '../../helpers/agentSettingsStorage'
+import { loadAutoCompactionEnabled } from '../../helpers/chatUiSettingsStorage'
 import { DEFAULT_COMPACTION_SYSTEM_PROMPT, loadProviderSettings } from '../../helpers/providerSettingsStorage'
 import { getDefaultBashTimeoutMs, getDefaultToolCallTimeoutMs } from '../../helpers/toolExecutionSettings'
 import { updateToolEnabledState } from '../../helpers/toolSettingsStorage'
-import { generateStreamId, STREAM_PRUNE_DELAY } from './streamHelpers'
+import { generateStreamId, inferStreamTypeFromId, STREAM_PRUNE_DELAY } from './streamHelpers'
 import sysPromptConfig from './sys_prompt.json'
 import {
   getAllTools,
@@ -1200,6 +1201,27 @@ const resolveSubagentDefaults = async (
   }
 }
 
+const shouldUseCommunityLocalEphemeral = () => isCommunityMode && isElectronEnvironment
+
+const parseToolResultsFromContentBlocks = (contentBlocks: any): any[] => {
+  if (!Array.isArray(contentBlocks)) return []
+
+  return contentBlocks
+    .filter(block => block?.type === 'tool_result' && (block?.tool_use_id || block?.toolUseId))
+    .map(block => ({
+      tool_use_id: block.tool_use_id || block.toolUseId,
+      content:
+        typeof block.content === 'string'
+          ? block.content
+          : block.content == null
+            ? ''
+            : JSON.stringify(block.content),
+      is_error: Boolean(block.is_error ?? block.isError),
+      tool_name: typeof block.name === 'string' ? block.name : undefined,
+      input: block.input,
+    }))
+}
+
 /**
  * Simple subagent execution without tool calling (fallback when context not available)
  */
@@ -1215,6 +1237,29 @@ const executeSimpleSubagentCall = async (toolCall: any, accessToken: string | nu
   const { model: resolvedModel, provider: resolvedProvider } = await resolveSubagentDefaults(model)
 
   try {
+    if (shouldUseCommunityLocalEphemeral()) {
+      const localPayload = await localApi.post<any>('/headless/ephemeral/chat', {
+        prompt,
+        provider: resolvedProvider,
+        model: resolvedModel,
+        maxTokens: Math.min(maxTokens || 4096, 16384),
+        temperature: temperature ?? 0.7,
+        systemPrompt,
+        response_format: effectiveResponseFormat,
+      })
+
+      if (!localPayload?.success) {
+        throw new Error(localPayload?.error || 'Community local subagent generation failed')
+      }
+
+      const fullText = typeof localPayload?.message?.content === 'string' ? localPayload.message.content : ''
+      const reasoning = typeof localPayload?.reasoning === 'string' ? localPayload.reasoning : ''
+
+      if (reasoning) {
+        return `<thinking>\n${reasoning}\n</thinking>\n\n${fullText}`
+      }
+      return fullText || 'Subagent returned empty response'
+    }
     const response = await createStreamingRequest('/generate/ephemeral', accessToken, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1501,21 +1546,55 @@ const executeSubagentCall = async (
       }
 
       // Call ephemeral endpoint with tools and conversation history
-      const response = await createStreamingRequest('/generate/ephemeral', accessToken, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: conversationHistory,
-          provider: resolvedProvider,
-          model: resolvedModel,
-          maxTokens: Math.min(maxTokens || 4096, 16384),
-          temperature: temperature ?? 0.7,
-          systemPrompt,
-          response_format: effectiveResponseFormat,
-          tools: subagentTools.length > 0 ? subagentTools : undefined,
-        }),
-        signal: subagentAbortController.signal,
-      })
+      const requestBody = {
+        messages: conversationHistory,
+        provider: resolvedProvider,
+        model: resolvedModel,
+        maxTokens: Math.min(maxTokens || 4096, 16384),
+        temperature: temperature ?? 0.7,
+        systemPrompt,
+        response_format: effectiveResponseFormat,
+        tools: subagentTools.length > 0 ? subagentTools : undefined,
+      }
+
+      let response: Response
+      if (shouldUseCommunityLocalEphemeral()) {
+        const localPayload = await localApi.post<any>('/headless/ephemeral/chat', requestBody)
+        if (!localPayload?.success) {
+          throw new Error(localPayload?.error || 'Community local subagent generation failed')
+        }
+
+        const syntheticEvents: string[] = []
+        if (typeof localPayload?.reasoning === 'string' && localPayload.reasoning.length > 0) {
+          syntheticEvents.push(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta: localPayload.reasoning })}`)
+        }
+        if (typeof localPayload?.message?.content === 'string' && localPayload.message.content.length > 0) {
+          syntheticEvents.push(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: localPayload.message.content })}`)
+        }
+
+        const localToolCalls = Array.isArray(localPayload?.toolCalls) ? localPayload.toolCalls : []
+        for (const toolCall of localToolCalls) {
+          syntheticEvents.push(`data: ${JSON.stringify({ type: 'tool_call', toolCall })}`)
+        }
+
+        const localToolResults = parseToolResultsFromContentBlocks(localPayload?.contentBlocks)
+        for (const toolResult of localToolResults) {
+          syntheticEvents.push(`data: ${JSON.stringify({ type: 'tool_result', toolResult })}`)
+        }
+
+        syntheticEvents.push('data: [DONE]')
+        response = new Response(`${syntheticEvents.join('\n')}\n`, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      } else {
+        response = await createStreamingRequest('/generate/ephemeral', accessToken, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: subagentAbortController.signal,
+        })
+      }
 
       if (!response.ok) {
         const errorText = await response.text()
@@ -1877,20 +1956,44 @@ const executeSubagentCall = async (
         'Summarize the tool results above and provide the final answer. Do not call tools. Be concise and complete.',
     })
 
-    const finalizeResponse = await createStreamingRequest('/generate/ephemeral', accessToken, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: conversationHistory,
-        provider: resolvedProvider,
-        model: resolvedModel,
-        maxTokens: Math.min(maxTokens || 1024, 4096),
-        temperature: temperature ?? 0.3,
-        systemPrompt,
-        tools: undefined, // Force no tool calls for finalization
-      }),
-      signal: subagentAbortController.signal,
-    })
+    const finalizeRequestBody = {
+      messages: conversationHistory,
+      provider: resolvedProvider,
+      model: resolvedModel,
+      maxTokens: Math.min(maxTokens || 1024, 4096),
+      temperature: temperature ?? 0.3,
+      systemPrompt,
+      tools: undefined, // Force no tool calls for finalization
+    }
+
+    let finalizeResponse: Response
+    if (shouldUseCommunityLocalEphemeral()) {
+      const localPayload = await localApi.post<any>('/headless/ephemeral/chat', finalizeRequestBody)
+      if (!localPayload?.success) {
+        throw new Error(localPayload?.error || 'Community local subagent finalization failed')
+      }
+
+      const syntheticEvents: string[] = []
+      if (typeof localPayload?.reasoning === 'string' && localPayload.reasoning.length > 0) {
+        syntheticEvents.push(`data: ${JSON.stringify({ type: 'chunk', part: 'reasoning', delta: localPayload.reasoning })}`)
+      }
+      if (typeof localPayload?.message?.content === 'string' && localPayload.message.content.length > 0) {
+        syntheticEvents.push(`data: ${JSON.stringify({ type: 'chunk', part: 'text', delta: localPayload.message.content })}`)
+      }
+      syntheticEvents.push('data: [DONE]')
+
+      finalizeResponse = new Response(`${syntheticEvents.join('\n')}\n`, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      })
+    } else {
+      finalizeResponse = await createStreamingRequest('/generate/ephemeral', accessToken, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalizeRequestBody),
+        signal: subagentAbortController.signal,
+      })
+    }
 
     if (!finalizeResponse.ok) {
       const errorText = await finalizeResponse.text()
@@ -1986,7 +2089,7 @@ const executeSubagentCall = async (
   }
 
   return finalResponse || 'No response generated'
-  // ${subagentSessionId.slice(0, 8)})\n\n${finalResponse || 'No response generated'}\n\n---\nTurns: ${turnsUsed}/${maxTurns} | Tool calls: ${totalToolCallsUsed}/${maxToolCalls} | Tools: ${toolSummary}`
+  // legacy summary removed\n\n${finalResponse || 'No response generated'}\n\n---\nTurns: ${turnsUsed}/${maxTurns} | Tool calls: ${totalToolCallsUsed}/${maxToolCalls} | Tools: ${toolSummary}`
 }
 
 /**
@@ -2165,6 +2268,28 @@ export const executeToolAsJobAndWait = async (
 
 let pendingPermissionResolve: ((allowed: boolean) => void) | null = null
 
+const requestToolPermissionDecision = async (
+  dispatch: any,
+  getState: () => RootState,
+  toolCall: any
+): Promise<'allow_once' | 'allow_always' | 'deny'> => {
+  if (getState().chat.toolAutoApprove) {
+    return 'allow_always'
+  }
+
+  dispatch(chatSliceActions.toolPermissionRequested({ toolCall }))
+
+  const allowed = await new Promise<boolean>(resolve => {
+    pendingPermissionResolve = resolve
+  })
+
+  if (!allowed) {
+    return 'deny'
+  }
+
+  return getState().chat.toolAutoApprove ? 'allow_always' : 'allow_once'
+}
+
 const executeToolWithPermissionCheck = async (
   dispatch: any,
   getState: any,
@@ -2251,23 +2376,13 @@ const executeToolWithPermissionCheck = async (
     if (shouldBypassToolPermission(effectiveToolCall)) {
       result = await runToolWithLiveOperationMode()
     } else {
-      const autoApprove = readLiveState().chat.toolAutoApprove
+      const permissionDecision = await requestToolPermissionDecision(dispatch, readLiveState, effectiveToolCall)
 
-      if (autoApprove) {
-        result = await runToolWithLiveOperationMode()
-      } else {
-        dispatch(chatSliceActions.toolPermissionRequested({ toolCall: effectiveToolCall }))
-
-        const allowed = await new Promise<boolean>(resolve => {
-          pendingPermissionResolve = resolve
-        })
-
-        if (!allowed) {
-          throw new Error('Tool execution denied by user')
-        }
-
-        result = await runToolWithLiveOperationMode()
+      if (permissionDecision === 'deny') {
+        throw new Error('Tool execution denied by user')
       }
+
+      result = await runToolWithLiveOperationMode()
     }
 
     if (context?.enableHooks) {
@@ -4812,7 +4927,9 @@ export const editMessageWithBranching = createAsyncThunk<
         branchTotalBudget > 0 ? Math.min((branchContextTokens / branchTotalBudget) * 100, 100) : 0
 
       let branchHistoryForSend = [...currentPathMessages]
+      const autoCompactionEnabled = loadAutoCompactionEnabled()
       const shouldAutoCompactBranch =
+        autoCompactionEnabled &&
         branchContextLimit > 0 &&
         (branchContextProgress >= 85 || branchTotalProgress >= 85) &&
         currentPathMessages.length >= 2 &&
@@ -4822,6 +4939,7 @@ export const editMessageWithBranching = createAsyncThunk<
         conversationId,
         originalMessageId,
         activeParentId,
+        autoCompactionEnabled,
         branchContextTokens,
         branchContextLimit,
         branchContextProgress,
@@ -8115,8 +8233,8 @@ export const fetchCCSlashCommands = createAsyncThunk<
 })
 
 /**
- * Send message to Hermes bridge agent with SSE streaming.
- * Always uses local server - Hermes bridge is local-only.
+ * Send message to the Hermes ACP backend with SSE streaming.
+ * Always uses the local server - Hermes runtime is local-only in Electron mode.
  */
 export const sendHermesMessage = createAsyncThunk<
   { sessionId: string; messageCount: number; userMessageId?: MessageId; streamId: string },
@@ -8140,12 +8258,19 @@ export const sendHermesMessage = createAsyncThunk<
     { dispatch, extra, rejectWithValue, signal, getState }
   ) => {
     const streamId = providedStreamId ?? generateStreamId('primary')
+    const streamType = inferStreamTypeFromId(streamId)
 
     dispatch(
       chatSliceActions.sendingStarted({
         streamId,
-        streamType: 'primary',
+        streamType,
         conversationId,
+        lineage:
+          streamType === 'branch' && parentId !== undefined && parentId !== null
+            ? {
+                rootMessageId: parentId,
+              }
+            : undefined,
       })
     )
 
@@ -8212,7 +8337,41 @@ export const sendHermesMessage = createAsyncThunk<
             try {
               const chunk = JSON.parse(line.slice(6))
 
-              if (chunk.messageType === 'tool_start' && chunk.event) {
+              if (chunk.type === 'permission_request') {
+                const permissionRequestId =
+                  typeof chunk.requestId === 'string' && chunk.requestId.length > 0 ? chunk.requestId : null
+
+                if (!permissionRequestId) {
+                  throw new Error('Hermes permission request missing requestId')
+                }
+
+                const rawToolCall = chunk.toolCall && typeof chunk.toolCall === 'object' ? chunk.toolCall : {}
+                const permissionToolCall = {
+                  id:
+                    typeof rawToolCall.id === 'string' && rawToolCall.id.length > 0
+                      ? rawToolCall.id
+                      : `hermes-permission-${permissionRequestId}`,
+                  name:
+                    typeof rawToolCall.name === 'string' && rawToolCall.name.length > 0
+                      ? rawToolCall.name
+                      : 'hermes_permission',
+                  arguments:
+                    rawToolCall.arguments && typeof rawToolCall.arguments === 'object'
+                      ? rawToolCall.arguments
+                      : {},
+                  status: 'pending' as const,
+                }
+
+                const permissionDecision = await requestToolPermissionDecision(
+                  dispatch,
+                  () => getState() as RootState,
+                  permissionToolCall
+                )
+
+                await localApi.post(`/agents/hermes-permission-response/${permissionRequestId}`, {
+                  decision: permissionDecision,
+                })
+              } else if (chunk.messageType === 'tool_start' && chunk.event) {
                 const event = chunk.event
                 const toolCallId =
                   typeof event.tool_call_id === 'string' && event.tool_call_id.length > 0
@@ -8328,7 +8487,7 @@ export const sendHermesMessage = createAsyncThunk<
                 const normalizedDelta = chunk.delta || chunk.content || ''
                 const normalizedChunkType = chunk.chunkType
 
-                // Hermes bridge can emit a full assistant_message/final text event after
+                // Hermes ACP can emit a full assistant_message/final text event after
                 // native assistant_delta streaming. If we've already seen incremental text,
                 // skip the synthetic full-text replay to avoid duplicate output in UI.
                 if (
@@ -8414,7 +8573,7 @@ export const sendHermesMessage = createAsyncThunk<
                     streamId,
                     chunk: {
                       type: 'error',
-                      error: chunk.error || 'Hermes bridge error',
+                      error: chunk.error || 'Hermes ACP error',
                     },
                   })
                 )
@@ -8446,7 +8605,7 @@ export const sendHermesMessage = createAsyncThunk<
       }
 
       if (!sessionId) {
-        throw new Error('No session ID received from Hermes bridge')
+        throw new Error('No session ID received from Hermes ACP')
       }
 
       dispatch(chatSliceActions.sendingCompleted({ streamId }))

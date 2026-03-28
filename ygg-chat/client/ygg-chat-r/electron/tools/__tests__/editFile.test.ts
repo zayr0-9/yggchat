@@ -251,6 +251,48 @@ describe('editFile replace and replace_first behavior', () => {
     expect(updated.endsWith(tailSnapshot)).toBe(true)
   })
 
+  it('replace_first matches code that contains escaped newline sequences inside string literals', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile(
+      'escaped-string-literal.ts',
+      [
+        'const hermesMsgId = uuidv4()',
+        "const textContent = textParts.join('\\n\\n').trim()",
+        '',
+        'statements.upsertMessage.run(',
+      ].join('\n')
+    )
+
+    const result = await editFile('escaped-string-literal.ts', 'replace_first', {
+      searchPattern: [
+        'const hermesMsgId = uuidv4()',
+        "const textContent = textParts.join('\\n\\n').trim()",
+        '',
+        'statements.upsertMessage.run(',
+      ].join('\n'),
+      replacement: [
+        'const hermesMsgId = uuidv4()',
+        "const textContent = textParts.join('\\n\\n').trim()",
+        "const thinkingContent = reasoningParts.join('').trim()",
+        '',
+        "if (thinkingContent && !contentBlocks.some(block => block?.type === 'thinking')) {",
+        "  contentBlocks = [{ type: 'thinking', thinking: thinkingContent }, ...contentBlocks]",
+        '}',
+        '',
+        'statements.upsertMessage.run(',
+      ].join('\n'),
+      cwd: harness.workspaceDir,
+    })
+
+    const updated = await harness.readFile('escaped-string-literal.ts')
+
+    expect(result.success).toBe(true)
+    expect(result.replacements).toBe(1)
+    expect(updated).toContain("textParts.join('\\n\\n').trim()")
+    expect(updated).toContain("const thinkingContent = reasoningParts.join('').trim()")
+    expect(updated).toContain("block?.type === 'thinking'")
+  })
+
   it('creates backup only when replace applies a change', async () => {
     const harness = await createToolFsHarness()
     const original = 'foo\nfoo\n'

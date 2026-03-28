@@ -119,7 +119,7 @@ export async function editFileSearchReplace(
 ): Promise<EditFileResult> {
   const {
     encoding = 'utf8',
-    enableFuzzyMatching = false,
+    enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
     validateContent = true,
@@ -279,6 +279,8 @@ export async function editFileSearchReplace(
       lineInfoScope
     )
 
+    const backup = replacements > 0 ? await createBackupIfNeeded(fsPath, originalContent, options, encoding) : undefined
+
     // Write the modified content back to file
     if (replacements > 0) {
       await fs.promises.writeFile(fsPath, newContent, encoding)
@@ -295,7 +297,7 @@ export async function editFileSearchReplace(
         replacements > 0
           ? `Successfully replaced ${replacements} occurrence(s)${strategyMessage} in ${filePath}`
           : `No changes needed in ${filePath}`,
-      backup: undefined,
+      backup,
       matchStrategy,
       attemptedStrategies,
       validation,
@@ -322,7 +324,7 @@ export async function editFileSearchReplaceFirst(
 ): Promise<EditFileResult> {
   const {
     encoding = 'utf8',
-    enableFuzzyMatching = false,
+    enableFuzzyMatching = true,
     fuzzyThreshold = 0.8,
     preserveIndentation = true,
     validateContent = true,
@@ -455,6 +457,8 @@ export async function editFileSearchReplaceFirst(
       'single'
     )
 
+    const backup = hasChanges ? await createBackupIfNeeded(fsPath, originalContent, options, encoding) : undefined
+
     // Write the modified content if needed
     if (hasChanges) {
       await fs.promises.writeFile(fsPath, newContent, encoding)
@@ -469,7 +473,7 @@ export async function editFileSearchReplaceFirst(
       message: hasChanges
         ? `Successfully replaced first occurrence${strategyMessage} in ${filePath}`
         : `No changes needed in ${filePath}`,
-      backup: undefined,
+      backup,
       matchStrategy: matchResult.strategy,
       attemptedStrategies: matchResult.attemptedStrategies,
       validation,
@@ -558,22 +562,29 @@ export async function appendToFile(
       throw error
     })
 
+    const existingContent = existingStats ? await fs.promises.readFile(fsPath, encoding) : ''
+
     if (existingStats && !existingStats.isFile()) {
       throw new Error(`'${filePath}' is not a file`)
     }
+
+    const backup = existingStats ? await createBackupIfNeeded(fsPath, existingContent, options, encoding) : undefined
 
     // Append content using fsPath (UNC format on Windows)
     await fs.promises.appendFile(fsPath, content, encoding)
 
     const previousSizeBytes = existingStats?.size ?? 0
     const appendedSizeBytes = estimateTextSizeBytes(content, encoding)
+    const appendStartIndex = existingContent.length
+    const lineInfo = buildLineInfo(existingContent, appendStartIndex, '', content, 'append')
 
     return {
       success: true,
       sizeBytes: previousSizeBytes + appendedSizeBytes,
       replacements: 1, // Consider append as one "replacement"
       message: `Successfully appended content to ${filePath}`,
-      backup: undefined,
+      backup,
+      lineInfo,
     }
   } catch (error: any) {
     return {
@@ -671,6 +682,19 @@ function shouldValidateAgainstExpectations(options: EditFileOptions, validateCon
 
 function estimateTextSizeBytes(content: string, encoding: BufferEncoding): number {
   return Buffer.byteLength(content, encoding)
+}
+
+async function createBackupIfNeeded(
+  absolutePath: string,
+  originalContent: string,
+  options: EditFileOptions,
+  encoding: BufferEncoding
+): Promise<string | undefined> {
+  if (!options.createBackup) return undefined
+
+  const backupPath = `${absolutePath}.backup.${Date.now()}`
+  await fs.promises.writeFile(backupPath, originalContent, encoding)
+  return backupPath
 }
 
 function countDisplayLines(text: string): number {
@@ -958,6 +982,16 @@ function protectRegexLiterals(str: string): {
   let index = 0
 
   while (index < str.length) {
+    const stringLiteralEnd = findStringLiteralEnd(str, index)
+    if (stringLiteralEnd !== -1) {
+      const literal = str.slice(index, stringLiteralEnd)
+      const placeholder = `\u0000STRING_LITERAL_${protectedLiterals.length}\u0000`
+      protectedLiterals.push({ placeholder, value: literal })
+      content += placeholder
+      index = stringLiteralEnd
+      continue
+    }
+
     if (str[index] === '/' && isRegexLiteralStart(str, index)) {
       const regexEnd = findRegexLiteralEnd(str, index + 1)
       if (regexEnd !== -1) {
@@ -982,6 +1016,32 @@ function protectRegexLiterals(str: string): {
   }
 
   return { content, protectedLiterals }
+}
+
+function findStringLiteralEnd(str: string, startIndex: number): number {
+  const quote = str[startIndex]
+  if (quote !== "'" && quote !== '"' && quote != '`') {
+    return -1
+  }
+
+  for (let i = startIndex + 1; i < str.length; i += 1) {
+    const ch = str[i]
+
+    if (ch === '\\') {
+      i += 1
+      continue
+    }
+
+    if (ch === quote) {
+      return i + 1
+    }
+
+    if ((quote === "'" || quote === '"') && (ch === '\n' || ch === '\r')) {
+      return -1
+    }
+  }
+
+  return -1
 }
 
 function restoreProtectedLiterals(
@@ -1273,9 +1333,8 @@ function findMatchWithStrategies(
     }
   }
 
-  // Strategy 4: Fuzzy match (temporarily disabled)
-  const fuzzyMatchingTemporarilyDisabled = true
-  if (!fuzzyMatchingTemporarilyDisabled && enableFuzzy) {
+  // Strategy 4: Fuzzy match
+  if (enableFuzzy) {
     attemptedStrategies.push('fuzzy')
     const fuzzyMatch = findFuzzyMatch(content, processedPattern, fuzzyThreshold)
     if (fuzzyMatch.found) {

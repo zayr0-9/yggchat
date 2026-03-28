@@ -127,7 +127,7 @@ const shouldOpenDetachedDevTools = isDebugMode
 
 // Set App User Model ID for Windows taskbar icon
 if (process.platform === 'win32') {
-  app.setAppUserModelId('com.yggdrasil.chat')
+  app.setAppUserModelId('com.graviton.chat')
 }
 
 // Use system theme by default for native UI (context menus, dialogs, mica material).
@@ -306,7 +306,7 @@ function createWindow() {
   const isWin11 = isWindows11()
 
   mainWindow = new BrowserWindow({
-    title: 'Yggdrasil',
+    title: 'Graviton',
     icon: iconPath,
     width: 1400,
     height: 900,
@@ -456,7 +456,7 @@ function createTray() {
   if (tray) return
   const iconPath = getIconPath(nativeTheme.shouldUseDarkColors)
   tray = new Tray(iconPath)
-  tray.setToolTip('Yggdrasil')
+  tray.setToolTip('Graviton')
   tray.on('click', () => {
     if (mainWindow) {
       mainWindow.show()
@@ -499,7 +499,7 @@ function createFloatingWindow() {
   const iconPath = getIconPath(nativeTheme.shouldUseDarkColors)
 
   floatingWindow = new BrowserWindow({
-    title: 'Yggdrasil - Floating',
+    title: 'Graviton - Floating',
     icon: iconPath,
     width: 600,
     height: 400,

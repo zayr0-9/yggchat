@@ -54,6 +54,18 @@ export const generateStreamId = (
 }
 
 /**
+ * Infers stream type from a generated stream ID.
+ * This keeps send actions branch-aware even when they share a common transport thunk.
+ */
+export const inferStreamTypeFromId = (streamId: string | null | undefined): StreamType => {
+  if (!streamId) return 'primary'
+  if (streamId.startsWith('branch:')) return 'branch'
+  if (streamId.startsWith('tool:')) return 'tool'
+  if (streamId.includes(':sub:') || streamId.startsWith('sub:')) return 'subagent'
+  return 'primary'
+}
+
+/**
  * The default stream ID used for backward compatibility
  * When no streamId is provided, actions fall back to this ID
  */

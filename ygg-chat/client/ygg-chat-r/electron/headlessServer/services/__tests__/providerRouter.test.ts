@@ -25,7 +25,7 @@ describe('provider routing', () => {
           conversationId: 'c1',
         },
       })
-    ).rejects.toThrow('Yggdrasil app auth token missing')
+    ).rejects.toThrow('Graviton app auth token missing')
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,

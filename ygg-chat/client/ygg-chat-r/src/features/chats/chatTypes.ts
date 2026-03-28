@@ -91,6 +91,7 @@ export interface StreamChunk {
     | 'generation_started'
     | 'tool_call'
     | 'free_generations_update'
+    | 'permission_request'
   content?: string
   // delta is used for token-level updates from the server
   delta?: string
@@ -114,6 +115,8 @@ export interface StreamChunk {
   }
   // free tier update data
   remaining?: number
+  // Hermes ACP permission request correlation id
+  requestId?: string
   // CC-specific chunk type (from Claude Code SDK streaming events)
   chunkType?:
     | 'content_delta'
