@@ -10,8 +10,8 @@ export interface ChatReasoningSettings {
 }
 
 const DEFAULT_SETTINGS: ChatReasoningSettings = {
-  defaultThinkingEnabled: false,
-  defaultReasoningEffort: 'medium',
+  defaultThinkingEnabled: true,
+  defaultReasoningEffort: 'high',
 }
 
 function normalizeReasoningEffort(value: unknown): ReasoningEffort {

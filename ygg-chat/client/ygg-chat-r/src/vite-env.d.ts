@@ -73,6 +73,19 @@ interface ElectronAPI {
     appendClientError: (content: string) => Promise<{ success: boolean; error?: string; filePath?: string }>
     getClientErrorLogPath: () => Promise<{ success: boolean; error?: string; filePath?: string }>
   }
+  terminal: {
+    create: (options?: {
+      cwd?: string
+      cols?: number
+      rows?: number
+      title?: string
+    }) => Promise<{ success: boolean; sessionId?: string; cwd?: string; shell?: string; cols?: number; rows?: number; title?: string; error?: string }>
+    write: (sessionId: string, data: string) => Promise<{ success: boolean; error?: string }>
+    resize: (sessionId: string, cols: number, rows: number) => Promise<{ success: boolean; error?: string }>
+    kill: (sessionId: string) => Promise<{ success: boolean; error?: string }>
+    onData: (callback: (payload: { sessionId: string; data: string }) => void) => () => void
+    onExit: (callback: (payload: { sessionId: string; exitCode: number | null; signal?: number; cwd?: string; shell?: string }) => void) => () => void
+  }
   dialog: {
     openFile: (options?: {
       title?: string

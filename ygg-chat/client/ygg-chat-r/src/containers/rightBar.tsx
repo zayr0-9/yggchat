@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { ConversationId } from '../../../../shared/types'
-import { Button, ChatMessage, MonacoFileEditorPane, MonacoGitDiffPane } from '../components'
+import { Button, ChatMessage, MonacoFileEditorPane, MonacoGitDiffPane, XtermTerminalPane } from '../components'
 import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import { TextArea } from '../components/TextArea/TextArea'
 import { useHtmlDarkMode } from '../components/ThemeManager/themeConfig'
@@ -13,6 +13,7 @@ import { Conversation } from '../features/conversations/conversationTypes'
 import type { StreamEvent, StreamState } from '../features/chats/chatTypes'
 import { uiActions } from '../features/ui'
 import { AGENT_SETTINGS_CHANGE_EVENT, AgentSettings, loadAgentSettings } from '../helpers/agentSettingsStorage'
+import { loadTerminalDockState, saveTerminalDockState, type TerminalDockPreferences } from '../helpers/terminalDockStorage'
 import { useAuth } from '../hooks/useAuth'
 import { clearGlobalAgentOptimisticMessage, setGlobalAgentOptimisticMessage } from '../hooks/useGlobalAgentCache'
 import {
@@ -80,6 +81,18 @@ type GitDiffTabState = {
   conflicted: boolean
 }
 
+type TerminalDockState = {
+  id: string
+  sessionId: string | null
+  cwd: string
+  shell: string
+  title: string
+  history: string
+  status: 'launching' | 'open' | 'closed' | 'error'
+  error: string | null
+  exitCode: number | null
+}
+
 type AgentStreamActivityKind = StreamEvent['type'] | 'idle'
 
 type AgentStreamListItem = {
@@ -98,6 +111,7 @@ type AgentStreamListItem = {
 }
 
 const getFileDockTabId = (filePath: string): string => `file:${filePath}`
+const getTerminalDockTabId = (terminalId: string): string => `terminal:${terminalId}`
 const getGitDiffDockTabId = (
   file: Pick<GitStatusFile, 'relativePath' | 'staged' | 'untracked' | 'conflicted'>,
   stagedView: boolean
@@ -106,6 +120,7 @@ const getGitDiffDockTabId = (
 
 const ALL_WEEKDAYS: number[] = [0, 1, 2, 3, 4, 5, 6]
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const TERMINAL_HISTORY_LIMIT = 200000
 const DOCKED_SIDEBAR_FIXED_WIDTH_PX = 340
 const DOCKED_EDITOR_PREFERRED_WIDTH_PX = 720
 const DOCKED_CHAT_MIN_WIDTH_PX = 580
@@ -132,7 +147,6 @@ const intervalUnitToMs = (value: number, unit: ScheduleIntervalUnit): number => 
 const RightBar: React.FC<RightBarProps> = ({
   conversationId,
   notes = [],
-  isLoadingNotes = false,
   className = '',
   ccCwd = '',
   onFilePathInsert,
@@ -162,13 +176,30 @@ const RightBar: React.FC<RightBarProps> = ({
   } = useDirectoryFileSearch(fileSearchBasePath, activeFileSearchQuery, followGitignore, 200)
   const displayedDirectoryFiles = isFileSearchMode ? fileSearchData?.files || [] : directoryData?.files || []
   const isSearchingFiles = isLoadingFileSearch || isFetchingFileSearch
+  const initialTerminalDockState = useMemo(() => loadTerminalDockState(), [])
   const isCollapsed = useSelector((state: RootState) => state.ui.rightBarCollapsed)
   const isDarkMode = useHtmlDarkMode()
   const [openFileEditors, setOpenFileEditors] = useState<FileEditorState[]>([])
   const [openGitDiffTabs, setOpenGitDiffTabs] = useState<GitDiffTabState[]>([])
-  const [activeDockTabId, setActiveDockTabId] = useState<string | null>(null)
+  const [openTerminalTabs, setOpenTerminalTabs] = useState<TerminalDockState[]>(() =>
+    initialTerminalDockState.sessions.map(session => ({
+      ...session,
+      sessionId: null,
+      status: 'closed',
+      error: null,
+      exitCode: null,
+    }))
+  )
+  const [terminalPreferences, setTerminalPreferences] = useState<TerminalDockPreferences>(
+    () => initialTerminalDockState.preferences
+  )
+  const [activeDockTabId, setActiveDockTabId] = useState<string | null>(() =>
+    initialTerminalDockState.activeTerminalTabId ? getTerminalDockTabId(initialTerminalDockState.activeTerminalTabId) : null
+  )
   const [activeFileEditorPath, setActiveFileEditorPath] = useState<string | null>(null)
   const fileEditorRequestIdRef = useRef<Record<string, number>>({})
+  const terminalLaunchRequestIdRef = useRef<Record<string, number>>({})
+  const restoredTerminalTabsRef = useRef<Set<string>>(new Set())
   const asideRef = useRef<HTMLElement | null>(null)
   const [dockedLayoutWidth, setDockedLayoutWidth] = useState<number | null>(null)
   const activeFileEditor = useMemo(
@@ -185,10 +216,17 @@ const RightBar: React.FC<RightBarProps> = ({
         : null,
     [activeDockTabId, openGitDiffTabs]
   )
+  const activeTerminalDock = useMemo(
+    () =>
+      activeDockTabId?.startsWith('terminal:')
+        ? (openTerminalTabs.find(tab => getTerminalDockTabId(tab.id) === activeDockTabId) ?? null)
+        : null,
+    [activeDockTabId, openTerminalTabs]
+  )
   const isEditorDirty = activeFileEditor ? activeFileEditor.content !== activeFileEditor.savedContent : false
   const hasAnyDirtyEditors = openFileEditors.some(editor => editor.content !== editor.savedContent)
   const isEditorDockOpen =
-    !isCollapsed && (openFileEditors.length > 0 || openGitDiffTabs.length > 0) && !!activeDockTabId
+    !isCollapsed && (openFileEditors.length > 0 || openGitDiffTabs.length > 0 || openTerminalTabs.length > 0) && !!activeDockTabId
   const monacoTheme = isDarkMode ? 'vs-dark' : 'vs'
   const dockedSidebarPanelWidth = useMemo(() => {
     if (!isEditorDockOpen) return DOCKED_SIDEBAR_FIXED_WIDTH_PX
@@ -257,8 +295,8 @@ const RightBar: React.FC<RightBarProps> = ({
   }, [fileSearchQuery])
 
   // Tab state: 'git' for repository tools, 'note' for single conversation note,
-  // 'list' for all notes, 'agents' for active stream overview, 'global' for agent (hidden)
-  const [activeTab, setActiveTab] = useState<'git' | 'note' | 'list' | 'agents' | 'global'>('note')
+  // 'terminal' for terminal management, 'agents' for active stream overview, 'global' for agent (hidden)
+  const [activeTab, setActiveTab] = useState<'git' | 'note' | 'terminal' | 'agents' | 'global'>('note')
   const gitBasePath = currentPath || ccCwd || null
   const isGitTabAvailable = !isWeb
   const [selectedGitDiff, setSelectedGitDiff] = useState<{
@@ -477,60 +515,63 @@ const RightBar: React.FC<RightBarProps> = ({
     return map
   }, [conversations])
 
-  const getStreamActivity = useCallback((stream: StreamState): { activityKind: AgentStreamActivityKind; activityLabel: string } => {
-    if (Array.isArray(stream.events) && stream.events.length > 0) {
-      for (let index = stream.events.length - 1; index >= 0; index -= 1) {
-        const event = stream.events[index]
-        if (!event) continue
+  const getStreamActivity = useCallback(
+    (stream: StreamState): { activityKind: AgentStreamActivityKind; activityLabel: string } => {
+      if (Array.isArray(stream.events) && stream.events.length > 0) {
+        for (let index = stream.events.length - 1; index >= 0; index -= 1) {
+          const event = stream.events[index]
+          if (!event) continue
 
-        if (event.type === 'tool_call') {
-          const toolName = event.toolCall?.name || stream.toolCalls[stream.toolCalls.length - 1]?.name || 'tool'
-          return {
-            activityKind: 'tool_call',
-            activityLabel: `tool: ${toolName}`,
+          if (event.type === 'tool_call') {
+            const toolName = event.toolCall?.name || stream.toolCalls[stream.toolCalls.length - 1]?.name || 'tool'
+            return {
+              activityKind: 'tool_call',
+              activityLabel: `tool: ${toolName}`,
+            }
+          }
+
+          if (event.type === 'tool_result') {
+            const matchingTool = stream.toolCalls.find(toolCall => toolCall.id === event.toolResult?.tool_use_id)
+            return {
+              activityKind: 'tool_result',
+              activityLabel: matchingTool?.name ? `result: ${matchingTool.name}` : 'tool result',
+            }
+          }
+
+          if (event.type === 'reasoning') {
+            return { activityKind: 'reasoning', activityLabel: 'reasoning' }
+          }
+
+          if (event.type === 'text') {
+            return { activityKind: 'text', activityLabel: 'text' }
+          }
+
+          if (event.type === 'image') {
+            return { activityKind: 'image', activityLabel: 'image' }
           }
         }
+      }
 
-        if (event.type === 'tool_result') {
-          const matchingTool = stream.toolCalls.find(toolCall => toolCall.id === event.toolResult?.tool_use_id)
-          return {
-            activityKind: 'tool_result',
-            activityLabel: matchingTool?.name ? `result: ${matchingTool.name}` : 'tool result',
-          }
-        }
-
-        if (event.type === 'reasoning') {
-          return { activityKind: 'reasoning', activityLabel: 'reasoning' }
-        }
-
-        if (event.type === 'text') {
-          return { activityKind: 'text', activityLabel: 'text' }
-        }
-
-        if (event.type === 'image') {
-          return { activityKind: 'image', activityLabel: 'image' }
+      if (stream.toolCalls.length > 0) {
+        const latestTool = stream.toolCalls[stream.toolCalls.length - 1]
+        return {
+          activityKind: 'tool_call',
+          activityLabel: `tool: ${latestTool?.name || 'tool'}`,
         }
       }
-    }
 
-    if (stream.toolCalls.length > 0) {
-      const latestTool = stream.toolCalls[stream.toolCalls.length - 1]
-      return {
-        activityKind: 'tool_call',
-        activityLabel: `tool: ${latestTool?.name || 'tool'}`,
+      if (stream.thinkingBuffer.trim().length > 0) {
+        return { activityKind: 'reasoning', activityLabel: 'reasoning' }
       }
-    }
 
-    if (stream.thinkingBuffer.trim().length > 0) {
-      return { activityKind: 'reasoning', activityLabel: 'reasoning' }
-    }
+      if (stream.buffer.trim().length > 0) {
+        return { activityKind: 'text', activityLabel: 'text' }
+      }
 
-    if (stream.buffer.trim().length > 0) {
-      return { activityKind: 'text', activityLabel: 'text' }
-    }
-
-    return { activityKind: 'idle', activityLabel: 'starting' }
-  }, [])
+      return { activityKind: 'idle', activityLabel: 'starting' }
+    },
+    []
+  )
 
   const buildAgentStreamListItem = useCallback(
     (streamId: string, stream: StreamState, completedAt: string | null = null): AgentStreamListItem => {
@@ -538,7 +579,11 @@ const RightBar: React.FC<RightBarProps> = ({
       const convo = streamConversationId ? conversationsById.get(streamConversationId) : null
       const note = streamConversationId ? notesByConversationId.get(streamConversationId) : null
       const anchorMessageId =
-        stream.streamingMessageId || stream.messageId || stream.lineage.originMessageId || stream.lineage.rootMessageId || null
+        stream.streamingMessageId ||
+        stream.messageId ||
+        stream.lineage.originMessageId ||
+        stream.lineage.rootMessageId ||
+        null
       const { activityKind, activityLabel } = getStreamActivity(stream)
 
       return {
@@ -546,7 +591,8 @@ const RightBar: React.FC<RightBarProps> = ({
         streamType: stream.streamType,
         conversationId: streamConversationId,
         projectId: convo?.project_id ? String(convo.project_id) : note?.project_id ? String(note.project_id) : null,
-        conversationTitle: convo?.title || note?.title || (streamConversationId ? `Conversation ${streamConversationId}` : null),
+        conversationTitle:
+          convo?.title || note?.title || (streamConversationId ? `Conversation ${streamConversationId}` : null),
         anchorMessageId: anchorMessageId ? String(anchorMessageId) : null,
         hasError: Boolean(stream.error),
         createdAt: stream.createdAt,
@@ -782,9 +828,9 @@ const RightBar: React.FC<RightBarProps> = ({
     dispatch(uiActions.rightBarToggled())
   }
 
-  const handleNoteClick = (noteItem: ResearchNoteItem) => {
-    navigate(`/chat/${noteItem.project_id || 'unknown'}/${noteItem.id}`)
-  }
+  // const handleNoteClick = (noteItem: ResearchNoteItem) => {
+  //   navigate(`/chat/${noteItem.project_id || 'unknown'}/${noteItem.id}`)
+  // }
 
   // File browser navigation
   const handleFileClick = (file: DirectoryFileEntry) => {
@@ -824,6 +870,71 @@ const RightBar: React.FC<RightBarProps> = ({
     return lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized
   }, [])
 
+  const appendTerminalHistory = useCallback((existingHistory: string, nextChunk: string) => {
+    if (!nextChunk) return existingHistory
+    const merged = existingHistory + nextChunk
+    return merged.length > TERMINAL_HISTORY_LIMIT ? merged.slice(-TERMINAL_HISTORY_LIMIT) : merged
+  }, [])
+
+  useEffect(() => {
+    if (isWeb || !window.electronAPI?.terminal) return
+
+    const unsubscribeData = window.electronAPI.terminal.onData(payload => {
+      if (!payload?.sessionId || typeof payload.data !== 'string') return
+      setOpenTerminalTabs(current =>
+        current.map(tab =>
+          tab.sessionId !== payload.sessionId
+            ? tab
+            : {
+                ...tab,
+                history: appendTerminalHistory(tab.history, payload.data),
+                status: tab.status === 'launching' ? 'open' : tab.status,
+                error: null,
+              }
+        )
+      )
+    })
+
+    const unsubscribeExit = window.electronAPI.terminal.onExit(payload => {
+      if (!payload?.sessionId) return
+      setOpenTerminalTabs(current =>
+        current.map(tab =>
+          tab.sessionId !== payload.sessionId
+            ? tab
+            : {
+                ...tab,
+                sessionId: null,
+                cwd: payload.cwd || tab.cwd,
+                shell: payload.shell || tab.shell,
+                status: tab.status === 'error' ? 'error' : 'closed',
+                exitCode: typeof payload.exitCode === 'number' ? payload.exitCode : null,
+              }
+        )
+      )
+    })
+
+    return () => {
+      unsubscribeData()
+      unsubscribeExit()
+    }
+  }, [appendTerminalHistory, isWeb])
+
+  useEffect(() => {
+    const persistedSessions = openTerminalTabs.map(tab => ({
+      id: tab.id,
+      cwd: tab.cwd,
+      title: tab.title,
+      shell: tab.shell,
+      history: terminalPreferences.persistHistory ? tab.history : '',
+    }))
+
+    saveTerminalDockState({
+      preferences: terminalPreferences,
+      sessions: persistedSessions,
+      activeTerminalTabId: activeDockTabId?.startsWith('terminal:') ? activeDockTabId.slice('terminal:'.length) : null,
+    })
+  }, [activeDockTabId, openTerminalTabs, terminalPreferences])
+
   const dockTabs = useMemo(
     () => [
       ...openFileEditors.map(editor => ({
@@ -842,8 +953,16 @@ const RightBar: React.FC<RightBarProps> = ({
         isDirty: false,
         isSaving: false,
       })),
+      ...openTerminalTabs.map(tab => ({
+        id: getTerminalDockTabId(tab.id),
+        label: tab.title,
+        title: tab.cwd,
+        kind: 'terminal' as const,
+        isDirty: false,
+        isSaving: false,
+      })),
     ],
-    [getFileName, openFileEditors, openGitDiffTabs]
+    [getFileName, openFileEditors, openGitDiffTabs, openTerminalTabs]
   )
 
   useEffect(() => {
@@ -968,11 +1087,214 @@ const RightBar: React.FC<RightBarProps> = ({
     [dispatch]
   )
 
+  const getTerminalLaunchCwd = useCallback(() => (currentPath || ccCwd || '').trim(), [ccCwd, currentPath])
+
+  const createTerminalStateId = useCallback(
+    () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    []
+  )
+
+  const launchTerminalDock = useCallback(
+    async (
+      targetCwd?: string,
+      options?: {
+        terminalId?: string
+        activate?: boolean
+        preservedHistory?: string
+        title?: string
+      }
+    ) => {
+      if (isWeb || !window.electronAPI?.terminal) return
+
+      const cwd = (targetCwd || currentPath || ccCwd || '').trim()
+      const terminalId = options?.terminalId || createTerminalStateId()
+      const activate = options?.activate ?? true
+      const existingTab = openTerminalTabs.find(tab => tab.id === terminalId) ?? null
+
+      if (!cwd) {
+        const errorTab: TerminalDockState = {
+          id: terminalId,
+          sessionId: null,
+          cwd: '',
+          shell: '',
+          title: options?.title || existingTab?.title || 'Terminal',
+          history: options?.preservedHistory || existingTab?.history || '',
+          status: 'error',
+          error: 'No working directory selected for terminal',
+          exitCode: null,
+        }
+        setOpenTerminalTabs(current => (current.some(tab => tab.id === terminalId) ? current.map(tab => (tab.id === terminalId ? errorTab : tab)) : [...current, errorTab]))
+        if (activate) {
+          dispatch(uiActions.rightBarExpanded())
+          setActiveDockTabId(getTerminalDockTabId(terminalId))
+        }
+        return
+      }
+
+      if (existingTab?.sessionId && existingTab.cwd === cwd && existingTab.status === 'open') {
+        if (activate) {
+          dispatch(uiActions.rightBarExpanded())
+          setActiveDockTabId(getTerminalDockTabId(terminalId))
+        }
+        return
+      }
+
+      const title = options?.title || existingTab?.title || getFileName(cwd) || 'Terminal'
+      const requestId = (terminalLaunchRequestIdRef.current[terminalId] || 0) + 1
+      terminalLaunchRequestIdRef.current[terminalId] = requestId
+
+      const nextTab: TerminalDockState = {
+        id: terminalId,
+        sessionId: null,
+        cwd,
+        shell: existingTab?.shell || '',
+        title,
+        history: options?.preservedHistory ?? existingTab?.history ?? '',
+        status: 'launching',
+        error: null,
+        exitCode: null,
+      }
+
+      setOpenTerminalTabs(current =>
+        current.some(tab => tab.id === terminalId) ? current.map(tab => (tab.id === terminalId ? nextTab : tab)) : [...current, nextTab]
+      )
+
+      if (activate) {
+        dispatch(uiActions.rightBarExpanded())
+        setActiveDockTabId(getTerminalDockTabId(terminalId))
+      }
+
+      if (existingTab?.sessionId) {
+        try {
+          await window.electronAPI.terminal.kill(existingTab.sessionId)
+        } catch {
+          // Ignore stale-session kill failures during restart.
+        }
+      }
+
+      try {
+        const result = await window.electronAPI.terminal.create({
+          cwd,
+          cols: 120,
+          rows: 32,
+          title,
+        })
+
+        if (terminalLaunchRequestIdRef.current[terminalId] !== requestId) {
+          if (result?.sessionId) {
+            void window.electronAPI.terminal.kill(result.sessionId)
+          }
+          return
+        }
+
+        if (!result?.success || !result.sessionId) {
+          throw new Error(result?.error || 'Failed to start terminal session')
+        }
+
+        setOpenTerminalTabs(current =>
+          current.map(tab =>
+            tab.id !== terminalId
+              ? tab
+              : {
+                  ...tab,
+                  sessionId: result.sessionId,
+                  cwd: result.cwd || cwd,
+                  shell: result.shell || '',
+                  title: result.title || title,
+                  status: 'open',
+                  error: null,
+                  exitCode: null,
+                }
+          )
+        )
+      } catch (error) {
+        if (terminalLaunchRequestIdRef.current[terminalId] !== requestId) return
+        setOpenTerminalTabs(current =>
+          current.map(tab =>
+            tab.id !== terminalId
+              ? tab
+              : {
+                  ...tab,
+                  sessionId: null,
+                  cwd,
+                  shell: tab.shell || '',
+                  title,
+                  status: 'error',
+                  error: error instanceof Error ? error.message : 'Failed to start terminal session',
+                  exitCode: null,
+                }
+          )
+        )
+      }
+    },
+    [ccCwd, createTerminalStateId, currentPath, dispatch, getFileName, isWeb, openTerminalTabs]
+  )
+
+  useEffect(() => {
+    if (isWeb || !terminalPreferences.restoreSessionsOnLaunch || !window.electronAPI?.terminal) return
+
+    for (const tab of openTerminalTabs) {
+      if (!initialTerminalDockState.sessions.some(session => session.id === tab.id)) continue
+      if (restoredTerminalTabsRef.current.has(tab.id)) continue
+      restoredTerminalTabsRef.current.add(tab.id)
+      void launchTerminalDock(tab.cwd, {
+        terminalId: tab.id,
+        activate: activeDockTabId === getTerminalDockTabId(tab.id),
+        preservedHistory: terminalPreferences.persistHistory ? tab.history : '',
+        title: tab.title,
+      })
+    }
+  }, [activeDockTabId, initialTerminalDockState.sessions, isWeb, launchTerminalDock, openTerminalTabs, terminalPreferences])
+
+  const handleTerminalInput = useCallback(
+    (data: string) => {
+      if (isWeb || !activeTerminalDock?.sessionId || !window.electronAPI?.terminal) return
+      void window.electronAPI.terminal.write(activeTerminalDock.sessionId, data)
+    },
+    [activeTerminalDock?.sessionId, isWeb]
+  )
+
+  const handleTerminalResize = useCallback(
+    (cols: number, rows: number) => {
+      if (isWeb || !activeTerminalDock?.sessionId || !window.electronAPI?.terminal) return
+      void window.electronAPI.terminal.resize(activeTerminalDock.sessionId, cols, rows)
+    },
+    [activeTerminalDock?.sessionId, isWeb]
+  )
+
+  const clearTerminalDockBuffer = useCallback((terminalId: string) => {
+    setOpenTerminalTabs(current => current.map(tab => (tab.id === terminalId ? { ...tab, history: '' } : tab)))
+  }, [])
+
+  const restartTerminalDock = useCallback(
+    (terminalId: string) => {
+      const target = openTerminalTabs.find(tab => tab.id === terminalId)
+      void launchTerminalDock(target?.cwd || getTerminalLaunchCwd(), {
+        terminalId,
+        preservedHistory: terminalPreferences.persistHistory ? target?.history || '' : '',
+        title: target?.title,
+      })
+    },
+    [getTerminalLaunchCwd, launchTerminalDock, openTerminalTabs, terminalPreferences.persistHistory]
+  )
+
+  const openNewTerminalDock = useCallback(
+    (targetCwd?: string) => {
+      setActiveTab('terminal')
+      void launchTerminalDock(targetCwd || getTerminalLaunchCwd())
+    },
+    [getTerminalLaunchCwd, launchTerminalDock]
+  )
+
   const selectDockTab = useCallback((tabId: string) => {
     setActiveDockTabId(tabId)
     if (tabId.startsWith('file:')) {
       const nextPath = tabId.slice('file:'.length)
       setActiveFileEditorPath(nextPath)
+      return
+    }
+    if (tabId.startsWith('terminal:')) {
+      setActiveTab('terminal')
     }
   }, [])
 
@@ -996,12 +1318,13 @@ const RightBar: React.FC<RightBarProps> = ({
         const remainingDockTabs = [
           ...remainingEditors.map(editor => getFileDockTabId(editor.path)),
           ...openGitDiffTabs.map(tab => tab.id),
+          ...openTerminalTabs.map(tab => getTerminalDockTabId(tab.id)),
         ]
         const fallbackIndex = Math.min(tabIndex, remainingDockTabs.length - 1)
         return fallbackIndex >= 0 ? (remainingDockTabs[fallbackIndex] ?? null) : null
       })
     },
-    [confirmDiscardSingleEditor, openFileEditors, openGitDiffTabs]
+    [confirmDiscardSingleEditor, openFileEditors, openGitDiffTabs, openTerminalTabs]
   )
 
   const closeGitDiffTab = useCallback(
@@ -1015,12 +1338,37 @@ const RightBar: React.FC<RightBarProps> = ({
         const remainingDockTabs = [
           ...openFileEditors.map(editor => getFileDockTabId(editor.path)),
           ...remainingDiffTabs.map(tab => tab.id),
+          ...openTerminalTabs.map(tab => getTerminalDockTabId(tab.id)),
         ]
         const fallbackIndex = Math.min(openFileEditors.length + tabIndex, remainingDockTabs.length - 1)
         return fallbackIndex >= 0 ? (remainingDockTabs[fallbackIndex] ?? null) : null
       })
     },
-    [openFileEditors, openGitDiffTabs]
+    [openFileEditors, openGitDiffTabs, openTerminalTabs]
+  )
+
+  const closeTerminalDock = useCallback(
+    (terminalId: string) => {
+      terminalLaunchRequestIdRef.current[terminalId] = (terminalLaunchRequestIdRef.current[terminalId] || 0) + 1
+      const target = openTerminalTabs.find(tab => tab.id === terminalId)
+      if (target?.sessionId && window.electronAPI?.terminal) {
+        void window.electronAPI.terminal.kill(target.sessionId)
+      }
+
+      const removedTabId = getTerminalDockTabId(terminalId)
+      const remainingTerminals = openTerminalTabs.filter(tab => tab.id !== terminalId)
+      setOpenTerminalTabs(remainingTerminals)
+      setActiveDockTabId(currentActive => {
+        if (currentActive !== removedTabId) return currentActive
+        const remainingDockTabs = [
+          ...openFileEditors.map(editor => getFileDockTabId(editor.path)),
+          ...openGitDiffTabs.map(tab => tab.id),
+          ...remainingTerminals.map(tab => getTerminalDockTabId(tab.id)),
+        ]
+        return remainingDockTabs[0] ?? null
+      })
+    },
+    [openFileEditors, openGitDiffTabs, openTerminalTabs]
   )
 
   const closeDockTab = useCallback(
@@ -1029,19 +1377,32 @@ const RightBar: React.FC<RightBarProps> = ({
         closeFileEditorTab(tabId.slice('file:'.length))
         return
       }
+      if (tabId.startsWith('terminal:')) {
+        closeTerminalDock(tabId.slice('terminal:'.length))
+        return
+      }
       closeGitDiffTab(tabId)
     },
-    [closeFileEditorTab, closeGitDiffTab]
+    [closeFileEditorTab, closeGitDiffTab, closeTerminalDock]
   )
 
   const closeMonacoDock = useCallback(() => {
     if (!confirmCollapseDirtyEditors()) return
+    Object.keys(terminalLaunchRequestIdRef.current).forEach(terminalId => {
+      terminalLaunchRequestIdRef.current[terminalId] += 1
+    })
+    openTerminalTabs.forEach(tab => {
+      if (tab.sessionId && window.electronAPI?.terminal) {
+        void window.electronAPI.terminal.kill(tab.sessionId)
+      }
+    })
     fileEditorRequestIdRef.current = {}
     setOpenFileEditors([])
     setOpenGitDiffTabs([])
+    setOpenTerminalTabs([])
     setActiveFileEditorPath(null)
     setActiveDockTabId(null)
-  }, [confirmCollapseDirtyEditors])
+  }, [confirmCollapseDirtyEditors, openTerminalTabs])
 
   const saveFileEditor = useCallback(async () => {
     if (
@@ -1529,6 +1890,28 @@ const RightBar: React.FC<RightBarProps> = ({
                 onSelectTab={selectDockTab}
                 onCloseTab={closeDockTab}
               />
+            ) : activeTerminalDock ? (
+              <XtermTerminalPane
+                tabId={getTerminalDockTabId(activeTerminalDock.id)}
+                title={activeTerminalDock.title}
+                cwd={activeTerminalDock.cwd}
+                shell={activeTerminalDock.shell}
+                sessionId={activeTerminalDock.sessionId}
+                history={activeTerminalDock.history}
+                status={activeTerminalDock.status}
+                error={activeTerminalDock.error}
+                exitCode={activeTerminalDock.exitCode}
+                theme={monacoTheme}
+                tabs={dockTabs}
+                activeTabId={activeDockTabId}
+                onInput={handleTerminalInput}
+                onResize={handleTerminalResize}
+                onRestart={() => restartTerminalDock(activeTerminalDock.id)}
+                onClear={() => clearTerminalDockBuffer(activeTerminalDock.id)}
+                onClose={() => closeTerminalDock(activeTerminalDock.id)}
+                onSelectTab={selectDockTab}
+                onCloseTab={closeDockTab}
+              />
             ) : null}
           </div>
         )}
@@ -1575,6 +1958,17 @@ const RightBar: React.FC<RightBarProps> = ({
                     title='Insert current directory path'
                   >
                     <i className='bx bx-folder-plus text-sm leading-none text-neutral-600 dark:text-neutral-100' />
+                  </button>
+                )}
+                {!isWeb && (currentPath || ccCwd) && (
+                  <button
+                    onClick={() => {
+                      openNewTerminalDock(currentPath || ccCwd)
+                    }}
+                    className='w-7 h-7 flex items-center justify-center rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors bg-neutral-50 acrylic-ultra-light-nb-3'
+                    title='Open terminal here'
+                  >
+                    <i className='bx bx-terminal text-sm leading-none text-neutral-600 dark:text-neutral-100' />
                   </button>
                 )}
                 <span
@@ -1737,16 +2131,19 @@ const RightBar: React.FC<RightBarProps> = ({
               >
                 Note
               </button>
-              <button
-                onClick={() => setActiveTab('list')}
-                className={`flex-1 px-2 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
-                  activeTab === 'list'
-                    ? 'bg-neutral-50 acrylic-ultra-light-nb-3 text-stone-800 dark:text-stone-200 scale-102 dark:border-transparent shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.05)]'
-                    : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-300 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 '
-                }`}
-              >
-                List
-              </button>
+              {!isWeb && (
+                <button
+                  onClick={() => setActiveTab('terminal')}
+                  className={`flex-1 px-2 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+                    activeTab === 'terminal'
+                      ? 'bg-neutral-50 acrylic-ultra-light-nb-3 text-stone-800 dark:text-stone-200 scale-102 dark:border-transparent shadow-[0px_0.5px_3px_-0.5px_rgba(0,0,0,0.05)] dark:shadow-[0px_0.5px_3px_2px_rgba(0,0,0,0.05)]'
+                      : 'bg-transparent hover:scale-101 text-stone-600 dark:text-stone-300 hover:bg-neutral-50 dark:hover:bg-neutral-900/50 '
+                  }`}
+                  title='Terminal sessions'
+                >
+                  Terminal {openTerminalTabs.length > 0 ? `(${openTerminalTabs.length})` : ''}
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('agents')}
                 className={`flex-1 px-2 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
@@ -1804,6 +2201,22 @@ const RightBar: React.FC<RightBarProps> = ({
                 >
                   <i className='bx bx-note text-lg' aria-hidden='true'></i>
                 </Button>
+                {!isWeb && (currentPath || ccCwd) && (
+                  <Button
+                    variant='outline2'
+                    size='circle'
+                    rounded='full'
+                    className='h-10 w-10 transition-transform duration-200 hover:scale-103 '
+                    onClick={() => {
+                      dispatch(uiActions.rightBarExpanded())
+                      setActiveTab('terminal')
+                      openNewTerminalDock(currentPath || ccCwd)
+                    }}
+                    title='Open terminal'
+                  >
+                    <i className='bx bx-terminal text-lg' aria-hidden='true'></i>
+                  </Button>
+                )}
               </div>
             ) : activeTab === 'git' ? (
               !gitBasePath ? (
@@ -2396,6 +2809,194 @@ const RightBar: React.FC<RightBarProps> = ({
                   </div>
                 </div>
               )
+            ) : activeTab === 'terminal' ? (
+              <div className='space-y-3'>
+                <div className='rounded-xl border border-neutral-200 bg-white/70 p-3 dark:border-neutral-800 dark:bg-neutral-900/40'>
+                  <div className='flex items-start justify-between gap-3'>
+                    <div>
+                      <h3 className='text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400'>
+                        Terminal Sessions
+                      </h3>
+                      <div className='mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>
+                        {openTerminalTabs.length} tab{openTerminalTabs.length === 1 ? '' : 's'} • {' '}
+                        {openTerminalTabs.filter(tab => tab.status === 'open' || tab.status === 'launching').length} running
+                      </div>
+                      <div className='mt-1 text-[11px] text-neutral-500 dark:text-neutral-400'>
+                        Launch multiple local shells and restore them on next app launch.
+                      </div>
+                    </div>
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => openNewTerminalDock()}
+                      disabled={isWeb || !(currentPath || ccCwd)}
+                    >
+                      New terminal
+                    </Button>
+                  </div>
+
+                  <div className='mt-3 flex flex-wrap gap-2'>
+                    <Button
+                      variant='outline2'
+                      size='small'
+                      onClick={() => openNewTerminalDock(currentPath || ccCwd)}
+                      disabled={isWeb || !(currentPath || ccCwd)}
+                    >
+                      Open in current path
+                    </Button>
+                    {ccCwd && currentPath && currentPath !== ccCwd && (
+                      <Button variant='outline2' size='small' onClick={() => openNewTerminalDock(ccCwd)}>
+                        Open in root
+                      </Button>
+                    )}
+                    {activeTerminalDock && (
+                      <Button
+                        variant='outline2'
+                        size='small'
+                        onClick={() => setActiveDockTabId(getTerminalDockTabId(activeTerminalDock.id))}
+                      >
+                        Focus active dock
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div className='rounded-xl border border-neutral-200 bg-white/70 p-3 dark:border-neutral-800 dark:bg-neutral-900/40'>
+                  <h3 className='text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400'>
+                    Preferences
+                  </h3>
+                  <div className='mt-3 space-y-2'>
+                    <button
+                      onClick={() =>
+                        setTerminalPreferences(current => ({
+                          ...current,
+                          restoreSessionsOnLaunch: !current.restoreSessionsOnLaunch,
+                        }))
+                      }
+                      className='flex w-full items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-left dark:border-neutral-800'
+                    >
+                      <div>
+                        <div className='text-sm font-medium text-neutral-900 dark:text-neutral-100'>Restore sessions on launch</div>
+                        <div className='text-[11px] text-neutral-500 dark:text-neutral-400'>
+                          Reopen saved terminal tabs after restarting Electron.
+                        </div>
+                      </div>
+                      <span className='text-xs font-semibold text-neutral-700 dark:text-neutral-200'>
+                        {terminalPreferences.restoreSessionsOnLaunch ? 'On' : 'Off'}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setTerminalPreferences(current => ({
+                          ...current,
+                          persistHistory: !current.persistHistory,
+                        }))
+                      }
+                      className='flex w-full items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-left dark:border-neutral-800'
+                    >
+                      <div>
+                        <div className='text-sm font-medium text-neutral-900 dark:text-neutral-100'>Persist shell history</div>
+                        <div className='text-[11px] text-neutral-500 dark:text-neutral-400'>
+                          Save each terminal buffer so restored tabs show previous output.
+                        </div>
+                      </div>
+                      <span className='text-xs font-semibold text-neutral-700 dark:text-neutral-200'>
+                        {terminalPreferences.persistHistory ? 'On' : 'Off'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className='rounded-xl border border-neutral-200 bg-white/70 p-3 dark:border-neutral-800 dark:bg-neutral-900/40'>
+                  <div className='mb-2 flex items-center justify-between gap-2'>
+                    <h3 className='text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500 dark:text-neutral-400'>
+                      Open Tabs
+                    </h3>
+                    <span className='text-[11px] text-neutral-500 dark:text-neutral-400'>
+                      {openTerminalTabs.length === 0 ? 'None' : `${openTerminalTabs.length} available`}
+                    </span>
+                  </div>
+
+                  {openTerminalTabs.length === 0 ? (
+                    <div className='text-xs text-neutral-500 dark:text-neutral-400'>
+                      No terminal tabs yet. Launch one from the file browser header or the button above.
+                    </div>
+                  ) : (
+                    <div className='space-y-2'>
+                      {openTerminalTabs.map(tab => {
+                        const tabDockId = getTerminalDockTabId(tab.id)
+                        const isFocused = activeDockTabId === tabDockId
+                        return (
+                          <div
+                            key={tab.id}
+                            className={`rounded-lg border px-3 py-2 ${
+                              isFocused
+                                ? 'border-violet-300 bg-violet-50/60 dark:border-violet-500/40 dark:bg-violet-500/10'
+                                : 'border-neutral-200 dark:border-neutral-800'
+                            }`}
+                          >
+                            <div className='flex items-start justify-between gap-3'>
+                              <button
+                                onClick={() => {
+                                  dispatch(uiActions.rightBarExpanded())
+                                  setActiveDockTabId(tabDockId)
+                                }}
+                                className='min-w-0 flex-1 text-left'
+                              >
+                                <div className='flex items-center gap-2'>
+                                  <span className='truncate text-sm font-medium text-neutral-900 dark:text-neutral-100'>
+                                    {tab.title}
+                                  </span>
+                                  <span className='rounded-full border border-neutral-200 px-2 py-0.5 text-[10px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-300'>
+                                    {tab.status === 'open'
+                                      ? 'running'
+                                      : tab.status === 'launching'
+                                        ? 'launching'
+                                        : tab.status === 'error'
+                                          ? 'error'
+                                          : tab.exitCode == null
+                                            ? 'closed'
+                                            : `exit ${tab.exitCode}`}
+                                  </span>
+                                </div>
+                                <div className='mt-1 truncate text-[11px] text-neutral-500 dark:text-neutral-400' title={tab.cwd}>
+                                  {tab.cwd}
+                                </div>
+                                {tab.history && (
+                                  <div className='mt-1 text-[11px] text-neutral-500 dark:text-neutral-400'>
+                                    buffer {Math.min(tab.history.length, TERMINAL_HISTORY_LIMIT).toLocaleString()} chars
+                                  </div>
+                                )}
+                              </button>
+                              <div className='flex flex-wrap justify-end gap-1.5'>
+                                <Button
+                                  variant='outline2'
+                                  size='small'
+                                  onClick={() => {
+                                    dispatch(uiActions.rightBarExpanded())
+                                    setActiveDockTabId(tabDockId)
+                                  }}
+                                >
+                                  Focus
+                                </Button>
+                                <Button variant='outline2' size='small' onClick={() => restartTerminalDock(tab.id)}>
+                                  Restart
+                                </Button>
+                                <Button variant='outline2' size='small' onClick={() => clearTerminalDockBuffer(tab.id)}>
+                                  Clear
+                                </Button>
+                                <Button variant='outline2' size='small' onClick={() => closeTerminalDock(tab.id)}>
+                                  Close
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : activeTab === 'agents' ? (
               <div className='space-y-3'>
                 <div>
@@ -2431,7 +3032,9 @@ const RightBar: React.FC<RightBarProps> = ({
                                   <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
                                     {stream.streamType}
                                   </span>
-                                  <span className={getActivityBadgeClasses(stream.activityKind)}>{stream.activityLabel}</span>
+                                  <span className={getActivityBadgeClasses(stream.activityKind)}>
+                                    {stream.activityLabel}
+                                  </span>
                                   <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
                                     stream {summarizeId(stream.streamId)}
                                   </span>
@@ -2496,7 +3099,9 @@ const RightBar: React.FC<RightBarProps> = ({
                                   <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
                                     {stream.streamType}
                                   </span>
-                                  <span className={getActivityBadgeClasses(stream.activityKind)}>{stream.activityLabel}</span>
+                                  <span className={getActivityBadgeClasses(stream.activityKind)}>
+                                    {stream.activityLabel}
+                                  </span>
                                   <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
                                     stream {summarizeId(stream.streamId)}
                                   </span>
@@ -2522,47 +3127,6 @@ const RightBar: React.FC<RightBarProps> = ({
                   )}
                 </div>
               </div>
-            ) : activeTab === 'list' ? (
-              // List tab - show all research notes
-              <>
-                {isLoadingNotes && <div className='text-xs text-gray-500 dark:text-gray-300 px-2 py-1'>Loading...</div>}
-                {notes.length === 0 && !isLoadingNotes && (
-                  <div className='text-xs text-neutral-500 dark:text-neutral-400 px-2 py-1'>No research notes</div>
-                )}
-                {notes.map(noteItem => (
-                  <div key={noteItem.id} className='sm:mb-1 md:mb-1 lg:mb-1.5 2xl:mb-2 group relative'>
-                    <div
-                      role='button'
-                      tabIndex={0}
-                      onClick={() => handleNoteClick(noteItem)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault()
-                          handleNoteClick(noteItem)
-                        }
-                      }}
-                      className='w-full text-left rounded-lg transition-all duration-200 cursor-pointer hover:bg-stone-100/30 hover:ring-neutral-100 hover:ring-1 sm:py-1 xl:py-2 dark:hover:ring-neutral-600/60 outline-transparent dark:hover:bg-yBlack-900/10'
-                    >
-                      <div className='flex flex-col gap-0 md:gap-1 lg:gap-1.5 xl:gap-1 2xl:gap-2 py-2 md:py-0 lg:py-0 xl:py-0 mx-2'>
-                        <span className='text-[10px] md:text-[11px] lg:text-[12px] xl:text-[12px] 2xl:text-[14px] 3xl:text-[16px] 4xl:text-[14px] font-medium text-neutral-900 dark:text-stone-200 truncate'>
-                          {noteItem.title || `Conversation ${noteItem.id}`}
-                        </span>
-                        {noteItem.research_note && (
-                          <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[12px] 2xl:text-[12px] 3xl:text-[16px] 4xl:text-[14px] text-neutral-600 dark:text-stone-300 truncate'>
-                            {noteItem.research_note.substring(0, 50)}
-                            {noteItem.research_note.length > 50 ? '...' : ''}
-                          </span>
-                        )}
-                        {noteItem.updated_at && (
-                          <span className='text-xs md:text-[11px] lg:text-[10px] xl:text-[9px] 2xl:text-[11px] 3xl:text-[12px] 4xl:text-[14px] text-neutral-500 dark:text-neutral-400 text-right'>
-                            {new Date(noteItem.updated_at).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </>
             ) : activeTab === 'global' ? (
               <div className='flex flex-col h-full'>
                 <div className='mb-2 flex flex-col gap-2'>

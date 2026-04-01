@@ -82,6 +82,29 @@ const isOnCurrentBranch = (currentPath: MessageId[], messages: Message[], messag
   return true
 }
 
+// Helper to keep the visible conversation buffer scoped to the currently selected conversation.
+const isMessageForCurrentConversation = (
+  state: ChatState,
+  message: Pick<Message, 'id' | 'parent_id'> & { conversation_id?: ConversationId | string | null }
+): boolean => {
+  const currentConversationId = state.conversation.currentConversationId
+  if (currentConversationId == null) return true
+
+  if (message.conversation_id != null) {
+    return String(message.conversation_id) === String(currentConversationId)
+  }
+
+  if (state.conversation.messages.some(existing => String(existing.id) === String(message.id))) {
+    return true
+  }
+
+  if (message.parent_id != null) {
+    return state.conversation.messages.some(existing => String(existing.id) === String(message.parent_id))
+  }
+
+  return false
+}
+
 // Helper to get or create stream state with fallback
 const getOrCreateStream = (state: ChatState, streamId: string): StreamState => {
   if (!state.streaming.byId[streamId]) {
@@ -366,6 +389,8 @@ export const chatSlice = createSlice({
         stream.toolCalls = []
         stream.events = []
         stream.error = null
+        stream.messageId = null
+        stream.streamingMessageId = null
         return
       }
 
@@ -596,6 +621,10 @@ export const chatSlice = createSlice({
 
     messageAdded: (state, action: PayloadAction<Message>) => {
       const m = action.payload
+      if (!isMessageForCurrentConversation(state, m)) {
+        return
+      }
+
       const existing = state.conversation.messages.findIndex(x => x.id === m.id)
       if (existing >= 0) {
         state.conversation.messages[existing] = m
@@ -677,6 +706,9 @@ export const chatSlice = createSlice({
     // Branching support
     messageBranchCreated: (state, action: PayloadAction<{ newMessage: Message }>) => {
       const { newMessage } = action.payload
+      if (!isMessageForCurrentConversation(state, newMessage)) {
+        return
+      }
 
       const normalizeIds = (ids: any): MessageId[] => {
         if (Array.isArray(ids)) return ids as MessageId[]

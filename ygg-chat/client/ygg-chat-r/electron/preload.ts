@@ -119,6 +119,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
     run: (command: string, options?: { cwd?: string; timeout?: number }) =>
       ipcRenderer.invoke('shell:exec', command, options),
   },
+  terminal: {
+    create: (options?: { cwd?: string; cols?: number; rows?: number; title?: string }) =>
+      ipcRenderer.invoke('terminal:create', options),
+    write: (sessionId: string, data: string) => ipcRenderer.invoke('terminal:write', sessionId, data),
+    resize: (sessionId: string, cols: number, rows: number) =>
+      ipcRenderer.invoke('terminal:resize', sessionId, cols, rows),
+    kill: (sessionId: string) => ipcRenderer.invoke('terminal:kill', sessionId),
+    onData: (callback: (payload: any) => void) => {
+      const listener = (_event: any, payload: any) => callback(payload)
+      ipcRenderer.on('terminal:data', listener)
+      return () => ipcRenderer.removeListener('terminal:data', listener)
+    },
+    onExit: (callback: (payload: any) => void) => {
+      const listener = (_event: any, payload: any) => callback(payload)
+      ipcRenderer.on('terminal:exit', listener)
+      return () => ipcRenderer.removeListener('terminal:exit', listener)
+    },
+  },
   http: {
     request: (options: {
       url: string

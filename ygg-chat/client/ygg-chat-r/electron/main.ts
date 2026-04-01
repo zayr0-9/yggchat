@@ -16,6 +16,7 @@ import {
 import { ensureManagedHooksInitialized } from './hooks/hookStorage.js'
 import { startLocalServer, stopLocalServer } from './localServer.js'
 import { ensureManagedThemesInitialized } from './tools/themeManager.js'
+import { detectPathType, getWSLCommandArgs, isWindows } from './utils/wslBridge.js'
 
 // Destructure autoUpdater from CommonJS module (ESM/CJS interop)
 const { autoUpdater } = autoUpdaterPkg
@@ -93,6 +94,128 @@ const activeReadStreams = new Map<
     abortedSent: boolean
   }
 >()
+
+type TerminalSessionRecord = {
+  sessionId: string
+  pty: import('node-pty').IPty
+  sender: Electron.WebContents
+  cwd: string
+  shell: string
+  cols: number
+  rows: number
+}
+
+const activeTerminalSessions = new Map<string, TerminalSessionRecord>()
+
+function getNodePtyModule(): typeof import('node-pty') {
+  return require('node-pty') as typeof import('node-pty')
+}
+
+function makeTerminalSessionId(): string {
+  return `terminal_${Date.now()}_${Math.random().toString(16).slice(2)}`
+}
+
+function clampTerminalDimension(value: number | undefined, fallback: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return fallback
+  return Math.min(max, Math.max(min, Math.floor(value as number)))
+}
+
+function normalizeTerminalCwd(inputCwd?: string): string {
+  const trimmed = inputCwd?.trim()
+  if (!trimmed) {
+    return process.cwd()
+  }
+
+  if (!isWindows()) {
+    return path.isAbsolute(trimmed) ? trimmed : path.resolve(trimmed)
+  }
+
+  const pathType = detectPathType(trimmed)
+  if (pathType === 'linux') {
+    return trimmed
+  }
+  if (pathType === 'windows') {
+    return path.win32.normalize(trimmed)
+  }
+  return path.win32.resolve(trimmed)
+}
+
+async function resolveTerminalLaunch(inputCwd?: string): Promise<{
+  file: string
+  args: string[]
+  spawnCwd: string
+  displayCwd: string
+  shellLabel: string
+}> {
+  const normalizedCwd = normalizeTerminalCwd(inputCwd)
+
+  if (!isWindows()) {
+    const shellPath = process.env.SHELL?.trim() || '/bin/bash'
+    return {
+      file: shellPath,
+      args: ['-i'],
+      spawnCwd: normalizedCwd,
+      displayCwd: normalizedCwd,
+      shellLabel: path.posix.basename(shellPath) || shellPath,
+    }
+  }
+
+  if (detectPathType(normalizedCwd) === 'linux') {
+    const [file, args] = await getWSLCommandArgs('bash', ['-i'], normalizedCwd)
+    return {
+      file,
+      args,
+      spawnCwd: process.cwd(),
+      displayCwd: normalizedCwd,
+      shellLabel: 'wsl bash',
+    }
+  }
+
+  const configuredShell = process.env.YGG_TERMINAL_SHELL?.trim()
+  const shellPath = configuredShell || 'powershell.exe'
+  const shellBaseName = path.win32.basename(shellPath).toLowerCase()
+  const args = shellBaseName === 'powershell.exe' || shellBaseName === 'pwsh.exe' ? ['-NoLogo'] : []
+
+  return {
+    file: shellPath,
+    args,
+    spawnCwd: normalizedCwd,
+    displayCwd: normalizedCwd,
+    shellLabel: path.win32.basename(shellPath) || shellPath,
+  }
+}
+
+function sendTerminalEvent(sender: Electron.WebContents, channel: string, payload: Record<string, any>): void {
+  if (!sender.isDestroyed()) {
+    sender.send(channel, payload)
+  }
+}
+
+function destroyTerminalSession(sessionId: string): boolean {
+  const session = activeTerminalSessions.get(sessionId)
+  if (!session) return false
+  activeTerminalSessions.delete(sessionId)
+  try {
+    session.pty.kill()
+  } catch (error) {
+    console.warn('[Electron Terminal] Failed to kill session:', error)
+  }
+  return true
+}
+
+function cleanupTerminalSessionsForSender(sender: Electron.WebContents): void {
+  const ownedSessionIds: string[] = []
+
+  for (const [sessionId, session] of activeTerminalSessions.entries()) {
+    if (session.sender.id === sender.id) {
+      ownedSessionIds.push(sessionId)
+    }
+  }
+
+  for (const sessionId of ownedSessionIds) {
+    destroyTerminalSession(sessionId)
+  }
+}
 
 // Custom protocol for OAuth callbacks
 const PROTOCOL = 'yggchat'
@@ -801,6 +924,9 @@ app.on('activate', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  for (const sessionId of Array.from(activeTerminalSessions.keys())) {
+    destroyTerminalSession(sessionId)
+  }
   // Ensure local sync server is stopped
   if (localServerStarted) {
     stopLocalServer().catch(err => console.error('[Electron] Error stopping local server on quit:', err))
@@ -1289,6 +1415,133 @@ ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
     console.error('[Electron IPC] Failed to create directory:', error)
     return { success: false, error: String(error) }
   }
+})
+
+ipcMain.handle(
+  'terminal:create',
+  async (
+    event,
+    options?: {
+      cwd?: string
+      cols?: number
+      rows?: number
+      title?: string
+    }
+  ) => {
+    try {
+      const launch = await resolveTerminalLaunch(options?.cwd)
+      const { spawn } = getNodePtyModule()
+      const cols = clampTerminalDimension(options?.cols, 120, 20, 400)
+      const rows = clampTerminalDimension(options?.rows, 32, 5, 200)
+      const sessionId = makeTerminalSessionId()
+      const pty = spawn(launch.file, launch.args, {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd: launch.spawnCwd,
+        env: {
+          ...process.env,
+          TERM: 'xterm-256color',
+          COLORTERM: 'truecolor',
+        },
+        ...(process.platform === 'win32' ? { useConpty: true } : {}),
+      })
+
+      const session: TerminalSessionRecord = {
+        sessionId,
+        pty,
+        sender: event.sender,
+        cwd: launch.displayCwd,
+        shell: launch.shellLabel,
+        cols,
+        rows,
+      }
+      activeTerminalSessions.set(sessionId, session)
+
+      event.sender.once('destroyed', () => {
+        cleanupTerminalSessionsForSender(event.sender)
+      })
+
+      pty.onData(data => {
+        const activeSession = activeTerminalSessions.get(sessionId)
+        if (!activeSession) return
+        sendTerminalEvent(activeSession.sender, 'terminal:data', {
+          sessionId,
+          data,
+        })
+      })
+
+      pty.onExit(({ exitCode, signal }) => {
+        const activeSession = activeTerminalSessions.get(sessionId)
+        if (!activeSession) return
+        activeTerminalSessions.delete(sessionId)
+        sendTerminalEvent(activeSession.sender, 'terminal:exit', {
+          sessionId,
+          exitCode,
+          signal,
+          cwd: activeSession.cwd,
+          shell: activeSession.shell,
+        })
+      })
+
+      return {
+        success: true,
+        sessionId,
+        cwd: launch.displayCwd,
+        shell: launch.shellLabel,
+        cols,
+        rows,
+        title: options?.title || 'Terminal',
+      }
+    } catch (error) {
+      console.error('[Electron Terminal] Failed to create terminal session:', error)
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+)
+
+ipcMain.handle('terminal:write', async (event, sessionId: string, data: string) => {
+  const session = activeTerminalSessions.get(sessionId)
+  if (!session || session.sender.id !== event.sender.id) {
+    return { success: false, error: 'Terminal session not found' }
+  }
+
+  try {
+    session.pty.write(typeof data === 'string' ? data : String(data ?? ''))
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron Terminal] Failed to write to terminal session:', error)
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+})
+
+ipcMain.handle('terminal:resize', async (event, sessionId: string, cols: number, rows: number) => {
+  const session = activeTerminalSessions.get(sessionId)
+  if (!session || session.sender.id !== event.sender.id) {
+    return { success: false, error: 'Terminal session not found' }
+  }
+
+  try {
+    const nextCols = clampTerminalDimension(cols, session.cols || 120, 20, 400)
+    const nextRows = clampTerminalDimension(rows, session.rows || 32, 5, 200)
+    session.cols = nextCols
+    session.rows = nextRows
+    session.pty.resize(nextCols, nextRows)
+    return { success: true }
+  } catch (error) {
+    console.error('[Electron Terminal] Failed to resize terminal session:', error)
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+})
+
+ipcMain.handle('terminal:kill', async (event, sessionId: string) => {
+  const session = activeTerminalSessions.get(sessionId)
+  if (!session || session.sender.id !== event.sender.id) {
+    return { success: false, error: 'Terminal session not found' }
+  }
+
+  destroyTerminalSession(sessionId)
+  return { success: true }
 })
 
 // Execute shell command for custom tool widgets

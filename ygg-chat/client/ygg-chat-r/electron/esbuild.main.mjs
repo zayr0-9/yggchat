@@ -16,6 +16,7 @@ await esbuild.build({
     'electron',
     'better-sqlite3',  // Native module - must be external
     'keytar',
+    'node-pty',
   ],
   banner: {
     // Required for ESM to use require() for native modules

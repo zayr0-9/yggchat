@@ -82,6 +82,8 @@ export interface JobSummary {
   startedAt: string | null
   completedAt: string | null
   conversationId: string | null
+  messageId: string | null
+  streamId: string | null
   error: string | null
 }
 

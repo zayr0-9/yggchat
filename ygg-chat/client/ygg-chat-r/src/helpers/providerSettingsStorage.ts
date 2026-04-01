@@ -8,7 +8,7 @@ export const PROVIDER_SETTINGS_CHANGE_EVENT = 'ygg-provider-settings-change'
 export const MIN_OPENROUTER_TEMPERATURE = 0
 export const MAX_OPENROUTER_TEMPERATURE = 2
 export const DEFAULT_COMPACTION_SYSTEM_PROMPT =
-  'You compact chat history. Return concise markdown that preserves goals, hard requirements, key facts, decisions, pending tasks, and unresolved questions. Do not include tool protocol chatter.'
+  'You compact chat history. Return detailed markdown that preserves goals, hard requirements, key facts, decisions, pending tasks, and unresolved questions. Do not include tool protocol chatter, but include general context around changes made instead. Include full absolute paths of files touched/edited, and brief summary of what changed.'
 
 export interface ProviderSettings {
   /** Whether the provider selector is visible in the chat UI */

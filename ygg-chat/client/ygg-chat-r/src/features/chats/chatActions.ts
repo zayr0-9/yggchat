@@ -38,6 +38,7 @@ import {
 import { createLmStudioStreamingRequest } from './LMStudio'
 import { createOpenAIChatGPTStreamingRequest } from './OpenAIChatGPT'
 import { openStreamingWithPreFirstByteRetry } from './streamResilience'
+import { buildCompactionHistoryLines, buildCompactionWriteOpAppendix } from './compactionContext'
 import { persistToolResultsWithFallback } from './toolResultPersistence'
 // OpenAI OAuth is handled internally by OpenAIChatGPT module
 import {
@@ -2557,22 +2558,22 @@ export const compactBranch = createAsyncThunk<
       }
 
       const compactableHistory = trimHistoryToLatestCompaction(messages)
-      const historyLines = compactableHistory
-        .map(msg => {
-          const role = msg.role === 'assistant' || msg.role === 'ex_agent' ? 'assistant' : msg.role
-          const content = typeof msg.content === 'string' ? msg.content.trim() : ''
-          return `${role.toUpperCase()}: ${content}`
-        })
-        .filter(Boolean)
+      const historyLines = buildCompactionHistoryLines(compactableHistory)
+      const historyText =
+        historyLines.length > 0
+          ? historyLines.join('\n\n')
+          : '(No non-tool conversational text remained after filtering tool outputs.)'
+      const writeOpAppendix = buildCompactionWriteOpAppendix(compactableHistory)
 
       console.log('[compactBranch] prepared', {
         resolvedModelName,
         compactableHistoryCount: compactableHistory.length,
         historyLinesCount: historyLines.length,
+        writeOpAppendixChars: writeOpAppendix.length,
       })
 
-      if (historyLines.length === 0) {
-        console.log('[compactBranch] skip: no history lines')
+      if (historyLines.length === 0 && !writeOpAppendix) {
+        console.log('[compactBranch] skip: no history lines or write-op appendix')
         return { message: null }
       }
 
@@ -2589,7 +2590,7 @@ export const compactBranch = createAsyncThunk<
         '5) Risks / ambiguities',
         '',
         'Conversation history:',
-        historyLines.join('\n\n'),
+        historyText,
       ].join('\n')
 
       let summaryText = ''
@@ -2705,7 +2706,12 @@ export const compactBranch = createAsyncThunk<
         throw new Error('Compaction returned empty summary')
       }
 
-      const persistedSummaryContent = ensureCompactionSummaryResumeLine(finalSummary)
+      const fencedWriteOpAppendix = writeOpAppendix ? `\`\`\`\n${writeOpAppendix}\n\`\`\`` : ''
+      const persistedSummaryContent = ensureCompactionSummaryResumeLine(
+        [finalSummary, fencedWriteOpAppendix]
+          .filter(section => typeof section === 'string' && section.trim().length > 0)
+          .join('\n\n')
+      )
 
       const summaryMessage: Message = {
         id: uuidv4(),
@@ -3364,7 +3370,7 @@ const executionMode = 'client'
                       )
                     messageId = assistantMsg.id
                     currentTurnHistory.push(assistantMsg)
-                    dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                    // Keep current streaming UI until the next generation_started event clears it.
                   }
                 },
                 signal: controller.signal,
@@ -3656,7 +3662,7 @@ const executionMode = 'client'
                     messageId = chunk.message.id
                     currentTurnContent = ''
                     currentTurnHistory.push(chunk.message)
-                    dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                    // Keep current streaming UI until the next generation_started event clears it.
                   }
                 },
                 signal: controller.signal,
@@ -3883,7 +3889,7 @@ const executionMode = 'client'
                       messageId = chunk.message.id
                       currentTurnContent = ''
                       currentTurnHistory.push(chunk.message)
-                      dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                      // Keep current streaming UI until the next generation_started event clears it.
                   }
                 },
                 signal: controller.signal,
@@ -4293,8 +4299,7 @@ const executionMode = 'client'
                       message_id: chunk.message.id,
                     })
                   }
-                  // Reset streaming buffer for next iteration
-                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                  // Preserve current streaming UI until the next generation_started event clears it.
                   messageId = chunk.message.id
                 } else if (chunk.type === 'free_generations_update') {
                   // Update free generations remaining count
@@ -4545,7 +4550,6 @@ const executionMode = 'client'
       }
 
       dispatch(chatSliceActions.sendingCompleted({ streamId }))
-      dispatch(chatSliceActions.inputCleared())
 
       // Schedule stream cleanup after delay
       setTimeout(() => {
@@ -5484,7 +5488,7 @@ const executionMode = 'client' // Prefer client execution for tools
                     )
                     messageId = assistantMsg.id
                     currentTurnHistory.push(assistantMsg)
-                    dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                    // Keep current streaming UI until the next generation_started event clears it.
                 }
               },
               signal: controller.signal,
@@ -5889,8 +5893,7 @@ const executionMode = 'client' // Prefer client execution for tools
                       message_id: chunk.message.id,
                     })
                   }
-                  // Reset streaming buffer for next iteration
-                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                  // Preserve current streaming UI until the next generation_started event clears it.
                 } else if (chunk.type === 'free_generations_update') {
                   // Update free generations remaining count
                   dispatch(
@@ -6698,7 +6701,7 @@ const executionMode = 'client'
                     )
                     messageId = assistantMsg.id
                     currentTurnHistory.push(assistantMsg)
-                    dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                    // Keep current streaming UI until the next generation_started event clears it.
                 }
               },
               signal: controller.signal,
@@ -7014,8 +7017,7 @@ const executionMode = 'client'
                       message_id: chunk.message.id,
                     })
                   }
-                  // Reset streaming buffer for next iteration
-                  dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk: { type: 'reset' } }))
+                  // Preserve current streaming UI until the next generation_started event clears it.
                 } else if (chunk.type === 'free_generations_update') {
                   // Update free generations remaining count
                   dispatch(
@@ -7270,7 +7272,7 @@ const executionMode = 'client'
       }
 
       dispatch(chatSliceActions.sendingCompleted({ streamId }))
-      dispatch(chatSliceActions.inputCleared())
+
 
       // Schedule stream cleanup after delay
       setTimeout(() => {
@@ -8633,7 +8635,7 @@ export const sendHermesMessage = createAsyncThunk<
       }
 
       dispatch(chatSliceActions.sendingCompleted({ streamId }))
-      dispatch(chatSliceActions.inputCleared())
+
 
       setTimeout(() => {
         dispatch(chatSliceActions.streamPruned({ streamId }))
@@ -8882,7 +8884,7 @@ export const sendCCMessage = createAsyncThunk<
       }
 
       dispatch(chatSliceActions.sendingCompleted({ streamId }))
-      dispatch(chatSliceActions.inputCleared())
+
 
       // Schedule stream cleanup after delay
       setTimeout(() => {
@@ -9134,7 +9136,7 @@ export const sendCCBranch = createAsyncThunk<
       }
 
       dispatch(chatSliceActions.sendingCompleted({ streamId }))
-      dispatch(chatSliceActions.inputCleared())
+
 
       // Schedule stream cleanup after delay
       setTimeout(() => {

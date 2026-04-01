@@ -64,6 +64,8 @@ export interface JobSummary {
   startedAt: string | null
   completedAt: string | null
   conversationId: string | null
+  messageId: string | null
+  streamId: string | null
   error: string | null
 }
 
@@ -328,6 +330,8 @@ class ToolJobManager {
           startedAt: data.job.startedAt,
           completedAt: data.job.completedAt,
           conversationId: data.job.conversationId,
+          messageId: data.job.messageId ?? null,
+          streamId: data.job.streamId ?? null,
           error: data.job.error,
         })
         this.notifyChangeListeners()

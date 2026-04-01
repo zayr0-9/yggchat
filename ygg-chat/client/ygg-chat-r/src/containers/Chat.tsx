@@ -138,6 +138,7 @@ import { useAppDispatch, useAppSelector } from '../hooks/redux'
 import { useAuth } from '../hooks/useAuth'
 import { useIdeContext } from '../hooks/useIdeContext'
 import { useIsMobile } from '../hooks/useMediaQuery'
+import { useRunningJobs } from '../hooks/useToolJobs'
 import {
   ResearchNoteItem,
   useConversationMessages,
@@ -196,6 +197,10 @@ type VirtualRenderRow =
   | {
       kind: 'streaming_message'
       key: 'streaming'
+    }
+  | {
+      kind: 'generation_loader'
+      key: 'generation-loader'
     }
 
 type BenchAction = 'on' | 'off' | 'status' | 'export' | 'reset'
@@ -637,12 +642,16 @@ const ChatInputController = React.memo(
         [onHasTextChange]
       )
 
-      const setValue = useCallback((next: ChatInputUpdater) => {
-        const prevValue = valueRef.current
-        const nextValue = typeof next === 'function' ? next(prevValue) : next
-        valueRef.current = nextValue
-        setValueState(nextValue)
-      }, [])
+      const setValue = useCallback(
+        (next: ChatInputUpdater) => {
+          const prevValue = valueRef.current
+          const nextValue = typeof next === 'function' ? next(prevValue) : next
+          valueRef.current = nextValue
+          setValueState(nextValue)
+          publishHasText(nextValue)
+        },
+        [publishHasText]
+      )
 
       const clear = useCallback(() => {
         setValue('')
@@ -677,14 +686,14 @@ const ChatInputController = React.memo(
         [clear, focus, setValue]
       )
 
-      const handleChange = useCallback((nextValue: string) => {
-        valueRef.current = nextValue
-        setValueState(nextValue)
-      }, [])
-
-      useEffect(() => {
-        publishHasText(value)
-      }, [publishHasText, value])
+      const handleChange = useCallback(
+        (nextValue: string) => {
+          valueRef.current = nextValue
+          setValueState(nextValue)
+          publishHasText(nextValue)
+        },
+        [publishHasText]
+      )
 
       const handleKeyDown = useCallback(
         (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -832,7 +841,7 @@ function Chat() {
   // Current view stream - automatically selects the relevant stream based on currentPath
   const currentViewStream = useAppSelector(selectCurrentViewStream)
   const pendingViewStream = useAppSelector(state =>
-    pendingViewStreamId ? state.chat.streaming.byId[pendingViewStreamId] ?? null : null
+    pendingViewStreamId ? (state.chat.streaming.byId[pendingViewStreamId] ?? null) : null
   )
   const effectiveViewStream = useMemo(() => {
     if (currentViewStream) return currentViewStream
@@ -890,6 +899,7 @@ function Chat() {
   // React Query for message fetching - MOVED BELOW after projectConversations is available
   // to enable passing storage_mode from cached conversations
   const selectedPath = useAppSelector(selectCurrentPath)
+  const runningToolJobs = useRunningJobs()
   const multiReplyCount = useAppSelector(selectMultiReplyCount)
   const focusedChatMessageId = useAppSelector(selectFocusedChatMessageId)
   const isBranchEditing = useAppSelector(state => state.chat.composition.editingBranch)
@@ -897,7 +907,7 @@ function Chat() {
   // const streamingRoot = useAppSelector(state => state.chat.streaming)
   // const [streamDebugPanelOpen, setStreamDebugPanelOpen] = useState(true)
 
-  // const selectedPathStringSet = useMemo(() => new Set(selectedPath.map(id => String(id))), [selectedPath])
+  const selectedPathStringSet = useMemo(() => new Set(selectedPath.map(id => String(id))), [selectedPath])
 
   // const selectedPathDebugLabel = useMemo(
   //   () => (selectedPath.length ? selectedPath.map(formatStreamDebugId).join(' → ') : '—'),
@@ -1876,7 +1886,9 @@ function Chat() {
 
     const hasResponsesOutputItems = (parsed: ParsedMessageData): boolean =>
       Array.isArray(parsed.contentBlocks)
-        ? parsed.contentBlocks.some(block => (block as unknown as Record<string, unknown>).type === 'responses_output_items')
+        ? parsed.contentBlocks.some(
+            block => (block as unknown as Record<string, unknown>).type === 'responses_output_items'
+          )
         : false
 
     const hasSubstantialTextOrImage = (msg: Message, parsed: ParsedMessageData): boolean => {
@@ -2141,13 +2153,14 @@ function Chat() {
       const startsAssistantBlock = previousRow?.kind === 'message' && previousRow.message.role === 'user'
       const endsAssistantBlock = nextRow == null || (nextRow.kind === 'message' && nextRow.message.role === 'user')
 
-      const radiusClassName = startsAssistantBlock && endsAssistantBlock
-        ? '!rounded-md'
-        : startsAssistantBlock
-          ? '!rounded-none !rounded-t-md'
-          : endsAssistantBlock
-            ? '!rounded-none !rounded-b-md'
-            : '!rounded-none'
+      const radiusClassName =
+        startsAssistantBlock && endsAssistantBlock
+          ? '!rounded-md'
+          : startsAssistantBlock
+            ? '!rounded-none !rounded-t-md'
+            : endsAssistantBlock
+              ? '!rounded-none !rounded-b-md'
+              : '!rounded-none'
 
       const containerClassName = [startsAssistantBlock ? 'pt-4' : '', endsAssistantBlock ? 'pb-4' : '', radiusClassName]
         .filter(Boolean)
@@ -2182,7 +2195,29 @@ function Chat() {
     currentConversationId != null &&
     compactingConversationId != null &&
     String(compactingConversationId) === String(currentConversationId)
-  const showGenerationLoadingAnimation = isCurrentConversationCompacting || streamState.active
+  const hasRunningToolJobForCurrentBranch = useMemo(() => {
+    const conversationKey = currentConversationId != null ? String(currentConversationId) : null
+    const currentStreamKey = streamState.id != null ? String(streamState.id) : null
+
+    return runningToolJobs.some(job => {
+      if (conversationKey != null) {
+        if (job.conversationId == null) return false
+        if (String(job.conversationId) !== conversationKey) return false
+      }
+
+      if (currentStreamKey != null && job.streamId != null && String(job.streamId) === currentStreamKey) {
+        return true
+      }
+
+      if (job.messageId != null && selectedPathStringSet.has(String(job.messageId))) {
+        return true
+      }
+
+      return false
+    })
+  }, [currentConversationId, runningToolJobs, selectedPathStringSet, streamState.id])
+  const showGenerationLoadingAnimation =
+    isCurrentConversationCompacting || streamState.active || hasRunningToolJobForCurrentBranch
   const hasStreamingMessageContent =
     Boolean(streamState.buffer) ||
     Boolean(streamState.thinkingBuffer) ||
@@ -2190,8 +2225,8 @@ function Chat() {
     streamState.events.length > 0
   const isStreamingMessageAlreadyRendered =
     streamState.messageId != null && messageRowIndexByMessageId.has(String(streamState.messageId))
-  const showStreamingMessage =
-    !isStreamingMessageAlreadyRendered && (showGenerationLoadingAnimation || hasStreamingMessageContent)
+  const showStreamingMessage = !isStreamingMessageAlreadyRendered && hasStreamingMessageContent
+  const showGenerationLoaderRow = showGenerationLoadingAnimation
 
   const virtualRows = useMemo<VirtualRenderRow[]>(() => {
     const rows: VirtualRenderRow[] = messageRenderRows.map((row, index) => ({
@@ -2227,6 +2262,13 @@ function Chat() {
       })
     }
 
+    if (showGenerationLoaderRow) {
+      rows.push({
+        kind: 'generation_loader',
+        key: 'generation-loader',
+      })
+    }
+
     return rows
   }, [
     messageRenderRows,
@@ -2235,6 +2277,7 @@ function Chat() {
     showOptimisticBranchMessage,
     optimisticBranchMessage,
     showStreamingMessage,
+    showGenerationLoaderRow,
     virtualRowsV2Enabled,
   ])
 
@@ -2249,7 +2292,7 @@ function Chat() {
     count: virtualRows.length,
     getItemKey: index => (virtualRowsV2Enabled ? (virtualRows[index]?.key ?? index) : index),
     getScrollElement: () => messagesContainerRef.current,
-    estimateSize: () => 200, // Estimated average message height
+    estimateSize: () => 100, // Estimated average message height
     overscan: 6, // Buffer rows above/below viewport
     paddingEnd: virtualizerPaddingEnd,
   })
@@ -3409,7 +3452,6 @@ function Chat() {
 
   // Query invalidation is now handled directly in sendMessage and editMessageWithBranching success handlers
   // This prevents aggressive refetching and duplicate API requests
-
 
   // Cleanup any pending rAF on unmount
   useEffect(() => {
@@ -5687,44 +5729,58 @@ function Chat() {
                         }
 
                         if (renderRow.kind === 'streaming_message') {
+                          if (!hasStreamingMessageContent) return null
+
                           return (
                             <VirtualizedRowContainer
                               key={renderRow.key}
                               id='message-streaming'
                               index={virtualRow.index}
                               start={virtualRow.start}
+                              measureElement={virtualizer.measureElement}
                             >
-                              {hasStreamingMessageContent && (
-                                <ChatMessage
-                                  id='streaming'
-                                  role='assistant'
-                                  content={streamState.buffer}
-                                  thinking={streamState.thinkingBuffer}
-                                  toolCalls={streamState.toolCalls}
-                                  streamEvents={streamState.events}
-                                  width='w-full'
-                                  fontSizeOffset={fontSizeOffset}
-                                  groupToolReasoningRuns={groupToolReasoningRuns}
-                                  customTheme={customTheme}
-                                  customThemeEnabled={customThemeEnabled}
-                                  isDarkMode={isDarkMode}
-                                  modelName={selectedModel?.name || undefined}
-                                  className=''
-                                  onOpenToolHtmlModal={openToolHtmlModal}
+                              <ChatMessage
+                                id='streaming'
+                                role='assistant'
+                                content={streamState.buffer}
+                                thinking={streamState.thinkingBuffer}
+                                toolCalls={streamState.toolCalls}
+                                streamEvents={streamState.events}
+                                width='w-full'
+                                fontSizeOffset={fontSizeOffset}
+                                groupToolReasoningRuns={groupToolReasoningRuns}
+                                customTheme={customTheme}
+                                customThemeEnabled={customThemeEnabled}
+                                isDarkMode={isDarkMode}
+                                modelName={selectedModel?.name || undefined}
+                                className=''
+                                onOpenToolHtmlModal={openToolHtmlModal}
+                              />
+                            </VirtualizedRowContainer>
+                          )
+                        }
+
+                        if (renderRow.kind === 'generation_loader') {
+                          if (!showGenerationLoadingAnimation) return null
+
+                          return (
+                            <VirtualizedRowContainer
+                              key={renderRow.key}
+                              id='message-generation-loader'
+                              index={virtualRow.index}
+                              start={virtualRow.start}
+                              measureElement={virtualizer.measureElement}
+                            >
+                              <div className={`${showStreamingMessage ? 'pt-2' : 'pt-1'} pl-2`}>
+                                <StreamingLoadingAnimation
+                                  animationType={streamingAnimation}
+                                  color={
+                                    streamingAnimationThemeColor ||
+                                    (isDarkMode ? streamingAnimationDarkColor : streamingAnimationLightColor)
+                                  }
+                                  speed={streamingAnimationSpeed}
                                 />
-                              )}
-                              {showGenerationLoadingAnimation && (
-                                <div className={`${hasStreamingMessageContent ? 'mt-2' : 'mt-1'} pl-2`}>
-                                  <StreamingLoadingAnimation
-                                    animationType={streamingAnimation}
-                                    color={
-                                      streamingAnimationThemeColor ||
-                                      (isDarkMode ? streamingAnimationDarkColor : streamingAnimationLightColor)
-                                    }
-                                    speed={streamingAnimationSpeed}
-                                  />
-                                </div>
-                              )}
+                              </div>
                             </VirtualizedRowContainer>
                           )
                         }
@@ -5927,7 +5983,6 @@ function Chat() {
               )}
             </React.Profiler>
 
-            
             {/* Bottom sentinel and padding for scrolling past last message */}
             <div ref={bottomRef} data-bottom-sentinel='true' style={{ height: Math.max(100, containerHeight - 300) }} />
           </div>
@@ -6593,9 +6648,7 @@ function Chat() {
                                 ? 'hover:bg-neutral-100 dark:hover:bg-white/5'
                                 : 'text-orange-700 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-white/5'
                           }
-                          style={
-                            operationMode !== 'plan' && customThemeEnabled ? composerToggleActiveStyle : undefined
-                          }
+                          style={operationMode !== 'plan' && customThemeEnabled ? composerToggleActiveStyle : undefined}
                           title={
                             operationMode === 'plan'
                               ? 'Plan mode enabled (tools will be blocked)'

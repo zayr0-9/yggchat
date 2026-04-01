@@ -295,6 +295,8 @@ export class ToolOrchestrator {
       startedAt: job.startedAt,
       completedAt: job.completedAt,
       conversationId: job.conversationId,
+      messageId: job.messageId,
+      streamId: job.streamId,
       error: job.error,
     }
   }

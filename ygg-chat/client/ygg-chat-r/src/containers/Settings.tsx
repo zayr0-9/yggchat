@@ -18,11 +18,7 @@ import {
 import { isCommunityMode, LOCAL_AUTH_USER_ID } from '../config/runtimeMode'
 import { chatSliceActions, selectProviderState } from '../features/chats'
 import { fetchCustomTools, fetchTools, updateToolEnabled } from '../features/chats/chatActions'
-import {
-  clearTokens as clearOpenAITokens,
-  isOpenAIAuthenticated,
-  saveTokens,
-} from '../features/chats/openaiOAuth'
+import { clearTokens as clearOpenAITokens, isOpenAIAuthenticated, saveTokens } from '../features/chats/openaiOAuth'
 import { getAllTools } from '../features/chats/toolDefinitions'
 import {
   AGENT_SETTINGS_CHANGE_EVENT,
@@ -428,7 +424,10 @@ const Settings: React.FC = () => {
 
     window.addEventListener(HERMES_RUNTIME_SETTINGS_CHANGE_EVENT, handleHermesRuntimeSettingsChange as EventListener)
     return () =>
-      window.removeEventListener(HERMES_RUNTIME_SETTINGS_CHANGE_EVENT, handleHermesRuntimeSettingsChange as EventListener)
+      window.removeEventListener(
+        HERMES_RUNTIME_SETTINGS_CHANGE_EVENT,
+        handleHermesRuntimeSettingsChange as EventListener
+      )
   }, [])
 
   useEffect(() => {
@@ -1257,7 +1256,7 @@ const Settings: React.FC = () => {
   const handleDefaultReasoningEffortChange = (value: string) => {
     const effort = REASONING_EFFORT_OPTIONS.includes(value as (typeof REASONING_EFFORT_OPTIONS)[number])
       ? (value as ChatReasoningSettings['defaultReasoningEffort'])
-      : 'medium'
+      : 'high'
     const updated: ChatReasoningSettings = {
       ...chatReasoningSettings,
       defaultReasoningEffort: effort,
@@ -1843,15 +1842,14 @@ const Settings: React.FC = () => {
               <Select
                 value={chatReasoningSettings.defaultReasoningEffort}
                 onChange={handleDefaultReasoningEffortChange}
-                options={REASONING_EFFORT_OPTIONS.map(option => ({
-                  value: option,
-                  label:
-                    option === 'medium'
-                      ? 'Medium (Default)'
-                      : option === 'xhigh'
-                        ? 'X-High'
-                        : option.charAt(0).toUpperCase() + option.slice(1),
-                }))}
+                options={REASONING_EFFORT_OPTIONS.map(option => {
+                  const baseLabel = option === 'xhigh' ? 'X-High' : option.charAt(0).toUpperCase() + option.slice(1)
+                  return {
+                    value: option,
+                    label:
+                      option === chatReasoningSettings.defaultReasoningEffort ? `${baseLabel} (Default)` : baseLabel,
+                  }
+                })}
                 className='max-w-xs'
               />
             </div>
@@ -2270,7 +2268,8 @@ const Settings: React.FC = () => {
                 <div>
                   <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Launch Mode</p>
                   <p className='text-sm text-stone-500 dark:text-stone-400'>
-                    Auto uses the native launcher by default. Use WSL only when Ygg is on Windows and Hermes is installed inside WSL.
+                    Auto uses the native launcher by default. Use WSL only when Ygg is on Windows and Hermes is
+                    installed inside WSL.
                   </p>
                 </div>
                 <Select
@@ -2279,7 +2278,7 @@ const Settings: React.FC = () => {
                   options={[
                     { value: 'auto', label: 'Auto (recommended)' },
                     { value: 'native', label: 'Native' },
-                    ...((isWindowsElectron || hermesRuntimeSettings.launchMode === 'wsl')
+                    ...(isWindowsElectron || hermesRuntimeSettings.launchMode === 'wsl'
                       ? [{ value: 'wsl', label: 'WSL' }]
                       : []),
                   ]}
@@ -2332,7 +2331,9 @@ const Settings: React.FC = () => {
             <div className='mt-4 flex flex-col gap-4'>
               <div className='flex items-center justify-between'>
                 <div>
-                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Enable Orchestrator Tool Calls</p>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>
+                    Enable Orchestrator Tool Calls
+                  </p>
                   <p className='text-sm text-stone-500 dark:text-stone-400'>
                     Controls whether subagents can execute tools at all.
                   </p>

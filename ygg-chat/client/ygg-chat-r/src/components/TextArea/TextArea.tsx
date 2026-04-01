@@ -343,7 +343,7 @@ export const TextArea: React.FC<TextAreaProps> = ({
     }
 
     const mention = activeMention
-    const mentionToken = file.relativePath || file.name
+    const mentionToken = shouldUseLocalFileFallback ? file.path : file.relativePath || file.name
 
     try {
       const currentValue = textareaRef.current?.value ?? value
