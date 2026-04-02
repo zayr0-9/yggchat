@@ -35,6 +35,7 @@ const HEADLESS_RUNTIME_BUILTIN_TOOL_NAMES = new Set([
   'read_files',
   'create_file',
   'edit_file',
+  'multi_edit',
   'delete_file',
   'directory',
   'glob',

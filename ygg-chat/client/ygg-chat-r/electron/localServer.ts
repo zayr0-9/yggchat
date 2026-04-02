@@ -37,7 +37,7 @@ import { customToolRegistry, type CustomToolsChangedEvent, ToolResult } from './
 import { execute as executeCustomToolManager } from './tools/customToolManager.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
-import { editFile } from './tools/editFile.js'
+import { editFile, multiEdit } from './tools/editFile.js'
 import { execute as executeFetchNotes } from './tools/fetchNotes.js'
 import { globSearch } from './tools/glob.js'
 import { executeHermesAgent, getHermesSession, setHermesSession } from './tools/hermesAgent.js'
@@ -442,6 +442,7 @@ const UTILITY_RUNTIME_TOOL_WHITELIST = new Set<string>([
   'read_files',
   'create_file',
   'edit_file',
+  'multi_edit',
   'delete_file',
   'directory',
   'glob',
@@ -557,6 +558,33 @@ function initializeBuiltInToolRegistry() {
       expectedMetadata,
       approxStartLine,
       approxEndLine,
+      operationMode,
+      cwd: rootPath,
+    })
+  })
+
+  builtInTools.set('multi_edit', async (args, { rootPath, operationMode }) => {
+    const {
+      edits,
+      stopOnError,
+      createBackup,
+      encoding,
+      enableFuzzyMatching,
+      fuzzyThreshold,
+      preserveIndentation,
+      validateContent,
+    } = args
+    if (!Array.isArray(edits) || edits.length === 0) throw new Error('edits are required')
+    return await multiEdit(edits, {
+      stopOnError,
+      createBackup,
+      encoding,
+      enableFuzzyMatching,
+      fuzzyThreshold,
+      preserveIndentation,
+      interpretSearchEscapes: true,
+      interpretReplacementEscapes: false,
+      validateContent,
       operationMode,
       cwd: rootPath,
     })
@@ -755,6 +783,7 @@ const HERMES_YGG_EXPOSED_BUILTIN_TOOL_NAMES = new Set([
   'read_files',
   'create_file',
   'edit_file',
+  'multi_edit',
   'delete_file',
   'directory',
   'glob',

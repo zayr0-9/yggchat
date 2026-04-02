@@ -1,6 +1,6 @@
 import { Analytics } from '@vercel/analytics/react'
 import { AnimatePresence } from 'framer-motion'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { BrowserRouter, HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import './App.css'
 import { HtmlIframeRegistryProvider, useHtmlIframeRegistry } from './components/HtmlIframeRegistry/HtmlIframeRegistry'
@@ -29,12 +29,13 @@ import {
 } from './containers'
 import RightBar from './containers/rightBar'
 import SideBar from './containers/sideBar'
-import { selectCurrentConversationId } from './features/chats'
+import { selectCcCwd, selectCurrentConversationId } from './features/chats'
 import { selectCurrentUser } from './features/users'
 import GlobalAgentBootstrap from './GlobalAgentBootstrap'
 import { useAppSelector } from './hooks/redux'
 import { useIsMobile } from './hooks/useMediaQuery'
 import { useResearchNotes } from './hooks/useQueries'
+import { dispatchChatInsertFilePath } from './helpers/chatInputBridge'
 import IdeContextBootstrap from './IdeContextBootstrap'
 
 // Use HashRouter for Electron (file:// protocol requires hash-based routing)
@@ -71,10 +72,12 @@ const RIGHTBAR_HIDDEN_ROUTES = new Set([
   '/logging',
 ])
 
-const SIDEBAR_VISIBLE_ROUTE_PATTERNS = [/^\/homepage$/, /^\/conversationPage$/, /^\/chat\/[^/]+\/[^/]+$/, /^\/logging$/]
+const CHAT_ROUTE_PATTERN = /^\/chat\/[^/]+\/[^/]+$/
+
+const SIDEBAR_VISIBLE_ROUTE_PATTERNS = [/^\/homepage$/, /^\/conversationPage$/, CHAT_ROUTE_PATTERN, /^\/logging$/]
 
 const getRouteAnimationKey = (pathname: string) => {
-  if (/^\/chat\/[^/]+\/[^/]+$/.test(pathname)) {
+  if (CHAT_ROUTE_PATTERN.test(pathname)) {
     return '/chat/:projectId/:id'
   }
 
@@ -155,16 +158,27 @@ const SideBarShell = () => {
 const RightBarShell = () => {
   const location = useLocation()
   const isMobile = useIsMobile()
+  const currentConversationId = useAppSelector(selectCurrentConversationId)
+  const ccCwd = useAppSelector(selectCcCwd)
   const { data: notes = [], isLoading: isLoadingNotes } = useResearchNotes()
+  const isChatRoute = CHAT_ROUTE_PATTERN.test(location.pathname)
+
+  const handleFilePathInsert = useCallback((path: string) => {
+    dispatchChatInsertFilePath(path)
+  }, [])
 
   if (isMobile) return null
   if (RIGHTBAR_HIDDEN_ROUTES.has(location.pathname)) return null
 
-  const match = location.pathname.match(/^\/chat\/[^/]+\/([^/]+)$/)
-  if (match) return null
-  const conversationId = null
-
-  return <RightBar conversationId={conversationId} notes={notes} isLoadingNotes={isLoadingNotes} ccCwd={''} />
+  return (
+    <RightBar
+      conversationId={isChatRoute ? currentConversationId : null}
+      notes={notes}
+      isLoadingNotes={isLoadingNotes}
+      ccCwd={isChatRoute ? ccCwd : ''}
+      onFilePathInsert={isChatRoute ? handleFilePathInsert : undefined}
+    />
+  )
 }
 
 function AnimatedRoutes() {

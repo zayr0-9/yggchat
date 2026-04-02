@@ -15,16 +15,39 @@ export type UiNotification = {
 
 export interface UiState {
   rightBarCollapsed: boolean
+  rightBarWidth: number
   notifications: UiNotification[]
 }
 
 const MAX_NOTIFICATIONS = 6
+const RIGHT_BAR_COLLAPSED_STORAGE_KEY = 'rightbar:collapsed'
+const RIGHT_BAR_WIDTH_STORAGE_KEY = 'rightbar:width'
+const RIGHT_BAR_DEFAULT_WIDTH_PX = 360
+const RIGHT_BAR_MIN_WIDTH_PX = 280
+const RIGHT_BAR_MAX_WIDTH_PX = 720
+
+const clampRightBarWidth = (value: number): number => {
+  if (!Number.isFinite(value)) return RIGHT_BAR_DEFAULT_WIDTH_PX
+  return Math.min(RIGHT_BAR_MAX_WIDTH_PX, Math.max(RIGHT_BAR_MIN_WIDTH_PX, Math.round(value)))
+}
+
+const persistRightBarCollapsed = (collapsed: boolean) => {
+  try {
+    localStorage.setItem(RIGHT_BAR_COLLAPSED_STORAGE_KEY, String(collapsed))
+  } catch {}
+}
+
+const persistRightBarWidth = (width: number) => {
+  try {
+    localStorage.setItem(RIGHT_BAR_WIDTH_STORAGE_KEY, String(clampRightBarWidth(width)))
+  } catch {}
+}
 
 // Load initial state from localStorage
 const getInitialCollapsed = (): boolean => {
   try {
     if (typeof window === 'undefined') return true
-    const stored = localStorage.getItem('rightbar:collapsed')
+    const stored = localStorage.getItem(RIGHT_BAR_COLLAPSED_STORAGE_KEY)
     if (stored !== null) {
       return stored === 'true'
     }
@@ -34,8 +57,20 @@ const getInitialCollapsed = (): boolean => {
   }
 }
 
+const getInitialRightBarWidth = (): number => {
+  try {
+    if (typeof window === 'undefined') return RIGHT_BAR_DEFAULT_WIDTH_PX
+    const stored = localStorage.getItem(RIGHT_BAR_WIDTH_STORAGE_KEY)
+    const parsed = stored ? Number.parseFloat(stored) : Number.NaN
+    return clampRightBarWidth(parsed)
+  } catch {
+    return RIGHT_BAR_DEFAULT_WIDTH_PX
+  }
+}
+
 const initialState: UiState = {
   rightBarCollapsed: getInitialCollapsed(),
+  rightBarWidth: getInitialRightBarWidth(),
   notifications: [],
 }
 
@@ -45,24 +80,20 @@ export const uiSlice = createSlice({
   reducers: {
     rightBarCollapsedSet: (state, action: PayloadAction<boolean>) => {
       state.rightBarCollapsed = action.payload
-      // Persist to localStorage
-      try {
-        localStorage.setItem('rightbar:collapsed', String(action.payload))
-      } catch {}
+      persistRightBarCollapsed(action.payload)
+    },
+    rightBarWidthSet: (state, action: PayloadAction<number>) => {
+      const nextWidth = clampRightBarWidth(action.payload)
+      state.rightBarWidth = nextWidth
+      persistRightBarWidth(nextWidth)
     },
     rightBarToggled: state => {
       state.rightBarCollapsed = !state.rightBarCollapsed
-      // Persist to localStorage
-      try {
-        localStorage.setItem('rightbar:collapsed', String(state.rightBarCollapsed))
-      } catch {}
+      persistRightBarCollapsed(state.rightBarCollapsed)
     },
     rightBarExpanded: state => {
       state.rightBarCollapsed = false
-      // Persist to localStorage
-      try {
-        localStorage.setItem('rightbar:collapsed', 'false')
-      } catch {}
+      persistRightBarCollapsed(false)
     },
     notificationAdded: (state, action: PayloadAction<UiNotification>) => {
       const notification = action.payload

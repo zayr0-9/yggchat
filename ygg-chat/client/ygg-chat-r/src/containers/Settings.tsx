@@ -40,6 +40,14 @@ import {
   saveShowTokenUsageBar,
 } from '../helpers/chatUiSettingsStorage'
 import {
+  BROWSER_SETTINGS_CHANGE_EVENT,
+  BROWSER_SETTINGS_STORAGE_KEY,
+  BrowserSettings,
+  hydrateBrowserSettings,
+  loadBrowserSettings,
+  saveBrowserSettings,
+} from '../helpers/browserSettingsStorage'
+import {
   AppFontSettings,
   applyAppFontSettings,
   clearStoredLocalFont,
@@ -244,6 +252,7 @@ const Settings: React.FC = () => {
   )
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
   const [autoCompactionEnabled, setAutoCompactionEnabled] = useState<boolean>(() => loadAutoCompactionEnabled())
+  const [browserSettings, setBrowserSettings] = useState<BrowserSettings>(() => loadBrowserSettings())
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     heartbeatTime: null,
     agentName: 'Global Agent',
@@ -346,6 +355,17 @@ const Settings: React.FC = () => {
         console.error('Failed to hydrate Hermes runtime settings from Electron storage:', error)
       })
 
+    window.electronAPI?.storage
+      ?.get(BROWSER_SETTINGS_STORAGE_KEY)
+      .then(stored => {
+        if (!active || !stored || typeof stored !== 'object') return
+        const saved = hydrateBrowserSettings(stored as BrowserSettings)
+        setBrowserSettings(saved)
+      })
+      .catch(error => {
+        console.error('Failed to hydrate browser settings from Electron storage:', error)
+      })
+
     return () => {
       active = false
     }
@@ -428,6 +448,16 @@ const Settings: React.FC = () => {
         HERMES_RUNTIME_SETTINGS_CHANGE_EVENT,
         handleHermesRuntimeSettingsChange as EventListener
       )
+  }, [])
+
+  useEffect(() => {
+    const handleBrowserSettingsChange = (e: CustomEvent<BrowserSettings>) => {
+      setBrowserSettings(e.detail)
+    }
+
+    window.addEventListener(BROWSER_SETTINGS_CHANGE_EVENT, handleBrowserSettingsChange as EventListener)
+    return () =>
+      window.removeEventListener(BROWSER_SETTINGS_CHANGE_EVENT, handleBrowserSettingsChange as EventListener)
   }, [])
 
   useEffect(() => {
@@ -1141,6 +1171,20 @@ const Settings: React.FC = () => {
     showStatus({
       type: 'success',
       text: nextValue ? 'Auto compaction enabled in Chat.' : 'Auto compaction disabled in Chat.',
+    })
+  }
+
+  const handleBrowserGuestDevToolsToggle = () => {
+    const saved = saveBrowserSettings({
+      ...browserSettings,
+      guestDevToolsEnabled: !browserSettings.guestDevToolsEnabled,
+    })
+    setBrowserSettings(saved)
+    showStatus({
+      type: 'success',
+      text: saved.guestDevToolsEnabled
+        ? 'Built-in browser DevTools enabled.'
+        : 'Built-in browser DevTools disabled.',
     })
   }
 
@@ -2313,6 +2357,49 @@ const Settings: React.FC = () => {
                       ? ` via distro ${hermesRuntimeSettings.wslDistro}`
                       : ' via default WSL distro'
                     : ''}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {import.meta.env.VITE_ENVIRONMENT === 'electron' && (
+          <section className='rounded-2xl border border-neutral-200 mica p-6 shadow-lg shadow-neutral-200/30 dark:border-neutral-800 dark:shadow-black/20'>
+            <div className='flex flex-col gap-1'>
+              <h2 className='text-xl font-semibold text-stone-900 dark:text-stone-100 mb-2'>Built-in Browser</h2>
+              <p className='text-sm text-stone-500 dark:text-stone-200'>
+                Control optional features for the Electron right-dock browser pane.
+              </p>
+            </div>
+
+            <div className='mt-4 flex flex-col gap-4'>
+              <div className='flex items-center justify-between'>
+                <div>
+                  <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Guest Page DevTools</p>
+                  <p className='text-sm text-stone-500 dark:text-stone-400'>
+                    Allow the built-in browser pane to open detached DevTools for the embedded page.
+                  </p>
+                </div>
+                <button
+                  onClick={handleBrowserGuestDevToolsToggle}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    browserSettings.guestDevToolsEnabled
+                      ? 'bg-emerald-500 dark:bg-emerald-600'
+                      : 'bg-stone-300 dark:bg-stone-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      browserSettings.guestDevToolsEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className='rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs text-stone-600 dark:border-stone-700 dark:bg-zinc-900 dark:text-stone-300'>
+                <p>
+                  Current setting:{' '}
+                  <code>{browserSettings.guestDevToolsEnabled ? 'enabled' : 'disabled'}</code>
                 </p>
               </div>
             </div>

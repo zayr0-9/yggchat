@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 import { Button } from '../Button/button'
+import { getDockTabIndicatorClasses, getDockTabKindLabel, getDockTabToneClasses } from '../dockTabStyles'
 import type { MonacoPaneTabItem } from '../MonacoFileEditorPane/MonacoFileEditorPane'
 
 interface XtermTerminalPaneProps {
@@ -26,6 +27,7 @@ interface XtermTerminalPaneProps {
   onClose: () => void
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
+  tabToolbar?: React.ReactNode
 }
 
 type XtermTheme = NonNullable<ConstructorParameters<typeof Terminal>[0]>['theme']
@@ -99,6 +101,7 @@ export const XtermTerminalPane: React.FC<XtermTerminalPaneProps> = ({
   onClose,
   onSelectTab,
   onCloseTab,
+  tabToolbar,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const terminalRef = useRef<Terminal | null>(null)
@@ -252,21 +255,11 @@ export const XtermTerminalPane: React.FC<XtermTerminalPaneProps> = ({
 
   return (
     <section className='relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200/80 bg-white/70 shadow-sm backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-950/60'>
-      <div className='flex items-center gap-1 overflow-x-auto border-b border-neutral-200 px-2 py-2 dark:border-neutral-800'>
+      <div className='flex items-center gap-2 border-b border-neutral-200 px-2 py-2 dark:border-neutral-800'>
+        <div className='flex min-w-0 flex-1 items-center gap-1 overflow-x-auto'>
         {tabs.map(tab => {
           const isActive = tab.id === activeTabId
-          const tabToneClasses =
-            tab.kind === 'terminal'
-              ? isActive
-                ? 'border-violet-300 bg-violet-50 text-violet-900 dark:border-violet-500/40 dark:bg-violet-500/15 dark:text-violet-100'
-                : 'border-violet-200/70 bg-violet-50/80 text-violet-700 hover:bg-violet-100 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300 dark:hover:bg-violet-500/20'
-              : tab.kind === 'diff'
-                ? isActive
-                  ? 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-100'
-                  : 'border-sky-200/70 bg-sky-50/80 text-sky-700 hover:bg-sky-100 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20'
-                : isActive
-                  ? 'border-neutral-300 bg-white text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100'
-                  : 'border-transparent bg-neutral-100/80 text-neutral-600 hover:bg-neutral-200 dark:bg-neutral-900/60 dark:text-neutral-400 dark:hover:bg-neutral-800'
+          const kindLabel = getDockTabKindLabel(tab.kind)
 
           return (
             <div
@@ -281,24 +274,13 @@ export const XtermTerminalPane: React.FC<XtermTerminalPaneProps> = ({
                   onSelectTab(tab.id)
                 }
               }}
-              className={`group flex min-w-0 max-w-[240px] cursor-pointer items-center gap-2 rounded-xl border px-3 py-1.5 text-xs transition-colors ${tabToneClasses}`}
+              className={`group flex min-w-0 max-w-[240px] cursor-pointer items-center gap-2 rounded-xl border px-3 py-1.5 text-xs transition-colors ${getDockTabToneClasses(tab.kind, isActive)}`}
               title={tab.title || tab.label}
             >
               <div className='flex min-w-0 flex-1 items-center gap-2 text-left'>
-                <span
-                  className={`h-2 w-2 flex-shrink-0 rounded-full ${
-                    tab.kind === 'terminal'
-                      ? 'bg-violet-500'
-                      : tab.kind === 'diff'
-                        ? 'bg-sky-500/80'
-                        : tab.isDirty
-                          ? 'bg-amber-500'
-                          : 'bg-emerald-500/70'
-                  }`}
-                />
+                <span className={`h-2 w-2 flex-shrink-0 rounded-full ${getDockTabIndicatorClasses(tab.kind, tab.isDirty)}`} />
                 <span className='truncate'>{tab.label}</span>
-                {tab.kind === 'terminal' ? <span className='text-[10px] opacity-70'>Term</span> : null}
-                {tab.kind === 'diff' ? <span className='text-[10px] opacity-70'>Diff</span> : null}
+                {kindLabel ? <span className='text-[10px] opacity-70'>{kindLabel}</span> : null}
                 {tab.isSaving ? <span className='text-[10px] opacity-70'>Saving…</span> : null}
               </div>
               <button
@@ -316,6 +298,8 @@ export const XtermTerminalPane: React.FC<XtermTerminalPaneProps> = ({
             </div>
           )
         })}
+        </div>
+        {tabToolbar ? <div className='flex shrink-0 items-center gap-2 pl-2'>{tabToolbar}</div> : null}
       </div>
 
       <header className='flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800'>

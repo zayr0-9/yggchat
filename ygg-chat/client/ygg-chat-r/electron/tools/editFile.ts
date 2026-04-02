@@ -71,6 +71,37 @@ export interface EditFileResult {
   lineInfo?: EditFileLineInfo // Real file line metadata for the displayed diff hunk
 }
 
+export interface MultiEditItem {
+  path: string
+  operation: EditOperation
+  searchPattern?: string
+  replacement?: string
+  content?: string
+  approxStartLine?: number
+  approxEndLine?: number
+  expectedHash?: string
+  expectedMetadata?: FileMetadata
+}
+
+export interface MultiEditOptions extends EditFileOptions {
+  stopOnError?: boolean
+}
+
+export interface MultiEditItemResult extends EditFileResult {
+  path: string
+  operation?: string
+  index: number
+}
+
+export interface MultiEditResult {
+  success: boolean
+  message: string
+  results: MultiEditItemResult[]
+  applied: number
+  failed: number
+  stoppedEarly: boolean
+}
+
 async function readFullTextFileForEdit(filePath: string, cwd?: string) {
   const fileData = await readTextFile(filePath, {
     cwd,
@@ -662,6 +693,148 @@ export async function editFile(
         replacements: 0,
         message: `Unknown operation: ${operation}`,
       }
+  }
+}
+
+/**
+ * Apply multiple edit_file-style operations sequentially.
+ */
+export async function multiEdit(
+  edits: MultiEditItem[],
+  options: MultiEditOptions = {}
+): Promise<MultiEditResult> {
+  if (options.operationMode === 'plan') {
+    return {
+      success: false,
+      message:
+        'You are in planning mode. File modification is not allowed. Please describe your implementation plan instead. Do not try to edit the code or make changes. Do not use bash to skip this warning.',
+      results: [],
+      applied: 0,
+      failed: Array.isArray(edits) ? edits.length : 0,
+      stoppedEarly: false,
+    }
+  }
+
+  if (!Array.isArray(edits) || edits.length === 0) {
+    return {
+      success: false,
+      message: 'edits must be a non-empty array',
+      results: [],
+      applied: 0,
+      failed: 0,
+      stoppedEarly: false,
+    }
+  }
+
+  const stopOnError = options.stopOnError ?? true
+  const results: MultiEditItemResult[] = []
+
+  for (const [index, edit] of edits.entries()) {
+    const itemPath = typeof edit?.path === 'string' ? edit.path : ''
+    const itemOperation = typeof edit?.operation === 'string' ? edit.operation : undefined
+
+    if (!itemPath) {
+      const invalidResult: MultiEditItemResult = {
+        success: false,
+        sizeBytes: 0,
+        replacements: 0,
+        message: 'path is required for each multi_edit item',
+        path: '',
+        operation: itemOperation,
+        index,
+      }
+      results.push(invalidResult)
+
+      if (stopOnError) {
+        const applied = results.filter(result => result.success).length
+        const failed = results.length - applied
+        return {
+          success: false,
+          message: `Multi-edit stopped after failure at item ${index + 1}.`,
+          results,
+          applied,
+          failed,
+          stoppedEarly: index < edits.length - 1,
+        }
+      }
+
+      continue
+    }
+
+    if (!itemOperation) {
+      const invalidResult: MultiEditItemResult = {
+        success: false,
+        sizeBytes: 0,
+        replacements: 0,
+        message: 'operation is required for each multi_edit item',
+        path: itemPath,
+        operation: itemOperation,
+        index,
+      }
+      results.push(invalidResult)
+
+      if (stopOnError) {
+        const applied = results.filter(result => result.success).length
+        const failed = results.length - applied
+        return {
+          success: false,
+          message: `Multi-edit stopped after failure at item ${index + 1} (${itemPath}).`,
+          results,
+          applied,
+          failed,
+          stoppedEarly: index < edits.length - 1,
+        }
+      }
+
+      continue
+    }
+
+    const result = await editFile(itemPath, itemOperation as EditOperation, {
+      ...options,
+      searchPattern: edit.searchPattern,
+      replacement: edit.replacement,
+      content: edit.content,
+      approxStartLine: edit.approxStartLine,
+      approxEndLine: edit.approxEndLine,
+      expectedHash: edit.expectedHash,
+      expectedMetadata: edit.expectedMetadata,
+    })
+
+    const itemResult: MultiEditItemResult = {
+      ...result,
+      path: itemPath,
+      operation: itemOperation,
+      index,
+    }
+    results.push(itemResult)
+
+    if (!result.success && stopOnError) {
+      const applied = results.filter(item => item.success).length
+      const failed = results.length - applied
+      return {
+        success: false,
+        message: `Multi-edit stopped after failure at item ${index + 1} (${itemPath}): ${result.message}`,
+        results,
+        applied,
+        failed,
+        stoppedEarly: index < edits.length - 1,
+      }
+    }
+  }
+
+  const applied = results.filter(result => result.success).length
+  const failed = results.length - applied
+
+  return {
+    success: failed === 0,
+    message:
+      failed === 0
+        ? `Successfully processed ${results.length} multi_edit item(s).`
+        : `Processed ${results.length} multi_edit item(s) with ${failed} failure(s).`,
+    results,
+    applied,
+    failed,
+    stoppedEarly: false,
   }
 }
 

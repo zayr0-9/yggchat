@@ -30,6 +30,9 @@ describe('normalizeHermesModel', () => {
 
 describe('resolveHermesAcpMcpServers', () => {
   it('returns no MCP servers when auth token or base URL is unavailable', () => {
+    vi.stubEnv('YGG_HERMES_MCP_AUTH_TOKEN', '')
+    vi.stubEnv('YGG_LOCAL_SERVER_URL', '')
+    vi.stubEnv('YGG_LOCAL_SERVER_LAN_URL', '')
     expect(resolveHermesAcpMcpServers('conv-1', 'D:/workspace/project', 'native')).toEqual([])
 
     vi.stubEnv('YGG_HERMES_MCP_AUTH_TOKEN', 'secret-token')

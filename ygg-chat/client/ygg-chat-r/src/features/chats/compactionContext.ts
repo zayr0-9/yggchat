@@ -1,6 +1,6 @@
 import type { Message } from './chatTypes'
 
-const INCLUDED_WRITE_TOOL_NAMES = new Set(['edit_file', 'create_file', 'delete_file'])
+const INCLUDED_WRITE_TOOL_NAMES = new Set(['edit_file', 'multi_edit', 'create_file', 'delete_file'])
 const MAX_COMPACTION_WRITE_APPENDIX_CHARS = 40000
 const MAX_EDIT_FILE_BEFORE_CHARS = 2200
 const MAX_EDIT_FILE_AFTER_CHARS = 4200
@@ -221,17 +221,14 @@ const formatLineRange = (args: Record<string, unknown>): string | null => {
   return null
 }
 
-const formatEditFileEntry = (toolCall: ParsedToolCall, status: ToolExecutionStatus): string => {
-  const lines = [`edit_file ${status.label}`]
-  const path = asTrimmedString(toolCall.args.path)
-  const operation = asTrimmedString(toolCall.args.operation)
-  const lineRange = formatLineRange(toolCall.args)
-  const beforeSearch = truncateCompactionSnippet(asTrimmedString(toolCall.args.searchPattern), MAX_EDIT_FILE_BEFORE_CHARS)
+const appendEditFileDetails = (lines: string[], args: Record<string, unknown>): void => {
+  const path = asTrimmedString(args.path)
+  const operation = asTrimmedString(args.operation)
+  const lineRange = formatLineRange(args)
+  const beforeSearch = truncateCompactionSnippet(asTrimmedString(args.searchPattern), MAX_EDIT_FILE_BEFORE_CHARS)
   const afterLabel = operation === 'append' ? 'after/appended' : 'after/replacement'
   const afterValueSource =
-    operation === 'append'
-      ? asTrimmedString(toolCall.args.content)
-      : asTrimmedString(toolCall.args.replacement) ?? asTrimmedString(toolCall.args.content)
+    operation === 'append' ? asTrimmedString(args.content) : asTrimmedString(args.replacement) ?? asTrimmedString(args.content)
   const afterValue = truncateCompactionSnippet(afterValueSource, MAX_EDIT_FILE_AFTER_CHARS)
 
   if (path) lines.push(`path: ${path}`)
@@ -245,6 +242,35 @@ const formatEditFileEntry = (toolCall: ParsedToolCall, status: ToolExecutionStat
     lines.push(`${afterLabel}:`)
     lines.push(afterValue)
   }
+}
+
+const formatEditFileEntry = (toolCall: ParsedToolCall, status: ToolExecutionStatus): string => {
+  const lines = [`edit_file ${status.label}`]
+  appendEditFileDetails(lines, toolCall.args)
+  if (status.errorText) {
+    lines.push('error:')
+    lines.push(status.errorText)
+  }
+  return lines.join('\n')
+}
+
+const formatMultiEditEntry = (toolCall: ParsedToolCall, status: ToolExecutionStatus): string | null => {
+  const rawEdits = Array.isArray(toolCall.args.edits) ? toolCall.args.edits.filter(isRecord) : []
+  if (rawEdits.length === 0) return null
+
+  const lines = [`multi_edit ${status.label}`, `edits: ${rawEdits.length}`]
+
+  rawEdits.forEach((editArgs, index) => {
+    lines.push(`edit ${index + 1}:`)
+    const detailLines: string[] = []
+    appendEditFileDetails(detailLines, editArgs)
+    if (detailLines.length === 0) {
+      lines.push('  (no details)')
+      return
+    }
+    lines.push(...detailLines.map(line => `  ${line}`))
+  })
+
   if (status.errorText) {
     lines.push('error:')
     lines.push(status.errorText)
@@ -290,6 +316,11 @@ const formatWriteToolEntry = (toolCall: ParsedToolCall, toolResult: ToolResultRe
   if (toolCall.name === 'edit_file') {
     if (status.label === 'failed') return null
     return formatEditFileEntry(toolCall, status)
+  }
+
+  if (toolCall.name === 'multi_edit') {
+    if (status.label === 'failed') return null
+    return formatMultiEditEntry(toolCall, status)
   }
 
   if (toolCall.name === 'create_file') {

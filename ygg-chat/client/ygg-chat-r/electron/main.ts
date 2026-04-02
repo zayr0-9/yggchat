@@ -1,5 +1,5 @@
 import Conf from 'conf'
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell, Tray, webContents } from 'electron'
 import autoUpdaterPkg from 'electron-updater'
 import fs from 'fs'
 import { randomBytes } from 'crypto'
@@ -49,6 +49,8 @@ const LOCAL_SERVER_ADVERTISE_HOST =
   (LOCAL_SERVER_HOST === '0.0.0.0' ? '127.0.0.1' : LOCAL_SERVER_HOST)
 const LOCAL_SERVER_LAN_ADVERTISE_HOST = process.env.YGG_LOCAL_SERVER_LAN_ADVERTISE_HOST?.trim() || ''
 const LOCAL_SERVER_ALLOW_EPHEMERAL_PORT = true
+const BROWSER_SETTINGS_STORAGE_KEY = 'ygg_browser_settings'
+const DEFAULT_GUEST_DEVTOOLS_ENABLED = true
 
 if (!process.env.YGG_HERMES_MCP_AUTH_TOKEN?.trim()) {
   process.env.YGG_HERMES_MCP_AUTH_TOKEN = randomBytes(32).toString('hex')
@@ -396,7 +398,25 @@ function clearStore(): boolean {
   }
 }
 
+function isGuestBrowserDevToolsEnabled(): boolean {
+  if (!storeInitialized) {
+    return DEFAULT_GUEST_DEVTOOLS_ENABLED
+  }
+
+  try {
+    const storedSettings = getFromStore(BROWSER_SETTINGS_STORAGE_KEY)
+    if (storedSettings && typeof storedSettings === 'object' && typeof storedSettings.guestDevToolsEnabled === 'boolean') {
+      return storedSettings.guestDevToolsEnabled
+    }
+  } catch (error) {
+    console.error('[Electron] Failed to read browser settings from storage:', error)
+  }
+
+  return DEFAULT_GUEST_DEVTOOLS_ENABLED
+}
+
 function applyHermesRuntimeSettingsToEnv(rawSettings: any): void {
+
   const launchMode =
     rawSettings?.launchMode === 'native' || rawSettings?.launchMode === 'wsl' || rawSettings?.launchMode === 'auto'
       ? rawSettings.launchMode
@@ -1792,6 +1812,44 @@ ipcMain.handle('customTool:clearCache', async (_event, toolPath?: string) => {
       }
     })
     return { success: true, cleared: count }
+  }
+})
+
+ipcMain.handle('browser:isGuestDevToolsEnabled', async () => {
+  return isGuestBrowserDevToolsEnabled()
+})
+
+ipcMain.handle('browser:openGuestDevTools', async (event, guestWebContentsId: number) => {
+  if (!isGuestBrowserDevToolsEnabled()) {
+    return { success: false, error: 'Browser DevTools are currently disabled in Settings.' }
+  }
+
+  if (!Number.isInteger(guestWebContentsId) || guestWebContentsId <= 0) {
+    return { success: false, error: 'A valid guest webContentsId is required.' }
+  }
+
+  try {
+    const guestContents = webContents.fromId(guestWebContentsId)
+    if (!guestContents || guestContents.isDestroyed()) {
+      return { success: false, error: 'Browser tab contents were not found.' }
+    }
+
+    if (guestContents.getType() !== 'webview') {
+      return { success: false, error: 'DevTools can only be opened for embedded browser tabs.' }
+    }
+
+    const owningHostId = (guestContents as any).hostWebContents?.id
+    if (typeof owningHostId === 'number' && owningHostId !== event.sender.id) {
+      return { success: false, error: 'The requested browser tab belongs to a different renderer.' }
+    }
+
+    guestContents.openDevTools({ mode: 'detach', activate: true })
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to open browser DevTools.',
+    }
   }
 })
 

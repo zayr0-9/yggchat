@@ -3,7 +3,7 @@ import { runBashCommand } from './tools/bash.js'
 import { createTextFile } from './tools/createFile.js'
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
-import { editFile } from './tools/editFile.js'
+import { editFile, multiEdit } from './tools/editFile.js'
 import { globSearch } from './tools/glob.js'
 import htmlRenderer from './tools/htmlRenderer.js'
 import { readFileContinuation, readTextFile } from './tools/readFile.js'
@@ -192,6 +192,33 @@ function initializeBuiltInToolRegistry(): void {
       expectedMetadata,
       approxStartLine,
       approxEndLine,
+      operationMode,
+      cwd: rootPath,
+    })
+  })
+
+  builtInTools.set('multi_edit', async (args, { rootPath, operationMode }) => {
+    const {
+      edits,
+      stopOnError,
+      createBackup,
+      encoding,
+      enableFuzzyMatching,
+      fuzzyThreshold,
+      preserveIndentation,
+      validateContent,
+    } = args
+    if (!Array.isArray(edits) || edits.length === 0) throw new Error('edits are required')
+    return await multiEdit(edits, {
+      stopOnError,
+      createBackup,
+      encoding,
+      enableFuzzyMatching,
+      fuzzyThreshold,
+      preserveIndentation,
+      interpretSearchEscapes: true,
+      interpretReplacementEscapes: false,
+      validateContent,
       operationMode,
       cwd: rootPath,
     })

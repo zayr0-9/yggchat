@@ -12,6 +12,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+## [0.1.84] - 2026-04-01
+
+### Added
+
+- Added built-in terminal support via xterm.js.
+- Added a terminal column in the right bar.
+- Added OpenAI sign-in in Settings.
+- Added a fallback for @-mentions when the extension is unavailable.
+- Added an appendix system to manually attach edited files during compactify.
+- Added built in browser in the right sidebar, dev tools available can be enabled/disabled in settings.
+- Added multi-edit tool, added ui card for it.
+
+### Changed
+
+- Streaming animation is now visible.
+- Reasoning defaults are now on with high effort.
+- Editor tabs are now fully clickable with better accessibility.
+- Compactify summaries now exclude tool-call text from the generated summary.
+
+### Fixed
+
+- Improved light theme terminal contrast for readability.
+
 ## [0.1.82] - 2026-03-25
 
 ### Added
@@ -29,7 +52,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Logging analytics now aggregate character counts server-side and expose `estimatedTotalTokens`, with the daily chart respecting the selected date range.
 
 ### Fixed
-
 
 ## [0.1.79] - 2026-02-23
 

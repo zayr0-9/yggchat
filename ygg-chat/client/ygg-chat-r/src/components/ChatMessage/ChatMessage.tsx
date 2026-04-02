@@ -19,7 +19,7 @@ import { useAppDispatch } from '../../hooks/redux'
 import { useIsMobile } from '../../hooks/useMediaQuery'
 import { environment, localApi } from '../../utils/api'
 import { Button } from '../Button/button'
-import { EditFileDiffView } from '../EditFileDiffView/EditFileDiffView'
+import { EditToolDiffView } from '../EditFileDiffView/EditToolDiffView'
 import { useHtmlIframeRegistry } from '../HtmlIframeRegistry/HtmlIframeRegistry'
 import { ImageModal } from '../ImageModal/ImageModal'
 import { MarkdownLink } from '../MarkdownLink/MarkdownLink'
@@ -1379,6 +1379,21 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     // Extract path-like parameters from tool arguments
     const extractPathParam = (args: any): string | null => {
       if (!args || typeof args !== 'object') return null
+
+      if (Array.isArray(args.edits)) {
+        const editPaths = args.edits
+          .map((edit: any) => (edit && typeof edit === 'object' && typeof edit.path === 'string' ? edit.path : null))
+          .filter((value: string | null): value is string => Boolean(value))
+
+        if (editPaths.length > 0) {
+          return editPaths.length === 1 ? editPaths[0] : `${editPaths[0]} +${editPaths.length - 1} more`
+        }
+
+        if (args.edits.length > 0) {
+          return `${args.edits.length} edits`
+        }
+      }
+
       const pathKeys = ['file_path', 'path', 'directory', 'dir', 'output_path', 'input_path', 'filepath']
       for (const key of pathKeys) {
         if (args[key] && typeof args[key] === 'string') {
@@ -1712,19 +1727,20 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Check for failure: either structured failure response OR is_error flag on any result
       const hasResults = group.results.length > 0
       const hasError = group.results.some(r => r.is_error) || resultSummary === 'failure'
-      // Special handling for edit_file tool - render EditFileDiffView
-      const isEditFileTool = (group.name ?? '').toLowerCase() === 'edit_file'
-      const isReplaceOperation = group.args?.searchPattern || group.args?.replacement
-      const isAppendOperation = (group.args?.operation ?? '').toLowerCase() === 'append' && group.args?.content
-      if (isEditFileTool && group.args && (isReplaceOperation || isAppendOperation)) {
+      const normalizedToolName = String(group.name ?? '')
+        .toLowerCase()
+        .replace(/[-\s]/g, '_')
+      const isEditLikeTool =
+        normalizedToolName === 'edit_file' || normalizedToolName === 'editfile' || normalizedToolName === 'multi_edit'
+      if (isEditLikeTool && group.args) {
         const editResult = group.results.length > 0 ? group.results[0].content : {}
-        const isEditFileSuccess = formatToolResultSummary(editResult) === 'success'
+        const isEditToolSuccess = formatToolResultSummary(editResult) === 'success'
         return (
           <div key={toggleKey} className={PROCESS_CARD_WRAPPER_CLASS}>
-            {/* Status pip indicator - align with EditFileDiffView success logic */}
+            {/* Status pip indicator - align with edit diff success logic */}
             <div
               className={`${PROCESS_PIP_BASE_CLASS} ${
-                isEditFileSuccess
+                isEditToolSuccess
                   ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
                   : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
               }`}
@@ -1735,18 +1751,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
                 {group.name || 'edit_file'}
               </span>
             </div>
-            {/* EditFileDiffView */}
-            <EditFileDiffView
-              args={{
-                path: group.args.path,
-                operation: group.args.operation,
-                searchPattern: group.args.searchPattern,
-                replacement: group.args.replacement,
-                content: group.args.content,
-                validateContent: group.args.validateContent,
-              }}
-              result={editResult}
-            />
+            <EditToolDiffView toolName={group.name} args={group.args} result={editResult} />
           </div>
         )
       }

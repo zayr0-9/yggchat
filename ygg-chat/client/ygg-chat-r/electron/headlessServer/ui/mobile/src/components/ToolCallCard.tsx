@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Badge } from './ui'
-import { EditFileDiffView } from './EditFileDiffView'
+import { EditToolDiffView } from './EditToolDiffView'
 import { CustomToolIframe } from './CustomToolIframe'
 import type { ToolGroup, ToolResultLike } from '../types'
 import { extractHtmlFromToolResult, toReadableToolResult } from '../messageParser'
@@ -12,21 +12,31 @@ interface ToolCallCardProps {
   rootPath?: string | null
 }
 
-interface EditFileArgs {
-  path?: string
-  operation?: string
-  searchPattern?: string
-  replacement?: string
-  content?: string
-  validateContent?: boolean
-}
-
 interface EditFileResultLike {
   success?: boolean
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
 const findPathHint = (args: Record<string, unknown> | undefined): string | null => {
   if (!args) return null
+
+  if (Array.isArray(args.edits)) {
+    const editPaths = args.edits
+      .filter(isRecord)
+      .map(edit => (typeof edit.path === 'string' ? edit.path : null))
+      .filter((value): value is string => Boolean(value))
+
+    if (editPaths.length > 0) {
+      return editPaths.length === 1 ? editPaths[0] : `${editPaths[0]} +${editPaths.length - 1} more`
+    }
+
+    if (args.edits.length > 0) {
+      return `${args.edits.length} edits`
+    }
+  }
+
   const key = ['path', 'filePath', 'cwd', 'searchPath'].find(candidate => typeof args[candidate] === 'string')
   if (!key) return null
   return String(args[key])
@@ -51,38 +61,9 @@ const normalizeToolName = (name: string | undefined): string =>
     .toLowerCase()
     .replace(/[-\s]/g, '_')
 
-const isEditFileTool = (name: string | undefined): boolean => {
+const isEditLikeTool = (name: string | undefined): boolean => {
   const normalized = normalizeToolName(name)
-  return normalized === 'edit_file' || normalized === 'editfile'
-}
-
-const getEditFileArgs = (args: Record<string, unknown> | undefined): EditFileArgs | null => {
-  if (!args) return null
-
-  const operation = typeof args.operation === 'string' ? args.operation : undefined
-  const searchPattern = typeof args.searchPattern === 'string' ? args.searchPattern : undefined
-  const replacement = typeof args.replacement === 'string' ? args.replacement : undefined
-  const content = typeof args.content === 'string' ? args.content : undefined
-  const path = typeof args.path === 'string' ? args.path : undefined
-  const validateContent = typeof args.validateContent === 'boolean' ? args.validateContent : undefined
-
-  const isAppend = String(operation || '')
-    .toLowerCase()
-    .trim() === 'append'
-
-  const hasReplacePayload = typeof searchPattern === 'string' || typeof replacement === 'string'
-  const hasAppendPayload = isAppend && typeof content === 'string'
-
-  if (!hasReplacePayload && !hasAppendPayload) return null
-
-  return {
-    path,
-    operation,
-    searchPattern,
-    replacement,
-    content,
-    validateContent,
-  }
+  return normalized === 'edit_file' || normalized === 'editfile' || normalized === 'multi_edit'
 }
 
 const humanizeToolName = (name: string | null | undefined): string => {
@@ -177,11 +158,10 @@ export const ToolCallCard: React.FC<ToolCallCardProps> = ({
   rootPath = null,
 }) => {
   const normalizedToolName = useMemo(() => normalizeToolName(group.name), [group.name])
-  const isEditFile = useMemo(() => isEditFileTool(group.name), [group.name])
+  const isEditTool = useMemo(() => isEditLikeTool(group.name), [group.name])
   const isHtmlRendererTool = normalizedToolName === 'html_renderer'
-  const editArgs = useMemo(() => getEditFileArgs(group.args), [group.args])
   const editResult = useMemo(() => parseResultObject(group.results[0]?.content), [group.results])
-  const hasEditFileView = isEditFile && Boolean(editArgs)
+  const hasEditToolView = isEditTool && Boolean(group.args)
   const hasHtmlResult = useMemo(() => group.results.some(result => Boolean(extractHtmlFromToolResult(result.content)?.html)), [group.results])
 
   const rendererHtmlFromArgs = useMemo(() => {
@@ -197,13 +177,13 @@ export const ToolCallCard: React.FC<ToolCallCardProps> = ({
     return Object.keys(rest).length > 0 ? rest : undefined
   }, [group.args, isHtmlRendererTool])
 
-  const [expanded, setExpanded] = useState(defaultExpanded || hasEditFileView || hasHtmlResult || Boolean(rendererHtmlFromArgs))
+  const [expanded, setExpanded] = useState(defaultExpanded || hasEditToolView || hasHtmlResult || Boolean(rendererHtmlFromArgs))
   const [openIframeByResultIndex, setOpenIframeByResultIndex] = useState<Record<number, boolean>>({})
   const [fullscreenIframeByResultIndex, setFullscreenIframeByResultIndex] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
-    if (hasEditFileView || hasHtmlResult || Boolean(rendererHtmlFromArgs)) setExpanded(true)
-  }, [hasEditFileView, hasHtmlResult, rendererHtmlFromArgs])
+    if (hasEditToolView || hasHtmlResult || Boolean(rendererHtmlFromArgs)) setExpanded(true)
+  }, [hasEditToolView, hasHtmlResult, rendererHtmlFromArgs])
 
   useEffect(() => {
     if (!hasHtmlResult) {
@@ -287,8 +267,13 @@ export const ToolCallCard: React.FC<ToolCallCardProps> = ({
 
       <div className={`tool-expand-container ${expanded ? 'open' : ''}`}>
         <div className='tool-expand-content'>
-          {hasEditFileView && editArgs ? (
-            <EditFileDiffView args={editArgs} result={group.results[0]?.content ?? {}} className='mobile-editfile-view' />
+          {hasEditToolView ? (
+            <EditToolDiffView
+              toolName={group.name}
+              args={group.args}
+              result={group.results[0]?.content ?? {}}
+              className='mobile-editfile-view'
+            />
           ) : (
             <>
               {displayArgs && Object.keys(displayArgs).length > 0 ? (

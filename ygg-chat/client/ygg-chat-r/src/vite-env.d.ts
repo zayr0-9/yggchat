@@ -69,6 +69,10 @@ interface ElectronAPI {
   shell: {
     openPath: (path: string) => Promise<{ success: boolean; error?: string }>
   }
+  browser: {
+    isGuestDevToolsEnabled: () => Promise<boolean>
+    openGuestDevTools: (webContentsId: number) => Promise<{ success: boolean; error?: string }>
+  }
   logs: {
     appendClientError: (content: string) => Promise<{ success: boolean; error?: string; filePath?: string }>
     getClientErrorLogPath: () => Promise<{ success: boolean; error?: string; filePath?: string }>
@@ -128,4 +132,11 @@ interface ElectronAPI {
 
 interface Window {
   electronAPI?: ElectronAPI
+}
+
+
+declare namespace JSX {
+  interface IntrinsicElements {
+    webview: any
+  }
 }

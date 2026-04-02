@@ -274,6 +274,7 @@ const OPENAI_LOCALLY_SUPPORTED_BUILTIN_TOOL_NAMES = new Set<string>([
   'create_file',
   'delete_file',
   'edit_file',
+  'multi_edit',
   'brave_search',
   'ripgrep',
   'bash',

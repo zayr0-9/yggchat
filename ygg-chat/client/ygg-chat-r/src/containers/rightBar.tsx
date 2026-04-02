@@ -3,7 +3,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { ConversationId } from '../../../../shared/types'
-import { Button, ChatMessage, MonacoFileEditorPane, MonacoGitDiffPane, XtermTerminalPane } from '../components'
+import {
+  BrowserPane,
+  Button,
+  ChatMessage,
+  MonacoFileEditorPane,
+  MonacoGitDiffPane,
+  XtermTerminalPane,
+} from '../components'
 import { useHtmlIframeRegistry } from '../components/HtmlIframeRegistry/HtmlIframeRegistry'
 import { TextArea } from '../components/TextArea/TextArea'
 import { useHtmlDarkMode } from '../components/ThemeManager/themeConfig'
@@ -11,9 +18,14 @@ import { updateResearchNote } from '../features/conversations/conversationAction
 import { makeSelectConversationById } from '../features/conversations/conversationSelectors'
 import { Conversation } from '../features/conversations/conversationTypes'
 import type { StreamEvent, StreamState } from '../features/chats/chatTypes'
+import { setCurrentSelection, type SelectionInfo } from '../features/ideContext'
 import { uiActions } from '../features/ui'
 import { AGENT_SETTINGS_CHANGE_EVENT, AgentSettings, loadAgentSettings } from '../helpers/agentSettingsStorage'
-import { loadTerminalDockState, saveTerminalDockState, type TerminalDockPreferences } from '../helpers/terminalDockStorage'
+import {
+  loadTerminalDockState,
+  saveTerminalDockState,
+  type TerminalDockPreferences,
+} from '../helpers/terminalDockStorage'
 import { useAuth } from '../hooks/useAuth'
 import { clearGlobalAgentOptimisticMessage, setGlobalAgentOptimisticMessage } from '../hooks/useGlobalAgentCache'
 import {
@@ -64,6 +76,7 @@ type AgentScheduleDraft = {
 
 type FileEditorState = {
   path: string
+  relativePath: string
   content: string
   savedContent: string
   loading: boolean
@@ -93,6 +106,17 @@ type TerminalDockState = {
   exitCode: number | null
 }
 
+type BrowserDockState = {
+  id: string
+  title: string
+  requestedUrl: string
+  currentUrl: string
+  isLoading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  lastError: string | null
+}
+
 type AgentStreamActivityKind = StreamEvent['type'] | 'idle'
 
 type AgentStreamListItem = {
@@ -112,6 +136,7 @@ type AgentStreamListItem = {
 
 const getFileDockTabId = (filePath: string): string => `file:${filePath}`
 const getTerminalDockTabId = (terminalId: string): string => `terminal:${terminalId}`
+const getBrowserDockTabId = (browserId: string): string => `browser:${browserId}`
 const getGitDiffDockTabId = (
   file: Pick<GitStatusFile, 'relativePath' | 'staged' | 'untracked' | 'conflicted'>,
   stagedView: boolean
@@ -121,8 +146,16 @@ const getGitDiffDockTabId = (
 const ALL_WEEKDAYS: number[] = [0, 1, 2, 3, 4, 5, 6]
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const TERMINAL_HISTORY_LIMIT = 200000
-const DOCKED_SIDEBAR_FIXED_WIDTH_PX = 340
-const DOCKED_EDITOR_PREFERRED_WIDTH_PX = 720
+const DEFAULT_BROWSER_HOME_URL = 'https://example.com'
+const RIGHT_BAR_DEFAULT_WIDTH_PX = 360
+const RIGHT_BAR_COLLAPSED_WIDTH_PX = 44
+const RIGHT_BAR_MIN_WIDTH_PX = 280
+const RIGHT_BAR_MAX_WIDTH_PX = 720
+const RIGHT_BAR_RESIZE_HANDLE_WIDTH_PX = 12
+const DOCKED_EDITOR_MIN_WIDTH_PX = 260
+const DOCKED_EDITOR_DEFAULT_WIDTH_PX = 720
+const DOCKED_TOTAL_WIDTH_RATIO = 0.9
+const DOCKED_LAYOUT_GAP_PX = 8
 const DOCKED_CHAT_MIN_WIDTH_PX = 580
 
 const PRESET_CONFIGS: Array<{
@@ -178,6 +211,8 @@ const RightBar: React.FC<RightBarProps> = ({
   const isSearchingFiles = isLoadingFileSearch || isFetchingFileSearch
   const initialTerminalDockState = useMemo(() => loadTerminalDockState(), [])
   const isCollapsed = useSelector((state: RootState) => state.ui.rightBarCollapsed)
+  const rightBarWidth = useSelector((state: RootState) => state.ui.rightBarWidth)
+  const extensionConnected = useSelector((state: RootState) => state.ideContext.extensionConnected)
   const isDarkMode = useHtmlDarkMode()
   const [openFileEditors, setOpenFileEditors] = useState<FileEditorState[]>([])
   const [openGitDiffTabs, setOpenGitDiffTabs] = useState<GitDiffTabState[]>([])
@@ -190,17 +225,24 @@ const RightBar: React.FC<RightBarProps> = ({
       exitCode: null,
     }))
   )
+  const [openBrowserTabs, setOpenBrowserTabs] = useState<BrowserDockState[]>([])
   const [terminalPreferences, setTerminalPreferences] = useState<TerminalDockPreferences>(
     () => initialTerminalDockState.preferences
   )
   const [activeDockTabId, setActiveDockTabId] = useState<string | null>(() =>
-    initialTerminalDockState.activeTerminalTabId ? getTerminalDockTabId(initialTerminalDockState.activeTerminalTabId) : null
+    initialTerminalDockState.activeTerminalTabId
+      ? getTerminalDockTabId(initialTerminalDockState.activeTerminalTabId)
+      : null
   )
   const [activeFileEditorPath, setActiveFileEditorPath] = useState<string | null>(null)
   const fileEditorRequestIdRef = useRef<Record<string, number>>({})
   const terminalLaunchRequestIdRef = useRef<Record<string, number>>({})
   const restoredTerminalTabsRef = useRef<Set<string>>(new Set())
   const asideRef = useRef<HTMLElement | null>(null)
+  const parentContainerRef = useRef<HTMLElement | null>(null)
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
+  const [isResizingDock, setIsResizingDock] = useState(false)
+  const [parentContainerWidth, setParentContainerWidth] = useState<number | null>(null)
   const [dockedLayoutWidth, setDockedLayoutWidth] = useState<number | null>(null)
   const activeFileEditor = useMemo(
     () =>
@@ -223,53 +265,202 @@ const RightBar: React.FC<RightBarProps> = ({
         : null,
     [activeDockTabId, openTerminalTabs]
   )
+  const activeBrowserDock = useMemo(
+    () =>
+      activeDockTabId?.startsWith('browser:')
+        ? (openBrowserTabs.find(tab => getBrowserDockTabId(tab.id) === activeDockTabId) ?? null)
+        : null,
+    [activeDockTabId, openBrowserTabs]
+  )
   const isEditorDirty = activeFileEditor ? activeFileEditor.content !== activeFileEditor.savedContent : false
   const hasAnyDirtyEditors = openFileEditors.some(editor => editor.content !== editor.savedContent)
-  const isEditorDockOpen =
-    !isCollapsed && (openFileEditors.length > 0 || openGitDiffTabs.length > 0 || openTerminalTabs.length > 0) && !!activeDockTabId
+  const hasDockTabs =
+    openFileEditors.length > 0 ||
+    openGitDiffTabs.length > 0 ||
+    openTerminalTabs.length > 0 ||
+    openBrowserTabs.length > 0
+  const isEditorDockOpen = !isCollapsed && hasDockTabs && !!activeDockTabId
   const monacoTheme = isDarkMode ? 'vs-dark' : 'vs'
-  const dockedSidebarPanelWidth = useMemo(() => {
-    if (!isEditorDockOpen) return DOCKED_SIDEBAR_FIXED_WIDTH_PX
-    if (dockedLayoutWidth == null) return DOCKED_SIDEBAR_FIXED_WIDTH_PX
-    return Math.min(DOCKED_SIDEBAR_FIXED_WIDTH_PX, dockedLayoutWidth)
-  }, [dockedLayoutWidth, isEditorDockOpen])
+  const maxResizableSidebarWidth = useMemo(() => {
+    if (parentContainerWidth == null || parentContainerWidth <= 0) return RIGHT_BAR_MAX_WIDTH_PX
+
+    return Math.max(
+      RIGHT_BAR_MIN_WIDTH_PX,
+      Math.min(RIGHT_BAR_MAX_WIDTH_PX, parentContainerWidth - DOCKED_CHAT_MIN_WIDTH_PX)
+    )
+  }, [parentContainerWidth])
+  const resolvedRightBarWidth = useMemo(
+    () =>
+      Math.min(maxResizableSidebarWidth, Math.max(RIGHT_BAR_MIN_WIDTH_PX, rightBarWidth || RIGHT_BAR_DEFAULT_WIDTH_PX)),
+    [maxResizableSidebarWidth, rightBarWidth]
+  )
+  const dockedSidebarPanelWidth = resolvedRightBarWidth
+  const maxDockOverlayWidth = useMemo(() => {
+    if (parentContainerWidth == null || parentContainerWidth <= 0) return 0
+
+    return Math.max(
+      0,
+      Math.min(
+        parentContainerWidth - resolvedRightBarWidth - DOCKED_LAYOUT_GAP_PX,
+        Math.round(parentContainerWidth * DOCKED_TOTAL_WIDTH_RATIO) - resolvedRightBarWidth - DOCKED_LAYOUT_GAP_PX
+      )
+    )
+  }, [parentContainerWidth, resolvedRightBarWidth])
+  const minDockOverlayWidth = useMemo(
+    () => Math.min(DOCKED_EDITOR_MIN_WIDTH_PX, maxDockOverlayWidth),
+    [maxDockOverlayWidth]
+  )
+  const defaultDockOverlayWidth = useMemo(() => {
+    if (maxDockOverlayWidth <= 0) return 0
+    return Math.max(minDockOverlayWidth, Math.min(DOCKED_EDITOR_DEFAULT_WIDTH_PX, maxDockOverlayWidth))
+  }, [maxDockOverlayWidth, minDockOverlayWidth])
+  const shouldMountDockOverlay = hasDockTabs && maxDockOverlayWidth > 0
+  const dockOverlayWidthPx = useMemo(() => {
+    if (!shouldMountDockOverlay) return 0
+    const baseWidth = dockedLayoutWidth == null ? defaultDockOverlayWidth : dockedLayoutWidth
+    return Math.max(minDockOverlayWidth, Math.min(maxDockOverlayWidth, Math.round(baseWidth)))
+  }, [defaultDockOverlayWidth, dockedLayoutWidth, maxDockOverlayWidth, minDockOverlayWidth, shouldMountDockOverlay])
+  const isDockOverlayVisible = isEditorDockOpen && dockOverlayWidthPx > 0
+  const asideWidthPx = useMemo(
+    () => (isCollapsed ? RIGHT_BAR_COLLAPSED_WIDTH_PX : resolvedRightBarWidth),
+    [isCollapsed, resolvedRightBarWidth]
+  )
 
   useEffect(() => {
-    if (!isEditorDockOpen) {
-      setDockedLayoutWidth(null)
-      return
-    }
-
     const asideElement = asideRef.current
     const parentElement = asideElement?.parentElement
     if (!parentElement) return
 
-    const updateDockedLayout = () => {
-      const parentWidth = parentElement.clientWidth || 0
-      if (parentWidth <= 0) return
+    parentContainerRef.current = parentElement
 
-      const preferredDockWidth = DOCKED_SIDEBAR_FIXED_WIDTH_PX + DOCKED_EDITOR_PREFERRED_WIDTH_PX
-      const widthKeepingChatVisible = parentWidth - DOCKED_CHAT_MIN_WIDTH_PX
-      const nextWidth =
-        widthKeepingChatVisible >= DOCKED_SIDEBAR_FIXED_WIDTH_PX
-          ? Math.min(preferredDockWidth, widthKeepingChatVisible)
-          : Math.min(parentWidth, DOCKED_SIDEBAR_FIXED_WIDTH_PX)
+    const updateParentWidth = () => {
+      const nextWidth = parentElement.clientWidth || 0
+      if (nextWidth <= 0) return
+      setParentContainerWidth(currentWidth => (currentWidth === nextWidth ? currentWidth : nextWidth))
+    }
 
+    updateParentWidth()
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => updateParentWidth()) : null
+
+    resizeObserver?.observe(parentElement)
+    window.addEventListener('resize', updateParentWidth)
+
+    return () => {
+      if (parentContainerRef.current === parentElement) {
+        parentContainerRef.current = null
+      }
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', updateParentWidth)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isEditorDockOpen || maxDockOverlayWidth <= 0) return
+
+    setDockedLayoutWidth(currentWidth => {
+      const baseWidth = currentWidth == null ? defaultDockOverlayWidth : currentWidth
+      const nextWidth = Math.max(minDockOverlayWidth, Math.min(maxDockOverlayWidth, Math.round(baseWidth)))
+      return currentWidth === nextWidth ? currentWidth : nextWidth
+    })
+  }, [defaultDockOverlayWidth, isEditorDockOpen, maxDockOverlayWidth, minDockOverlayWidth])
+
+  useEffect(() => {
+    if (!isResizingSidebar) return
+
+    const clampSidebarWidth = (width: number) =>
+      Math.max(RIGHT_BAR_MIN_WIDTH_PX, Math.min(maxResizableSidebarWidth, Math.round(width)))
+
+    const handleMove = (clientX: number) => {
+      const parentElement = parentContainerRef.current ?? asideRef.current?.parentElement
+      if (!parentElement) return
+
+      const rect = parentElement.getBoundingClientRect()
+      const nextWidth = clampSidebarWidth(rect.right - clientX)
+      dispatch(uiActions.rightBarWidthSet(nextWidth))
+    }
+
+    const stopResizing = () => setIsResizingSidebar(false)
+    const onMouseMove = (event: MouseEvent) => handleMove(event.clientX)
+    const onMouseUp = stopResizing
+    const onTouchMove = (event: TouchEvent) => {
+      if (!event.touches?.[0]) return
+      event.preventDefault()
+      handleMove(event.touches[0].clientX)
+    }
+    const onTouchEnd = stopResizing
+    const onWindowBlur = stopResizing
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd)
+    window.addEventListener('blur', onWindowBlur)
+
+    const prevUserSelect = document.body.style.userSelect
+    const prevCursor = document.body.style.cursor
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('blur', onWindowBlur)
+      document.body.style.userSelect = prevUserSelect
+      document.body.style.cursor = prevCursor
+    }
+  }, [dispatch, isResizingSidebar, maxResizableSidebarWidth])
+
+  useEffect(() => {
+    if (!isResizingDock || maxDockOverlayWidth <= 0) return
+
+    const clampDockWidth = (width: number) =>
+      Math.max(minDockOverlayWidth, Math.min(maxDockOverlayWidth, Math.round(width)))
+
+    const handleMove = (clientX: number) => {
+      const asideElement = asideRef.current
+      if (!asideElement) return
+
+      const asideRect = asideElement.getBoundingClientRect()
+      const dockRightEdge = asideRect.left - DOCKED_LAYOUT_GAP_PX
+      const nextWidth = clampDockWidth(dockRightEdge - clientX)
       setDockedLayoutWidth(currentWidth => (currentWidth === nextWidth ? currentWidth : nextWidth))
     }
 
-    updateDockedLayout()
+    const stopResizing = () => setIsResizingDock(false)
+    const onMouseMove = (event: MouseEvent) => handleMove(event.clientX)
+    const onMouseUp = stopResizing
+    const onTouchMove = (event: TouchEvent) => {
+      if (!event.touches?.[0]) return
+      event.preventDefault()
+      handleMove(event.touches[0].clientX)
+    }
+    const onTouchEnd = stopResizing
+    const onWindowBlur = stopResizing
 
-    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => updateDockedLayout()) : null
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd)
+    window.addEventListener('blur', onWindowBlur)
 
-    resizeObserver?.observe(parentElement)
-    window.addEventListener('resize', updateDockedLayout)
+    const prevUserSelect = document.body.style.userSelect
+    const prevCursor = document.body.style.cursor
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
 
     return () => {
-      resizeObserver?.disconnect()
-      window.removeEventListener('resize', updateDockedLayout)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('blur', onWindowBlur)
+      document.body.style.userSelect = prevUserSelect
+      document.body.style.cursor = prevCursor
     }
-  }, [isEditorDockOpen])
+  }, [isResizingDock, maxDockOverlayWidth, minDockOverlayWidth])
 
   // Sync currentPath with ccCwd only when the actual cwd prop changes
   useEffect(() => {
@@ -828,6 +1019,56 @@ const RightBar: React.FC<RightBarProps> = ({
     dispatch(uiActions.rightBarToggled())
   }
 
+  const beginSidebarResize = useCallback(() => {
+    if (isCollapsed) {
+      dispatch(uiActions.rightBarWidthSet(resolvedRightBarWidth))
+      dispatch(uiActions.rightBarExpanded())
+    }
+
+    setIsResizingSidebar(true)
+  }, [dispatch, isCollapsed, resolvedRightBarWidth])
+
+  const handleSidebarResizeMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      beginSidebarResize()
+    },
+    [beginSidebarResize]
+  )
+
+  const handleSidebarResizeTouchStart = useCallback(
+    (event: React.TouchEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      beginSidebarResize()
+    },
+    [beginSidebarResize]
+  )
+
+  const beginDockResize = useCallback(() => {
+    if (!isEditorDockOpen || maxDockOverlayWidth <= 0) return
+    setIsResizingDock(true)
+  }, [isEditorDockOpen, maxDockOverlayWidth])
+
+  const handleDockResizeMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      beginDockResize()
+    },
+    [beginDockResize]
+  )
+
+  const handleDockResizeTouchStart = useCallback(
+    (event: React.TouchEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      beginDockResize()
+    },
+    [beginDockResize]
+  )
+
   // const handleNoteClick = (noteItem: ResearchNoteItem) => {
   //   navigate(`/chat/${noteItem.project_id || 'unknown'}/${noteItem.id}`)
   // }
@@ -869,6 +1110,71 @@ const RightBar: React.FC<RightBarProps> = ({
     const lastSlash = normalized.lastIndexOf('/')
     return lastSlash >= 0 ? normalized.slice(lastSlash + 1) : normalized
   }, [])
+
+  const getBrowserDisplayLabel = useCallback((url: string) => {
+    try {
+      const hostname = new URL(url).hostname.replace(/^www\./i, '').trim()
+      return hostname || 'Browser'
+    } catch {
+      return 'Browser'
+    }
+  }, [])
+
+  const deriveEditorRelativePath = useCallback(
+    (filePath: string, fallbackRelativePath?: string | null) => {
+      const normalizedFilePath = filePath.replace(/\\/g, '/')
+      const normalizedFallback = (fallbackRelativePath || '')
+        .trim()
+        .replace(/\\/g, '/')
+        .replace(/^\.\//, '')
+        .replace(/^\//, '')
+
+      const preferredBasePath = (ccCwd || '').trim()
+      if (preferredBasePath) {
+        const normalizedBasePath = preferredBasePath.replace(/\\/g, '/').replace(/\/+$/, '')
+        const lowerFilePath = normalizedFilePath.toLowerCase()
+        const lowerBasePath = normalizedBasePath.toLowerCase()
+
+        if (lowerFilePath === lowerBasePath) {
+          return getFileName(normalizedFilePath)
+        }
+
+        if (lowerFilePath.startsWith(`${lowerBasePath}/`)) {
+          return normalizedFilePath.slice(normalizedBasePath.length + 1)
+        }
+      }
+
+      if (normalizedFallback) {
+        return normalizedFallback
+      }
+
+      const currentBasePath = (currentPath || '').trim()
+      if (currentBasePath) {
+        const normalizedBasePath = currentBasePath.replace(/\\/g, '/').replace(/\/+$/, '')
+        const lowerFilePath = normalizedFilePath.toLowerCase()
+        const lowerBasePath = normalizedBasePath.toLowerCase()
+
+        if (lowerFilePath === lowerBasePath) {
+          return getFileName(normalizedFilePath)
+        }
+
+        if (lowerFilePath.startsWith(`${lowerBasePath}/`)) {
+          return normalizedFilePath.slice(normalizedBasePath.length + 1)
+        }
+      }
+
+      return getFileName(normalizedFilePath)
+    },
+    [ccCwd, currentPath, getFileName]
+  )
+
+  const handleMonacoSelectionChange = useCallback(
+    (selection: SelectionInfo | null) => {
+      if (extensionConnected) return
+      dispatch(setCurrentSelection(selection))
+    },
+    [dispatch, extensionConnected]
+  )
 
   const appendTerminalHistory = useCallback((existingHistory: string, nextChunk: string) => {
     if (!nextChunk) return existingHistory
@@ -961,8 +1267,31 @@ const RightBar: React.FC<RightBarProps> = ({
         isDirty: false,
         isSaving: false,
       })),
+      ...openBrowserTabs.map(tab => ({
+        id: getBrowserDockTabId(tab.id),
+        label: tab.title || getBrowserDisplayLabel(tab.currentUrl || tab.requestedUrl),
+        title: tab.currentUrl || tab.requestedUrl,
+        kind: 'browser' as const,
+        isDirty: false,
+        isSaving: false,
+      })),
     ],
-    [getFileName, openFileEditors, openGitDiffTabs, openTerminalTabs]
+    [getBrowserDisplayLabel, getFileName, openBrowserTabs, openFileEditors, openGitDiffTabs, openTerminalTabs]
+  )
+
+  const buildDockTabIds = useCallback(
+    (
+      editors: FileEditorState[] = openFileEditors,
+      diffTabs: GitDiffTabState[] = openGitDiffTabs,
+      terminalTabs: TerminalDockState[] = openTerminalTabs,
+      browserTabs: BrowserDockState[] = openBrowserTabs
+    ) => [
+      ...editors.map(editor => getFileDockTabId(editor.path)),
+      ...diffTabs.map(tab => tab.id),
+      ...terminalTabs.map(tab => getTerminalDockTabId(tab.id)),
+      ...browserTabs.map(tab => getBrowserDockTabId(tab.id)),
+    ],
+    [openBrowserTabs, openFileEditors, openGitDiffTabs, openTerminalTabs]
   )
 
   useEffect(() => {
@@ -998,13 +1327,18 @@ const RightBar: React.FC<RightBarProps> = ({
   }, [hasAnyDirtyEditors])
 
   const openFileEditor = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, options?: { relativePath?: string | null }) => {
       if (isWeb || !filePath) return
 
+      const relativePath = deriveEditorRelativePath(filePath, options?.relativePath)
       const existingEditor = openFileEditors.find(editor => editor.path === filePath)
       dispatch(uiActions.rightBarExpanded())
       setActiveFileEditorPath(filePath)
       setActiveDockTabId(getFileDockTabId(filePath))
+
+      if (existingEditor?.relativePath !== relativePath) {
+        updateOpenFileEditor(filePath, editor => ({ ...editor, relativePath }))
+      }
 
       if (existingEditor && !existingEditor.loading && !existingEditor.error) {
         return
@@ -1015,6 +1349,7 @@ const RightBar: React.FC<RightBarProps> = ({
           ...prev,
           {
             path: filePath,
+            relativePath,
             content: '',
             savedContent: '',
             loading: true,
@@ -1023,7 +1358,7 @@ const RightBar: React.FC<RightBarProps> = ({
           },
         ])
       } else {
-        updateOpenFileEditor(filePath, editor => ({ ...editor, loading: true, error: null }))
+        updateOpenFileEditor(filePath, editor => ({ ...editor, relativePath, loading: true, error: null }))
       }
 
       const requestId = (fileEditorRequestIdRef.current[filePath] || 0) + 1
@@ -1056,7 +1391,7 @@ const RightBar: React.FC<RightBarProps> = ({
         }))
       }
     },
-    [dispatch, isWeb, openFileEditors, updateOpenFileEditor]
+    [deriveEditorRelativePath, dispatch, isWeb, openFileEditors, updateOpenFileEditor]
   )
 
   const handleFileEditorChange = useCallback(
@@ -1094,6 +1429,38 @@ const RightBar: React.FC<RightBarProps> = ({
     []
   )
 
+  const createBrowserStateId = useCallback(
+    () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    []
+  )
+
+  const updateBrowserDock = useCallback((browserId: string, updates: Partial<BrowserDockState>) => {
+    setOpenBrowserTabs(current => current.map(tab => (tab.id === browserId ? { ...tab, ...updates } : tab)))
+  }, [])
+
+  const openBrowserDock = useCallback(
+    (initialUrl: string = DEFAULT_BROWSER_HOME_URL) => {
+      if (isWeb) return
+
+      const browserId = createBrowserStateId()
+      const nextTab: BrowserDockState = {
+        id: browserId,
+        title: getBrowserDisplayLabel(initialUrl),
+        requestedUrl: initialUrl,
+        currentUrl: initialUrl,
+        isLoading: false,
+        canGoBack: false,
+        canGoForward: false,
+        lastError: null,
+      }
+
+      setOpenBrowserTabs(current => [...current, nextTab])
+      dispatch(uiActions.rightBarExpanded())
+      setActiveDockTabId(getBrowserDockTabId(browserId))
+    },
+    [createBrowserStateId, dispatch, getBrowserDisplayLabel, isWeb]
+  )
+
   const launchTerminalDock = useCallback(
     async (
       targetCwd?: string,
@@ -1123,7 +1490,11 @@ const RightBar: React.FC<RightBarProps> = ({
           error: 'No working directory selected for terminal',
           exitCode: null,
         }
-        setOpenTerminalTabs(current => (current.some(tab => tab.id === terminalId) ? current.map(tab => (tab.id === terminalId ? errorTab : tab)) : [...current, errorTab]))
+        setOpenTerminalTabs(current =>
+          current.some(tab => tab.id === terminalId)
+            ? current.map(tab => (tab.id === terminalId ? errorTab : tab))
+            : [...current, errorTab]
+        )
         if (activate) {
           dispatch(uiActions.rightBarExpanded())
           setActiveDockTabId(getTerminalDockTabId(terminalId))
@@ -1156,7 +1527,9 @@ const RightBar: React.FC<RightBarProps> = ({
       }
 
       setOpenTerminalTabs(current =>
-        current.some(tab => tab.id === terminalId) ? current.map(tab => (tab.id === terminalId ? nextTab : tab)) : [...current, nextTab]
+        current.some(tab => tab.id === terminalId)
+          ? current.map(tab => (tab.id === terminalId ? nextTab : tab))
+          : [...current, nextTab]
       )
 
       if (activate) {
@@ -1244,7 +1617,14 @@ const RightBar: React.FC<RightBarProps> = ({
         title: tab.title,
       })
     }
-  }, [activeDockTabId, initialTerminalDockState.sessions, isWeb, launchTerminalDock, openTerminalTabs, terminalPreferences])
+  }, [
+    activeDockTabId,
+    initialTerminalDockState.sessions,
+    isWeb,
+    launchTerminalDock,
+    openTerminalTabs,
+    terminalPreferences,
+  ])
 
   const handleTerminalInput = useCallback(
     (data: string) => {
@@ -1315,16 +1695,12 @@ const RightBar: React.FC<RightBarProps> = ({
       })
       setActiveDockTabId(currentActive => {
         if (currentActive !== removedTabId) return currentActive
-        const remainingDockTabs = [
-          ...remainingEditors.map(editor => getFileDockTabId(editor.path)),
-          ...openGitDiffTabs.map(tab => tab.id),
-          ...openTerminalTabs.map(tab => getTerminalDockTabId(tab.id)),
-        ]
+        const remainingDockTabs = buildDockTabIds(remainingEditors, openGitDiffTabs, openTerminalTabs, openBrowserTabs)
         const fallbackIndex = Math.min(tabIndex, remainingDockTabs.length - 1)
         return fallbackIndex >= 0 ? (remainingDockTabs[fallbackIndex] ?? null) : null
       })
     },
-    [confirmDiscardSingleEditor, openFileEditors, openGitDiffTabs, openTerminalTabs]
+    [buildDockTabIds, confirmDiscardSingleEditor, openBrowserTabs, openFileEditors, openGitDiffTabs, openTerminalTabs]
   )
 
   const closeGitDiffTab = useCallback(
@@ -1335,16 +1711,12 @@ const RightBar: React.FC<RightBarProps> = ({
       setOpenGitDiffTabs(remainingDiffTabs)
       setActiveDockTabId(currentActive => {
         if (currentActive !== tabId) return currentActive
-        const remainingDockTabs = [
-          ...openFileEditors.map(editor => getFileDockTabId(editor.path)),
-          ...remainingDiffTabs.map(tab => tab.id),
-          ...openTerminalTabs.map(tab => getTerminalDockTabId(tab.id)),
-        ]
+        const remainingDockTabs = buildDockTabIds(openFileEditors, remainingDiffTabs, openTerminalTabs, openBrowserTabs)
         const fallbackIndex = Math.min(openFileEditors.length + tabIndex, remainingDockTabs.length - 1)
         return fallbackIndex >= 0 ? (remainingDockTabs[fallbackIndex] ?? null) : null
       })
     },
-    [openFileEditors, openGitDiffTabs, openTerminalTabs]
+    [buildDockTabIds, openBrowserTabs, openFileEditors, openGitDiffTabs, openTerminalTabs]
   )
 
   const closeTerminalDock = useCallback(
@@ -1360,15 +1732,30 @@ const RightBar: React.FC<RightBarProps> = ({
       setOpenTerminalTabs(remainingTerminals)
       setActiveDockTabId(currentActive => {
         if (currentActive !== removedTabId) return currentActive
-        const remainingDockTabs = [
-          ...openFileEditors.map(editor => getFileDockTabId(editor.path)),
-          ...openGitDiffTabs.map(tab => tab.id),
-          ...remainingTerminals.map(tab => getTerminalDockTabId(tab.id)),
-        ]
+        const remainingDockTabs = buildDockTabIds(openFileEditors, openGitDiffTabs, remainingTerminals, openBrowserTabs)
         return remainingDockTabs[0] ?? null
       })
     },
-    [openFileEditors, openGitDiffTabs, openTerminalTabs]
+    [buildDockTabIds, openBrowserTabs, openFileEditors, openGitDiffTabs, openTerminalTabs]
+  )
+
+  const closeBrowserDock = useCallback(
+    (browserId: string) => {
+      const tabIndex = openBrowserTabs.findIndex(tab => tab.id === browserId)
+      if (tabIndex === -1) return
+
+      const removedTabId = getBrowserDockTabId(browserId)
+      const remainingBrowsers = openBrowserTabs.filter(tab => tab.id !== browserId)
+      setOpenBrowserTabs(remainingBrowsers)
+      setActiveDockTabId(currentActive => {
+        if (currentActive !== removedTabId) return currentActive
+        const remainingDockTabs = buildDockTabIds(openFileEditors, openGitDiffTabs, openTerminalTabs, remainingBrowsers)
+        const browserStartIndex = openFileEditors.length + openGitDiffTabs.length + openTerminalTabs.length + tabIndex
+        const fallbackIndex = Math.min(browserStartIndex, remainingDockTabs.length - 1)
+        return fallbackIndex >= 0 ? (remainingDockTabs[fallbackIndex] ?? null) : null
+      })
+    },
+    [buildDockTabIds, openBrowserTabs, openFileEditors, openGitDiffTabs, openTerminalTabs]
   )
 
   const closeDockTab = useCallback(
@@ -1381,9 +1768,13 @@ const RightBar: React.FC<RightBarProps> = ({
         closeTerminalDock(tabId.slice('terminal:'.length))
         return
       }
+      if (tabId.startsWith('browser:')) {
+        closeBrowserDock(tabId.slice('browser:'.length))
+        return
+      }
       closeGitDiffTab(tabId)
     },
-    [closeFileEditorTab, closeGitDiffTab, closeTerminalDock]
+    [closeBrowserDock, closeFileEditorTab, closeGitDiffTab, closeTerminalDock]
   )
 
   const closeMonacoDock = useCallback(() => {
@@ -1400,6 +1791,7 @@ const RightBar: React.FC<RightBarProps> = ({
     setOpenFileEditors([])
     setOpenGitDiffTabs([])
     setOpenTerminalTabs([])
+    setOpenBrowserTabs([])
     setActiveFileEditorPath(null)
     setActiveDockTabId(null)
   }, [confirmCollapseDirtyEditors, openTerminalTabs])
@@ -1803,116 +2195,250 @@ const RightBar: React.FC<RightBarProps> = ({
     }
   }, [gitBasePath, gitCreateBranchMutation, newGitBranchName, refetchGitOverview])
 
+  const dockTabToolbar = isEditorDockOpen ? (
+    <div className='flex mt-2 py-2 flex-wrap items-center gap-2 px-2 rounded-t-2xl pb-2 bg-white/70 shadow-sm dark:bg-neutral-950/60 backdrop-blur-sm'>
+      <Button
+        variant='outline2'
+        size='circle'
+        rounded='full'
+        onClick={toggleCollapse}
+        className='h-9 w-9 transition-transform duration-200 hover:scale-103 acrylic-ultra-light-nb-3'
+        aria-label='Collapse sidebar'
+      >
+        <i className='bx bx-chevron-right text-xl' aria-hidden='true'></i>
+      </Button>
+      <span className='leading-none rounded-[18px] py-2 px-3.5 bg-neutral-50 font-semibold text-[22px] text-neutral-600 dark:text-neutral-200 acrylic-ultra-light-nb-3'>
+        Dock
+      </span>
+      <Button variant='outline2' size='small' onClick={() => openBrowserDock()} disabled={isWeb}>
+        New browser
+      </Button>
+    </div>
+  ) : null
+
   return (
     <aside
       ref={asideRef}
-      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} flex flex-col overflow-hidden transition-all duration-300 ease-in-out bg-transparent dark:bg-transparent flex-shrink-0 ${isCollapsed ? 'w-11' : isEditorDockOpen ? '' : 'w-64 md:w-72 lg:w-80 xl:w-90'} ${className}`}
-      style={
-        isEditorDockOpen && dockedLayoutWidth != null
-          ? {
-              width: `${dockedLayoutWidth}px`,
-              maxWidth: '100%',
-            }
-          : undefined
-      }
+      className={`relative z-10 ${isWeb ? 'h-[100vh]' : 'h-full'} flex flex-col ${isEditorDockOpen ? 'overflow-visible' : 'overflow-hidden'} bg-transparent dark:bg-transparent flex-shrink-0 ${isResizingSidebar ? 'transition-none' : 'transition-all duration-300 ease-in-out'} ${className}`}
+      style={{
+        width: `${asideWidthPx}px`,
+        maxWidth: '100%',
+        flexBasis: `${asideWidthPx}px`,
+      }}
       aria-label='Research Notes'
     >
-      {/* Toggle Button */}
-      <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
-        <div className='flex items-center gap-2'>
-          <Button
-            variant='outline2'
-            size='circle'
-            rounded='full'
-            onClick={toggleCollapse}
-            className={`${isCollapsed ? 'mx-auto' : 'ml-0'} mb-2 transition-transform duration-200 hover:scale-103 px-2 py-2 acrylic-ultra-light-nb-3`}
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <i className={`bx ${isCollapsed ? 'bx-chevron-left' : 'bx-chevron-right'} text-xl`} aria-hidden='true'></i>
-          </Button>
-
-          {isEditorDockOpen && (
-            <span className='leading-none rounded-[18px] py-2 px-3.5 bg-neutral-50 font-semibold text-[22px] text-neutral-600 dark:text-neutral-200 acrylic-ultra-light-nb-3'>
-              Editor
-            </span>
-          )}
+      {!isEditorDockOpen && (
+        <div
+          className='group absolute inset-y-0 left-0 z-30 flex cursor-col-resize select-none items-center justify-center'
+          style={{ width: `${RIGHT_BAR_RESIZE_HANDLE_WIDTH_PX}px` }}
+          role='separator'
+          aria-orientation='vertical'
+          aria-label={isCollapsed ? 'Drag to expand right sidebar' : 'Drag to resize right sidebar'}
+          aria-valuemin={RIGHT_BAR_MIN_WIDTH_PX}
+          aria-valuemax={maxResizableSidebarWidth}
+          aria-valuenow={resolvedRightBarWidth}
+          onMouseDown={handleSidebarResizeMouseDown}
+          onTouchStart={handleSidebarResizeTouchStart}
+          title={isCollapsed ? 'Drag to expand sidebar' : 'Drag to resize sidebar'}
+        >
+          <div
+            className={`h-full w-px transition-colors ${
+              isResizingSidebar
+                ? 'bg-neutral-400/80 dark:bg-neutral-500/80'
+                : 'bg-transparent group-hover:bg-neutral-300 dark:group-hover:bg-neutral-700'
+            }`}
+          />
         </div>
+      )}
 
-        {/* {!isCollapsed && (
+      {(isResizingSidebar || isResizingDock) && (
+        <div
+          className='fixed inset-0 z-[2000] cursor-col-resize select-none bg-transparent'
+          aria-hidden='true'
+          onMouseUp={() => {
+            setIsResizingSidebar(false)
+            setIsResizingDock(false)
+          }}
+          onTouchEnd={() => {
+            setIsResizingSidebar(false)
+            setIsResizingDock(false)
+          }}
+        />
+      )}
+
+      {!isEditorDockOpen && (
+        <>
+          {/* Toggle Button */}
+          <div className='flex items-center justify-between py-3 my-1 md:py-2.5 lg:p-1 xl:p-1 2xl:px-1 2xl:py-2'>
+            <div className='flex items-center gap-2'>
+              <Button
+                variant='outline2'
+                size='circle'
+                rounded='full'
+                onClick={toggleCollapse}
+                className={`${isCollapsed ? 'mx-auto' : 'ml-0'} mb-2 transition-transform duration-200 hover:scale-103 px-2 py-2 acrylic-ultra-light-nb-3`}
+                aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              >
+                <i
+                  className={`bx ${isCollapsed ? 'bx-chevron-left' : 'bx-chevron-right'} text-xl`}
+                  aria-hidden='true'
+                ></i>
+              </Button>
+
+              {!isCollapsed && !isEditorDockOpen && (
+                <div className='flex flex-wrap items-center gap-2'>
+                  {hasDockTabs ? (
+                    <span className='leading-none rounded-[18px] py-2 px-3.5 bg-neutral-50 font-semibold text-[22px] text-neutral-600 dark:text-neutral-200 acrylic-ultra-light-nb-3'>
+                      Dock
+                    </span>
+                  ) : null}
+                  <Button variant='outline2' size='small' onClick={() => openBrowserDock()} disabled={isWeb}>
+                    New browser
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* {!isCollapsed && (
           <h2 className='leading-none text-[14px] md:text-[16px] lg:text-[16px] xl:text-[16px] 2xl:text-[18px] 3xl:text-[20px] 4xl:text-[22px] rounded-[18px] py-2 px-2.5 font-semibold text-neutral-700 dark:text-neutral-200 truncate bg-neutral-50 acrylic-ultra-light-nb-3'>
             Explorer
           </h2>
         )} */}
-      </div>
+          </div>
+        </>
+      )}
 
-      {/* Main content wrapper - equal height sections when expanded */}
-      <div className={`flex-1 ${isCollapsed ? 'flex flex-col' : 'flex min-h-0'}`}>
-        {isEditorDockOpen && (
-          <div className='min-w-0 flex-1 px-2 pb-2'>
-            {activeFileEditor ? (
-              <MonacoFileEditorPane
-                filePath={activeFileEditor.path}
-                value={activeFileEditor.content}
-                loading={activeFileEditor.loading}
-                error={activeFileEditor.error}
-                isDirty={isEditorDirty}
-                isSaving={activeFileEditor.saving}
-                theme={monacoTheme}
-                tabs={dockTabs}
-                activeTabId={activeDockTabId}
-                onChange={handleFileEditorChange}
-                onSave={() => {
-                  void saveFileEditor()
-                }}
-                onClose={closeMonacoDock}
-                onSelectTab={selectDockTab}
-                onCloseTab={closeDockTab}
-              />
-            ) : activeGitDiffTab ? (
-              <MonacoGitDiffPane
-                title={activeGitDiffTab.displayPath}
-                filePath={activeGitDiffTab.path}
-                originalValue={gitDiffData?.original?.content ?? ''}
-                modifiedValue={gitDiffData?.modified?.content ?? ''}
-                originalLabel={gitDiffData?.original?.label ?? 'Original'}
-                modifiedLabel={gitDiffData?.modified?.label ?? 'Modified'}
-                loading={isLoadingGitDiff || isFetchingGitDiff}
-                error={null}
-                theme={monacoTheme}
-                language={gitDiffData?.languageHint || 'plaintext'}
-                message={gitDiffData?.message ?? null}
-                patch={gitDiffData?.diff ?? ''}
-                preferPatch={Boolean(gitDiffData?.preferPatch || (!gitDiffData?.original && !gitDiffData?.modified))}
-                tabs={dockTabs}
-                activeTabId={activeDockTabId}
-                onClose={closeMonacoDock}
-                onOpenFile={activeGitDiffTab.path ? () => void openFileEditor(activeGitDiffTab.path) : null}
-                onSelectTab={selectDockTab}
-                onCloseTab={closeDockTab}
-              />
-            ) : activeTerminalDock ? (
-              <XtermTerminalPane
-                tabId={getTerminalDockTabId(activeTerminalDock.id)}
-                title={activeTerminalDock.title}
-                cwd={activeTerminalDock.cwd}
-                shell={activeTerminalDock.shell}
-                sessionId={activeTerminalDock.sessionId}
-                history={activeTerminalDock.history}
-                status={activeTerminalDock.status}
-                error={activeTerminalDock.error}
-                exitCode={activeTerminalDock.exitCode}
-                theme={monacoTheme}
-                tabs={dockTabs}
-                activeTabId={activeDockTabId}
-                onInput={handleTerminalInput}
-                onResize={handleTerminalResize}
-                onRestart={() => restartTerminalDock(activeTerminalDock.id)}
-                onClear={() => clearTerminalDockBuffer(activeTerminalDock.id)}
-                onClose={() => closeTerminalDock(activeTerminalDock.id)}
-                onSelectTab={selectDockTab}
-                onCloseTab={closeDockTab}
-              />
-            ) : null}
+      {/* Main content wrapper - compact sidebar with floating dock overlay */}
+      <div
+        className={`relative flex-1 ${isCollapsed ? 'flex flex-col' : 'flex min-h-0'} ${isEditorDockOpen ? 'overflow-visible' : ''}`}
+      >
+        {shouldMountDockOverlay && (
+          <div
+            className={`absolute inset-y-0 z-20 flex min-h-0 min-w-0 flex-col pb-2 transition-opacity duration-200 ${
+              isDockOverlayVisible ? 'visible opacity-100' : 'pointer-events-none invisible opacity-0'
+            }`}
+            style={{
+              width: `${dockOverlayWidthPx}px`,
+              right: `calc(100% + ${DOCKED_LAYOUT_GAP_PX}px)`,
+            }}
+            aria-hidden={!isDockOverlayVisible}
+          >
+            {dockTabToolbar}
+            <div className='relative min-h-0 min-w-0 flex-1'>
+              <div
+                className='group absolute inset-y-0 left-0 z-30 flex cursor-col-resize select-none items-center justify-center'
+                style={{ width: `${RIGHT_BAR_RESIZE_HANDLE_WIDTH_PX}px` }}
+                role='separator'
+                aria-orientation='vertical'
+                aria-label='Drag to resize dock'
+                aria-valuemin={minDockOverlayWidth}
+                aria-valuemax={maxDockOverlayWidth}
+                aria-valuenow={dockOverlayWidthPx}
+                onMouseDown={handleDockResizeMouseDown}
+                onTouchStart={handleDockResizeTouchStart}
+                title='Drag to resize dock'
+              >
+                <div
+                  className={`h-full w-px transition-colors ${
+                    isResizingDock
+                      ? 'bg-neutral-400/80 dark:bg-neutral-500/80'
+                      : 'bg-transparent group-hover:bg-neutral-300 dark:group-hover:bg-neutral-700'
+                  }`}
+                />
+              </div>
+
+              {activeFileEditor ? (
+                <MonacoFileEditorPane
+                  filePath={activeFileEditor.path}
+                  relativePath={activeFileEditor.relativePath}
+                  value={activeFileEditor.content}
+                  loading={activeFileEditor.loading}
+                  error={activeFileEditor.error}
+                  isDirty={isEditorDirty}
+                  isSaving={activeFileEditor.saving}
+                  theme={monacoTheme}
+                  tabs={dockTabs}
+                  activeTabId={activeDockTabId}
+                  onChange={handleFileEditorChange}
+                  onSave={() => {
+                    void saveFileEditor()
+                  }}
+                  onClose={closeMonacoDock}
+                  onSelectTab={selectDockTab}
+                  onCloseTab={closeDockTab}
+                  onSelectionChange={handleMonacoSelectionChange}
+                />
+              ) : activeGitDiffTab ? (
+                <MonacoGitDiffPane
+                  title={activeGitDiffTab.displayPath}
+                  filePath={activeGitDiffTab.path}
+                  originalValue={gitDiffData?.original?.content ?? ''}
+                  modifiedValue={gitDiffData?.modified?.content ?? ''}
+                  originalLabel={gitDiffData?.original?.label ?? 'Original'}
+                  modifiedLabel={gitDiffData?.modified?.label ?? 'Modified'}
+                  loading={isLoadingGitDiff || isFetchingGitDiff}
+                  error={null}
+                  theme={monacoTheme}
+                  language={gitDiffData?.languageHint || 'plaintext'}
+                  message={gitDiffData?.message ?? null}
+                  patch={gitDiffData?.diff ?? ''}
+                  preferPatch={Boolean(gitDiffData?.preferPatch || (!gitDiffData?.original && !gitDiffData?.modified))}
+                  tabs={dockTabs}
+                  activeTabId={activeDockTabId}
+                  onClose={closeMonacoDock}
+                  onOpenFile={
+                    activeGitDiffTab.path
+                      ? () =>
+                          void openFileEditor(activeGitDiffTab.path, { relativePath: activeGitDiffTab.relativePath })
+                      : null
+                  }
+                  onSelectTab={selectDockTab}
+                  onCloseTab={closeDockTab}
+                />
+              ) : activeTerminalDock ? (
+                <XtermTerminalPane
+                  tabId={getTerminalDockTabId(activeTerminalDock.id)}
+                  title={activeTerminalDock.title}
+                  cwd={activeTerminalDock.cwd}
+                  shell={activeTerminalDock.shell}
+                  sessionId={activeTerminalDock.sessionId}
+                  history={activeTerminalDock.history}
+                  status={activeTerminalDock.status}
+                  error={activeTerminalDock.error}
+                  exitCode={activeTerminalDock.exitCode}
+                  theme={monacoTheme}
+                  tabs={dockTabs}
+                  activeTabId={activeDockTabId}
+                  onInput={handleTerminalInput}
+                  onResize={handleTerminalResize}
+                  onRestart={() => restartTerminalDock(activeTerminalDock.id)}
+                  onClear={() => clearTerminalDockBuffer(activeTerminalDock.id)}
+                  onClose={() => closeTerminalDock(activeTerminalDock.id)}
+                  onSelectTab={selectDockTab}
+                  onCloseTab={closeDockTab}
+                />
+              ) : null}
+              {openBrowserTabs.length > 0 ? (
+                <div className={activeBrowserDock ? 'h-full' : 'hidden'}>
+                  <BrowserPane
+                    browserTabs={openBrowserTabs}
+                    activeBrowserTabId={activeBrowserDock?.id ?? null}
+                    theme={monacoTheme}
+                    tabs={dockTabs}
+                    activeTabId={activeDockTabId}
+                    onUpdateTab={updateBrowserDock}
+                    onOpenNewTab={() => openBrowserDock()}
+                    onClose={() => {
+                      if (activeBrowserDock) {
+                        closeBrowserDock(activeBrowserDock.id)
+                      }
+                    }}
+                    onSelectTab={selectDockTab}
+                    onCloseTab={closeDockTab}
+                  />
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
         <div
@@ -2076,7 +2602,7 @@ const RightBar: React.FC<RightBarProps> = ({
                       <button
                         onClick={e => {
                           e.stopPropagation()
-                          void openFileEditor(file.path)
+                          void openFileEditor(file.path, { relativePath: file.relativePath })
                         }}
                         className={`p-1 rounded-full hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors flex-shrink-0 ${
                           activeFileEditorPath === file.path
@@ -2501,7 +3027,9 @@ const RightBar: React.FC<RightBarProps> = ({
                                         </button>
                                         {!file.isDeleted && !isWeb && (
                                           <button
-                                            onClick={() => void openFileEditor(file.path)}
+                                            onClick={() =>
+                                              void openFileEditor(file.path, { relativePath: file.relativePath })
+                                            }
                                             className='inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-200 text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800'
                                             aria-label='Open file'
                                             title='Open file'
@@ -2585,7 +3113,9 @@ const RightBar: React.FC<RightBarProps> = ({
                                           </button>
                                           {!file.isDeleted && !isWeb && (
                                             <button
-                                              onClick={() => void openFileEditor(file.path)}
+                                              onClick={() =>
+                                                void openFileEditor(file.path, { relativePath: file.relativePath })
+                                              }
                                               className='rounded-md border border-neutral-200 px-2 py-1 text-[10px] text-neutral-700 transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800'
                                             >
                                               Open
@@ -2818,8 +3348,9 @@ const RightBar: React.FC<RightBarProps> = ({
                         Terminal Sessions
                       </h3>
                       <div className='mt-1 text-sm font-semibold text-neutral-900 dark:text-neutral-100'>
-                        {openTerminalTabs.length} tab{openTerminalTabs.length === 1 ? '' : 's'} • {' '}
-                        {openTerminalTabs.filter(tab => tab.status === 'open' || tab.status === 'launching').length} running
+                        {openTerminalTabs.length} tab{openTerminalTabs.length === 1 ? '' : 's'} •{' '}
+                        {openTerminalTabs.filter(tab => tab.status === 'open' || tab.status === 'launching').length}{' '}
+                        running
                       </div>
                       <div className='mt-1 text-[11px] text-neutral-500 dark:text-neutral-400'>
                         Launch multiple local shells and restore them on next app launch.
@@ -2876,7 +3407,9 @@ const RightBar: React.FC<RightBarProps> = ({
                       className='flex w-full items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-left dark:border-neutral-800'
                     >
                       <div>
-                        <div className='text-sm font-medium text-neutral-900 dark:text-neutral-100'>Restore sessions on launch</div>
+                        <div className='text-sm font-medium text-neutral-900 dark:text-neutral-100'>
+                          Restore sessions on launch
+                        </div>
                         <div className='text-[11px] text-neutral-500 dark:text-neutral-400'>
                           Reopen saved terminal tabs after restarting Electron.
                         </div>
@@ -2895,7 +3428,9 @@ const RightBar: React.FC<RightBarProps> = ({
                       className='flex w-full items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-left dark:border-neutral-800'
                     >
                       <div>
-                        <div className='text-sm font-medium text-neutral-900 dark:text-neutral-100'>Persist shell history</div>
+                        <div className='text-sm font-medium text-neutral-900 dark:text-neutral-100'>
+                          Persist shell history
+                        </div>
                         <div className='text-[11px] text-neutral-500 dark:text-neutral-400'>
                           Save each terminal buffer so restored tabs show previous output.
                         </div>
@@ -2959,7 +3494,10 @@ const RightBar: React.FC<RightBarProps> = ({
                                             : `exit ${tab.exitCode}`}
                                   </span>
                                 </div>
-                                <div className='mt-1 truncate text-[11px] text-neutral-500 dark:text-neutral-400' title={tab.cwd}>
+                                <div
+                                  className='mt-1 truncate text-[11px] text-neutral-500 dark:text-neutral-400'
+                                  title={tab.cwd}
+                                >
                                   {tab.cwd}
                                 </div>
                                 {tab.history && (

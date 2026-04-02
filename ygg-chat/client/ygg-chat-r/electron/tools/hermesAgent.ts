@@ -174,15 +174,11 @@ export async function executeHermesAgent(
   const normalizedModel = normalizeHermesModel(model)
   const launcher = resolveAcpLauncher()
   const launcherDiagnostics = getHermesLauncherDiagnostics(cwd)
-  const mcpServers = resolveHermesAcpMcpServers(conversationId, cwd, launcher.launchMode)
 
   console.info('[HermesAgent] Launching Hermes ACP', {
     ...launcherDiagnostics,
-    mcpServers: mcpServers.map(server => ({
-      name: server.name,
-      transport: server.transport || server.type || (server.url ? 'http' : 'stdio'),
-      url: server.url ?? null,
-    })),
+    mcpServers: [],
+    mcpServerInjectionEnabled: false,
   })
 
   const proc = spawn(launcher.command, launcher.args, {
@@ -219,7 +215,7 @@ export async function executeHermesAgent(
     let activeSessionId = existingSessionId
 
     if (activeSessionId && forkSession) {
-      activeSessionId = await client.forkSession(activeSessionId, cwd, mcpServers)
+      activeSessionId = await client.forkSession(activeSessionId, cwd)
       latestSessionId = activeSessionId
       await emitAndTrackSession(
         {
@@ -233,7 +229,7 @@ export async function executeHermesAgent(
         onResponse
       )
     } else if (activeSessionId) {
-      await client.loadSession(activeSessionId, cwd, mcpServers)
+      await client.loadSession(activeSessionId, cwd)
       latestSessionId = activeSessionId
       await emitAndTrackSession(
         {
@@ -246,7 +242,7 @@ export async function executeHermesAgent(
         onResponse
       )
     } else {
-      activeSessionId = await client.newSession(cwd, mcpServers)
+      activeSessionId = await client.newSession(cwd)
       latestSessionId = activeSessionId
       await emitAndTrackSession(
         {

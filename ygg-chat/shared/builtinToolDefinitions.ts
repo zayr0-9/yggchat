@@ -364,6 +364,87 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
     },
   },
   {
+    name: 'multi_edit',
+    enabled: true,
+    description:
+      'Apply multiple edit_file-style operations sequentially across one or more files. Each item uses the same search/replace or append behavior as edit_file and returns a per-item result summary.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        edits: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'The path to the file to edit' },
+              operation: {
+                type: 'string',
+                enum: ['replace', 'replace_first', 'append'],
+                description: 'Type of edit operation',
+              },
+              searchPattern: {
+                type: 'string',
+                description:
+                  'REQUIRED for replace/replace_first operations. The exact text pattern to find in the file. Escape sequences like \n (newline), \t (tab), \r (carriage return) are interpreted by default.',
+              },
+              replacement: {
+                type: 'string',
+                description:
+                  'REQUIRED for replace/replace_first operations. The text to replace the search pattern with. Treated literally by default; include actual newlines in the string when needed.',
+              },
+              approxStartLine: {
+                type: 'integer',
+                minimum: 1,
+                description:
+                  'Optional approximate start line hint. replace_first searches a local window around this line first (default ±100 lines) before falling back to full-file search.',
+              },
+              approxEndLine: {
+                type: 'integer',
+                minimum: 1,
+                description:
+                  'Optional approximate end line hint. Combine with approxStartLine to bound the preferred window. For non-range edits you can pass the same value for start and end.',
+              },
+              content: {
+                type: 'string',
+                description: 'REQUIRED for append operation. The content to append to the end of the file.',
+              },
+              expectedHash: {
+                type: 'string',
+                description: 'Expected SHA256 content hash from read_file for validation. Prevents editing if file changed.',
+              },
+              expectedMetadata: {
+                type: 'object',
+                properties: {
+                  lineEnding: { type: 'string', enum: ['\n', '\r\n', 'mixed'] },
+                  hasBOM: { type: 'boolean' },
+                  encoding: { type: 'string' },
+                  lastModified: { type: 'string' },
+                  inode: { type: 'number' },
+                },
+                description: 'Expected file metadata from read_file for validation',
+              },
+            },
+            required: ['path', 'operation'],
+          },
+          description:
+            'Ordered list of edit operations to execute sequentially. Later edits run after earlier edits complete, so you can edit the same file multiple times in one call.',
+        },
+        stopOnError: {
+          type: 'boolean',
+          description: 'If true, stop after the first failed edit (default true). If false, continue processing remaining edits.',
+        },
+        createBackup: { type: 'boolean', description: 'Whether to create a backup before each edit (default false)' },
+        encoding: { type: 'string', description: 'File encoding (default utf8)' },
+        validateContent: {
+          type: 'boolean',
+          description: 'Validate each file has not changed since read using hash/metadata (default true)',
+        },
+      },
+      required: ['edits'],
+    },
+  },
+  {
     name: 'search_history',
     enabled: false,
     description: 'Search chat history across user, project, or conversation using the DB FTS utilities.',

@@ -56,6 +56,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   shell: {
     openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
   },
+  browser: {
+    isGuestDevToolsEnabled: () => ipcRenderer.invoke('browser:isGuestDevToolsEnabled'),
+    openGuestDevTools: (webContentsId: number) => ipcRenderer.invoke('browser:openGuestDevTools', webContentsId),
+  },
   dialog: {
     openFile: (options?: {
       title?: string

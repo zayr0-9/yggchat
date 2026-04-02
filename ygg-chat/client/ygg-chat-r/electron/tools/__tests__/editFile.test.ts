@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs'
 import * as path from 'path'
 import { describe, expect, it, test } from 'vitest'
-import { editFile } from '../editFile.js'
+import { editFile, multiEdit } from '../editFile.js'
 import { readTextFile } from '../readFile.js'
 import { createToolFsHarness } from './helpers/toolFsHarness.js'
 
@@ -66,6 +66,115 @@ describe('editFile operation contract', () => {
 
     expect(result.success).toBe(false)
     expect(result.message).toContain('Unknown operation: rename')
+  })
+})
+
+describe('multiEdit behavior', () => {
+  it('applies multiple edits sequentially', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('alpha.txt', 'alpha')
+    await harness.writeFile('beta.txt', 'beta')
+
+    const result = await multiEdit(
+      [
+        {
+          path: 'alpha.txt',
+          operation: 'replace',
+          searchPattern: 'alpha',
+          replacement: 'ALPHA',
+        },
+        {
+          path: 'beta.txt',
+          operation: 'append',
+          content: '\ngamma',
+        },
+      ],
+      { cwd: harness.workspaceDir }
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.applied).toBe(2)
+    expect(result.failed).toBe(0)
+    expect(result.stoppedEarly).toBe(false)
+    expect(result.results).toHaveLength(2)
+    expect(await harness.readFile('alpha.txt')).toBe('ALPHA')
+    expect(await harness.readFile('beta.txt')).toBe('beta\ngamma')
+  })
+
+  it('stops on the first failed edit by default', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('first.txt', 'one')
+    await harness.writeFile('third.txt', 'three')
+
+    const result = await multiEdit(
+      [
+        {
+          path: 'first.txt',
+          operation: 'replace',
+          searchPattern: 'one',
+          replacement: 'ONE',
+        },
+        {
+          path: 'missing.txt',
+          operation: 'replace',
+          searchPattern: 'two',
+          replacement: 'TWO',
+        },
+        {
+          path: 'third.txt',
+          operation: 'replace',
+          searchPattern: 'three',
+          replacement: 'THREE',
+        },
+      ],
+      { cwd: harness.workspaceDir }
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.applied).toBe(1)
+    expect(result.failed).toBe(1)
+    expect(result.stoppedEarly).toBe(true)
+    expect(result.results).toHaveLength(2)
+    expect(await harness.readFile('first.txt')).toBe('ONE')
+    expect(await harness.readFile('third.txt')).toBe('three')
+  })
+
+  it('can continue past failures when stopOnError is false', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('first.txt', 'one')
+    await harness.writeFile('third.txt', 'three')
+
+    const result = await multiEdit(
+      [
+        {
+          path: 'first.txt',
+          operation: 'replace',
+          searchPattern: 'one',
+          replacement: 'ONE',
+        },
+        {
+          path: 'missing.txt',
+          operation: 'replace',
+          searchPattern: 'two',
+          replacement: 'TWO',
+        },
+        {
+          path: 'third.txt',
+          operation: 'replace',
+          searchPattern: 'three',
+          replacement: 'THREE',
+        },
+      ],
+      { cwd: harness.workspaceDir, stopOnError: false }
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.applied).toBe(2)
+    expect(result.failed).toBe(1)
+    expect(result.stoppedEarly).toBe(false)
+    expect(result.results).toHaveLength(3)
+    expect(await harness.readFile('first.txt')).toBe('ONE')
+    expect(await harness.readFile('third.txt')).toBe('THREE')
   })
 })
 
