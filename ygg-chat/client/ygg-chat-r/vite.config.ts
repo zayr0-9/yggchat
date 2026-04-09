@@ -34,7 +34,7 @@ export default defineConfig(() => {
     // Build configuration
     build: {
       outDir: isElectron ? 'dist-electron' : 'dist',
-      sourcemap: true,
+      sourcemap: false,
 
       rollupOptions: {
         output: {

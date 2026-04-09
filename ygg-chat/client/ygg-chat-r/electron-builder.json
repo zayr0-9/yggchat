@@ -50,7 +50,8 @@
   },
   "linux": {
     "target": ["AppImage"],
-    "category": "Office"
+    "category": "Office",
+    "icon": "public/img/graviton-dark.png"
   },
   "npmRebuild": true,
   "nativeRebuilder": "sequential",
