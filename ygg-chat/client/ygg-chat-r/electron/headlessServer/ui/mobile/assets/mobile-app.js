@@ -64634,6 +64634,7 @@ var MessageList = ({
   (0, import_react29.useEffect)(() => {
     if (!containerRef.current) return;
     if (scrollToMessageId) return;
+    if (streamingMessage) return;
     containerRef.current.scrollTop = containerRef.current.scrollHeight;
   }, [messages, streamingMessage, scrollToMessageId]);
   (0, import_react29.useEffect)(() => {

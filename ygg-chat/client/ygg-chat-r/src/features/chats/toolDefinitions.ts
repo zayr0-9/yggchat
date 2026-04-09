@@ -268,6 +268,8 @@ const OPENAI_LOCALLY_SUPPORTED_BUILTIN_TOOL_NAMES = new Set<string>([
   'todo_list',
   'theme_manager',
   'fetch_notes',
+  'fetch_chats',
+  'internalLink',
   'read_file',
   'read_files',
   'read_file_continuation',

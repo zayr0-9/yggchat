@@ -44,7 +44,8 @@ import { execute as executeCustomToolManager } from './tools/customToolManager.j
 import { deleteFile, safeDeleteFile } from './tools/deleteFile.js'
 import { extractDirectoryStructure } from './tools/directory.js'
 import { editFile, multiEdit } from './tools/editFile.js'
-import { execute as executeFetchNotes } from './tools/fetchNotes.js'
+import { execute as executeFetchChats, executeFetchNotes } from './tools/fetchChats.js'
+import { execute as executeInternalLink } from './tools/internalLink.js'
 import { globSearch } from './tools/glob.js'
 import { executeHermesAgent, getHermesSession, setHermesSession } from './tools/hermesAgent.js'
 import { resolveHermesExecutionPlan } from './tools/hermesExecutionPlanner.js'
@@ -720,7 +721,36 @@ function initializeBuiltInToolRegistry() {
 
   builtInTools.set('fetch_notes', async (args, options) => {
     return await executeFetchNotes(args, {
-      conversationId: options?.conversationId ?? null,
+      currentConversationId: options?.conversationId ?? null,
+      listConversations: () => {
+        const getter = statements?.getAllConversations
+        if (!getter || typeof getter.all !== 'function') return []
+        return getter.all()
+      },
+      getConversationById: conversationId => {
+        const getter = statements?.getConversationById
+        if (!getter || typeof getter.get !== 'function') return undefined
+        return getter.get(conversationId)
+      },
+      searchConversations: ({ userId, projectId, query, limit }) => {
+        const trimmedQuery = typeof query === 'string' ? query.trim() : ''
+        if (!trimmedQuery) return []
+        const normalizedQuery = trimmedQuery.replace(/[\s_-]+/g, '')
+        const likeQuery = `%${trimmedQuery}%`
+        const normalizedLikeQuery = `%${normalizedQuery || trimmedQuery}%`
+        if (projectId) {
+          const getter = statements?.searchConversationsByTitleInProject
+          if (!getter || typeof getter.all !== 'function') return []
+          return getter.all(userId, projectId, likeQuery, normalizedLikeQuery, limit)
+        }
+        const getter = statements?.searchConversationsByTitle
+        if (!getter || typeof getter.all !== 'function') return []
+        return getter.all(userId, likeQuery, normalizedLikeQuery, limit)
+      },
+      searchTopLevelMessages: ({ userId, projectId, query, limit }) => {
+        if (typeof searchTopLevelUserMessages !== 'function') return []
+        return searchTopLevelUserMessages({ userId, projectId, query, limit })
+      },
       listMessagesByConversationId: conversationId => {
         const getter = statements?.getMessagesByConversationId
         if (!getter || typeof getter.all !== 'function') return []
@@ -730,6 +760,77 @@ function initializeBuiltInToolRegistry() {
         const getter = statements?.getTopLevelUserMessagesByConversationId
         if (!getter || typeof getter.all !== 'function') return []
         return getter.all(conversationId)
+      },
+      getMessageById: messageId => {
+        const getter = statements?.getMessageById
+        if (!getter || typeof getter.get !== 'function') return undefined
+        return getter.get(messageId)
+      },
+    })
+  })
+
+  builtInTools.set('fetch_chats', async (args, options) => {
+    return await executeFetchChats(args, {
+      currentConversationId: options?.conversationId ?? null,
+      listConversations: () => {
+        const getter = statements?.getAllConversations
+        if (!getter || typeof getter.all !== 'function') return []
+        return getter.all()
+      },
+      getConversationById: conversationId => {
+        const getter = statements?.getConversationById
+        if (!getter || typeof getter.get !== 'function') return undefined
+        return getter.get(conversationId)
+      },
+      searchConversations: ({ userId, projectId, query, limit }) => {
+        const trimmedQuery = typeof query === 'string' ? query.trim() : ''
+        if (!trimmedQuery) return []
+        const normalizedQuery = trimmedQuery.replace(/[\s_-]+/g, '')
+        const likeQuery = `%${trimmedQuery}%`
+        const normalizedLikeQuery = `%${normalizedQuery || trimmedQuery}%`
+        if (projectId) {
+          const getter = statements?.searchConversationsByTitleInProject
+          if (!getter || typeof getter.all !== 'function') return []
+          return getter.all(userId, projectId, likeQuery, normalizedLikeQuery, limit)
+        }
+        const getter = statements?.searchConversationsByTitle
+        if (!getter || typeof getter.all !== 'function') return []
+        return getter.all(userId, likeQuery, normalizedLikeQuery, limit)
+      },
+      searchTopLevelMessages: ({ userId, projectId, query, limit }) => {
+        if (typeof searchTopLevelUserMessages !== 'function') return []
+        return searchTopLevelUserMessages({ userId, projectId, query, limit })
+      },
+      listMessagesByConversationId: conversationId => {
+        const getter = statements?.getMessagesByConversationId
+        if (!getter || typeof getter.all !== 'function') return []
+        return getter.all(conversationId)
+      },
+      listTopLevelUserMessagesByConversationId: conversationId => {
+        const getter = statements?.getTopLevelUserMessagesByConversationId
+        if (!getter || typeof getter.all !== 'function') return []
+        return getter.all(conversationId)
+      },
+      getMessageById: messageId => {
+        const getter = statements?.getMessageById
+        if (!getter || typeof getter.get !== 'function') return undefined
+        return getter.get(messageId)
+      },
+    })
+  })
+
+  builtInTools.set('internalLink', async (args, options) => {
+    return await executeInternalLink(args, {
+      currentConversationId: options?.conversationId ?? null,
+      getConversationById: conversationId => {
+        const getter = statements?.getConversationById
+        if (!getter || typeof getter.get !== 'function') return undefined
+        return getter.get(conversationId)
+      },
+      getMessageById: messageId => {
+        const getter = statements?.getMessageById
+        if (!getter || typeof getter.get !== 'function') return undefined
+        return getter.get(messageId)
       },
     })
   })
@@ -788,6 +889,8 @@ const HERMES_YGG_MCP_SESSION_ID = 'ygg-hermes-tools'
 const HERMES_YGG_EXPOSED_BUILTIN_TOOL_NAMES = new Set([
   'todo_list',
   'fetch_notes',
+  'fetch_chats',
+  'internalLink',
   'read_file',
   'read_file_continuation',
   'read_files',
@@ -1552,6 +1655,7 @@ function initializeLocalDatabase(dbPath: string) {
       `),
     deleteConversation: db.prepare('DELETE FROM conversations WHERE id = ?'),
     getConversationById: db.prepare('SELECT * FROM conversations WHERE id = ?'),
+    getAllConversations: db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC'),
     getLocalConversations: db.prepare(
       "SELECT * FROM conversations WHERE user_id = ? AND storage_mode = 'local' ORDER BY updated_at DESC"
     ),
@@ -3433,6 +3537,40 @@ function setupServer() {
       }
 
       const messageCreatedAt = created_at || new Date().toISOString()
+      const normalizedContentBlocks =
+        typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null)
+
+      if (role === 'assistant' || role === 'ex_agent') {
+        const thinkingText = typeof thinking_block === 'string' ? thinking_block.trim() : ''
+        if (thinkingText.length > 0) {
+          let parsedBlocks: any[] = []
+          try {
+            const parsed =
+              typeof normalizedContentBlocks === 'string' && normalizedContentBlocks
+                ? JSON.parse(normalizedContentBlocks)
+                : null
+            parsedBlocks = Array.isArray(parsed) ? parsed : []
+          } catch {
+            parsedBlocks = []
+          }
+
+          const hasThinkingBlock = parsedBlocks.some(block => block?.type === 'thinking')
+          const hasResponsesReasoning = parsedBlocks.some(block => {
+            if (block?.type !== 'responses_output_items' || !Array.isArray(block?.items)) return false
+            return block.items.some((item: any) => item?.type === 'reasoning')
+          })
+
+          if (!hasThinkingBlock && !hasResponsesReasoning) {
+            console.debug('[LocalServer][sync/message] Assistant message has thinking_block but no reasoning persisted in content_blocks', {
+              messageId: id,
+              conversationId: conversation_id,
+              role,
+              thinkingLength: thinkingText.length,
+              contentBlocksLength: parsedBlocks.length,
+            })
+          }
+        }
+      }
 
       statements.upsertMessage.run(
         id,
@@ -3450,7 +3588,7 @@ function setupServer() {
         note_color || null,
         ex_agent_session_id || null,
         ex_agent_type || null,
-        typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks || null),
+        normalizedContentBlocks,
         messageCreatedAt
       )
 

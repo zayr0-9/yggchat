@@ -8,6 +8,7 @@ import 'katex/dist/katex.min.css'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import ReactMarkdown from 'react-markdown'
+import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeKatex from 'rehype-katex'
@@ -483,6 +484,7 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     onLayoutChange,
   }) => {
     const dispatch = useAppDispatch()
+    const navigate = useNavigate()
     const isMobile = useIsMobile()
     const isDarkMode =
       typeof isDarkModeProp === 'boolean'
@@ -1598,6 +1600,11 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
     }
 
     const renderToolCallGroupCard = (group: ToolCallRenderGroup, key: string) => {
+      const openInternalRoute = (route: string | null | undefined) => {
+        if (!route) return
+        navigate(route)
+      }
+
       // Don't render orphaned groups (results waiting for their tool_call)
       if (group.anchorIndex === -1) {
         return null
@@ -1644,6 +1651,121 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
             {/* Always show HTML output */}
             <div className='mt-2'>
               <HtmlIframe html={extractedHtml} toolName={group.name ?? null} />
+            </div>
+          </div>
+        )
+      }
+
+      const normalizedToolCardName = String(group.name ?? '')
+        .toLowerCase()
+        .replace(/[-\s]/g, '_')
+      const isInternalLinkTool =
+        normalizedToolCardName === 'internallink' || normalizedToolCardName === 'internal_link'
+
+      if (isInternalLinkTool) {
+        const resultPayload = group.results.length > 0 ? group.results[group.results.length - 1].content : null
+        const parsedPayload = (() => {
+          if (typeof resultPayload === 'string') {
+            try {
+              return JSON.parse(resultPayload)
+            } catch {
+              return null
+            }
+          }
+          return resultPayload && typeof resultPayload === 'object' ? resultPayload : null
+        })()
+
+        const target = parsedPayload?.target && typeof parsedPayload.target === 'object' ? parsedPayload.target : null
+        const route: string | null = typeof target?.route === 'string' ? target.route : null
+        const routeType: string = typeof target?.routeType === 'string' ? target.routeType : 'conversation'
+        const conversationIdLabel =
+          typeof target?.conversationId === 'string' && target.conversationId.trim().length > 0
+            ? target.conversationId
+            : null
+        const projectIdLabel =
+          typeof target?.projectId === 'string' && target.projectId.trim().length > 0 ? target.projectId : null
+        const messageIdLabel =
+          typeof target?.messageId === 'string' && target.messageId.trim().length > 0 ? target.messageId : null
+        const providedLabel = typeof parsedPayload?.label === 'string' ? parsedPayload.label.trim() : ''
+        const conversationTitle =
+          typeof target?.conversationTitle === 'string' && target.conversationTitle.trim().length > 0
+            ? target.conversationTitle
+            : null
+        const buttonLabel =
+          providedLabel ||
+          conversationTitle ||
+          (routeType === 'project'
+            ? projectIdLabel
+              ? `Open project ${projectIdLabel}`
+              : 'Open project'
+            : conversationIdLabel
+              ? `Open chat ${conversationIdLabel}`
+              : 'Open chat')
+        const warnings = Array.isArray(parsedPayload?.warnings)
+          ? parsedPayload.warnings.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+          : []
+        const errorText = typeof parsedPayload?.error === 'string' ? parsedPayload.error : null
+        const linkFailed = parsedPayload?.success === false || !route
+
+        return (
+          <div key={toggleKey} className={PROCESS_CARD_WRAPPER_CLASS}>
+            <div
+              className={`${PROCESS_PIP_BASE_CLASS} ${
+                linkFailed
+                  ? 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.4)]'
+                  : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.4)]'
+              }`}
+            />
+            <div className='flex items-center gap-2 mb-2 flex-wrap'>
+              <span className='rounded-[10px] font-mono text-xs bg-neutral-100 dark:bg-neutral-900 px-1.5 py-0.5 rounded border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400'>
+                {group.name || 'internalLink'}
+              </span>
+              <Button
+                variant='outline2'
+                size='small'
+                onClick={() => openInternalRoute(route)}
+                disabled={!route}
+                title={route ? `Navigate to ${route}` : 'No route resolved'}
+              >
+                <i className='bx bx-link-external text-base' aria-hidden='true'></i>
+                <span className='ml-1'>{buttonLabel}</span>
+              </Button>
+            </div>
+            <div className='border-l-2 border-neutral-300/50 dark:border-neutral-700/50 pl-4 py-1 font-mono text-[11px] text-neutral-500 dark:text-neutral-500 leading-relaxed'>
+              {projectIdLabel && (
+                <div>
+                  <span className='text-neutral-400 dark:text-neutral-600'>projectId:</span>{' '}
+                  <span className='text-neutral-600 dark:text-neutral-300'>{projectIdLabel}</span>
+                </div>
+              )}
+              {conversationIdLabel && (
+                <div>
+                  <span className='text-neutral-400 dark:text-neutral-600'>conversationId:</span>{' '}
+                  <span className='text-neutral-600 dark:text-neutral-300'>{conversationIdLabel}</span>
+                </div>
+              )}
+              {messageIdLabel && (
+                <div>
+                  <span className='text-neutral-400 dark:text-neutral-600'>messageId:</span>{' '}
+                  <span className='text-neutral-600 dark:text-neutral-300'>{messageIdLabel}</span>
+                </div>
+              )}
+              {route && (
+                <div className='break-all'>
+                  <span className='text-neutral-400 dark:text-neutral-600'>route:</span>{' '}
+                  <span className='text-neutral-600 dark:text-neutral-300'>{route}</span>
+                </div>
+              )}
+              {!route && errorText && (
+                <div className='text-red-600 dark:text-red-400'>
+                  <span className='text-neutral-400 dark:text-neutral-600'>error:</span> {errorText}
+                </div>
+              )}
+              {warnings.length > 0 && (
+                <div className='mt-1 text-[10px] text-amber-600 dark:text-amber-400'>
+                  {warnings.join(' • ')}
+                </div>
+              )}
             </div>
           </div>
         )
@@ -1727,11 +1849,10 @@ const ChatMessage: React.FC<ChatMessageProps> = React.memo(
       // Check for failure: either structured failure response OR is_error flag on any result
       const hasResults = group.results.length > 0
       const hasError = group.results.some(r => r.is_error) || resultSummary === 'failure'
-      const normalizedToolName = String(group.name ?? '')
-        .toLowerCase()
-        .replace(/[-\s]/g, '_')
       const isEditLikeTool =
-        normalizedToolName === 'edit_file' || normalizedToolName === 'editfile' || normalizedToolName === 'multi_edit'
+        normalizedToolCardName === 'edit_file' ||
+        normalizedToolCardName === 'editfile' ||
+        normalizedToolCardName === 'multi_edit'
       if (isEditLikeTool && group.args) {
         const editResult = group.results.length > 0 ? group.results[0].content : {}
         const isEditToolSuccess = formatToolResultSummary(editResult) === 'success'

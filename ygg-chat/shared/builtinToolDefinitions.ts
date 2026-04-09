@@ -81,43 +81,122 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
     },
   },
   {
-    name: 'fetch_notes',
+    name: 'fetch_chats',
     enabled: true,
     description:
-      'Fetch top-level user notes or sibling branch notes from the current conversation. Default action returns top-level user note entries. Use action="siblings" with branchPointAncestorId to fetch same-level branch note entries under a branch point.',
+      'Browse local chats and branches. Can list chats, fetch compact chat summaries by id, fetch notes for a conversation, or read a linear message segment from a specific branch starting at a message id.',
     inputSchema: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['top_level', 'siblings'],
+          enum: ['list_chats', 'get_chats', 'search_chats', 'search_messages', 'get_notes', 'read_branch'],
           description:
-            'Action to perform: "top_level" (default) returns top-level user note entries in the conversation. "siblings" returns sibling note entries whose parent_id equals branchPointAncestorId.',
+            'Action to perform: "list_chats" returns recent chats with compact metadata and top-level branch messages. "get_chats" returns one or more chats by conversation id. "search_chats" searches chats by title using the same local search path used by the sidebar. "search_messages" searches top-level user messages using the same local path used by the sidebar message search. "get_notes" returns all notes for a specific conversation with message ids. "read_branch" returns a linear segment of messages from a specific message id until a branch point or the end of the branch.',
+        },
+        conversationId: {
+          type: 'string',
+          description: 'Conversation id for "get_chats" or "get_notes". Optional for "list_chats".',
+        },
+        conversationIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Multiple conversation ids for "get_chats".',
+        },
+        userId: {
+          type: 'string',
+          description: 'User id for "search_chats". Optional when it can be inferred from the current conversation or provided conversationId.',
+        },
+        projectId: {
+          type: 'string',
+          description: 'Optional project id filter for "search_chats".',
+        },
+        query: {
+          type: 'string',
+          description: 'Search query for "search_chats".',
         },
         branchPointAncestorId: {
           type: 'string',
-          description: 'Required when action="siblings". Parent id shared by sibling branch-entry messages.',
+          description: 'Optional branch parent id used by note fetching flows.',
+        },
+        messageId: {
+          type: 'string',
+          description: 'Required for "read_branch". Starting message id for the branch read.',
         },
         limit: {
           type: 'integer',
           minimum: 1,
           maximum: 200,
-          description: 'Maximum number of returned entries (default 50).',
+          description: 'Maximum number of returned chats or notes depending on action (default 50).',
         },
         includeEmpty: {
           type: 'boolean',
-          description:
-            'Include entries even when note is empty/null. Default is false (note-bearing entries only).',
+          description: 'For note fetching, include messages even when note is empty/null. Default is false.',
         },
         includeContentPreview: {
           type: 'boolean',
-          description: 'If true, include a truncated content_preview for each returned entry.',
+          description: 'If true, include truncated content_preview fields where applicable. Default is true for chat and branch reads.',
         },
         previewChars: {
           type: 'integer',
           minimum: 20,
           maximum: 1200,
-          description: 'Maximum characters for content preview when includeContentPreview=true (default 180).',
+          description: 'Maximum characters for content previews (default 180).',
+        },
+        offset: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 200,
+          description: 'For "read_branch", number of linear messages to return starting from skip (default 10).',
+        },
+        skip: {
+          type: 'integer',
+          minimum: 0,
+          description: 'For "read_branch", number of messages to skip from the start of the computed linear branch segment.',
+        },
+      },
+    },
+  },
+  {
+    name: 'internalLink',
+    enabled: true,
+    description:
+      'Resolve in-app navigation links for projects, conversations, and message branches. Accepts projectId, conversationId, and/or messageId and returns a normalized internal route for clickable UI navigation.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Optional project id. If used alone, routes to the project conversation page.',
+        },
+        project_id: {
+          type: 'string',
+          description: 'Alias for projectId.',
+        },
+        conversationId: {
+          type: 'string',
+          description: 'Optional conversation id. Routes to the chat for that conversation.',
+        },
+        conversation_id: {
+          type: 'string',
+          description: 'Alias for conversationId.',
+        },
+        messageId: {
+          type: 'string',
+          description:
+            'Optional message id. If provided, the tool resolves its conversation and returns a route anchored to that message branch.',
+        },
+        message_id: {
+          type: 'string',
+          description: 'Alias for messageId.',
+        },
+        chatMessageId: {
+          type: 'string',
+          description: 'Alias for messageId (chat message id).',
+        },
+        label: {
+          type: 'string',
+          description: 'Optional display label for UI rendering.',
         },
       },
     },
@@ -326,7 +405,7 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
           type: 'integer',
           minimum: 1,
           description:
-            'REQUIRED. Approximate start line hint. replace_first searches a local window around this line first (default ±100 lines) before falling back to full-file search.',
+            'REQUIRED. Approximate start line hint. replace_first searches a local window around this line first (default Â±100 lines) before falling back to full-file search.',
         },
         approxEndLine: {
           type: 'integer',
@@ -397,7 +476,7 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
                 type: 'integer',
                 minimum: 1,
                 description:
-                  'Optional approximate start line hint. replace_first searches a local window around this line first (default ±100 lines) before falling back to full-file search.',
+                  'Optional approximate start line hint. replace_first searches a local window around this line first (default Â±100 lines) before falling back to full-file search.',
               },
               approxEndLine: {
                 type: 'integer',
@@ -838,3 +917,6 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
 ]
 
 export default BUILTIN_TOOL_DEFINITIONS
+
+
+

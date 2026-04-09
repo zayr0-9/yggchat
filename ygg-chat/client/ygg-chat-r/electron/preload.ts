@@ -193,7 +193,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('autoUpdater:error', listener)
     },
   },
-  platform: 'electron',
+  platform: process.platform,
 })
 
 // Log that preload script has loaded

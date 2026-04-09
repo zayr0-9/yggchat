@@ -1373,22 +1373,32 @@ export async function createOpenAIChatGPTStreamingRequest(
     const finalAssistantText = replayArtifacts.finalAssistantText || selectFinalAssistantText()
     const finalReasoningText = replayArtifacts.finalReasoningText || assistantReasoning
 
-    if (replayArtifacts.contentBlocks.length === 0) {
-      if (finalReasoningText) {
-        finalContentBlocks.unshift({
-          type: 'thinking',
-          index: 0,
-          content: finalReasoningText,
-        })
-      }
+    const hasThinkingBlock = finalContentBlocks.some(block => block?.type === 'thinking')
 
-      if (finalAssistantText) {
-        finalContentBlocks.unshift({
-          type: 'text',
-          index: 0,
-          content: finalAssistantText,
-        })
-      }
+    if (finalReasoningText && !hasThinkingBlock) {
+      // Important: ChatMessage prefers content_blocks over legacy thinking_block.
+      // If reasoning was only emitted in stream deltas (assistantReasoning) and not in
+      // replayItems, we must still persist a concrete `thinking` content_block or
+      // reasoning disappears after reload even though it was visible during streaming.
+      finalContentBlocks.unshift({
+        type: 'thinking',
+        index: 0,
+        content: finalReasoningText,
+      })
+
+      console.debug('[OpenAI ChatGPT] Backfilled missing thinking block from streamed reasoning', {
+        messageId: assistantMessageId,
+        reasoningLength: finalReasoningText.length,
+        replayItemsCount: replayItems.length,
+      })
+    }
+
+    if (replayArtifacts.contentBlocks.length === 0 && finalAssistantText) {
+      finalContentBlocks.unshift({
+        type: 'text',
+        index: 0,
+        content: finalAssistantText,
+      })
     }
 
     if (replayItems.length > 0) {

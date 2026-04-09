@@ -166,7 +166,7 @@ export const BrowserPane: React.FC<BrowserPaneProps> = ({
   const updateTabRef = useRef(onUpdateTab)
   const [addressValue, setAddressValue] = useState('')
   const [guestDevToolsEnabled, setGuestDevToolsEnabled] = useState(() => loadBrowserSettings().guestDevToolsEnabled)
-  const isElectronRuntime = window.electronAPI?.platform === 'electron'
+  const isElectronRuntime = Boolean(window.electronAPI)
   const activeBrowser = useMemo(
     () => browserTabs.find(tab => tab.id === activeBrowserTabId) ?? browserTabs[0] ?? null,
     [activeBrowserTabId, browserTabs]

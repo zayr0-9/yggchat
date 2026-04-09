@@ -345,7 +345,11 @@ const getWorkspaceMutationBadgeClassName = (operation: WorkspaceMutationOperatio
 //   return stringValue.length > 18 ? `${stringValue.slice(0, 8)}…${stringValue.slice(-6)}` : stringValue
 // }
 
-const EmptyChatState = () => (
+type EmptyChatStateProps = {
+  onSelectProjectFolder?: () => Promise<void> | void
+}
+
+const EmptyChatState = ({ onSelectProjectFolder }: EmptyChatStateProps) => (
   <div className='flex min-h-[420px] flex-1 items-center justify-center px-6 py-12 sm:px-10'>
     <div className='mx-auto flex max-w-sm flex-col items-center text-center'>
       <div className='mb-5 rounded-[28px] border border-stone-200/80 bg-white/75 p-5 shadow-[0_16px_40px_-24px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/70'>
@@ -383,6 +387,32 @@ const EmptyChatState = () => (
       <p className='mt-2 max-w-xs text-sm leading-6 text-stone-600 dark:text-stone-400'>
         Ask a question, drop in some context, or sketch an idea to make it real.
       </p>
+      <div className='mt-4 flex items-center gap-3'>
+        <span className='text-sm font-medium text-stone-700 dark:text-stone-300'>Open project folder</span>
+        <button
+          type='button'
+          onClick={() => {
+            void onSelectProjectFolder?.()
+          }}
+          className='inline-flex items-center justify-center rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 transition hover:bg-stone-100 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800 dark:focus:ring-orange-500/60'
+          title='Select project folder'
+        >
+          <svg
+            xmlns='http://www.w3.org/2000/svg'
+            className='h-4 w-4'
+            fill='none'
+            viewBox='0 0 24 24'
+            stroke='currentColor'
+          >
+            <path
+              strokeLinecap='round'
+              strokeLinejoin='round'
+              strokeWidth={2}
+              d='M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z'
+            />
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 )
@@ -635,6 +665,27 @@ const parseMessageDataForRender = (msg: Message): ParsedMessageData => {
     } catch (error) {
       console.warn(`Failed to parse content_blocks for message ${msg.id}`, error)
       contentBlocks = undefined
+    }
+  }
+
+  if (msg.role === 'assistant' || msg.role === 'ex_agent') {
+    const legacyThinking = typeof msg.thinking_block === 'string' ? msg.thinking_block.trim() : ''
+    if (legacyThinking.length > 0) {
+      const hasThinkingInBlocks = Array.isArray(contentBlocks)
+        ? contentBlocks.some(block => block?.type === 'thinking')
+        : false
+      const hasResponsesReasoningInBlocks = Array.isArray(contentBlocks)
+        ? contentBlocks.some(block => getResponsesOutputReasoningCount(block) > 0)
+        : false
+
+      if (!hasThinkingInBlocks && !hasResponsesReasoningInBlocks) {
+        console.debug('[Chat] Legacy thinking_block present but no reasoning in content_blocks', {
+          messageId: msg.id,
+          role: msg.role,
+          thinkingLength: legacyThinking.length,
+          contentBlocksCount: Array.isArray(contentBlocks) ? contentBlocks.length : 0,
+        })
+      }
     }
   }
 
@@ -2615,6 +2666,13 @@ function Chat() {
     },
     [currentConversationId, dispatch]
   )
+
+  const handleSelectProjectFolder = useCallback(async () => {
+    const result = await window.electronAPI?.dialog?.selectFolder()
+    if (result?.success && result.path) {
+      setCcCwdFromUser(result.path)
+    }
+  }, [setCcCwdFromUser])
 
   const setCcCwdFromSystem = useCallback(
     (nextValue: string) => {
@@ -5722,7 +5780,7 @@ function Chat() {
           >
             <React.Profiler id='chat-virtual-list' onRender={handleVirtualListProfilerRender}>
               {virtualRows.length === 0 ? (
-                <EmptyChatState />
+                <EmptyChatState onSelectProjectFolder={handleSelectProjectFolder} />
               ) : (
                 (() => {
                   const totalSize = virtualizer.getTotalSize()
@@ -6613,12 +6671,7 @@ function Chat() {
                               />
                               <button
                                 type='button'
-                                onClick={async () => {
-                                  const result = await window.electronAPI?.dialog?.selectFolder()
-                                  if (result?.success && result.path) {
-                                    setCcCwdFromUser(result.path)
-                                  }
-                                }}
+                                onClick={handleSelectProjectFolder}
                                 className='px-3 py-2 text-sm border border-neutral-300 dark:border-neutral-900 rounded-lg bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:focus:ring-orange-500/60'
                                 style={
                                   actionPopoverInputBorderColor

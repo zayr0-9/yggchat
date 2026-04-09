@@ -33,6 +33,7 @@ export const MessageList: React.FC<MessageListProps> = ({
   useEffect(() => {
     if (!containerRef.current) return
     if (scrollToMessageId) return
+    if (streamingMessage) return
     containerRef.current.scrollTop = containerRef.current.scrollHeight
   }, [messages, streamingMessage, scrollToMessageId])
 

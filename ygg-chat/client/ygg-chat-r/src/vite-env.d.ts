@@ -127,7 +127,7 @@ interface ElectronAPI {
     ) => Promise<{ success: boolean; result?: any; error?: string }>
     clearCache: (toolPath?: string) => Promise<{ success: boolean; cleared?: number; error?: string }>
   }
-  platform: 'electron'
+  platform: string
 }
 
 interface Window {

@@ -1644,7 +1644,7 @@ const Settings: React.FC = () => {
     clearCustomVideoLibrary()
     setVideos([])
     setActiveVideoId(null)
-    showStatus({ type: 'success', text: 'Gallery cleared. Using the default transparent background.' })
+    showStatus({ type: 'success', text: 'Gallery cleared. Using the default app background.' })
   }
 
   const handleResetToDefault = () => {
@@ -1652,7 +1652,7 @@ const Settings: React.FC = () => {
     persistBackgroundMode('color')
     setActiveVideoId(null)
     setBackgroundMode('color')
-    showStatus({ type: 'success', text: 'Reverted to the default transparent background.' })
+    showStatus({ type: 'success', text: 'Reverted to the default app background.' })
   }
 
   const handleTextColorModeChange = (id: string, mode: 'light' | 'dark' | 'auto') => {
@@ -3357,8 +3357,8 @@ const Settings: React.FC = () => {
             })}
           </div>
           <p className='mt-4 text-xs text-stone-500 dark:text-stone-400'>
-            Solid colors automatically switch with the theme, and you can set either theme to transparent. When you’re
-            ready for motion, switch back to video wallpapers.
+            Solid colors automatically switch with the theme, and you can still set either theme to transparent if you
+            want. When you’re ready for motion, switch back to video wallpapers.
           </p>
         </section>
 

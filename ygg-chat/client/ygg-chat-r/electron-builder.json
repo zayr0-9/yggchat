@@ -1,7 +1,7 @@
 {
   "electronVersion": "38.8.4",
   "appId": "com.graviton.chat",
-  "icon": "public/img/graviton-dark.png",
+  "icon": "public/img/graviton-dark1.ico",
   "productName": "Graviton",
   "directories": {
     "output": "release"
@@ -41,7 +41,8 @@
     }
   ],
   "win": {
-    "target": ["nsis"]
+    "target": ["nsis"],
+    "icon": "public/img/graviton-dark1.ico"
   },
   "mac": {
     "target": ["dmg"],

@@ -453,10 +453,15 @@ function syncHermesRuntimeSettingsFromStore(): void {
 // Helper to get icon path
 
 function getIconPath(_isDark?: boolean) {
-  const logoFile = 'graviton-dark.png'
-  return app.isPackaged
-    ? path.join(__dirname, '../dist-electron/img', logoFile)
-    : path.join(__dirname, '../public/img', logoFile)
+  const logoFile = process.platform === 'win32' ? 'graviton-dark1.ico' : 'graviton-dark.png'
+  const iconBasePath = app.isPackaged ? path.join(__dirname, '../dist-electron/img') : path.join(__dirname, '../public/img')
+  const preferredIconPath = path.join(iconBasePath, logoFile)
+
+  if (process.platform === 'win32' && !fs.existsSync(preferredIconPath)) {
+    return path.join(iconBasePath, 'graviton-dark.png')
+  }
+
+  return preferredIconPath
 }
 
 // function applyTitleBarTheme(win: BrowserWindow, isDark?: boolean) {

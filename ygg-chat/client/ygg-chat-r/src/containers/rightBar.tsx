@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { Crosshair, Eraser, RotateCcw, X } from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
@@ -2683,14 +2684,14 @@ const RightBar: React.FC<RightBarProps> = ({
       },
       {
         key: 'staged' as const,
-        label: 'Staged',
+        label: 'Staged Changes',
         files: gitOverviewData?.status.staged || [],
         badgeClass:
           'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200',
       },
       {
         key: 'unstaged' as const,
-        label: 'Unstaged',
+        label: 'Changes',
         files: gitOverviewData?.status.unstaged || [],
         badgeClass:
           'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200',
@@ -3602,17 +3603,17 @@ const RightBar: React.FC<RightBarProps> = ({
                                       : section.key === 'untracked'
                                         ? Boolean(selectedGitDiff?.untracked)
                                         : !selectedGitDiff?.staged && !selectedGitDiff?.untracked)
-                                  const fileStatusDescription = file.isDeleted
-                                    ? 'Deleted'
-                                    : file.isRenamed
-                                      ? 'Renamed'
-                                      : file.untracked
-                                        ? 'Untracked'
-                                        : file.conflicted
-                                          ? 'Conflict requires resolution'
-                                          : section.key === 'staged'
-                                            ? 'Staged'
-                                            : 'Modified in working tree'
+                                  // const fileStatusDescription = file.isDeleted
+                                  //   ? 'Deleted'
+                                  //   : file.isRenamed
+                                  //     ? 'Renamed'
+                                  //     : file.untracked
+                                  //       ? 'Untracked'
+                                  //       : file.conflicted
+                                  //         ? 'Conflict requires resolution'
+                                  //         : section.key === 'staged'
+                                  //           ? 'Staged'
+                                  //           : 'Modified in working tree'
                                   const normalizedRelativePath = normalizeRelativeGitPath(
                                     file.relativePath || file.displayPath || file.path
                                   )
@@ -3632,7 +3633,7 @@ const RightBar: React.FC<RightBarProps> = ({
                                         <span className='mt-0.5 inline-flex h-5 shrink-0 items-center rounded-full bg-neutral-100 px-1.5 text-[9px] font-semibold leading-none text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'>
                                           {file.code}
                                         </span>
-                                        <div className='min-w-0 flex-1 pr-28'>
+                                        <div className='min-w-0 flex-1'>
                                           <button
                                             onClick={() => handleSelectGitDiff(file, section.key === 'staged')}
                                             className='w-full min-w-0 text-left'
@@ -3652,12 +3653,12 @@ const RightBar: React.FC<RightBarProps> = ({
                                                 {fileDirectoryPath}
                                               </span>
                                             </div>
-                                            <div className='mt-0.5 truncate text-[10px] text-neutral-500 dark:text-neutral-400'>
+                                            {/* <div className='mt-0.5 truncate text-[10px] text-neutral-500 dark:text-neutral-400'>
                                               {fileStatusDescription}
-                                            </div>
+                                            </div> */}
                                           </button>
                                         </div>
-                                        <div className='pointer-events-none absolute inset-y-0 right-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100'>
+                                        <div className='pointer-events-none absolute right-1 top-1 z-10 flex items-center gap-1 rounded-md bg-white/90 p-0.5 opacity-0 shadow-sm ring-1 ring-black/5 backdrop-blur-sm transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 dark:bg-neutral-950/90 dark:ring-white/10'>
                                           <button
                                             type='button'
                                             onClick={() => openGitDiffTab(file, section.key === 'staged')}
@@ -4074,77 +4075,83 @@ const RightBar: React.FC<RightBarProps> = ({
                         return (
                           <div
                             key={tab.id}
-                            className={`px-1 py-1.5 transition-colors ${
+                            className={`group relative px-1 py-1.5 transition-colors ${
                               isFocused
                                 ? 'rounded-lg bg-violet-50/60 dark:bg-violet-500/10'
                                 : 'hover:bg-neutral-100/60 dark:hover:bg-neutral-900/40'
                             }`}
                           >
-                            <div className='flex items-start justify-between gap-3'>
+                            <button
+                              type='button'
+                              onClick={() => {
+                                dispatch(uiActions.rightBarExpanded())
+                                setActiveDockTabId(tabDockId)
+                              }}
+                              className='min-w-0 w-full text-left'
+                            >
+                              <div className='flex min-w-0 items-center gap-2'>
+                                <span className='truncate text-[11px] font-medium text-neutral-900 dark:text-neutral-100'>
+                                  {tab.title}
+                                </span>
+                                <span className={`shrink-0 text-[10px] font-medium ${statusClassName}`}>
+                                  {statusLabel}
+                                </span>
+                                {isFocused && (
+                                  <span className='shrink-0 text-[10px] font-medium text-violet-600 dark:text-violet-300'>
+                                    focused
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                className='mt-0.5 truncate text-[10px] text-neutral-500 dark:text-neutral-400'
+                                title={tab.cwd}
+                              >
+                                {tab.cwd}
+                                {tab.history
+                                  ? ` • ${Math.min(tab.history.length, TERMINAL_HISTORY_LIMIT).toLocaleString()} chars`
+                                  : ''}
+                              </div>
+                            </button>
+                            <div className='pointer-events-none absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded-md bg-white/90 p-0.5 opacity-0 shadow-sm ring-1 ring-black/5 backdrop-blur-sm transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 dark:bg-neutral-950/90 dark:ring-white/10'>
                               <button
                                 type='button'
+                                aria-label='Focus terminal'
+                                title='Focus terminal'
                                 onClick={() => {
                                   dispatch(uiActions.rightBarExpanded())
                                   setActiveDockTabId(tabDockId)
                                 }}
-                                className='min-w-0 flex-1 text-left'
+                                className='rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-200/80 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
                               >
-                                <div className='flex min-w-0 items-center gap-2'>
-                                  <span className='truncate text-[11px] font-medium text-neutral-900 dark:text-neutral-100'>
-                                    {tab.title}
-                                  </span>
-                                  <span className={`shrink-0 text-[10px] font-medium ${statusClassName}`}>
-                                    {statusLabel}
-                                  </span>
-                                  {isFocused && (
-                                    <span className='shrink-0 text-[10px] font-medium text-violet-600 dark:text-violet-300'>
-                                      focused
-                                    </span>
-                                  )}
-                                </div>
-                                <div
-                                  className='mt-0.5 truncate text-[10px] text-neutral-500 dark:text-neutral-400'
-                                  title={tab.cwd}
-                                >
-                                  {tab.cwd}
-                                  {tab.history
-                                    ? ` • ${Math.min(tab.history.length, TERMINAL_HISTORY_LIMIT).toLocaleString()} chars`
-                                    : ''}
-                                </div>
+                                <Crosshair className='h-3.5 w-3.5' />
                               </button>
-                              <div className='mt-0.5 flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1'>
-                                <button
-                                  type='button'
-                                  onClick={() => {
-                                    dispatch(uiActions.rightBarExpanded())
-                                    setActiveDockTabId(tabDockId)
-                                  }}
-                                  className='text-[10px] font-medium text-neutral-500 transition-colors hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200'
-                                >
-                                  Focus
-                                </button>
-                                <button
-                                  type='button'
-                                  onClick={() => restartTerminalDock(tab.id)}
-                                  className='text-[10px] font-medium text-neutral-500 transition-colors hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200'
-                                >
-                                  Restart
-                                </button>
-                                <button
-                                  type='button'
-                                  onClick={() => clearTerminalDockBuffer(tab.id)}
-                                  className='text-[10px] font-medium text-neutral-500 transition-colors hover:text-neutral-800 dark:text-neutral-400 dark:hover:text-neutral-200'
-                                >
-                                  Clear
-                                </button>
-                                <button
-                                  type='button'
-                                  onClick={() => closeTerminalDock(tab.id)}
-                                  className='text-[10px] font-medium text-neutral-500 transition-colors hover:text-rose-600 dark:text-neutral-400 dark:hover:text-rose-300'
-                                >
-                                  Close
-                                </button>
-                              </div>
+                              <button
+                                type='button'
+                                aria-label='Restart terminal'
+                                title='Restart terminal'
+                                onClick={() => restartTerminalDock(tab.id)}
+                                className='rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-200/80 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
+                              >
+                                <RotateCcw className='h-3.5 w-3.5' />
+                              </button>
+                              <button
+                                type='button'
+                                aria-label='Clear terminal buffer'
+                                title='Clear terminal buffer'
+                                onClick={() => clearTerminalDockBuffer(tab.id)}
+                                className='rounded p-1 text-neutral-500 transition-colors hover:bg-neutral-200/80 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'
+                              >
+                                <Eraser className='h-3.5 w-3.5' />
+                              </button>
+                              <button
+                                type='button'
+                                aria-label='Close terminal'
+                                title='Close terminal'
+                                onClick={() => closeTerminalDock(tab.id)}
+                                className='rounded p-1 text-neutral-500 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:text-neutral-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-300'
+                              >
+                                <X className='h-3.5 w-3.5' />
+                              </button>
                             </div>
                           </div>
                         )

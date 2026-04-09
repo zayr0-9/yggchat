@@ -18,10 +18,27 @@ export interface BackgroundColorSettings {
   dark: string
 }
 
-export const DEFAULT_BACKGROUND_COLORS: BackgroundColorSettings = {
+const LINUX_DEFAULT_BACKGROUND_COLORS: BackgroundColorSettings = {
+  light: '#F5F5F4',
+  dark: '#0C0A09',
+}
+
+const TRANSPARENT_DEFAULT_BACKGROUND_COLORS: BackgroundColorSettings = {
   light: 'transparent',
   dark: 'transparent',
 }
+
+const isElectronLinux = (): boolean => {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return window.electronAPI?.platform === 'linux'
+}
+
+export const DEFAULT_BACKGROUND_COLORS: BackgroundColorSettings = isElectronLinux()
+  ? LINUX_DEFAULT_BACKGROUND_COLORS
+  : TRANSPARENT_DEFAULT_BACKGROUND_COLORS
 
 const HEX_COLOR_REGEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
 const BACKGROUND_PREFERENCE_KEY = 'yggdrasil_background_preference'
