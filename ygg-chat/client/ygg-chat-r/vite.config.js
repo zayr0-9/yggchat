@@ -28,7 +28,7 @@ export default defineConfig(function () {
         // Build configuration
         build: {
             outDir: isElectron ? 'dist-electron' : 'dist',
-            sourcemap: true,
+            sourcemap: false,
             rollupOptions: {
                 output: {
                     // Code-split by feature for tree-shaking
