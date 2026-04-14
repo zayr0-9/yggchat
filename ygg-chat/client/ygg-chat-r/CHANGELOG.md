@@ -6,7 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-## [0.1.87] - 2026-04-14
+### Added
+
+### Changed
+
+### Fixed
+
+## [0.1.88] - 2026-04-14
 
 ### Added
 
@@ -25,12 +31,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Fixed LM Studio server address handling so the client no longer depends on a static base URL.
 - Fixed branch-parenting behavior for explain selection in the chat flow.
-
-### Added
-
-### Changed
-
-### Fixed
 
 ## [0.1.86] - 2026-04-04
 
