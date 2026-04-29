@@ -1,0 +1,182 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { OpenAiChatgptProvider } from '../openaiChatgptProvider.js'
+
+function createSseStream(events: any[]) {
+  const encoder = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+      }
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.close()
+    },
+  })
+}
+
+describe('OpenAiChatgptProvider', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    delete process.env.OPENAI_CHATGPT_ACCESS_TOKEN
+    delete process.env.OPENAI_ACCESS_TOKEN
+    delete process.env.OPENAI_CHATGPT_ACCOUNT_ID
+  })
+
+  it('enables parallel tool calls and preserves final_answer text for gpt-5.3-codex', async () => {
+    process.env.OPENAI_CHATGPT_ACCESS_TOKEN = 'header.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdC0xIn19.sig'
+
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      expect(body.parallel_tool_calls).toBe(true)
+
+      return {
+        ok: true,
+        status: 200,
+        body: createSseStream([
+          {
+            type: 'response.output_item.added',
+            item: {
+              id: 'msg-commentary',
+              type: 'message',
+              role: 'assistant',
+              phase: 'commentary',
+              output_index: 0,
+            },
+          },
+          {
+            type: 'response.output_text.delta',
+            item_id: 'msg-commentary',
+            output_index: 0,
+            delta: 'assistant to=functions.read_file {"path":"/tmp/localServer.ts"}',
+          },
+          {
+            type: 'response.output_item.added',
+            item: {
+              id: 'msg-final',
+              type: 'message',
+              role: 'assistant',
+              phase: 'final_answer',
+              output_index: 1,
+            },
+          },
+          {
+            type: 'response.output_text.delta',
+            item_id: 'msg-final',
+            output_index: 1,
+            delta: 'Final safe answer',
+          },
+          {
+            type: 'response.output_item.done',
+            item: {
+              id: 'call-1',
+              type: 'function_call',
+              call_id: 'call-1',
+              name: 'read_file',
+              arguments: '{"path":"README.md"}',
+              output_index: 2,
+            },
+          },
+          {
+            type: 'response.completed',
+            response: {
+              output: [
+                {
+                  id: 'msg-commentary',
+                  type: 'message',
+                  role: 'assistant',
+                  phase: 'commentary',
+                  output_index: 0,
+                  content: [{ type: 'output_text', text: 'assistant to=functions.read_file {"path":"/tmp/localServer.ts"}' }],
+                },
+                {
+                  id: 'msg-final',
+                  type: 'message',
+                  role: 'assistant',
+                  phase: 'final_answer',
+                  output_index: 1,
+                  content: [{ type: 'output_text', text: 'Final safe answer' }],
+                },
+                {
+                  id: 'call-1',
+                  type: 'function_call',
+                  call_id: 'call-1',
+                  name: 'read_file',
+                  arguments: '{"path":"README.md"}',
+                  output_index: 2,
+                },
+              ],
+            },
+          },
+        ]),
+        text: async () => '',
+      } as any
+    })
+
+    const provider = new OpenAiChatgptProvider()
+    const events: any[] = []
+    const result = await provider.generate(
+      {
+        modelName: 'gpt-5.3-codex',
+        history: [],
+        userContent: 'hello',
+        tools: [{ name: 'read_file', description: 'Read a file', inputSchema: { type: 'object', properties: {} } }],
+      },
+      event => events.push(event)
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.content).toBe('Final safe answer')
+    expect(result.toolCalls).toEqual([
+      {
+        id: 'call-1',
+        name: 'read_file',
+        arguments: { path: 'README.md' },
+        status: 'pending',
+      },
+    ])
+    expect(result.raw?.responses_output_items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'message', phase: 'final_answer', output_index: 1 }),
+        expect.objectContaining({ type: 'function_call', call_id: 'call-1', output_index: 2 }),
+      ])
+    )
+    expect(events).toContainEqual({ type: 'chunk', part: 'text', delta: 'Final safe answer' })
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: 'chunk',
+        part: 'text',
+        delta: expect.stringContaining('assistant to=functions.read_file'),
+      })
+    )
+  })
+
+  it('throws on incomplete responses surfaced by SSE', async () => {
+    process.env.OPENAI_CHATGPT_ACCESS_TOKEN = 'header.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdC0yIn19.sig'
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: createSseStream([
+        {
+          type: 'response.incomplete',
+          response: {
+            error: {
+              message: 'Provider stopped early',
+            },
+          },
+        },
+      ]),
+      text: async () => '',
+    } as any)
+
+    const provider = new OpenAiChatgptProvider()
+
+    await expect(
+      provider.generate({
+        modelName: 'gpt-5.2-codex',
+        history: [],
+        userContent: 'hello',
+      })
+    ).rejects.toThrow('Provider stopped early')
+  })
+})

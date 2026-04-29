@@ -996,19 +996,20 @@ const RightBar: React.FC<RightBarProps> = ({
   }, [])
 
   const getActivityBadgeClasses = useCallback((kind: AgentStreamActivityKind): string => {
+    const baseClasses = 'rounded-full px-2 py-0.5 font-medium'
     if (kind === 'tool_call' || kind === 'tool_result') {
-      return 'rounded-full border border-violet-300/70 dark:border-violet-500/50 bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-200 px-2 py-0.5'
+      return `${baseClasses} bg-violet-100/80 dark:bg-violet-500/15 text-violet-700 dark:text-violet-200`
     }
     if (kind === 'reasoning') {
-      return 'rounded-full border border-sky-300/70 dark:border-sky-500/50 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-200 px-2 py-0.5'
+      return `${baseClasses} bg-sky-100/80 dark:bg-sky-500/15 text-sky-700 dark:text-sky-200`
     }
     if (kind === 'text') {
-      return 'rounded-full border border-emerald-300/70 dark:border-emerald-500/50 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-200 px-2 py-0.5'
+      return `${baseClasses} bg-emerald-100/80 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-200`
     }
     if (kind === 'image') {
-      return 'rounded-full border border-fuchsia-300/70 dark:border-fuchsia-500/50 bg-fuchsia-50 dark:bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-200 px-2 py-0.5'
+      return `${baseClasses} bg-fuchsia-100/80 dark:bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-200`
     }
-    return 'rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'
+    return `${baseClasses} bg-neutral-100 dark:bg-neutral-800/70 text-neutral-600 dark:text-neutral-300`
   }, [])
 
   const notesByConversationId = useMemo(() => {
@@ -3205,7 +3206,7 @@ const RightBar: React.FC<RightBarProps> = ({
                 {displayedDirectoryFiles.map(file => (
                   <div
                     key={`${isFileSearchMode ? 'search' : 'list'}-${file.path}`}
-                    className='flex items-center gap-1.5 rounded-[10px] my-1.5 bg-neutral-50 acrylic-ultra-light-nb-3 px-1.5 py-0.5 rounded text-[13px] transition-colors group'
+                    className='flex items-center gap-1.5 my-0.5 px-1 py-1 text-[13px] transition-colors group'
                   >
                     <div
                       role='button'
@@ -3219,7 +3220,7 @@ const RightBar: React.FC<RightBarProps> = ({
                       }}
                       className={`flex items-center gap-1.5 flex-1 min-w-0 ${
                         file.isDirectory
-                          ? 'cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded px-1 -mx-1'
+                          ? 'cursor-pointer hover:text-neutral-900 dark:hover:text-neutral-100'
                           : 'cursor-default text-neutral-500 dark:text-neutral-400'
                       }`}
                       title={file.path}
@@ -4184,7 +4185,7 @@ const RightBar: React.FC<RightBarProps> = ({
                                 handleActiveStreamClick(stream)
                               }
                             }}
-                            className='w-full text-left rounded-lg transition-all duration-200 cursor-pointer border border-transparent hover:border-neutral-200 hover:bg-stone-100/40 dark:hover:border-neutral-700 dark:hover:bg-yBlack-900/20 px-2 py-2'
+                            className='w-full text-left rounded-xl transition-colors duration-200 cursor-pointer bg-neutral-50/60 hover:bg-neutral-100/80 dark:bg-yBlack-900/20 dark:hover:bg-neutral-800/45 px-3 py-2.5'
                           >
                             <div className='flex items-start justify-between gap-2'>
                               <div className='min-w-0 flex-1'>
@@ -4192,17 +4193,8 @@ const RightBar: React.FC<RightBarProps> = ({
                                   {stream.conversationTitle || `Conversation ${stream.conversationId || 'Unknown'}`}
                                 </div>
                                 <div className='mt-1 text-[11px] text-neutral-500 dark:text-neutral-400 flex flex-wrap gap-2'>
-                                  <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
-                                    {stream.streamType}
-                                  </span>
                                   <span className={getActivityBadgeClasses(stream.activityKind)}>
                                     {stream.activityLabel}
-                                  </span>
-                                  <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
-                                    stream {summarizeId(stream.streamId)}
-                                  </span>
-                                  <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
-                                    anchor {summarizeId(stream.anchorMessageId)}
                                   </span>
                                 </div>
                                 <div className='mt-1 text-[10px] text-neutral-500 dark:text-neutral-400'>
@@ -4214,7 +4206,7 @@ const RightBar: React.FC<RightBarProps> = ({
                                   {new Date(stream.createdAt).toLocaleTimeString()}
                                 </span>
                                 {stream.hasError && (
-                                  <span className='text-[10px] rounded-full border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-200 px-2 py-0.5'>
+                                  <span className='text-[10px] rounded-full bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-200 px-2 py-0.5'>
                                     error
                                   </span>
                                 )}
@@ -4227,7 +4219,7 @@ const RightBar: React.FC<RightBarProps> = ({
                   )}
                 </div>
 
-                <div className='border-t border-neutral-200 dark:border-neutral-800' />
+                <div className='h-px bg-neutral-200/60 dark:bg-neutral-800/60' />
 
                 <div>
                   <div className='px-2 pb-1 text-[11px] uppercase tracking-[0.16em] text-neutral-500 dark:text-neutral-400'>
@@ -4251,7 +4243,7 @@ const RightBar: React.FC<RightBarProps> = ({
                                 handleActiveStreamClick(stream)
                               }
                             }}
-                            className='w-full text-left rounded-lg transition-all duration-200 cursor-pointer border border-neutral-200/80 dark:border-neutral-800 hover:border-neutral-300 dark:hover:border-neutral-700 bg-stone-50/40 dark:bg-yBlack-900/20 px-2 py-2'
+                            className='w-full text-left rounded-xl transition-colors duration-200 cursor-pointer bg-stone-50/60 hover:bg-neutral-100/80 dark:bg-yBlack-900/20 dark:hover:bg-neutral-800/45 px-3 py-2.5 opacity-90 hover:opacity-100'
                           >
                             <div className='flex items-start justify-between gap-2'>
                               <div className='min-w-0 flex-1'>
@@ -4259,21 +4251,15 @@ const RightBar: React.FC<RightBarProps> = ({
                                   {stream.conversationTitle || `Conversation ${stream.conversationId || 'Unknown'}`}
                                 </div>
                                 <div className='mt-1 text-[11px] text-neutral-500 dark:text-neutral-400 flex flex-wrap gap-2'>
-                                  <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
-                                    {stream.streamType}
-                                  </span>
                                   <span className={getActivityBadgeClasses(stream.activityKind)}>
                                     {stream.activityLabel}
                                   </span>
-                                  <span className='rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
-                                    stream {summarizeId(stream.streamId)}
-                                  </span>
                                   {stream.hasError ? (
-                                    <span className='text-[10px] rounded-full border border-rose-300 dark:border-rose-500/40 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-200 px-2 py-0.5'>
+                                    <span className='text-[10px] rounded-full bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-200 px-2 py-0.5'>
                                       ended with error
                                     </span>
                                   ) : (
-                                    <span className='text-[10px] rounded-full border border-neutral-200 dark:border-neutral-700 px-2 py-0.5'>
+                                    <span className='text-[10px] rounded-full bg-neutral-100 dark:bg-neutral-800/70 px-2 py-0.5'>
                                       completed
                                     </span>
                                   )}

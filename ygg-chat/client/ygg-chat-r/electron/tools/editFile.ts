@@ -27,6 +27,7 @@ export interface EditFileOptions {
   approxStartLine?: number // Optional approximate start line hint for replace_first windowed matching
   approxEndLine?: number // Optional approximate end line hint for replace_first windowed matching
   lineHintWindow?: number // Optional +/- window size (lines) around hints for replace_first (default: 100)
+  skipLastModifiedValidation?: boolean // Skip mtime validation while still allowing inode validation (used by multi_edit sequential edits)
 }
 
 export type EditOperation = 'replace' | 'replace_first' | 'append'
@@ -862,6 +863,7 @@ export async function multiEdit(
       approxEndLine: edit.approxEndLine,
       expectedHash: edit.expectedHash,
       expectedMetadata: edit.expectedMetadata,
+      skipLastModifiedValidation: true,
     })
 
     const itemResult: MultiEditItemResult = {
@@ -911,6 +913,10 @@ function calculateHash(content: string): string {
 
 function shouldValidateAgainstExpectations(options: EditFileOptions, validateContent: boolean): boolean {
   if (!validateContent) return false
+
+  if (options.skipLastModifiedValidation) {
+    return options.expectedMetadata?.inode !== undefined
+  }
 
   return Boolean(options.expectedMetadata?.lastModified || options.expectedMetadata?.inode !== undefined)
 }

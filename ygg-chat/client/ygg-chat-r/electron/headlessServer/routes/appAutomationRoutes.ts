@@ -1039,6 +1039,21 @@ export function registerAppAutomationRoutes(app: Express, deps: AppAutomationRou
     }
   })
 
+  app.get('/api/app/messages/:id', (req, res) => {
+    try {
+      const { id } = req.params
+      const message = statements.getMessageById.get(id) as any
+      if (!message) {
+        res.status(404).json({ error: 'Message not found' })
+        return
+      }
+      res.json(message)
+    } catch (error) {
+      console.error('[HeadlessServer] Error fetching app message:', error)
+      res.status(500).json({ error: 'Failed to fetch message' })
+    }
+  })
+
   const updateMessageHandler = (req: any, res: any) => {
     try {
       const { id } = req.params

@@ -8,11 +8,17 @@ export const createEmptyStreamState = (
   lineage: StreamLineage = {}
 ): StreamState => ({
   active: false,
+  status: 'idle',
   buffer: '',
   thinkingBuffer: '',
   toolCalls: [],
   events: [],
   messageId: null,
+  branchAnchorMessageId: lineage.rootMessageId ?? lineage.originMessageId ?? null,
+  liveMessageId: null,
+  lastCompletedMessageId: null,
+  finalMessageId: null,
+  suppressedEventCount: 0,
   error: null,
   finished: false,
   streamingMessageId: null,

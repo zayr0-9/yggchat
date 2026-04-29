@@ -207,7 +207,10 @@ export const selectCurrentViewStream = createSelector(
         let score = 0
 
         const candidateIds = [
-          stream.streamingMessageId,
+          stream.liveMessageId ?? stream.streamingMessageId,
+          stream.branchAnchorMessageId,
+          stream.lastCompletedMessageId,
+          stream.finalMessageId,
           stream.messageId,
           stream.lineage.rootMessageId,
           stream.lineage.originMessageId,

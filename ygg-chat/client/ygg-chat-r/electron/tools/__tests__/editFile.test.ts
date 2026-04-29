@@ -176,6 +176,48 @@ describe('multiEdit behavior', () => {
     expect(await harness.readFile('first.txt')).toBe('ONE')
     expect(await harness.readFile('third.txt')).toBe('THREE')
   })
+
+  it('skips lastModified validation for later sequential multi_edit items', async () => {
+    const harness = await createToolFsHarness()
+    await harness.writeFile('shared.txt', 'alpha\nbeta\n')
+    const readResult = await readTextFile('shared.txt', {
+      cwd: harness.workspaceDir,
+      includeHash: true,
+    })
+    const metadataWithoutInode = {
+      ...readResult.metadata,
+      inode: undefined,
+    }
+
+    const result = await multiEdit(
+      [
+        {
+          path: 'shared.txt',
+          operation: 'replace',
+          searchPattern: 'alpha',
+          replacement: 'ALPHA',
+          expectedMetadata: metadataWithoutInode,
+          expectedHash: readResult.contentHash,
+        },
+        {
+          path: 'shared.txt',
+          operation: 'replace',
+          searchPattern: 'beta',
+          replacement: 'BETA',
+          expectedMetadata: metadataWithoutInode,
+          expectedHash: readResult.contentHash,
+        },
+      ],
+      { cwd: harness.workspaceDir, validateContent: true }
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.applied).toBe(2)
+    expect(result.failed).toBe(0)
+    expect(result.results[0]?.validation).toBeUndefined()
+    expect(result.results[1]?.validation).toBeUndefined()
+    expect(await harness.readFile('shared.txt')).toBe('ALPHA\nBETA\n')
+  })
 })
 
 describe('editFile replace and replace_first behavior', () => {

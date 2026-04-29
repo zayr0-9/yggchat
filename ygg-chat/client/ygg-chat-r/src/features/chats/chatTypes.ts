@@ -151,6 +151,14 @@ export interface StreamEvent {
 // Stream type classification for multi-stream support
 export type StreamType = 'primary' | 'subagent' | 'tool' | 'branch'
 
+export type StreamLifecycleStatus =
+  | 'idle'
+  | 'active'
+  | 'waiting_for_tool'
+  | 'aborting'
+  | 'completed'
+  | 'error'
+
 // Lineage metadata for tracking stream hierarchy (subagents, tool-spawned streams)
 export interface StreamLineage {
   parentStreamId?: string        // If spawned from another stream
@@ -161,6 +169,9 @@ export interface StreamLineage {
 
 export interface StreamState {
   active: boolean
+  // Explicit lifecycle status. `waiting_for_tool` is still an in-flight stream
+  // and should stay visible/interruptible in branch-local UIs.
+  status: StreamLifecycleStatus
   buffer: string
   // separate buffer for reasoning/thinking tokens while streaming
   thinkingBuffer: string
@@ -168,9 +179,18 @@ export interface StreamState {
   toolCalls: ToolCall[]
   // sequential events log to preserve order of chunks as received
   events: StreamEvent[]
+  // Legacy/latest completed message id. Kept as a branch-selection anchor.
   messageId: MessageId | null
+  // Explicit message tracking for multi-turn/tool streams.
+  branchAnchorMessageId: MessageId | null
+  liveMessageId: MessageId | null
+  lastCompletedMessageId: MessageId | null
+  finalMessageId: MessageId | null
+  // Incremented when stale chunks are ignored after abort/completion.
+  suppressedEventCount: number
   error: string | null
   finished: boolean
+  // Legacy alias for liveMessageId, preserved for existing abort/UI paths.
   streamingMessageId: MessageId | null
   // Conversation this stream belongs to (used to avoid cross-conversation UI bleed)
   conversationId: ConversationId | null

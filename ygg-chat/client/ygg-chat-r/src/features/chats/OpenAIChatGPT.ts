@@ -25,6 +25,10 @@ function mapTools(tools: SharedToolDefinition[]) {
 function normalizeModel(model: string): string {
   const m = model.toLowerCase().replace(/\s+/g, '-')
 
+  // GPT-5.5 variants
+  if (m.includes('gpt-5.5-pro')) return 'gpt-5.5-pro'
+  if (m.includes('gpt-5.5')) return 'gpt-5.5'
+
   // GPT-5.4 variants
   if (m.includes('gpt-5.4-mini')) return 'gpt-5.4-mini'
   if (m.includes('gpt-5.4-pro')) return 'gpt-5.4-pro'
@@ -923,7 +927,18 @@ export async function createOpenAIChatGPTStreamingRequest(
   // This matters when the same streamId is reused across successive OpenAI
   // generations inside tool/repeat loops.
   const assistantMessageId = uuidv4()
-  onChunk({ type: 'generation_started', messageId: assistantMessageId })
+  if (signal?.aborted) {
+    await reader.cancel().catch(() => {})
+    return
+  }
+  const isAbortRequested = () => Boolean(signal?.aborted)
+  const emitChunk = (chunk: any) => {
+    if (isAbortRequested()) return
+    onChunk(chunk)
+  }
+
+  emitChunk({ type: 'generation_started', messageId: assistantMessageId })
+
 
   // Accumulators for final message
   let assistantText = ''
@@ -1002,7 +1017,7 @@ export async function createOpenAIChatGPTStreamingRequest(
   const emitTextDelta = (delta: string, itemId?: string) => {
     if (!delta) return
     assistantText += delta
-    onChunk({ type: 'chunk', part: 'text', delta })
+    emitChunk({ type: 'chunk', part: 'text', delta })
     if (itemId) {
       emittedTextByItem.set(itemId, (emittedTextByItem.get(itemId) || '') + delta)
     }
@@ -1160,7 +1175,7 @@ export async function createOpenAIChatGPTStreamingRequest(
 
   const emitToolCallChunk = (toolCall: ToolCall | null) => {
     if (!toolCall?.id || !toolCall?.name) return
-    onChunk({ type: 'chunk', part: 'tool_call', toolCall })
+    emitChunk({ type: 'chunk', part: 'tool_call', toolCall })
   }
 
   const extractAssistantMessageTextFromReplayItem = (item: any): string => {
@@ -1345,7 +1360,7 @@ export async function createOpenAIChatGPTStreamingRequest(
   }
 
   const emitCompleteMessage = (partial: boolean): boolean => {
-    if (completionEmitted) return false
+    if (completionEmitted || isAbortRequested()) return false
 
     const replayItems = getResponseOutputItemsForReplay()
     const replayArtifacts = buildFinalArtifactsFromReplayItems(replayItems)
@@ -1443,7 +1458,7 @@ export async function createOpenAIChatGPTStreamingRequest(
     }
 
     completionEmitted = true
-    onChunk({ type: 'complete', message })
+    emitChunk({ type: 'complete', message })
     return true
   }
 
@@ -1454,7 +1469,7 @@ export async function createOpenAIChatGPTStreamingRequest(
   const emitReasoning = (delta: string) => {
     if (!delta) return
     assistantReasoning += delta
-    onChunk({ type: 'chunk', part: 'reasoning', delta })
+    emitChunk({ type: 'chunk', part: 'reasoning', delta })
   }
 
   const applyReasoningDelta = (key: string, delta: string) => {
@@ -1523,6 +1538,7 @@ export async function createOpenAIChatGPTStreamingRequest(
 
   try {
     while (true) {
+      if (isAbortRequested()) break
       const { done, value } = pendingRead ?? (await reader.read())
       pendingRead = null
       if (done) break
@@ -1532,6 +1548,7 @@ export async function createOpenAIChatGPTStreamingRequest(
       buffer = lines.pop() || ''
 
       for (const line of lines) {
+        if (isAbortRequested()) break
         const trimmed = line.trim()
         if (!trimmed.startsWith('data:')) continue
         const dataStr = trimmed.slice(5).trim()
@@ -1734,7 +1751,7 @@ export async function createOpenAIChatGPTStreamingRequest(
           const reasoningDelta = typeof delta.reasoning === 'string' ? delta.reasoning : ''
           if (reasoningDelta) {
             assistantReasoning += reasoningDelta
-            onChunk({ type: 'chunk', part: 'reasoning', delta: reasoningDelta })
+            emitChunk({ type: 'chunk', part: 'reasoning', delta: reasoningDelta })
           }
         }
 
@@ -1745,13 +1762,12 @@ export async function createOpenAIChatGPTStreamingRequest(
       }
     }
 
-    if (!completionEmitted) {
-      emitCompleteMessage(Boolean(signal?.aborted))
+    if (!completionEmitted && !isAbortRequested()) {
+      emitCompleteMessage(false)
     }
   } catch (error) {
     const isAbortError = (error instanceof Error && error.name === 'AbortError') || signal?.aborted
     if (isAbortError) {
-      emitCompleteMessage(true)
       return
     }
     throw error

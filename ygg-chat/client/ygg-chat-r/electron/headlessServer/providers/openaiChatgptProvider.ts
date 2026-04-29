@@ -54,6 +54,40 @@ function normalizeModel(model: string): string {
   return model
 }
 
+function shouldUseGPT53StrictTextAssembly(model: string): boolean {
+  return normalizeModel(model) === 'gpt-5.3-codex'
+}
+
+const GPT53_INTERNAL_PROTOCOL_MARKERS: RegExp[] = [
+  /assistant to=functions\./i,
+  /to=functions\./i,
+  /tool read [^\n]* lines/i,
+  /\{\s*"path"\s*:\s*".*localServer\.ts"/i,
+]
+
+function sanitizeGPT53Text(text: string): string {
+  if (!text) return ''
+
+  const firstMarker = GPT53_INTERNAL_PROTOCOL_MARKERS.reduce((first, marker) => {
+    const idx = text.search(marker)
+    if (idx < 0) return first
+    return first < 0 ? idx : Math.min(first, idx)
+  }, -1)
+
+  if (firstMarker < 0) {
+    return text
+  }
+
+  const prefix = text.slice(0, firstMarker).trim()
+  if (!prefix) return ''
+
+  if (prefix.length < 600 && /\b(need|inspect|gather|tool|maybe|let'?s)\b/i.test(prefix)) {
+    return ''
+  }
+
+  return prefix
+}
+
 function decodeJwtPayload(token: string): any | null {
   try {
     const parts = token.split('.')
@@ -204,11 +238,46 @@ function parseStoredResponseOutputItems(raw: any): any[] {
   return []
 }
 
+function normalizeResponseMessageContent(content: any): Array<{ type: 'output_text'; text: string }> {
+  if (!Array.isArray(content)) return []
+
+  return content
+    .map(part => {
+      if (!part || typeof part !== 'object') return null
+      if (part.type === 'output_text' && typeof part.text === 'string' && part.text.trim().length > 0) {
+        return { type: 'output_text' as const, text: part.text }
+      }
+      if (part.type === 'text' && typeof part.text === 'string' && part.text.trim().length > 0) {
+        return { type: 'output_text' as const, text: part.text }
+      }
+      return null
+    })
+    .filter((part): part is { type: 'output_text'; text: string } => Boolean(part))
+}
+
 function normalizeResponseOutputItemsForReplay(items: any[]): any[] {
   const normalized: any[] = []
 
   for (const item of items || []) {
     if (!item || typeof item !== 'object' || typeof item.type !== 'string') continue
+
+    if (item.type === 'message') {
+      const role = typeof item.role === 'string' ? item.role : 'assistant'
+      const content = normalizeResponseMessageContent(item.content)
+      if (content.length === 0) continue
+
+      const messageItem: any = {
+        type: 'message',
+        role,
+        content,
+      }
+      if (typeof item.id === 'string') messageItem.id = item.id
+      if (typeof item.phase === 'string') messageItem.phase = item.phase
+      if (typeof item.output_index === 'number') messageItem.output_index = item.output_index
+      if (typeof item.outputIndex === 'number') messageItem.output_index = item.outputIndex
+      normalized.push(messageItem)
+      continue
+    }
 
     if (item.type === 'function_call') {
       const callId = typeof item.call_id === 'string' ? item.call_id : typeof item.id === 'string' ? item.id : ''
@@ -220,12 +289,17 @@ function normalizeResponseOutputItemsForReplay(items: any[]): any[] {
             ? JSON.stringify(item.arguments)
             : ''
       if (!callId || !name) continue
-      normalized.push({
+
+      const functionCallItem: any = {
         type: 'function_call',
         call_id: callId,
         name,
         arguments: args,
-      })
+      }
+      if (typeof item.id === 'string') functionCallItem.id = item.id
+      if (typeof item.output_index === 'number') functionCallItem.output_index = item.output_index
+      if (typeof item.outputIndex === 'number') functionCallItem.output_index = item.outputIndex
+      normalized.push(functionCallItem)
       continue
     }
 
@@ -234,6 +308,8 @@ function normalizeResponseOutputItemsForReplay(items: any[]): any[] {
       if (typeof item.id === 'string') reasoningItem.id = item.id
       if (Array.isArray(item.summary)) reasoningItem.summary = item.summary
       if (Array.isArray(item.content)) reasoningItem.content = item.content
+      if (typeof item.output_index === 'number') reasoningItem.output_index = item.output_index
+      if (typeof item.outputIndex === 'number') reasoningItem.output_index = item.outputIndex
       if ((item as any).encrypted_content) reasoningItem.encrypted_content = (item as any).encrypted_content
       normalized.push(reasoningItem)
     }
@@ -403,50 +479,41 @@ function mapTools(tools: ProviderToolDefinition[]): any[] {
     }))
 }
 
-function extractTextFromCompletedOutput(output: any[]): string {
-  const chunks: string[] = []
+function extractAssistantMessageTextFromReplayItem(item: any): string {
+  if (!item || item.type !== 'message' || !Array.isArray(item.content)) return ''
 
-  for (const item of output || []) {
-    if (item?.type !== 'message' || item?.role !== 'assistant') continue
-    const content = Array.isArray(item?.content) ? item.content : []
-    for (const part of content) {
-      if (part?.type === 'output_text' && typeof part?.text === 'string' && part.text) {
-        chunks.push(part.text)
+  return item.content
+    .map((part: any) => (typeof part?.text === 'string' ? part.text : ''))
+    .filter(Boolean)
+    .join('')
+}
+
+function extractReasoningTextFromReplayItem(item: any): string {
+  if (!item || item.type !== 'reasoning') return ''
+
+  const parts: string[] = []
+
+  if (Array.isArray(item.summary)) {
+    for (const part of item.summary) {
+      if (typeof part?.text === 'string' && part.text.trim()) {
+        parts.push(part.text)
       }
     }
   }
 
-  return chunks.join('')
-}
-
-function extractReasoningFromCompletedOutput(output: any[]): string {
-  const chunks: string[] = []
-
-  for (const item of output || []) {
-    if (item?.type !== 'reasoning') continue
-
-    if (Array.isArray(item?.content)) {
-      for (const part of item.content) {
-        if (part?.type === 'reasoning_text' && typeof part?.text === 'string' && part.text) {
-          chunks.push(part.text)
-        }
-      }
-    }
-
-    if (Array.isArray(item?.summary)) {
-      for (const part of item.summary) {
-        if (typeof part?.text === 'string' && part.text) {
-          chunks.push(part.text)
-        }
+  if (Array.isArray(item.content)) {
+    for (const part of item.content) {
+      if (typeof part?.text === 'string' && part.text.trim()) {
+        parts.push(part.text)
       }
     }
   }
 
-  return chunks.join('')
+  return parts.join('\n\n').trim()
 }
 
-function extractToolCallsFromCompletedOutput(output: any[]): ProviderToolCall[] {
-  return (output || [])
+function extractToolCallsFromReplayItems(items: any[]): ProviderToolCall[] {
+  return (items || [])
     .filter(item => item?.type === 'function_call' && (item?.call_id || item?.id) && item?.name)
     .map(item => {
       const callId = typeof item.call_id === 'string' ? item.call_id : item.id
@@ -468,20 +535,51 @@ function extractToolCallsFromCompletedOutput(output: any[]): ProviderToolCall[] 
     })
 }
 
+function selectFinalTextFromReplayItems(replayItems: any[], fallbackText: string, useGPT53StrictTextAssembly: boolean): string {
+  const assistantMessages = (replayItems || [])
+    .filter(item => item?.type === 'message' && item?.role === 'assistant')
+    .map((item: any) => {
+      const rawText = extractAssistantMessageTextFromReplayItem(item)
+      const text = useGPT53StrictTextAssembly ? sanitizeGPT53Text(rawText) : rawText
+      return {
+        text,
+        phase: typeof item?.phase === 'string' ? item.phase : undefined,
+      }
+    })
+    .filter((entry: { text: string }) => entry.text.trim().length > 0)
+
+  const finalAnswerEntry = [...assistantMessages].reverse().find(entry => entry.phase === 'final_answer')
+  const fallbackEntry = [...assistantMessages].reverse().find(entry => entry.phase !== 'commentary')
+  const lastEntry = assistantMessages.length > 0 ? assistantMessages[assistantMessages.length - 1] : null
+  const fallback = useGPT53StrictTextAssembly ? sanitizeGPT53Text(fallbackText) : fallbackText
+
+  return finalAnswerEntry?.text || fallbackEntry?.text || lastEntry?.text || fallback
+}
+
+function selectReasoningFromReplayItems(replayItems: any[], fallbackReasoning: string): string {
+  const reasoningSegments = (replayItems || [])
+    .map((item: any) => extractReasoningTextFromReplayItem(item))
+    .filter((text: string) => text.trim().length > 0)
+
+  return reasoningSegments.join('\n\n').trim() || fallbackReasoning
+}
+
 async function readCodexSseOutput(params: {
   reader: ReadableStreamDefaultReader<Uint8Array>
   firstRead?: ReadableStreamReadResult<Uint8Array> | null
   emit?: ProviderStreamEventHandler
+  modelName: string
 }): Promise<{
   text: string
   reasoning: string
   toolCalls: ProviderToolCall[]
   responseOutputItems: any[]
 }> {
-  const { reader, firstRead, emit } = params
+  const { reader, firstRead, emit, modelName } = params
   const decoder = new TextDecoder()
   let buffer = ''
 
+  const useGPT53StrictTextAssembly = shouldUseGPT53StrictTextAssembly(modelName)
   let streamedText = ''
   let streamedReasoning = ''
   let completedOutputItems: any[] | null = null
@@ -496,9 +594,179 @@ async function readCodexSseOutput(params: {
       seq: number
     }
   >()
+  const responseOutputItemsById = new Map<
+    string,
+    {
+      id: string
+      type?: string
+      role?: string
+      phase?: string
+      outputIndex?: number
+      seq: number
+    }
+  >()
+  const responseTextByItem = new Map<
+    string,
+    {
+      text: string
+      outputIndex?: number
+      seq: number
+      fromDone: boolean
+    }
+  >()
+  const reasoningByKey = new Map<string, string>()
   let callSeq = 0
-
+  let responseSeq = 0
   let pendingRead: ReadableStreamReadResult<Uint8Array> | null = firstRead ?? null
+
+  const extractItemId = (evt: any): string => {
+    const raw = evt?.item_id ?? evt?.itemId ?? evt?.id ?? ''
+    return typeof raw === 'string' ? raw : ''
+  }
+
+  const extractIndex = (evt: any, snakeKey: string, camelKey: string): number | undefined => {
+    const raw = evt?.[snakeKey] ?? evt?.[camelKey]
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
+  }
+
+  const mergeOutputItem = (item: any) => {
+    if (!item?.id || typeof item.id !== 'string') return
+
+    const existing = responseOutputItemsById.get(item.id)
+    const outputIndex =
+      typeof item.output_index === 'number'
+        ? item.output_index
+        : typeof item.outputIndex === 'number'
+          ? item.outputIndex
+          : existing?.outputIndex
+
+    responseOutputItemsById.set(item.id, {
+      id: item.id,
+      type: typeof item.type === 'string' ? item.type : existing?.type,
+      role: typeof item.role === 'string' ? item.role : existing?.role,
+      phase: typeof item.phase === 'string' ? item.phase : existing?.phase,
+      outputIndex,
+      seq: existing?.seq ?? responseSeq++,
+    })
+  }
+
+  const upsertResponseText = (itemId: string, text: string, outputIndex?: number, fromDone: boolean = false) => {
+    const existing = responseTextByItem.get(itemId)
+    responseTextByItem.set(itemId, {
+      text: fromDone ? text : (existing?.text || '') + text,
+      outputIndex: typeof outputIndex === 'number' ? outputIndex : existing?.outputIndex,
+      seq: existing?.seq ?? responseSeq++,
+      fromDone: fromDone || Boolean(existing?.fromDone),
+    })
+  }
+
+  const shouldEmitTextForEvent = (evt: any): boolean => {
+    if (!useGPT53StrictTextAssembly) return true
+    const itemId = extractItemId(evt)
+    if (!itemId) return false
+    const meta = responseOutputItemsById.get(itemId)
+    if (!meta) return false
+    if (meta.type && meta.type !== 'message') return false
+    if (meta.role && meta.role !== 'assistant') return false
+    if (meta.phase && meta.phase !== 'final_answer') return false
+    return true
+  }
+
+  const emitReasoning = (delta: string) => {
+    if (!delta) return
+    streamedReasoning += delta
+    emit?.({ type: 'chunk', part: 'reasoning', delta })
+  }
+
+  const applyReasoningDelta = (key: string, delta: string) => {
+    if (!delta) return
+    const prev = reasoningByKey.get(key) || ''
+    reasoningByKey.set(key, prev + delta)
+    emitReasoning(delta)
+  }
+
+  const applyReasoningDone = (key: string, fullText: string) => {
+    if (!fullText) return
+
+    const prev = reasoningByKey.get(key) || ''
+    reasoningByKey.set(key, fullText)
+
+    if (fullText.startsWith(prev)) {
+      emitReasoning(fullText.slice(prev.length))
+      return
+    }
+
+    if (prev) {
+      return
+    }
+
+    emitReasoning(fullText)
+  }
+
+  const extractReasoningFromOutputItem = (item: any) => {
+    if (!item || item.type !== 'reasoning') return
+
+    const itemId = typeof item.id === 'string' ? item.id : 'unknown-reasoning-item'
+
+    if (Array.isArray(item.content)) {
+      item.content.forEach((part: any, contentIndex: number) => {
+        if (part?.type === 'reasoning_text' && typeof part.text === 'string' && part.text) {
+          applyReasoningDone(`reasoning_text:${itemId}:${contentIndex}`, part.text)
+        }
+      })
+    }
+
+    if (Array.isArray(item.summary)) {
+      item.summary.forEach((part: any, summaryIndex: number) => {
+        if (typeof part?.text === 'string' && part.text) {
+          applyReasoningDone(`reasoning_summary:${itemId}:${summaryIndex}`, part.text)
+        }
+      })
+    }
+  }
+
+  const buildFallbackResponseOutputItems = (): any[] => {
+    const fallbackMessages = Array.from(responseOutputItemsById.values())
+      .filter(item => (!item.type || item.type === 'message') && (!item.role || item.role === 'assistant'))
+      .sort((a, b) => {
+        if (typeof a.outputIndex === 'number' && typeof b.outputIndex === 'number') return a.outputIndex - b.outputIndex
+        if (typeof a.outputIndex === 'number') return -1
+        if (typeof b.outputIndex === 'number') return 1
+        return a.seq - b.seq
+      })
+      .map(item => {
+        const textEntry = responseTextByItem.get(item.id)
+        const text = textEntry?.text || ''
+        if (!text.trim()) return null
+        return {
+          type: 'message',
+          id: item.id,
+          role: item.role || 'assistant',
+          phase: item.phase,
+          output_index: item.outputIndex,
+          content: [{ type: 'output_text', text }],
+        }
+      })
+      .filter(Boolean)
+
+    const fallbackFunctionCalls = Array.from(callByItemId.values())
+      .sort((a, b) => {
+        if (typeof a.outputIndex === 'number' && typeof b.outputIndex === 'number') return a.outputIndex - b.outputIndex
+        if (typeof a.outputIndex === 'number') return -1
+        if (typeof b.outputIndex === 'number') return 1
+        return a.seq - b.seq
+      })
+      .map(call => ({
+        type: 'function_call',
+        call_id: call.id,
+        name: call.name,
+        arguments: call.arguments || '',
+        output_index: call.outputIndex,
+      }))
+      .filter(call => call.call_id && call.name)
+
+    return normalizeResponseOutputItemsForReplay([...fallbackMessages, ...fallbackFunctionCalls])
+  }
 
   while (true) {
     const readResult = pendingRead ?? (await reader.read())
@@ -527,43 +795,95 @@ async function readCodexSseOutput(params: {
 
       if (!parsed) continue
 
-      if (parsed.type === 'response.output_text.delta' && typeof parsed.delta === 'string') {
-        streamedText += parsed.delta
-        emit?.({ type: 'chunk', part: 'text', delta: parsed.delta })
-        continue
-      }
-
-      if (parsed.type === 'response.reasoning_text.delta' && typeof parsed.delta === 'string') {
-        streamedReasoning += parsed.delta
-        emit?.({ type: 'chunk', part: 'reasoning', delta: parsed.delta })
-        continue
-      }
-
-      if (parsed.type === 'response.reasoning_summary_text.delta' && typeof parsed.delta === 'string') {
-        streamedReasoning += parsed.delta
-        emit?.({ type: 'chunk', part: 'reasoning', delta: parsed.delta })
-        continue
-      }
-
       if (parsed.type === 'response.output_item.added' || parsed.type === 'response.output_item.done') {
         const item = parsed.item
+        mergeOutputItem(item)
+
         if (item?.type === 'function_call' && item?.id) {
           const existing = callByItemId.get(item.id)
+          const outputIndex =
+            typeof item.output_index === 'number'
+              ? item.output_index
+              : typeof item.outputIndex === 'number'
+                ? item.outputIndex
+                : existing?.outputIndex
           if (existing) {
             existing.id = item.call_id || item.id
             existing.name = item.name || existing.name
             existing.arguments = item.arguments ?? existing.arguments
-            if (typeof item.output_index === 'number') existing.outputIndex = item.output_index
+            existing.outputIndex = outputIndex
           } else {
             callByItemId.set(item.id, {
               id: item.call_id || item.id,
               name: item.name || '',
               arguments: item.arguments || '',
-              outputIndex: typeof item.output_index === 'number' ? item.output_index : undefined,
+              outputIndex,
               seq: callSeq++,
             })
           }
         }
+
+        if (parsed.type === 'response.output_item.done') {
+          if (item?.type === 'message' && item?.id) {
+            const text = extractAssistantMessageTextFromReplayItem({
+              type: 'message',
+              content: normalizeResponseMessageContent(item.content),
+            })
+            if (text) {
+              upsertResponseText(item.id, text, extractIndex(item, 'output_index', 'outputIndex'), true)
+            }
+          }
+          extractReasoningFromOutputItem(item)
+        }
+        continue
+      }
+
+      if (parsed.type === 'response.output_text.delta') {
+        const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
+        if (!delta) continue
+
+        const itemId = extractItemId(parsed)
+        const outputIndex = extractIndex(parsed, 'output_index', 'outputIndex')
+        if (itemId) {
+          upsertResponseText(itemId, delta, outputIndex, false)
+        }
+
+        if (shouldEmitTextForEvent(parsed)) {
+          streamedText += delta
+          emit?.({ type: 'chunk', part: 'text', delta })
+        }
+        continue
+      }
+
+      if (parsed.type === 'response.output_text.done') {
+        const fullText = typeof parsed.text === 'string' ? parsed.text : ''
+        if (!fullText) continue
+
+        const itemId = extractItemId(parsed)
+        if (!itemId) continue
+        upsertResponseText(itemId, fullText, extractIndex(parsed, 'output_index', 'outputIndex'), true)
+        continue
+      }
+
+      if (parsed.type === 'response.reasoning_text.delta' && typeof parsed.delta === 'string') {
+        const itemId = extractItemId(parsed) || 'reasoning'
+        applyReasoningDelta(`reasoning_text:${itemId}:${extractIndex(parsed, 'content_index', 'contentIndex') || 0}`, parsed.delta)
+        continue
+      }
+
+      if (parsed.type === 'response.reasoning_summary_text.delta' && typeof parsed.delta === 'string') {
+        const itemId = extractItemId(parsed) || 'reasoning'
+        applyReasoningDelta(`reasoning_summary:${itemId}:${extractIndex(parsed, 'summary_index', 'summaryIndex') || 0}`, parsed.delta)
+        continue
+      }
+
+      if (
+        parsed.type === 'response.reasoning_text.done' ||
+        parsed.type === 'response.reasoning_summary_text.done' ||
+        parsed.type === 'response.reasoning_summary_part.done' ||
+        parsed.type === 'response.content_part.done' ||
+        parsed.type === 'response.reasoning.delta'
+      ) {
         continue
       }
 
@@ -603,51 +923,31 @@ async function readCodexSseOutput(params: {
         continue
       }
 
-      if ((parsed.type === 'response.completed' || parsed.type === 'response.done') && Array.isArray(parsed?.response?.output)) {
-        completedOutputItems = parsed.response.output
+      if (parsed.type === 'response.failed' || parsed.type === 'response.incomplete') {
+        const responseError = parsed?.response?.error
+        const message =
+          typeof responseError?.message === 'string' && responseError.message.trim().length > 0
+            ? responseError.message
+            : parsed.type === 'response.incomplete'
+              ? 'OpenAI response was incomplete.'
+              : 'OpenAI response failed.'
+        throw new Error(message)
+      }
+
+      if (parsed.type === 'response.completed' || parsed.type === 'response.done') {
+        if (Array.isArray(parsed?.response?.output)) {
+          completedOutputItems = parsed.response.output
+        }
       }
     }
   }
 
-  const responseOutputItems = normalizeResponseOutputItemsForReplay(completedOutputItems || [])
-
-  const text =
-    Array.isArray(completedOutputItems) && completedOutputItems.length > 0
-      ? extractTextFromCompletedOutput(completedOutputItems) || streamedText
-      : streamedText
-
-  const reasoning =
-    Array.isArray(completedOutputItems) && completedOutputItems.length > 0
-      ? extractReasoningFromCompletedOutput(completedOutputItems) || streamedReasoning
-      : streamedReasoning
-
-  const toolCalls =
-    Array.isArray(completedOutputItems) && completedOutputItems.length > 0
-      ? extractToolCallsFromCompletedOutput(completedOutputItems)
-      : Array.from(callByItemId.values())
-          .sort((a, b) => {
-            if (typeof a.outputIndex === 'number' && typeof b.outputIndex === 'number') {
-              return a.outputIndex - b.outputIndex
-            }
-            if (typeof a.outputIndex === 'number') return -1
-            if (typeof b.outputIndex === 'number') return 1
-            return a.seq - b.seq
-          })
-          .map(call => {
-            let parsedArgs: any = call.arguments
-            try {
-              parsedArgs = call.arguments ? JSON.parse(call.arguments) : {}
-            } catch {
-              // keep string
-            }
-            return {
-              id: call.id,
-              name: call.name,
-              arguments: parsedArgs,
-              status: 'pending' as const,
-            }
-          })
-          .filter(call => call.id && call.name)
+  const normalizedCompletedOutputItems = normalizeResponseOutputItemsForReplay(completedOutputItems || [])
+  const responseOutputItems =
+    normalizedCompletedOutputItems.length > 0 ? normalizedCompletedOutputItems : buildFallbackResponseOutputItems()
+  const text = selectFinalTextFromReplayItems(responseOutputItems, streamedText, useGPT53StrictTextAssembly)
+  const reasoning = selectReasoningFromReplayItems(responseOutputItems, streamedReasoning)
+  const toolCalls = extractToolCallsFromReplayItems(responseOutputItems)
 
   return {
     text,
@@ -735,6 +1035,7 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
       input: transformMessagesForCodex(input.history || [], input.userContent),
       tools: requestTools.length ? requestTools : undefined,
       tool_choice: requestTools.length ? 'auto' : undefined,
+      parallel_tool_calls: requestTools.length ? true : undefined,
       store: false,
       include: ['reasoning.encrypted_content'],
       reasoning: {
@@ -776,6 +1077,7 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
       reader: streamOpen.reader,
       firstRead: streamOpen.firstRead,
       emit,
+      modelName: input.modelName,
     })
     const contentBlocks: any[] = []
 

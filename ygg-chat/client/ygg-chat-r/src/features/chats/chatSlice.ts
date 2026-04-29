@@ -276,6 +276,7 @@ export const chatSlice = createSlice({
       state.streaming.byId[streamId] = {
         ...createEmptyStreamState(streamType, lineage),
         active: true,
+        status: 'active',
         conversationId,
       }
 
@@ -306,7 +307,10 @@ export const chatSlice = createSlice({
 
       if (stream) {
         stream.active = false
+        stream.status = 'completed'
         stream.finished = true
+        stream.liveMessageId = null
+        stream.finalMessageId = stream.messageId
         stream.streamingMessageId = null
 
         // Remove from active list
@@ -336,7 +340,9 @@ export const chatSlice = createSlice({
 
       if (stream) {
         stream.active = false
+        stream.status = 'aborting'
         stream.error = error
+        stream.liveMessageId = null
         stream.streamingMessageId = null
 
         // Remove from active list
@@ -363,7 +369,9 @@ export const chatSlice = createSlice({
         const stream = state.streaming.byId[streamId]
         if (stream) {
           stream.active = false
+          stream.status = 'aborting'
           stream.error = 'Generation aborted'
+          stream.liveMessageId = null
           stream.streamingMessageId = null
         }
       }
@@ -383,20 +391,37 @@ export const chatSlice = createSlice({
       // Get or create the target stream
       const stream = getOrCreateStream(state, streamId)
 
+      if (chunk.type !== 'reset' && !stream.active) {
+        // Late chunks can arrive after abort/completion. Do not let them mutate
+        // visible branch state after the stream has left the in-flight set.
+        stream.suppressedEventCount = (stream.suppressedEventCount ?? 0) + 1
+        return
+      }
+
       if (chunk.type === 'reset') {
+        stream.status = stream.active ? 'active' : 'idle'
         stream.buffer = ''
         stream.thinkingBuffer = ''
         stream.toolCalls = []
         stream.events = []
         stream.error = null
         stream.messageId = null
+        stream.liveMessageId = null
+        stream.lastCompletedMessageId = null
+        stream.finalMessageId = null
         stream.streamingMessageId = null
         return
       }
 
       if (chunk.type === 'generation_started') {
+        stream.active = true
+        stream.status = 'active'
+        stream.error = null
+        stream.liveMessageId = chunk.messageId || null
         stream.streamingMessageId = chunk.messageId || null
-        // Clear previous streaming events when starting new generation
+        // Keep messageId/lastCompletedMessageId as branch anchors. Chat.tsx uses
+        // liveMessageId/streamingMessageId for duplicate suppression instead.
+        // Clear previous turn's transient render buffers for the new live answer.
         stream.events = []
         stream.buffer = ''
         stream.thinkingBuffer = ''
@@ -435,19 +460,24 @@ export const chatSlice = createSlice({
             }
           }
         } else if (chunk.part === 'tool_result') {
-          // Handle tool result events during streaming
+          // Handle tool result events during streaming. Upsert instead of ignoring
+          // duplicates so a final/updated result replaces any earlier placeholder
+          // and becomes visible immediately in Chat.tsx.
           if (chunk.toolResult) {
-            // Only add to events if this tool_use_id hasn't been logged yet (deduplication)
-            const resultExists = stream.events.some(
+            const existingEventIndex = stream.events.findIndex(
               e => e.type === 'tool_result' && e.toolResult?.tool_use_id === chunk.toolResult!.tool_use_id
             )
 
-            if (!resultExists) {
-              stream.events.push({
-                type: 'tool_result',
-                toolResult: chunk.toolResult,
-                complete: true,
-              })
+            const nextToolResultEvent = {
+              type: 'tool_result' as const,
+              toolResult: chunk.toolResult,
+              complete: true,
+            }
+
+            if (existingEventIndex >= 0) {
+              stream.events[existingEventIndex] = nextToolResultEvent
+            } else {
+              stream.events.push(nextToolResultEvent)
             }
           }
         } else if (chunk.part === 'image') {
@@ -497,12 +527,27 @@ export const chatSlice = createSlice({
           }
         }
       } else if (chunk.type === 'complete') {
-        stream.messageId = chunk.message?.id || null
+        const completedMessageId = chunk.message?.id || null
+        stream.messageId = completedMessageId
+        stream.lastCompletedMessageId = completedMessageId
+        if (completedMessageId) {
+          stream.branchAnchorMessageId = completedMessageId
+        }
+        stream.liveMessageId = null
+        stream.streamingMessageId = null
+        const completedMessage = chunk.message as any
+        const hasToolCalls =
+          (Array.isArray(completedMessage?.tool_calls) && completedMessage.tool_calls.length > 0) ||
+          (Array.isArray(completedMessage?.content_blocks) &&
+            completedMessage.content_blocks.some((block: any) => block?.type === 'tool_use'))
+        stream.status = hasToolCalls ? 'waiting_for_tool' : 'active'
         // Do NOT set active=false here. Wait for explicit streamCompleted action.
         // This is crucial for multi-turn loops where 'complete' chunks arrive per turn.
       } else if (chunk.type === 'error') {
         stream.error = chunk.error || 'Unknown stream error'
+        stream.status = 'error'
         stream.active = false
+        stream.liveMessageId = null
         stream.streamingMessageId = null
 
         // Remove from active list
@@ -527,8 +572,13 @@ export const chatSlice = createSlice({
       if (stream) {
         // Mark stream as complete
         stream.active = false
+        stream.status = 'completed'
         stream.finished = true
         stream.messageId = messageId
+        stream.lastCompletedMessageId = messageId
+        stream.finalMessageId = messageId
+        stream.liveMessageId = null
+        stream.streamingMessageId = null
 
         // Remove from active list
         state.streaming.activeIds = state.streaming.activeIds.filter(id => id !== streamId)
@@ -592,6 +642,7 @@ export const chatSlice = createSlice({
       const stream = state.streaming.byId[streamId]
       if (stream) {
         stream.lineage.rootMessageId = targetParentId
+        stream.branchAnchorMessageId = targetParentId
       }
     },
 

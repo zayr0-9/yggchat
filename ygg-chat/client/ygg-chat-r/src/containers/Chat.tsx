@@ -968,14 +968,19 @@ function Chat() {
     () => ({
       id: effectiveViewStream?.id ?? null,
       active: effectiveViewStream?.active ?? false,
+      status: effectiveViewStream?.status ?? 'idle',
       buffer: effectiveViewStream?.buffer ?? '',
       thinkingBuffer: effectiveViewStream?.thinkingBuffer ?? '',
       toolCalls: effectiveViewStream?.toolCalls ?? [],
       events: effectiveViewStream?.events ?? [],
       messageId: effectiveViewStream?.messageId ?? null,
+      branchAnchorMessageId: effectiveViewStream?.branchAnchorMessageId ?? null,
+      liveMessageId: effectiveViewStream?.liveMessageId ?? effectiveViewStream?.streamingMessageId ?? null,
+      lastCompletedMessageId: effectiveViewStream?.lastCompletedMessageId ?? null,
+      finalMessageId: effectiveViewStream?.finalMessageId ?? null,
       error: effectiveViewStream?.error ?? null,
       finished: effectiveViewStream?.finished ?? false,
-      streamingMessageId: effectiveViewStream?.streamingMessageId ?? null,
+      streamingMessageId: effectiveViewStream?.streamingMessageId ?? effectiveViewStream?.liveMessageId ?? null,
     }),
     [effectiveViewStream]
   )
@@ -2325,15 +2330,35 @@ function Chat() {
       return false
     })
   }, [currentConversationId, runningToolJobs, selectedPathStringSet, streamState.id])
+  const streamLifecycleActive =
+    streamState.active ||
+    streamState.status === 'active' ||
+    streamState.status === 'waiting_for_tool' ||
+    streamState.status === 'aborting'
   const showGenerationLoadingAnimation =
-    isCurrentConversationCompacting || streamState.active || hasRunningToolJobForCurrentBranch
+    isCurrentConversationCompacting || streamLifecycleActive || hasRunningToolJobForCurrentBranch
   const hasStreamingMessageContent =
     Boolean(streamState.buffer) ||
     Boolean(streamState.thinkingBuffer) ||
     streamState.toolCalls.length > 0 ||
     streamState.events.length > 0
+  const shouldPreserveProcessStreamRow =
+    streamState.status === 'waiting_for_tool' || hasRunningToolJobForCurrentBranch
+  const liveDuplicateSuppressionMessageId = streamState.liveMessageId ?? streamState.streamingMessageId
+  const completedDuplicateSuppressionMessageId =
+    streamState.lastCompletedMessageId ?? streamState.messageId ?? streamState.finalMessageId
+  const isLiveStreamingMessageAlreadyRendered =
+    liveDuplicateSuppressionMessageId != null && messageRowIndexByMessageId.has(String(liveDuplicateSuppressionMessageId))
+  const isCompletedStreamMessageAlreadyRendered =
+    completedDuplicateSuppressionMessageId != null &&
+    messageRowIndexByMessageId.has(String(completedDuplicateSuppressionMessageId))
+  // During OpenAI multi-turn tool loops a completed assistant tool-call message can be
+  // persisted into the normal message list while the same tool-call events remain in
+  // the live stream during `waiting_for_tool`. Keep the lifecycle/loader active, but
+  // suppress the transient streaming row once that completed turn is already rendered.
   const isStreamingMessageAlreadyRendered =
-    streamState.messageId != null && messageRowIndexByMessageId.has(String(streamState.messageId))
+    isLiveStreamingMessageAlreadyRendered ||
+    ((shouldPreserveProcessStreamRow || liveDuplicateSuppressionMessageId == null) && isCompletedStreamMessageAlreadyRendered)
   const showStreamingMessage = !isStreamingMessageAlreadyRendered && hasStreamingMessageContent
   const showGenerationLoaderRow = showGenerationLoadingAnimation
 

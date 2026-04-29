@@ -225,8 +225,10 @@ def main():
                 if _child_count(parent_id) > 1:
                     return candidate
 
-            # No branch point on this path. Do not create/update notes for normal
-            # linear sends; this hook should only do work after branching.
+            # Fallback for non-branched paths: latest user message on the current path.
+            for candidate in chain:
+                if _is_user_message(candidate):
+                    return candidate
             return None
 
         path_anchor_id = last_user_message_id or current_parent_id or current_message_id or last_assistant_message_id

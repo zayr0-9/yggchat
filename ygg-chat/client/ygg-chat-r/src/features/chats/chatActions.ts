@@ -3369,6 +3369,9 @@ const executionMode = 'client'
               },
               {
                 onChunk: chunk => {
+                  if (controller?.signal.aborted || !(getState().chat.streaming.byId[streamId]?.active ?? false)) {
+                    return
+                  }
                   dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   if (chunk.type === 'complete' && chunk.message) {
                     const assistantMsg = chunk.message
@@ -3885,6 +3888,9 @@ const executionMode = 'client'
               },
               {
                 onChunk: chunk => {
+                  if (controller?.signal.aborted || !(getState().chat.streaming.byId[streamId]?.active ?? false)) {
+                    return
+                  }
                   dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                   if (chunk.type === 'complete' && chunk.message) {
                     // Add to Redux + update branch path
@@ -5487,6 +5493,9 @@ const executionMode = 'client' // Prefer client execution for tools
             },
             {
               onChunk: chunk => {
+                if (controller?.signal.aborted || !(getState().chat.streaming.byId[streamId]?.active ?? false)) {
+                  return
+                }
                 dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                 if (chunk.type === 'complete' && chunk.message) {
                   const assistantMsg = chunk.message
@@ -6701,6 +6710,9 @@ const executionMode = 'client'
             },
             {
               onChunk: chunk => {
+                if (controller?.signal.aborted || !(getState().chat.streaming.byId[streamId]?.active ?? false)) {
+                  return
+                }
                 dispatch(chatSliceActions.streamChunkReceived({ streamId, chunk }))
                 if (chunk.type === 'complete' && chunk.message) {
                   const assistantMsg = chunk.message
@@ -7973,10 +7985,18 @@ export const abortGeneration = createAsyncThunk<
   void,
   { streamId?: string | null; messageId?: MessageId | null },
   { state: RootState }
->('chat/abortGeneration', async ({ streamId, messageId }, { dispatch }) => {
+>('chat/abortGeneration', async ({ streamId, messageId }, { dispatch, getState }) => {
   abortSubagentControllers(streamId)
 
-  if (messageId) {
+  const state = getState()
+  const providerRaw = state.chat.providerState.currentProvider || 'ollama'
+  const providerSlug = providerRaw.toLowerCase().replace(/\s+/g, '')
+  const isOpenAIChatGPT = providerSlug === 'openaichatgpt' || providerSlug === 'openai(chatgpt)'
+
+  // OpenAI ChatGPT streams are driven by a direct client-side fetch/SSE reader.
+  // Stop should abort that local transport immediately instead of waiting on the
+  // server-side /messages/:id/abort endpoint, which is not the real streaming source.
+  if (!isOpenAIChatGPT && messageId) {
     try {
       const response = await dispatch(abortStreaming({ messageId, streamId })).unwrap()
       if (response?.success) {
