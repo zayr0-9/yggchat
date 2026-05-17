@@ -1121,19 +1121,8 @@ const isGeneratedImagePathHintMessage = (msg: Message | undefined | null): boole
   return typeof msg.note === 'string' && msg.note === GENERATED_IMAGE_PATH_HINT_NOTE
 }
 
-const getGeneratedImagesDirectoryHint = (): { dir: string | null; pattern: string | null } => {
-  const explicit = (typeof window !== 'undefined' ? (window as any).__YGG_APP_USER_DATA : null) || null
-  const userDataPath = typeof explicit === 'string' ? explicit.trim() : ''
-  if (!userDataPath) return { dir: null, pattern: null }
-  const separator = userDataPath.includes('\\') ? '\\' : '/'
-  const dir = `${userDataPath.replace(/[\\/]+$/, '')}${separator}generated_images`
-  return { dir, pattern: `${dir}${separator}img-0001.<ext>` }
-}
 
-const createGeneratedImagePathHintContent = (
-  filePaths?: string[] | null,
-  directoryHint?: { dir?: string | null; pattern?: string | null } | null
-): string | null => {
+const createGeneratedImagePathHintContent = (filePaths?: string[] | null): string | null => {
   const uniquePaths = Array.from(
     new Set((filePaths || []).filter((value): value is string => typeof value === 'string' && value.trim().length > 0))
   )
@@ -1251,7 +1240,7 @@ const persistGeneratedImagePathHintMessage = async (
   }
 ): Promise<Message | null> => {
   const filePaths = params.filePaths || []
-  const content = createGeneratedImagePathHintContent(filePaths, params.directoryHint)
+  const content = createGeneratedImagePathHintContent(filePaths)
   if (!content) return null
 
   const hintMessage: Message = {
