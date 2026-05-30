@@ -51,8 +51,8 @@ export const TitleBar = () => {
         setPlatform(info.platform)
         setIsElectron(info.isElectron)
 
-        // Add padding to app content on Windows
-        if (info.isElectron && info.platform === 'win32') {
+        // Add padding to app content when we render an in-app title bar.
+        if (info.isElectron && (info.platform === 'win32' || info.platform === 'darwin')) {
           document.body.classList.add('has-titlebar')
         }
 
@@ -71,8 +71,12 @@ export const TitleBar = () => {
     }
   }, [])
 
-  // Only show on Windows in Electron
-  if (!isElectron || platform !== 'win32') {
+  const isWindows = platform === 'win32'
+  const isMac = platform === 'darwin'
+
+  // Render custom title bar content on Windows and macOS only.
+  // macOS keeps native traffic lights; Windows uses custom window controls.
+  if (!isElectron || (!isWindows && !isMac)) {
     return null
   }
 
@@ -147,7 +151,7 @@ export const TitleBar = () => {
   }
 
   return (
-    <div className={`titlebar ${isChatPage ? 'titlebar-chat' : ''}`}>
+    <div className={`titlebar ${isMac ? 'titlebar-mac' : 'titlebar-windows'} ${isChatPage ? 'titlebar-chat' : ''}`}>
       <div className='titlebar-drag-region'>
         <div className='titlebar-nav-controls'>
           <button className='titlebar-control-button titlebar-nav-button' onClick={() => navigate(-1)} title='Go Back'>
@@ -221,45 +225,49 @@ export const TitleBar = () => {
             )}
           </span>
         </button>
-        <button
-          className='titlebar-control-button titlebar-minimize'
-          onClick={handleMinimize}
-          aria-label='Minimize'
-          title='Minimize'
-        >
-          <span className='titlebar-control-icon-shell acrylic-subtle'>
-            <svg width='10' height='1' viewBox='0 0 10 1'>
-              <rect fill='currentColor' width='10' height='1' />
-            </svg>
-          </span>
-        </button>
-        <button
-          className='titlebar-control-button titlebar-maximize'
-          onClick={handleMaximize}
-          aria-label='Maximize'
-          title='Maximize'
-        >
-          <span className='titlebar-control-icon-shell acrylic-subtle'>
-            <svg width='10' height='10' viewBox='0 0 10 10'>
-              <path fill='currentColor' d='M0 0v10h10V0H0zm1 1h8v8H1V1z' />
-            </svg>
-          </span>
-        </button>
-        <button
-          className='titlebar-control-button titlebar-close'
-          onClick={handleClose}
-          aria-label='Close'
-          title='Close'
-        >
-          <span className='titlebar-control-icon-shell acrylic-subtle'>
-            <svg width='10' height='10' viewBox='0 0 10 10'>
-              <path
-                fill='currentColor'
-                d='M1.207.293l-.914.914L4.086 5 .293 8.793l.914.914L5 5.914l3.793 3.793.914-.914L5.914 5l3.793-3.793-.914-.914L5 4.086 1.207.293z'
-              />
-            </svg>
-          </span>
-        </button>
+        {isWindows ? (
+          <>
+            <button
+              className='titlebar-control-button titlebar-minimize'
+              onClick={handleMinimize}
+              aria-label='Minimize'
+              title='Minimize'
+            >
+              <span className='titlebar-control-icon-shell acrylic-subtle'>
+                <svg width='10' height='1' viewBox='0 0 10 1'>
+                  <rect fill='currentColor' width='10' height='1' />
+                </svg>
+              </span>
+            </button>
+            <button
+              className='titlebar-control-button titlebar-maximize'
+              onClick={handleMaximize}
+              aria-label='Maximize'
+              title='Maximize'
+            >
+              <span className='titlebar-control-icon-shell acrylic-subtle'>
+                <svg width='10' height='10' viewBox='0 0 10 10'>
+                  <path fill='currentColor' d='M0 0v10h10V0H0zm1 1h8v8H1V1z' />
+                </svg>
+              </span>
+            </button>
+            <button
+              className='titlebar-control-button titlebar-close'
+              onClick={handleClose}
+              aria-label='Close'
+              title='Close'
+            >
+              <span className='titlebar-control-icon-shell acrylic-subtle'>
+                <svg width='10' height='10' viewBox='0 0 10 10'>
+                  <path
+                    fill='currentColor'
+                    d='M1.207.293l-.914.914L4.086 5 .293 8.793l.914.914L5 5.914l3.793 3.793.914-.914L5.914 5l3.793-3.793-.914-.914L5 4.086 1.207.293z'
+                  />
+                </svg>
+              </span>
+            </button>
+          </>
+        ) : null}
       </div>
     </div>
   )

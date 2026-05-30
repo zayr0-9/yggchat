@@ -559,6 +559,10 @@ function createWindow() {
     mainWindow.setBackgroundMaterial('acrylic')
   }
 
+  if (process.platform === 'darwin') {
+    mainWindow.setWindowButtonPosition({ x: 14, y: 13 })
+  }
+
   // applyTitleBarTheme(mainWindow)
 
   // Show window when ready to avoid flicker

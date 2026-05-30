@@ -43,6 +43,15 @@
   padding-left: 12px;
 }
 
+/* macOS keeps the native traffic lights; reserve their hit area. */
+.titlebar-mac .titlebar-drag-region {
+  padding-left: 82px;
+}
+
+.titlebar-mac .titlebar-controls {
+  padding-right: 12px;
+}
+
 .titlebar-title {
   font-size: 13px;
   font-weight: 500;
@@ -264,6 +273,16 @@
 
 @media (max-width: 820px) {
   .titlebar-project-name {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .titlebar-mac .titlebar-drag-region {
+    padding-left: 78px;
+  }
+
+  .titlebar-mac .titlebar-remote-pill {
     display: none;
   }
 }
