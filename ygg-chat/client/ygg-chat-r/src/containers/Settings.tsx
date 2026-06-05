@@ -37,9 +37,11 @@ import {
   loadAutoCompactionEnabled,
   loadHeimdallNotePreviewHoverPaddingEnabled,
   loadShowTokenUsageBar,
+  loadShowTokenUsageHoverDetails,
   saveAutoCompactionEnabled,
   saveHeimdallNotePreviewHoverPaddingEnabled,
   saveShowTokenUsageBar,
+  saveShowTokenUsageHoverDetails,
 } from '../helpers/chatUiSettingsStorage'
 import {
   BROWSER_SETTINGS_CHANGE_EVENT,
@@ -286,6 +288,9 @@ const Settings: React.FC = () => {
   const [chatModePromptNameInput, setChatModePromptNameInput] = useState('')
   const [chatModePromptInput, setChatModePromptInput] = useState('')
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
+  const [showTokenUsageHoverDetails, setShowTokenUsageHoverDetails] = useState<boolean>(() =>
+    loadShowTokenUsageHoverDetails()
+  )
   const [autoCompactionEnabled, setAutoCompactionEnabled] = useState<boolean>(() => loadAutoCompactionEnabled())
   const [heimdallNotePreviewHoverPaddingEnabled, setHeimdallNotePreviewHoverPaddingEnabled] = useState<boolean>(() =>
     loadHeimdallNotePreviewHoverPaddingEnabled()
@@ -1546,6 +1551,18 @@ const Settings: React.FC = () => {
     })
   }
 
+  const handleTokenUsageHoverDetailsToggle = () => {
+    const nextValue = !showTokenUsageHoverDetails
+    saveShowTokenUsageHoverDetails(nextValue)
+    setShowTokenUsageHoverDetails(nextValue)
+    showStatus({
+      type: 'success',
+      text: nextValue
+        ? 'Token usage hover details enabled in Chat.'
+        : 'Token usage hover details hidden in Chat.',
+    })
+  }
+
   const handleChatModePromptSelect = (promptId: string) => {
     const saved = selectChatModePrompt(promptId)
     setOperationModePromptSettings(saved)
@@ -2323,6 +2340,27 @@ const Settings: React.FC = () => {
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     showTokenUsageBar ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div className='flex items-center justify-between pt-2 border-t border-stone-200 dark:border-stone-700'>
+              <div>
+                <p className='text-base font-medium text-stone-900 dark:text-stone-100'>Show Token Usage Hover Details</p>
+                <p className='text-sm text-stone-500 dark:text-stone-400'>
+                  Show the context, message, model window, and credits popup when hovering the token usage progress bar.
+                </p>
+              </div>
+              <button
+                onClick={handleTokenUsageHoverDetailsToggle}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showTokenUsageHoverDetails ? 'bg-emerald-500 dark:bg-emerald-600' : 'bg-stone-300 dark:bg-stone-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    showTokenUsageHoverDetails ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>

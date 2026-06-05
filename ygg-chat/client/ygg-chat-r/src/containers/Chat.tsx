@@ -131,9 +131,12 @@ import {
 import {
   CHAT_UI_AUTO_COMPACTION_ENABLED_CHANGE_EVENT,
   CHAT_UI_AUTO_COMPACTION_ENABLED_KEY,
+  CHAT_UI_TOKEN_USAGE_HOVER_DETAILS_VISIBILITY_CHANGE_EVENT,
+  CHAT_UI_TOKEN_USAGE_HOVER_DETAILS_VISIBILITY_KEY,
   CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
   loadAutoCompactionEnabled,
   loadShowTokenUsageBar,
+  loadShowTokenUsageHoverDetails,
 } from '../helpers/chatUiSettingsStorage'
 import {
   loadProviderSettings,
@@ -3277,6 +3280,9 @@ function Chat() {
         : 'outline-2 dark:outline-2 dark:outline-orange-700/70 outline-orange-700/70'
 
   const [showTokenUsageBar, setShowTokenUsageBar] = useState<boolean>(() => loadShowTokenUsageBar())
+  const [showTokenUsageHoverDetails, setShowTokenUsageHoverDetails] = useState<boolean>(() =>
+    loadShowTokenUsageHoverDetails()
+  )
   const [autoCompactionEnabled, setAutoCompactionEnabled] = useState<boolean>(() => loadAutoCompactionEnabled())
   const [expandedProcessMessageRuns, setExpandedProcessMessageRuns] = useState<Set<string>>(() => new Set())
   useEffect(() => {
@@ -3343,6 +3349,13 @@ function Chat() {
       }
     }
 
+    const handleTokenUsageHoverDetailsVisibilityEvent = (e: Event) => {
+      const detail = (e as CustomEvent<boolean>).detail
+      if (typeof detail === 'boolean') {
+        setShowTokenUsageHoverDetails(detail)
+      }
+    }
+
     const handleAutoCompactionEnabledEvent = (e: Event) => {
       const detail = (e as CustomEvent<boolean>).detail
       if (typeof detail === 'boolean') {
@@ -3355,6 +3368,10 @@ function Chat() {
         setShowTokenUsageBar(e.newValue === 'true')
       }
 
+      if (e.key === CHAT_UI_TOKEN_USAGE_HOVER_DETAILS_VISIBILITY_KEY && e.newValue !== null) {
+        setShowTokenUsageHoverDetails(e.newValue === 'true')
+      }
+
       if (e.key === CHAT_UI_AUTO_COMPACTION_ENABLED_KEY && e.newValue !== null) {
         setAutoCompactionEnabled(e.newValue === 'true')
       }
@@ -3363,6 +3380,10 @@ function Chat() {
     window.addEventListener(
       CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
       handleTokenUsageVisibilityEvent as EventListener
+    )
+    window.addEventListener(
+      CHAT_UI_TOKEN_USAGE_HOVER_DETAILS_VISIBILITY_CHANGE_EVENT,
+      handleTokenUsageHoverDetailsVisibilityEvent as EventListener
     )
     window.addEventListener(
       CHAT_UI_AUTO_COMPACTION_ENABLED_CHANGE_EVENT,
@@ -3374,6 +3395,10 @@ function Chat() {
       window.removeEventListener(
         CHAT_UI_TOKEN_USAGE_VISIBILITY_CHANGE_EVENT,
         handleTokenUsageVisibilityEvent as EventListener
+      )
+      window.removeEventListener(
+        CHAT_UI_TOKEN_USAGE_HOVER_DETAILS_VISIBILITY_CHANGE_EVENT,
+        handleTokenUsageHoverDetailsVisibilityEvent as EventListener
       )
       window.removeEventListener(
         CHAT_UI_AUTO_COMPACTION_ENABLED_CHANGE_EVENT,
@@ -6600,8 +6625,9 @@ function Chat() {
                   </button>
                 </div>
                 {/* Hover Popup with Token Details */}
-                <div className='absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50'>
-                  <div className='bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white rounded-lg shadow-lg px-3 py-2 whitespace-nowrap'>
+                {showTokenUsageHoverDetails && (
+                  <div className='absolute left-1/2 -translate-x-1/2 bottom-full mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50'>
+                    <div className='bg-neutral-100 dark:bg-neutral-900 text-black dark:text-white rounded-lg shadow-lg px-3 py-2 whitespace-nowrap'>
                     <div className='flex items-center gap-2 text-xs'>
                       <span className='text-blue-700 dark:text-blue-400'>Context:</span>
                       <span>
@@ -6625,9 +6651,10 @@ function Chat() {
                       <span>{(current_credits * 100).toFixed(3)}</span>
                     </div>
                     {/* Tooltip Arrow */}
-                    <div className='absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800 dark:border-t-neutral-900' />
+                      <div className='absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-neutral-800 dark:border-t-neutral-900' />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
             {/* Controls row */}
