@@ -17,6 +17,7 @@ import {
   Heimdall,
   InputTextArea,
   ModelSelectControl,
+  PlanClarificationPanel,
   Select,
   SettingsPane,
   TextField,
@@ -54,6 +55,7 @@ import { isCommunityMode } from '../config/runtimeMode'
 import {
   abortGeneration,
   AUTO_COMPACTION_NOTE,
+  cancelPlanClarification,
   GENERATED_IMAGE_PATH_HINT_NOTE,
   blobToDataURL,
   chatSliceActions,
@@ -63,6 +65,7 @@ import {
   initializeUserAndConversation,
   Message,
   resolveAttachmentUrl,
+  respondToPlanClarification,
   respondToToolPermission,
   respondToToolPermissionAndEnableAll,
   selectCcCwd,
@@ -89,6 +92,7 @@ import {
   updateMessage,
 } from '../features/chats'
 import type { ContentBlock, ToolCall } from '../features/chats/chatTypes'
+import type { PlanClarificationAnswer } from '../features/chats/planToolTypes'
 import { estimateContentBlocksForContext, safeEstimateTokenCount } from '../features/chats/contextTokenEstimate'
 import {
   extractBranchFileMutations,
@@ -1054,6 +1058,7 @@ function Chat() {
   const conversationMessages = useAppSelector(selectConversationMessages)
   const displayMessages = useAppSelector(selectDisplayMessages)
   const toolCallPermissionRequest = useAppSelector(state => state.chat.toolCallPermissionRequest)
+  const planClarificationRequest = useAppSelector(state => state.chat.planClarificationRequest)
   const toolAutoApprove = useAppSelector(state => state.chat.toolAutoApprove)
   const showFreeTierModal = useAppSelector(state => state.chat.freeTier.showLimitModal)
   // const freeGenerationsRemaining = useAppSelector(state => state.chat.freeTier.freeGenerationsRemaining)
@@ -6258,6 +6263,13 @@ function Chat() {
                 onGrant={() => dispatch(respondToToolPermission(true))}
                 onDeny={() => dispatch(respondToToolPermission(false))}
                 onAllowAll={() => dispatch(respondToToolPermissionAndEnableAll())}
+              />
+            )}
+            {planClarificationRequest && (
+              <PlanClarificationPanel
+                request={planClarificationRequest}
+                onSubmit={(answers: PlanClarificationAnswer[]) => dispatch(respondToPlanClarification(answers))}
+                onCancel={() => dispatch(cancelPlanClarification())}
               />
             )}
             {/* Todo List Display - shows latest todo_list tool result */}
