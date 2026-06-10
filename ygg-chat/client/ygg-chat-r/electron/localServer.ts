@@ -1519,6 +1519,46 @@ function initializeLocalDatabase(dbPath: string) {
   }
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS subagent_runs (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      parent_message_id TEXT NOT NULL,
+      tool_call_id TEXT,
+      prompt TEXT NOT NULL,
+      provider TEXT,
+      model_name TEXT,
+      system_prompt TEXT,
+      status TEXT NOT NULL DEFAULT 'running',
+      final_response TEXT,
+      error TEXT,
+      turns_used INTEGER DEFAULT 0,
+      tool_calls_used INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      FOREIGN KEY (parent_message_id) REFERENCES messages(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS subagent_messages (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool', 'system')),
+      content TEXT NOT NULL DEFAULT '',
+      thinking_block TEXT,
+      tool_calls TEXT,
+      tool_call_id TEXT,
+      content_blocks TEXT,
+      sequence INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (run_id) REFERENCES subagent_runs(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_subagent_runs_parent ON subagent_runs(parent_message_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_subagent_runs_conversation ON subagent_runs(conversation_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_subagent_messages_run_seq ON subagent_messages(run_id, sequence);
+  `)
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS message_attachments (
       id TEXT PRIMARY KEY,
       message_id TEXT,
@@ -2238,6 +2278,52 @@ function initializeLocalDatabase(dbPath: string) {
       'SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1'
     ),
 
+    // Subagent runs/transcripts
+    upsertSubagentRun: db.prepare(`
+        INSERT INTO subagent_runs (id, conversation_id, parent_message_id, tool_call_id, prompt, provider, model_name, system_prompt, status, final_response, error, turns_used, tool_calls_used, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          status = excluded.status,
+          final_response = excluded.final_response,
+          error = excluded.error,
+          turns_used = excluded.turns_used,
+          tool_calls_used = excluded.tool_calls_used,
+          updated_at = excluded.updated_at
+      `),
+    updateSubagentRun: db.prepare(`
+        UPDATE subagent_runs
+        SET status = COALESCE(?, status),
+            final_response = COALESCE(?, final_response),
+            error = ?,
+            turns_used = COALESCE(?, turns_used),
+            tool_calls_used = COALESCE(?, tool_calls_used),
+            updated_at = ?
+        WHERE id = ?
+      `),
+    insertSubagentMessage: db.prepare(`
+        INSERT INTO subagent_messages (id, run_id, role, content, thinking_block, tool_calls, tool_call_id, content_blocks, sequence, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          content = excluded.content,
+          thinking_block = excluded.thinking_block,
+          tool_calls = excluded.tool_calls,
+          tool_call_id = excluded.tool_call_id,
+          content_blocks = excluded.content_blocks
+      `),
+    getSubagentRunsByConversationId: db.prepare(
+      'SELECT * FROM subagent_runs WHERE conversation_id = ? ORDER BY created_at ASC'
+    ),
+    getSubagentRunsByParentMessageId: db.prepare(
+      'SELECT * FROM subagent_runs WHERE parent_message_id = ? ORDER BY created_at ASC'
+    ),
+    getSubagentRunById: db.prepare('SELECT * FROM subagent_runs WHERE id = ?'),
+    getSubagentMessagesByRunId: db.prepare(
+      'SELECT * FROM subagent_messages WHERE run_id = ? ORDER BY sequence ASC, created_at ASC'
+    ),
+    getNextSubagentMessageSequence: db.prepare(
+      'SELECT COALESCE(MAX(sequence), -1) + 1 AS nextSequence FROM subagent_messages WHERE run_id = ?'
+    ),
+
     // Attachments
     upsertAttachment: db.prepare(`
         INSERT INTO message_attachments (id, message_id, kind, mime_type, storage, url, file_path, width, height, size_bytes, sha256, created_at, short_id)
@@ -2561,6 +2647,29 @@ async function saveGeneratedImage(
     return null
   }
 }
+
+const safeJsonParseLocal = <T,>(value: any, fallback: T): T => {
+  if (value == null) return fallback
+  if (typeof value !== 'string') return value as T
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return fallback
+  }
+}
+
+const normalizeSubagentMessageRow = (row: any) => ({
+  ...row,
+  tool_calls: safeJsonParseLocal(row.tool_calls, null),
+  content_blocks: safeJsonParseLocal(row.content_blocks, null),
+})
+
+const normalizeSubagentRunRow = (row: any, messages: any[] = []) => ({
+  ...row,
+  turns_used: Number(row.turns_used || 0),
+  tool_calls_used: Number(row.tool_calls_used || 0),
+  messages,
+})
 
 // ChatNode interface for message tree structure
 interface ChatNode {
@@ -4040,6 +4149,166 @@ function setupServer() {
     } catch (error) {
       console.error('[LocalServer] Error getting conversation:', error)
       res.status(500).json({ error: 'Failed to get conversation' })
+    }
+  })
+
+  // Subagent run/transcript APIs (local-only side channel; not part of main message tree)
+  app.post('/api/subagents/runs', (req, res) => {
+    try {
+      const {
+        id,
+        conversation_id,
+        conversationId,
+        parent_message_id,
+        parentMessageId,
+        tool_call_id,
+        toolCallId,
+        prompt,
+        provider,
+        model_name,
+        modelName,
+        system_prompt,
+        systemPrompt,
+        status,
+      } = req.body || {}
+
+      const runId = typeof id === 'string' && id.trim() ? id.trim() : uuidv4()
+      const resolvedConversationId = String(conversation_id || conversationId || '').trim()
+      const resolvedParentMessageId = String(parent_message_id || parentMessageId || '').trim()
+      const resolvedPrompt = typeof prompt === 'string' ? prompt : ''
+
+      if (!resolvedConversationId) {
+        res.status(400).json({ error: 'conversation_id is required' })
+        return
+      }
+      if (!resolvedParentMessageId) {
+        res.status(400).json({ error: 'parent_message_id is required' })
+        return
+      }
+      if (!resolvedPrompt.trim()) {
+        res.status(400).json({ error: 'prompt is required' })
+        return
+      }
+
+      const now = new Date().toISOString()
+      statements.upsertSubagentRun.run(
+        runId,
+        resolvedConversationId,
+        resolvedParentMessageId,
+        tool_call_id || toolCallId || null,
+        resolvedPrompt,
+        provider || null,
+        model_name || modelName || null,
+        system_prompt || systemPrompt || null,
+        status || 'running',
+        null,
+        null,
+        0,
+        0,
+        now,
+        now
+      )
+
+      const run = statements.getSubagentRunById.get(runId)
+      res.json({ run: normalizeSubagentRunRow(run, []) })
+    } catch (error) {
+      console.error('[LocalServer] Error creating subagent run:', error)
+      res.status(500).json({ error: 'Failed to create subagent run' })
+    }
+  })
+
+  app.post('/api/subagents/runs/:runId/messages', (req, res) => {
+    try {
+      const { runId } = req.params
+      const run = statements.getSubagentRunById.get(runId)
+      if (!run) {
+        res.status(404).json({ error: 'Subagent run not found' })
+        return
+      }
+
+      const { id, role, content, thinking_block, thinkingBlock, tool_calls, toolCalls, tool_call_id, toolCallId, content_blocks, contentBlocks, sequence, created_at, createdAt } = req.body || {}
+      const resolvedRole = typeof role === 'string' ? role : ''
+      if (!['user', 'assistant', 'tool', 'system'].includes(resolvedRole)) {
+        res.status(400).json({ error: 'Invalid role' })
+        return
+      }
+
+      const nextSequence = statements.getNextSubagentMessageSequence.get(runId) as { nextSequence: number } | undefined
+      const resolvedSequence = typeof sequence === 'number' && Number.isFinite(sequence) ? sequence : nextSequence?.nextSequence ?? 0
+      const messageId = typeof id === 'string' && id.trim() ? id.trim() : uuidv4()
+      const messageCreatedAt = created_at || createdAt || new Date().toISOString()
+
+      statements.insertSubagentMessage.run(
+        messageId,
+        runId,
+        resolvedRole,
+        typeof content === 'string' ? content : content == null ? '' : JSON.stringify(content),
+        thinking_block || thinkingBlock || null,
+        typeof tool_calls === 'string' ? tool_calls : JSON.stringify(tool_calls ?? toolCalls ?? null),
+        tool_call_id || toolCallId || null,
+        typeof content_blocks === 'string' ? content_blocks : JSON.stringify(content_blocks ?? contentBlocks ?? null),
+        resolvedSequence,
+        messageCreatedAt
+      )
+
+      const messages = statements.getSubagentMessagesByRunId.all(runId).map(normalizeSubagentMessageRow)
+      res.json({ message: messages.find((m: any) => m.id === messageId), messages })
+    } catch (error) {
+      console.error('[LocalServer] Error appending subagent message:', error)
+      res.status(500).json({ error: 'Failed to append subagent message' })
+    }
+  })
+
+  app.patch('/api/subagents/runs/:runId', (req, res) => {
+    try {
+      const { runId } = req.params
+      const { status, final_response, finalResponse, error, turns_used, turnsUsed, tool_calls_used, toolCallsUsed } = req.body || {}
+      const now = new Date().toISOString()
+      statements.updateSubagentRun.run(
+        status || null,
+        final_response ?? finalResponse ?? null,
+        error ?? null,
+        typeof turns_used === 'number' ? turns_used : typeof turnsUsed === 'number' ? turnsUsed : null,
+        typeof tool_calls_used === 'number' ? tool_calls_used : typeof toolCallsUsed === 'number' ? toolCallsUsed : null,
+        now,
+        runId
+      )
+      const run = statements.getSubagentRunById.get(runId)
+      if (!run) {
+        res.status(404).json({ error: 'Subagent run not found' })
+        return
+      }
+      const messages = statements.getSubagentMessagesByRunId.all(runId).map(normalizeSubagentMessageRow)
+      res.json({ run: normalizeSubagentRunRow(run, messages) })
+    } catch (err) {
+      console.error('[LocalServer] Error updating subagent run:', err)
+      res.status(500).json({ error: 'Failed to update subagent run' })
+    }
+  })
+
+  app.get('/api/subagents/by-parent/:messageId', (req, res) => {
+    try {
+      const runs = statements.getSubagentRunsByParentMessageId.all(req.params.messageId).map((run: any) => {
+        const messages = statements.getSubagentMessagesByRunId.all(run.id).map(normalizeSubagentMessageRow)
+        return normalizeSubagentRunRow(run, messages)
+      })
+      res.json({ runs })
+    } catch (error) {
+      console.error('[LocalServer] Error fetching subagent runs by parent:', error)
+      res.status(500).json({ error: 'Failed to fetch subagent runs' })
+    }
+  })
+
+  app.get('/api/conversations/:conversationId/subagents', (req, res) => {
+    try {
+      const runs = statements.getSubagentRunsByConversationId.all(req.params.conversationId).map((run: any) => {
+        const messages = statements.getSubagentMessagesByRunId.all(run.id).map(normalizeSubagentMessageRow)
+        return normalizeSubagentRunRow(run, messages)
+      })
+      res.json({ runs })
+    } catch (error) {
+      console.error('[LocalServer] Error fetching conversation subagents:', error)
+      res.status(500).json({ error: 'Failed to fetch conversation subagents' })
     }
   })
 

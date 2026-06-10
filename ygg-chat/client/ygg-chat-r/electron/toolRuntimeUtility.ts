@@ -21,7 +21,12 @@ const builtInTools: Map<string, BuiltInToolHandler> = new Map()
 let customToolsInitialized = false
 let customToolsInitPromise: Promise<void> | null = null
 
+function isUtilityRuntimeDebugLoggingEnabled(): boolean {
+  return /^(1|true|yes|on)$/i.test(process.env.YGG_UTILITY_TOOL_RUNTIME_DEBUG_LOGS || '')
+}
+
 function logLifecycle(event: string, details: Record<string, unknown>): void {
+  if (!isUtilityRuntimeDebugLoggingEnabled()) return
   const detailText = Object.entries(details)
     .filter(([, value]) => value !== undefined && value !== null)
     .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`)

@@ -1040,7 +1040,7 @@ function summarizeOpenAiEvent(parsed: any): Record<string, unknown> {
 }
 
 function logOpenAiChatgpt(level: 'info' | 'warn' | 'error', message: string, details?: Record<string, unknown>) {
-  if (level === 'info' && !isOpenAiChatgptDebugLoggingEnabled()) return
+  if (!isOpenAiChatgptDebugLoggingEnabled()) return
   const logger = level === 'error' ? console.error : level === 'warn' ? console.warn : console.info
   logger(`[OpenAI ChatGPT] ${message}`, details || {})
 }
@@ -1546,7 +1546,7 @@ async function readCodexWebSocketOutput(params: {
     })
     ws.on('error', fail)
     ws.on('close', (code, reason) => {
-      logOpenAiChatgpt('warn', 'WebSocket close', {
+      logOpenAiChatgpt('info', 'WebSocket close', {
         traceId: params.traceId,
         code,
         reason: reason?.length ? reason.toString() : '',

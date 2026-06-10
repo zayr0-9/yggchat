@@ -80,6 +80,10 @@ function formatTelemetry(details: {
   return fields.map(([k, v]) => `${k}=${v}`).join(' ')
 }
 
+function isUtilityRuntimeDebugLoggingEnabled(): boolean {
+  return /^(1|true|yes|on)$/i.test(process.env.YGG_UTILITY_TOOL_RUNTIME_DEBUG_LOGS || '')
+}
+
 function createUtilityRequestError(
   message: string,
   details: {
@@ -111,6 +115,7 @@ export class UtilityToolRuntimeHost {
   private readyTimeoutId: NodeJS.Timeout | null = null
 
   private logLifecycle(event: string, details: Record<string, unknown>, level: 'log' | 'warn' | 'error' = 'log'): void {
+    if (level === 'log' && !isUtilityRuntimeDebugLoggingEnabled()) return
     const detailText = Object.entries(details)
       .filter(([, value]) => value !== undefined && value !== null)
       .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`)
@@ -169,6 +174,7 @@ export class UtilityToolRuntimeHost {
     })
 
     this.process.stdout?.on('data', chunk => {
+      if (!isUtilityRuntimeDebugLoggingEnabled()) return
       const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
       const trimmed = text.trim()
       if (trimmed) {
@@ -177,6 +183,7 @@ export class UtilityToolRuntimeHost {
     })
 
     this.process.stderr?.on('data', chunk => {
+      if (!isUtilityRuntimeDebugLoggingEnabled()) return
       const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
       const trimmed = text.trim()
       if (trimmed) {

@@ -2294,14 +2294,6 @@ ipcMain.handle('openai:chatgpt:stream-start', async (event, payload: any) => {
         }
       )
       if (!state.aborted) {
-        console.log('[OpenAIChatGPTBridgeMain] provider output complete', {
-          streamId,
-          contentLength: typeof output.content === 'string' ? output.content.length : 0,
-          reasoningLength: typeof output.reasoning === 'string' ? output.reasoning.length : 0,
-          toolCallCount: Array.isArray(output.toolCalls) ? output.toolCalls.length : 0,
-          toolCallNames: Array.isArray(output.toolCalls) ? output.toolCalls.map((tc: any) => tc?.name || '<unnamed>') : [],
-          contentBlockTypes: Array.isArray(output.contentBlocks) ? output.contentBlocks.map((block: any) => block?.type).filter(Boolean) : [],
-        })
         sendOpenAIStreamEvent(event.sender, streamId, {
           type: 'complete',
           message: {

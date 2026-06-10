@@ -57,6 +57,23 @@ interface SubagentNode {
   content_blocks?: any[]
 }
 
+interface SubagentRun {
+  id: string
+  parent_message_id: string
+  prompt?: string
+  status?: string
+  final_response?: string | null
+  error?: string | null
+  messages?: Array<{
+    id: string
+    role: string
+    content?: string
+    thinking_block?: string | null
+    tool_calls?: any[] | null
+    content_blocks?: any[] | null
+  }>
+}
+
 interface Position {
   x: number
   y: number
@@ -207,6 +224,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     loading: boolean
     error?: string | null
   } | null>(null)
+  const [dedicatedSubagentMap, setDedicatedSubagentMap] = useState<Record<string, SubagentNode[]>>({})
   const subagentModalScrollRef = useRef<HTMLDivElement | null>(null)
   const subagentModalScrollTopRef = useRef<number>(0)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
@@ -548,7 +566,85 @@ export const Heimdall: React.FC<HeimdallProps> = ({
     [normalizeComparableText, normalizeContentBlocks]
   )
 
-  const subagentMapByParent = useMemo(() => buildSubagentMap(allMessages), [allMessages, buildSubagentMap])
+  const buildDedicatedSubagentMap = useCallback(
+    (runs: SubagentRun[]) => {
+      const map: Record<string, SubagentNode[]> = {}
+
+      runs.forEach(run => {
+        const parentId = String(run.parent_message_id || '')
+        if (!parentId) return
+        if (!map[parentId]) map[parentId] = []
+
+        const combinedBlocks: any[] = []
+        const messages = Array.isArray(run.messages) ? run.messages : []
+        messages.forEach(message => {
+          const blocks = normalizeContentBlocks(message.content_blocks)
+          const hasTextBlock = blocks.some((block: any) => block?.type === 'text')
+          if (message.thinking_block) {
+            combinedBlocks.push({ type: 'thinking', content: message.thinking_block })
+          }
+          if (message.content && message.content.trim() && !hasTextBlock) {
+            combinedBlocks.push({ type: 'text', content: message.content })
+          }
+          if (blocks.length > 0) combinedBlocks.push(...blocks)
+        })
+
+        if (run.status === 'error' && run.error) {
+          combinedBlocks.push({ type: 'text', content: `Subagent error: ${run.error}` })
+        }
+
+        map[parentId].push({
+          id: `run_${run.id}`,
+          message: run.prompt || messages[0]?.content || 'Subagent Run',
+          sender: 'ex_agent',
+          content_blocks: combinedBlocks,
+        })
+      })
+
+      return map
+    },
+    [normalizeContentBlocks]
+  )
+
+  useEffect(() => {
+    if (environment !== 'electron' || !conversationId) {
+      setDedicatedSubagentMap({})
+      return
+    }
+
+    let cancelled = false
+    const fetchDedicatedSubagents = async () => {
+      try {
+        const result = await localApi.get<{ runs: SubagentRun[] }>(`/conversations/${conversationId}/subagents`)
+        if (cancelled) return
+        setDedicatedSubagentMap(buildDedicatedSubagentMap(Array.isArray(result?.runs) ? result.runs : []))
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[Heimdall] Failed to load dedicated subagent runs:', error)
+          setDedicatedSubagentMap({})
+        }
+      }
+    }
+
+    void fetchDedicatedSubagents()
+    const pollId = window.setInterval(() => {
+      void fetchDedicatedSubagents()
+    }, 3000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(pollId)
+    }
+  }, [conversationId, buildDedicatedSubagentMap])
+
+  const legacySubagentMapByParent = useMemo(() => buildSubagentMap(allMessages), [allMessages, buildSubagentMap])
+  const subagentMapByParent = useMemo(() => {
+    const merged: Record<string, SubagentNode[]> = { ...legacySubagentMapByParent }
+    Object.entries(dedicatedSubagentMap).forEach(([parentId, nodes]) => {
+      merged[parentId] = nodes.length > 0 ? nodes : merged[parentId] || []
+    })
+    return merged
+  }, [dedicatedSubagentMap, legacySubagentMapByParent])
 
   const handleSubagentBadgeClick = useCallback((event: React.MouseEvent<SVGGElement>, parentId: string) => {
     event.stopPropagation()
@@ -604,10 +700,17 @@ export const Heimdall: React.FC<HeimdallProps> = ({
 
     const fetchSubagentMessages = async () => {
       try {
-        const result = await localApi.get<{ messages: Message[] }>(`/app/conversations/${conversationId}/messages/tree`)
+        const dedicated = await localApi.get<{ runs: SubagentRun[] }>(`/subagents/by-parent/${parentId}`)
         if (cancelled) return
-        const map = buildSubagentMap(Array.isArray(result?.messages) ? result.messages : [])
-        const nextNodes = map[parentId] || []
+        const dedicatedMap = buildDedicatedSubagentMap(Array.isArray(dedicated?.runs) ? dedicated.runs : [])
+        let nextNodes = dedicatedMap[parentId] || []
+
+        if (nextNodes.length === 0) {
+          const result = await localApi.get<{ messages: Message[] }>(`/app/conversations/${conversationId}/messages/tree`)
+          if (cancelled) return
+          const map = buildSubagentMap(Array.isArray(result?.messages) ? result.messages : [])
+          nextNodes = map[parentId] || []
+        }
 
         setSubagentModalData(prev => {
           const previousNodes = prev?.parentId === parentId ? prev.nodes : []
@@ -645,7 +748,7 @@ export const Heimdall: React.FC<HeimdallProps> = ({
         window.clearInterval(pollId)
       }
     }
-  }, [subagentPanel?.parentId, conversationId, buildSubagentMap, haveSameSubagentNodes])
+  }, [subagentPanel?.parentId, conversationId, buildSubagentMap, buildDedicatedSubagentMap, haveSameSubagentNodes])
 
   useEffect(() => {
     if (!subagentPanel?.parentId) return
