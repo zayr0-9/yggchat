@@ -1481,6 +1481,7 @@ export const executeLocalTool = async (
     accessToken?: string | null
     callerProvider?: string | null
     queryClient?: QueryClient | null
+    subagentDepth?: number
     // For subagent execution
     dispatch?: any
     getState?: () => RootState
@@ -1508,6 +1509,7 @@ export const executeLocalTool = async (
       rootPath,
       callerProvider: context.callerProvider,
       queryClient: context.queryClient ?? null,
+      subagentDepth: (context.subagentDepth ?? 0) + 1,
       executeLocalTool,
       executeToolWithPermissionCheck,
     })

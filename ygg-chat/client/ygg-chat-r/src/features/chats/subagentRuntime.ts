@@ -14,6 +14,8 @@ import {
 import { getAllTools } from './toolDefinitions'
 
 const DEFAULT_SUBAGENT_MODEL = 'openai/gpt-5.3-codex'
+const MAX_PARALLEL_SUBAGENTS = 3
+const MAX_SUBAGENT_DEPTH = 2
 const isElectronEnvironment = environment === 'electron' || (typeof __IS_ELECTRON__ !== 'undefined' && __IS_ELECTRON__)
 const normalizeProviderSlug = (providerName: string | null | undefined): string =>
   (providerName || '').toLowerCase().replace(/\s+/g, '')
@@ -27,6 +29,7 @@ export interface SubagentRuntimeContext {
   rootPath: string | null
   callerProvider?: string | null
   queryClient?: QueryClient | null
+  subagentDepth?: number
   executeLocalTool: (
     toolCall: any,
     rootPath: string | null,
@@ -40,6 +43,7 @@ export interface SubagentRuntimeContext {
       accessToken?: string | null
       callerProvider?: string | null
       queryClient?: QueryClient | null
+      subagentDepth?: number
       dispatch?: any
       getState?: () => RootState
     }
@@ -106,6 +110,34 @@ const resolveSubagentDefaults = async (
 }
 
 const shouldUseCommunityLocalEphemeral = () => isCommunityMode && isElectronEnvironment
+
+const getRuntimeToolCallName = (toolCall: any): string =>
+  typeof toolCall?.name === 'string'
+    ? toolCall.name
+    : typeof toolCall?.function?.name === 'string'
+      ? toolCall.function.name
+      : ''
+
+const isSubagentToolCall = (toolCall: any): boolean => getRuntimeToolCallName(toolCall) === 'subagent'
+
+const runWithConcurrencyLimit = async <T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> => {
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+
+  const runWorker = async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex++
+      results[currentIndex] = await worker(items[currentIndex], currentIndex)
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(Math.max(limit, 1), items.length) }, () => runWorker()))
+  return results
+}
 
 const parseToolResultsFromContentBlocks = (contentBlocks: any): any[] => {
   if (!Array.isArray(contentBlocks)) return []
@@ -425,6 +457,11 @@ export const executeSubagentCall = async (
 
   if (!prompt) {
     throw new Error('Subagent requires a prompt')
+  }
+
+  const currentDepth = context.subagentDepth ?? 0
+  if (currentDepth > MAX_SUBAGENT_DEPTH) {
+    throw new Error(`Subagent nesting depth exceeded (${MAX_SUBAGENT_DEPTH})`)
   }
 
   const { dispatch, getState, conversationId, parentMessageId, rootPath } = context
@@ -759,8 +796,10 @@ export const executeSubagentCall = async (
         continue
       }
 
-      // Process client tool calls
-      const toolResults: any[] = []
+      // Process client tool calls. Subagent fan-out is allowed in parallel only
+      // when the parent has auto-approve enabled; permission-gated tools remain
+      // sequential to avoid overlapping permission dialogs.
+      const rawToolResults: any[] = []
 
       // Build a set of tool IDs that were already executed by the server
       const serverExecutedToolIds = new Set(serverToolResults.map(tr => tr.tool_use_id))
@@ -768,22 +807,18 @@ export const executeSubagentCall = async (
 
       // Filter out tool calls that were already executed by the server
       const clientToolCalls = turnToolCalls.filter(tc => !serverExecutedToolIds.has(tc.id))
+      const subagentToolCalls = clientToolCalls.filter(isSubagentToolCall)
+      const nonSubagentToolCalls = clientToolCalls.filter(tc => !isSubagentToolCall(tc))
+      const liveStateBeforeTools = getState()
+      const shouldParallelizeSubagents = inheritAutoApprove && liveStateBeforeTools.chat.toolAutoApprove
 
-      for (let i = 0; i < clientToolCalls.length; i++) {
-        const tc = clientToolCalls[i]
-
-        // Skip nested subagent calls
-        if (tc.name === 'subagent') {
-          toolResults.push({
-            tool_use_id: tc.id,
-            content: 'Error: Nested subagent calls are not allowed.',
-            is_error: true,
-          })
-          hadAnyToolActivity = true
-          continue
-        }
-
+      const executeClientToolCall = async (tc: any): Promise<any> => {
         try {
+          if (!isStreamActive()) {
+            subagentAbortController.abort()
+            throw new Error('Subagent aborted')
+          }
+
           // Read live settings per tool call so toggles apply mid-stream.
           const liveState = getState()
           const parentAutoApprove = liveState.chat.toolAutoApprove
@@ -796,35 +831,68 @@ export const executeSubagentCall = async (
             result = await context.executeLocalTool(tc, rootPath, liveOperationMode, {
               conversationId,
               messageId: assistantMessageId,
+              streamId,
               accessToken,
               queryClient: context.queryClient ?? null,
+              subagentDepth: currentDepth + 1,
+              dispatch,
+              getState,
             })
           } else {
-            // Show permission dialog
+            // Show permission dialog. This path is intentionally not parallelized.
             result = await context.executeToolWithPermissionCheck(dispatch, getState, tc, rootPath, liveOperationMode, {
               conversationId,
               messageId: assistantMessageId,
+              streamId,
               accessToken,
               queryClient: context.queryClient ?? null,
             })
           }
 
-          toolResults.push({
+          return {
             tool_use_id: tc.id,
             content: result,
             is_error: false,
-          })
-          hadAnyToolActivity = true
+          }
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err)
-          toolResults.push({
+          return {
             tool_use_id: tc.id,
             content: `Error: ${errorMsg}`,
             is_error: true,
-          })
-          hadAnyToolActivity = true
+          }
         }
       }
+
+      if (subagentToolCalls.length > 0) {
+        if (shouldParallelizeSubagents) {
+          const parallelSubagentResults = await runWithConcurrencyLimit(
+            subagentToolCalls,
+            MAX_PARALLEL_SUBAGENTS,
+            executeClientToolCall
+          )
+          rawToolResults.push(...parallelSubagentResults)
+          hadAnyToolActivity = true
+        } else {
+          for (const tc of subagentToolCalls) {
+            rawToolResults.push({
+              tool_use_id: tc.id,
+              content:
+                'Error: Nested subagent calls require auto-approve to run and are limited to parallel fan-out mode.',
+              is_error: true,
+            })
+            hadAnyToolActivity = true
+          }
+        }
+      }
+
+      for (const tc of nonSubagentToolCalls) {
+        rawToolResults.push(await executeClientToolCall(tc))
+        hadAnyToolActivity = true
+      }
+
+      const rawToolResultById = new Map(rawToolResults.map(result => [result.tool_use_id, result]))
+      const toolResults = clientToolCalls.map(tc => rawToolResultById.get(tc.id)).filter(Boolean)
 
       // Combine all tool results (server-executed + client-executed)
       const allToolResults = [...serverToolResults, ...toolResults]
