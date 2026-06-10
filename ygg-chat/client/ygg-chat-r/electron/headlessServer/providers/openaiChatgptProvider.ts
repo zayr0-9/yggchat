@@ -608,21 +608,6 @@ function collectToolOutputCallIds(messages: any[]): Set<string> {
   return ids
 }
 
-function getFinalFunctionCallOutputDelta(history: any[]): any[] | null {
-  const last = Array.isArray(history) && history.length > 0 ? history[history.length - 1] : null
-  if (!last || last.role !== 'tool' || typeof last.tool_call_id !== 'string' || !last.tool_call_id) return null
-
-  const toolNameById = buildToolNameMap(history)
-  const sanitized = sanitizeToolResultContentForModel(last.content, toolNameById.get(last.tool_call_id) || null)
-  return [
-    {
-      type: 'function_call_output',
-      call_id: last.tool_call_id,
-      output: typeof sanitized === 'string' ? sanitized : (sanitized ?? null),
-    },
-  ]
-}
-
 function transformMessagesForCodex(history: any[], fallbackUserContent: string): any[] {
   const input: any[] = []
   const toolCallIds = new Set<string>()
@@ -1050,6 +1035,9 @@ function logCodexUsage(params: {
   responseId?: string
   promptCacheKey?: string
   promptCacheRetention: 'in_memory' | '24h'
+  requestMode?: 'full_replay'
+  inputItems?: number
+  hasPreviousResponseId?: boolean
   usage?: OpenAiResponseUsage
 }) {
   // Keep Codex usage logs always-on for now. If this gets too noisy, gate this with an env var.
@@ -1071,6 +1059,9 @@ function logCodexUsage(params: {
     responseId: params.responseId,
     promptCacheKey: params.promptCacheKey,
     promptCacheRetention: params.promptCacheRetention,
+    requestMode: params.requestMode,
+    inputItems: params.inputItems,
+    hasPreviousResponseId: params.hasPreviousResponseId,
     inputTokens,
     cachedInputTokens,
     uncachedInputTokens,
@@ -2060,14 +2051,14 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
       enableImageGeneration: hasImageGenerationIntent(input),
     })
     const requestTools = [...mapTools(input.tools || []), ...hostedTools]
-    const previousResponseId = input.railwayTurn?.previousResponseId?.trim() || undefined
-    const incrementalToolOutput = previousResponseId ? getFinalFunctionCallOutputDelta(input.history || []) : null
-    const transformedInput = incrementalToolOutput
-      ? incrementalToolOutput
-      : appendImageAttachmentsToLatestUserMessage(
-          transformMessagesForCodex(input.history || [], input.userContent),
-          input.railwayTurn?.attachmentsBase64 ?? null
-        )
+    // Match Qubit's Codex provider request shape: always replay the full conversation path.
+    // ChatGPT/Codex `previous_response_id` continuations reconstruct context server-side, but
+    // empirically collapse prompt-cache reuse for tool loops because the stable prefix is no
+    // longer present in the request body. Full replay keeps prompt_cache_key useful across turns.
+    const transformedInput = appendImageAttachmentsToLatestUserMessage(
+      transformMessagesForCodex(input.history || [], input.userContent),
+      input.railwayTurn?.attachmentsBase64 ?? null
+    )
 
     const serviceTier = input.railwayTurn?.serviceTier === 'priority' ? 'priority' : undefined
     const requestId = input.railwayTurn?.conversationId?.trim() || traceId || 'ygg-chat'
@@ -2094,13 +2085,7 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
       ...(promptCacheRetention === '24h' ? { prompt_cache_retention: '24h' } : {}),
       stream: true,
     }
-    const effectiveRequestBody = incrementalToolOutput
-      ? {
-          ...requestBody,
-          previous_response_id: previousResponseId,
-          input: incrementalToolOutput,
-        }
-      : requestBody
+    const effectiveRequestBody = requestBody
 
     const endpoint = `${CHATGPT_BASE_URL}${CHATGPT_CODEX_ENDPOINT}`
     let parsed: CodexParsedOutput
@@ -2110,8 +2095,9 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
       endpoint,
       hostedTools: hostedTools.length,
       mappedTools: requestTools.length - hostedTools.length,
-      incrementalToolOutput: Boolean(incrementalToolOutput),
-      incrementalToolOutputItems: incrementalToolOutput?.length,
+      requestMode: 'full_replay',
+      inputItems: transformedInput.length,
+      hasPreviousResponseId: false,
       attachmentsBase64: Array.isArray(input.railwayTurn?.attachmentsBase64)
         ? input.railwayTurn?.attachmentsBase64.length
         : 0,
@@ -2218,19 +2204,14 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
       })
     }
 
-    if (incrementalToolOutput && isOpenAiChatgptDebugLoggingEnabled()) {
-      console.info('[OpenAI Responses Continuation]', {
-        model: requestBody.model,
-        previousResponseId,
-        inputItems: incrementalToolOutput.length,
-      })
-    }
-
     logCodexUsage({
       model: requestBody.model,
       responseId: parsed.responseId,
       promptCacheKey,
       promptCacheRetention,
+      requestMode: 'full_replay',
+      inputItems: transformedInput.length,
+      hasPreviousResponseId: false,
       usage: parsed.usage,
     })
 
@@ -2275,8 +2256,9 @@ export class OpenAiChatgptProvider implements HeadlessProvider {
         responses_output_items: parsed.responseOutputItems,
         response_items_added: parsed.responseItemsAdded,
         response_id: parsed.responseId,
-        used_previous_response_id: previousResponseId,
-        used_incremental_tool_output: Boolean(incrementalToolOutput),
+        request_mode: 'full_replay',
+        used_previous_response_id: null,
+        used_incremental_tool_output: false,
         usage: parsed.usage,
         generatedImagesDirectoryHint: getGeneratedImagesDirectoryHint(),
       },

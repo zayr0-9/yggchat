@@ -182,8 +182,6 @@ export class ToolLoopService {
     let currentUserContent = input.userContent
     let history = [...(input.history || [])]
     let lastAssistantMessage: any = null
-    let previousOpenAiResponseId: string | null = null
-
     for (let turn = 1; turn <= this.maxTurns; turn++) {
       emit({
         type: 'tool_loop',
@@ -224,7 +222,6 @@ export class ToolLoopService {
                 reasoningConfig: input.reasoningConfig,
                 serviceTier: input.serviceTier,
                 promptCacheRetention: input.promptCacheRetention,
-                previousResponseId: providerRoute === 'openaichatgpt' ? previousOpenAiResponseId : null,
               }
             : null,
       }
@@ -262,10 +259,6 @@ export class ToolLoopService {
       }
       if (output.content && !streamedTextDuringTurn) {
         emit({ type: 'chunk', part: 'text', delta: output.content })
-      }
-
-      if (providerRoute === 'openaichatgpt') {
-        previousOpenAiResponseId = typeof output.raw?.response_id === 'string' ? output.raw.response_id : null
       }
 
       const assistantToolCalls = Array.isArray(output.toolCalls)

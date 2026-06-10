@@ -171,6 +171,8 @@ describe('OpenAiChatgptProvider', () => {
       expect.objectContaining({
         model: 'gpt-5.3-codex',
         responseId: 'resp-1',
+        requestMode: 'full_replay',
+        hasPreviousResponseId: false,
         inputTokens: 100,
         cachedInputTokens: 40,
         uncachedInputTokens: 60,
@@ -183,6 +185,101 @@ describe('OpenAiChatgptProvider', () => {
     expect(infoSpy.mock.calls).not.toEqual(
       expect.arrayContaining([[expect.stringContaining('[OpenAI ChatGPT] stream event'), expect.anything()]])
     )
+  })
+
+  it('uses full replay instead of previous_response_id for Codex tool continuations', async () => {
+    process.env.OPENAI_CHATGPT_ACCESS_TOKEN = 'header.eyJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjdC0zIn19.sig'
+
+    let capturedBody: any = null
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      capturedBody = JSON.parse(String(init?.body || '{}'))
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createSseStream([
+          {
+            type: 'response.completed',
+            response: {
+              id: 'resp-full-replay',
+              usage: {
+                input_tokens: 120,
+                input_tokens_details: { cached_tokens: 90 },
+                output_tokens: 10,
+                total_tokens: 130,
+              },
+              output: [
+                {
+                  id: 'msg-final',
+                  type: 'message',
+                  role: 'assistant',
+                  phase: 'final_answer',
+                  output_index: 0,
+                  content: [{ type: 'output_text', text: 'Final answer after replay' }],
+                },
+              ],
+            },
+          },
+        ]),
+        text: async () => '',
+      } as any
+    })
+
+    const provider = new OpenAiChatgptProvider()
+    const result = await provider.generate({
+      modelName: 'gpt-5.5',
+      userContent: '',
+      tools: [{ name: 'read_file', description: 'Read a file', inputSchema: { type: 'object', properties: {} } }],
+      railwayTurn: {
+        conversationId: 'conversation-cache-key',
+        previousResponseId: 'resp-prior-should-not-be-sent',
+      },
+      history: [
+        {
+          role: 'user',
+          content: 'Read README and summarize.',
+        },
+        {
+          role: 'assistant',
+          content: '',
+          content_blocks: JSON.stringify([
+            {
+              type: 'responses_output_items',
+              items: [
+                {
+                  id: 'call-item-1',
+                  type: 'function_call',
+                  call_id: 'call-1',
+                  name: 'read_file',
+                  arguments: '{"path":"README.md"}',
+                  output_index: 0,
+                },
+              ],
+            },
+          ]),
+        },
+        {
+          role: 'tool',
+          tool_call_id: 'call-1',
+          content: 'README body',
+        },
+      ],
+    })
+
+    expect(result.content).toBe('Final answer after replay')
+    expect(capturedBody).toBeTruthy()
+    expect(capturedBody.prompt_cache_key).toBe('conversation-cache-key')
+    expect(capturedBody.client_metadata).toEqual({ 'x-codex-installation-id': 'conversation-cache-key' })
+    expect(capturedBody.previous_response_id).toBeUndefined()
+    expect(capturedBody.input).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'message', role: 'user' }),
+        expect.objectContaining({ type: 'function_call', call_id: 'call-1', name: 'read_file' }),
+        expect.objectContaining({ type: 'function_call_output', call_id: 'call-1', output: expect.stringContaining('README body') }),
+      ])
+    )
+    expect(capturedBody.input).not.toHaveLength(1)
   })
 
   it('throws on incomplete responses surfaced by SSE', async () => {

@@ -109,12 +109,14 @@ function createStatements(db: Database.Database): any {
 
 class FakeProviderRouter {
   private readonly queuedOutputs: any[] = []
+  readonly calls: Array<{ provider: string; input: any }> = []
 
   enqueue(output: any): void {
     this.queuedOutputs.push(output)
   }
 
-  async generate(_provider: string, _input: any): Promise<any> {
+  async generate(provider: string, input: any): Promise<any> {
+    this.calls.push({ provider, input })
     if (this.queuedOutputs.length > 0) {
       return this.queuedOutputs.shift()
     }
@@ -189,6 +191,11 @@ describeIfSqlite('ToolLoopService', () => {
     expect(events.some((evt: any) => evt.type === 'tool_execution' && evt.status === 'started')).toBe(true)
     expect(events.some((evt: any) => evt.type === 'tool_execution' && evt.status === 'completed')).toBe(true)
     expect(events.some((evt: any) => evt.type === 'tool_loop' && evt.status === 'turn_completed' && evt.continued)).toBe(true)
+
+    expect(providerRouter.calls).toHaveLength(2)
+    expect(providerRouter.calls[1].input.railwayTurn?.previousResponseId).toBeUndefined()
+    expect(providerRouter.calls[1].input.history.some((entry: any) => entry.role === 'assistant')).toBe(true)
+    expect(providerRouter.calls[1].input.history.some((entry: any) => entry.role === 'tool' && entry.tool_call_id === 'call-1')).toBe(true)
   })
 
   it('continues loop when all tool executions fail', async () => {
