@@ -687,10 +687,7 @@ export class ToolOrchestrator {
     // Clean database
     if (this.db && this.statements.deleteOldJobs) {
       try {
-        const result = this.statements.deleteOldJobs.run(cutoff)
-        if (result.changes > 0) {
-          console.log(`[ToolOrchestrator] Cleaned up ${result.changes} old jobs`)
-        }
+        this.statements.deleteOldJobs.run(cutoff)
       } catch (error) {
         console.error('[ToolOrchestrator] Failed to cleanup old jobs:', error)
       }
