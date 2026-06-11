@@ -20,6 +20,8 @@ jobs:
         node-version: [22.x]
     permissions:
       contents: read
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -78,7 +80,6 @@ jobs:
           echo "VITE_ENVIRONMENT=electron" >> $GITHUB_ENV
           echo "VITE_API_URL=https://webdrasil-production.up.railway.app/api" >> $GITHUB_ENV
           echo "SUPABASE_UPDATE_FEED_BASE_URL=${{ secrets.SUPABASE_UPDATE_FEED_BASE_URL }}" >> $GITHUB_ENV
-          echo "NODE_OPTIONS=--max-old-space-size=6144" >> $GITHUB_ENV
         shell: bash
 
       - name: Validate tag matches app version
