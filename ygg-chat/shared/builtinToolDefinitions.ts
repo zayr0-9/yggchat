@@ -17,7 +17,7 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
     name: 'todo_list',
     enabled: true,
     description:
-      'Manage Markdown todo lists stored as .md files. Names are auto-generated (e.g., "goku-sage-ember"). Four actions: create, list, read, edit.',
+      'Manage Markdown todo lists stored as .md files. Names are auto-generated (e.g., "goku-sage-ember"). Four actions: create, list, read, edit. Edit can update one line via search/replacement or multiple lines via edits.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -25,7 +25,7 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
           type: 'string',
           enum: ['create', 'list', 'read', 'edit'],
           description:
-            'Action to perform: "create" = create a new todo list (name auto-generated, returns the generated name); "list" = show 5 most recent todo lists; "read" = get contents of a specific list by name; "edit" = find and replace a line in an existing list.',
+            'Action to perform: "create" = create a new todo list (name auto-generated, returns the generated name); "list" = show 5 most recent todo lists; "read" = get contents of a specific list by name; "edit" = find and replace one or more lines in an existing list.',
         },
         name: {
           type: 'string',
@@ -45,7 +45,26 @@ export const BUILTIN_TOOL_DEFINITIONS: SharedToolDefinition[] = [
         replacement: {
           type: 'string',
           description:
-            'For "edit" action: the full replacement line. Example: to mark done, use "- [x] Buy milk". To update text, use "- [ ] Buy 2% milk".',
+            'For "edit" action with search: the full replacement line. Example: to mark done, use "- [x] Buy milk". To update text, use "- [ ] Buy 2% milk".',
+        },
+        edits: {
+          type: 'array',
+          description:
+            'For "edit" action: multiple line replacements to apply in one tool call. Use this instead of repeated sequential todo_list edit calls when updating multiple tasks.',
+          items: {
+            type: 'object',
+            properties: {
+              search: {
+                type: 'string',
+                description: 'Text to search for. Matches any line containing this text.',
+              },
+              replacement: {
+                type: 'string',
+                description: 'The full replacement line.',
+              },
+            },
+            required: ['search', 'replacement'],
+          },
         },
       },
       required: ['action'],

@@ -53,6 +53,8 @@ interface ElectronAPI {
     isFloatingOpen: () => Promise<boolean>
     toggleCompact: () => Promise<{ success: boolean; error?: string; compact: boolean }>
     isCompact: () => Promise<boolean>
+    getState: () => Promise<{ isMaximized: boolean; isFullScreen: boolean }>
+    onStateChanged: (callback: (payload: { isMaximized: boolean; isFullScreen: boolean }) => void) => () => void
   }
   theme: {
     update: (themePreference: boolean | 'light' | 'dark' | 'system') => Promise<void>

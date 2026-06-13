@@ -45,6 +45,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Compact mode controls
     toggleCompact: () => ipcRenderer.invoke('window:toggleCompact'),
     isCompact: () => ipcRenderer.invoke('window:isCompact'),
+    getState: () => ipcRenderer.invoke('window:getState'),
+    onStateChanged: (callback: (payload: { isMaximized: boolean; isFullScreen: boolean }) => void) => {
+      const listener = (_event: any, payload: { isMaximized: boolean; isFullScreen: boolean }) => callback(payload)
+      ipcRenderer.on('window:state-changed', listener)
+      return () => ipcRenderer.removeListener('window:state-changed', listener)
+    },
   },
   theme: {
     update: (themePreference: boolean | 'light' | 'dark' | 'system') =>

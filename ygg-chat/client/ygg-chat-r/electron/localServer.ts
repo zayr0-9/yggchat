@@ -718,7 +718,7 @@ function initializeBuiltInToolRegistry() {
   })
 
   builtInTools.set('todo_list', async args => {
-    const { action, name, content, search, replacement } = args
+    const { action, name, content, search, replacement, edits } = args
     switch (action) {
       case 'list': {
         const lists = await listTodoLists()
@@ -736,6 +736,20 @@ function initializeBuiltInToolRegistry() {
       }
       case 'edit': {
         if (!name) throw new Error('name is required for todo_list edit')
+        if (Array.isArray(edits)) {
+          if (edits.length === 0) throw new Error('edits must contain at least one item for todo_list edit')
+          for (const [index, edit] of edits.entries()) {
+            if (!edit || typeof edit !== 'object') {
+              throw new Error(`edits[${index}] must be an object`)
+            }
+            if (!edit.search) throw new Error(`edits[${index}].search is required for todo_list edit`)
+            if (edit.replacement === undefined) {
+              throw new Error(`edits[${index}].replacement is required for todo_list edit`)
+            }
+          }
+          const edited = await editTodoList(name, edits)
+          return edited
+        }
         if (!search) throw new Error('search is required for todo_list edit')
         if (replacement === undefined) throw new Error('replacement is required for todo_list edit')
         const edited = await editTodoList(name, search, replacement)

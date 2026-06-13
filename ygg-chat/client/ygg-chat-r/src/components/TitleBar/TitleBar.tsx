@@ -45,6 +45,13 @@ export const TitleBar = () => {
   }, [allProjects, currentConversation?.project_id, projectIdFromRoute, selectedProject])
 
   useEffect(() => {
+    const updateWindowStateClasses = (state: { isMaximized: boolean; isFullScreen: boolean }) => {
+      document.body.classList.toggle('window-maximized', state.isMaximized)
+      document.body.classList.toggle('window-fullscreen', state.isFullScreen)
+    }
+
+    let removeWindowStateListener: (() => void) | undefined
+
     const detectPlatform = async () => {
       if (window.electronAPI?.platformInfo?.get) {
         const info = await window.electronAPI.platformInfo.get()
@@ -54,6 +61,14 @@ export const TitleBar = () => {
         // Add padding to app content when we render an in-app title bar.
         if (info.isElectron && (info.platform === 'win32' || info.platform === 'darwin' || info.platform === 'linux')) {
           document.body.classList.add('has-titlebar')
+          document.body.classList.add(`electron-platform-${info.platform}`)
+        }
+
+        if (info.isElectron && info.platform === 'linux') {
+          if (window.electronAPI?.window?.getState) {
+            updateWindowStateClasses(await window.electronAPI.window.getState())
+          }
+          removeWindowStateListener = window.electronAPI?.window?.onStateChanged?.(updateWindowStateClasses)
         }
 
         // Check initial compact mode state
@@ -67,7 +82,15 @@ export const TitleBar = () => {
 
     // Cleanup
     return () => {
-      document.body.classList.remove('has-titlebar')
+      removeWindowStateListener?.()
+      document.body.classList.remove(
+        'has-titlebar',
+        'electron-platform-win32',
+        'electron-platform-darwin',
+        'electron-platform-linux',
+        'window-maximized',
+        'window-fullscreen'
+      )
     }
   }, [])
 
@@ -75,8 +98,10 @@ export const TitleBar = () => {
   const isMac = platform === 'darwin'
   const isLinux = platform === 'linux'
 
+  const usesCustomWindowControls = isWindows || isLinux
+
   // Render custom title bar content on desktop Electron platforms.
-  // macOS and Linux keep native window controls; Windows uses custom controls.
+  // macOS keeps native traffic lights; Windows/Linux use custom controls.
   if (!isElectron || (!isWindows && !isMac && !isLinux)) {
     return null
   }
@@ -230,7 +255,7 @@ export const TitleBar = () => {
             )}
           </span>
         </button>
-        {isWindows ? (
+        {usesCustomWindowControls ? (
           <>
             <button
               className='titlebar-control-button titlebar-minimize'

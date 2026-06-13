@@ -76,10 +76,22 @@ export interface CreateTodoResult {
   content: string
 }
 
+export interface TodoEditOperation {
+  search: string
+  replacement: string
+}
+
+export interface TodoEditOperationResult extends TodoEditOperation {
+  matchCount: number
+  success: boolean
+  message: string
+}
+
 export interface EditTodoResult {
   success: boolean
   message: string
   content: string | null
+  edits?: TodoEditOperationResult[]
 }
 
 /**
@@ -182,37 +194,63 @@ export async function createTodoList(content: string): Promise<CreateTodoResult>
 }
 
 /**
- * Edit a todo list by finding a line and replacing it
+ * Edit a todo list by finding one or more line substrings and replacing matching lines.
  * @param name - The todo list name
- * @param search - The text to search for (matches line containing this text)
- * @param replacement - The replacement text (replaces entire line)
+ * @param searchOrEdits - Either a single search string, or an array of edit operations
+ * @param replacement - The replacement text for single-edit calls
  */
 export async function editTodoList(
   name: string,
   search: string,
   replacement: string
+): Promise<EditTodoResult>
+export async function editTodoList(
+  name: string,
+  edits: TodoEditOperation[]
+): Promise<EditTodoResult>
+export async function editTodoList(
+  name: string,
+  searchOrEdits: string | TodoEditOperation[],
+  replacement?: string
 ): Promise<EditTodoResult> {
   const sanitized = normalizeId(name)
   const filePath = path.join(getTodoDirectory(), `${sanitized}${TODO_FILE_EXTENSION}`)
+  const edits = Array.isArray(searchOrEdits)
+    ? searchOrEdits
+    : [{ search: searchOrEdits, replacement: replacement ?? '' }]
 
   try {
     const content = await fs.readFile(filePath, 'utf8')
     const lines = content.split('\n')
-    let matchCount = 0
+    let newLines = lines
 
-    const newLines = lines.map(line => {
-      if (line.includes(search)) {
-        matchCount++
-        return replacement
+    const editResults: TodoEditOperationResult[] = edits.map(edit => {
+      let matchCount = 0
+      newLines = newLines.map(line => {
+        if (line.includes(edit.search)) {
+          matchCount++
+          return edit.replacement
+        }
+        return line
+      })
+
+      return {
+        ...edit,
+        matchCount,
+        success: matchCount > 0,
+        message: matchCount > 0
+          ? `Updated ${matchCount} line${matchCount === 1 ? '' : 's'} containing "${edit.search}"`
+          : `No lines found containing "${edit.search}"`,
       }
-      return line
     })
 
-    if (matchCount === 0) {
+    const failedEdits = editResults.filter(edit => !edit.success)
+    if (failedEdits.length > 0) {
       return {
         success: false,
-        message: `No lines found containing "${search}"`,
+        message: failedEdits.map(edit => edit.message).join('; '),
         content,
+        edits: editResults,
       }
     }
 
@@ -220,8 +258,9 @@ export async function editTodoList(
     await fs.writeFile(filePath, newContent, 'utf8')
     return {
       success: true,
-      message: `Updated`,
+      message: `Updated ${editResults.length} edit${editResults.length === 1 ? '' : 's'}`,
       content: newContent,
+      edits: editResults,
     }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {

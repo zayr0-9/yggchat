@@ -52,9 +52,9 @@
   padding-right: 12px;
 }
 
-/* Linux uses Electron's native window-controls overlay; reserve the right edge. */
+/* Linux is frameless and uses our custom window controls. */
 .titlebar-linux .titlebar-controls {
-  padding-right: 132px;
+  padding-right: 8px;
 }
 
 .titlebar-title {
@@ -293,7 +293,7 @@
   }
 
   .titlebar-linux .titlebar-controls {
-    padding-right: 120px;
+    padding-right: 8px;
   }
 }
 
