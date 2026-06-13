@@ -550,14 +550,12 @@ function createWindow() {
             visualEffectState: 'active',
           }
         : {
-            // Linux can use Electron's native window-controls overlay so our in-app
-            // title bar is visible without stacking below the OS title bar.
-            titleBarStyle: 'hidden',
-            titleBarOverlay: {
-              color: '#00000000',
-              symbolColor: nativeTheme.shouldUseDarkColors ? '#f2f4f7' : '#111827',
-              height: 40,
-            },
+            // Linux needs a frameless transparent window so the renderer can clip
+            // the app shell into rounded corners consistently across WMs.
+            frame: false,
+            transparent: true,
+            backgroundColor: '#00000000',
+            hasShadow: true,
           }),
     show: false, // Don't show until ready
   })
@@ -569,6 +567,20 @@ function createWindow() {
   if (process.platform === 'darwin') {
     mainWindow.setWindowButtonPosition({ x: 14, y: 13 })
   }
+
+  const sendWindowState = () => {
+    if (!mainWindow || mainWindow.webContents.isDestroyed()) return
+    mainWindow.webContents.send('window:state-changed', {
+      isMaximized: mainWindow.isMaximized(),
+      isFullScreen: mainWindow.isFullScreen(),
+    })
+  }
+
+  mainWindow.on('maximize', sendWindowState)
+  mainWindow.on('unmaximize', sendWindowState)
+  mainWindow.on('enter-full-screen', sendWindowState)
+  mainWindow.on('leave-full-screen', sendWindowState)
+  mainWindow.webContents.once('did-finish-load', sendWindowState)
 
   // applyTitleBarTheme(mainWindow)
 
@@ -1963,6 +1975,13 @@ ipcMain.handle('window:toggleCompact', async () => {
 
 ipcMain.handle('window:isCompact', async () => {
   return compactMode
+})
+
+ipcMain.handle('window:getState', async () => {
+  return {
+    isMaximized: Boolean(mainWindow?.isMaximized()),
+    isFullScreen: Boolean(mainWindow?.isFullScreen()),
+  }
 })
 
 // Open OAuth URL in a new BrowserWindow (for WSL/Linux compatibility)
